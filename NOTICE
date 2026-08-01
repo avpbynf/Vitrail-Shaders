@@ -1,0 +1,18 @@
+Third-party material in Vitrail
+===============================
+
+Vitrail is distributed under the GNU Lesser General Public License version 3, in LICENSE.
+The file below contains material from another project, reused under that project's own terms.
+
+Iris, https://github.com/IrisShaders/Iris
+Copyright the Iris contributors
+GNU Lesser General Public License version 3
+
+  common/src/main/java/dev/vitrail/pack/ProgramFallbacks.java contains the gbuffers, shadow and
+  Distant Horizons fallback table, adapted in 2026 from the enum
+  net.irisshaders.iris.shaderpack.loading.ProgramId. The table was reorganised into a name to
+  parent map. The blend mode overrides and the IrisProgram API mapping carried by the original
+  enum were not reused.
+
+  Nothing else in Vitrail is derived from Iris. In particular nothing is taken from its GLSL
+  transformation code, which links against glsl-transformer (AGPL-3.0).

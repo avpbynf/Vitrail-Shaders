@@ -98,10 +98,10 @@ not competing with the projects below.
 - **[Iris](https://github.com/IrisShaders/Iris)** is the reference
   implementation for OptiFine-format packs and the reason this project is
   LGPL-3.0 as well. It targets OpenGL, which is where the overwhelming majority
-  of packs are still played. The table saying which program stands in for
-  another when a pack does not ship it is taken from Iris, with thanks: it is
-  the only authority for it, and the format's documentation does not spell it
-  out.
+  of packs are still played. One table is borrowed from it, with credit in
+  [NOTICE](NOTICE): the chain saying which program stands in for another when a
+  pack does not ship it. Iris is the only authority for that chain, and the
+  format's own documentation does not spell it out.
 - **[Sulkan](https://github.com/mravatins/sulkanShaders)** is an open source
   Vulkan shader engine for Minecraft 26.2 and later, GPLv3, built as a Fabric
   mod. It was already running on the Vulkan renderer when this project started,
@@ -168,3 +168,7 @@ LGPL-3.0-only, in [LICENSE](LICENSE). Version 3 of the Lesser GPL is written as
 a set of additional permissions on top of the ordinary GPL rather than as a
 standalone document, so a copy of that one is in [GPL-3.0.txt](GPL-3.0.txt) as
 well. Both are needed to read either.
+
+One table in the pack loader, the gbuffers fallback chain, is adapted from Iris.
+Iris is LGPL-3.0 as well, so nothing about the licensing of this repository
+changes. The details are in [NOTICE](NOTICE).
