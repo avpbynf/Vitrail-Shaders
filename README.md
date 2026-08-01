@@ -8,4 +8,7 @@ OptiFine-format shader packs on the Vulkan backend.
 Pack GLSL is translated once, when the pack is loaded, and compiled to SPIR-V.
 There is no translation layer at runtime.
 
-Status: early. Nothing is usable yet.
+Status: early. The engine gets a pass of its own into the frame and draws a full
+screen triangle with it. The GLSL for that pass lives in `vitrail/` in the game
+directory and is compiled at startup, so editing it and restarting is enough to
+change what shows up. No pack format, no uniforms, nothing else yet.
