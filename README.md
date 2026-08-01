@@ -8,14 +8,31 @@
   OptiFine-format shader packs, on Minecraft's native Vulkan renderer.
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Minecraft-26.2-2E6FD9?style=flat-square" alt="Minecraft 26.2">
+  <img src="https://img.shields.io/badge/loader-NeoForge-1B2A6B?style=flat-square" alt="NeoForge">
+  <img src="https://img.shields.io/badge/renderer-Vulkan-7B3FA0?style=flat-square" alt="Vulkan">
+  <img src="https://img.shields.io/badge/licence-LGPL--3.0-F2B134?style=flat-square" alt="LGPL-3.0-only">
+  <img src="https://img.shields.io/badge/status-in%20development-6E7681?style=flat-square" alt="In development">
+</p>
+
 ---
 
-Minecraft 26.2 ships a native Vulkan renderer. Shader packs did not follow.
-Iris does not run on Vulkan and crashes if it is enabled, and the engines that
-do run on Vulkan expect packs written for them, so a decade of existing packs
-has nowhere to go.
+Minecraft 26.2 ships a native Vulkan renderer alongside the OpenGL one. The
+shader ecosystem grew up on OpenGL and has not crossed over yet: the packs, the
+engines that load them and the habits of the people who write them all assume
+that renderer.
 
-Vitrail loads those packs unmodified.
+Vitrail keeps the two sides compatible while that changes. It loads existing
+OptiFine-format packs, unmodified, on the Vulkan backend, so that turning Vulkan
+on does not mean giving up the packs you already use.
+
+## Status
+
+**It does not load a shader pack yet.** What runs today is the machinery
+underneath one: a chain of full screen passes of its own on the Vulkan backend,
+reading GLSL from disk and having the game compile it to SPIR-V. Steps 1 and 2
+of the plan below are done.
 
 ## How it works
 
@@ -50,23 +67,15 @@ specification already exists, there is a corpus of real packs to test against,
 and there is an unambiguous definition of done. A new format closes the door on
 all three permanently.
 
-It also gives pack authors somewhere to stand while the renderer moves out from
-under them. They can keep shipping what they already have instead of maintaining
-two versions of it through the transition from OpenGL to Vulkan. None of this
-rules out supporting a Vulkan-native pack format later, if one appears and
-people write for it; it is simply not the problem worth solving first.
+It also means an author can keep shipping one pack through the move to Vulkan
+rather than maintaining two. None of this rules out supporting a Vulkan-native
+format later, if one appears and people write for it; it is simply not the
+problem worth solving first.
 
 The cost is known and measured. Eight packs were surveyed before any code was
 written: they expect 274 distinct uniforms between them, and 85 percent of their
 1863 compilation units survive a purely mechanical translation. The packs
 themselves are not redistributable and are not in this repository.
-
-## Status
-
-**It does not load a shader pack yet.** What runs today is the machinery
-underneath one: a chain of full screen passes of its own on the Vulkan backend,
-reading GLSL from disk and having the game compile it to SPIR-V. Steps 1 and 2
-below are done.
 
 ## The plan
 
@@ -88,8 +97,8 @@ not competing with the projects below.
 
 - **[Iris](https://github.com/IrisShaders/Iris)** is the reference
   implementation for OptiFine-format packs and the reason this project is
-  LGPL-3.0 as well. It runs on OpenGL; on Minecraft's Vulkan backend it does not
-  start.
+  LGPL-3.0 as well. It targets OpenGL, which is where the overwhelming majority
+  of packs are still played.
 - **[Sulkan](https://github.com/mravatins/sulkanShaders)** is an open source
   Vulkan shader engine for Minecraft 26.2 and later, GPLv3, built as a Fabric
   mod. It was already running on the Vulkan renderer when this project started,
@@ -102,9 +111,8 @@ not competing with the projects below.
   pack is public. It is a clean break from the OptiFine format rather than a way
   to keep running what already exists.
 
-The gap none of them fills is the narrow one this project aims at: taking a pack
-written years ago for OptiFine, unmodified, and running it on the Vulkan
-renderer that now ships with the game.
+None of them covers the narrow case this one is built for: a pack written years
+ago, running as it is, on the renderer that now ships with the game.
 
 ## Requirements
 
