@@ -1,0 +1,73 @@
+package dev.vitrail.pack;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.stream.Stream;
+
+/**
+ * Reads a pack from disk and hands back what was found.
+ * <p>
+ * The source is closed before the result is returned, so the result cannot hold anything that
+ * depends on it still being open. Nothing is compiled and nothing is drawn here: this stage
+ * reads and counts, so that what it reports can be checked against measurements taken from the
+ * same packs before any of the engine existed.
+ */
+public final class PackLoader {
+
+	public static final String DIRECTORY_NAME = "shaderpacks";
+
+	private PackLoader() {
+	}
+
+	public static LoadedPack load(Path packPath) throws IOException {
+		long start = System.nanoTime();
+
+		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
+			DimensionSet dimensions = DimensionSet.discover(source);
+			OptionIndex options = OptionIndex.build(source);
+			ProgramSet programs = ProgramSet.enumerate(source, dimensions);
+			PackStats stats = PackStats.measure(source, options);
+
+			return new LoadedPack(source.packName(), source.isZip(), dimensions, options, programs, stats,
+					source.caseInsensitiveHits(), (System.nanoTime() - start) / 1_000_000L);
+		}
+	}
+
+	/** Where packs are looked for, next to {@code mods/}, as every other engine does it. */
+	public static Path directory(Path gameDirectory) {
+		return gameDirectory.resolve(DIRECTORY_NAME);
+	}
+
+	/**
+	 * Every pack in the directory, in name order. A directory and a zip are both candidates; a
+	 * zip that turns out not to be a pack fails when it is opened, not here.
+	 */
+	public static List<Path> candidates(Path gameDirectory) throws IOException {
+		Path directory = directory(gameDirectory);
+		if (!Files.isDirectory(directory)) {
+			return List.of();
+		}
+
+		try (Stream<Path> entries = Files.list(directory)) {
+			List<Path> found = new ArrayList<>(entries.filter(PackLoader::looksLikeAPack).toList());
+			found.sort(Comparator.comparing(path -> path.getFileName().toString().toLowerCase(Locale.ROOT)));
+
+			return List.copyOf(found);
+		}
+	}
+
+	private static boolean looksLikeAPack(Path entry) {
+		if (Files.isDirectory(entry)) {
+			return true;
+		}
+
+		Path name = entry.getFileName();
+
+		return name != null && name.toString().toLowerCase(Locale.ROOT).endsWith(".zip");
+	}
+}

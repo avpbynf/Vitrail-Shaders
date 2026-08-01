@@ -1,6 +1,7 @@
 package dev.vitrail.neoforge;
 
 import dev.vitrail.Vitrail;
+import dev.vitrail.pack.PackReport;
 import dev.vitrail.render.ShaderChain;
 
 import net.neoforged.api.distmarker.Dist;
@@ -34,6 +35,11 @@ public final class VitrailNeoForge {
 				Vitrail.platform().isModLoaded("sodium") ? "present" : "missing");
 
 		ShaderChain.loadShaders();
+
+		// Reading every pack in the folder rather than one: this stage is judged by comparing
+		// its counts against measurements taken from a whole corpus, and one line per pack is
+		// what makes that comparison possible.
+		PackReport.logAll(Vitrail.platform().gameDirectory());
 	}
 
 	private void onAfterLevel(RenderLevelStageEvent.AfterLevel event) {
