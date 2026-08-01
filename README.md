@@ -114,5 +114,7 @@ breaks anything that feeds sources to a GLSL compiler, and line endings are LF.
 
 ## Licence
 
-LGPL-3.0-only.
-
+LGPL-3.0-only, in [LICENSE](LICENSE). Version 3 of the Lesser GPL is written as
+a set of additional permissions on top of the ordinary GPL rather than as a
+standalone document, so a copy of that one is in [GPL-3.0.txt](GPL-3.0.txt) as
+well. Both are needed to read either.
