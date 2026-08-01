@@ -13,8 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Turns one flattened pack unit into GLSL a Vulkan compiler will take.
@@ -61,8 +59,6 @@ public final class GlslTranslator {
 	 */
 	private static final int MAX_STATEMENT_TOKENS = 4096;
 
-	private static final Pattern DRAW_BUFFERS =
-			Pattern.compile("(DRAWBUFFERS|RENDERTARGETS)\\s*:\\s*([0-9][0-9,\\s]*)");
 
 	private final ExpandedUnit unit;
 	private final ProgramStage stage;
@@ -187,47 +183,75 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Which colour attachments this program writes. Packs declare it more than once, in different
-	 * branches of the same {@code #if}, so only the first one on a line that was actually taken
-	 * counts. Reading the first one found regardless gives the wrong list on real packs: BSL's
-	 * nether composite writes four outputs and the first comment in its text names two.
+	 * Which colour attachments this program writes.
 	 * <p>
-	 * Nothing in the translation depends on this. It is carried for the pass that binds them.
+	 * This follows Iris rather than anything reasoned out here, because Iris is what the packs are
+	 * written and tested against, and its rule is odd enough that guessing would get it wrong.
+	 * Read from {@code CommentDirectiveParser.findDirective} and {@code ProgramDirectives}: the
+	 * <em>last</em> occurrence in the file wins, the search runs on text whose conditionals have
+	 * not been evaluated, so a declaration in a branch nobody takes still counts, the directive
+	 * has to open a block comment or it is not one at all, and if the last occurrence fails that
+	 * test nothing falls back to an earlier one. When both spellings appear, the later of the two
+	 * wins.
+	 * <p>
+	 * Iris infers a single attachment zero when neither appears. That is a rendering decision, so
+	 * it is left to whoever binds these rather than made here: an empty list means the program
+	 * said nothing.
 	 */
 	private void collectDrawBuffers() {
-		int[] lines = lineNumbers();
+		String text = this.unit.text();
+		int drawBuffersAt = directiveStart(text, "DRAWBUFFERS");
+		int renderTargetsAt = directiveStart(text, "RENDERTARGETS");
 
-		for (int index = 0; index < this.tokens.size(); index++) {
-			Token token = this.tokens.get(index);
-			if (token.kind() != Kind.COMMENT || !this.unit.isLive(lines[index])) {
-				continue;
-			}
+		if (drawBuffersAt < 0 && renderTargetsAt < 0) {
+			return;
+		}
 
-			Matcher found = DRAW_BUFFERS.matcher(token.text());
-			if (!found.find()) {
-				continue;
-			}
+		boolean runTogether = drawBuffersAt > renderTargetsAt;
+		String value = directiveValue(text, runTogether ? drawBuffersAt : renderTargetsAt,
+				runTogether ? "DRAWBUFFERS" : "RENDERTARGETS");
+		if (value == null) {
+			return;
+		}
 
-			// DRAWBUFFERS runs its indices together, so it cannot name an attachment past nine;
-			// RENDERTARGETS separates them with commas and can.
-			if (found.group(1).equals("DRAWBUFFERS")) {
-				for (char digit : found.group(2).trim().toCharArray()) {
-					if (digit >= '0' && digit <= '9') {
-						this.drawBuffers.add(digit - '0');
-					}
-				}
-			} else {
-				for (String part : found.group(2).split(",")) {
-					addRenderTarget(part.trim());
+		// DRAWBUFFERS runs its indices together, so it cannot name an attachment past nine.
+		// RENDERTARGETS separates them with commas and can.
+		if (runTogether) {
+			for (char digit : value.toCharArray()) {
+				if (digit >= '0' && digit <= '9') {
+					this.drawBuffers.add(digit - '0');
 				}
 			}
 
 			return;
 		}
+
+		for (String part : value.split(",")) {
+			addRenderTarget(part.trim());
+		}
+	}
+
+	/** Where the winning occurrence of a directive begins, or -1 if the file has none usable. */
+	private static int directiveStart(String text, String name) {
+		int at = text.lastIndexOf(name + ":");
+		if (at < 0) {
+			return -1;
+		}
+
+		// The directive has to be the first thing in a block comment. A line comment does not
+		// count, and neither does a directive with prose in front of it on the same line.
+		return text.substring(0, at).stripTrailing().endsWith("/*") ? at : -1;
+	}
+
+	private static String directiveValue(String text, int at, String name) {
+		String rest = text.substring(at + name.length() + 1);
+		int close = rest.indexOf("*/");
+
+		return close < 0 ? null : rest.substring(0, close).trim();
 	}
 
 	private void addRenderTarget(String text) {
-		if (text.isEmpty() || text.length() > 2) {
+		if (text.isEmpty() || text.length() > 2 || !text.chars().allMatch(Character::isDigit)) {
 			return;
 		}
 
