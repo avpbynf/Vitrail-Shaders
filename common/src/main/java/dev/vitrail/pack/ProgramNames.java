@@ -25,23 +25,26 @@ public final class ProgramNames {
 		return ProgramFallbacks.names();
 	}
 
-	/** Families that carry an optional number, as in {@code composite3}. */
+	/**
+	 * Families that carry an optional number, as in {@code composite3}. Setup and begin belong
+	 * here too, however singular they sound: a pack may write {@code setup1} through
+	 * {@code setup99} and expect them run in order.
+	 */
 	private static final Set<String> NUMBERED = Set.of(
-			"composite", "deferred", "prepare", "shadowcomp");
+			"composite", "deferred", "prepare", "shadowcomp", "setup", "begin");
 
 	/** Families that stand alone. */
-	private static final Set<String> SIMPLE = Set.of(
-			"shadow", "final", "setup", "begin");
+	private static final Set<String> SIMPLE = Set.of("shadow", "final");
 
 	/** Highest slot the format allows on a numbered family. */
 	private static final int MAX_SLOT = 99;
 
 	/**
-	 * A trailing letter marks a compute pass attached to the program before it. The underscore
-	 * is optional because both spellings are in use across the corpus, and a pack that writes
-	 * {@code composite21_a.csh} would otherwise lose every compute pass it has.
+	 * An underscore and a letter mark a compute pass attached to the program before it, as in
+	 * {@code composite21_a.csh}. The underscore is required: without it, any program whose name
+	 * happens to end in a letter would be read as a compute pass hanging off a shorter name.
 	 */
-	private static final Pattern COMPUTE_SUFFIX = Pattern.compile("^(.*?)_?([a-z])$");
+	private static final Pattern COMPUTE_SUFFIX = Pattern.compile("^(.*?)_([a-z])$");
 
 	private ProgramNames() {
 	}

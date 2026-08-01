@@ -30,6 +30,17 @@ public final class IncludeExpander {
 	/** Deep enough for anything real: the worst of the corpus reaches five. */
 	private static final int MAX_DEPTH = 32;
 
+	/**
+	 * A depth limit alone does not bound the work. Includes form a graph, not a tree, and a
+	 * file that includes the next one twice doubles at every level: eighteen small files with no
+	 * cycle at all produce half a million lines and take forty seconds, and thirty-two levels
+	 * would run for hours before running out of memory. Neither of those is catchable where this
+	 * is called from, so the total is bounded too.
+	 */
+	private static final int MAX_FILES = 20_000;
+
+	private static final int MAX_LINES = 400_000;
+
 	private static final Pattern INCLUDE = Pattern.compile("^\\s*#\\s*include\\s+[<\"](.+?)[>\"].*$");
 	private static final Pattern IF_DEFINED = Pattern.compile("^\\s*#\\s*(ifdef|ifndef)\\s+([A-Za-z_]\\w*).*$");
 	private static final Pattern IF = Pattern.compile("^\\s*#\\s*if\\s+(.*)$");
@@ -70,6 +81,15 @@ public final class IncludeExpander {
 		if (depth > MAX_DEPTH) {
 			state.tooDeep++;
 			state.output.add("#error include nesting too deep at " + relative);
+			return;
+		}
+
+		if (++state.filesExpanded > MAX_FILES || state.output.size() > MAX_LINES) {
+			// Said once and then quietly, otherwise the message itself becomes the runaway.
+			if (state.exhausted++ == 0) {
+				state.output.add("#error include budget exhausted at " + relative);
+			}
+
 			return;
 		}
 
@@ -241,6 +261,8 @@ public final class IncludeExpander {
 		private final Set<String> everSeen = new HashSet<>();
 
 		private String version;
+		private int filesExpanded;
+		private int exhausted;
 		private int seen;
 		private int followed;
 		private int skipped;
@@ -259,7 +281,7 @@ public final class IncludeExpander {
 		private ExpansionStats toStats() {
 			return new ExpansionStats(this.seen, this.followed, this.skipped, this.missing,
 					this.duplicates, this.cycles, this.maxDepth, this.tooDeep, this.conditionals,
-					this.undecidable);
+					this.undecidable, this.exhausted);
 		}
 	}
 }

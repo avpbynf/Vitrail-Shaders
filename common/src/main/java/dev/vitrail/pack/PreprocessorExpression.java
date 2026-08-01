@@ -14,6 +14,12 @@ import java.util.OptionalLong;
  * writing {@code #if QUALITY / 2} expects the C answer, and the compiler that sees the same
  * line later will give the C answer whatever is decided here.
  * <p>
+ * A name stands for a value, and that value may itself be an expression naming other settings,
+ * so evaluating one expression can start another. The budget for that is shared across the
+ * whole nest rather than restarting at each hop, because a pack is downloaded content and
+ * {@code #define A (B)} beside {@code #define B (A)} would otherwise exhaust the stack. That
+ * failure is not catchable where this is called from, so it has to be impossible here.
+ * <p>
  * An expression this cannot parse yields no answer rather than false, and the caller is
  * expected to treat that as true. Including code that should have been skipped leaves a
  * compiler error to find; skipping code that should have been included removes a function
@@ -21,33 +27,50 @@ import java.util.OptionalLong;
  */
 public final class PreprocessorExpression {
 
-	/** How far a macro may be resolved through other macros before giving up. */
+	/** How far one name may lead to another before the nest is called unresolvable. */
 	private static final int MAX_RESOLUTION_DEPTH = 8;
+
+	/** No real expression nests this deep, and a crafted one must not reach the stack limit. */
+	private static final int MAX_PARENTHESIS_DEPTH = 64;
 
 	private final List<String> tokens;
 	private final Map<String, String> defines;
+	private final int depth;
 
 	private int position;
+	private int parentheses;
 	private boolean failed;
 
-	private PreprocessorExpression(List<String> tokens, Map<String, String> defines) {
+	private PreprocessorExpression(List<String> tokens, Map<String, String> defines, int depth) {
 		this.tokens = tokens;
 		this.defines = defines;
+		this.depth = depth;
 	}
 
 	public static Optional<Boolean> evaluate(String expression, Map<String, String> defines) {
+		OptionalLong value = value(expression, defines, 0);
+
+		return value.isPresent() ? Optional.of(value.getAsLong() != 0) : Optional.empty();
+	}
+
+	/** The numeric answer, which is what a name resolving to an expression needs. */
+	private static OptionalLong value(String expression, Map<String, String> defines, int depth) {
+		if (depth > MAX_RESOLUTION_DEPTH) {
+			return OptionalLong.empty();
+		}
+
 		List<String> tokens = tokenise(stripComments(expression));
 		if (tokens.isEmpty()) {
-			return Optional.empty();
+			return OptionalLong.empty();
 		}
 
-		PreprocessorExpression parser = new PreprocessorExpression(tokens, defines);
-		long value = parser.logicalOr();
+		PreprocessorExpression parser = new PreprocessorExpression(tokens, defines, depth);
+		long result = parser.logicalOr();
 		if (parser.failed || parser.position < tokens.size()) {
-			return Optional.empty();
+			return OptionalLong.empty();
 		}
 
-		return Optional.of(value != 0);
+		return OptionalLong.of(result);
 	}
 
 	private static String stripComments(String expression) {
@@ -198,13 +221,23 @@ public final class PreprocessorExpression {
 		long left = additive();
 		while (true) {
 			if (accept("<<")) {
-				left <<= additive();
+				left = shiftBy(left, additive(), true);
 			} else if (accept(">>")) {
-				left >>= additive();
+				left = shiftBy(left, additive(), false);
 			} else {
 				return left;
 			}
 		}
+	}
+
+	/** A shift by a negative or absurd amount is undefined in C, so it is not an answer here. */
+	private long shiftBy(long left, long places, boolean up) {
+		if (places < 0 || places > 63) {
+			this.failed = true;
+			return 0;
+		}
+
+		return up ? left << places : left >> places;
 	}
 
 	private long additive() {
@@ -226,27 +259,26 @@ public final class PreprocessorExpression {
 			if (accept("*")) {
 				left *= unary();
 			} else if (accept("/")) {
-				long divisor = unary();
-				// A pack dividing by zero is a pack whose condition cannot be decided, not a
-				// reason to bring the load down.
-				if (divisor == 0) {
-					this.failed = true;
-					return 0;
-				}
-
-				left /= divisor;
+				left = divide(left, unary(), false);
 			} else if (accept("%")) {
-				long divisor = unary();
-				if (divisor == 0) {
-					this.failed = true;
-					return 0;
-				}
-
-				left %= divisor;
+				left = divide(left, unary(), true);
 			} else {
 				return left;
 			}
 		}
+	}
+
+	/**
+	 * Zero and the one overflowing case are treated as no answer rather than as an exception:
+	 * a pack whose condition cannot be worked out is not a reason to abandon the load.
+	 */
+	private long divide(long left, long right, boolean remainder) {
+		if (right == 0 || (left == Long.MIN_VALUE && right == -1)) {
+			this.failed = true;
+			return 0;
+		}
+
+		return remainder ? left % right : left / right;
 	}
 
 	private long unary() {
@@ -277,7 +309,13 @@ public final class PreprocessorExpression {
 		}
 
 		if (accept("(")) {
+			if (++this.parentheses > MAX_PARENTHESIS_DEPTH) {
+				this.failed = true;
+				return 0;
+			}
+
 			long value = logicalOr();
+			this.parentheses--;
 			if (!accept(")")) {
 				this.failed = true;
 			}
@@ -292,7 +330,7 @@ public final class PreprocessorExpression {
 		}
 
 		if (isIdentifier(token)) {
-			return resolve(token, this.defines, 0);
+			return resolve(token, this.defines, this.depth + 1);
 		}
 
 		OptionalLong number = parseNumber(token);
@@ -323,8 +361,8 @@ public final class PreprocessorExpression {
 
 	/**
 	 * An identifier stands for whatever it was defined as, and that in turn may be another
-	 * identifier. A name nothing defines is zero, which is what the preprocessor does and what
-	 * lets a pack test a setting it never declared.
+	 * identifier or a whole expression. A name nothing defines is zero, which is what the
+	 * preprocessor does and what lets a pack test a setting it never declared.
 	 */
 	public static long resolve(String name, Map<String, String> defines, int depth) {
 		if (depth > MAX_RESOLUTION_DEPTH) {
@@ -347,8 +385,10 @@ public final class PreprocessorExpression {
 			return resolve(trimmed, defines, depth + 1);
 		}
 
-		// Anything else is an expression: evaluate it in the same table rather than guessing.
-		return evaluate(trimmed, defines).map(value2 -> value2 ? 1L : 0L).orElse(1L);
+		// An expression keeps its value rather than collapsing to one or zero. A pack that
+		// writes SHADOW_RES as QUALITY * 512 and then compares it against 256 is comparing
+		// sizes, and reducing that to a truth value quietly gives the wrong branch.
+		return value(trimmed, defines, depth + 1).orElse(1L);
 	}
 
 	private static boolean isIdentifier(String token) {
@@ -360,8 +400,13 @@ public final class PreprocessorExpression {
 	}
 
 	private static OptionalLong parseNumber(String token) {
+		boolean hexadecimal = token.length() > 2 && (token.startsWith("0x") || token.startsWith("0X"));
+
+		// The base has to be known before a suffix can be stripped: in hexadecimal, f and F are
+		// digits, and taking them for a float suffix turns 0x1F into 0x1 without a word.
+		String suffixes = hexadecimal ? "uUlL" : "uUlLfF";
 		String text = token;
-		while (!text.isEmpty() && "uUlLfF".indexOf(text.charAt(text.length() - 1)) >= 0) {
+		while (!text.isEmpty() && suffixes.indexOf(text.charAt(text.length() - 1)) >= 0) {
 			text = text.substring(0, text.length() - 1);
 		}
 
@@ -370,7 +415,7 @@ public final class PreprocessorExpression {
 		}
 
 		try {
-			if (text.length() > 2 && (text.startsWith("0x") || text.startsWith("0X"))) {
+			if (hexadecimal) {
 				return OptionalLong.of(Long.parseLong(text.substring(2), 16));
 			}
 

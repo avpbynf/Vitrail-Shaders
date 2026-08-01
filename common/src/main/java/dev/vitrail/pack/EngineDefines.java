@@ -81,8 +81,9 @@ public final class EngineDefines {
 		defines.put("DH_BLOCK_TERRACOTTA", "10");
 		defines.put("DH_BLOCK_NETHER_STONE", "11");
 		defines.put("DH_BLOCK_WATER", "12");
-		defines.put("DH_BLOCK_AIR", "13");
-		defines.put("DH_BLOCK_ILLUMINATED", "14");
+		defines.put("DH_BLOCK_GRASS", "13");
+		defines.put("DH_BLOCK_AIR", "14");
+		defines.put("DH_BLOCK_ILLUMINATED", "15");
 
 		return defines;
 	}
