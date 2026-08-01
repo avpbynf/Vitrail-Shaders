@@ -1,0 +1,17 @@
+# Normalise line endings in the repository, keep native ones in the working tree.
+* text=auto eol=lf
+
+*.java   text diff=java
+*.gradle text
+*.kts    text
+*.md     text
+*.json   text
+*.glsl   text
+*.fsh    text
+*.vsh    text
+*.csh    text
+*.properties text
+
+*.png    binary
+*.jar    binary
+*.zip    binary
