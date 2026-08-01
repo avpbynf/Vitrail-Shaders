@@ -29,10 +29,10 @@ on does not mean giving up the packs you already use.
 
 ## Status
 
-**It does not load a shader pack yet.** What runs today is the machinery
-underneath one: a chain of full screen passes of its own on the Vulkan backend,
-reading GLSL from disk and having the game compile it to SPIR-V. Steps 1 and 2
-of the plan below are done.
+**It does not render a shader pack yet.** It reads one: point it at a pack and
+it will resolve the includes, apply the settings and work out which program
+serves what, for every dimension. What it cannot do yet is translate that GLSL
+and put it on screen. Steps 1 to 3 of the plan below are done.
 
 ## How it works
 
@@ -98,7 +98,10 @@ not competing with the projects below.
 - **[Iris](https://github.com/IrisShaders/Iris)** is the reference
   implementation for OptiFine-format packs and the reason this project is
   LGPL-3.0 as well. It targets OpenGL, which is where the overwhelming majority
-  of packs are still played.
+  of packs are still played. The table saying which program stands in for
+  another when a pack does not ship it is taken from Iris, with thanks: it is
+  the only authority for it, and the format's documentation does not spell it
+  out.
 - **[Sulkan](https://github.com/mravatins/sulkanShaders)** is an open source
   Vulkan shader engine for Minecraft 26.2 and later, GPLv3, built as a Fabric
   mod. It was already running on the Vulkan renderer when this project started,
