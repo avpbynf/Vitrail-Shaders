@@ -33,11 +33,11 @@ hs_err_pid*.log
 replay_pid*.log
 *.hprof
 
-# Local working notes, not part of the project
+# Working notes, planning and measurement work. Useful to have next to the code,
+# but none of it is part of what the project ships.
 NOTES.md
+ROADMAP.md
+research/
 
 # Shader packs used for testing are not redistributable and must never be committed.
-research/corpus/
-research/units*/
-research/work/
 *.zip
