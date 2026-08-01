@@ -29,17 +29,22 @@ on does not mean giving up the packs you already use.
 
 ## Status
 
-**It does not render a shader pack yet.** It reads one: point it at a pack and
-it will resolve the includes, apply the settings and work out which program
-serves what, for every dimension. What it cannot do yet is translate that GLSL
-and put it on screen. Steps 1 to 3 of the plan below are done.
+**It does not render a shader pack yet.** It reads one and translates it: point
+it at a pack and it will resolve the includes, apply the settings, work out which
+program serves what for every dimension, and rewrite each program into GLSL a
+Vulkan compiler accepts. Across the eight packs surveyed, 1738 of their 1863
+compilation units now compile, and 1523 of the 1577 that are real entry points
+rather than fragments meant to be included by one.
+
+What it cannot do yet is supply those programs with the values they read, so
+nothing reaches the screen. Steps 1 to 4 of the plan below are done.
 
 ## How it works
 
 A shader pack is GLSL written against OpenGL conventions that no Vulkan driver
 will accept. Vitrail rewrites it: version bump, `varying` and `attribute` into
-`in` and `out`, loose uniforms gathered into blocks, explicit locations,
-`gl_FragData[N]` into declared outputs, legacy sampler calls, fixed-function
+`in` and `out`, loose uniforms gathered into a block, `gl_FragData[N]` into
+outputs declared one per colour attachment, legacy sampler calls, fixed-function
 builtins.
 
 That rewriting happens **once, when the pack is loaded**. What reaches the
@@ -74,8 +79,10 @@ problem worth solving first.
 
 The cost is known and measured. Eight packs were surveyed before any code was
 written: they expect 274 distinct uniforms between them, and 85 percent of their
-1863 compilation units survive a purely mechanical translation. The packs
-themselves are not redistributable and are not in this repository.
+1863 compilation units survived a throwaway mechanical translation written to
+find that number out. That survey is what the figure in the status above should
+be read against. The packs themselves are not redistributable and are not in
+this repository.
 
 ## The plan
 
