@@ -2,24 +2,41 @@ package dev.vitrail.shader;
 
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.shaders.ShaderType;
+import net.minecraft.resources.Identifier;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
- * On-disk layout of the shader sources. Nothing is compiled from the jar: a starting pair
- * of files is written out the first time the game runs, and from then on the engine only
- * ever compiles what it reads back from disk. Editing a file and restarting is enough to
- * change what ends up on screen.
+ * On-disk layout of the shader sources. Nothing is compiled from the jar: a starting set of
+ * files is written out the first time the game runs, and from then on the engine only ever
+ * compiles what it reads back from disk. Editing a file and restarting is enough to change
+ * what ends up on screen.
+ * <p>
+ * The four units here are a hand-written stand-in for the program chain a pack will
+ * eventually declare. One vertex stage is shared by all three passes, so the fragment
+ * stages have to agree with it on varyings. They are paired by name, not by order, and the
+ * two ways of getting it wrong are not equally kind: a name the vertex stage never outputs
+ * is refused outright, while a fragment that leaves one out shifts the locations of the
+ * ones after it and says nothing.
  */
 public final class ShaderFiles {
 
 	public static final String DIRECTORY_NAME = "vitrail";
-	public static final String VERTEX_FILE = "overlay.vsh";
-	public static final String FRAGMENT_FILE = "overlay.fsh";
 
-	private static final String DEFAULT_VERTEX = """
+	public static final Identifier SCREEN = shaderId("screen");
+	public static final Identifier FIRST = shaderId("pass1");
+	public static final Identifier SECOND = shaderId("pass2");
+	public static final Identifier COMPOSE = shaderId("compose");
+
+	private static final String SCREEN_VERTEX = """
 			#version 330
 
 			out vec2 texCoord;
@@ -33,21 +50,22 @@ public final class ShaderFiles {
 			}
 			""";
 
-	private static final String DEFAULT_FRAGMENT = """
+	private static final String FIRST_FRAGMENT = """
 			#version 330
 
 			// --- settings ---
-			// Thickness of the solid frame drawn against the edges of the window, in pixels.
-			// 0.0 draws no frame.
-			#define BORDER_PIXELS 6.0
-			// Colour of that frame, linear RGB in 0.0 to 1.0.
-			#define BORDER_COLOUR vec3(1.0, 0.0, 1.0)
-			// Opacity of the tint laid over the rest of the screen, 0.0 to 1.0.
-			#define TINT_OPACITY 0.15
+			// Side of the square marks the two passes stamp into the image, in pixels.
+			#define MARK_PIXELS 64.0
 			// --- end of settings ---
 
+			// The name of a sampler has to be spelled the same way here, in the bind group
+			// layout the pipeline declares, and in the call that binds the texture. There is
+			// deliberately no layout(binding) or layout(set): the game assigns those itself
+			// while compiling, and rewrites them afterwards.
+			uniform sampler2D VitrailSceneSampler;
+
 			// The block the game fills in for its own shaders. ScreenSize is the size of the
-			// render target in pixels, which is what makes the frame below resolution aware.
+			// target in pixels, which is what makes the marks below resolution aware.
 			layout(std140) uniform Globals {
 				ivec3 CameraBlockPos;
 				vec3 CameraOffset;
@@ -65,16 +83,80 @@ public final class ShaderFiles {
 			void main() {
 				vec2 uv = clamp(texCoord, 0.0, 1.0);
 				vec2 pixel = uv * ScreenSize;
-				float edgeDistance = min(min(pixel.x, ScreenSize.x - pixel.x),
-						min(pixel.y, ScreenSize.y - pixel.y));
+				vec4 scene = texture(VitrailSceneSampler, uv);
 
-				if (edgeDistance < BORDER_PIXELS) {
-					fragColor = vec4(BORDER_COLOUR, 1.0);
+				// Pure magenta survives a round trip through an RGBA8 target untouched, so
+				// the next pass can recognise it by an exact comparison.
+				if (pixel.x < MARK_PIXELS && pixel.y < MARK_PIXELS) {
+					fragColor = vec4(1.0, 0.0, 1.0, 1.0);
 				} else {
-					fragColor = vec4(uv.x, 1.0 - uv.x, 0.65, TINT_OPACITY);
+					fragColor = vec4(scene.rgb, 1.0);
 				}
 			}
 			""";
+
+	private static final String SECOND_FRAGMENT = """
+			#version 330
+
+			// --- settings ---
+			#define MARK_PIXELS 64.0
+			// --- end of settings ---
+
+			uniform sampler2D VitrailFirstSampler;
+
+			layout(std140) uniform Globals {
+				ivec3 CameraBlockPos;
+				vec3 CameraOffset;
+				vec2 ScreenSize;
+				float GlintAlpha;
+				float GameTime;
+				int MenuBlurRadius;
+				int UseRgss;
+			};
+
+			in vec2 texCoord;
+
+			out vec4 fragColor;
+
+			void main() {
+				vec2 uv = clamp(texCoord, 0.0, 1.0);
+				vec2 pixel = uv * ScreenSize;
+				vec4 previous = texture(VitrailFirstSampler, uv);
+
+				if (previous.r > 0.9 && previous.g < 0.1 && previous.b > 0.9) {
+					// Green is written nowhere else in the chain. It can only appear if this
+					// pass really read back what the previous one wrote, which is the whole
+					// point of the exercise.
+					fragColor = vec4(0.0, 1.0, 0.0, 1.0);
+				} else if (pixel.x > ScreenSize.x - MARK_PIXELS && pixel.y < MARK_PIXELS) {
+					// A mark of its own, in the opposite corner, so that a chain stopping one
+					// pass short is visible rather than merely suspected.
+					fragColor = vec4(0.0, 1.0, 1.0, 1.0);
+				} else {
+					fragColor = previous;
+				}
+			}
+			""";
+
+	private static final String COMPOSE_FRAGMENT = """
+			#version 330
+
+			uniform sampler2D VitrailSecondSampler;
+
+			in vec2 texCoord;
+
+			out vec4 fragColor;
+
+			void main() {
+				fragColor = vec4(texture(VitrailSecondSampler, clamp(texCoord, 0.0, 1.0)).rgb, 1.0);
+			}
+			""";
+
+	private static final List<Unit> UNITS = List.of(
+			new Unit(SCREEN, ShaderType.VERTEX, "screen.vsh", SCREEN_VERTEX),
+			new Unit(FIRST, ShaderType.FRAGMENT, "pass1.fsh", FIRST_FRAGMENT),
+			new Unit(SECOND, ShaderType.FRAGMENT, "pass2.fsh", SECOND_FRAGMENT),
+			new Unit(COMPOSE, ShaderType.FRAGMENT, "compose.fsh", COMPOSE_FRAGMENT));
 
 	private ShaderFiles() {
 	}
@@ -87,15 +169,24 @@ public final class ShaderFiles {
 		Path directory = directory();
 		Files.createDirectories(directory);
 
-		Path vertexFile = directory.resolve(VERTEX_FILE);
-		Path fragmentFile = directory.resolve(FRAGMENT_FILE);
-		String vertex = readOrCreate(vertexFile, DEFAULT_VERTEX);
-		String fragment = readOrCreate(fragmentFile, DEFAULT_FRAGMENT);
+		Map<Identifier, String> vertexSources = new HashMap<>();
+		Map<Identifier, String> fragmentSources = new HashMap<>();
+		List<String> read = new ArrayList<>();
 
-		Vitrail.logger().info("Read {} ({} chars) and {} ({} chars) from {}",
-				VERTEX_FILE, vertex.length(), FRAGMENT_FILE, fragment.length(), directory);
+		for (Unit unit : UNITS) {
+			String source = readOrCreate(directory.resolve(unit.fileName()), unit.defaultSource());
+			if (unit.type() == ShaderType.FRAGMENT) {
+				fragmentSources.put(unit.id(), source);
+			} else {
+				vertexSources.put(unit.id(), source);
+			}
 
-		return new DiskShaderSource(vertex, fragment);
+			read.add(unit.fileName() + " (" + source.length() + " chars)");
+		}
+
+		Vitrail.logger().info("Read {} from {}", String.join(", ", read), directory);
+
+		return new DiskShaderSource(vertexSources, fragmentSources);
 	}
 
 	private static String readOrCreate(Path file, String starting) throws IOException {
@@ -111,5 +202,12 @@ public final class ShaderFiles {
 	// and the compiler then rejects the file with a message that points nowhere useful.
 	private static String stripByteOrderMark(String source) {
 		return !source.isEmpty() && source.charAt(0) == 0xFEFF ? source.substring(1) : source;
+	}
+
+	private static Identifier shaderId(String name) {
+		return Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, name);
+	}
+
+	private record Unit(Identifier id, ShaderType type, String fileName, String defaultSource) {
 	}
 }
