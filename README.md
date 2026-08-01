@@ -37,11 +37,24 @@ on its own shaders.
 
 ## Why the OptiFine format
 
-Inventing a pack format was the obvious alternative and it was rejected on
-purpose. Following the OptiFine conventions gives three things that a new format
-closes the door on permanently: a specification that has been stable for ten
-years, a corpus of real packs to test against, and an unambiguous definition of
-done.
+Not because it is elegant, but because that is where the work is. Packs have
+been written against the OptiFine conventions for more than a decade, by a lot
+of people, and that is still where nearly all of the community writes today.
+Minecraft moving to Vulkan does not make any of that work worse. It just makes
+it unrunnable, and asking every author to port to a new format is asking them to
+throw it away.
+
+So inventing a format was the obvious alternative, and it was rejected on
+purpose. Following conventions that have held for ten years means the
+specification already exists, there is a corpus of real packs to test against,
+and there is an unambiguous definition of done. A new format closes the door on
+all three permanently.
+
+It also gives pack authors somewhere to stand while the renderer moves out from
+under them. They can keep shipping what they already have instead of maintaining
+two versions of it through the transition from OpenGL to Vulkan. None of this
+rules out supporting a Vulkan-native pack format later, if one appears and
+people write for it; it is simply not the problem worth solving first.
 
 The cost is known and measured. Eight packs were surveyed before any code was
 written: they expect 274 distinct uniforms between them, and 85 percent of their
@@ -50,22 +63,48 @@ themselves are not redistributable and are not in this repository.
 
 ## Status
 
-Vitrail is being built in order of risk rather than in order of visible payoff.
-It does not load a pack yet.
+**It does not load a shader pack yet.** What runs today is the machinery
+underneath one: a chain of full screen passes of its own on the Vulkan backend,
+reading GLSL from disk and having the game compile it to SPIR-V. Steps 1 and 2
+below are done.
 
-| # | Milestone | State |
-| --- | --- | --- |
-| 1 | Get a pass of our own into the frame, with GLSL from outside the jar | Done |
-| 2 | The pass graph: our own targets, chained, resize-safe | Done |
-| 3 | Pack loading: `shaders.properties`, includes, settings, fallbacks | Not started |
-| 4 | The translator, ported to Java against the measured corpus | Not started |
-| 5 | The uniform surface, where compiling becomes rendering correctly | Not started |
-| 6 | Terrain coupling with Sodium | Not started |
+## The plan
 
-Each one has to end in something that can be looked at and judged, rather than
-in a claim that it works. Milestone 1 ended with pixels on the screen coming
-from a file outside the jar. Milestone 2 ended with a pass reading back what the
-pass before it wrote, which is what the next three all rest on.
+Ordered by risk rather than by how much there is to show for it. Each step has
+to end in something that can be looked at and judged, rather than in a claim
+that it works.
+
+1. Get a pass of our own into the frame, with GLSL from outside the jar.
+2. The pass graph: our own render targets, chained, safe across a resize.
+3. Pack loading: `shaders.properties`, includes, settings, program fallbacks.
+4. The translator, ported to Java against the measured corpus.
+5. The uniform surface, where compiling becomes rendering correctly.
+6. Terrain coupling with Sodium.
+
+## Related work
+
+Vitrail is not the first attempt at running shaders on this renderer, and it is
+not competing with the projects below.
+
+- **[Iris](https://github.com/IrisShaders/Iris)** is the reference
+  implementation for OptiFine-format packs and the reason this project is
+  LGPL-3.0 as well. It runs on OpenGL; on Minecraft's Vulkan backend it does not
+  start.
+- **[Sulkan](https://github.com/mravatins/sulkanShaders)** is an open source
+  Vulkan shader engine for Minecraft 26.2 and later, GPLv3, built as a Fabric
+  mod. It was already running on the Vulkan renderer when this project started,
+  and reading where it hooks into the game was useful. None of its code is
+  reused here: its licence would not allow it without relicensing all of
+  Vitrail, and a mechanical line comparison is run at every milestone to keep
+  that claim honest.
+- **[Aperture](https://github.com/IrisShaders/Aperture-Example-Pack)**, from the
+  Iris team, is a newer engine whose packs are written in Slang. Its example
+  pack is public. It is a clean break from the OptiFine format rather than a way
+  to keep running what already exists.
+
+The gap none of them fills is the narrow one this project aims at: taking a pack
+written years ago for OptiFine, unmodified, and running it on the Vulkan
+renderer that now ships with the game.
 
 ## Requirements
 
