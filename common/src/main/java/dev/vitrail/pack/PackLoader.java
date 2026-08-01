@@ -33,8 +33,24 @@ public final class PackLoader {
 			ProgramSet programs = ProgramSet.enumerate(source, dimensions);
 			PackStats stats = PackStats.measure(source, options);
 
+			// Every entry point is flattened, and the text is then thrown away. This stage is
+			// judged on whether the graph resolves, not on what comes out of it, and holding
+			// two hundred flattened units would cost a lot of memory to prove nothing.
+			SettingSet settings = SettingSet.defaults();
+			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			ExpansionStats expansion = ExpansionStats.NONE;
+			int expanded = 0;
+			for (ProgramSet.ProgramKey key : programs.keys()) {
+				Path file = source.file(key.file()).orElse(null);
+				if (file != null) {
+					expansion = expansion.plus(expander.expand(file).stats());
+					expanded++;
+				}
+			}
+
 			return new LoadedPack(source.packName(), source.isZip(), dimensions, options, programs, stats,
-					source.caseInsensitiveHits(), (System.nanoTime() - start) / 1_000_000L);
+					expansion, expanded, source.caseInsensitiveHits(),
+					(System.nanoTime() - start) / 1_000_000L);
 		}
 	}
 

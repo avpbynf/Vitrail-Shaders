@@ -8,6 +8,6 @@ package dev.vitrail.pack;
  * surviving path into a {@code ClosedFileSystemException} on first use, far from the cause.
  */
 public record LoadedPack(String packName, boolean fromZip, DimensionSet dimensions,
-		OptionIndex options, ProgramSet programs, PackStats stats, int caseInsensitiveHits,
-		long loadMillis) {
+		OptionIndex options, ProgramSet programs, PackStats stats, ExpansionStats expansion,
+		int expandedUnits, int caseInsensitiveHits, long loadMillis) {
 }

@@ -83,6 +83,11 @@ public final class PackReport {
 		Vitrail.logger().info("{}  dimensions {}{}", PREFIX, pack.dimensions().names(),
 				pack.dimensions().hasDimensionProperties() ? ", declared in dimension.properties" : "");
 
+		Vitrail.logger().info("{}  expansion of {} units: {}", PREFIX, pack.expandedUnits(), pack.expansion());
+		if (!pack.expansion().clean()) {
+			Vitrail.logger().warn("{}  expansion did not come out clean, see the counters above", PREFIX);
+		}
+
 		logIfAny("  ignored directories", programs.skippedDirectories());
 		logIfAny("  unrecognised program names", programs.skippedNames());
 
