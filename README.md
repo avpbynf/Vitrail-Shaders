@@ -29,15 +29,17 @@ on does not mean giving up the packs you already use.
 
 ## Status
 
-**It does not render a shader pack yet.** It reads one and translates it: point
-it at a pack and it will resolve the includes, apply the settings, work out which
-program serves what for every dimension, and rewrite each program into GLSL a
-Vulkan compiler accepts. Across the eight packs surveyed, 1738 of their 1863
-compilation units now compile, and 1523 of the 1577 that are real entry points
-rather than fragments meant to be included by one.
+**It draws one pass of a real pack, and only one.** Point it at a pack and it
+will resolve the includes, apply the settings, work out which program serves
+what for every dimension, rewrite each program into GLSL a Vulkan compiler
+accepts, and put that pack's `final` pass on screen over the finished world.
+Across the eight packs surveyed, 1738 of their 1863 compilation units compile,
+and 743 of their 785 programs compile with their stages linked together.
 
-What it cannot do yet is supply those programs with the values they read, so
-nothing reaches the screen. Steps 1 to 4 of the plan below are done.
+What it cannot do yet is run the rest of a pack's chain, or supply more than a
+handful of the values those programs read. A pack has dozens of passes and
+expects 274 uniforms; a `final` on its own is the first of them, not the point
+of arrival. Steps 1 to 4 of the plan below are done and step 5 has started.
 
 ## How it works
 
