@@ -36,6 +36,11 @@ final class NeoForgePlatform implements VitrailPlatform {
 	}
 
 	@Override
+	public Path gameDirectory() {
+		return FMLPaths.GAMEDIR.get();
+	}
+
+	@Override
 	public boolean isModLoaded(String modId) {
 		return ModList.get().isLoaded(modId);
 	}

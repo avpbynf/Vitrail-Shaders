@@ -20,5 +20,8 @@ public interface VitrailPlatform {
 	/** Directory the shader packs and the engine configuration live in. */
 	Path configDirectory();
 
+	/** Root of the game instance, where the user-editable shader sources live. */
+	Path gameDirectory();
+
 	boolean isModLoaded(String modId);
 }
