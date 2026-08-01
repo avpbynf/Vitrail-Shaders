@@ -3,6 +3,7 @@ package dev.vitrail.glsl;
 import dev.vitrail.pack.IncludeExpander;
 import dev.vitrail.pack.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.OptionIndex;
+import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.ProgramStage;
 import dev.vitrail.pack.SettingSet;
 import dev.vitrail.pack.ShaderPackSource;
@@ -39,9 +40,20 @@ public final class PackProgram {
 	 * @return empty when the pack does not serve both halves of this program
 	 */
 	public static Optional<Loaded> load(Path packPath, String path, boolean fullscreen) throws IOException {
+		return load(packPath, path, fullscreen, Map.of());
+	}
+
+	/**
+	 * @param chosen settings to override, by the name the pack declares them under. Milestone 3
+	 *               already resolves these; handing them in here is what lets a pack's own
+	 *               features be turned on without touching the pack.
+	 */
+	public static Optional<Loaded> load(Path packPath, String path, boolean fullscreen,
+			Map<String, OptionValue> chosen) throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
-			IncludeExpander expander = new IncludeExpander(source, options, SettingSet.defaults());
+			SettingSet settings = SettingSet.resolve(Map.of(), chosen, "chosen");
+			IncludeExpander expander = new IncludeExpander(source, options, settings);
 
 			Map<ProgramStage, ExpandedUnit> units = new LinkedHashMap<>();
 			for (ProgramStage stage : STAGES) {

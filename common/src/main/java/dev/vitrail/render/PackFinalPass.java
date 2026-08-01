@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.Vitrail;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
+import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.PackLoader;
 import dev.vitrail.pack.ProgramStage;
 
@@ -38,8 +39,10 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -156,7 +159,9 @@ public final class PackFinalPass {
 			}
 
 			Path pack = choose(gameDirectory, packs);
-			Optional<PackProgram.Loaded> program = PackProgram.load(pack, OVERWORLD + "/final", true);
+			Map<String, OptionValue> chosen = settings(gameDirectory);
+			Optional<PackProgram.Loaded> program =
+					PackProgram.load(pack, OVERWORLD + "/final", true, chosen);
 			if (program.isEmpty()) {
 				Vitrail.logger().warn("{} does not serve {}/final with both stages, nothing to draw",
 						pack.getFileName(), OVERWORLD);
@@ -199,6 +204,47 @@ public final class PackFinalPass {
 				wanted, chosen);
 
 		return packs.get(0);
+	}
+
+	/**
+	 * Settings to force on the pack, one {@code NAME=value} per line in {@code vitrail/options.txt}.
+	 * A value of {@code on} or {@code off} toggles, anything else is written as it stands.
+	 * <p>
+	 * This exists to make the pass provable. A pack's {@code final} is often nearly an identity
+	 * with its settings at their defaults, which looks exactly like a pass that never ran; turning
+	 * on one of the pack's own features settles it without touching the pack or writing a test
+	 * shader that proves only itself. It also exercises the settings resolved at milestone 3,
+	 * which nothing else does yet.
+	 */
+	private static Map<String, OptionValue> settings(Path gameDirectory) throws IOException {
+		Path file = gameDirectory.resolve(Vitrail.MOD_ID).resolve("options.txt");
+		if (!Files.isRegularFile(file)) {
+			return Map.of();
+		}
+
+		Map<String, OptionValue> chosen = new LinkedHashMap<>();
+		for (String line : Files.readAllLines(file)) {
+			String trimmed = line.trim();
+			int equals = trimmed.indexOf('=');
+			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {
+				continue;
+			}
+
+			String name = trimmed.substring(0, equals).trim();
+			String value = trimmed.substring(equals + 1).trim();
+			chosen.put(name, switch (value.toLowerCase(Locale.ROOT)) {
+				case "on", "true" -> OptionValue.on();
+				case "off", "false" -> OptionValue.off();
+				default -> OptionValue.of(value);
+			});
+		}
+
+		if (!chosen.isEmpty()) {
+			Vitrail.logger().info("Forcing {} pack settings from {}: {}", chosen.size(), file,
+					chosen.keySet());
+		}
+
+		return chosen;
 	}
 
 	/** Whether a pack was loaded, which decides who owns the frame. */
