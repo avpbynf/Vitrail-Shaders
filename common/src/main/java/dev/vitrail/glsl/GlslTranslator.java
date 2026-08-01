@@ -66,6 +66,9 @@ public final class GlslTranslator {
 	private final ExpandedUnit unit;
 	private final ProgramStage stage;
 	private final Map<String, String> engineDefines;
+
+	/** A pass drawn over a quad rather than over the world takes its attributes differently. */
+	private final boolean fullscreen;
 	private final List<Token> tokens;
 
 	/** Names the pack defines as macros. Their uses belong to the preprocessor, not to us. */
@@ -96,10 +99,12 @@ public final class GlslTranslator {
 	private int unwrappedShadowCalls;
 	private int strippedExtensions;
 
-	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines) {
+	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines,
+			boolean fullscreen) {
 		this.unit = unit;
 		this.stage = stage;
 		this.engineDefines = engineDefines;
+		this.fullscreen = fullscreen;
 
 		// Tokens cost far more than the text they came from, roughly seventy bytes each, so a unit
 		// the expander should never have produced has to be refused before it is read rather than
@@ -120,15 +125,20 @@ public final class GlslTranslator {
 	 * be given a header together.
 	 */
 	public static TranslatedUnit translate(ExpandedUnit unit, ProgramStage stage) {
-		Stage prepared = prepare(unit, stage);
+		Stage prepared = prepare(unit, stage, false);
 
 		return prepared.render(prepared.uniforms(), prepared.samplers(), prepared.varyings());
 	}
 
-	/** Rewrites one stage and stops short of the header, so that a caller can settle it. */
-	public static Stage prepare(ExpandedUnit unit, ProgramStage stage) {
-		GlslTranslator translator =
-				new GlslTranslator(unit, stage, EngineDefines.table(EngineDefines.DEFAULT_MC_VERSION));
+	/**
+	 * Rewrites one stage and stops short of the header, so that a caller can settle it.
+	 *
+	 * @param fullscreen whether this program is drawn over a quad rather than over the world,
+	 *                   which decides where its vertex inputs come from
+	 */
+	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, boolean fullscreen) {
+		GlslTranslator translator = new GlslTranslator(unit, stage,
+				EngineDefines.table(EngineDefines.DEFAULT_MC_VERSION), fullscreen);
 		translator.rewrite();
 
 		return new Stage(translator);
@@ -788,7 +798,9 @@ public final class GlslTranslator {
 
 		// Attributes stay a matter for the stage that has them. Only a vertex shader has inputs
 		// from a buffer, so there is no other side to agree with.
-		if (this.stage == ProgramStage.VERTEX) {
+		if (this.stage == ProgramStage.VERTEX && this.fullscreen) {
+			lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
+		} else if (this.stage == ProgramStage.VERTEX) {
 			for (Map.Entry<String, String> attribute : LegacyGlsl.FIXED_ATTRIBUTES.entrySet()) {
 				if (this.used.contains(attribute.getKey())) {
 					lines.add("in " + attribute.getValue() + ";");

@@ -73,6 +73,28 @@ public final class LegacyGlsl {
 	public static final Map<String, String> ENGINE_ATTRIBUTES = engineAttributes();
 
 	/**
+	 * What a full screen pass gets instead of vertex inputs of its own.
+	 * <p>
+	 * Attributes are matched by name against the elements of the vertex format, in
+	 * {@code GlslCompiler.compile}, so a shader declaring {@code of_Vertex} would be looking for
+	 * an element nothing provides. Worse, that failure is silent: the location counter only moves
+	 * for inputs the format does have, so an unmatched one simply reads whatever is there. The
+	 * names here are the ones a full screen quad really carries.
+	 * <p>
+	 * Written as macros rather than as variables so that the body is left alone, and because a
+	 * global initialised from an attribute is not a constant expression and GLSL would refuse it.
+	 * The values are Iris's, since a pack's full screen pass is written expecting them: a quad
+	 * from (0,0) to (1,1), no colour, a normal pointing at the viewer.
+	 */
+	public static final List<String> FULLSCREEN_ATTRIBUTES = List.of(
+			"in vec3 Position;",
+			"in vec2 UV0;",
+			"#define of_Vertex vec4(Position, 1.0)",
+			"#define of_MultiTexCoord0 vec4(UV0, 0.0, 1.0)",
+			"#define of_Color vec4(1.0)",
+			"#define of_Normal vec3(0.0, 0.0, 1.0)");
+
+	/**
 	 * Functions GLSL gained after 120 that a pack written against 120 may define for itself. Its
 	 * own definition then collides with the built-in one, which is reported as a mismatch of
 	 * parameter precision and reads like anything but the name clash it is. Renaming the pack's

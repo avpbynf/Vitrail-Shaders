@@ -57,11 +57,19 @@ public final class ProgramTranslator {
 	}
 
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units) {
+		return translate(units, false);
+	}
+
+	/**
+	 * @param fullscreen whether this program is drawn over a quad, which changes where the vertex
+	 *                   stage takes its inputs from
+	 */
+	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units, boolean fullscreen) {
 		Map<ProgramStage, GlslTranslator.Stage> prepared = new LinkedHashMap<>();
 		for (ProgramStage stage : PIPELINE_ORDER) {
 			ExpandedUnit unit = units.get(stage);
 			if (unit != null) {
-				prepared.put(stage, GlslTranslator.prepare(unit, stage));
+				prepared.put(stage, GlslTranslator.prepare(unit, stage, fullscreen));
 			}
 		}
 
