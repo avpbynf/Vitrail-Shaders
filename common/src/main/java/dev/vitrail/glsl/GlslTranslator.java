@@ -43,6 +43,9 @@ public final class GlslTranslator {
 	/** The block name has to be declared to the pipeline by hand later, so it is fixed here. */
 	private static final String UNIFORM_BLOCK = "OfGlobals";
 
+	/** The one varying the engine names itself, so the one both stages have to agree about. */
+	private static final String FOG_COORD = "of_FogFragCoord";
+
 	private static final String FOG_STRUCT =
 			"struct OfFog { vec4 color; float density; float start; float end; float scale; };";
 
@@ -80,12 +83,12 @@ public final class GlslTranslator {
 	private final Map<String, String> blockMembers = new LinkedHashMap<>();
 	private final Map<String, String> samplers = new LinkedHashMap<>();
 
-	/** The block as it ends up written, fixed function state included. Settled by the header. */
-	private final List<TranslatedUnit.Uniform> blockLayout = new ArrayList<>();
-
 	private final Set<String> injectedNames = new HashSet<>();
 	private final List<String> conflicts = new ArrayList<>();
 	private final List<Integer> drawBuffers = new ArrayList<>();
+
+	private Set<String> declaredAfter = Set.of();
+	private Set<String> used = Set.of();
 
 	private int maxFragmentOutput = -1;
 	private int dynamicFragData;
@@ -111,12 +114,27 @@ public final class GlslTranslator {
 		this.tokens = new ArrayList<>(GlslLexer.lex(text));
 	}
 
+	/**
+	 * Rewrites one stage on its own, agreeing with nothing but itself. Fine for measuring, and
+	 * wrong for rendering: see {@link ProgramTranslator} for why the stages of one program have to
+	 * be given a header together.
+	 */
 	public static TranslatedUnit translate(ExpandedUnit unit, ProgramStage stage) {
-		return new GlslTranslator(unit, stage, EngineDefines.table(EngineDefines.DEFAULT_MC_VERSION))
-				.run();
+		Stage prepared = prepare(unit, stage);
+
+		return prepared.render(prepared.uniforms(), prepared.samplers(), prepared.varyings());
 	}
 
-	private TranslatedUnit run() {
+	/** Rewrites one stage and stops short of the header, so that a caller can settle it. */
+	public static Stage prepare(ExpandedUnit unit, ProgramStage stage) {
+		GlslTranslator translator =
+				new GlslTranslator(unit, stage, EngineDefines.table(EngineDefines.DEFAULT_MC_VERSION));
+		translator.rewrite();
+
+		return new Stage(translator);
+	}
+
+	private void rewrite() {
 		collectMacroNames();
 		collectDeclarations();
 		collectDrawBuffers();
@@ -126,14 +144,113 @@ public final class GlslTranslator {
 		rewriteFragmentOutputs();
 		liftUniforms();
 
-		// The header is built first because building it is what settles the block layout.
-		String text = header() + GlslLexer.join(this.tokens) + "\n";
-
-		return new TranslatedUnit(this.unit.entry(), this.stage, text, notes(),
-				List.copyOf(this.drawBuffers), List.copyOf(this.blockLayout), uniforms(this.samplers));
+		this.used = usedNames();
+		this.declaredAfter = declaredUnderAType();
 	}
 
-	private static List<TranslatedUnit.Uniform> uniforms(Map<String, String> declarations) {
+	/**
+	 * One stage rewritten, waiting for a header. What it asks for is separate from what it is
+	 * given: a stage that asks for six uniforms may be handed twelve, because a sibling stage of
+	 * the same program needs the other six and the block has to be the same on both sides.
+	 */
+	public static final class Stage {
+
+		private final GlslTranslator translator;
+
+		private Stage(GlslTranslator translator) {
+			this.translator = translator;
+		}
+
+		public ProgramStage stage() {
+			return this.translator.stage;
+		}
+
+		/** The block members this stage reads, fixed function state first. */
+		public List<TranslatedUnit.Uniform> uniforms() {
+			return this.translator.ownBlock();
+		}
+
+		public List<TranslatedUnit.Uniform> samplers() {
+			return asUniforms(this.translator.samplers);
+		}
+
+		/** Varyings the engine names, which both sides of a program have to declare or neither. */
+		public Set<String> varyings() {
+			return this.translator.used.contains(FOG_COORD) ? Set.of(FOG_COORD) : Set.of();
+		}
+
+		/** Names this stage declares itself, and that a shared block must therefore not shadow. */
+		public Set<String> declared() {
+			return this.translator.declaredAfter;
+		}
+
+		/** Names this stage lifted into the block, where the block member is the real meaning. */
+		public Set<String> lifted() {
+			return this.translator.blockMembers.keySet();
+		}
+
+		public TranslatedUnit render(List<TranslatedUnit.Uniform> block,
+				List<TranslatedUnit.Uniform> samplers, Set<String> varyings) {
+			return render(block, samplers, varyings, Set.of());
+		}
+
+		public TranslatedUnit render(List<TranslatedUnit.Uniform> block,
+				List<TranslatedUnit.Uniform> samplers, Set<String> varyings, Set<String> shadowed) {
+			return this.translator.render(block, samplers, varyings, shadowed);
+		}
+	}
+
+	private TranslatedUnit render(List<TranslatedUnit.Uniform> block,
+			List<TranslatedUnit.Uniform> samplers, Set<String> varyings, Set<String> shadowed) {
+		return new TranslatedUnit(this.unit.entry(), this.stage,
+				header(block, varyings) + body(shadowed) + "\n", notes(),
+				List.copyOf(this.drawBuffers), List.copyOf(block), List.copyOf(samplers));
+	}
+
+	/**
+	 * The rewritten text, with any name the caller flagged moved out of the way.
+	 * <p>
+	 * A shared block carries members some of its stages never asked for, and one of those stages
+	 * may already use that name for a value of its own: Bliss works out {@code sunVec} in its
+	 * vertex shader and takes it as a uniform in its fragment shader. Renaming is safe precisely
+	 * where it is needed, because a stage that never declared the name as a uniform has only one
+	 * meaning for it, its own.
+	 */
+	private String body(Set<String> shadowed) {
+		if (shadowed.isEmpty()) {
+			return GlslLexer.join(this.tokens);
+		}
+
+		StringBuilder text = new StringBuilder();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			boolean rename = token.kind() == Kind.IDENTIFIER
+					&& shadowed.contains(token.text())
+					&& !this.macroNamePositions.contains(index)
+					&& (token.directive() == null
+							|| !LegacyGlsl.OPAQUE_DIRECTIVES.contains(token.directive()));
+
+			text.append(rename ? "ofOwn_" + token.text() : token.text());
+		}
+
+		return text.toString();
+	}
+
+	private List<TranslatedUnit.Uniform> ownBlock() {
+		List<TranslatedUnit.Uniform> block = new ArrayList<>();
+
+		for (Map.Entry<String, String> member : LegacyGlsl.FIXED_FUNCTION_MEMBERS.entrySet()) {
+			if (this.used.contains(member.getKey())) {
+				block.add(TranslatedUnit.Uniform.of(member.getKey(), member.getValue()));
+			}
+		}
+
+		block.addAll(asUniforms(this.blockMembers));
+
+		return block;
+	}
+
+	static List<TranslatedUnit.Uniform> asUniforms(Map<String, String> declarations) {
 		return declarations.entrySet().stream()
 				.map(entry -> TranslatedUnit.Uniform.of(entry.getKey(), entry.getValue()))
 				.toList();
@@ -644,8 +761,7 @@ public final class GlslTranslator {
 	}
 
 
-	private String header() {
-		Set<String> used = usedNames();
+	private String header(List<TranslatedUnit.Uniform> block, Set<String> varyings) {
 		List<String> lines = new ArrayList<>();
 		lines.add(VERSION);
 
@@ -655,50 +771,43 @@ public final class GlslTranslator {
 					: "#define " + define.getKey() + " " + define.getValue());
 		}
 
-		// Fixed function state comes first, then what the pack declared, and that order is the
-		// layout the engine will fill. Nothing sorts it: a std140 buffer is written by walking
-		// the members, so a different order here is a different buffer.
-		for (Map.Entry<String, String> member : LegacyGlsl.FIXED_FUNCTION_MEMBERS.entrySet()) {
-			if (!used.contains(member.getKey())) {
-				continue;
-			}
-
-			if (member.getKey().equals("of_Fog")) {
-				lines.add(FOG_STRUCT);
-			}
-
-			this.blockLayout.add(TranslatedUnit.Uniform.of(member.getKey(), member.getValue()));
+		// The block is written in the order it was handed over, and nothing sorts it: a std140
+		// buffer is filled by walking the members, so a different order is a different buffer.
+		if (block.stream().anyMatch(member -> member.name().equals("of_Fog"))) {
+			lines.add(FOG_STRUCT);
 		}
 
-		this.blockLayout.addAll(uniforms(this.blockMembers));
-
-		if (!this.blockLayout.isEmpty()) {
+		if (!block.isEmpty()) {
 			lines.add("layout(std140) uniform " + UNIFORM_BLOCK + " {");
-			for (TranslatedUnit.Uniform member : this.blockLayout) {
+			for (TranslatedUnit.Uniform member : block) {
 				lines.add("\t" + member.declaration() + ";");
 			}
 
 			lines.add("};");
 		}
 
+		// Attributes stay a matter for the stage that has them. Only a vertex shader has inputs
+		// from a buffer, so there is no other side to agree with.
 		if (this.stage == ProgramStage.VERTEX) {
 			for (Map.Entry<String, String> attribute : LegacyGlsl.FIXED_ATTRIBUTES.entrySet()) {
-				if (used.contains(attribute.getKey())) {
+				if (this.used.contains(attribute.getKey())) {
 					lines.add("in " + attribute.getValue() + ";");
 				}
 			}
-		}
 
-		if (this.stage == ProgramStage.VERTEX) {
 			for (Map.Entry<String, String> attribute : LegacyGlsl.ENGINE_ATTRIBUTES.entrySet()) {
-				if (used.contains(attribute.getKey()) && !this.declaredNames.contains(attribute.getKey())) {
+				if (this.used.contains(attribute.getKey())
+						&& !this.declaredNames.contains(attribute.getKey())) {
 					lines.add("in " + attribute.getValue() + ";");
 				}
 			}
 		}
 
-		if (used.contains("of_FogFragCoord")) {
-			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " float of_FogFragCoord;");
+		// Declared on both sides or on neither, whether this stage reads it or not. A varying the
+		// vertex writes and the fragment never mentions is accepted in silence and shifts the
+		// location of everything declared after it.
+		if (varyings.contains(FOG_COORD)) {
+			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " float " + FOG_COORD + ";");
 		}
 
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
@@ -712,6 +821,25 @@ public final class GlslTranslator {
 	 * Every name the translated body mentions. Taken from the tokens rather than the text, so a
 	 * name that only appears inside a comment does not have a uniform declared for it.
 	 */
+	/** Names declared under a built-in type once the uniforms have been lifted out of the text. */
+	private Set<String> declaredUnderAType() {
+		Set<String> names = new HashSet<>();
+
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.IDENTIFIER || token.directive() != null) {
+				continue;
+			}
+
+			int before = significantBefore(index);
+			if (before >= 0 && LegacyGlsl.TYPE_NAMES.contains(this.tokens.get(before).text())) {
+				names.add(token.text());
+			}
+		}
+
+		return names;
+	}
+
 	private Set<String> usedNames() {
 		Set<String> names = new HashSet<>(this.injectedNames);
 		for (Token token : this.tokens) {
