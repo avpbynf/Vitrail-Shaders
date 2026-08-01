@@ -83,6 +83,21 @@ public final class PackReport {
 		Vitrail.logger().info("{}  dimensions {}{}", PREFIX, pack.dimensions().names(),
 				pack.dimensions().hasDimensionProperties() ? ", declared in dimension.properties" : "");
 
+		ShaderProperties properties = pack.properties();
+		if (properties.present()) {
+			Vitrail.logger().info(
+					"{}  shaders.properties: {} directives, {} continuations, {} profiles, {} custom uniforms, "
+							+ "{} screen tokens, {} sliders, {} blend directives, {} programs switched off",
+					PREFIX, properties.directiveCount(), properties.continuationCount(),
+					properties.profiles().size(), properties.customUniformTypes().size(),
+					properties.screenTokens().size(), properties.sliders().size(),
+					properties.blend().size(), pack.disabledPrograms().size());
+
+			logIfAny("  keys not read", properties.ignoredPrefixes());
+		} else {
+			Vitrail.logger().info("{}  no shaders.properties", PREFIX);
+		}
+
 		Vitrail.logger().info("{}  expansion of {} units: {}", PREFIX, pack.expandedUnits(), pack.expansion());
 		if (!pack.expansion().clean()) {
 			Vitrail.logger().warn("{}  expansion did not come out clean, see the counters above", PREFIX);

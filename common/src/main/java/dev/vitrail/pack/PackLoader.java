@@ -5,8 +5,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -29,6 +31,7 @@ public final class PackLoader {
 
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			DimensionSet dimensions = DimensionSet.discover(source);
+			ShaderProperties properties = ShaderProperties.parse(source);
 			OptionIndex options = OptionIndex.build(source);
 			ProgramSet programs = ProgramSet.enumerate(source, dimensions);
 			PackStats stats = PackStats.measure(source, options);
@@ -37,6 +40,16 @@ public final class PackLoader {
 			// judged on whether the graph resolves, not on what comes out of it, and holding
 			// two hundred flattened units would cost a lot of memory to prove nothing.
 			SettingSet settings = SettingSet.defaults();
+
+			// The file has conditionals of its own, and they read the settings, so the toggles
+			// can only be known once the settings are.
+			Set<String> disabled = new LinkedHashSet<>();
+			properties.programToggles(settings.globalDefines(options)).forEach((program, on) -> {
+				if (!on) {
+					disabled.add(program);
+				}
+			});
+
 			IncludeExpander expander = new IncludeExpander(source, options, settings);
 			ExpansionStats expansion = ExpansionStats.NONE;
 			int expanded = 0;
@@ -48,9 +61,9 @@ public final class PackLoader {
 				}
 			}
 
-			return new LoadedPack(source.packName(), source.isZip(), dimensions, options, programs, stats,
-					expansion, expanded, source.caseInsensitiveHits(),
-					(System.nanoTime() - start) / 1_000_000L);
+			return new LoadedPack(source.packName(), source.isZip(), dimensions, properties, options,
+					programs, stats, expansion, expanded, Set.copyOf(disabled),
+					source.caseInsensitiveHits(), (System.nanoTime() - start) / 1_000_000L);
 		}
 	}
 

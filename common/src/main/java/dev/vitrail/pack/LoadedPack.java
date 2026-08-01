@@ -8,6 +8,7 @@ package dev.vitrail.pack;
  * surviving path into a {@code ClosedFileSystemException} on first use, far from the cause.
  */
 public record LoadedPack(String packName, boolean fromZip, DimensionSet dimensions,
-		OptionIndex options, ProgramSet programs, PackStats stats, ExpansionStats expansion,
-		int expandedUnits, int caseInsensitiveHits, long loadMillis) {
+		ShaderProperties properties, OptionIndex options, ProgramSet programs, PackStats stats,
+		ExpansionStats expansion, int expandedUnits, java.util.Set<String> disabledPrograms,
+		int caseInsensitiveHits, long loadMillis) {
 }
