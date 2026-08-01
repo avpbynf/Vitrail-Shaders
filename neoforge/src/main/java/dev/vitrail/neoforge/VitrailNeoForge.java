@@ -49,9 +49,7 @@ public final class VitrailNeoForge {
 		// The pack's own pass when there is one, and the hand written chain otherwise. Running
 		// both would have the second read what the first wrote, which is a chain nobody asked
 		// for and an image neither of them describes.
-		if (PackFinalPass.isDrawing()) {
-			PackFinalPass.draw();
-		} else {
+		if (!PackFinalPass.draw(Vitrail.platform().gameDirectory())) {
 			ShaderChain.draw();
 		}
 	}

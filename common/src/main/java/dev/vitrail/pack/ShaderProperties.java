@@ -51,6 +51,7 @@ public final class ShaderProperties {
 	private final Map<String, String> profiles;
 	private final Map<String, String> customUniformTypes;
 	private final Set<String> screenTokens;
+	private final Map<String, List<String>> screens;
 	private final List<String> sliders;
 	private final List<BlendDirective> blend;
 	private final Map<String, String> alphaTest;
@@ -64,6 +65,7 @@ public final class ShaderProperties {
 		this.profiles = Map.copyOf(builder.profiles);
 		this.customUniformTypes = Map.copyOf(builder.customUniformTypes);
 		this.screenTokens = Set.copyOf(builder.screenTokens);
+		this.screens = Map.copyOf(builder.screens);
 		this.sliders = List.copyOf(builder.sliders);
 		this.blend = List.copyOf(builder.blend);
 		this.alphaTest = Map.copyOf(builder.alphaTest);
@@ -123,11 +125,19 @@ public final class ShaderProperties {
 
 		Matcher screen = SCREEN.matcher(line);
 		if (screen.matches()) {
+			// The name of the page, "" for the one the pack opens on. A sub page is referred to
+			// from its parent by its own name, so the two are joined by name rather than nested.
+			String page = screen.group(1) == null ? "" : screen.group(1).substring(1);
+			List<String> layout = builder.screens.computeIfAbsent(page, ignored -> new ArrayList<>());
+
 			for (String token : screen.group(2).trim().split("\\s+")) {
-				// Everything that is not a plain name is layout: sub-screen brackets, blanks,
-				// placeholders, and the stray marks a joined continuation leaves behind.
+				// A blank slot, written <empty>, is layout and has to be kept: it is how a pack
+				// lines its options up in columns.
 				if (SCREEN_TOKEN.matcher(token).matches()) {
 					builder.screenTokens.add(token);
+					layout.add(token);
+				} else if (token.equals("<empty>")) {
+					layout.add("");
 				}
 			}
 
@@ -277,6 +287,15 @@ public final class ShaderProperties {
 		return this.customUniformTypes;
 	}
 
+	/**
+	 * The pages a pack lays out, by name, the one it opens on being "". Each is the options in
+	 * the order they are written, with an empty string where the pack asked for a blank slot.
+	 * A name that is not an option is a sub page, and the key to find it under here.
+	 */
+	public Map<String, List<String>> screens() {
+		return this.screens;
+	}
+
 	public Set<String> screenTokens() {
 		return this.screenTokens;
 	}
@@ -319,6 +338,7 @@ public final class ShaderProperties {
 		private final Map<String, String> profiles = new LinkedHashMap<>();
 		private final Map<String, String> customUniformTypes = new LinkedHashMap<>();
 		private final Set<String> screenTokens = new LinkedHashSet<>();
+		private final Map<String, List<String>> screens = new LinkedHashMap<>();
 		private final List<String> sliders = new ArrayList<>();
 		private final List<BlendDirective> blend = new ArrayList<>();
 		private final Map<String, String> alphaTest = new LinkedHashMap<>();

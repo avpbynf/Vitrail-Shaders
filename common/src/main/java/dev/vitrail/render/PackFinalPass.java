@@ -97,6 +97,9 @@ public final class PackFinalPass {
 
 	private static volatile PackFinalPass active;
 	private static volatile boolean disabled;
+	private static long lastCheckNanos;
+	private static long lastStamp;
+	private static boolean checked;
 
 	private final PackProgram.Loaded loaded;
 	private final RenderPipeline pipeline;
@@ -247,16 +250,67 @@ public final class PackFinalPass {
 		return chosen;
 	}
 
-	/** Whether a pack was loaded, which decides who owns the frame. */
-	public static boolean isDrawing() {
-		return !disabled && active != null;
+	/**
+	 * Rebuilds everything when {@code pack.txt} or {@code options.txt} changes on disk, looked at
+	 * once a second at most.
+	 * <p>
+	 * Watching the files rather than binding a key is not laziness. Forcing a pack's own setting
+	 * turned out to be the only honest way to prove a pass does what it should, so it is done
+	 * constantly, and a restart between attempts costs a minute every time. The price is the half
+	 * second a pack takes to read and translate, which shows as a hitch and is the right trade.
+	 */
+	private static void reloadIfChanged(Path gameDirectory) {
+		long now = System.nanoTime();
+		if (now - lastCheckNanos < 1_000_000_000L) {
+			return;
+		}
+
+		lastCheckNanos = now;
+		long stamp = stampOf(gameDirectory.resolve(Vitrail.MOD_ID).resolve("pack.txt"))
+				+ stampOf(gameDirectory.resolve(Vitrail.MOD_ID).resolve("options.txt"));
+		boolean first = lastStamp == 0L && !checked;
+		checked = true;
+		if (stamp == lastStamp || first) {
+			lastStamp = stamp;
+			return;
+		}
+
+		lastStamp = stamp;
+		Vitrail.logger().info("Settings changed on disk, reloading the pack");
+
+		PackFinalPass previous = active;
+		if (previous != null) {
+			previous.release();
+		}
+
+		active = null;
+		// Cleared as well, so that a pack that failed to compile can be fixed and tried again
+		// without leaving the game.
+		disabled = false;
+		load(gameDirectory);
 	}
 
-	/** Called from the loader module once the world has been rendered. */
-	public static void draw() {
+	private static long stampOf(Path file) {
+		try {
+			return Files.isRegularFile(file) ? Files.getLastModifiedTime(file).toMillis() : 0L;
+		} catch (IOException e) {
+			return 0L;
+		}
+	}
+
+	/**
+	 * Called from the loader module once the world has been rendered.
+	 *
+	 * @return whether a pack was drawn, so that the caller knows to fall back to its own chain.
+	 *         The reload check runs first and unconditionally, or a pack that failed once could
+	 *         never be retried.
+	 */
+	public static boolean draw(Path gameDirectory) {
+		reloadIfChanged(gameDirectory);
+
 		PackFinalPass pass = active;
 		if (disabled || pass == null) {
-			return;
+			return false;
 		}
 
 		try {
@@ -266,6 +320,8 @@ public final class PackFinalPass {
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			pass.release();
 		}
+
+		return true;
 	}
 
 	/** Called when the client shuts down, while the device is still alive. */
