@@ -1,0 +1,40 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "LGPL-3.0-only"
+issueTrackerURL = "https://github.com/avpbynf/vitrail/issues"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "Vitrail"
+displayURL = "https://github.com/avpbynf/vitrail"
+authors = "avpbynf"
+displayTest = "IGNORE_ALL_VERSION"
+description = '''
+Minecraft 26.2 ships a native Vulkan renderer, but shader packs still require OpenGL.
+Vitrail loads existing OptiFine-format shader packs on the Vulkan backend. Pack GLSL is
+translated once, when the pack is loaded, and compiled to SPIR-V. There is no translation
+layer at runtime.
+'''
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "[${minecraft_version},26.3)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.${mod_id}]]
+modId = "neoforge"
+type = "required"
+versionRange = "[${neoforge_version},26.3)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.${mod_id}]]
+modId = "sodium"
+type = "required"
+reason = "Vitrail renders through Sodium, which owns the Vulkan command submission."
+versionRange = "[0.9,0.10)"
+ordering = "AFTER"
+side = "CLIENT"
