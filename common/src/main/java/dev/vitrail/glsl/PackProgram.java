@@ -6,6 +6,7 @@ import dev.vitrail.pack.OptionIndex;
 import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.ProgramStage;
 import dev.vitrail.pack.SettingSet;
+import dev.vitrail.pack.ShaderProperties;
 import dev.vitrail.pack.ShaderPackSource;
 
 import java.io.IOException;
@@ -50,9 +51,22 @@ public final class PackProgram {
 	 */
 	public static Optional<Loaded> load(Path packPath, String path, boolean fullscreen,
 			Map<String, OptionValue> chosen) throws IOException {
+		return load(packPath, path, fullscreen, chosen, "");
+	}
+
+	/**
+	 * @param profile a profile the pack declares, applied underneath {@code chosen} so that a
+	 *                single setting can still be overridden on top of it. Profiles chain, and
+	 *                milestone 3 already follows the chain: BSL's ULTRA is HIGH is MEDIUM is LOW.
+	 */
+	public static Optional<Loaded> load(Path packPath, String path, boolean fullscreen,
+			Map<String, OptionValue> chosen, String profile) throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
-			SettingSet settings = SettingSet.resolve(Map.of(), chosen, "chosen");
+			Map<String, OptionValue> fromProfile = profile.isEmpty()
+					? Map.of()
+					: ShaderProperties.parse(source).expandProfile(profile);
+			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
 			IncludeExpander expander = new IncludeExpander(source, options, settings);
 
 			Map<ProgramStage, ExpandedUnit> units = new LinkedHashMap<>();

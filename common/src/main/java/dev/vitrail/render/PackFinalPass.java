@@ -71,6 +71,9 @@ public final class PackFinalPass {
 	/** Which dimension's programs are used. One is enough to put something on screen. */
 	private static final String OVERWORLD = "world0";
 
+	/** The line in options.txt that names a whole set of settings rather than one of them. */
+	private static final String PROFILE_KEY = "profile";
+
 	/**
 	 * The quad a pack expects under a full screen pass, from (0,0) to (1,1), as two triangles.
 	 * Vulkan has no quad topology and going through an index buffer to get one would add a
@@ -162,9 +165,12 @@ public final class PackFinalPass {
 			}
 
 			Path pack = choose(gameDirectory, packs);
-			Map<String, OptionValue> chosen = settings(gameDirectory);
-			Optional<PackProgram.Loaded> program =
-					PackProgram.load(pack, OVERWORLD + "/final", true, chosen);
+			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings(gameDirectory));
+			// A reserved key rather than an option: no pack declares a setting called profile,
+			// and a profile is a different thing from a value, it is a whole set of them.
+			OptionValue profile = chosen.remove(PROFILE_KEY);
+			Optional<PackProgram.Loaded> program = PackProgram.load(pack, OVERWORLD + "/final", true,
+					chosen, profile == null ? "" : profile.text());
 			if (program.isEmpty()) {
 				Vitrail.logger().warn("{} does not serve {}/final with both stages, nothing to draw",
 						pack.getFileName(), OVERWORLD);
