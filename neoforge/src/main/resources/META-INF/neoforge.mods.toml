@@ -12,10 +12,14 @@ logoFile = "vitrail.png"
 authors = "avpbynf"
 displayTest = "IGNORE_ALL_VERSION"
 description = '''
-Minecraft 26.2 ships a native Vulkan renderer, but shader packs still require OpenGL.
-Vitrail loads existing OptiFine-format shader packs on the Vulkan backend. Pack GLSL is
-translated once, when the pack is loaded, and compiled to SPIR-V. There is no translation
-layer at runtime.
+Minecraft 26.2 ships a native Vulkan renderer alongside the OpenGL one, and the shader
+ecosystem has not crossed over yet. Vitrail loads existing OptiFine-format packs, unmodified,
+on the Vulkan backend, so that turning Vulkan on does not mean giving up the packs you use.
+
+Pack GLSL is rewritten once, when the pack is loaded, and compiled to SPIR-V by the compiler
+the game already ships. Nothing is translated per frame.
+
+Still early: the machinery underneath works, but no pack is rendered yet.
 '''
 
 [[dependencies.${mod_id}]]
