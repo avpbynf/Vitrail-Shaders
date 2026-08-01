@@ -42,6 +42,14 @@ public final class IncludeExpander {
 
 	private static final int MAX_LINES = 400_000;
 
+	/**
+	 * Lines are not the cost that matters downstream. Four hundred thousand of them held one
+	 * pack's worth of tokens in a gigabyte and a half, which is an {@code OutOfMemoryError} rather
+	 * than an exception anyone can catch. The worst unit of the corpus is four hundred kilobytes,
+	 * so this leaves an order of magnitude and still bounds the translator that reads it.
+	 */
+	private static final int MAX_CHARACTERS = 4_000_000;
+
 	private static final Pattern INCLUDE = Pattern.compile("^\\s*#\\s*include\\s+[<\"](.+?)[>\"].*$");
 	private static final Pattern IF_DEFINED = Pattern.compile("^\\s*#\\s*(ifdef|ifndef)\\s+([A-Za-z_]\\w*).*$");
 	private static final Pattern IF = Pattern.compile("^\\s*#\\s*if\\s+(.*)$");
@@ -86,12 +94,8 @@ public final class IncludeExpander {
 			return;
 		}
 
-		if (++state.filesExpanded > MAX_FILES || state.output.size() > MAX_LINES) {
-			// Said once and then quietly, otherwise the message itself becomes the runaway.
-			if (state.exhausted++ == 0) {
-				state.emit("#error include budget exhausted at " + relative, true);
-			}
-
+		if (++state.filesExpanded > MAX_FILES || state.overBudget()) {
+			state.giveUp(relative);
 			return;
 		}
 
@@ -111,6 +115,14 @@ public final class IncludeExpander {
 		ConditionStack conditions = new ConditionStack();
 
 		for (String line : this.source.readLines(file)) {
+			// Checked here and not only on the way in. One file is enough on its own: a pack that
+			// ships a single shader of a million lines never expands anything, so a budget read
+			// once per file would never be read at all.
+			if (state.overBudget()) {
+				state.giveUp(relative);
+				break;
+			}
+
 			if (handleCondition(line, conditions, state)) {
 				state.emit(line, true);
 				continue;
@@ -282,6 +294,7 @@ public final class IncludeExpander {
 		private final Set<String> everSeen = new HashSet<>();
 
 		private String version;
+		private long characters;
 		private int filesExpanded;
 		private int exhausted;
 		private int seen;
@@ -302,6 +315,18 @@ public final class IncludeExpander {
 		private void emit(String line, boolean taken) {
 			this.live.set(this.output.size(), taken);
 			this.output.add(line);
+			this.characters += line.length() + 1;
+		}
+
+		private boolean overBudget() {
+			return this.output.size() > MAX_LINES || this.characters > MAX_CHARACTERS;
+		}
+
+		/** Said once and then quietly, otherwise the message itself becomes the runaway. */
+		private void giveUp(String relative) {
+			if (this.exhausted++ == 0) {
+				emit("#error include budget exhausted at " + relative, true);
+			}
 		}
 
 		private ExpansionStats toStats() {

@@ -45,6 +45,9 @@ public final class ShaderPackSource implements AutoCloseable {
 	/** How deep to look for a misplaced {@code shaders/} before giving up. */
 	private static final int SHADERS_SEARCH_DEPTH = 3;
 
+	/** Fifty times the largest source file in the corpus, and a bound on a hostile archive. */
+	private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
+
 	private final String packName;
 	private final Path shadersRoot;
 	private final FileSystem ownedFileSystem;
@@ -160,6 +163,15 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * touched something that mattered.
 	 */
 	public List<String> readLines(Path file) throws IOException {
+		// The largest source file in the corpus is a hundred and sixty kilobytes. Reading without
+		// a ceiling means a zip that unpacks to half a gigabyte is read whole into memory before
+		// anything downstream gets the chance to refuse it.
+		long size = Files.size(file);
+		if (size > MAX_FILE_BYTES) {
+			throw new IOException(rel(file) + " is " + size + " bytes, past the " + MAX_FILE_BYTES
+					+ " a shader source is allowed");
+		}
+
 		CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
 				.onMalformedInput(CodingErrorAction.REPLACE)
 				.onUnmappableCharacter(CodingErrorAction.REPLACE);

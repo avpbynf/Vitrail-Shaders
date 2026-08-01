@@ -51,6 +51,16 @@ public final class GlslTranslator {
 	/** OptiFine's colour attachments, so the highest index a fragment output can carry. */
 	private static final int MAX_FRAGMENT_OUTPUTS = 16;
 
+	/** Matches the expander's own ceiling: nothing it produces should ever reach this. */
+	private static final int MAX_SOURCE_CHARACTERS = 4_000_000;
+
+	/**
+	 * How far a declaration may reach for its semicolon. A pack that leaves one out would
+	 * otherwise have the rest of the file scanned once per {@code uniform} it declares, which is
+	 * quadratic: forty thousand such lines took twenty-seven seconds.
+	 */
+	private static final int MAX_STATEMENT_TOKENS = 4096;
+
 	private static final Pattern DRAW_BUFFERS =
 			Pattern.compile("(DRAWBUFFERS|RENDERTARGETS)\\s*:\\s*([0-9][0-9,\\s]*)");
 
@@ -72,21 +82,37 @@ public final class GlslTranslator {
 	private final Set<String> shadowedBuiltins = new HashSet<>();
 
 	private final Map<String, String> blockMembers = new LinkedHashMap<>();
+	private final Map<String, String> samplers = new LinkedHashMap<>();
+
+	/** The block as it ends up written, fixed function state included. Settled by the header. */
+	private final List<TranslatedUnit.Uniform> blockLayout = new ArrayList<>();
+
 	private final Set<String> injectedNames = new HashSet<>();
 	private final List<String> conflicts = new ArrayList<>();
 	private final List<Integer> drawBuffers = new ArrayList<>();
 
 	private int maxFragmentOutput = -1;
 	private int dynamicFragData;
-	private int opaqueUniforms;
 	private int shadowCalls;
+	private int unwrappedShadowCalls;
 	private int strippedExtensions;
 
 	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines) {
 		this.unit = unit;
 		this.stage = stage;
 		this.engineDefines = engineDefines;
-		this.tokens = new ArrayList<>(GlslLexer.lex(unit.text()));
+
+		// Tokens cost far more than the text they came from, roughly seventy bytes each, so a unit
+		// the expander should never have produced has to be refused before it is read rather than
+		// after. Running out of memory here throws an Error, and an Error goes straight past the
+		// catch that is supposed to turn a bad pack into a report.
+		String text = unit.text();
+		if (text.length() > MAX_SOURCE_CHARACTERS) {
+			throw new IllegalStateException(unit.entry() + " expands to " + text.length()
+					+ " characters, past the " + MAX_SOURCE_CHARACTERS + " a unit is allowed");
+		}
+
+		this.tokens = new ArrayList<>(GlslLexer.lex(text));
 	}
 
 	public static TranslatedUnit translate(ExpandedUnit unit, ProgramStage stage) {
@@ -104,10 +130,17 @@ public final class GlslTranslator {
 		rewriteFragmentOutputs();
 		liftUniforms();
 
-		String body = GlslLexer.join(this.tokens);
+		// The header is built first because building it is what settles the block layout.
+		String text = header() + GlslLexer.join(this.tokens) + "\n";
 
-		return new TranslatedUnit(this.unit.entry(), this.stage, header() + body + "\n", notes(),
-				List.copyOf(this.drawBuffers));
+		return new TranslatedUnit(this.unit.entry(), this.stage, text, notes(),
+				List.copyOf(this.drawBuffers), List.copyOf(this.blockLayout), uniforms(this.samplers));
+	}
+
+	private static List<TranslatedUnit.Uniform> uniforms(Map<String, String> declarations) {
+		return declarations.entrySet().stream()
+				.map(entry -> TranslatedUnit.Uniform.of(entry.getKey(), entry.getValue()))
+				.toList();
 	}
 
 
@@ -272,8 +305,15 @@ public final class GlslTranslator {
 			}
 
 			String shadow = LegacyGlsl.SHADOW_FUNCTIONS.get(name);
-			if (shadow != null) {
+			if (shadow != null && callOpener(index) >= 0) {
 				int close = matchingBracket(callOpener(index));
+				if (close < 0) {
+					// Unbalanced from here, usually because a macro opened the parenthesis. The
+					// call is left alone and the compiler will say so, but silence here would
+					// mean a lookup nobody wrapped and nobody counted.
+					this.unwrappedShadowCalls++;
+				}
+
 				if (close >= 0) {
 					// The wrap adds an opening parenthesis, so it has to add a closing one too.
 					// Substituting the head alone is what left the prototype with eighty-six
@@ -485,6 +525,10 @@ public final class GlslTranslator {
 		}
 
 		int start = statementStart(keyword);
+		if (start < 0) {
+			return;
+		}
+
 		List<Integer> parts = significantRange(start, end);
 		int cursor = parts.indexOf(keyword);
 		if (cursor < 0) {
@@ -501,20 +545,22 @@ public final class GlslTranslator {
 		}
 
 		String type = this.tokens.get(parts.get(cursor)).text();
-		if (LegacyGlsl.isOpaqueType(type)) {
-			this.opaqueUniforms++;
+
+		// An opaque uniform is read the same way but keeps its declaration where it stands. It is
+		// still recorded, because the engine has to name every sampler it binds.
+		boolean opaque = LegacyGlsl.isOpaqueType(type);
+		if (!readDeclarators(parts, cursor + 1, type, opaque ? this.samplers : this.blockMembers)) {
 			return;
 		}
 
-		if (!readDeclarators(parts, cursor + 1, type)) {
-			return;
+		if (!opaque) {
+			blankRange(start, end);
 		}
-
-		blankRange(start, end);
 	}
 
-	/** Records each declarator of one declaration as a block member. False if none could be read. */
-	private boolean readDeclarators(List<Integer> parts, int from, String type) {
+	/** Records each declarator of one declaration. False if none could be read. */
+	private boolean readDeclarators(List<Integer> parts, int from, String type,
+			Map<String, String> target) {
 		int cursor = from;
 		boolean any = false;
 
@@ -555,7 +601,7 @@ public final class GlslTranslator {
 				}
 			}
 
-			record(token.text(), declaration.toString());
+			record(target, token.text(), declaration.toString());
 			any = true;
 
 			if (cursor < parts.size() && this.tokens.get(parts.get(cursor)).operator(",")) {
@@ -566,8 +612,8 @@ public final class GlslTranslator {
 		return any;
 	}
 
-	private void record(String name, String declaration) {
-		String existing = this.blockMembers.putIfAbsent(name, declaration);
+	private void record(Map<String, String> target, String name, String declaration) {
+		String existing = target.putIfAbsent(name, declaration);
 		if (existing != null && !existing.equals(declaration)) {
 			this.conflicts.add(name);
 		}
@@ -585,7 +631,9 @@ public final class GlslTranslator {
 					: "#define " + define.getKey() + " " + define.getValue());
 		}
 
-		List<String> members = new ArrayList<>();
+		// Fixed function state comes first, then what the pack declared, and that order is the
+		// layout the engine will fill. Nothing sorts it: a std140 buffer is written by walking
+		// the members, so a different order here is a different buffer.
 		for (Map.Entry<String, String> member : LegacyGlsl.FIXED_FUNCTION_MEMBERS.entrySet()) {
 			if (!used.contains(member.getKey())) {
 				continue;
@@ -595,16 +643,17 @@ public final class GlslTranslator {
 				lines.add(FOG_STRUCT);
 			}
 
-			members.add("\t" + member.getValue() + ";");
+			this.blockLayout.add(TranslatedUnit.Uniform.of(member.getKey(), member.getValue()));
 		}
 
-		for (String declaration : this.blockMembers.values()) {
-			members.add("\t" + declaration + ";");
-		}
+		this.blockLayout.addAll(uniforms(this.blockMembers));
 
-		if (!members.isEmpty()) {
+		if (!this.blockLayout.isEmpty()) {
 			lines.add("layout(std140) uniform " + UNIFORM_BLOCK + " {");
-			lines.addAll(members);
+			for (TranslatedUnit.Uniform member : this.blockLayout) {
+				lines.add("\t" + member.declaration() + ";");
+			}
+
 			lines.add("};");
 		}
 
@@ -652,8 +701,8 @@ public final class GlslTranslator {
 
 	private TranslatedUnit.Notes notes() {
 		return new TranslatedUnit.Notes(this.maxFragmentOutput + 1, this.dynamicFragData,
-				this.blockMembers.size(), this.opaqueUniforms, this.conflicts.size(),
-				this.shadowCalls, this.strippedExtensions, List.copyOf(this.conflicts));
+				this.conflicts.size(), this.shadowCalls, this.unwrappedShadowCalls,
+				this.strippedExtensions, List.copyOf(this.conflicts));
 	}
 
 
@@ -819,10 +868,16 @@ public final class GlslTranslator {
 		return -1;
 	}
 
-	/** Where the statement containing this token starts: just past whatever ended the last one. */
+	/**
+	 * Where the statement containing this token starts: just past whatever ended the last one.
+	 * Returns -1 when no end to the previous statement is within reach, since blanking a range
+	 * whose beginning was guessed would erase code that is none of our business.
+	 */
 	private int statementStart(int index) {
-		int start = 0;
-		for (int scan = index - 1; scan >= 0; scan--) {
+		int limit = Math.max(0, index - MAX_STATEMENT_TOKENS);
+		int start = -1;
+
+		for (int scan = index - 1; scan >= limit; scan--) {
 			Token token = this.tokens.get(scan);
 			boolean boundary = token.kind() == Kind.HASH || token.directive() != null
 					|| token.operator(";") || token.operator("{") || token.operator("}");
@@ -830,6 +885,15 @@ public final class GlslTranslator {
 				start = scan + 1;
 				break;
 			}
+		}
+
+		if (start < 0) {
+			// Reaching the first token is a real answer; running out of budget is not.
+			if (limit > 0) {
+				return -1;
+			}
+
+			start = 0;
 		}
 
 		while (start < index) {
@@ -847,8 +911,9 @@ public final class GlslTranslator {
 	/** The semicolon closing this statement, or -1 if a brace opens first or none is found. */
 	private int statementEnd(int index) {
 		int depth = 0;
+		int last = Math.min(this.tokens.size(), index + MAX_STATEMENT_TOKENS);
 
-		for (int scan = index; scan < this.tokens.size(); scan++) {
+		for (int scan = index; scan < last; scan++) {
 			Token token = this.tokens.get(scan);
 			if (token.kind() != Kind.OPERATOR || token.directive() != null) {
 				continue;
