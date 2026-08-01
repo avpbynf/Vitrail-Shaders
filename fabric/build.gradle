@@ -1,0 +1,8 @@
+// Placeholder. Fabric is not implemented yet: this module only exists so that adding
+// fabric-loom and a Fabric entry point later is a change confined to this directory.
+// It mirrors the NeoForge module, which depends on :common and supplies a
+// VitrailPlatform implementation.
+
+base {
+	archivesName = "vitrail-fabric"
+}

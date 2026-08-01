@@ -1,0 +1,41 @@
+plugins {
+	id "base"
+}
+
+subprojects {
+	apply plugin: "java"
+
+	group = project.group_id
+	version = project.mod_version
+
+	repositories {
+		mavenCentral()
+	}
+
+	java {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(Integer.parseInt(project.java_version))
+		}
+	}
+
+	tasks.withType(JavaCompile).configureEach {
+		options.encoding = "UTF-8"
+		options.release = Integer.parseInt(project.java_version)
+	}
+
+	tasks.withType(AbstractArchiveTask).configureEach {
+		preserveFileTimestamps = false
+		reproducibleFileOrder = true
+	}
+}
+
+// Loader jars are what gets shipped, so gather them at the root rather than making
+// people dig through each module.
+tasks.register("collectJars", Copy) {
+	from project(":neoforge").tasks.named("jar")
+	into layout.buildDirectory.dir("libs")
+}
+
+tasks.named("assemble") {
+	dependsOn tasks.named("collectJars")
+}

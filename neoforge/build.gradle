@@ -1,0 +1,62 @@
+plugins {
+	id "net.neoforged.moddev" version "${moddev_version}"
+}
+
+evaluationDependsOn(":common")
+
+base {
+	archivesName = "vitrail-neoforge"
+}
+
+neoForge {
+	version = project.neoforge_version
+
+	runs {
+		client {
+			client()
+		}
+	}
+
+	mods {
+		"${project.mod_id}" {
+			sourceSet sourceSets.main
+			sourceSet project(":common").sourceSets.main
+		}
+	}
+}
+
+repositories {
+	maven {
+		name = "CaffeineMC"
+		url = "https://maven.caffeinemc.net/releases"
+	}
+}
+
+dependencies {
+	compileOnly project(":common")
+
+	// Sodium ships with the pack, so it is never bundled and never remapped.
+	compileOnly("net.caffeinemc:sodium-neoforge:${project.sodium_version}") {
+		transitive = false
+	}
+}
+
+tasks.named("processResources", ProcessResources).configure {
+	def metadata = [
+		mod_id: project.mod_id,
+		mod_version: project.mod_version,
+		minecraft_version: project.minecraft_version,
+		neoforge_version: project.neoforge_version
+	]
+
+	inputs.properties(metadata)
+
+	filesMatching("META-INF/neoforge.mods.toml") {
+		expand(metadata)
+	}
+}
+
+tasks.named("jar", Jar).configure {
+	archiveVersion = "${project.mod_version}+mc${project.minecraft_version}"
+	from project(":common").sourceSets.main.output
+}

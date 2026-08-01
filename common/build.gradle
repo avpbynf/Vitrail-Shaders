@@ -1,0 +1,13 @@
+plugins {
+	id "net.neoforged.moddev" version "${moddev_version}"
+}
+
+base {
+	archivesName = "vitrail-common"
+}
+
+neoForge {
+	// Vanilla Minecraft only. Nothing in this module may reference a mod loader,
+	// so that the Fabric module can reuse it as is.
+	neoFormVersion = project.neoform_version
+}
