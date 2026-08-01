@@ -8,6 +8,7 @@ modId = "${mod_id}"
 version = "${mod_version}"
 displayName = "Vitrail"
 displayURL = "https://github.com/avpbynf/vitrail"
+logoFile = "vitrail.png"
 authors = "avpbynf"
 displayTest = "IGNORE_ALL_VERSION"
 description = '''
