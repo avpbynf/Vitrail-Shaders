@@ -1,5 +1,7 @@
 package dev.vitrail.pack;
 
+import java.util.Set;
+
 /**
  * What is known about a pack once it has been read.
  * <p>
@@ -8,7 +10,7 @@ package dev.vitrail.pack;
  * surviving path into a {@code ClosedFileSystemException} on first use, far from the cause.
  */
 public record LoadedPack(String packName, boolean fromZip, DimensionSet dimensions,
-		ShaderProperties properties, OptionIndex options, ProgramSet programs, PackStats stats,
-		ExpansionStats expansion, int expandedUnits, java.util.Set<String> disabledPrograms,
-		int caseInsensitiveHits, long loadMillis) {
+		ShaderProperties properties, OptionIndex options, ProgramSet programs,
+		ProgramResolver resolved, PackStats stats, ExpansionStats expansion, int expandedUnits,
+		Set<String> disabledPrograms, int caseInsensitiveHits, long loadMillis) {
 }

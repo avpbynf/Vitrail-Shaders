@@ -4,6 +4,7 @@ import dev.vitrail.Vitrail;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -96,6 +97,23 @@ public final class PackReport {
 			logIfAny("  keys not read", properties.ignoredPrefixes());
 		} else {
 			Vitrail.logger().info("{}  no shaders.properties", PREFIX);
+		}
+
+		List<String> places = new ArrayList<>();
+		places.add(ProgramSet.ROOT);
+		places.addAll(pack.dimensions().names());
+
+		for (String place : places) {
+			// A dimension with nothing of its own is a dimension the pack does not touch, and
+			// saying so for every one of them buries the ones that matter.
+			if (pack.resolved().resolutions(place).isEmpty()) {
+				continue;
+			}
+
+			Vitrail.logger().info("{}  {}: {} programs served directly, {} through a fallback, {} not served",
+					PREFIX, place.isEmpty() ? "(root)" : place,
+					pack.resolved().directCount(place), pack.resolved().inheritedCount(place),
+					pack.resolved().unservedCount(place));
 		}
 
 		Vitrail.logger().info("{}  expansion of {} units: {}", PREFIX, pack.expandedUnits(), pack.expansion());

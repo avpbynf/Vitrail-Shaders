@@ -34,6 +34,7 @@ public final class PackLoader {
 			ShaderProperties properties = ShaderProperties.parse(source);
 			OptionIndex options = OptionIndex.build(source);
 			ProgramSet programs = ProgramSet.enumerate(source, dimensions);
+			ProgramResolver resolved = ProgramResolver.resolve(programs, dimensions);
 			PackStats stats = PackStats.measure(source, options);
 
 			// Every entry point is flattened, and the text is then thrown away. This stage is
@@ -62,7 +63,7 @@ public final class PackLoader {
 			}
 
 			return new LoadedPack(source.packName(), source.isZip(), dimensions, properties, options,
-					programs, stats, expansion, expanded, Set.copyOf(disabled),
+					programs, resolved, stats, expansion, expanded, Set.copyOf(disabled),
 					source.caseInsensitiveHits(), (System.nanoTime() - start) / 1_000_000L);
 		}
 	}

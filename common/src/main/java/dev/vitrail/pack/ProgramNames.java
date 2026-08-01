@@ -16,45 +16,14 @@ import java.util.regex.Pattern;
  */
 public final class ProgramNames {
 
-	/** Every {@code gbuffers_} program the format defines. */
-	private static final Set<String> GBUFFERS = Set.of(
-			"gbuffers_basic",
-			"gbuffers_line",
-			"gbuffers_textured",
-			"gbuffers_textured_lit",
-			"gbuffers_skybasic",
-			"gbuffers_skytextured",
-			"gbuffers_clouds",
-			"gbuffers_terrain",
-			"gbuffers_terrain_solid",
-			"gbuffers_terrain_cutout_mip",
-			"gbuffers_terrain_cutout",
-			"gbuffers_damagedblock",
-			"gbuffers_block",
-			"gbuffers_beaconbeam",
-			"gbuffers_item",
-			"gbuffers_entities",
-			"gbuffers_entities_glowing",
-			"gbuffers_armor_glint",
-			"gbuffers_spidereyes",
-			"gbuffers_hand",
-			"gbuffers_weather",
-			"gbuffers_water",
-			"gbuffers_hand_water",
-			"gbuffers_particles",
-			"gbuffers_particles_translucent",
-			"gbuffers_entities_translucent",
-			"gbuffers_block_translucent",
-			"gbuffers_lightning",
-			"gbuffers_shadow");
-
 	/**
-	 * Programs that draw Distant Horizons geometry. They are a later addition to the format
-	 * rather than part of the original set, and packs ship them whether or not that mod is
-	 * installed, so leaving them out makes a pack look short of a dozen programs.
+	 * The named programs are exactly those that take part in the fallback tree, so the list
+	 * lives in one place. Keeping a second copy here is how the two drift apart and how a
+	 * program ends up recognised but unplaceable, or the reverse.
 	 */
-	private static final Set<String> DISTANT_HORIZONS = Set.of(
-			"dh_terrain", "dh_water", "dh_shadow", "dh_generic");
+	private static Set<String> named() {
+		return ProgramFallbacks.names();
+	}
 
 	/** Families that carry an optional number, as in {@code composite3}. */
 	private static final Set<String> NUMBERED = Set.of(
@@ -78,7 +47,7 @@ public final class ProgramNames {
 	}
 
 	public static Optional<ProgramName> parse(String baseName) {
-		if (GBUFFERS.contains(baseName) || SIMPLE.contains(baseName) || DISTANT_HORIZONS.contains(baseName)) {
+		if (named().contains(baseName) || SIMPLE.contains(baseName)) {
 			return Optional.of(new ProgramName(baseName, -1, null));
 		}
 
@@ -128,10 +97,6 @@ public final class ProgramNames {
 		}
 
 		return Optional.empty();
-	}
-
-	public static Set<String> gbuffers() {
-		return GBUFFERS;
 	}
 
 	/**
