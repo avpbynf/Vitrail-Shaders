@@ -4,9 +4,11 @@ build/
 */build/
 !gradle/wrapper/gradle-wrapper.jar
 
-# Run directories
+# Run directories. ModDevGradle puts the dev client under runs/.
 run/
 */run/
+runs/
+*/runs/
 
 # IDE
 .idea/
@@ -14,10 +16,22 @@ run/
 .vscode/
 *.ipr
 *.iws
+.fleet/
+.classpath
+.project
+.settings/
+bin/
+*/bin/
+local.properties
 
 # OS
 Thumbs.db
 .DS_Store
+
+# JVM crash and heap dumps
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
 
 # Local working notes, not part of the project
 NOTES.md
