@@ -56,7 +56,7 @@ It does not load a pack yet.
 | # | Milestone | State |
 | --- | --- | --- |
 | 1 | Get a pass of our own into the frame, with GLSL from outside the jar | Done |
-| 2 | The pass graph: our own targets, chained, resize-safe | In progress |
+| 2 | The pass graph: our own targets, chained, resize-safe | Done |
 | 3 | Pack loading: `shaders.properties`, includes, settings, fallbacks | Not started |
 | 4 | The translator, ported to Java against the measured corpus | Not started |
 | 5 | The uniform surface, where compiling becomes rendering correctly | Not started |
@@ -64,8 +64,8 @@ It does not load a pack yet.
 
 Each one has to end in something that can be looked at and judged, rather than
 in a claim that it works. Milestone 1 ended with pixels on the screen coming
-from a file outside the jar; milestone 2 ends with a pass reading back what the
-pass before it wrote.
+from a file outside the jar. Milestone 2 ended with a pass reading back what the
+pass before it wrote, which is what the next three all rest on.
 
 ## Requirements
 

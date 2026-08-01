@@ -5,7 +5,7 @@ installed on one.
 
 ## Requirements
 
-| | Version |
+| Component | Version |
 | --- | --- |
 | Minecraft | 26.2 |
 | NeoForge | 26.2.0.32-beta or later in the 26.2 line |
@@ -50,10 +50,20 @@ For a CurseForge instance that is:
 Remove any other shader engine from that folder first. Iris and Vitrail both want
 to own the frame, and there is no reason to have both.
 
-Nothing else has to be copied. On its first start the mod writes `overlay.vsh` and
-`overlay.fsh` into a `vitrail/` folder next to `mods/`, and reads them from there
-on every start after that. Edit those files and restart the game to change what the
-pass draws; the jar does not need to be rebuilt.
+Nothing else has to be copied. On its first start the mod writes its shader sources
+into a `vitrail/` folder next to `mods/`, and reads them from there on every start
+after that:
+
+```
+screen.vsh    the vertex stage, shared by every pass
+pass1.fsh     reads what the game drew, writes the first target
+pass2.fsh     reads the first target, writes the second
+compose.fsh   reads the second target, writes back onto the screen
+```
+
+Edit any of them and restart the game to change what the chain draws; the jar does
+not need to be rebuilt. A file that fails to compile is reported in the log and the
+game keeps running without the chain rather than crashing.
 
 ## Switching the graphics backend to Vulkan
 
