@@ -3,6 +3,7 @@ package dev.vitrail.pack;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -65,13 +66,14 @@ public final class IncludeExpander {
 		State state = new State(this.settings.unitDefines(this.index));
 
 		for (Map.Entry<String, String> define : this.settings.headerDefines(this.index).entrySet()) {
-			state.output.add("#define " + define.getKey()
-					+ (define.getValue().isEmpty() ? "" : " " + define.getValue()));
+			state.emit("#define " + define.getKey()
+					+ (define.getValue().isEmpty() ? "" : " " + define.getValue()), true);
 		}
 
 		expandFile(entry, 0, state);
 
-		return new ExpandedUnit(this.source.rel(entry), List.copyOf(state.output), state.version, state.toStats());
+		return new ExpandedUnit(this.source.rel(entry), List.copyOf(state.output), state.version,
+				state.toStats(), state.live);
 	}
 
 	private void expandFile(Path file, int depth, State state) throws IOException {
@@ -80,14 +82,14 @@ public final class IncludeExpander {
 
 		if (depth > MAX_DEPTH) {
 			state.tooDeep++;
-			state.output.add("#error include nesting too deep at " + relative);
+			state.emit("#error include nesting too deep at " + relative, true);
 			return;
 		}
 
 		if (++state.filesExpanded > MAX_FILES || state.output.size() > MAX_LINES) {
 			// Said once and then quietly, otherwise the message itself becomes the runaway.
 			if (state.exhausted++ == 0) {
-				state.output.add("#error include budget exhausted at " + relative);
+				state.emit("#error include budget exhausted at " + relative, true);
 			}
 
 			return;
@@ -98,7 +100,7 @@ public final class IncludeExpander {
 		// thirty-two times over before anything said so.
 		if (!state.onPath.add(relative)) {
 			state.cycles++;
-			state.output.add("#error include cycle at " + relative);
+			state.emit("#error include cycle at " + relative, true);
 			return;
 		}
 
@@ -110,7 +112,7 @@ public final class IncludeExpander {
 
 		for (String line : this.source.readLines(file)) {
 			if (handleCondition(line, conditions, state)) {
-				state.output.add(line);
+				state.emit(line, true);
 				continue;
 			}
 
@@ -121,7 +123,7 @@ public final class IncludeExpander {
 					follow(file, include.group(1), depth, state);
 				} else {
 					state.skipped++;
-					state.output.add("// include not taken: " + include.group(1));
+					state.emit("// include not taken: " + include.group(1), false);
 				}
 
 				continue;
@@ -129,7 +131,7 @@ public final class IncludeExpander {
 
 			if (!conditions.active()) {
 				// Kept as it was, so that what the compiler discards is what is written here.
-				state.output.add(line);
+				state.emit(line, false);
 				continue;
 			}
 
@@ -139,13 +141,13 @@ public final class IncludeExpander {
 				// ones come from includes and would be an error where they land.
 				if (state.version == null) {
 					state.version = version.group(1).replaceAll("//.*", "").trim();
-					state.output.add(line);
+					state.emit(line, true);
 				}
 
 				continue;
 			}
 
-			state.output.add(track(line, state));
+			state.emit(track(line, state), true);
 		}
 
 		state.onPath.remove(relative);
@@ -212,7 +214,7 @@ public final class IncludeExpander {
 			state.missing++;
 			// Left in the text on purpose: the compiler then names the file that is absent,
 			// rather than the load quietly producing a unit with a hole in it.
-			state.output.add("#error include not found: " + spec);
+			state.emit("#error include not found: " + spec, true);
 			return;
 		}
 
@@ -245,11 +247,29 @@ public final class IncludeExpander {
 		return rewritten;
 	}
 
-	/** One flattened unit, ready for a translator and then for the compiler. */
-	public record ExpandedUnit(String entry, List<String> lines, String version, ExpansionStats stats) {
+	/**
+	 * One flattened unit, ready for a translator and then for the compiler.
+	 *
+	 * @param live which lines came from a branch that was taken. Dead branches are kept in the
+	 *             text, because the compiler has to see the same code the expander did, but a
+	 *             translator that moves a declaration has to know: lifting a uniform out of a
+	 *             branch nobody takes makes it unconditional, and packs do declare the same name
+	 *             as a uniform in one branch and as an ordinary global in the other. Conditional
+	 *             lines themselves count as taken; they are directives, never declarations.
+	 */
+	public record ExpandedUnit(String entry, List<String> lines, String version,
+			ExpansionStats stats, BitSet live) {
+
+		public ExpandedUnit {
+			live = (BitSet) live.clone();
+		}
 
 		public String text() {
 			return String.join("\n", this.lines);
+		}
+
+		public boolean isLive(int line) {
+			return this.live.get(line);
 		}
 	}
 
@@ -257,6 +277,7 @@ public final class IncludeExpander {
 
 		private final Map<String, String> defines;
 		private final List<String> output = new ArrayList<>();
+		private final BitSet live = new BitSet();
 		private final Set<String> onPath = new HashSet<>();
 		private final Set<String> everSeen = new HashSet<>();
 
@@ -276,6 +297,11 @@ public final class IncludeExpander {
 
 		private State(Map<String, String> defines) {
 			this.defines = new LinkedHashMap<>(defines);
+		}
+
+		private void emit(String line, boolean taken) {
+			this.live.set(this.output.size(), taken);
+			this.output.add(line);
 		}
 
 		private ExpansionStats toStats() {

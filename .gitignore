@@ -41,3 +41,6 @@ research/
 
 # Shader packs used for testing are not redistributable and must never be committed.
 *.zip
+
+# glslangValidator drops its SPIR-V next to wherever it was run from.
+*.spv
