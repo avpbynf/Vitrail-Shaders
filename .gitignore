@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+*/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Run directories
+run/
+*/run/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local working notes, not part of the project
+NOTES.md
+
+# Shader packs used for testing are not redistributable and must never be committed.
+research/corpus/
+research/units*/
+research/work/
+*.zip
