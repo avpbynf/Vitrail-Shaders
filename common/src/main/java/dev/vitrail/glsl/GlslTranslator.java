@@ -88,6 +88,9 @@ public final class GlslTranslator {
 	/** {@code (clipA, clipB, readA, readB)}: how to write a depth, then how to read one. */
 	private static final String DEPTH_CONV = "of_DepthConv";
 
+	/** How far into a sprite a chunk mesh's texture coordinate has to be pulled. */
+	private static final String TEX_SHRINK = "of_TexShrink";
+
 	/** Matches the expander's own ceiling: nothing it produces should ever reach this. */
 	private static final int MAX_SOURCE_CHARACTERS = 4_000_000;
 
@@ -103,8 +106,8 @@ public final class GlslTranslator {
 	private final ProgramStage stage;
 	private final Map<String, String> engineDefines;
 
-	/** A pass drawn over a quad rather than over the world takes its attributes differently. */
-	private final boolean fullscreen;
+	/** A pass drawn over a quad rather than over a chunk mesh takes its attributes differently. */
+	private final VertexInputs inputs;
 	private final List<Token> tokens;
 
 	/** Names the pack defines as macros. Their uses belong to the preprocessor, not to us. */
@@ -129,6 +132,9 @@ public final class GlslTranslator {
 	private final List<String> conflicts = new ArrayList<>();
 	private final List<Integer> drawBuffers = new ArrayList<>();
 
+	/** Vertex inputs the mesh has not got, taken out of the body with the type the pack gave them. */
+	private final Map<String, String> synthesized = new LinkedHashMap<>();
+
 	private Set<String> declaredAfter = Set.of();
 	private Set<String> used = Set.of();
 
@@ -139,6 +145,7 @@ public final class GlslTranslator {
 	private int unwrappedShadowCalls;
 	private int strippedExtensions;
 	private boolean depthEpilogue;
+	private boolean terrainPrologue;
 	private int depthReads;
 	private int depthReadsUnwrapped;
 	private int fragCoordZ;
@@ -148,11 +155,11 @@ public final class GlslTranslator {
 	private int fragDepthUnhandled;
 
 	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines,
-			boolean fullscreen) {
+			VertexInputs inputs) {
 		this.unit = unit;
 		this.stage = stage;
 		this.engineDefines = engineDefines;
-		this.fullscreen = fullscreen;
+		this.inputs = inputs;
 
 		// Tokens cost far more than the text they came from, roughly seventy bytes each, so a unit
 		// the expander should never have produced has to be refused before it is read rather than
@@ -173,7 +180,7 @@ public final class GlslTranslator {
 	 * be given a header together.
 	 */
 	public static TranslatedUnit translate(ExpandedUnit unit, ProgramStage stage) {
-		Stage prepared = prepare(unit, stage, false);
+		Stage prepared = prepare(unit, stage, VertexInputs.WORLD);
 
 		return prepared.render(prepared.uniforms(), prepared.samplers(), prepared.varyings());
 	}
@@ -181,12 +188,11 @@ public final class GlslTranslator {
 	/**
 	 * Rewrites one stage and stops short of the header, so that a caller can settle it.
 	 *
-	 * @param fullscreen whether this program is drawn over a quad rather than over the world,
-	 *                   which decides where its vertex inputs come from
+	 * @param inputs where this program's vertex stage takes its inputs from
 	 */
-	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, boolean fullscreen) {
+	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs) {
 		GlslTranslator translator = new GlslTranslator(unit, stage,
-				EngineDefines.table(EngineDefines.machine()), fullscreen);
+				EngineDefines.table(EngineDefines.machine()), inputs);
 		translator.rewrite();
 
 		return new Stage(translator);
@@ -196,6 +202,7 @@ public final class GlslTranslator {
 		collectMacroNames();
 		collectDeclarations();
 		collectDrawBuffers();
+		synthesizeAttributes();
 		dropVersionAndExtensions();
 		rewriteIdentifiers();
 		convertDepth();
@@ -204,7 +211,7 @@ public final class GlslTranslator {
 		liftFragmentOutputs();
 		liftUniforms();
 		orderFragmentOutputs();
-		convertClipDepth();
+		wrapMain();
 
 		this.used = usedNames();
 		this.declaredAfter = declaredUnderAType();
@@ -234,6 +241,15 @@ public final class GlslTranslator {
 
 		public List<TranslatedUnit.Uniform> samplers() {
 			return asUniforms(this.translator.samplers);
+		}
+
+		/**
+		 * Vertex inputs this stage declared that the chunk mesh has not got, with the type the pack
+		 * gave them. Empty for anything but a terrain stage, and the list of what the picture will be
+		 * wrong about when it is not.
+		 */
+		public Map<String, String> synthesized() {
+			return Map.copyOf(this.translator.synthesized);
 		}
 
 		/** Varyings the engine names, which both sides of a program have to declare or neither. */
@@ -725,6 +741,11 @@ public final class GlslTranslator {
 		this.injectedNames.add(DEPTH_CONV);
 	}
 
+	private void takeTexShrink() {
+		record(this.blockMembers, TEX_SHRINK, "vec2 " + TEX_SHRINK);
+		this.injectedNames.add(TEX_SHRINK);
+	}
+
 	/**
 	 * Precision qualifiers mean nothing on the desktop, but two declarations of one function that
 	 * disagree about them are still a mismatch, which is a failure the packs hit and cannot see.
@@ -1004,8 +1025,19 @@ public final class GlslTranslator {
 	 * conversion done before the geometry stage read the position back. The corpus has no geometry
 	 * stage at all; the day one appears, {@link #prepare} has to be told the program has one.
 	 */
-	private void convertClipDepth() {
-		if (this.stage != ProgramStage.VERTEX || !namesClipPosition()) {
+	private void wrapMain() {
+		if (this.stage != ProgramStage.VERTEX) {
+			return;
+		}
+
+		// A terrain stage is wrapped whatever it writes, and not only when it names gl_Position: the
+		// prologue is what fills the four names the mesh answers, and it is also what keeps all four
+		// attributes alive. An input the shader declares and never reads may be dropped from the
+		// SPIR-V, and rebind only counts the ones that survived, so a dropped attribute shifts the
+		// location of every one after it.
+		boolean terrain = this.inputs == VertexInputs.TERRAIN;
+		boolean depth = namesClipPosition();
+		if (!terrain && !depth) {
 			return;
 		}
 
@@ -1015,8 +1047,98 @@ public final class GlslTranslator {
 		}
 
 		replace(name, PACK_MAIN);
-		takeDepthConv();
-		this.depthEpilogue = true;
+		this.terrainPrologue = terrain;
+		if (terrain) {
+			takeTexShrink();
+		}
+
+		if (depth) {
+			takeDepthConv();
+			this.depthEpilogue = true;
+		}
+	}
+
+	/**
+	 * Takes the vertex inputs the chunk mesh has not got out of the body, keeping the type the pack
+	 * declared them under so that the header can hand back a global of the same shape.
+	 * <p>
+	 * Runs before {@link #rewriteIdentifiers}, which is where {@code attribute} becomes {@code in}
+	 * and the two stop being distinguishable. Leaving one standing is not a soft failure: the game
+	 * refuses outright, {@code IntermediaryShaderModule.rebind} raising on an input the vertex format
+	 * has no element for, which is at least loud. What it must not do is guess: an {@code in} is also
+	 * how a function names a parameter, so the keyword has to open the statement, and where it is
+	 * {@code in} rather than {@code attribute} the name has to be one this engine knows is an
+	 * attribute.
+	 */
+	private void synthesizeAttributes() {
+		if (this.stage != ProgramStage.VERTEX || this.inputs != VertexInputs.TERRAIN) {
+			return;
+		}
+
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() != null || !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			if (token.identifier("attribute")) {
+				synthesizeOne(index, false);
+			} else if (token.identifier("in")) {
+				synthesizeOne(index, true);
+			}
+		}
+	}
+
+	/** @param known whether the declared name has to be one this engine already calls an attribute */
+	private void synthesizeOne(int keyword, boolean known) {
+		int end = statementEnd(keyword);
+		int start = end < 0 ? -1 : statementStart(keyword);
+		if (start < 0) {
+			return;
+		}
+
+		List<Integer> parts = significantRange(start, end);
+		int cursor = parts.indexOf(keyword);
+		if (cursor < 0) {
+			return;
+		}
+
+		// Everything before the keyword has to be an interpolation qualifier, or this is not a
+		// declaration at file scope: a parameter list puts the return type and the function's name
+		// ahead of it, and blanking from there would erase the function.
+		for (int before = 0; before < cursor; before++) {
+			if (!LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(this.tokens.get(parts.get(before)).text())) {
+				return;
+			}
+		}
+
+		cursor++;
+		while (cursor < parts.size() && (isQualifier(this.tokens.get(parts.get(cursor)))
+				|| LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(this.tokens.get(parts.get(cursor)).text()))) {
+			cursor++;
+		}
+
+		if (cursor >= parts.size() || this.tokens.get(parts.get(cursor)).kind() != Kind.IDENTIFIER) {
+			return;
+		}
+
+		String type = this.tokens.get(parts.get(cursor)).text();
+		if (!LegacyGlsl.TYPE_NAMES.contains(type)) {
+			return;
+		}
+
+		Map<String, String> found = new LinkedHashMap<>();
+		if (!readDeclarators(parts, cursor + 1, type, found)) {
+			return;
+		}
+
+		if (known && found.keySet().stream().noneMatch(SodiumVertex.SYNTHESIZED::contains)) {
+			return;
+		}
+
+		found.keySet().forEach(name -> this.synthesized.putIfAbsent(name, type));
+		blankRange(start, end);
 	}
 
 	private boolean namesClipPosition() {
@@ -1225,19 +1347,23 @@ public final class GlslTranslator {
 
 		// Attributes stay a matter for the stage that has them. Only a vertex shader has inputs
 		// from a buffer, so there is no other side to agree with.
-		if (this.stage == ProgramStage.VERTEX && this.fullscreen) {
-			lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
-		} else if (this.stage == ProgramStage.VERTEX) {
-			for (Map.Entry<String, String> attribute : LegacyGlsl.FIXED_ATTRIBUTES.entrySet()) {
-				if (this.used.contains(attribute.getKey())) {
-					lines.add("in " + attribute.getValue() + ";");
-				}
-			}
+		if (this.stage == ProgramStage.VERTEX) {
+			switch (this.inputs) {
+				case FULLSCREEN -> lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
+				case TERRAIN -> lines.addAll(SodiumVertex.prologue(this.used, this.synthesized));
+				case WORLD -> {
+					for (Map.Entry<String, String> attribute : LegacyGlsl.FIXED_ATTRIBUTES.entrySet()) {
+						if (this.used.contains(attribute.getKey())) {
+							lines.add("in " + attribute.getValue() + ";");
+						}
+					}
 
-			for (Map.Entry<String, String> attribute : LegacyGlsl.ENGINE_ATTRIBUTES.entrySet()) {
-				if (this.used.contains(attribute.getKey())
-						&& !this.declaredNames.contains(attribute.getKey())) {
-					lines.add("in " + attribute.getValue() + ";");
+					for (Map.Entry<String, String> attribute : LegacyGlsl.ENGINE_ATTRIBUTES.entrySet()) {
+						if (this.used.contains(attribute.getKey())
+								&& !this.declaredNames.contains(attribute.getKey())) {
+							lines.add("in " + attribute.getValue() + ";");
+						}
+					}
 				}
 			}
 		}
@@ -1251,10 +1377,14 @@ public final class GlslTranslator {
 
 		// Below the block, since it reads it. The pack's body is concatenated after the header, so
 		// its own main is only a name here and has to be declared before it can be called.
-		if (this.depthEpilogue) {
+		if (this.depthEpilogue || this.terrainPrologue) {
 			lines.add("void " + PACK_MAIN + "();");
-			lines.add("void main() { " + PACK_MAIN + "(); gl_Position.z = " + DEPTH_CONV
-					+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w; }");
+			lines.add("void main() { "
+					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
+					+ PACK_MAIN + "();"
+					+ (this.depthEpilogue ? " gl_Position.z = " + DEPTH_CONV
+							+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w;" : "")
+					+ " }");
 		}
 
 		// From zero up with no gaps, because a location the game finds nothing declared at is not

@@ -4,6 +4,7 @@ import dev.vitrail.uniform.values.CameraValues;
 import dev.vitrail.uniform.values.CelestialValues;
 import dev.vitrail.uniform.values.DhValues;
 import dev.vitrail.uniform.values.DrawValues;
+import dev.vitrail.uniform.values.GeometryValues;
 import dev.vitrail.uniform.values.MatrixValues;
 import dev.vitrail.uniform.values.PlayerValues;
 import dev.vitrail.uniform.values.ShadowMatrixValues;
@@ -32,6 +33,7 @@ import java.util.Set;
 public final class UniformCatalog {
 
 	private static volatile UniformCatalog engine;
+	private static volatile UniformCatalog geometry;
 
 	private final Map<String, Entry> entries;
 
@@ -72,6 +74,30 @@ public final class UniformCatalog {
 			}
 
 			return engine;
+		}
+	}
+
+	/**
+	 * The engine table with the six fixed function names answered for a pass drawn over the world.
+	 * <p>
+	 * A layer and not a table of its own: {@link #builder(UniformCatalog)} refuses a duplicate only
+	 * among the names it registers itself, so shadowing an engine name is what layering is for and
+	 * registering the same name twice here would still be caught.
+	 */
+	public static UniformCatalog geometry() {
+		UniformCatalog built = geometry;
+		if (built != null) {
+			return built;
+		}
+
+		synchronized (UniformCatalog.class) {
+			if (geometry == null) {
+				Builder builder = builder(engine());
+				GeometryValues.register(builder);
+				geometry = builder.build();
+			}
+
+			return geometry;
 		}
 	}
 

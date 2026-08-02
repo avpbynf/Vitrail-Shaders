@@ -115,6 +115,17 @@ public final class PackProgram {
 	 */
 	public static Optional<Loaded> load(Path packPath, String path, boolean fullscreen,
 			Map<String, OptionValue> chosen, String profile) throws IOException {
+		return load(packPath, path, fullscreen ? VertexInputs.FULLSCREEN : VertexInputs.WORLD,
+				chosen, profile);
+	}
+
+	/**
+	 * @param inputs where the vertex stage takes its inputs from. {@link VertexInputs#TERRAIN} is
+	 *               what a chunk mesh of Sodium's is drawn under, and the only mode that answers
+	 *               for the names the mesh has not got
+	 */
+	public static Optional<Loaded> load(Path packPath, String path, VertexInputs inputs,
+			Map<String, OptionValue> chosen, String profile) throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
 			ShaderProperties properties = ShaderProperties.parse(source);
@@ -135,7 +146,7 @@ public final class PackProgram {
 			// Inside the same opening of the pack, because a zip closed behind us invalidates every
 			// path taken from it and the plan reads thirty more files than this program does.
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimensionOf(path));
-			ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units, fullscreen);
+			ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units, inputs);
 
 			return Optional.of(bind(source.packName(), path, program, targets));
 		}
@@ -282,7 +293,7 @@ public final class PackProgram {
 	private static ProgramTranslator.TranslatedProgram translate(String path,
 			Map<ProgramStage, ExpandedUnit> units) {
 		try {
-			return ProgramTranslator.translate(units, true);
+			return ProgramTranslator.translate(units, VertexInputs.FULLSCREEN);
 		} catch (RuntimeException e) {
 			// Named here rather than let through: the message a translator throws says which line
 			// of which unit it choked on and never which program of the chain that unit belongs to.

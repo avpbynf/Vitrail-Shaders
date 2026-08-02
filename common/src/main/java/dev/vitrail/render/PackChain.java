@@ -21,11 +21,15 @@ import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
+import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.util.Mth;
@@ -122,13 +126,33 @@ public final class PackChain {
 	private static final String DUMP_KEY = "dump";
 
 	/**
-	 * The five lines of options.txt that name what this mod does rather than what the pack declares,
+	 * The line in options.txt that draws the pack's own terrain program over Sodium's chunk mesh:
+	 * {@code terrain=on}. Off unless asked for, which is the opposite of every other line here, and
+	 * deliberately so: it takes over the game's own geometry shader and everything before milestone
+	 * six was verified without it.
+	 */
+	private static final String TERRAIN_KEY = "terrain";
+
+	/**
+	 * The line that stops the composite chain from running at all: {@code chain=off}. Different from
+	 * {@code passes=0}, which still draws the {@code final} over the whole screen.
+	 * <p>
+	 * It exists for one job and it is the criterion of the first step of milestone six. A terrain
+	 * program writes the game's own target, and a {@code final} drawn afterwards would tone map it
+	 * and hold whatever the seed put in colortex0: the picture would then be a judgement about
+	 * lighting rather than about whether the geometry arrived. With the chain off, what is on screen
+	 * is the game's frame with the pack's albedo in it and nothing else.
+	 */
+	private static final String CHAIN_KEY = "chain";
+
+	/**
+	 * The seven lines of options.txt that name what this mod does rather than what the pack declares,
 	 * kept together for the one place that has to tell them apart: the log that says what the file
 	 * forces. {@code profile} is the settings layer's own, since that is the side that writes it
-	 * back; the other four are read here and nowhere else.
+	 * back; the other six are read here and nowhere else.
 	 */
-	private static final Set<String> RESERVED =
-			Set.of(SettingsFile.PROFILE_KEY, SEED_KEY, PASSES_KEY, SCREEN_KEY, DUMP_KEY);
+	private static final Set<String> RESERVED = Set.of(SettingsFile.PROFILE_KEY, SEED_KEY,
+			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY);
 
 	/**
 	 * The quad a pack expects under a full screen pass, from (0,0) to (1,1), as two triangles.
@@ -159,6 +183,19 @@ public final class PackChain {
 	private static volatile String dumping = "";
 	private static volatile Path dumpFile;
 	private static long lastDumpNanos;
+	private static volatile boolean terrainWanted;
+	private static volatile boolean chainWanted = true;
+
+	/**
+	 * Whether this frame's values have been moved on yet.
+	 * <p>
+	 * The frame used to begin where the chain draws, which is after the world. A terrain program runs
+	 * during the world and reads the same block, so whichever of the two comes first opens the frame
+	 * and {@link #draw} closes it. Two advances in one frame would shift the previous frame's
+	 * matrices twice and make every {@code smooth()} in the pack fade at twice the speed, with
+	 * nothing on screen to say so.
+	 */
+	private static boolean advanced;
 
 	private final PackProgram.Chain chain;
 	private final PackValues values;
@@ -167,7 +204,12 @@ public final class PackChain {
 	private final SceneSeed seed;
 	private final boolean seedEnabled;
 	private final int load;
+	private final Path packPath;
+	private final Map<String, OptionValue> chosen;
+	private final String profile;
 
+	private TerrainProgram terrain;
+	private boolean terrainRead;
 	private List<PackPass> programs;
 	private PackPass last;
 	private MappableRingBuffer block;
@@ -177,11 +219,15 @@ public final class PackChain {
 	private int warmed;
 	private boolean announced;
 
-	private PackChain(PackProgram.Chain chain, PackValues values, String world, boolean seedEnabled) {
+	private PackChain(PackProgram.Chain chain, PackValues values, String world, boolean seedEnabled,
+			Path packPath, Map<String, OptionValue> chosen, String profile) {
 		this.chain = chain;
 		this.values = values;
 		this.world = world;
 		this.seedEnabled = seedEnabled;
+		this.packPath = packPath;
+		this.chosen = Map.copyOf(chosen);
+		this.profile = profile;
 		this.load = LOADS.incrementAndGet();
 
 		// None of this touches the device: the textures are allocated by the first frame and this
@@ -223,6 +269,8 @@ public final class PackChain {
 			ChainFilter filter = filterOf(chosen.remove(PASSES_KEY));
 			packsFirst = packsFirst(chosen.remove(SCREEN_KEY));
 			dumping = named(chosen.remove(DUMP_KEY));
+			terrainWanted = asked(chosen.remove(TERRAIN_KEY), false);
+			chainWanted = asked(chosen.remove(CHAIN_KEY), true);
 			dumpFile = gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt");
 
 			// The world decides the directory, and the pack decides which world that is: a folder
@@ -266,7 +314,13 @@ public final class PackChain {
 
 			announceRemoved(chain);
 			active = new PackChain(chain, values, world,
-					seed == null || !seed.isBoolean() || seed.asBoolean());
+					seed == null || !seed.isBoolean() || seed.asBoolean(), pack, chosen,
+					settings.profile());
+			if (!chainWanted) {
+				Vitrail.logger().info("{}=off, so nothing of the chain is drawn and the game keeps "
+						+ "its own image. The pack is still read, which is what lets a terrain "
+						+ "program be judged on its own", CHAIN_KEY);
+			}
 		} catch (IOException | RuntimeException e) {
 			disabled = true;
 			lastError = "Could not prepare this pack: " + e;
@@ -319,6 +373,33 @@ public final class PackChain {
 		}
 
 		return true;
+	}
+
+	/**
+	 * A reserved line read as a yes or a no. A word that is neither keeps the default and says so,
+	 * rather than being taken for the answer nobody wrote.
+	 */
+	private static boolean asked(OptionValue value, boolean byDefault) {
+		if (value == null) {
+			return byDefault;
+		}
+
+		if (value.isBoolean()) {
+			return value.asBoolean();
+		}
+
+		String text = value.asText().trim().toLowerCase(Locale.ROOT);
+		if (text.equals("on") || text.equals("true") || text.equals("1")) {
+			return true;
+		}
+
+		if (text.equals("off") || text.equals("false") || text.equals("0")) {
+			return false;
+		}
+
+		Vitrail.logger().warn("'{}' is neither on nor off, so this line is ignored", value.asText());
+
+		return byDefault;
 	}
 
 	/** The program the dump line names, lowercased, or empty when the line is missing. */
@@ -632,18 +713,121 @@ public final class PackChain {
 
 		PackChain chain = active;
 		if (disabled || chain == null) {
+			// The frame is closed whatever happened, and outside the try: a terrain program may have
+			// opened it during the world even when nothing of the chain is drawn afterwards, and a
+			// flag left standing would stop the values ever moving again.
+			advanced = false;
+
 			return false;
 		}
 
 		try {
-			chain.run();
+			if (chainWanted) {
+				chain.run();
+			} else {
+				chain.rotate();
+			}
 		} catch (RuntimeException e) {
 			disabled = true;
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
 
-		return true;
+		advanced = false;
+
+		return chainWanted;
+	}
+
+	/**
+	 * Moves the frame on unless something already did, and answers the pack's terrain program.
+	 * <p>
+	 * Called from where Sodium asks for its chunk shader, which is during the world and so before
+	 * {@link #draw}. That is the whole reason the frame boundary moved: the matrices the terrain
+	 * stage is handed have to be this frame's, and the level's projection is captured before
+	 * {@code LevelRenderer.render} runs, so they are there to be read.
+	 *
+	 * @param format the chunk mesh format, which nothing in this module is allowed to name itself
+	 * @param atlas  the block atlas of the pass being drawn
+	 * @return the pipeline to draw the opaque terrain with, or null to leave the game's own alone
+	 */
+	public static RenderPipeline terrainPipeline(VertexFormat format, GpuTextureView atlas) {
+		PackChain chain = active;
+		if (disabled || chain == null || !terrainWanted) {
+			return null;
+		}
+
+		try {
+			return chain.terrain(format, atlas);
+		} catch (RuntimeException e) {
+			terrainWanted = false;
+			Vitrail.logger().error("Vitrail stopped drawing the terrain after an error", e);
+
+			return null;
+		}
+	}
+
+	/** The sampler the game configured for the block atlas, taken where the chunk pass begins. */
+	public static void terrainSampler(GpuSampler sampler) {
+		PackChain chain = active;
+		if (chain != null && chain.terrain != null) {
+			chain.terrain.sampler(sampler);
+		}
+	}
+
+	/**
+	 * Binds the terrain program's block and samplers, inside the pass Sodium opened.
+	 * <p>
+	 * Called for every chunk pass and not only ours, so the pipeline that is really bound decides.
+	 * Binding into a pass drawing Sodium's own shader would be harmless, since the descriptor flush
+	 * walks the layout of the bound pipeline, but it would also mean this engine had stopped knowing
+	 * which of the two was drawing.
+	 */
+	public static void bindTerrain(RenderPass pass, RenderPipeline bound) {
+		PackChain chain = active;
+		if (chain != null && chain.terrain != null && chain.terrain.owns(bound)) {
+			chain.terrain.bind(pass);
+		}
+	}
+
+	private RenderPipeline terrain(VertexFormat format, GpuTextureView atlas) {
+		if (!this.terrainRead) {
+			this.terrainRead = true;
+			if (TerrainProgram.carries(format)) {
+				this.terrain = TerrainProgram.read(this.packPath, this.chain.place(),
+						TerrainProgram.PROGRAM, this.chosen, this.profile, this.values, this.load,
+						format).orElse(null);
+			}
+		}
+
+		if (this.terrain == null) {
+			return null;
+		}
+
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (device == null) {
+			return null;
+		}
+
+		beginFrame();
+
+		return this.terrain.prepare(device, atlas);
+	}
+
+	/** Opens the frame if nothing has yet. The one point the frame boundary hangs off. */
+	private void beginFrame() {
+		if (!advanced) {
+			advanced = true;
+			this.values.advance();
+			dump();
+		}
+	}
+
+	/** Everything the end of a frame owes when the chain itself is not drawn. */
+	private void rotate() {
+		beginFrame();
+		if (this.terrain != null) {
+			this.terrain.rotate();
+		}
 	}
 
 	/** Called when the client shuts down, while the device is still alive. */
@@ -734,6 +918,9 @@ public final class PackChain {
 		this.targets.swapBack(encoder, this.chain.chain().swapBack());
 
 		this.block.rotate();
+		if (this.terrain != null) {
+			this.terrain.rotate();
+		}
 	}
 
 	/**
@@ -864,11 +1051,11 @@ public final class PackChain {
 	 * buffer, so each block is written at its own offset and measured as though it started there.
 	 */
 	private void writeBlocks() {
-		// The one point in the frame where the clocks, the counters and the previous frame's
-		// matrices move, and it is before the first block is written on purpose: two passes of one
-		// frame have to be handed the same numbers, or the second one silently reprojects against
-		// itself and a smooth() of the pack fades at twice the speed.
-		this.values.advance();
+		// The clocks, the counters and the previous frame's matrices move at the frame boundary and
+		// never here: two passes of one frame have to be handed the same numbers, or the second one
+		// silently reprojects against itself and a smooth() of the pack fades at twice the speed.
+		// A terrain program runs during the world, so it may already have opened this frame.
+		beginFrame();
 
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();
@@ -877,8 +1064,6 @@ public final class PackChain {
 				pass.write(Std140Builder.intoBuffer(data), this.values.world());
 			}
 		}
-
-		dump();
 	}
 
 	/**
@@ -906,26 +1091,47 @@ public final class PackChain {
 		}
 
 		lastDumpNanos = now;
-		PackPass chosen = null;
-		for (PackPass pass : this.programs) {
-			if (pass.path().toLowerCase(Locale.ROOT).endsWith(dumping)) {
-				chosen = pass;
-				break;
+		List<String> running = new ArrayList<>();
+		String chosenPath = null;
+		String decoded = null;
+
+		// The terrain program first, because it is the one the milestone is being judged on and
+		// because it is answered from a different catalogue: its of_ModelViewMatrix is the world's
+		// and a composite's is the identity, which is exactly the pair a reading has to tell apart.
+		if (this.terrain != null) {
+			running.add(this.terrain.path());
+			if (this.terrain.path().toLowerCase(Locale.ROOT).endsWith(dumping)) {
+				chosenPath = this.terrain.path();
+				decoded = this.terrain.decoded(this.values.world());
 			}
 		}
 
-		if (chosen == null) {
+		for (PackPass pass : this.programs == null ? List.<PackPass>of() : this.programs) {
+			running.add(pass.path());
+			if (decoded == null && pass.path().toLowerCase(Locale.ROOT).endsWith(dumping)) {
+				chosenPath = pass.path();
+				decoded = pass.decoded(this.values.world());
+			}
+		}
+
+		if (decoded == null) {
+			// Nothing is built yet, which is the first frame or two rather than a wrong name. The
+			// line has to survive that or a dump asked for in the file would be turned off before
+			// the thing it names exists.
+			if (running.isEmpty()) {
+				return;
+			}
+
 			Vitrail.logger().warn("{}={} names no program of this chain, so nothing is dumped. This "
-					+ "chain runs: {}", DUMP_KEY, dumping,
-					this.programs.stream().map(PackPass::path).toList());
+					+ "chain runs: {}", DUMP_KEY, dumping, running);
 			dumping = "";
 
 			return;
 		}
 
-		String text = "# " + this.chain.place() + ", " + chosen.path() + ", load " + this.load + "\n"
+		String text = "# " + this.chain.place() + ", " + chosenPath + ", load " + this.load + "\n"
 				+ situation()
-				+ chosen.decoded(this.values.world());
+				+ decoded;
 		try {
 			Files.createDirectories(dumpFile.getParent());
 			Files.writeString(dumpFile, text, StandardCharsets.UTF_8);
@@ -1112,6 +1318,10 @@ public final class PackChain {
 		this.targets.release();
 		if (this.seed != null) {
 			this.seed.release();
+		}
+
+		if (this.terrain != null) {
+			this.terrain.release();
 		}
 
 		if (this.block != null) {

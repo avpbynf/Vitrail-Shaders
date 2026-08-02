@@ -48,6 +48,7 @@ public final class PackValues {
 
 	private CustomUniforms customs;
 	private UniformCatalog catalog = UniformCatalog.engine();
+	private UniformCatalog geometry = UniformCatalog.geometry();
 
 	private PackValues() {
 	}
@@ -89,6 +90,18 @@ public final class PackValues {
 	/** The engine's table with the pack's own uniforms layered over it. */
 	public UniformCatalog catalog() {
 		return this.catalog;
+	}
+
+	/**
+	 * The same, for a pass drawn over the world: six fixed function names answer the gbuffer pair
+	 * instead of the stand ins a full screen quad needs.
+	 * <p>
+	 * The pack's own uniforms are layered on top of the geometry table and not on top of the answer
+	 * {@link #catalog()} gives, so a pack that declares an expression over {@code gl_ModelViewMatrix}
+	 * reads the world's matrix here and the quad's there, which is what each pass was written for.
+	 */
+	public UniformCatalog geometryCatalog() {
+		return this.geometry;
 	}
 
 	/** What a block is written from. The same object every frame, refilled by {@link #advance()}. */
@@ -176,6 +189,7 @@ public final class PackValues {
 
 		this.customs = builder.build(UniformCatalog.engine(), this.problems);
 		this.catalog = this.customs.layerOn(UniformCatalog.engine());
+		this.geometry = this.customs.layerOn(UniformCatalog.geometry());
 	}
 
 	/**

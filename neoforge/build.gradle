@@ -32,13 +32,25 @@ repositories {
 	}
 }
 
+configurations {
+	sodium
+}
+
 dependencies {
 	compileOnly project(":common")
 
 	// Sodium ships with the pack, so it is never bundled and never remapped.
-	compileOnly("net.caffeinemc:sodium-neoforge:${project.sodium_version}") {
+	sodium("net.caffeinemc:sodium-neoforge:${project.sodium_version}") {
 		transitive = false
 	}
+
+	// What Maven serves under that name is a launcher shim: seventy-two classes, none of them the
+	// renderer. The mod itself is a jar inside it, under META-INF/jarjar, and that is the one
+	// carrying net.caffeinemc.mods.sodium.client. Compiling against the outer jar looks like it
+	// works right up to the first import.
+	compileOnly files(provider {
+		zipTree(configurations.sodium.singleFile).matching { include "META-INF/jarjar/*.jar" }.files
+	})
 }
 
 tasks.named("processResources", ProcessResources).configure {

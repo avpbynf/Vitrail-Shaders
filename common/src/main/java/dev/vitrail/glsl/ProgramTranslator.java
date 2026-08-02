@@ -49,15 +49,19 @@ public final class ProgramTranslator {
 	}
 
 	/**
-	 * @param uniforms the block every stage declares, in the order a std140 buffer is filled in
-	 * @param samplers every opaque uniform any stage binds, which is what the pipeline declares
+	 * @param uniforms    the block every stage declares, in the order a std140 buffer is filled in
+	 * @param samplers    every opaque uniform any stage binds, which is what the pipeline declares
+	 * @param synthesized vertex inputs the mesh has not got, answered with a constant, by name and
+	 *                    with the type the pack declared them under. Empty for every pass drawn over
+	 *                    a quad, which is every pass this engine drew before milestone six
 	 */
 	public record TranslatedProgram(Map<ProgramStage, TranslatedUnit> stages,
-			List<TranslatedUnit.Uniform> uniforms, List<TranslatedUnit.Uniform> samplers) {
+			List<TranslatedUnit.Uniform> uniforms, List<TranslatedUnit.Uniform> samplers,
+			Map<String, String> synthesized) {
 	}
 
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units) {
-		return translate(units, false);
+		return translate(units, VertexInputs.WORLD);
 	}
 
 	/**
@@ -65,19 +69,29 @@ public final class ProgramTranslator {
 	 *                   stage takes its inputs from
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units, boolean fullscreen) {
+		return translate(units, fullscreen ? VertexInputs.FULLSCREEN : VertexInputs.WORLD);
+	}
+
+	/**
+	 * @param inputs where this program's vertex stage takes its inputs from
+	 */
+	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
+			VertexInputs inputs) {
 		Map<ProgramStage, GlslTranslator.Stage> prepared = new LinkedHashMap<>();
 		for (ProgramStage stage : PIPELINE_ORDER) {
 			ExpandedUnit unit = units.get(stage);
 			if (unit != null) {
-				prepared.put(stage, GlslTranslator.prepare(unit, stage, fullscreen));
+				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs));
 			}
 		}
 
 		Map<String, TranslatedUnit.Uniform> uniforms = new LinkedHashMap<>();
 		Map<String, TranslatedUnit.Uniform> samplers = new LinkedHashMap<>();
+		Map<String, String> synthesized = new LinkedHashMap<>();
 		Set<String> varyings = new LinkedHashSet<>();
 
 		for (GlslTranslator.Stage stage : prepared.values()) {
+			synthesized.putAll(stage.synthesized());
 			// First declaration of a name wins, as it does within one stage. A name declared
 			// under two types in two stages is the pack's problem, and taking the first keeps the
 			// answer the same whichever stage is looked at.
@@ -93,7 +107,7 @@ public final class ProgramTranslator {
 		prepared.forEach((stage, prepare) ->
 				translated.put(stage, prepare.render(block, bound, varyings, shadowedBy(prepare, block))));
 
-		return new TranslatedProgram(Map.copyOf(translated), block, bound);
+		return new TranslatedProgram(Map.copyOf(translated), block, bound, Map.copyOf(synthesized));
 	}
 
 	/**

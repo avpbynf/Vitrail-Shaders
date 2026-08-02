@@ -137,6 +137,14 @@ public final class LegacyGlsl {
 	/** Precision qualifiers, meaningless on the desktop and a source of overload mismatches. */
 	public static final Set<String> PRECISION_QUALIFIERS = Set.of("lowp", "mediump", "highp");
 
+	/**
+	 * Qualifiers allowed to stand beside the storage keyword of a declaration. They matter for one
+	 * question only: whether an {@code in} that is not the first word of its statement is still a
+	 * declaration at file scope or the first parameter of a function.
+	 */
+	public static final Set<String> INTERPOLATION_QUALIFIERS =
+			Set.of("flat", "smooth", "noperspective", "centroid", "sample", "invariant", "precise");
+
 	/** Qualifiers that may sit between {@code uniform} and the type name. */
 	public static final Set<String> MEMORY_QUALIFIERS =
 			Set.of("restrict", "coherent", "readonly", "writeonly", "volatile");
