@@ -11,9 +11,4 @@ public record MenuPage(String name, List<MenuSlot> slots, int columns) {
 	public MenuPage {
 		slots = List.copyOf(slots);
 	}
-
-	/** The page a pack opens on carries no name. */
-	public boolean isMain() {
-		return this.name.isEmpty();
-	}
 }

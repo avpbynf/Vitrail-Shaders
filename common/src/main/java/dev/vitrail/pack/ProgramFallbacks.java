@@ -102,14 +102,6 @@ public final class ProgramFallbacks {
 		return PARENTS.keySet();
 	}
 
-	public static boolean knows(String program) {
-		return PARENTS.containsKey(program);
-	}
-
-	public static Optional<String> parentOf(String program) {
-		return Optional.ofNullable(PARENTS.get(program));
-	}
-
 	/**
 	 * The programs to try, in order, starting with the one asked for. Walking this list and
 	 * taking the first one the pack ships is the whole of the resolution.

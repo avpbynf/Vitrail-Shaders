@@ -64,15 +64,6 @@ public final class TargetName {
 		return index >= 0 && index < LEGACY.size() ? Optional.of(LEGACY.get(index)) : Optional.empty();
 	}
 
-	/** Both names an index answers to, canonical first. */
-	public static List<String> namesFor(int index) {
-		List<String> names = new ArrayList<>();
-		names.add(canonical(index));
-		legacyAlias(index).ifPresent(names::add);
-
-		return List.copyOf(names);
-	}
-
 	/** {@code gaux2Format} splits into index 5 and suffix {@code Format}. */
 	public static Optional<Suffixed> split(String directiveName) {
 		if (directiveName.startsWith(PREFIX)) {
