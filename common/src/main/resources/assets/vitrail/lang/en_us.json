@@ -2,6 +2,7 @@
 	"options.vitrail.title": "Shader Pack Settings",
 	"options.vitrail.apply": "Apply",
 	"options.vitrail.reload": "Reload",
+	"options.vitrail.reset": "Reset",
 	"options.vitrail.packs": "Packs",
 	"options.vitrail.packs_title": "Shader Packs",
 	"options.vitrail.profile": "Profile",

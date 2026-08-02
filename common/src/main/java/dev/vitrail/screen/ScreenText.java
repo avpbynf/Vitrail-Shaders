@@ -24,6 +24,7 @@ public final class ScreenText {
 	public static final String TITLE = "options.vitrail.title";
 	public static final String APPLY = "options.vitrail.apply";
 	public static final String RELOAD = "options.vitrail.reload";
+	public static final String RESET = "options.vitrail.reset";
 	public static final String PACKS = "options.vitrail.packs";
 	public static final String PACKS_TITLE = "options.vitrail.packs_title";
 	public static final String PROFILE = "options.vitrail.profile";

@@ -334,19 +334,31 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		}
 
 		navigation.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
+		// Only beside a pack's own settings, because that is the only place it means anything: the
+		// pack list has no file of its own to throw away.
+		if (!this.listingPacks) {
+			navigation.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::reset));
+		}
 
 		LinearLayout commit = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
 				LayoutSettings::alignHorizontallyCenter);
-		Button apply = commit.addChild(button(ScreenText.APPLY, WIDE_BUTTON, () -> {
-			apply();
-			queueRebuild();
-		}));
-		Button cancel = commit.addChild(
-				button(CommonComponents.GUI_CANCEL, WIDE_BUTTON, this::cancel));
-		commit.addChild(button(CommonComponents.GUI_DONE, WIDE_BUTTON, this::onClose));
+		// Not on the pack list, where they had nothing to act on: openPacks applies what is pending
+		// on the way out, so by the time the list is drawn there is never anything left to apply or
+		// to cancel. They were enabled there on the strength of a pack being loaded, which is not
+		// the same question, and pressing either did nothing a player could see.
+		if (!this.listingPacks) {
+			Button apply = commit.addChild(button(ScreenText.APPLY, WIDE_BUTTON, () -> {
+				apply();
+				queueRebuild();
+			}));
+			Button cancel = commit.addChild(
+					button(CommonComponents.GUI_CANCEL, WIDE_BUTTON, this::cancel));
 
-		apply.active = this.values != null;
-		cancel.active = this.values != null;
+			apply.active = this.values != null;
+			cancel.active = this.values != null;
+		}
+
+		commit.addChild(button(CommonComponents.GUI_DONE, WIDE_BUTTON, this::onClose));
 
 		return footer;
 	}
@@ -498,6 +510,45 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		this.error = null;
 		PackChain.reload(gameDirectory());
 		syncWithLoadedPack();
+		queueRebuild();
+	}
+
+	/**
+	 * Throws away this pack's settings file, so that it goes back to what the pack itself declares.
+	 * <p>
+	 * Three things it deliberately does not do. It does not touch {@code vitrail/options.txt}, which
+	 * is the file that forces settings from outside and is not the player's to lose here; the
+	 * greyed out widgets stay greyed out after a reset, which is the honest answer. It does not
+	 * touch the file Iris left in {@code shaderpacks/}, which is read but never written. And it
+	 * drops what is pending rather than keeping it, because a pending value is a change the player
+	 * made to the settings this is discarding, so keeping it would put back part of what was asked
+	 * to be thrown away.
+	 * <p>
+	 * No confirmation is asked. The file holds only what differs from the pack's own defaults, so
+	 * this loses a set of choices and nothing else, and the reload right after shows the result
+	 * immediately.
+	 */
+	private void reset() {
+		PackSession loaded = this.session;
+		if (loaded == null) {
+			return;
+		}
+
+		try {
+			SettingsFile.delete(loaded.settingsFile());
+			this.error = null;
+			this.closeRefused = false;
+		} catch (IOException | RuntimeException e) {
+			this.error = String.valueOf(e.getMessage());
+			Vitrail.logger().error("Vitrail could not delete {}", loaded.settingsFile(), e);
+
+			return;
+		}
+
+		Vitrail.logger().info("{} is back to the settings it declares itself, {} is gone",
+				loaded.packFileName(), loaded.settingsFile().getFileName());
+		PackChain.reload(loaded.gameDirectory());
+		adopt(PackChain.session().orElse(null));
 		queueRebuild();
 	}
 
