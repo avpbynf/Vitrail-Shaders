@@ -6,6 +6,10 @@ import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.PackLoader;
 import dev.vitrail.pack.ProgramStage;
+import dev.vitrail.pack.SamplerPlan;
+import dev.vitrail.pack.TargetName;
+import dev.vitrail.pack.TargetPlan;
+import dev.vitrail.pack.TargetSchedule;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
@@ -16,7 +20,6 @@ import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
 import com.mojang.blaze3d.shaders.UniformType;
@@ -38,12 +41,13 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /**
@@ -54,16 +58,32 @@ import java.util.function.Supplier;
  * onto the same target, which is the shape milestones 1 and 2 already proved. The programs that
  * need the world's geometry come later.
  * <p>
- * What it does not do yet is supply every value a pack reads. The block is written in full, so
+ * Every sampler it declares is now bound to the target the pack named, at the format the pack
+ * declared, and nothing else. The buffers the chain has not filled in hold their clear colour,
+ * which is a duller picture than the scene they used to be handed, and that is the point: an
+ * image that looks plausible because every sampler was quietly given the finished frame is the
+ * shape of failure this stage exists to remove. colortex0 is the one exception, and it is not a
+ * fallback: it is by definition what the gbuffers drew, so the game's own frame is seeded into
+ * it until they run.
+ * <p>
+ * What it still does not do is supply every value a pack reads. The block is written in full, so
  * the layout is always right, but a name the engine has no answer for is written as zeroes and
  * named in the log once. That is the difference between a gap you can see and a wrong image.
  */
 public final class PackFinalPass {
 
-	private static final Identifier VERTEX_ID =
-			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/final_vertex");
-	private static final Identifier FRAGMENT_ID =
-			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/final_fragment");
+	/**
+	 * Counts loads, so that no two of them name their shaders alike.
+	 * <p>
+	 * The device keeps compiled modules under the name, the stage and the defines, and not under
+	 * the source, so a second pack asking for the same two names is handed the first one's SPIR-V
+	 * and never compiled at all. Reloading is how this stage is worked on, and the failure is
+	 * silent whenever the two packs happen to declare the same samplers: the old program keeps
+	 * drawing while the targets, the formats, the clear colours and every line of the log come
+	 * from the new one. What a load leaves behind stays in that cache until a resource reload
+	 * empties it, which is two modules a reload against an image drawn by the wrong program.
+	 */
+	private static final AtomicInteger LOADS = new AtomicInteger();
 
 	/** The block name the translator writes into every program. */
 	private static final String UNIFORM_BLOCK = "OfGlobals";
@@ -73,6 +93,23 @@ public final class PackFinalPass {
 
 	/** The line in options.txt that names a whole set of settings rather than one of them. */
 	private static final String PROFILE_KEY = "profile";
+
+	/**
+	 * The line in options.txt that turns the scene seed off. Reserved like {@code profile}, and
+	 * for the same reason: no pack declares a setting under either name. Turning it off leaves
+	 * colortex0 holding its clear colour, which is what proves the clears work on their own.
+	 */
+	private static final String SEED_KEY = "seed";
+
+	/** Which programs of the chain actually run, which is what decides what has to be doubled. */
+	private static final Set<String> EXECUTING = Set.of(OVERWORLD + "/final");
+
+	/**
+	 * A common ceiling on a pushed descriptor set. Nothing in the game asks the device for its
+	 * own, so a pack past this is warned about and still drawn: the failure, if it comes, is a
+	 * driver error that this line makes readable.
+	 */
+	private static final int PUSH_DESCRIPTORS = 32;
 
 	/**
 	 * The quad a pack expects under a full screen pass, from (0,0) to (1,1), as two triangles.
@@ -109,26 +146,39 @@ public final class PackFinalPass {
 	private final PackUniforms uniforms;
 	private final ShaderSource source;
 	private final List<String> samplers;
+	private final ColorTargets targets;
+	private final SceneSeed seed;
+	private final boolean seedEnabled;
 
 	private MappableRingBuffer block;
 	private GpuBuffer quad;
-	private TextureTarget scene;
 	private long firstFrameNanos;
 	private boolean announced;
 
-	private PackFinalPass(PackProgram.Loaded loaded) {
+	private PackFinalPass(PackProgram.Loaded loaded, boolean seedEnabled) {
 		this.loaded = loaded;
+		this.seedEnabled = seedEnabled;
 		this.uniforms = new PackUniforms(loaded.program().uniforms());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
 
+		// Neither of these touches the device: the textures are allocated by the first frame and
+		// this runs while the client is still starting up, off the render thread.
+		this.targets = new ColorTargets(loaded.targets(), EXECUTING);
+		this.seed = this.targets.has(0) ? new SceneSeed(this.targets.format(0)) : null;
+
 		String vertex = loaded.program().stages().get(ProgramStage.VERTEX).text();
 		String fragment = loaded.program().stages().get(ProgramStage.FRAGMENT).text();
+		int load = LOADS.incrementAndGet();
+		Identifier vertexId =
+				Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/final_vertex_" + load);
+		Identifier fragmentId =
+				Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/final_fragment_" + load);
 		this.source = (id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
-				return FRAGMENT_ID.equals(id) ? fragment : null;
+				return fragmentId.equals(id) ? fragment : null;
 			}
 
-			return VERTEX_ID.equals(id) ? vertex : null;
+			return vertexId.equals(id) ? vertex : null;
 		};
 
 		BindGroupLayout.Builder bindings = BindGroupLayout.builder()
@@ -137,8 +187,8 @@ public final class PackFinalPass {
 
 		this.pipeline = RenderPipeline.builder()
 				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/pack_final"))
-				.withVertexShader(VERTEX_ID)
-				.withFragmentShader(FRAGMENT_ID)
+				.withVertexShader(vertexId)
+				.withFragmentShader(fragmentId)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
 				.withBindGroupLayout(bindings.build())
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
@@ -166,9 +216,10 @@ public final class PackFinalPass {
 
 			Path pack = choose(gameDirectory, packs);
 			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings(gameDirectory));
-			// A reserved key rather than an option: no pack declares a setting called profile,
+			// Reserved keys rather than options: no pack declares a setting under either name,
 			// and a profile is a different thing from a value, it is a whole set of them.
 			OptionValue profile = chosen.remove(PROFILE_KEY);
+			OptionValue seed = chosen.remove(SEED_KEY);
 			Optional<PackProgram.Loaded> program = PackProgram.load(pack, OVERWORLD + "/final", true,
 					chosen, profile == null ? "" : profile.text());
 			if (program.isEmpty()) {
@@ -177,7 +228,7 @@ public final class PackFinalPass {
 				return;
 			}
 
-			active = new PackFinalPass(program.get());
+			active = new PackFinalPass(program.get(), seed == null || !seed.isBoolean() || seed.asBoolean());
 		} catch (IOException | RuntimeException e) {
 			disabled = true;
 			Vitrail.logger().error("Vitrail could not prepare a pack's final pass", e);
@@ -356,53 +407,77 @@ public final class PackFinalPass {
 		}
 
 		// Outside any render pass: creating a texture or a buffer records a barrier into the very
-		// command buffer a pass would be recording into.
-		prepare(device, main);
-
-		GpuTextureView sceneView = this.scene.getColorTextureView();
-		GpuTextureView mainView = main.getColorTextureView();
-		GpuTextureView depthView = main.useDepth ? main.getDepthTextureView() : null;
-		if (sceneView == null || mainView == null) {
+		// command buffer a pass would be recording into, and the clears refuse outright while one
+		// is open.
+		if (!prepare(device, main)) {
 			return;
 		}
 
-		announce(main);
+		GpuTextureView mainView = main.getColorTextureView();
+		GpuTextureView depthView = main.useDepth ? main.getDepthTextureView() : null;
+		if (mainView == null) {
+			return;
+		}
+
+		// Every frame here as well, and for the same reason as the pass's own pipeline.
+		boolean seeding = this.seed != null && this.seedEnabled && this.seed.prepare(device);
+
+		announce(main, seeding);
 		writeBlock(main);
 
+		// One encoder for the whole frame. A second one would be a fresh wrapper carrying its own
+		// idea of whether a pass is open, which is the guard that keeps allocations out of one.
 		CommandEncoder encoder = device.createCommandEncoder();
-		// The pass writes into the main target while reading what the main target held, so the
-		// copy has to happen first and cannot be skipped by sampling the target itself.
-		encoder.copyTextureToTexture(main.getColorTexture(), this.scene.getColorTexture(), 0,
-				0, 0, 0, 0, main.width, main.height);
+		this.targets.clear(encoder);
+
+		if (seeding) {
+			// After the clears and never before, or the clear would throw the scene away. The main
+			// side and not the other one: the gbuffers this stands in for run before anything has
+			// flipped, so they would write the half every later pass starts from.
+			this.seed.draw(encoder, this.quad, mainView, this.targets.view(0, TargetSchedule.Side.MAIN));
+		}
 
 		try (RenderPass pass = encoder.createRenderPass(LABEL, mainView, Optional.empty())) {
 			pass.setPipeline(this.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setUniform(UNIFORM_BLOCK, this.block.currentBuffer());
 			pass.setVertexBuffer(0, this.quad.slice());
-
-			// Every sampler the layout names has to be bound or the draw throws. A pack asking
-			// for a buffer this pass does not own yet reads the scene, which is wrong but visible.
-			for (String sampler : this.samplers) {
-				GpuTextureView bound = sampler.startsWith("depthtex") && depthView != null ? depthView : sceneView;
-				pass.bindTexture(sampler, bound,
-						RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			}
-
+			bindSamplers(pass, depthView);
 			pass.draw(QUAD.length / 5, 1, 0, 0);
 		}
 
 		this.block.rotate();
 	}
 
-	private void prepare(GpuDevice device, RenderTarget main) {
-		if (this.scene == null) {
-			this.scene = new TextureTarget("Vitrail colortex0", main.width, main.height, false,
-					GpuFormat.RGBA8_UNORM);
-		} else if (this.scene.width != main.width || this.scene.height != main.height) {
-			this.scene.resize(main.width, main.height);
-		}
+	/**
+	 * Every name the layout carries has to be bound or the draw throws on the first one missing,
+	 * so the plan answers for all of them and a name nothing serves gets one black pixel rather
+	 * than being left out.
+	 */
+	private void bindSamplers(RenderPass pass, GpuTextureView depthView) {
+		for (String sampler : this.samplers) {
+			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+			GpuTextureView bound = switch (binding.kind()) {
+				case COLORTEX -> this.targets.view(binding.index(), binding.side());
+				// White is not black on purpose: a depth of one is the far plane, so a lookup that
+				// finds nothing reads open sky. Black would put the whole world in shadow.
+				case DEPTH -> depthView == null ? this.targets.white() : depthView;
+				case SHADOW_DEPTH, SHADOW_COLOUR -> this.targets.white();
+				case NOISE -> this.targets.grey();
+				case UNSERVED -> this.targets.black();
+			};
 
+			FilterMode filter = binding.kind() == SamplerPlan.Kind.COLORTEX
+					? this.targets.filter(binding.index())
+					: FilterMode.NEAREST;
+
+			pass.bindTexture(sampler, bound == null ? this.targets.black() : bound,
+					RenderSystem.getSamplerCache().getClampToEdge(filter));
+		}
+	}
+
+	/** @return false when the targets could not be prepared, in which case nothing may be drawn */
+	private boolean prepare(GpuDevice device, RenderTarget main) {
 		if (this.quad == null) {
 			ByteBuffer vertices = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
 					.order(ByteOrder.nativeOrder());
@@ -418,6 +493,11 @@ public final class PackFinalPass {
 					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE,
 					Math.max(16, this.uniforms.size()));
 		}
+
+		// Compared against the window every frame rather than driven by an event: the resize event
+		// fires too early, fires again when only the interface scale moved, and the panorama
+		// capture takes the main target to 4096 without going through the game's resize at all.
+		return this.targets.ensure(main.width, main.height);
 	}
 
 	private void writeBlock(RenderTarget main) {
@@ -440,17 +520,56 @@ public final class PackFinalPass {
 		}
 	}
 
-	private void announce(RenderTarget main) {
+	/**
+	 * Said once per pack, and grouped by cause rather than by target. A promoted format, a buffer
+	 * nothing writes and a sampler nothing serves all produce a picture that looks entirely
+	 * plausible, so none of the three can be found by looking at one. They are named here instead.
+	 */
+	private void announce(RenderTarget main, boolean seeding) {
 		if (this.announced) {
 			return;
 		}
 
 		this.announced = true;
-		List<String> missing = new ArrayList<>(this.uniforms.unsupplied());
+		TargetPlan plan = this.loaded.targets();
 		Vitrail.logger().info("Drawing {} of {} at {}x{}, {} uniforms and {} samplers",
 				this.loaded.path(), this.loaded.packName(), main.width, main.height,
 				this.loaded.program().uniforms().size(), this.samplers.size());
 
+		// Already whole sentences, and already the pack's own words where it has any: promotions,
+		// sizes the pack asked for, mipmaps nothing can generate, and what this engine will not do.
+		plan.notes().forEach(note -> Vitrail.logger().info("{}", note));
+		this.targets.notes().forEach(note -> Vitrail.logger().warn("{}", note));
+
+		List<String> resting = plan.ordered().stream()
+				.filter(index -> !(seeding && index == 0))
+				.map(TargetName::canonical)
+				.toList();
+		if (!resting.isEmpty()) {
+			Vitrail.logger().info(
+					"No pass writes these yet, so they hold nothing but their clear colour: {}", resting);
+		}
+
+		if (seeding) {
+			Vitrail.logger().info("colortex0 carries the game's finished frame, drawn in for the "
+					+ "gbuffers stage that does not run yet, so it is already tone mapped and "
+					+ "already holds the translucents, the weather and the hand");
+		} else if (this.seed == null) {
+			Vitrail.logger().info("{} declares no colortex0 in {}, so nothing carries the game's "
+					+ "frame at all", this.loaded.packName(), plan.place().isEmpty() ? "its root" : plan.place());
+		} else if (!this.seedEnabled) {
+			Vitrail.logger().info("The scene seed is off, colortex0 holds its clear colour as well");
+		}
+
+		announceSamplers();
+
+		int descriptors = this.samplers.size() + 1;
+		if (descriptors > PUSH_DESCRIPTORS) {
+			Vitrail.logger().warn("{} binds {} descriptors in one set, past the {} a device commonly "
+					+ "allows pushed at once", this.loaded.path(), descriptors, PUSH_DESCRIPTORS);
+		}
+
+		List<String> missing = this.uniforms.unsupplied();
 		if (!missing.isEmpty()) {
 			Vitrail.logger().warn(
 					"{} values this program reads are written as zeroes because nothing supplies them yet: {}",
@@ -458,10 +577,43 @@ public final class PackFinalPass {
 		}
 	}
 
+	private void announceSamplers() {
+		Map<SamplerPlan.Kind, List<String>> byKind = this.loaded.samplers().byKind();
+		named(byKind, SamplerPlan.Kind.COLORTEX, "read a real colour target");
+		named(byKind, SamplerPlan.Kind.DEPTH, "read the world's depth");
+		named(byKind, SamplerPlan.Kind.SHADOW_DEPTH, "read white, no shadow map is drawn yet");
+		named(byKind, SamplerPlan.Kind.SHADOW_COLOUR, "read white, no shadow map is drawn yet");
+		named(byKind, SamplerPlan.Kind.NOISE, "read mid grey, no noise texture is built yet");
+
+		// The two copies of the depth taken before the translucents and before the hand cannot be
+		// made from a hook that fires once the world is finished, so both read the final depth.
+		List<String> copies = byKind.getOrDefault(SamplerPlan.Kind.DEPTH, List.of()).stream()
+				.filter(name -> name.equals("depthtex1") || name.equals("depthtex2"))
+				.toList();
+		if (!copies.isEmpty()) {
+			Vitrail.logger().info("{} read the finished depth rather than the copies taken before "
+					+ "the translucents and before the hand", copies);
+		}
+
+		List<String> unserved = this.loaded.samplers().unserved();
+		if (!unserved.isEmpty()) {
+			Vitrail.logger().warn("{} samplers this program declares read one black pixel because "
+					+ "nothing serves them: {}", unserved.size(), unserved);
+		}
+	}
+
+	private static void named(Map<SamplerPlan.Kind, List<String>> byKind, SamplerPlan.Kind kind,
+			String what) {
+		List<String> names = byKind.getOrDefault(kind, List.of());
+		if (!names.isEmpty()) {
+			Vitrail.logger().info("{} samplers {}: {}", names.size(), what, names);
+		}
+	}
+
 	private void release() {
-		if (this.scene != null) {
-			this.scene.destroyBuffers();
-			this.scene = null;
+		this.targets.release();
+		if (this.seed != null) {
+			this.seed.release();
 		}
 
 		if (this.block != null) {

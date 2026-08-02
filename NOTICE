@@ -14,5 +14,38 @@ GNU Lesser General Public License version 3
   parent map. The blend mode overrides and the IrisProgram API mapping carried by the original
   enum were not reused.
 
+  common/src/main/java/dev/vitrail/pack/TargetFormat.java transcribes the colour format table of
+  net.irisshaders.iris.gl.texture.InternalTextureFormat, so that a pack is read against the names
+  it was written for. The promotion of the three component formats and the replacement of the
+  fixed function relics are this project's own, and are needed because Vulkan attaches neither.
+
+  common/src/main/java/dev/vitrail/pack/ConstDirectives.java and
+  common/src/main/java/dev/vitrail/pack/DrawBuffers.java follow the grammars of
+  net.irisshaders.iris.shaderpack.parsing.ConstDirectiveParser and of
+  net.irisshaders.iris.shaderpack.parsing.CommentDirectiveParser together with
+  net.irisshaders.iris.shaderpack.programs.ProgramDirectives. Both rules are odd enough that
+  reasoning them out would get them wrong, so they are reproduced rather than reinvented.
+
+  common/src/main/java/dev/vitrail/pack/TargetDirectives.java and
+  common/src/main/java/dev/vitrail/pack/TargetSchedule.java carry the semantics of
+  net.irisshaders.iris.shaderpack.properties.PackRenderTargetDirectives, of
+  net.irisshaders.iris.targets.ClearPassCreator and of net.irisshaders.iris.targets.BufferFlipper:
+  the last declaration read overwriting the ones before it, the default clear colours, and which
+  half of a doubled target each pass reads and writes. The two directives that are dead in Iris,
+  GAUX4FORMAT and the promotion of colortex1 on a gdepth uniform, are not implemented. The flip
+  state is carried once rather than as the pair BufferFlipper keeps.
+
+  common/src/main/java/dev/vitrail/pack/TargetSize.java reimplements
+  net.irisshaders.iris.gl.texture.TextureScaleOverride, down to the dot in the value being what
+  tells a fraction of the screen from a count of pixels, together with the rule of
+  net.irisshaders.iris.shaderpack.properties.PackDirectives.getTextureScaleOverride that looks the
+  legacy name up before the canonical one. One divergence: the two axes share a single relative
+  flag here where Iris carries one each.
+
+  common/src/main/java/dev/vitrail/pack/TargetPlan.java folds a dimension's directives in the
+  order of net.irisshaders.iris.shaderpack.programs.ProgramSet.locateDirectives, setup programs
+  left out of it as they are there. The order the frame runs in, which the same file also carries,
+  is not that one and is not from Iris.
+
   Nothing else in Vitrail is derived from Iris. In particular nothing is taken from its GLSL
   transformation code, which links against glsl-transformer (AGPL-3.0).

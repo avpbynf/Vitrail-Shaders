@@ -2,6 +2,7 @@ package dev.vitrail.glsl;
 
 import dev.vitrail.glsl.GlslLexer.Kind;
 import dev.vitrail.glsl.GlslLexer.Token;
+import dev.vitrail.pack.DrawBuffers;
 import dev.vitrail.pack.EngineDefines;
 import dev.vitrail.pack.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.ProgramStage;
@@ -310,82 +311,14 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Which colour attachments this program writes.
-	 * <p>
-	 * This follows Iris rather than anything reasoned out here, because Iris is what the packs are
-	 * written and tested against, and its rule is odd enough that guessing would get it wrong.
-	 * Read from {@code CommentDirectiveParser.findDirective} and {@code ProgramDirectives}: the
-	 * <em>last</em> occurrence in the file wins, the search runs on text whose conditionals have
-	 * not been evaluated, so a declaration in a branch nobody takes still counts, the directive
-	 * has to open a block comment or it is not one at all, and if the last occurrence fails that
-	 * test nothing falls back to an earlier one. When both spellings appear, the later of the two
-	 * wins.
-	 * <p>
-	 * Iris infers a single attachment zero when neither appears. That is a rendering decision, so
-	 * it is left to whoever binds these rather than made here: an empty list means the program
-	 * said nothing.
+	 * Which colour attachments this program writes, bounded to what a fragment stage may declare.
+	 * The rule itself is in {@link DrawBuffers}, next to the targets it decides the existence of;
+	 * all that belongs here is the ceiling, since a target that has to exist and an output that
+	 * can be declared are two different questions with two different answers.
 	 */
 	private void collectDrawBuffers() {
-		String text = this.unit.text();
-		int drawBuffersAt = directiveStart(text, "DRAWBUFFERS");
-		int renderTargetsAt = directiveStart(text, "RENDERTARGETS");
-
-		if (drawBuffersAt < 0 && renderTargetsAt < 0) {
-			return;
-		}
-
-		boolean runTogether = drawBuffersAt > renderTargetsAt;
-		String value = directiveValue(text, runTogether ? drawBuffersAt : renderTargetsAt,
-				runTogether ? "DRAWBUFFERS" : "RENDERTARGETS");
-		if (value == null) {
-			return;
-		}
-
-		// DRAWBUFFERS runs its indices together, so it cannot name an attachment past nine.
-		// RENDERTARGETS separates them with commas and can.
-		if (runTogether) {
-			for (char digit : value.toCharArray()) {
-				if (digit >= '0' && digit <= '9') {
-					this.drawBuffers.add(digit - '0');
-				}
-			}
-
-			return;
-		}
-
-		for (String part : value.split(",")) {
-			addRenderTarget(part.trim());
-		}
-	}
-
-	/** Where the winning occurrence of a directive begins, or -1 if the file has none usable. */
-	private static int directiveStart(String text, String name) {
-		int at = text.lastIndexOf(name + ":");
-		if (at < 0) {
-			return -1;
-		}
-
-		// The directive has to be the first thing in a block comment. A line comment does not
-		// count, and neither does a directive with prose in front of it on the same line.
-		return text.substring(0, at).stripTrailing().endsWith("/*") ? at : -1;
-	}
-
-	private static String directiveValue(String text, int at, String name) {
-		String rest = text.substring(at + name.length() + 1);
-		int close = rest.indexOf("*/");
-
-		return close < 0 ? null : rest.substring(0, close).trim();
-	}
-
-	private void addRenderTarget(String text) {
-		if (text.isEmpty() || text.length() > 2 || !text.chars().allMatch(Character::isDigit)) {
-			return;
-		}
-
-		int slot = Integer.parseInt(text);
-		if (slot < MAX_FRAGMENT_OUTPUTS) {
-			this.drawBuffers.add(slot);
-		}
+		List<Integer> raw = DrawBuffers.parse(this.unit);
+		raw.stream().filter(slot -> slot < MAX_FRAGMENT_OUTPUTS).forEach(this.drawBuffers::add);
 	}
 
 	/**

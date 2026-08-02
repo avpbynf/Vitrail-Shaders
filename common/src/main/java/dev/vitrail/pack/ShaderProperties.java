@@ -40,6 +40,8 @@ public final class ShaderProperties {
 	private static final Pattern BLEND = Pattern.compile("^\\s*blend\\.([^=\\s.]+)(?:\\.(\\w+))?\\s*=\\s*(.*)$");
 	private static final Pattern ALPHA_TEST = Pattern.compile("^\\s*alphaTest\\.(\\S+)\\s*=\\s*(.*)$");
 	private static final Pattern SLIDERS = Pattern.compile("^\\s*sliders\\s*=\\s*(.*)$");
+	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
+	private static final Pattern FLIP = Pattern.compile("^\\s*flip\\.([^=\\s.]+)\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern OTHER_KEY = Pattern.compile("^\\s*([A-Za-z_][\\w]*)[.=].*$");
 
 	private static final Pattern SCREEN_TOKEN = Pattern.compile("^[A-Za-z_]\\w*$");
@@ -54,6 +56,8 @@ public final class ShaderProperties {
 	private final Map<String, List<String>> screens;
 	private final List<String> sliders;
 	private final List<BlendDirective> blend;
+	private final Map<String, String> sizeBuffers;
+	private final List<FlipDirective> flips;
 	private final Map<String, String> alphaTest;
 	private final Map<String, Integer> ignoredPrefixes;
 	private final int directiveCount;
@@ -68,6 +72,8 @@ public final class ShaderProperties {
 		this.screens = Map.copyOf(builder.screens);
 		this.sliders = List.copyOf(builder.sliders);
 		this.blend = List.copyOf(builder.blend);
+		this.sizeBuffers = Map.copyOf(builder.sizeBuffers);
+		this.flips = List.copyOf(builder.flips);
 		this.alphaTest = Map.copyOf(builder.alphaTest);
 		this.ignoredPrefixes = Map.copyOf(builder.ignoredPrefixes);
 		this.directiveCount = builder.directiveCount;
@@ -165,6 +171,25 @@ public final class ShaderProperties {
 			}
 
 			return;
+		}
+
+		// The value is kept exactly as written. It is often not a number at all but the name of
+		// one of the pack's own settings, and substituting it needs those settings resolved,
+		// which this class deliberately knows nothing about.
+		Matcher size = SIZE_BUFFER.matcher(line);
+		if (size.matches()) {
+			builder.sizeBuffers.put(size.group(1), size.group(2).trim());
+			return;
+		}
+
+		Matcher flip = FLIP.matcher(line);
+		if (flip.matches()) {
+			String value = flip.group(3).trim();
+			if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false")) {
+				builder.flips.add(new FlipDirective(flip.group(1), flip.group(2),
+						value.equalsIgnoreCase("true")));
+				return;
+			}
 		}
 
 		// Anything left is counted by its first segment rather than dropped. That is what makes
@@ -308,6 +333,20 @@ public final class ShaderProperties {
 		return this.blend;
 	}
 
+	/**
+	 * The size a pack asks a colour target to be, by the name it wrote, raw. The two tokens are
+	 * often settings rather than numbers, so reading them needs {@link TargetSize} and the
+	 * resolved settings.
+	 */
+	public Map<String, String> sizeBuffers() {
+		return this.sizeBuffers;
+	}
+
+	/** Where a pack takes the ping pong into its own hands. One line in the whole corpus. */
+	public List<FlipDirective> flips() {
+		return this.flips;
+	}
+
 	public Map<String, String> alphaTest() {
 		return this.alphaTest;
 	}
@@ -332,6 +371,10 @@ public final class ShaderProperties {
 		}
 	}
 
+	/** Whether a program swaps a target's two halves, said outright rather than inferred. */
+	public record FlipDirective(String program, String buffer, boolean value) {
+	}
+
 	private static final class Builder {
 
 		private List<String> lines = List.of();
@@ -341,6 +384,8 @@ public final class ShaderProperties {
 		private final Map<String, List<String>> screens = new LinkedHashMap<>();
 		private final List<String> sliders = new ArrayList<>();
 		private final List<BlendDirective> blend = new ArrayList<>();
+		private final Map<String, String> sizeBuffers = new LinkedHashMap<>();
+		private final List<FlipDirective> flips = new ArrayList<>();
 		private final Map<String, String> alphaTest = new LinkedHashMap<>();
 		private final Map<String, Integer> ignoredPrefixes = new LinkedHashMap<>();
 		private int directiveCount;

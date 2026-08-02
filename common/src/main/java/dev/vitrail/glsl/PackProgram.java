@@ -4,10 +4,13 @@ import dev.vitrail.pack.IncludeExpander;
 import dev.vitrail.pack.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.OptionIndex;
 import dev.vitrail.pack.OptionValue;
+import dev.vitrail.pack.ProgramSet;
 import dev.vitrail.pack.ProgramStage;
+import dev.vitrail.pack.SamplerPlan;
 import dev.vitrail.pack.SettingSet;
 import dev.vitrail.pack.ShaderProperties;
 import dev.vitrail.pack.ShaderPackSource;
+import dev.vitrail.pack.TargetPlan;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -31,7 +34,15 @@ public final class PackProgram {
 	private PackProgram() {
 	}
 
-	public record Loaded(String packName, String path, ProgramTranslator.TranslatedProgram program) {
+	/**
+	 * @param targets  what the whole dimension declares about its colour targets, which is read
+	 *                 from thirty odd programs while only one of them is translated
+	 * @param samplers what each sampler of the translated program is bound to, answered here
+	 *                 rather than at draw time so that a name nothing serves is known before a
+	 *                 frame rather than during one
+	 */
+	public record Loaded(String packName, String path, ProgramTranslator.TranslatedProgram program,
+			TargetPlan targets, SamplerPlan samplers) {
 	}
 
 	/**
@@ -63,9 +74,10 @@ public final class PackProgram {
 			Map<String, OptionValue> chosen, String profile) throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
+			ShaderProperties properties = ShaderProperties.parse(source);
 			Map<String, OptionValue> fromProfile = profile.isEmpty()
 					? Map.of()
-					: ShaderProperties.parse(source).expandProfile(profile);
+					: properties.expandProfile(profile);
 			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
 			IncludeExpander expander = new IncludeExpander(source, options, settings);
 
@@ -83,8 +95,23 @@ public final class PackProgram {
 				return Optional.empty();
 			}
 
-			return Optional.of(new Loaded(source.packName(), path,
-					ProgramTranslator.translate(units, fullscreen)));
+			// Inside the same opening of the pack, because a zip closed behind us invalidates every
+			// path taken from it and the plan reads thirty more files than this program does.
+			TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimensionOf(path));
+			ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units, fullscreen);
+			List<String> declared = program.samplers().stream()
+					.map(TranslatedUnit.Uniform::name)
+					.toList();
+
+			return Optional.of(new Loaded(source.packName(), path, program, targets,
+					SamplerPlan.of(declared, targets, path)));
 		}
+	}
+
+	/** {@code world0/final} sits in world0; a program at the root belongs to no dimension. */
+	private static String dimensionOf(String path) {
+		int slash = path.indexOf('/');
+
+		return slash < 0 ? ProgramSet.ROOT : path.substring(0, slash);
 	}
 }
