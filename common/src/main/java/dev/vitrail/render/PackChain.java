@@ -29,6 +29,7 @@ import net.minecraft.util.Mth;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -110,13 +111,23 @@ public final class PackChain {
 	private static final String ON_SETTINGS = "settings";
 
 	/**
-	 * The four lines of options.txt that name what this mod does rather than what the pack declares,
+	 * The line in options.txt that takes the decoded dump: {@code dump=composite5}, or the whole
+	 * path, or {@code dump=final}. One program, because the point is to read the file rather than
+	 * to search it, and because two programs of one frame are handed the same values anyway.
+	 * <p>
+	 * Reserved like the others. It is the instrument the milestone is verified with: a value can be
+	 * non zero, plausible and wrong, and the only cheap way to tell is to read the number.
+	 */
+	private static final String DUMP_KEY = "dump";
+
+	/**
+	 * The five lines of options.txt that name what this mod does rather than what the pack declares,
 	 * kept together for the one place that has to tell them apart: the log that says what the file
 	 * forces. {@code profile} is the settings layer's own, since that is the side that writes it
-	 * back; the other three are read here and nowhere else.
+	 * back; the other four are read here and nowhere else.
 	 */
 	private static final Set<String> RESERVED =
-			Set.of(SettingsFile.PROFILE_KEY, SEED_KEY, PASSES_KEY, SCREEN_KEY);
+			Set.of(SettingsFile.PROFILE_KEY, SEED_KEY, PASSES_KEY, SCREEN_KEY, DUMP_KEY);
 
 	/**
 	 * The quad a pack expects under a full screen pass, from (0,0) to (1,1), as two triangles.
@@ -143,6 +154,9 @@ public final class PackChain {
 	private static volatile String lastError;
 	private static volatile Path settingsFile;
 	private static volatile boolean packsFirst = true;
+	private static volatile String dumping = "";
+	private static volatile Path dumpFile;
+	private static long lastDumpNanos;
 
 	private final PackProgram.Chain chain;
 	private final PackValues values;
@@ -203,6 +217,8 @@ public final class PackChain {
 			OptionValue seed = chosen.remove(SEED_KEY);
 			ChainFilter filter = filterOf(chosen.remove(PASSES_KEY));
 			packsFirst = packsFirst(chosen.remove(SCREEN_KEY));
+			dumping = named(chosen.remove(DUMP_KEY));
+			dumpFile = gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt");
 
 			// Before the translation and not after: this is what installs the machine's own
 			// symbols, and the biome ones among them decide which branch of the pack compiles.
@@ -291,6 +307,12 @@ public final class PackChain {
 		}
 
 		return true;
+	}
+
+	/** The program the dump line names, lowercased, or empty when the line is missing. */
+	private static String named(OptionValue value) {
+		// asText rather than text, for the same reason as above: dump=1 parses as a boolean.
+		return value == null ? "" : value.asText().trim().toLowerCase(Locale.ROOT);
 	}
 
 	/**
@@ -788,6 +810,61 @@ public final class PackChain {
 				data.position(pass.uniformOffset());
 				pass.write(Std140Builder.intoBuffer(data), this.values.world());
 			}
+		}
+
+		dump();
+	}
+
+	/**
+	 * Writes the program the dump line names as {@code name = value} text, once a second.
+	 * <p>
+	 * Once a second and not once a frame, because the file is meant to be read by a human or tailed
+	 * by a script, and because the values it holds are the frame's own: two passes of one frame are
+	 * handed the same numbers, so a faster rate would say the same thing more often. It is written
+	 * whole each time rather than appended, so what is in it is always this second and never a
+	 * history to scroll through; a curve is taken by reading it repeatedly, which is what the
+	 * halflife checks do.
+	 * <p>
+	 * Failing to write is said once and then dropped. A dump that cannot be taken is a lost
+	 * measurement, and turning it into a crash would make a debugging aid the reason the game
+	 * stopped.
+	 */
+	private void dump() {
+		if (dumping.isEmpty() || dumpFile == null) {
+			return;
+		}
+
+		long now = System.nanoTime();
+		if (lastDumpNanos != 0L && now - lastDumpNanos < 1_000_000_000L) {
+			return;
+		}
+
+		lastDumpNanos = now;
+		PackPass chosen = null;
+		for (PackPass pass : this.programs) {
+			if (pass.path().toLowerCase(Locale.ROOT).endsWith(dumping)) {
+				chosen = pass;
+				break;
+			}
+		}
+
+		if (chosen == null) {
+			Vitrail.logger().warn("{}={} names no program of this chain, so nothing is dumped. This "
+					+ "chain runs: {}", DUMP_KEY, dumping,
+					this.programs.stream().map(PackPass::path).toList());
+			dumping = "";
+
+			return;
+		}
+
+		String text = "# " + this.chain.place() + ", " + chosen.path() + ", load " + this.load + "\n"
+				+ chosen.decoded(this.values.world());
+		try {
+			Files.createDirectories(dumpFile.getParent());
+			Files.writeString(dumpFile, text, StandardCharsets.UTF_8);
+		} catch (IOException e) {
+			Vitrail.logger().warn("Could not write the decoded dump to {}: {}", dumpFile, e.toString());
+			dumping = "";
 		}
 	}
 

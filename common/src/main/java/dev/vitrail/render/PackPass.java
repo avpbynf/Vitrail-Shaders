@@ -7,6 +7,7 @@ import dev.vitrail.pack.ChainPlan;
 import dev.vitrail.pack.ProgramStage;
 import dev.vitrail.pack.SamplerPlan;
 import dev.vitrail.pack.TargetName;
+import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
 
 import com.mojang.blaze3d.GpuFormat;
@@ -247,6 +248,14 @@ final class PackPass {
 
 	void write(Std140Builder into, WorldState world) {
 		this.uniforms.write(into, world);
+	}
+
+	/** This program's block as {@code name = value} text, for the decoded dump. */
+	String decoded(WorldState world) {
+		TextSink sink = new TextSink();
+		this.uniforms.write(sink, world);
+
+		return sink.text();
 	}
 
 	/** Two for the block and the globals, then one per sampler. Logged for every program. */

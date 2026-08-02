@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.uniform.UniformBlock;
 import dev.vitrail.uniform.UniformCatalog;
+import dev.vitrail.uniform.UniformSink;
 import dev.vitrail.uniform.WorldState;
 
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -50,5 +51,14 @@ final class PackUniforms {
 
 	void write(Std140Builder into, WorldState world) {
 		this.block.write(new Std140Sink(into), world);
+	}
+
+	/**
+	 * The same walk through a sink of the caller's choosing, which is how the decoded dump is taken.
+	 * It has to be the same one: a second walk written to print values would be a second reading of
+	 * the catalogue, and the thing worth proving is what the buffer got.
+	 */
+	void write(UniformSink into, WorldState world) {
+		this.block.write(into, world);
 	}
 }

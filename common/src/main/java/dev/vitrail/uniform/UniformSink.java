@@ -13,6 +13,20 @@ import org.joml.Matrix4fc;
  */
 public interface UniformSink {
 
+	/**
+	 * Says which member the puts that follow belong to, before the first of them.
+	 * <p>
+	 * Ignored by the two sinks that produce bytes, which is why it is a default: a name changes
+	 * nothing about the layout, and a sink that had to be taught one in order to stay correct would
+	 * be a sink that could get it wrong. Only {@link TextSink} keeps it.
+	 *
+	 * @param supplied whether a source answered this name, so that the zeroes a sink is about to be
+	 *                 handed can be told from zeroes that are the real value
+	 */
+	default UniformSink member(String name, int elements, boolean supplied) {
+		return this;
+	}
+
 	UniformSink align(int alignment);
 
 	UniformSink putFloat(float v);

@@ -97,6 +97,8 @@ public final class UniformBlock {
 				member.source().read(world, this.carrier);
 			}
 
+			sink.member(member.name(), member.elements(), supplied);
+
 			for (int element = 0; element < member.elements(); element++) {
 				// Every element of an array starts on a sixteen byte boundary in std140, which for
 				// anything smaller than a vec4 is not what putting them back to back gives.
