@@ -31,6 +31,7 @@ public final class ScreenText {
 
 	/** One argument: how many settings are waiting to be applied. */
 	public static final String PENDING = "options.vitrail.pending";
+	public static final String REMOVED = "options.vitrail.removed";
 
 	/** One argument: how many settings options.txt is holding down. */
 	public static final String FORCED = "options.vitrail.forced";

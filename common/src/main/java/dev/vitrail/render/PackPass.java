@@ -302,6 +302,16 @@ final class PackPass {
 	}
 
 	/**
+	 * {@code colortex6 as sampler3D}. The type is always printed beside the name, because the name
+	 * on its own is what made this look like a colour target in the first place.
+	 */
+	static String describe(List<TranslatedUnit.Uniform> samplers) {
+		return samplers.stream()
+				.map(sampler -> sampler.name() + " as " + sampler.type())
+				.collect(Collectors.joining(", "));
+	}
+
+	/**
 	 * Opens and closes its own render pass, which is what makes the next one able to read what
 	 * this one wrote: the Vulkan backend ends a pass with a full memory barrier. Nothing is
 	 * allocated here, and the attachments are loaded rather than cleared, since the clears for the
@@ -384,7 +394,10 @@ final class PackPass {
 				case DEPTH -> depthView == null ? targets.black() : depthView;
 				case SHADOW_DEPTH, SHADOW_COLOUR -> targets.white();
 				case NOISE -> targets.grey();
-				case UNSERVED -> targets.black();
+				// A name this backend cannot bind should have taken its program out of the chain
+				// before a frame was drawn. It is still answered rather than left out, because the
+				// layout carries it either way and the draw throws on the first name it misses.
+				case UNSERVED, UNBINDABLE -> targets.black();
 			};
 
 			FilterMode filter = binding.kind() == SamplerPlan.Kind.COLORTEX
@@ -462,6 +475,16 @@ final class PackPass {
 		if (!unserved.isEmpty()) {
 			this.notes.add(this.path + " declares " + unserved.size() + " samplers that read one "
 					+ "black pixel because nothing serves them: " + unserved);
+		}
+
+		// This one should be unreachable: a program declaring such a sampler is taken out of the
+		// chain before anything is built. It stays because the failure it would otherwise produce
+		// is the raw one this whole path exists to replace, and it names the type as well.
+		List<TranslatedUnit.Uniform> unbindable = this.loaded.unbindable();
+		if (!unbindable.isEmpty()) {
+			this.notes.add(this.path + " is being drawn although it declares "
+					+ describe(unbindable) + ", which this backend cannot bind, so its pipeline "
+					+ "will not build");
 		}
 	}
 

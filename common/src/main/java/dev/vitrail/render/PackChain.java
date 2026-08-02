@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
 import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.pack.ChainFilter;
 import dev.vitrail.pack.ChainPlan;
 import dev.vitrail.pack.EngineDefines;
@@ -155,6 +156,7 @@ public final class PackChain {
 	private static boolean checked;
 	private static volatile PackSession session;
 	private static volatile String lastError;
+	private static volatile List<String> removed = List.of();
 	private static volatile Path settingsFile;
 	private static volatile boolean packsFirst = true;
 	private static volatile String dumping = "";
@@ -200,6 +202,7 @@ public final class PackChain {
 		session = null;
 		settingsFile = null;
 		lastError = null;
+		removed = List.of();
 		packsFirst = true;
 		try {
 			List<Path> packs = PackLoader.candidates(gameDirectory);
@@ -256,6 +259,7 @@ public final class PackChain {
 				return;
 			}
 
+			announceRemoved(chain);
 			active = new PackChain(chain, values,
 					seed == null || !seed.isBoolean() || seed.asBoolean());
 		} catch (IOException | RuntimeException e) {
@@ -435,9 +439,48 @@ public final class PackChain {
 		}
 	}
 
+	/**
+	 * The passes no pipeline could have been built for, said once, with the type spelled out.
+	 * <p>
+	 * What each one costs the picture is deliberately not repeated here. The plan has already walked
+	 * the frame without them and names, target by target, every half that is now read before
+	 * anything writes it; these lines exist so that the list of targets has a cause, and so that the
+	 * cause is not a message from the SPIR-V compiler naming a sampler and no program.
+	 */
+	private static void announceRemoved(PackProgram.Chain chain) {
+		Map<String, List<TranslatedUnit.Uniform>> refused = chain.removed();
+		if (refused.isEmpty()) {
+			return;
+		}
+
+		List<String> said = new ArrayList<>();
+		refused.forEach((program, samplers) -> said.add(
+				(chain.place().isEmpty() ? program : chain.place() + "/" + program)
+						+ " is not run: it declares " + PackPass.describe(samplers)
+						+ ", and a pipeline of this game carries two dimensional and cube samplers "
+						+ "and nothing else"));
+
+		removed = List.copyOf(said);
+		said.forEach(line -> Vitrail.logger().warn("{}", line));
+		Vitrail.logger().warn("{} passes of {} are out for that reason and the rest of the chain "
+				+ "runs, rebuilt on what is left", refused.size(), chain.packName());
+	}
+
 	/** The pack being drawn, if there is one, with everything a screen needs to show it. */
 	public static Optional<PackSession> session() {
 		return Optional.ofNullable(session);
+	}
+
+	/**
+	 * Passes this engine took out of the loaded chain, in whole sentences, for a screen to show
+	 * beside the pack rather than for the log to keep to itself.
+	 * <p>
+	 * Empty is the ordinary answer, and it stays empty when the pack was refused outright: that case
+	 * is {@link #lastError()}, since nothing at all is drawn and naming one pass would be the
+	 * smaller half of the truth.
+	 */
+	public static List<String> removedPasses() {
+		return removed;
 	}
 
 	/**
@@ -1014,6 +1057,9 @@ public final class PackChain {
 		named(byKind, SamplerPlan.Kind.SHADOW_DEPTH, "read white, no shadow map is drawn yet");
 		named(byKind, SamplerPlan.Kind.SHADOW_COLOUR, "read white, no shadow map is drawn yet");
 		named(byKind, SamplerPlan.Kind.NOISE, "read mid grey, no noise texture is built yet");
+		named(byKind, SamplerPlan.Kind.UNBINDABLE,
+				"are declared under a type this backend cannot bind, and should have gone with "
+						+ "their pass");
 
 		// The two copies of the depth taken before the translucents and before the hand cannot be
 		// made from a hook that fires once the world is finished, so both read the final depth.

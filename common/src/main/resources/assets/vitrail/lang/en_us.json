@@ -7,6 +7,7 @@
 	"options.vitrail.packs_title": "Shader Packs",
 	"options.vitrail.profile": "Profile",
 	"options.vitrail.pending": "Waiting to be applied: %s",
+	"options.vitrail.removed": "Passes this backend cannot build, taken out: %s",
 	"options.vitrail.forced": "Forced by vitrail/options.txt: %s",
 	"options.vitrail.no_pack": "No shader pack is loaded",
 	"options.vitrail.error": "%s",

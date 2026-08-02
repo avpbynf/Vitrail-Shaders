@@ -20,6 +20,10 @@ import java.util.Set;
  * <p>
  * The side of a colour target is answered here too, from the schedule and for this program, so
  * that no caller has to work out where the ping pong stands.
+ * <p>
+ * A name is only asked about once its declared type has been accepted, and the order matters:
+ * Mellow declares {@code sampler3D colortex6} in a shared include, and reading the name first would
+ * hand a three dimensional sampler a real 2D view of colour target six.
  */
 public final class SamplerPlan {
 
@@ -42,10 +46,25 @@ public final class SamplerPlan {
 		this.byName = Map.copyOf(byName);
 	}
 
-	public enum Kind { COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, UNSERVED }
+	/**
+	 * {@link #UNSERVED} is a name this engine has nothing to put behind; {@link #UNBINDABLE} is a
+	 * declaration the API cannot express at all. The two are not the same failure and are worth
+	 * telling apart: the first costs one black pixel, the second costs the whole program.
+	 */
+	public enum Kind { COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, UNSERVED, UNBINDABLE }
 
 	/** @param index the colour target for {@link Kind#COLORTEX}, -1 otherwise */
 	public record Binding(String sampler, Kind kind, int index, TargetSchedule.Side side) {
+	}
+
+	/**
+	 * The type first and the name second, in that order and never the other way round.
+	 *
+	 * @param type what the declaration says, {@code sampler3D}, or null when the reader had only
+	 *             the name to go on and cannot answer for the type
+	 */
+	public static Kind classify(String name, String type) {
+		return type != null && SamplerTypes.refused(type) ? Kind.UNBINDABLE : classify(name);
 	}
 
 	public static Kind classify(String name) {
@@ -73,11 +92,20 @@ public final class SamplerPlan {
 	 * @param program  the program the plan is for, so the flip snapshot is the right one
 	 */
 	public static SamplerPlan of(List<String> declared, TargetPlan plan, String program) {
+		return of(declared, Map.of(), plan, program);
+	}
+
+	/**
+	 * @param types the declared type of each name. A name missing from it is one the reader could
+	 *              not type, and is taken at its word rather than refused on a guess
+	 */
+	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
+			String program) {
 		Optional<TargetSchedule.Bound> step = plan.schedule().step(program);
 		List<Binding> bindings = new ArrayList<>();
 
 		for (String name : declared) {
-			Kind kind = classify(name);
+			Kind kind = classify(name, types.get(name));
 			if (kind != Kind.COLORTEX) {
 				bindings.add(new Binding(name, kind, -1, TargetSchedule.Side.MAIN));
 				continue;
@@ -128,8 +156,17 @@ public final class SamplerPlan {
 	}
 
 	public List<String> unserved() {
+		return named(Kind.UNSERVED);
+	}
+
+	/** Names declared under a type no pipeline of this backend can carry. Empty is the norm. */
+	public List<String> unbindable() {
+		return named(Kind.UNBINDABLE);
+	}
+
+	private List<String> named(Kind kind) {
 		return this.bindings.stream()
-				.filter(binding -> binding.kind() == Kind.UNSERVED)
+				.filter(binding -> binding.kind() == kind)
 				.map(Binding::sampler)
 				.toList();
 	}

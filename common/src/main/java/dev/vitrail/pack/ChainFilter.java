@@ -1,17 +1,24 @@
 package dev.vitrail.pack;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * What the user asked to run, over and above what the pack itself keeps on.
+ * What the user asked to run, and what this engine cannot run, over and above what the pack keeps.
  * <p>
  * It exists to bisect: which pass breaks the picture, which pass costs, and what the chain is
  * worth against no chain at all. Removing a pass changes the parity of everything after it, so
- * the schedule is always rebuilt on what this filter leaves, never trimmed afterwards.
+ * the schedule is always rebuilt on what this filter leaves, never trimmed afterwards. That is
+ * also why a pass the backend refuses is taken out here rather than anywhere downstream: it is
+ * the one place where a removal is paid for by the walk that everything else reads.
+ *
+ * @param without programs the engine itself will not run, whatever the user asked. It is kept
+ *                apart from {@code only} so that a log can say which of the two took a pass out;
+ *                the two reasons are nothing alike and only one of them is a choice
  */
-public record ChainFilter(List<String> only, int limit) {
+public record ChainFilter(List<String> only, List<String> without, int limit) {
 
 	/** Everything the pack keeps on. */
 	public static final ChainFilter ALL = new ChainFilter(List.of(), -1);
@@ -21,6 +28,11 @@ public record ChainFilter(List<String> only, int limit) {
 
 	public ChainFilter {
 		only = List.copyOf(only);
+		without = List.copyOf(without);
+	}
+
+	public ChainFilter(List<String> only, int limit) {
+		this(only, List.of(), limit);
 	}
 
 	/**
@@ -61,11 +73,39 @@ public record ChainFilter(List<String> only, int limit) {
 	}
 
 	/**
+	 * The same filter with more programs the engine will not run.
+	 * <p>
+	 * The rest is carried over untouched, {@code limit} included, so that the ranks a second walk
+	 * hands out are the ranks the first one did. A refusal that shifted them would make
+	 * {@code passes=6} mean six different programs, and the picture would change for a reason
+	 * nobody asked for.
+	 */
+	public ChainFilter without(Collection<String> programs) {
+		if (programs.isEmpty()) {
+			return this;
+		}
+
+		List<String> refused = new ArrayList<>(this.without);
+		programs.stream().filter(name -> !refused.contains(name)).forEach(refused::add);
+
+		return new ChainFilter(this.only, refused, this.limit);
+	}
+
+	/** Whether this engine, rather than the user or the pack, is what takes the program out. */
+	public boolean refuses(String bareName) {
+		return this.without.contains(bareName);
+	}
+
+	/**
 	 * @param bareName the program without its place, for instance {@code composite4}
 	 * @param rank     its position among the full screen programs the pack itself keeps, from 0.
 	 *                 The final is never offered here and is never filtered.
 	 */
 	public boolean accepts(String bareName, int rank) {
+		if (refuses(bareName)) {
+			return false;
+		}
+
 		if (!this.only.isEmpty()) {
 			return this.only.contains(bareName);
 		}

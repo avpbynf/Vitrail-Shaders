@@ -89,8 +89,17 @@ public final class ChainPlan {
 	}
 
 	public static ChainPlan of(TargetPlan plan, ProgramResolver resolver) {
+		return of(plan, resolver, List.of());
+	}
+
+	/**
+	 * @param refused why programs of this place can have no pipeline built for them at all, in
+	 *                whole sentences. They are put first because the caller shows one of them and
+	 *                the one worth showing is the one nothing downstream could have worked around
+	 */
+	public static ChainPlan of(TargetPlan plan, ProgramResolver resolver, List<String> refused) {
 		List<Pass> passes = new ArrayList<>();
-		List<String> refusals = new ArrayList<>();
+		List<String> refusals = new ArrayList<>(refused);
 		List<String> notes = new ArrayList<>();
 		Pass last = null;
 

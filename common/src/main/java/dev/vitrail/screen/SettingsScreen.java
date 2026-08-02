@@ -322,6 +322,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		this.statusLine = footer.addChild(
 				new StringWidget(status(), this.font).setMaxWidth(this.width - 20),
 				LayoutSettings::alignHorizontallyCenter);
+		this.statusLine.setTooltip(removedTooltip());
 
 		LinearLayout navigation = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
 				LayoutSettings::alignHorizontallyCenter);
@@ -418,10 +419,26 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 
 		MenuValues current = this.values;
 		int pending = current == null ? 0 : current.pendingCount();
+		if (pending > 0) {
+			return Component.translatable(ScreenText.PENDING, pending);
+		}
 
-		return pending == 0
+		// Said here because nowhere else reaches the player. A pass this backend cannot build is
+		// taken out and the rest of the pack keeps drawing, which is the right thing to do and also
+		// the reason it goes unnoticed: the picture is missing an effect rather than broken. The log
+		// names each one, and the log is not where anyone looks.
+		List<String> gone = PackChain.removedPasses();
+
+		return gone.isEmpty()
 				? Component.empty()
-				: Component.translatable(ScreenText.PENDING, pending);
+				: Component.translatable(ScreenText.REMOVED, gone.size());
+	}
+
+	/** The whole sentence for each pass, on hover, since the line above only carries a count. */
+	private Tooltip removedTooltip() {
+		List<String> gone = PackChain.removedPasses();
+
+		return gone.isEmpty() ? null : Tooltip.create(Component.literal(String.join("\n", gone)));
 	}
 
 	private void updateStatus() {

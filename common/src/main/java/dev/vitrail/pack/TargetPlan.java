@@ -61,6 +61,13 @@ public final class TargetPlan {
 	/** What {@link #disabled()} says when the pack keeps a pass and {@code passes=} does not. */
 	public static final String LEFT_OUT = "passes=";
 
+	/**
+	 * What {@link #disabled()} says when the backend cannot build the pass at all. Told apart from
+	 * {@link #LEFT_OUT} because one of the two is a choice and the other is a wall, and a reader
+	 * looking for why the picture is short a pass has to be able to tell which.
+	 */
+	public static final String UNBINDABLE = "sampler this backend cannot bind";
+
 	/** Where the world is drawn in the frame order, which is what the scene seed stands in for. */
 	private static final int GEOMETRY_RANK = ProgramNames.GEOMETRY_RANK;
 
@@ -213,9 +220,12 @@ public final class TargetPlan {
 			// The final is neither counted nor filtered: without it nothing reaches the screen at
 			// all, and "no passes" has to mean the picture this chain is measured against.
 			if (!name.equals(FINAL)) {
+				// The rank is spent before anything is refused, so that a second walk taken with
+				// more refusals hands out the ranks the first one did. Renumbering here would make
+				// passes=6 mean six other programs the moment one of them turned out unbuildable.
 				int position = rank++;
 				if (!filter.accepts(name, position)) {
-					draft.disabled.put(name, LEFT_OUT);
+					draft.disabled.put(name, filter.refuses(name) ? UNBINDABLE : LEFT_OUT);
 					continue;
 				}
 			}
