@@ -29,7 +29,11 @@ public final class ShaderProperties {
 
 	private static final String FILE_NAME = "shaders.properties";
 
-	private static final Pattern CONTINUATION = Pattern.compile("\\\\\\r?\\n\\s*");
+	// Only the indentation of the joined line is swallowed, never a blank line: {@code \\s*}
+	// would cross one and make a continued key absorb whatever block follows it. Bliss ends
+	// three of its continuations on a blank line, and its main screen swallowed the commented
+	// block underneath.
+	private static final Pattern CONTINUATION = Pattern.compile("\\\\\\r?\\n[ \\t]*");
 	private static final Pattern DIRECTIVE = Pattern.compile("^\\s*#\\s*(if|ifdef|ifndef|else|elif|endif)\\b.*$");
 
 	private static final Pattern PROFILE = Pattern.compile("^\\s*profile\\.(\\w+)\\s*=\\s*(.*)$");

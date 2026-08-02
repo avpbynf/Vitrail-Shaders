@@ -31,7 +31,11 @@ public final class OptionIndex {
 			Pattern.compile("^\\s*(//\\s*)?#\\s*define\\s+([A-Za-z_]\\w*)\\s*(.*)$");
 	private static final Pattern CONSTANT =
 			Pattern.compile("^\\s*const\\s+(int|float|bool|uint)\\s+([A-Za-z_]\\w*)\\s*=\\s*([^;]+);(.*)$");
-	private static final Pattern VALUE_LIST = Pattern.compile("//\\s*\\[(.*?)]");
+	// The list is the first bracket anywhere in the trailing comment, not one that has to
+	// follow the slashes. Packs routinely describe the setting before offering its values,
+	// as in "// render resolution multiplier [0.10 0.25]", and requiring the bracket first
+	// silently leaves those options with nothing to cycle through.
+	private static final Pattern VALUE_LIST = Pattern.compile("//[^\\[]*\\[(.*?)]");
 	private static final Pattern TRAILING_COMMENT = Pattern.compile("//.*");
 
 	private final Map<String, PackOption> byName;
