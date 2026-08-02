@@ -4,6 +4,7 @@ import dev.vitrail.Vitrail;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.ChainFilter;
 import dev.vitrail.pack.ChainPlan;
+import dev.vitrail.pack.EngineDefines;
 import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.PackLoader;
 import dev.vitrail.pack.SamplerPlan;
@@ -12,6 +13,8 @@ import dev.vitrail.pack.TargetPlan;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsFile;
 import dev.vitrail.settings.SettingsLayers;
+import dev.vitrail.uniform.BiomeCategory;
+import dev.vitrail.uniform.WorldState;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
@@ -858,6 +861,7 @@ public final class PackChain {
 		}
 
 		String text = "# " + this.chain.place() + ", " + chosen.path() + ", load " + this.load + "\n"
+				+ situation()
 				+ chosen.decoded(this.values.world());
 		try {
 			Files.createDirectories(dumpFile.getParent());
@@ -866,6 +870,42 @@ public final class PackChain {
 			Vitrail.logger().warn("Could not write the decoded dump to {}: {}", dumpFile, e.toString());
 			dumping = "";
 		}
+	}
+
+	/**
+	 * Where the camera stood when these values were taken, and what the biome table says about it.
+	 * <p>
+	 * Written into the same file as the values and read from the same frame, because a reading is
+	 * only worth something if what it describes is known at the same instant. A pack's biome
+	 * uniforms are smoothed over a second, so a player who walked between the screenshot and the
+	 * file is enough to make a table that works look broken, or the other way round, which has
+	 * already happened once.
+	 * <p>
+	 * The define is printed beside the number the uniform carries because those two are the pair
+	 * that has to agree. {@link BiomeClassifier} hands out both from one table so that they cannot
+	 * drift; this line is what proves it rather than assuming it.
+	 */
+	private String situation() {
+		WorldState world = this.values.world();
+		int id = world.biomeId();
+		// Backwards, on purpose. Asking the define table which name carries the number the uniform
+		// just reported is the whole check: the two are built from one walk of the registry and are
+		// meant to agree, and a number no define carries is that promise broken, said out loud here
+		// rather than found later as a pack lighting the wrong biome.
+		String name = EngineDefines.machine().biomes().entrySet().stream()
+				.filter(entry -> entry.getValue() == id)
+				.map(Map.Entry::getKey)
+				.findFirst()
+				.orElse("!! no BIOME_ define carries this number");
+
+		BiomeCategory[] categories = BiomeCategory.values();
+		int category = world.biomeCategory();
+
+		return "# biome " + id + " is BIOME_" + name + ", category " + category + " "
+				+ (category >= 0 && category < categories.length ? categories[category] : "?") + "\n"
+				+ "# camera " + Math.round(world.cameraPosition().x()) + ", "
+				+ Math.round(world.cameraPosition().y()) + ", "
+				+ Math.round(world.cameraPosition().z()) + "\n";
 	}
 
 	/**
