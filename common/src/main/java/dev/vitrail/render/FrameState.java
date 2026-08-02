@@ -256,6 +256,8 @@ public final class FrameState implements WorldState {
 		ClientLevel level = minecraft == null ? null : minecraft.level;
 		if (level == null) {
 			CapturedProjection.clear();
+			CameraBob.clear();
+
 			return;
 		}
 
@@ -297,8 +299,11 @@ public final class FrameState implements WorldState {
 		advanceView(minecraft, cameraState);
 
 		// Cleared last, so that a frame in which nothing captured falls back rather than
-		// publishing the frame before it.
+		// publishing the frame before it. The bob goes with it and for the same reason: a frame
+		// that took none must not be handed the last one's, or the world would keep swinging after
+		// the player had stopped.
 		CapturedProjection.clear();
+		CameraBob.clear();
 	}
 
 	/** Forgets everything one frame carried into the next. For a world or dimension change. */
@@ -341,11 +346,18 @@ public final class FrameState implements WorldState {
 		int renderDistance = minecraft.options.getEffectiveRenderDistance();
 		Matrix4fc rendered = CapturedProjection.rendered(cameraState.projectionMatrix);
 
+		// The bob goes to the model view and the projection is published clean, which is where a
+		// pack expects both. Only once the two have been multiplied back together and found to be
+		// the matrix the level was really drawn with: a term this engine failed to intercept would
+		// otherwise be missing from one and not made up for by the other.
+		boolean split = CameraBob.agrees(cameraState.projectionMatrix, rendered);
+
 		// The render distance in blocks, which is a quarter of the plane the game actually clips
 		// at: Camera sets depthFar to max(renderDistance * 4, cloudRange * 16). That quarter is
 		// what Iris hands out, so every linearisation in every pack of the corpus is written
 		// against it, and correcting it here would make all of them wrong at once.
-		this.view.advance(cameraState.viewRotationMatrix, rendered, renderDistance * 16.0F,
+		this.view.advance(cameraState.viewRotationMatrix, CameraBob.taken(),
+				split ? cameraState.projectionMatrix : rendered, renderDistance * 16.0F,
 				renderDistance);
 
 		this.view.advanceShadow(sunAngle(isDay()) / 360.0F, this.directives.sunPathRotation(),

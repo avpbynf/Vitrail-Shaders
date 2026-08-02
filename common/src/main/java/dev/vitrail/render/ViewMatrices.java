@@ -57,24 +57,31 @@ public final class ViewMatrices implements ViewSource {
 	 * Takes this frame's view and projection, publishes them, and shifts the previous frame's
 	 * copies down.
 	 *
-	 * @param view                 the level's model view, which needs no correction at all: it is
-	 *                             a pure rotation, same handedness and same convention, and the
-	 *                             clip volume only enters after the projection
-	 * @param rendered             the matrix the level was drawn with, reversed Z over 0..1
+	 * @param view                 the level's model view, a pure rotation in the same handedness and
+	 *                             the same convention, so it needs no correction of its own
+	 * @param bob                  the walk bob and the three effects beside it, which the game keeps
+	 *                             in its projection and a pack expects here instead; the identity
+	 *                             when {@link CameraBob} could not vouch for the split
+	 * @param projection           the matrix to publish, reversed Z over 0..1, and the one that
+	 *                             multiplied by {@code bob} gives back what the level was drawn with
 	 * @param far                  the far plane as the pack is told it, which is not the one the
 	 *                             game clips at, see {@link FrameState}
 	 * @param renderDistanceChunks the render distance, used to resolve a shadow plane of -1
 	 */
-	void advance(Matrix4fc view, Matrix4fc rendered, float far, int renderDistanceChunks) {
+	void advance(Matrix4fc view, Matrix4fc bob, Matrix4fc projection, float far,
+			int renderDistanceChunks) {
 		if (this.seeded) {
 			this.previousModelView.set(this.modelView);
 			this.previousProjection.set(this.projection);
 		}
 
-		this.modelView.set(view);
+		// Pre-multiplied and not appended: the bob is applied to the world after the camera has
+		// turned, so it stands to the left. The other way round would bob along the player's own
+		// axes and swing hardest when looking down.
+		this.modelView.set(bob).mul(view);
 		this.modelView.invert(this.modelViewInverse);
 
-		ClipSpace.toLegacyDepth(rendered, this.projection);
+		ClipSpace.toLegacyDepth(projection, this.projection);
 		this.projection.invert(this.projectionInverse);
 
 		if (!this.seeded) {
