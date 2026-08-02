@@ -21,9 +21,6 @@ import java.util.regex.Pattern;
  */
 public final class PropertiesFile {
 
-	// Only the indentation of the joined line is swallowed, never a blank line. Kept the same as
-	// the reader in ShaderProperties, which found that the hard way on Bliss.
-	private static final Pattern CONTINUATION = Pattern.compile("\\\\\\r?\\n[ \\t]*");
 	private static final Pattern DIRECTIVE = Pattern.compile("^\\s*#\\s*(if|ifdef|ifndef|else|elif|endif)\\b.*$");
 
 	private final String name;
@@ -40,9 +37,7 @@ public final class PropertiesFile {
 			return new PropertiesFile(name, List.of());
 		}
 
-		String text = String.join("\n", source.readLines(file.get()));
-
-		return new PropertiesFile(name, List.of(CONTINUATION.matcher(text).replaceAll(" ").split("\n", -1)));
+		return new PropertiesFile(name, List.copyOf(source.readLines(file.get())));
 	}
 
 	public String name() {
@@ -53,9 +48,25 @@ public final class PropertiesFile {
 		return !this.lines.isEmpty();
 	}
 
-	/** Every line the conditionals leave standing, in order, directives themselves excluded. */
+	/**
+	 * Every line the conditionals leave standing, in order, directives themselves excluded and
+	 * continuations joined.
+	 * <p>
+	 * <strong>The conditionals are read first and the continuations joined after, and the order is
+	 * not a detail.</strong> Folding first was what this did, and a pack that continues a value past
+	 * an {@code #endif} then had its {@code #endif} swallowed into the middle of that value, where
+	 * nothing recognises it: the {@code #ifdef} above was never closed and the rest of the file went
+	 * dark. Bliss writes exactly that, {@code block.properties:94-99}, and it cost 291 of its 305
+	 * block declarations. Iris runs its preprocessor before it joins anything, so this is also what
+	 * being read the same way as Iris means.
+	 * <p>
+	 * A continuation therefore joins across a directive line, which is the same thing that happens
+	 * once the directive has been removed. Only the indentation of the joined line is swallowed,
+	 * never a blank line.
+	 */
 	public void walk(Map<String, String> defines, Consumer<String> line) {
 		ConditionStack conditions = new ConditionStack();
+		StringBuilder joined = null;
 
 		for (String text : this.lines) {
 			Matcher directive = DIRECTIVE.matcher(text);
@@ -64,9 +75,28 @@ public final class PropertiesFile {
 				continue;
 			}
 
-			if (conditions.active()) {
-				line.accept(text);
+			if (!conditions.active()) {
+				continue;
 			}
+
+			boolean continues = text.endsWith("\\");
+			String body = continues ? text.substring(0, text.length() - 1) : text;
+			if (joined == null) {
+				joined = new StringBuilder(body);
+			} else {
+				joined.append(' ').append(body.stripLeading());
+			}
+
+			if (!continues) {
+				line.accept(joined.toString());
+				joined = null;
+			}
+		}
+
+		// A file whose last line asks to be continued. The pack is wrong and the value is still
+		// worth handing over, since everything before the backslash is a complete declaration.
+		if (joined != null) {
+			line.accept(joined.toString());
 		}
 	}
 

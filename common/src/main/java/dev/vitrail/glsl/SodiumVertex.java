@@ -10,17 +10,26 @@ import java.util.Set;
 /**
  * What Sodium's chunk mesh carries, and how the names a pack reads are made out of it.
  * <p>
- * The mesh is twenty bytes: {@code a_Position} as three twenty bit coordinates interleaved across
- * two unsigned integers, {@code a_Color}, {@code a_TexCoord}, and {@code a_LightAndData} whose last
- * two bytes are the material bits and the index of the draw command. The decode below is Sodium's
- * own {@code assets/sodium/shaders/include/chunk_vertex.glsl} and
- * {@code blocks/block_layer_opaque.vsh}, written out rather than included: the include is a file of
- * the game's resource packs and our text never goes through that path.
+ * The mesh is twenty bytes, laid out as follows. {@code a_Position} holds three coordinates of
+ * twenty bits each, split so that the top ten bits of x, y and z sit at bits 0, 10 and 20 of its
+ * first component and the bottom ten at the same places of its second; a coordinate counts
+ * thirty-two blocks over its full range and starts eight blocks before the section, which is the
+ * reach a mesh needs for the faces of its neighbours. {@code a_Color} is the block tint already
+ * multiplied by the ambient occlusion. {@code a_TexCoord} keeps fifteen bits of texture coordinate
+ * per axis and spends its top bit on which side of the sprite the corner lies. {@code a_LightAndData}
+ * holds the block light, the sky light, a byte of material bits and the index of the draw command,
+ * one per byte.
  * <p>
- * <strong>Four of the six names a pack reads are not in the mesh at all.</strong> There is no
- * normal, no block id, no mid texture coordinate and no tangent, so those are given a constant and
- * named in the log. That is the whole reason this stage is called a narrow door: providing them for
- * real means adding fields to {@code ChunkVertexEncoder$Vertex} and filling them in the mesher.
+ * <strong>Sodium is under the PolyForm Shield licence, which this project cannot take code
+ * from.</strong> So what is written below is this engine's own reading of that layout and not a
+ * transcription of Sodium's shader: the layout is a fact about the bytes, the way of undoing it is
+ * ours. Nothing here is copied, and nothing here may be replaced by something copied.
+ * <p>
+ * <strong>Three of the names a pack reads are not in the mesh at all.</strong> There is no block id,
+ * no mid texture coordinate and no tangent, so those are given a constant and named in the log. The
+ * normal is not among them any more: the facing rides in the spare bits of the material byte, which
+ * costs the mesh nothing. Providing the block id for real is what still needs a fifth element on the
+ * format.
  * <p>
  * The region offset arrives through push constants, which is the one thing here that has to be got
  * right or nothing else matters. blaze3d never declares a push constant range; Sodium adds one, and
@@ -136,25 +145,34 @@ public final class SodiumVertex {
 			}
 		}
 
+		// One coordinate out of the pair, given where its ten bit halves sit in each component.
+		lines.add("float ofAxis(uint at) {");
+		lines.add("\tuint top = (a_Position.x >> at) & 1023u;");
+		lines.add("\tuint bottom = (a_Position.y >> at) & 1023u;");
+		// Thirty-two blocks across the full twenty bit range, starting eight blocks early.
+		lines.add("\treturn float(top * 1024u + bottom) * (32.0 / 1048576.0) - 8.0;");
+		lines.add("}");
+
+		// Where the section this draw command belongs to sits inside its region, in blocks. The
+		// index packs eight sections across, four up and eight deep. Leaving this out is not
+		// subtle: every section of a region lands on the region's own corner.
+		lines.add("vec3 ofSectionOrigin(uint index) {");
+		lines.add("\treturn vec3(float((index >> 5u) & 7u), float(index & 3u),"
+				+ " float((index >> 2u) & 7u)) * 16.0;");
+		lines.add("}");
+
 		lines.add("void " + PROLOGUE + "() {");
-		lines.add("\tuvec3 ofHi = (uvec3(a_Position.x) >> uvec3(0u, 10u, 20u)) & 0x3FFu;");
-		lines.add("\tuvec3 ofLo = (uvec3(a_Position.y) >> uvec3(0u, 10u, 20u)) & 0x3FFu;");
-		// 32 over two to the twentieth, and minus eight: a section is sixteen blocks and the mesh
-		// reaches eight blocks either side of it for the faces of its neighbours.
-		lines.add("\tvec3 ofLocal = vec3((ofHi << 10u) | ofLo) * (32.0 / 1048576.0) - 8.0;");
-		// Which section of the region this draw command belongs to, packed by LocalSectionIndex.
-		// Leaving it out is not subtle: every section of a region lands on the region's own corner.
-		lines.add("\tvec3 ofSection = vec3(uvec3(a_LightAndData.w) >> uvec3(5u, 0u, 2u)"
-				+ " & uvec3(7u, 3u, 7u)) * 16.0;");
-		lines.add("\tof_Vertex = vec4(ofLocal + of_RegionOffset + ofSection, 1.0);");
+		lines.add("\tvec3 ofLocal = vec3(ofAxis(0u), ofAxis(10u), ofAxis(20u));");
+		lines.add("\tof_Vertex = vec4(ofLocal + of_RegionOffset"
+				+ " + ofSectionOrigin(a_LightAndData.w), 1.0);");
 		lines.add("\tof_Color = a_Color;");
 		// The top bit of each texture coordinate says which side of its sprite this corner is on,
 		// and the coordinate is pulled that way by a fraction of a texel. Leaving it out is not
 		// invisible: a corner that lands exactly on a sprite's edge picks up the neighbouring sprite
 		// of the atlas, which shows as a fringe along the top of every block of grass.
-		lines.add("\tvec2 ofBias = mix(vec2(-1.0), vec2(1.0), bvec2(a_TexCoord >> 15u));");
-		lines.add("\tof_MultiTexCoord0 = vec4(ofBias * of_TexShrink"
-				+ " + vec2(a_TexCoord & 0x7FFFu) / 32768.0, 0.0, 1.0);");
+		lines.add("\tvec2 ofInward = vec2(a_TexCoord >> 15u) * 2.0 - 1.0;");
+		lines.add("\tof_MultiTexCoord0 = vec4(vec2(a_TexCoord & 32767u) / 32768.0"
+				+ " + ofInward * of_TexShrink, 0.0, 1.0);");
 		lines.add("\tof_MultiTexCoord1 = vec4(vec2(a_LightAndData.xy) / 256.0, 0.0, 1.0);");
 		lines.add("\tof_Normal = ofFacingNormals[int((a_LightAndData.z >> " + FACING_SHIFT
 				+ "u) & " + FACING_MASK + "u)];");
