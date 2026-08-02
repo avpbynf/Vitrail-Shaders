@@ -47,9 +47,24 @@ public final class SodiumVertex {
 					"vaPosition", "vaNormal", "vaColor", "vaUV0", "vaUV1", "vaUV2", "dhMaterialId");
 
 	/**
-	 * The two fixed function attributes the mesh cannot answer, and every texture unit above the
-	 * light map. Declared whether the pack mentions them or not costs nothing; not declaring one the
-	 * pack does mention costs the program.
+	 * Where the quad's facing sits in the material byte, and why there is room for it.
+	 * <p>
+	 * {@code packLightAndData} gives the material a whole byte and Sodium's own
+	 * {@code chunk_material.glsl} uses three bits of it, one for the mipmap and two for the alpha
+	 * cutoff. The facing needs three more, {@code ModelQuadFacing} having seven values, so it goes
+	 * in the five that were spare and the mesh does not grow by one byte. What is stored is the
+	 * ordinal PLUS ONE, so that nought keeps its meaning: nobody wrote a facing here. Fluids take
+	 * the other push site and are not hooked, so nought really happens.
+	 */
+	public static final int FACING_SHIFT = 3;
+	public static final int FACING_MASK = 7;
+
+	/**
+	 * Every texture unit above the light map. Declared whether the pack mentions them or not costs
+	 * nothing; not declaring one the pack does mention costs the program.
+	 * <p>
+	 * {@code of_Normal} used to be here and is not any more: the facing arrives in the mesh, so the
+	 * prologue works it out instead of standing one in.
 	 */
 	private static final Map<String, String> FIXED = fixed();
 
@@ -95,6 +110,17 @@ public final class SodiumVertex {
 		lines.add("vec4 of_Color;");
 		lines.add("vec4 of_MultiTexCoord0;");
 		lines.add("vec4 of_MultiTexCoord1;");
+		lines.add("vec3 of_Normal;");
+
+		// In ModelQuadFacing's own order, shifted up by one so that index nought is the quad nobody
+		// wrote a facing for. Index seven is UNASSIGNED, a quad aligned on no axis at all, which the
+		// mesh cannot describe with one normal; both fall back to up rather than to nought, because
+		// every pack normalises what it reads and normalize(vec3(0)) is a NaN in the colour.
+		lines.add("const vec3 ofFacingNormals[8] = vec3[8]("
+				+ "vec3(0.0, 1.0, 0.0), "
+				+ "vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0), "
+				+ "vec3(-1.0, 0.0, 0.0), vec3(0.0, -1.0, 0.0), vec3(0.0, 0.0, -1.0), "
+				+ "vec3(0.0, 1.0, 0.0));");
 
 		// The pack's own declaration first, so that a pack asking for a vec2 mc_Entity gets a vec2.
 		synthesized.forEach((name, type) -> lines.add(declare(type, name)));
@@ -130,6 +156,8 @@ public final class SodiumVertex {
 		lines.add("\tof_MultiTexCoord0 = vec4(ofBias * of_TexShrink"
 				+ " + vec2(a_TexCoord & 0x7FFFu) / 32768.0, 0.0, 1.0);");
 		lines.add("\tof_MultiTexCoord1 = vec4(vec2(a_LightAndData.xy) / 256.0, 0.0, 1.0);");
+		lines.add("\tof_Normal = ofFacingNormals[int((a_LightAndData.z >> " + FACING_SHIFT
+				+ "u) & " + FACING_MASK + "u)];");
 		lines.add("}");
 
 		return List.copyOf(lines);
@@ -187,7 +215,6 @@ public final class SodiumVertex {
 
 	private static Map<String, String> fixed() {
 		Map<String, String> names = new LinkedHashMap<>();
-		names.put("of_Normal", "vec3");
 		for (int unit = 2; unit <= 7; unit++) {
 			names.put("of_MultiTexCoord" + unit, "vec4");
 		}
