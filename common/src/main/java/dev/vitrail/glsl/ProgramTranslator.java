@@ -1,5 +1,6 @@
 package dev.vitrail.glsl;
 
+import dev.vitrail.pack.AlphaTest;
 import dev.vitrail.pack.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.ProgramStage;
 
@@ -77,11 +78,21 @@ public final class ProgramTranslator {
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
 			VertexInputs inputs) {
+		return translate(units, inputs, AlphaTest.OFF);
+	}
+
+	/**
+	 * @param alphaTest what the fragment stage discards at, which belongs to the pass the program is
+	 *                  drawn in rather than to the program: one {@code gbuffers_terrain} serves both
+	 *                  the solid half of the chunk pass, with no test, and the cutout half, at a half
+	 */
+	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
+			VertexInputs inputs, AlphaTest alphaTest) {
 		Map<ProgramStage, GlslTranslator.Stage> prepared = new LinkedHashMap<>();
 		for (ProgramStage stage : PIPELINE_ORDER) {
 			ExpandedUnit unit = units.get(stage);
 			if (unit != null) {
-				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs));
+				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs, alphaTest));
 			}
 		}
 

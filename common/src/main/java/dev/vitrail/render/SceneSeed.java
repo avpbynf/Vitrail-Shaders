@@ -28,7 +28,11 @@ import java.util.function.Supplier;
 
 /**
  * Draws the game's finished scene into the target the terrain would have written, standing in for
- * the gbuffers stage that does not run yet.
+ * a gbuffers stage that does not write into a target of the pack.
+ * <p>
+ * The chunk passes do run against the pack's own programs, and that changes nothing here: they draw
+ * into the game's target, where Sodium opened its pass, so the pack's colour targets are still
+ * written by nobody until the geometry gets targets of its own.
  * <p>
  * This is not a fallback and should not be read as one. The first draw buffer of the terrain pass
  * is, by the definition of the OptiFine model, where the world's colour ends up, so it is the one

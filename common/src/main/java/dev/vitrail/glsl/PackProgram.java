@@ -1,5 +1,6 @@
 package dev.vitrail.glsl;
 
+import dev.vitrail.pack.AlphaTest;
 import dev.vitrail.pack.ChainFilter;
 import dev.vitrail.pack.ChainPlan;
 import dev.vitrail.pack.DimensionSet;
@@ -16,6 +17,7 @@ import dev.vitrail.pack.SettingSet;
 import dev.vitrail.pack.ShaderProperties;
 import dev.vitrail.pack.ShaderPackSource;
 import dev.vitrail.pack.TargetPlan;
+import dev.vitrail.pack.TerrainPass;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -46,14 +48,17 @@ public final class PackProgram {
 	}
 
 	/**
-	 * @param targets  what the whole dimension declares about its colour targets, which is read
-	 *                 from thirty odd programs while only one of them is translated
-	 * @param samplers what each sampler of the translated program is bound to, answered here
-	 *                 rather than at draw time so that a name nothing serves is known before a
-	 *                 frame rather than during one
+	 * @param targets   what the whole dimension declares about its colour targets, which is read
+	 *                  from thirty odd programs while only one of them is translated
+	 * @param samplers  what each sampler of the translated program is bound to, answered here
+	 *                  rather than at draw time so that a name nothing serves is known before a
+	 *                  frame rather than during one
+	 * @param alphaTest what the fragment stage was translated to discard at. Carried rather than
+	 *                  worked out again, because the text has already been written for it and a
+	 *                  second answer could differ from the one that is in the shader
 	 */
 	public record Loaded(String packName, String path, ProgramTranslator.TranslatedProgram program,
-			TargetPlan targets, SamplerPlan samplers) {
+			TargetPlan targets, SamplerPlan samplers, AlphaTest alphaTest) {
 
 		/**
 		 * The samplers this program declares under a type no pipeline can carry, with their types.
@@ -148,7 +153,67 @@ public final class PackProgram {
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimensionOf(path));
 			ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units, inputs);
 
-			return Optional.of(bind(source.packName(), path, program, targets));
+			return Optional.of(bind(source.packName(), path, program, targets, AlphaTest.OFF));
+		}
+	}
+
+	/**
+	 * Reads the three programs the chunk renderer draws a section with, in one opening of the pack.
+	 * <p>
+	 * The three are read together and not one at a time for the reason {@link #loadChain} gives: the
+	 * plan reads thirty odd files whatever is asked of it, so three separate calls would pay for
+	 * three plans to translate three programs. They are also the same three files as often as not,
+	 * every pack of the corpus serving the solid and the cutout pass from one
+	 * {@code gbuffers_terrain}; they are still translated once each, because the alpha test differs
+	 * between them and it is written into the text.
+	 * <p>
+	 * A pass the pack serves no program for is simply absent from the answer, and the chunk renderer
+	 * keeps the game's own shader for it. That is a normal thing for a pack to do rather than a
+	 * failure: nothing in the format obliges a pack to ship a {@code gbuffers_water}.
+	 *
+	 * @param place where the entry points are read from, {@code world0} or the root, already settled
+	 *              by the chain
+	 */
+	public static Map<TerrainPass, Loaded> loadTerrain(Path packPath, String place,
+			Map<String, OptionValue> chosen, String profile) throws IOException {
+		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
+			OptionIndex options = OptionIndex.build(source);
+			ShaderProperties properties = ShaderProperties.parse(source);
+			Map<String, OptionValue> fromProfile = profile.isEmpty()
+					? Map.of()
+					: properties.expandProfile(profile);
+			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
+			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
+
+			DimensionSet dimensions = DimensionSet.discover(source);
+			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
+					dimensions);
+
+			Map<TerrainPass, Loaded> loaded = new LinkedHashMap<>();
+			for (TerrainPass pass : TerrainPass.values()) {
+				Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, pass.program());
+				if (resolution.isEmpty()) {
+					continue;
+				}
+
+				// The name the override is written under is the file that really serves the pass and
+				// not the one the pass asked for, which is how Iris looks it up: a pack shipping one
+				// gbuffers_terrain moves both halves of the chunk pass with one line.
+				String servedBy = resolution.get().servedBy();
+				String path = pathOf(place, servedBy);
+				Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
+				if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+					continue;
+				}
+
+				AlphaTest alphaTest = pass.alphaTest(properties, servedBy);
+				loaded.put(pass, bind(source.packName(), path,
+						ProgramTranslator.translate(units, VertexInputs.TERRAIN, alphaTest),
+						targets, alphaTest));
+			}
+
+			return loaded;
 		}
 	}
 
@@ -238,7 +303,10 @@ public final class PackProgram {
 							+ source.packName() + " and was never translated");
 				}
 
-				loaded.put(name, bind(source.packName(), pathOf(place, name), program, targets));
+					// A full screen pass has no alpha test. The fixed function one was for geometry, and
+				// nothing in the format lets a composite ask for it.
+				loaded.put(name, bind(source.packName(), pathOf(place, name), program, targets,
+						AlphaTest.OFF));
 			}
 
 			return Optional.of(new Chain(source.packName(), place, targets, chain, loaded, refused));
@@ -307,7 +375,7 @@ public final class PackProgram {
 	 * text does not depend on the plan, and only the samplers do.
 	 */
 	private static Loaded bind(String packName, String path,
-			ProgramTranslator.TranslatedProgram program, TargetPlan targets) {
+			ProgramTranslator.TranslatedProgram program, TargetPlan targets, AlphaTest alphaTest) {
 		List<String> declared = new ArrayList<>();
 		Map<String, String> types = new LinkedHashMap<>();
 		for (TranslatedUnit.Uniform sampler : program.samplers()) {
@@ -316,7 +384,7 @@ public final class PackProgram {
 		}
 
 		return new Loaded(packName, path, program, targets,
-				SamplerPlan.of(declared, types, targets, path));
+				SamplerPlan.of(declared, types, targets, path), alphaTest);
 	}
 
 	/** Both halves, as files. Iris carries a default vertex stage for old packs and this does not. */

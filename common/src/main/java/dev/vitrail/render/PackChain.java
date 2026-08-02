@@ -567,7 +567,7 @@ public final class PackChain {
 		if (!advanced) {
 			advanced = true;
 			this.values.advance();
-			PackDump.take(this.chain.place(), this.load, this.terrain.program(),
+			PackDump.take(this.chain.place(), this.load, this.terrain.programs(),
 					this.programs == null ? List.of() : this.programs, this.values.world());
 		}
 	}
@@ -869,10 +869,10 @@ public final class PackChain {
 	private void announceSeed(boolean seeding) {
 		Optional<ChainPlan.Seed> where = this.chain.chain().seed();
 		if (seeding && where.isPresent()) {
-			Vitrail.logger().info("{} carries the game's finished frame, drawn in for {}, which does "
-					+ "not run yet, so it is already tone mapped and already holds the translucents, "
-					+ "the weather and the hand", TargetName.canonical(where.get().target()),
-					where.get().from());
+			Vitrail.logger().info("{} carries the game's finished frame, drawn in for {}: nothing of "
+					+ "the pack writes into a colour target of its own yet, the chunk passes included, "
+					+ "so what lands here is already tone mapped and already holds the sky, the weather "
+					+ "and the hand", TargetName.canonical(where.get().target()), where.get().from());
 			// The number is worth printing on its own: it is the whole difference between a begin
 			// that reads the world of this frame and one that reads what the clear left.
 			Vitrail.logger().info("It is painted where the world would be drawn, after {} passes of "

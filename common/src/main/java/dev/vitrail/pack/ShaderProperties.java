@@ -74,7 +74,8 @@ public final class ShaderProperties {
 	private final List<BlendDirective> blend;
 	private final Map<String, String> sizeBuffers;
 	private final List<FlipDirective> flips;
-	private final Map<String, String> alphaTest;
+	private final Map<String, AlphaTest> alphaTest;
+	private final Map<String, String> malformedAlphaTests;
 	private final Map<String, Integer> ignoredPrefixes;
 	private final int directiveCount;
 	private final int continuationCount;
@@ -100,6 +101,7 @@ public final class ShaderProperties {
 		this.sizeBuffers = Map.copyOf(builder.sizeBuffers);
 		this.flips = List.copyOf(builder.flips);
 		this.alphaTest = Map.copyOf(builder.alphaTest);
+		this.malformedAlphaTests = Map.copyOf(builder.malformedAlphaTests);
 		this.ignoredPrefixes = Map.copyOf(builder.ignoredPrefixes);
 		this.directiveCount = builder.directiveCount;
 		this.continuationCount = builder.continuationCount;
@@ -203,7 +205,10 @@ public final class ShaderProperties {
 
 		Matcher alpha = ALPHA_TEST.matcher(line);
 		if (alpha.matches()) {
-			builder.alphaTest.put(alpha.group(1), alpha.group(2).trim());
+			String value = alpha.group(2).trim();
+			AlphaTest.parse(value).ifPresentOrElse(
+					test -> builder.alphaTest.put(alpha.group(1), test),
+					() -> builder.malformedAlphaTests.put(alpha.group(1), value));
 			return;
 		}
 
@@ -690,8 +695,25 @@ public final class ShaderProperties {
 		return this.flips;
 	}
 
-	public Map<String, String> alphaTest() {
-		return this.alphaTest;
+	/**
+	 * What alpha a program discards at, when the pack overrides the default of the pass it is drawn
+	 * in. Empty for a line this could not read, which {@link #malformedAlphaTests()} names.
+	 *
+	 * @param program the name of the file that serves the pass, not the name the pass asked for
+	 */
+	public Optional<AlphaTest> alphaTest(String program) {
+		return Optional.ofNullable(this.alphaTest.get(program));
+	}
+
+	/**
+	 * The {@code alphaTest} lines that name neither a function and a reference nor {@code off}.
+	 * <p>
+	 * Kept rather than dropped because the failure it guards against is silent: a program whose
+	 * override could not be read falls back to the default of its pass, which is a working picture
+	 * with the wrong threshold in it. Nothing in the corpus writes one.
+	 */
+	public Map<String, String> malformedAlphaTests() {
+		return this.malformedAlphaTests;
 	}
 
 	public int directiveCount() {
@@ -769,7 +791,8 @@ public final class ShaderProperties {
 		private final List<BlendDirective> blend = new ArrayList<>();
 		private final Map<String, String> sizeBuffers = new LinkedHashMap<>();
 		private final List<FlipDirective> flips = new ArrayList<>();
-		private final Map<String, String> alphaTest = new LinkedHashMap<>();
+		private final Map<String, AlphaTest> alphaTest = new LinkedHashMap<>();
+		private final Map<String, String> malformedAlphaTests = new LinkedHashMap<>();
 		private final Map<String, Integer> ignoredPrefixes = new LinkedHashMap<>();
 		private int directiveCount;
 		private int continuationCount;

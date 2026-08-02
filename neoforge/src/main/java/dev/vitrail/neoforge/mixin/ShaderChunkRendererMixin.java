@@ -1,5 +1,6 @@
 package dev.vitrail.neoforge.mixin;
 
+import dev.vitrail.pack.TerrainPass;
 import dev.vitrail.render.TerrainDraw;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -18,13 +19,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Hands Sodium the pack's own terrain program in place of its chunk shader, for the opaque pass and
- * that pass alone.
+ * Hands Sodium the pack's own programs in place of its chunk shader, one per pass.
  * <p>
  * The head of {@code compileProgram} is the whole hook: it is one point, it has no state of its own,
  * and short circuiting it there leaves Sodium's memo untouched, so nothing of ours is ever handed
- * back once this is turned off. Cutout and translucent are deliberately left alone, which puts the
- * two shaders on screen at the same time and makes the difference between them the thing being read.
+ * back once this is turned off.
+ * <p>
+ * The three passes are told apart by identity against {@code DefaultTerrainRenderPasses}, and a pass
+ * that is none of the three is left to Sodium. That is not defensive: {@code TerrainRenderPass} is a
+ * plain class and not an enum, so a mod adding one is a thing the type allows, and drawing it with a
+ * program written for another pass would be silently wrong.
  * <p>
  * It is also the last point before Sodium opens its render pass, which is why the pipeline is
  * compiled, the buffers made and this frame's uniform block written from here rather than from the
@@ -62,13 +66,31 @@ public abstract class ShaderChunkRendererMixin {
 			CallbackInfoReturnable<RenderPipeline> callback) {
 		// The region offset arrives through push constants, which only the Vulkan backend pushes at
 		// all: under OpenGL Sodium sets it as an ordinary uniform and our shader would read nothing.
-		if (DrawBackend.BACKEND == DrawBackend.OPENGL || pass != DefaultTerrainRenderPasses.SOLID) {
+		if (DrawBackend.BACKEND == DrawBackend.OPENGL) {
 			return;
 		}
 
-		RenderPipeline ours = TerrainDraw.pipeline(this.vertexFormat, pass.getAtlas());
-		if (ours != null) {
-			callback.setReturnValue(ours);
+		TerrainPass ours = vitrail$pass(pass);
+		if (ours == null) {
+			return;
 		}
+
+		RenderPipeline pipeline = TerrainDraw.pipeline(ours, this.vertexFormat, pass.getAtlas());
+		if (pipeline != null) {
+			callback.setReturnValue(pipeline);
+		}
+	}
+
+	/** This engine's name for one of Sodium's three passes, or null for anything else. */
+	private static TerrainPass vitrail$pass(TerrainRenderPass pass) {
+		if (pass == DefaultTerrainRenderPasses.SOLID) {
+			return TerrainPass.SOLID;
+		}
+
+		if (pass == DefaultTerrainRenderPasses.CUTOUT) {
+			return TerrainPass.CUTOUT;
+		}
+
+		return pass == DefaultTerrainRenderPasses.TRANSLUCENT ? TerrainPass.TRANSLUCENT : null;
 	}
 }

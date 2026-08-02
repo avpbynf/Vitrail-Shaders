@@ -2,6 +2,7 @@ package dev.vitrail.glsl;
 
 import dev.vitrail.glsl.GlslLexer.Kind;
 import dev.vitrail.glsl.GlslLexer.Token;
+import dev.vitrail.pack.AlphaTest;
 import dev.vitrail.pack.DrawBuffers;
 import dev.vitrail.pack.EngineDefines;
 import dev.vitrail.pack.IncludeExpander.ExpandedUnit;
@@ -108,6 +109,9 @@ public final class GlslTranslator {
 
 	/** A pass drawn over a quad rather than over a chunk mesh takes its attributes differently. */
 	private final VertexInputs inputs;
+
+	/** What the fragment stage discards at, which the fixed function pipeline used to hold. */
+	private final AlphaTest alphaTest;
 	private final List<Token> tokens;
 
 	/** Names the pack defines as macros. Their uses belong to the preprocessor, not to us. */
@@ -146,6 +150,10 @@ public final class GlslTranslator {
 	private int strippedExtensions;
 	private boolean depthEpilogue;
 	private boolean terrainPrologue;
+	private boolean alphaEpilogue;
+
+	/** Where the fragment stage's own {@code main} stands, once the alpha test has claimed it. */
+	private int packMainName = -1;
 	private int depthReads;
 	private int depthReadsUnwrapped;
 	private int fragCoordZ;
@@ -155,11 +163,12 @@ public final class GlslTranslator {
 	private int fragDepthUnhandled;
 
 	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines,
-			VertexInputs inputs) {
+			VertexInputs inputs, AlphaTest alphaTest) {
 		this.unit = unit;
 		this.stage = stage;
 		this.engineDefines = engineDefines;
 		this.inputs = inputs;
+		this.alphaTest = alphaTest;
 
 		// Tokens cost far more than the text they came from, roughly seventy bytes each, so a unit
 		// the expander should never have produced has to be refused before it is read rather than
@@ -191,8 +200,17 @@ public final class GlslTranslator {
 	 * @param inputs where this program's vertex stage takes its inputs from
 	 */
 	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs) {
+		return prepare(unit, stage, inputs, AlphaTest.OFF);
+	}
+
+	/**
+	 * @param alphaTest what the fragment stage discards at. {@link AlphaTest#OFF} for every pass
+	 *                  drawn over a quad, and for the solid half of the terrain
+	 */
+	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs,
+			AlphaTest alphaTest) {
 		GlslTranslator translator = new GlslTranslator(unit, stage,
-				EngineDefines.table(EngineDefines.machine()), inputs);
+				EngineDefines.table(EngineDefines.machine()), inputs, alphaTest);
 		translator.rewrite();
 
 		return new Stage(translator);
@@ -210,6 +228,10 @@ public final class GlslTranslator {
 		rewriteFragmentOutputs();
 		liftFragmentOutputs();
 		liftUniforms();
+		// Decided before the outputs are ordered and applied after: whether the fragment body is
+		// wrapped is what decides where the ascending call goes, and both are settled from the one
+		// answer rather than each asking again.
+		planAlphaEpilogue();
 		orderFragmentOutputs();
 		wrapMain();
 
@@ -987,11 +1009,52 @@ public final class GlslTranslator {
 			return;
 		}
 
+		// Where the body is wrapped, the wrapper makes the call and this must not also make it: the
+		// brace it would replace belongs to a function that is about to be renamed, and a second
+		// call would only name the outputs a second time.
+		if (this.alphaEpilogue) {
+			this.ordered = true;
+			return;
+		}
+
 		int brace = mainBrace();
 		if (brace >= 0) {
 			inject(brace, "{ " + ORDER_OUTPUTS + "();");
 			this.ordered = true;
 		}
+	}
+
+	/**
+	 * Works out whether this fragment stage can be given the alpha test its pass asks for, before
+	 * anything is moved.
+	 * <p>
+	 * A discard has to come at the END of {@code main}, after the pack has written its colour, which
+	 * is the opposite of the ascending call and so a second mechanism rather than the same one. It
+	 * is done by wrapping, for the reasons {@link #wrapMain} gives about closing braces, and the
+	 * wrapper then makes both calls.
+	 * <p>
+	 * Three things have to hold and none of them is a formality. The stage has to declare an output
+	 * nought, since that is the one the fixed function pipeline tested and the only one a pack can
+	 * mean; that output has to be a {@code vec4}, or it has no alpha to read; and {@code main} has
+	 * to be findable, since a stage whose {@code main} is not is a stage nothing can be appended to.
+	 * Nothing in the corpus fails any of the three, and a program that does keeps its picture and
+	 * loses its discard, which {@link TranslatedUnit.Notes#alphaEpilogue} reports rather than hides.
+	 */
+	private void planAlphaEpilogue() {
+		if (this.stage != ProgramStage.FRAGMENT || !this.alphaTest.tests()
+				|| this.maxFragmentOutput < 0) {
+			return;
+		}
+
+		Output first = this.packOutputs.get(0);
+		if (first != null && !first.type().equals("vec4")) {
+			return;
+		}
+
+		// Kept rather than asked for again in wrapMain: nothing moves the tokens between here and
+		// there today, and a second walk would quietly start depending on that staying true.
+		this.packMainName = mainName();
+		this.alphaEpilogue = this.packMainName >= 0;
 	}
 
 	/**
@@ -1020,12 +1083,24 @@ public final class GlslTranslator {
 	 * also survives an early {@code return} from {@code main}, which no vertex stage in the corpus
 	 * does, and the header is already where code of ours is written.
 	 * <p>
-	 * Vertex stages only. A geometry stage writes {@code gl_Position} once per {@code EmitVertex},
-	 * so an epilogue would land in the wrong place, and a program carrying both would have the
-	 * conversion done before the geometry stage read the position back. The corpus has no geometry
-	 * stage at all; the day one appears, {@link #prepare} has to be told the program has one.
+	 * The depth conversion is for vertex stages only. A geometry stage writes {@code gl_Position}
+	 * once per {@code EmitVertex}, so an epilogue would land in the wrong place, and a program
+	 * carrying both would have the conversion done before the geometry stage read the position back.
+	 * The corpus has no geometry stage at all; the day one appears, {@link #prepare} has to be told
+	 * the program has one.
+	 * <p>
+	 * A fragment stage is wrapped for one reason only, the alpha test, decided in
+	 * {@link #planAlphaEpilogue}. The same wrapping argument holds and the same header carries it.
 	 */
 	private void wrapMain() {
+		if (this.stage == ProgramStage.FRAGMENT) {
+			if (this.alphaEpilogue) {
+				replace(this.packMainName, PACK_MAIN);
+			}
+
+			return;
+		}
+
 		if (this.stage != ProgramStage.VERTEX) {
 			return;
 		}
@@ -1375,18 +1450,6 @@ public final class GlslTranslator {
 			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " float " + FOG_COORD + ";");
 		}
 
-		// Below the block, since it reads it. The pack's body is concatenated after the header, so
-		// its own main is only a name here and has to be declared before it can be called.
-		if (this.depthEpilogue || this.terrainPrologue) {
-			lines.add("void " + PACK_MAIN + "();");
-			lines.add("void main() { "
-					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
-					+ PACK_MAIN + "();"
-					+ (this.depthEpilogue ? " gl_Position.z = " + DEPTH_CONV
-							+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w;" : "")
-					+ " }");
-		}
-
 		// From zero up with no gaps, because a location the game finds nothing declared at is not
 		// left empty: it renumbers what is there and everything above the gap moves down one.
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
@@ -1402,6 +1465,26 @@ public final class GlslTranslator {
 			}
 
 			lines.add(order.append(" }").toString());
+		}
+
+		// Below the block, since it reads it, and below the outputs and the ascending function for a
+		// reason that decides the picture: a wrapper standing above them would be the first place the
+		// compiler met an output name, and the rank it hands out there is the location the game
+		// writes back. It has to be the ascending function that gets there first, so this goes last.
+		// The pack's body is concatenated after the header, so its own main is only a name here and
+		// has to be declared before it can be called.
+		if (this.depthEpilogue || this.terrainPrologue || this.alphaEpilogue) {
+			lines.add("void " + PACK_MAIN + "();");
+			lines.add("void main() { "
+					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
+					+ (this.alphaEpilogue ? ORDER_OUTPUTS + "(); " : "")
+					+ PACK_MAIN + "();"
+					+ (this.depthEpilogue ? " gl_Position.z = " + DEPTH_CONV
+							+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w;" : "")
+					+ (this.alphaEpilogue
+							? " " + this.alphaTest.discard(outputName(0, shadowed) + ".a")
+							: "")
+					+ " }");
 		}
 
 		return String.join("\n", lines) + "\n";
@@ -1461,7 +1544,8 @@ public final class GlslTranslator {
 	private TranslatedUnit.Notes notes() {
 		return new TranslatedUnit.Notes(this.maxFragmentOutput + 1, this.dynamicFragData,
 				this.conflicts.size(), this.shadowCalls, this.unwrappedShadowCalls,
-				this.strippedExtensions, this.depthEpilogue ? 1 : 0, this.depthReads,
+				this.strippedExtensions, this.depthEpilogue ? 1 : 0, this.alphaEpilogue ? 1 : 0,
+				this.depthReads,
 				this.depthReadsUnwrapped, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
 				List.copyOf(this.conflicts));

@@ -53,9 +53,11 @@ final class EngineOptions {
 	private static final String ON_SETTINGS = "settings";
 
 	/**
-	 * Takes the decoded dump: {@code dump=composite5}, or the whole path, or {@code dump=final}. One
-	 * program, because the point is to read the file rather than to search it, and because two
-	 * programs of one frame are handed the same values anyway.
+	 * Takes the decoded dump: {@code dump=composite5}, or the whole path, or {@code dump=final}, or
+	 * one of {@code solid}, {@code cutout} and {@code translucent} for a chunk pass, two of which are
+	 * usually served by the one file and could not otherwise be told apart. One program, because the
+	 * point is to read the file rather than to search it, and because two programs of one frame are
+	 * handed the same values anyway.
 	 * <p>
 	 * It is the instrument the milestones are verified with: a value can be non zero, plausible and
 	 * wrong, and the only cheap way to tell is to read the number.

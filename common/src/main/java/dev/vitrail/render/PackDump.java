@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,13 +49,13 @@ final class PackDump {
 	/**
 	 * Takes this frame's dump, if a second has gone by and the line names something that is running.
 	 *
-	 * @param terrain the pack's terrain program, or null, and first on purpose: it is answered from a
-	 *                different catalogue, its {@code of_ModelViewMatrix} being the world's where a
-	 *                composite's is the identity, which is exactly the pair a reading has to tell
-	 *                apart
+	 * @param terrain the pack's terrain programs, empty until they are read, and first on purpose:
+	 *                they are answered from a different catalogue, their {@code of_ModelViewMatrix}
+	 *                being the world's where a composite's is the identity, which is exactly the pair
+	 *                a reading has to tell apart
 	 * @param passes  the chain's own passes, empty for the frame or two before they are built
 	 */
-	static void take(String place, int load, TerrainProgram terrain, List<PackPass> passes,
+	static void take(String place, int load, Collection<TerrainProgram> terrain, List<PackPass> passes,
 			WorldState world) {
 		if (wanted.isEmpty() || file == null) {
 			return;
@@ -70,11 +71,15 @@ final class PackDump {
 		String path = null;
 		String decoded = null;
 
-		if (terrain != null) {
-			running.add(terrain.path());
-			if (names(terrain.path())) {
-				path = terrain.path();
-				decoded = terrain.decoded(world);
+		// Named by pass and not only by path: two of the three are usually the same file, and a line
+		// that said gbuffers_terrain twice would not say which of the two was read. The label is
+		// matched as well as the path, so dump=cutout names the pass and dump=gbuffers_terrain still
+		// names the file, taking the first pass drawn with it.
+		for (TerrainProgram program : terrain) {
+			running.add(program.label());
+			if (decoded == null && (names(program.path()) || names(program.label()))) {
+				path = program.label();
+				decoded = program.decoded(world);
 			}
 		}
 

@@ -4,10 +4,11 @@ import dev.vitrail.Vitrail;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.SodiumVertex;
 import dev.vitrail.glsl.TranslatedUnit;
-import dev.vitrail.glsl.VertexInputs;
+import dev.vitrail.pack.AlphaTest;
 import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.ProgramStage;
 import dev.vitrail.pack.SamplerPlan;
+import dev.vitrail.pack.TerrainPass;
 import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
 
@@ -17,6 +18,7 @@ import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
@@ -43,22 +45,23 @@ import org.joml.Vector4f;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * The pack's {@code gbuffers_terrain}, drawn over Sodium's chunk mesh in place of Sodium's own
- * shader.
+ * One of the three programs the pack draws a chunk pass with, in place of Sodium's own shader.
  * <p>
- * The first step of milestone six, and it is deliberately the smallest one that can be judged. Only
- * the opaque pass is taken over; cutout and translucent keep Sodium's shader, so the difference
- * between the two is on screen at the same time. Nothing of the mesh is changed: the four attributes
- * it carries are decoded and the four names it does not carry are given constants, which
- * {@link SodiumVertex} spells out. The normals are therefore wrong and the albedo is right, and the
- * albedo is what the test looks at.
+ * Nothing of the mesh is changed: the attributes it carries are decoded and the names it does not
+ * carry are given constants, which {@link SodiumVertex} spells out. What separates the three is not
+ * the geometry but the pass, and {@link TerrainPass} holds all of it: which program the pack serves
+ * it with, what alpha the fragment stage discards at, and whether the result is blended. The first
+ * two are settled at translation and reach here already written into the text; only the blend is a
+ * property of the pipeline, and it is the one line below that differs between the three.
  * <p>
  * <strong>The pipeline is named in a namespace containing {@code sodium}, and that is not a
  * cosmetic.</strong> blaze3d never declares a push constant range; Sodium adds one by a mixin on
@@ -83,9 +86,6 @@ public final class TerrainProgram {
 	/** The one name that decides everything. See the class comment before shortening it. */
 	private static final String NAMESPACE = Vitrail.MOD_ID + "_sodium";
 
-	/** The program of the milestone. The fallback tree serves it where a pack ships no file. */
-	public static final String PROGRAM = "gbuffers_terrain";
-
 	/**
 	 * What a pack calls the block atlas. {@code texture} arrives as {@code ofTexture} because the
 	 * word is reserved in modern GLSL and the translator renames it; all eight packs of the corpus
@@ -103,6 +103,16 @@ public final class TerrainProgram {
 
 	private static final Supplier<String> BLOCK_LABEL = () -> "Vitrail terrain OfGlobals";
 
+	/**
+	 * How a blended chunk pass writes into the target, which is Sodium's own choice reproduced: the
+	 * same {@code BlendFunction.TRANSLUCENT} and the same {@code RGBA8_UNORM}, so that swapping the
+	 * pipeline swaps the shader and nothing else. Sodium's translucent pass is the only one that
+	 * blends; the other two take {@code ColorTargetState.DEFAULT}, which blends nothing.
+	 */
+	private static final ColorTargetState BLENDED = new ColorTargetState(
+			Optional.of(BlendFunction.TRANSLUCENT), GpuFormat.RGBA8_UNORM, ColorTargetState.WRITE_ALL);
+
+	private final TerrainPass pass;
 	private final String path;
 	private final PackProgram.Loaded loaded;
 	private final PackValues values;
@@ -121,9 +131,10 @@ public final class TerrainProgram {
 	private boolean announced;
 	private boolean broken;
 
-	private TerrainProgram(String path, PackProgram.Loaded loaded, PackValues values, int load,
+	private TerrainProgram(TerrainPass pass, PackProgram.Loaded loaded, PackValues values, int load,
 			VertexFormat format) {
-		this.path = path;
+		this.pass = pass;
+		this.path = loaded.path();
 		this.loaded = loaded;
 		this.values = values;
 		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.geometryCatalog());
@@ -131,7 +142,12 @@ public final class TerrainProgram {
 
 		String vertex = loaded.program().stages().get(ProgramStage.VERTEX).text();
 		String fragment = loaded.program().stages().get(ProgramStage.FRAGMENT).text();
-		String stem = "pack/" + load + "/" + path;
+		// The pass is in the name and not only the path, because two passes are usually served by
+		// the same file and their text still differs: the cutout half carries a discard the solid
+		// half does not. The device caches a shader module under its identifier, so one name for two
+		// texts would hand the second whatever the first compiled to, and the picture would be a
+		// picture with the discard silently gone.
+		String stem = "pack/" + load + "/" + pass.name().toLowerCase(Locale.ROOT) + "/" + this.path;
 		Identifier vertexId = Identifier.fromNamespaceAndPath(NAMESPACE, stem + "/vertex");
 		Identifier fragmentId = Identifier.fromNamespaceAndPath(NAMESPACE, stem + "/fragment");
 
@@ -161,42 +177,46 @@ public final class TerrainProgram {
 				.withVertexBinding(0, format)
 				.withPrimitiveTopology(PrimitiveTopology.QUADS)
 				.withDepthStencilState(DepthStencilState.DEFAULT)
-				.withColorTargetState(ColorTargetState.DEFAULT)
+				.withColorTargetState(pass.blended() ? BLENDED : ColorTargetState.DEFAULT)
 				.withCull(true)
 				.build();
 	}
 
 	/**
-	 * Reads and translates the terrain program of one place, or answers empty when the pack serves
-	 * none there.
+	 * Reads and translates the three programs the chunk renderer draws with, keyed by the pass each
+	 * one serves. A pass the pack ships nothing for is absent, and keeps the game's own shader.
 	 * <p>
-	 * A second reading of the pack, which costs one plan build. The chain's own reading translates
-	 * what the chain runs, and a gbuffers program is not in it: folding this into that walk would
-	 * make every place pay for a program only this step uses.
+	 * A second reading of the pack, which costs one plan build for all three. The chain's own reading
+	 * translates what the chain runs, and a gbuffers program is not in it: folding this into that
+	 * walk would make every place pay for programs only this step uses.
 	 *
 	 * @param format the chunk mesh format, handed in rather than looked up, because nothing in this
 	 *               module is allowed to name Sodium
 	 */
-	static Optional<TerrainProgram> read(Path packPath, String place, String program,
+	static Map<TerrainPass, TerrainProgram> read(Path packPath, String place,
 			Map<String, OptionValue> chosen, String profile, PackValues values, int load,
 			VertexFormat format) {
-		String path = place.isEmpty() ? program : place + "/" + program;
 		try {
-			Optional<PackProgram.Loaded> loaded =
-					PackProgram.load(packPath, path, VertexInputs.TERRAIN, chosen, profile);
+			Map<TerrainPass, PackProgram.Loaded> loaded =
+					PackProgram.loadTerrain(packPath, place, chosen, profile);
 			if (loaded.isEmpty()) {
-				Vitrail.logger().warn("{} serves no {} with both stages, so the terrain keeps the "
-						+ "game's own shader", packPath.getFileName(), path);
+				Vitrail.logger().warn("{} serves no terrain program with both stages in {}, so the "
+						+ "world keeps the game's own shader", packPath.getFileName(),
+						place.isEmpty() ? "its root" : place);
 
-				return Optional.empty();
+				return Map.of();
 			}
 
-			return Optional.of(new TerrainProgram(path, loaded.get(), values, load, format));
-		} catch (IOException | RuntimeException e) {
-			Vitrail.logger().error("Could not prepare " + path + ", so the terrain keeps the game's "
-					+ "own shader", e);
+			Map<TerrainPass, TerrainProgram> programs = new EnumMap<>(TerrainPass.class);
+			loaded.forEach((pass, one) ->
+					programs.put(pass, new TerrainProgram(pass, one, values, load, format)));
 
-			return Optional.empty();
+			return programs;
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().error("Could not prepare the terrain programs of "
+					+ packPath.getFileName() + ", so the world keeps the game's own shader", e);
+
+			return Map.of();
 		}
 	}
 
@@ -317,6 +337,14 @@ public final class TerrainProgram {
 		return this.path;
 	}
 
+	/**
+	 * How the dump names this program, which has to tell two passes of one file apart. The pass is
+	 * last and bare so that the line the dump is pointed at can be the pass rather than the file.
+	 */
+	String label() {
+		return this.path + " " + this.pass.name().toLowerCase(Locale.ROOT);
+	}
+
 	void release() {
 		if (this.block != null) {
 			this.block.close();
@@ -388,9 +416,10 @@ public final class TerrainProgram {
 	}
 
 	/**
-	 * Said once, and grouped by what it costs the picture. Four names are constants, every sampler
-	 * but two reads one pixel, and a fragment stage may declare more outputs than the one attachment
-	 * Sodium's pass carries. None of the three shows as an error and all three change the image.
+	 * Said once, and grouped by what it costs the picture. Some names are constants, every sampler
+	 * but two reads one pixel, a pass that wanted an alpha test may not have got one, and a fragment
+	 * stage may declare more outputs than the one attachment Sodium's pass carries. None of them
+	 * shows as an error and all of them change the image.
 	 */
 	private void announce() {
 		if (this.announced) {
@@ -398,10 +427,20 @@ public final class TerrainProgram {
 		}
 
 		this.announced = true;
-		int outputs = this.loaded.program().stages().get(ProgramStage.FRAGMENT).notes().fragmentOutputs();
-		Vitrail.logger().info("Drawing the opaque terrain with {} of {}, {} uniforms and {} samplers,"
-				+ " cutout and translucent left to the game", this.path, this.loaded.packName(),
+		TranslatedUnit fragment = this.loaded.program().stages().get(ProgramStage.FRAGMENT);
+		int outputs = fragment.notes().fragmentOutputs();
+		Vitrail.logger().info("Drawing the {} chunk pass with {} of {}, {} uniforms and {} samplers",
+				this.pass.name().toLowerCase(Locale.ROOT), this.path, this.loaded.packName(),
 				this.loaded.program().uniforms().size(), this.samplers.size());
+
+		// A cutout stage without its discard draws a leaf as a cube, which reads as the pack being
+		// wrong rather than as a translation that could not place a statement.
+		AlphaTest alphaTest = this.loaded.alphaTest();
+		if (alphaTest.tests() && fragment.notes().alphaEpilogue() == 0) {
+			Vitrail.logger().warn("This pass discards at {} {} and the program could not be given the "
+					+ "test, so nothing is discarded at all", alphaTest.function(),
+					alphaTest.reference());
+		}
 
 		// Split by what the mesh really answers: mc_Entity comes out of the fifth element and is not
 		// a gap, where a tangent and a mid texture coordinate still are and change what is drawn.

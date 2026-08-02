@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
 import dev.vitrail.pack.OptionValue;
+import dev.vitrail.pack.TerrainPass;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -12,6 +13,7 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -23,9 +25,10 @@ import java.util.Map;
  * whichever of the two comes first opens the frame, or the terrain stage would be handed the
  * previous frame's matrices.
  * <p>
- * The program is read on demand rather than with the chain, and once. It costs one plan build of its
- * own, which is the price of not making every place that never draws terrain pay for a program only
- * this step uses, and the vertex format it is compiled against is only known here.
+ * The programs are read on demand rather than with the chain, and all three at once the first time
+ * any pass asks. That costs one plan build for the three, which is the price of not making every
+ * place that never draws terrain pay for programs only this step uses, and the vertex format they
+ * are compiled against is only known here.
  */
 public final class TerrainDraw {
 
@@ -44,7 +47,7 @@ public final class TerrainDraw {
 	private final PackValues values;
 	private final int load;
 
-	private TerrainProgram program;
+	private Map<TerrainPass, TerrainProgram> programs = Map.of();
 	private boolean read;
 
 	TerrainDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
@@ -74,22 +77,24 @@ public final class TerrainDraw {
 	}
 
 	/**
-	 * Answers the pipeline to draw the opaque terrain with, reading and translating the pack's
-	 * program the first time it is asked.
+	 * Answers the pipeline to draw one chunk pass with, reading and translating the pack's programs
+	 * the first time it is asked.
 	 *
-	 * @param format the chunk mesh format, handed in rather than looked up, because nothing in this
-	 *               module is allowed to name Sodium
+	 * @param pass   which of the three passes is being drawn, named in this engine's own terms
+	 *               because nothing in this module is allowed to name Sodium
+	 * @param format the chunk mesh format, handed in rather than looked up, for the same reason
 	 * @param atlas  the block atlas of the pass being drawn
 	 * @return the pipeline to draw with, or null to leave the game's own shader alone
 	 */
-	public static RenderPipeline pipeline(VertexFormat format, GpuTextureView atlas) {
+	public static RenderPipeline pipeline(TerrainPass pass, VertexFormat format,
+			GpuTextureView atlas) {
 		TerrainDraw draw = PackChain.terrain();
 		if (draw == null || !wanted) {
 			return null;
 		}
 
 		try {
-			return draw.prepare(format, atlas);
+			return draw.prepare(pass, format, atlas);
 		} catch (RuntimeException e) {
 			wanted = false;
 			Vitrail.logger().error("Vitrail stopped drawing the terrain after an error", e);
@@ -98,11 +103,11 @@ public final class TerrainDraw {
 		}
 	}
 
-	/** The sampler the game configured for the block atlas, taken where the chunk pass begins. */
+	/** The sampler the game configured for the block atlas, taken where a chunk pass begins. */
 	public static void sampler(GpuSampler sampler) {
 		TerrainDraw draw = PackChain.terrain();
-		if (draw != null && draw.program != null) {
-			draw.program.sampler(sampler);
+		if (draw != null) {
+			draw.programs.values().forEach(program -> program.sampler(sampler));
 		}
 	}
 
@@ -116,21 +121,29 @@ public final class TerrainDraw {
 	 */
 	public static void bind(RenderPass pass, RenderPipeline bound) {
 		TerrainDraw draw = PackChain.terrain();
-		if (draw != null && draw.program != null && draw.program.owns(bound)) {
-			draw.program.bind(pass);
+		if (draw == null) {
+			return;
+		}
+
+		for (TerrainProgram program : draw.programs.values()) {
+			if (program.owns(bound)) {
+				program.bind(pass);
+				return;
+			}
 		}
 	}
 
-	private RenderPipeline prepare(VertexFormat format, GpuTextureView atlas) {
+	private RenderPipeline prepare(TerrainPass pass, VertexFormat format, GpuTextureView atlas) {
 		if (!this.read) {
 			this.read = true;
 			if (TerrainProgram.carries(format)) {
-				this.program = TerrainProgram.read(this.packPath, this.place, TerrainProgram.PROGRAM,
-						this.chosen, this.profile, this.values, this.load, format).orElse(null);
+				this.programs = TerrainProgram.read(this.packPath, this.place, this.chosen,
+						this.profile, this.values, this.load, format);
 			}
 		}
 
-		if (this.program == null) {
+		TerrainProgram program = this.programs.get(pass);
+		if (program == null) {
 			return null;
 		}
 
@@ -141,24 +154,20 @@ public final class TerrainDraw {
 
 		this.owner.beginFrame();
 
-		return this.program.prepare(device, atlas);
+		return program.prepare(device, atlas);
 	}
 
-	/** The program itself once it has been read, for the decoded dump. Null until then. */
-	TerrainProgram program() {
-		return this.program;
+	/** The programs once they have been read, for the decoded dump. Empty until then. */
+	Collection<TerrainProgram> programs() {
+		return this.programs.values();
 	}
 
-	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */
+	/** Rotates the ring buffers. Called once the frame's terrain draws have been recorded. */
 	void rotate() {
-		if (this.program != null) {
-			this.program.rotate();
-		}
+		this.programs.values().forEach(TerrainProgram::rotate);
 	}
 
 	void release() {
-		if (this.program != null) {
-			this.program.release();
-		}
+		this.programs.values().forEach(TerrainProgram::release);
 	}
 }

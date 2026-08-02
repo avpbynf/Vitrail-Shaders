@@ -57,6 +57,11 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 * @param strippedExtensions {@code #extension} lines dropped as core in 4.60
 	 * @param depthEpilogue      one when the vertex body was wrapped so that the clip depth it
 	 *                           writes is converted once, after everything the pack did to it
+	 * @param alphaEpilogue      one when the fragment body was wrapped so that the alpha test of its
+	 *                           pass discards after the pack has written its colour. Zero where the
+	 *                           pass asks for no test, and zero where it asked and the stage could
+	 *                           not be given one, which is the case worth reading: the picture is
+	 *                           then drawn without the discard it needed
 	 * @param depthReads         lookups on a depth texture wrapped back into the window depth the
 	 *                           pack was written against
 	 * @param depthReadsUnwrapped lookups on a depth texture whose closing parenthesis could not be
@@ -77,7 +82,7 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 */
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
-			int depthEpilogue, int depthReads, int depthReadsUnwrapped,
+			int depthEpilogue, int alphaEpilogue, int depthReads, int depthReadsUnwrapped,
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames) {
