@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * The textures behind one pack's colour targets: what exists, at which format and size, what is
@@ -42,11 +43,11 @@ import java.util.Set;
  * a view kept across a resize is a silent use after free rather than an exception. Views are
  * therefore looked up again at every use, which is what {@link #view} is for.
  * <p>
- * Only the {@code final} runs today and it writes the game's own target, so nothing flips and no
- * second texture is allocated. When the composite chain arrives, the set of doubled targets grows
- * by itself through {@code doubledFor}, and the end of frame copy from the alternate side back to
- * the main one belongs next to {@link #clear}. Neither is written here: it would be code no frame
- * executes and nothing measures.
+ * A target the schedule turns over carries two textures, and which half a program reads and
+ * writes is the schedule's answer rather than a flag kept here. The one thing this class owes the
+ * ping pong is {@link #swapBack}: a target the pack keeps between frames and that the chain left
+ * on the alternate half has to come back to the main one, because the next frame starts its walk
+ * from an empty flipped set and would read the half nothing wrote.
  */
 final class ColorTargets {
 
@@ -67,6 +68,7 @@ final class ColorTargets {
 	private final Map<Integer, Vector4fc> clearColours = new LinkedHashMap<>();
 	private final Map<Integer, TextureTarget> mainSide = new LinkedHashMap<>();
 	private final Map<Integer, TextureTarget> altSide = new LinkedHashMap<>();
+	private final Set<Integer> fellBack = new TreeSet<>();
 	private final List<String> notes = new ArrayList<>();
 
 	private TextureTarget black;
@@ -79,13 +81,14 @@ final class ColorTargets {
 	private boolean broken;
 
 	/**
-	 * @param executing the programs that really run this frame, which is what decides whether a
-	 *                  target needs its second half. Today that is the {@code final} alone, and
-	 *                  it writes the game's target, so nothing is doubled.
+	 * The plan describes the programs that run and no others, so what its schedule turns over is
+	 * exactly what needs a second texture. Nothing is filtered here: a set of doubled targets
+	 * worked out from anything but the schedule the samplers were bound against is a parity that
+	 * disagrees with itself, and that shows as a plausible picture rather than as an error.
 	 */
-	ColorTargets(TargetPlan plan, Set<String> executing) {
+	ColorTargets(TargetPlan plan) {
 		this.plan = plan;
-		this.doubled = Set.copyOf(plan.schedule().doubledFor(executing));
+		this.doubled = Set.copyOf(plan.schedule().doubled());
 
 		// The format and the starting colour are read once and kept. Neither moves while a pack
 		// is loaded, and the colour especially is a decision the plan has already made: the Iris
@@ -96,6 +99,17 @@ final class ColorTargets {
 			TargetDirectives.Colour colour = directives.clearColour(index);
 			this.formats.put(index, GpuFormats.of(directives.format(index).used()));
 			this.clearColours.put(index, new Vector4f(colour.r(), colour.g(), colour.b(), colour.a()));
+		}
+
+		// A flip directive may turn over a target no program of this place writes or samples, and
+		// nothing is allocated for one of those. Said here because the count of doubled targets is
+		// read against the memory the pack costs, and those two would otherwise disagree.
+		List<Integer> nowhere = this.doubled.stream()
+				.filter(index -> !this.formats.containsKey(index))
+				.toList();
+		if (!nowhere.isEmpty()) {
+			note("targets the schedule turns over and that no program of this place writes or "
+					+ "samples, so no texture exists for either half: " + nowhere);
 		}
 	}
 
@@ -170,6 +184,34 @@ final class ColorTargets {
 			Vector4fc colour = this.clearColours.get(index);
 			clear(encoder, this.mainSide.get(index), colour);
 			clear(encoder, this.altSide.get(index), colour);
+		}
+	}
+
+	/**
+	 * Copies the alternate half back over the main one, for the targets the plan named and no
+	 * others. Must run outside any render pass, and after the last one of the frame.
+	 * <p>
+	 * Only a target the pack keeps between frames is ever in that list. The next frame walks the
+	 * chain from an empty flipped set, so it reads the main half of everything before anything has
+	 * written it; without this the pack would be handed, once per frame, the half it filled two
+	 * frames ago. Both halves carry the same format, so this is a copy of bits that mean the same
+	 * thing on both sides rather than a reinterpretation.
+	 */
+	void swapBack(CommandEncoder encoder, List<Integer> targets) {
+		for (int index : targets) {
+			TextureTarget alt = this.altSide.get(index);
+			TextureTarget main = this.mainSide.get(index);
+			if (alt == null || main == null) {
+				note("nothing to copy back for " + TargetName.canonical(index) + ": the plan asks "
+						+ "for it and only one half of it exists");
+				continue;
+			}
+
+			GpuTexture from = alt.getColorTexture();
+			GpuTexture to = main.getColorTexture();
+			if (from != null && to != null) {
+				encoder.copyTextureToTexture(from, to, 0, 0, 0, 0, 0, main.width, main.height);
+			}
 		}
 	}
 
@@ -293,14 +335,27 @@ final class ColorTargets {
 
 	private void announceSize() {
 		long bytes = bytes();
-		Vitrail.logger().info("Colour targets of {} sized for {}x{}: {} targets, {} MiB, {} doubled",
+		long single = this.plan.bytesAt(this.screenWidth, this.screenHeight, Set.of());
+		Vitrail.logger().info("Colour targets of {} sized for {}x{}: {} targets, {} MiB",
 				this.plan.packName(), this.screenWidth, this.screenHeight, this.mainSide.size(),
-				bytes / (1024L * 1024L), this.doubled.size());
+				megabytes(bytes));
+
+		// Named and not counted. Which targets take part in the ping pong is the one thing a wrong
+		// picture is read back against, and the cost of the second half is the price of the chain.
+		if (!this.doubled.isEmpty()) {
+			Vitrail.logger().info("{} targets doubled: {}, {} MiB instead of {}",
+					this.doubled.size(), this.doubled, megabytes(bytes), megabytes(single));
+		}
 
 		if (bytes > LOUD_BYTES) {
-			Vitrail.logger().warn("{} takes {} MiB of colour targets at {}x{}", this.plan.packName(),
-					bytes / (1024L * 1024L), this.screenWidth, this.screenHeight);
+			Vitrail.logger().warn("{} takes {} MiB of colour targets at {}x{}, {} of them for the "
+					+ "second halves of {}", this.plan.packName(), megabytes(bytes), this.screenWidth,
+					this.screenHeight, megabytes(bytes - single), this.doubled);
 		}
+	}
+
+	private static long megabytes(long bytes) {
+		return bytes / (1024L * 1024L);
 	}
 
 	private TextureTarget target(int index, TargetSchedule.Side side) {
@@ -310,6 +365,16 @@ final class ColorTargets {
 			TextureTarget alt = this.altSide.get(index);
 			if (alt != null) {
 				return alt;
+			}
+
+			// Said once per target, because past this point it must never happen: the schedule
+			// doubles everything a running program turns over, so a fall back here means the halves
+			// the samplers were bound against and the halves that exist are two different answers.
+			// Left silent it is the one place such a disagreement can hide.
+			if (this.formats.containsKey(index) && this.fellBack.add(index)) {
+				Vitrail.logger().warn("{} was read from its alternate half and only one half of it "
+						+ "exists, so both sides of the ping pong are the same texture",
+						TargetName.canonical(index));
 			}
 		}
 

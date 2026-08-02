@@ -25,19 +25,37 @@ import java.util.TreeSet;
  * <p>
  * The programs that draw geometry take no part. They write the half they read, because they
  * paint over the world rather than filtering it, and they never flip anything.
+ * <p>
+ * A pack may also turn a target over itself, either against one program or at the opening of a
+ * whole stage, {@code flip.deferred_pre.colortex3}. The second kind belongs to no program, so it
+ * is applied when the walk first reaches that stage, and it is applied even when the stage runs
+ * nothing at all: Iris hands those directives to each renderer at construction and the renderer
+ * plays them before its own loop, valid sources or none.
  */
 public final class TargetSchedule {
 
+	/**
+	 * The stages a pack may turn a target over at the opening of, in the order a frame runs them.
+	 * {@code shadowcomp_pre} is not among them: it goes to the shadow targets, which are not these.
+	 */
+	private static final List<String> PRE_STAGES =
+			List.of("begin", "prepare", "deferred", "composite");
+
+	/** The suffix that marks the opening of a stage rather than one of its programs. */
+	private static final String PRE = "_pre";
+
 	private final List<Bound> steps;
 	private final Set<Integer> doubled;
+	private final Set<Integer> flippedAtEnd;
 	private final Map<String, Map<Integer, Boolean>> forced;
 
-	private TargetSchedule(List<Bound> steps, Set<Integer> doubled,
+	private TargetSchedule(List<Bound> steps, Set<Integer> doubled, Set<Integer> flippedAtEnd,
 			Map<String, Map<Integer, Boolean>> forced) {
 		this.steps = List.copyOf(steps);
 		// Sorted rather than Set.copyOf: these end up in a log, and an index that moves about
 		// between two runs of the same pack reads as a difference that is not one.
 		this.doubled = sortedCopy(doubled);
+		this.flippedAtEnd = sortedCopy(flippedAtEnd);
 
 		Map<String, Map<Integer, Boolean>> copied = new LinkedHashMap<>();
 		forced.forEach((program, indices) -> copied.put(program, Map.copyOf(indices)));
@@ -69,8 +87,13 @@ public final class TargetSchedule {
 		Set<Integer> flipped = new LinkedHashSet<>();
 		Set<Integer> doubled = new TreeSet<>();
 		List<Bound> bound = new ArrayList<>();
+		int opened = 0;
 
 		for (Step step : steps) {
+			opened = openStages(opened,
+					ProgramNames.frameRank(ProgramNames.familyOf(bareName(step.program()))),
+					forced, flipped, doubled);
+
 			Set<Integer> readsAlt = sortedCopy(flipped);
 			Set<Integer> writesAlt = new TreeSet<>();
 
@@ -110,7 +133,43 @@ public final class TargetSchedule {
 			});
 		}
 
-		return new TargetSchedule(bound, doubled, forced);
+		// A stage the place ships nothing for still opens, at the end of the walk if nowhere else.
+		openStages(opened, Integer.MAX_VALUE, forced, flipped, doubled);
+
+		return new TargetSchedule(bound, doubled, flipped, forced);
+	}
+
+	/**
+	 * Turns over what the pack asked to have turned over at the opening of every stage the walk has
+	 * now reached, and says which stage to look at next.
+	 * <p>
+	 * Driven by the rank of the step rather than by its family, so that a stage the place ships no
+	 * program for is still opened, in its own place in the frame, on the way past. Iris hands these
+	 * directives to a renderer at construction and the renderer plays them before its loop, whether
+	 * or not it has a single valid source, and a bascule lost here would be lost for the rest of
+	 * the frame without a word.
+	 *
+	 * @param opened  the first stage of {@link #PRE_STAGES} not yet opened
+	 * @param reached the frame rank the walk has arrived at
+	 * @return the new first stage not yet opened
+	 */
+	private static int openStages(int opened, int reached,
+			Map<String, Map<Integer, Boolean>> forced, Set<Integer> flipped, Set<Integer> doubled) {
+		int next = opened;
+		while (next < PRE_STAGES.size() && ProgramNames.frameRank(PRE_STAGES.get(next)) <= reached) {
+			forced.getOrDefault(PRE_STAGES.get(next) + PRE, Map.of()).forEach((index, shouldFlip) -> {
+				if (shouldFlip) {
+					flip(flipped, index);
+					// Nothing else will double it: no step writes it, so without this the alternate
+					// half never exists and every read past here silently lands back on the main one.
+					doubled.add(index);
+				}
+			});
+
+			next++;
+		}
+
+		return next;
 	}
 
 	public List<Bound> steps() {
@@ -131,6 +190,21 @@ public final class TargetSchedule {
 		return this.doubled;
 	}
 
+	/**
+	 * Which targets still hold their fresh content on the alternate side once every step has run.
+	 * The next frame starts from an empty flipped set, so these are the ones a copy has to bring
+	 * back. Kept rather than derived from the last step: the last step is the final today and the
+	 * derivation would break in silence the day a pack ships none.
+	 */
+	public Set<Integer> flippedAtEnd() {
+		return this.flippedAtEnd;
+	}
+
+	/**
+	 * The same answer restricted to a chosen few programs. Nothing in the engine asks this any
+	 * more, now that the schedule only carries what runs, and it is kept because the corpus
+	 * measurements are taken with it and their figures are frozen.
+	 */
 	public Set<Integer> doubledFor(Set<String> programs) {
 		Set<String> wanted = new LinkedHashSet<>();
 		programs.forEach(program -> wanted.add(bareName(program)));

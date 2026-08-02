@@ -1,6 +1,9 @@
 package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
+import dev.vitrail.pack.ChainPlan;
+import dev.vitrail.pack.TargetName;
+import dev.vitrail.pack.TargetSchedule;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
@@ -24,13 +27,15 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
- * Draws the game's finished scene into colortex0, standing in for the gbuffers stage that does
- * not run yet.
+ * Draws the game's finished scene into the target the terrain would have written, standing in for
+ * the gbuffers stage that does not run yet.
  * <p>
- * This is not a fallback and should not be read as one. colortex0 is, by the definition of the
- * OptiFine model, the image the gbuffers drew, so it is the one place where putting the game's
- * own picture back is the right answer rather than a guess. The whole class goes away the day
- * the gbuffers run.
+ * This is not a fallback and should not be read as one. The first draw buffer of the terrain pass
+ * is, by the definition of the OptiFine model, where the world's colour ends up, so it is the one
+ * place where putting the game's own picture back is the right answer rather than a guess. Which
+ * target that is comes from the plan and is not always colortex0: Sildur's serves its terrain
+ * through {@code gbuffers_textured}, whose draw buffers start at colortex4. The whole class goes
+ * away the day the gbuffers run.
  * <p>
  * A draw and not a copy. {@code copyTextureToTexture} ends up on {@code vkCmdCopyImage}, which
  * reinterprets bits instead of converting them, and the Java side only checks that both formats
@@ -85,12 +90,21 @@ final class SceneSeed {
 			}
 			""";
 
+	private final ChainPlan.Seed seed;
 	private final RenderPipeline pipeline;
 	private final ShaderSource source;
 
 	private boolean reported;
 
-	SceneSeed(GpuFormat destination) {
+	/**
+	 * @param seed        which target the scene goes into and on which half, both taken from the
+	 *                    geometry program it stands in for rather than assumed
+	 * @param destination that target's format as the pack declared it. The caller is the one that
+	 *                    checks the target exists: a place that has nowhere to put the scene draws
+	 *                    no seed and says so, it does not refuse the pack
+	 */
+	SceneSeed(ChainPlan.Seed seed, GpuFormat destination) {
+		this.seed = seed;
 		this.source = (id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
 				return FRAGMENT_ID.equals(id) ? FRAGMENT : null;
@@ -106,7 +120,7 @@ final class SceneSeed {
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
 				.withBindGroupLayout(BindGroupLayout.builder().withSampler(SAMPLER).build())
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
-				// The format of colortex0 as the pack declared it, not the one of the main
+				// The format of the target as the pack declared it, not the one of the main
 				// target: setting a pipeline whose colour state disagrees with the attachment
 				// throws, and the message names both formats, which is the useful failure.
 				.withColorTargetState(new ColorTargetState(Optional.empty(), destination,
@@ -114,6 +128,21 @@ final class SceneSeed {
 				.withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
 				.withCull(false)
 				.build();
+	}
+
+	/** Where the scene goes, which is the first draw buffer of the terrain program. */
+	int target() {
+		return this.seed.target();
+	}
+
+	/** The half that terrain program would have written, so that the chain reads what it wrote. */
+	TargetSchedule.Side side() {
+		return this.seed.side();
+	}
+
+	/** The geometry program this stands in for, for the log. */
+	String from() {
+		return this.seed.from();
 	}
 
 	/** Called every frame: a resource reload empties the pipeline cache. */
@@ -124,7 +153,8 @@ final class SceneSeed {
 
 		if (!this.reported) {
 			this.reported = true;
-			Vitrail.logger().error("The scene seed did not compile, colortex0 keeps its clear colour");
+			Vitrail.logger().error("The scene seed did not compile, {} keeps its clear colour",
+					TargetName.canonical(this.seed.target()));
 		}
 
 		return false;
@@ -134,7 +164,7 @@ final class SceneSeed {
 	 * Draws the scene over the whole of {@code into}. Only worth calling once {@link #prepare} has
 	 * said the pipeline is usable.
 	 *
-	 * @return false when a side of the draw is missing, in which case colortex0 keeps its clear
+	 * @return false when a side of the draw is missing, in which case the target keeps its clear
 	 *         colour rather than holding half an image
 	 */
 	boolean draw(CommandEncoder encoder, GpuBuffer quad, GpuTextureView scene, GpuTextureView into) {

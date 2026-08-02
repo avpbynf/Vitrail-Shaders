@@ -16,6 +16,7 @@ import java.util.TreeSet;
 import java.util.function.ToIntFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Everything one dimension of a pack needs to know about its colour targets, worked out once
@@ -29,10 +30,16 @@ import java.util.regex.Pattern;
  * highest one they fill and allocating the gap costs between thirty and seventy megabytes at
  * 1080p for nothing.
  * <p>
- * The schedule is computed for the whole chain even though only one program runs today. It costs
- * nothing to compute and it is measured against the corpus, whereas an allocation for a program
- * that does not run is a texture nobody ever writes; so the plan describes the chain and
- * {@link TargetSchedule#doubledFor(Set)} decides what is actually paid for.
+ * The schedule describes exactly the programs that run and no others, which is why the programs
+ * a pack switches off are dropped here rather than anywhere downstream. Removing a pass changes
+ * the half every later pass reads and writes, so a second walk taken over a different set would
+ * disagree with this one, and the disagreement produces no error at all: only an image that is
+ * plausible and wrong. There is therefore one walk, it lives here, and nothing else in the
+ * engine is allowed to redo it.
+ * <p>
+ * What a program is switched off <em>by</em> does not change what is allocated. A target a
+ * silent program declares a format for is still allocated, because the pack may switch that
+ * program back on without the plan being rebuilt from a different set of files.
  * <p>
  * One thing this cannot report exactly and a reader should know: a directive is placed by the
  * entry point that pulled it in and by its line in the flattened unit, not by the file that
@@ -51,8 +58,11 @@ public final class TargetPlan {
 
 	private static final String FINAL = "final";
 
-	/** Past this, a pack is asking for more memory than a plan should hand out without a word. */
-	private static final long WARN_BYTES = 512L * 1024 * 1024;
+	/** What {@link #disabled()} says when the pack keeps a pass and {@code passes=} does not. */
+	public static final String LEFT_OUT = "passes=";
+
+	/** Where the world is drawn in the frame order, which is what the scene seed stands in for. */
+	private static final int GEOMETRY_RANK = ProgramNames.GEOMETRY_RANK;
 
 	private final String packName;
 	private final String dimension;
@@ -64,6 +74,12 @@ public final class TargetPlan {
 	private final Set<Integer> allocated;
 	private final List<Integer> ordered;
 	private final Set<Integer> persistent;
+	private final List<String> running;
+	private final Map<String, String> disabled;
+	private final Map<String, List<Integer>> writes;
+	private final Set<String> inferred;
+	private final Map<String, Set<Integer>> samples;
+	private final int geometryAt;
 	private final List<String> unreadable;
 	private final List<String> notes;
 	private final int programsRead;
@@ -75,6 +91,12 @@ public final class TargetPlan {
 		this.place = draft.place;
 		this.directives = draft.directives;
 		this.schedule = draft.schedule;
+		this.running = List.copyOf(draft.running);
+		this.disabled = Collections.unmodifiableMap(new LinkedHashMap<>(draft.disabled));
+		this.writes = Collections.unmodifiableMap(new LinkedHashMap<>(draft.effective));
+		this.inferred = Collections.unmodifiableSet(new TreeSet<>(draft.inferred));
+		this.samples = Collections.unmodifiableMap(new LinkedHashMap<>(draft.samples));
+		this.geometryAt = draft.geometryAt;
 		this.written = Collections.unmodifiableSet(new TreeSet<>(draft.written));
 		this.sampled = Collections.unmodifiableSet(new TreeSet<>(draft.sampled));
 
@@ -98,6 +120,16 @@ public final class TargetPlan {
 	 */
 	public static TargetPlan build(ShaderPackSource source, OptionIndex options, SettingSet settings,
 			ShaderProperties properties, String dimension) throws IOException {
+		return build(source, options, settings, properties, dimension, ChainFilter.ALL);
+	}
+
+	/**
+	 * @param filter what the user asked to run on top of what the pack keeps. The schedule is
+	 *               rebuilt on what it leaves rather than trimmed afterwards, because a pass
+	 *               taken out moves the half every later pass reads.
+	 */
+	public static TargetPlan build(ShaderPackSource source, OptionIndex options, SettingSet settings,
+			ShaderProperties properties, String dimension, ChainFilter filter) throws IOException {
 		DimensionSet dimensions = DimensionSet.discover(source);
 		ProgramSet programs = ProgramSet.enumerate(source, dimensions);
 
@@ -115,19 +147,8 @@ public final class TargetPlan {
 				: here;
 
 		read(source, options, settings, properties, entries, draft);
+		walk(properties, options, settings.globalDefines(options), entries, filter, draft);
 
-		List<TargetSchedule.Step> steps = new ArrayList<>();
-		for (ProgramSet.ProgramKey key : sorted(entries, TargetPlan::frameRank)) {
-			String name = key.name().baseName();
-			// The final pass writes the game's own target, never a colortex, so it flips nothing
-			// however its directive reads.
-			List<Integer> writes = name.equals(FINAL)
-					? List.of()
-					: draft.writes.getOrDefault(name, List.of());
-			steps.add(new TargetSchedule.Step(name, writes, !geometry(key.name().family())));
-		}
-
-		draft.schedule = TargetSchedule.of(steps, properties.flips());
 		draft.computes = programs.keys().stream()
 				.filter(key -> key.stage() == ProgramStage.COMPUTE && key.dimension().equals(draft.place))
 				.map(key -> key.name().baseName())
@@ -136,6 +157,105 @@ public final class TargetPlan {
 				.toList();
 
 		return new TargetPlan(draft);
+	}
+
+	/**
+	 * The one walk of the frame: what runs, in what order, writing what. Everything downstream
+	 * reads its answer and none of it works the answer out again.
+	 */
+	private static void walk(ShaderProperties properties, OptionIndex options,
+			Map<String, String> defines, List<ProgramSet.ProgramKey> entries, ChainFilter filter,
+			Draft draft) {
+		Map<String, Boolean> toggles = properties.programToggles(defines, options);
+		Map<String, String> conditions = properties.programConditions(defines);
+		List<TargetSchedule.Step> steps = new ArrayList<>();
+		int rank = 0;
+
+		for (ProgramSet.ProgramKey key : sorted(entries, ProgramNames::frameRank)) {
+			String family = key.name().family();
+			String name = key.name().baseName();
+
+			// Noted while the entries are still in frame order, because running() drops the geometry
+			// that marks the spot and nothing downstream could then work out where the world goes.
+			if (draft.geometryAt < 0 && ProgramNames.frameRank(family) >= GEOMETRY_RANK) {
+				draft.geometryAt = draft.running.size();
+			}
+
+			// A shadow composite runs over the shadow targets, with a flip counter of its own, so
+			// its draw buffers name shadowcolor and never colortex. Left in the walk it would
+			// allocate colour targets on their indices, draw a full screen pass over them and move
+			// the half every later pass reads. It belongs to the shadow stage, which nothing runs.
+			if (ProgramNames.shadowComposite(family)) {
+				draft.shadowComposites.add(name);
+				continue;
+			}
+
+			boolean fullscreen = !ProgramNames.geometry(family);
+			List<Integer> writes = writesOf(name, fullscreen, draft);
+			draft.effective.put(name, writes);
+
+			// A geometry pass writes the half it reads and flips nothing, so keeping it in the
+			// walk costs nothing and holds the side a gbuffers program will read the day one runs.
+			if (!fullscreen) {
+				steps.add(new TargetSchedule.Step(name, writes, false));
+				continue;
+			}
+
+			// The key is the path the pack wrote and only that. BSL conditions world0/composite1
+			// and world-1/composite1 on two different expressions, so falling back to the bare
+			// name would run in the Nether a pass the pack switched off there.
+			String path = draft.place.isEmpty() ? name : draft.place + "/" + name;
+			if (Boolean.FALSE.equals(toggles.get(path))) {
+				draft.disabled.put(name, conditions.getOrDefault(path, "shaders.properties"));
+				continue;
+			}
+
+			// The final is neither counted nor filtered: without it nothing reaches the screen at
+			// all, and "no passes" has to mean the picture this chain is measured against.
+			if (!name.equals(FINAL)) {
+				int position = rank++;
+				if (!filter.accepts(name, position)) {
+					draft.disabled.put(name, LEFT_OUT);
+					continue;
+				}
+			}
+
+			draft.running.add(name);
+			steps.add(new TargetSchedule.Step(name, writes, true));
+		}
+
+		// A place shipping nothing from the geometry stage onwards still draws its world somewhere,
+		// and that is after everything this walk did keep.
+		if (draft.geometryAt < 0) {
+			draft.geometryAt = draft.running.size();
+		}
+
+		draft.schedule = TargetSchedule.of(steps, properties.flips());
+	}
+
+	/**
+	 * What a program really writes, which is not always what it says. Iris infers a single
+	 * attachment zero when a fragment declares none and the packs are written against that, so a
+	 * full screen pass with no directive is sent to colortex0 and colortex0 is allocated for it.
+	 * Geometry is left out of the inference on purpose: none of it is drawn yet, and inferring
+	 * there would pay for a target on behalf of a program that does not run.
+	 */
+	private static List<Integer> writesOf(String name, boolean fullscreen, Draft draft) {
+		// The final writes the game's own target, never a colortex, so it flips nothing however
+		// its directive reads.
+		if (name.equals(FINAL)) {
+			return List.of();
+		}
+
+		List<Integer> declared = draft.writes.getOrDefault(name, List.of());
+		if (!declared.isEmpty() || !fullscreen || draft.unexpanded.contains(name)) {
+			return declared;
+		}
+
+		draft.inferred.add(name);
+		draft.written.add(0);
+
+		return List.of(0);
 	}
 
 	private static void read(ShaderPackSource source, OptionIndex options, SettingSet settings,
@@ -151,6 +271,7 @@ public final class TargetPlan {
 			Optional<Path> file = source.file(key.file());
 			if (file.isEmpty()) {
 				draft.unreadable.add(key.file());
+				draft.unexpanded.add(key.name().baseName());
 				continue;
 			}
 
@@ -160,19 +281,36 @@ public final class TargetPlan {
 			} catch (IOException | RuntimeException e) {
 				// One unreadable composite must not cost the pack every other target it declares.
 				draft.unreadable.add(key.file());
+				draft.unexpanded.add(key.name().baseName());
 				continue;
 			}
 
 			draft.programsRead++;
+			// Its format table counts whatever the program is: Iris folds the directives of every
+			// fragment stage it reads, shadow composites included, and a const written there is
+			// written for the whole place.
 			builder.accept(key.file(), unit);
+
+			// What it writes and samples does not. A shadow composite is bound to the shadow
+			// targets, so its indices name shadowcolor, and allocating colour targets for them
+			// would pay for images no program of this place ever touches.
+			if (ProgramNames.shadowComposite(key.name().family())) {
+				continue;
+			}
 
 			List<Integer> writes = DrawBuffers.parse(unit);
 			draft.writes.put(key.name().baseName(), writes);
 			draft.written.addAll(writes);
 
+			Set<Integer> indices = new TreeSet<>();
 			for (String sampler : samplers(unit)) {
-				TargetName.index(sampler).ifPresent(draft.sampled::add);
+				TargetName.index(sampler).ifPresent(index -> {
+					draft.sampled.add(index);
+					indices.add(index);
+				});
 			}
+
+			draft.samples.put(key.name().baseName(), indices);
 		}
 
 		builder.accept(properties, settings.globalDefines(options));
@@ -253,6 +391,57 @@ public final class TargetPlan {
 	/** {@code colortexNClear = false}. Read, exposed, and only honoured past the full clear. */
 	public Set<Integer> persistent() {
 		return this.persistent;
+	}
+
+	/**
+	 * The full screen programs of this place that both the pack and the filter keep, in frame
+	 * order, the final last. This is the same set, in the same order, that {@link #schedule}
+	 * describes, and there is no other.
+	 */
+	public List<String> running() {
+		return this.running;
+	}
+
+	/**
+	 * Full screen programs this place ships and does not run, by bare name, with the reason. The
+	 * reason is the pack's own expression when the pack switched it off, {@code MOTION_BLUR} or
+	 * {@code false}, and {@link #LEFT_OUT} when {@code passes=} did, so a log can tell the two
+	 * apart by printing {@code name (reason)}.
+	 */
+	public Map<String, String> disabled() {
+		return this.disabled;
+	}
+
+	/** The draw buffers of one program after inference, by bare name. Empty for the final. */
+	public List<Integer> writes(String program) {
+		return this.writes.getOrDefault(bareName(program), List.of());
+	}
+
+	/** Programs whose draw buffers nobody wrote down and that were sent to colortex0. */
+	public Set<String> inferredWrites() {
+		return this.inferred;
+	}
+
+	/**
+	 * The colour targets one program samples, read from its own live declarations rather than
+	 * from a translation, so that the whole chain can be checked without compiling anything.
+	 */
+	public Set<Integer> samples(String program) {
+		return this.samples.getOrDefault(bareName(program), Set.of());
+	}
+
+	/**
+	 * Where the world is drawn among {@link #running()}: how many of those programs come before it.
+	 * <p>
+	 * Nothing draws the world yet and the scene seed stands in for it, so this is where that seed
+	 * goes. It is answered here rather than downstream because {@link #running()} holds no geometry
+	 * to mark the spot, and a frame that painted the seed anywhere else would contradict the very
+	 * schedule that gave it its half: a begin or a prepare writing the same target would land on
+	 * the wrong side of it, and one sampling it would be handed this frame's world where the walk
+	 * says it reads a clear colour.
+	 */
+	public int geometryAt() {
+		return this.geometryAt;
 	}
 
 	public int programsRead() {
@@ -336,14 +525,46 @@ public final class TargetPlan {
 			notes.add("compute programs skipped, no stage exists for them yet: " + draft.computes);
 		}
 
-		List<String> silent = draft.writes.entrySet().stream()
+		if (!draft.shadowComposites.isEmpty()) {
+			notes.add("shadow composites skipped, they draw over the shadow targets and nothing "
+					+ "draws a shadow map yet, so their draw buffers name no colour target of this "
+					+ "place: " + draft.shadowComposites);
+		}
+
+		// In frame order rather than sorted, so that the line reads the way the chain runs, and
+		// each one carries what switched it off: the pack's own expression, or the filter.
+		if (!draft.disabled.isEmpty()) {
+			notes.add("full screen programs this place ships and does not run: "
+					+ draft.disabled.entrySet().stream()
+							.map(entry -> entry.getKey() + " (" + entry.getValue() + ")")
+							.collect(Collectors.joining(", ")));
+		}
+
+		if (!draft.inferred.isEmpty()) {
+			notes.add("full screen programs declaring no draw buffer, sent to colortex0 as Iris "
+					+ "does: " + new TreeSet<>(draft.inferred));
+		}
+
+		List<String> silent = draft.effective.entrySet().stream()
 				.filter(entry -> entry.getValue().isEmpty() && !entry.getKey().equals(FINAL))
 				.map(Map.Entry::getKey)
 				.sorted()
 				.toList();
 		if (!silent.isEmpty()) {
-			notes.add("programs declaring no draw buffer, which Iris would send to colortex0 and "
-					+ "this plan does not: " + silent);
+			notes.add("geometry programs declaring no draw buffer, which Iris would send to "
+					+ "colortex0 and this plan does not, nothing drawing them yet: " + silent);
+		}
+
+		// The defect this closes: a target a pack declares a format for and nothing allocates
+		// simply vanished from the inventory, so nothing told a reader whether it was unread or
+		// dropped on the way.
+		List<Integer> declaredOnly = directives.declared().stream()
+				.filter(index -> !ordered.contains(index))
+				.sorted()
+				.toList();
+		if (!declaredOnly.isEmpty()) {
+			notes.add("targets this pack declares a format for and that no program of this place "
+					+ "writes or samples, so nothing is allocated for them: " + declaredOnly);
 		}
 
 		List<Integer> neverWritten = draft.sampled.stream()
@@ -403,40 +624,32 @@ public final class TargetPlan {
 		};
 	}
 
-	/** The order the frame runs in, which is not the order directives are folded in. */
-	private static int frameRank(String family) {
-		if (geometry(family)) {
-			return 3;
-		}
+	/**
+	 * A program is named here by itself, {@code composite1}, while the rest of the engine names
+	 * it by where it lives, {@code world0/composite1}. Both are accepted, as in the schedule, so
+	 * that neither side has to remember which form the other one uses.
+	 */
+	private static String bareName(String program) {
+		int slash = program.lastIndexOf('/');
 
-		return switch (family) {
-			case "begin" -> 0;
-			case "shadowcomp" -> 1;
-			case "prepare" -> 2;
-			case "deferred" -> 4;
-			case "composite" -> 5;
-			default -> 6;
-		};
-	}
-
-	/** A pass drawn over the world rather than over a quad, which never flips anything. */
-	private static boolean geometry(String family) {
-		return family.startsWith("gbuffers") || family.startsWith("dh_")
-				|| family.equals("shadow") || family.startsWith("shadow_");
-	}
-
-	/** Warned about rather than refused: a stutter is easier to read than a black screen. */
-	public boolean heavy(int screenWidth, int screenHeight, Set<Integer> doubledNow) {
-		return bytesAt(screenWidth, screenHeight, doubledNow) > WARN_BYTES;
+		return slash < 0 ? program : program.substring(slash + 1);
 	}
 
 	private static final class Draft {
 
 		private final Map<String, List<Integer>> writes = new LinkedHashMap<>();
+		private final Map<String, List<Integer>> effective = new LinkedHashMap<>();
+		private final Map<String, Set<Integer>> samples = new LinkedHashMap<>();
+		private final Set<String> inferred = new TreeSet<>();
+		private final Set<String> unexpanded = new TreeSet<>();
+		private final List<String> running = new ArrayList<>();
+		private final Map<String, String> disabled = new LinkedHashMap<>();
+		private final Set<String> shadowComposites = new TreeSet<>();
 		private final Set<Integer> written = new TreeSet<>();
 		private final Set<Integer> sampled = new TreeSet<>();
 		private final List<String> unreadable = new ArrayList<>();
 
+		private int geometryAt = -1;
 		private String packName;
 		private String dimension;
 		private String place;

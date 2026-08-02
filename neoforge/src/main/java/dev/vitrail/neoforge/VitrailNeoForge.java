@@ -2,7 +2,7 @@ package dev.vitrail.neoforge;
 
 import dev.vitrail.Vitrail;
 import dev.vitrail.pack.PackReport;
-import dev.vitrail.render.PackFinalPass;
+import dev.vitrail.render.PackChain;
 import dev.vitrail.render.ShaderChain;
 
 import net.neoforged.api.distmarker.Dist;
@@ -42,20 +42,20 @@ public final class VitrailNeoForge {
 		// what makes that comparison possible.
 		PackReport.logAll(Vitrail.platform().gameDirectory());
 
-		PackFinalPass.load(Vitrail.platform().gameDirectory());
+		PackChain.load(Vitrail.platform().gameDirectory());
 	}
 
 	private void onAfterLevel(RenderLevelStageEvent.AfterLevel event) {
-		// The pack's own pass when there is one, and the hand written chain otherwise. Running
+		// The pack's own chain when there is one, and the hand written one otherwise. Running
 		// both would have the second read what the first wrote, which is a chain nobody asked
 		// for and an image neither of them describes.
-		if (!PackFinalPass.draw(Vitrail.platform().gameDirectory())) {
+		if (!PackChain.draw(Vitrail.platform().gameDirectory())) {
 			ShaderChain.draw();
 		}
 	}
 
 	private void onClientStopping(ClientStoppingEvent event) {
-		PackFinalPass.close();
+		PackChain.close();
 		ShaderChain.close();
 	}
 }

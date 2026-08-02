@@ -45,7 +45,7 @@ public final class PackLoader {
 			// The file has conditionals of its own, and they read the settings, so the toggles
 			// can only be known once the settings are.
 			Set<String> disabled = new LinkedHashSet<>();
-			properties.programToggles(settings.globalDefines(options)).forEach((program, on) -> {
+			properties.programToggles(settings.globalDefines(options), options).forEach((program, on) -> {
 				if (!on) {
 					disabled.add(program);
 				}

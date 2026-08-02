@@ -46,7 +46,47 @@ public final class ProgramNames {
 	 */
 	private static final Pattern COMPUTE_SUFFIX = Pattern.compile("^(.*?)_([a-z])$");
 
+	/** Where the world is drawn, which everything else is placed before or after. */
+	public static final int GEOMETRY_RANK = 3;
+
 	private ProgramNames() {
+	}
+
+	/**
+	 * The order a frame runs the families in, which is not the order their directives are folded
+	 * in. Kept here rather than beside either of its two readers: a schedule and a plan that
+	 * disagree about where a stage begins produce no error, only a half read in one place and
+	 * written in another.
+	 */
+	public static int frameRank(String family) {
+		if (geometry(family)) {
+			return GEOMETRY_RANK;
+		}
+
+		return switch (family) {
+			case "begin" -> 0;
+			case "shadowcomp" -> 1;
+			case "prepare" -> 2;
+			case "deferred" -> 4;
+			case "composite" -> 5;
+			default -> 6;
+		};
+	}
+
+	/** A pass drawn over the world rather than over a quad, which never flips anything. */
+	public static boolean geometry(String family) {
+		return family.startsWith("gbuffers") || family.startsWith("dh_")
+				|| family.equals("shadow") || family.startsWith("shadow_");
+	}
+
+	/** A full screen pass over the shadow targets, which are not the colour targets of a place. */
+	public static boolean shadowComposite(String family) {
+		return family.equals("shadowcomp");
+	}
+
+	/** The family a program belongs to, {@code composite} for {@code composite4}. */
+	public static String familyOf(String baseName) {
+		return parse(baseName).map(ProgramName::family).orElse(baseName);
 	}
 
 	public static Optional<ProgramName> parse(String baseName) {

@@ -209,9 +209,34 @@ public final class ShaderProperties {
 	 * expression on the line itself evaluated. The value is not a word but an expression over
 	 * the settings, so a pack writes {@code program.world0/shadow.enabled=SHADOW} and expects
 	 * the program to disappear when that setting is off.
+	 * <p>
+	 * The two are read in two different languages, and that is the packs' doing rather than a
+	 * choice made here. The {@code #if} lines around the value are preprocessor conditions, so a
+	 * pack opens {@code #if AA_MODE == 1} and expects arithmetic; the value itself is a boolean
+	 * expression, where a name that is not one of the pack's own switches stands for true. Reading
+	 * the value as a preprocessor condition switches off every pass a pack conditions on a
+	 * numbered setting, and a pass removed moves the half every later one reads.
+	 *
+	 * @param options what the pack declares, which is the only way to tell a switch the pack owns
+	 *                from a name it never declared or a setting that carries a number
 	 */
-	public Map<String, Boolean> programToggles(Map<String, String> defines) {
+	public Map<String, Boolean> programToggles(Map<String, String> defines, OptionIndex options) {
 		Map<String, Boolean> toggles = new LinkedHashMap<>();
+		programConditions(defines).forEach((program, expression) ->
+				toggles.put(program, enabled(expression, defines, options)));
+
+		return toggles;
+	}
+
+	/**
+	 * The same programs with the expression left as written, so that a log can say which setting
+	 * switched a pass off rather than only that something did. The key is the path the pack wrote,
+	 * {@code world0/composite1} or {@code composite} at the root, and never the bare name: BSL
+	 * conditions {@code world0/composite1} and {@code world-1/composite1} on two different
+	 * expressions.
+	 */
+	public Map<String, String> programConditions(Map<String, String> defines) {
+		Map<String, String> expressions = new LinkedHashMap<>();
 		ConditionStack conditions = new ConditionStack();
 
 		for (String line : this.lines) {
@@ -227,11 +252,11 @@ public final class ShaderProperties {
 
 			Matcher program = PROGRAM_ENABLED.matcher(line);
 			if (program.matches()) {
-				toggles.put(program.group(1), enabled(program.group(2).trim(), defines));
+				expressions.put(program.group(1), program.group(2).trim());
 			}
 		}
 
-		return toggles;
+		return expressions;
 	}
 
 	/**
@@ -239,12 +264,160 @@ public final class ShaderProperties {
 	 * without conditioning it. An expression that cannot be decided leaves it on too: dropping a
 	 * program is the more damaging way to be wrong, since nothing then reports its absence.
 	 */
-	private static boolean enabled(String expression, Map<String, String> defines) {
+	private static boolean enabled(String expression, Map<String, String> defines,
+			OptionIndex options) {
 		if (expression.isEmpty()) {
 			return true;
 		}
 
-		return PreprocessorExpression.evaluate(expression, defines).orElse(true);
+		Boolean value = new EnabledExpression(expression, defines, options).parse();
+
+		return value == null || value;
+	}
+
+	/**
+	 * The little boolean language a {@code program.NAME.enabled} value is written in: names,
+	 * {@code true} and {@code false}, {@code !}, {@code &&}, {@code ||} and brackets.
+	 * <p>
+	 * Every term that is not a literal is a name, and a name stands for one thing only: the state
+	 * of a switch the pack declares. Anything else, a setting that carries a number or a name the
+	 * pack never declared at all, stands for true. That is what packs are written against, and the
+	 * two shapes of the same mistake are both live in the corpus: one pack conditions a pass on a
+	 * setting declared {@code #define LUT 0 //[0 1]}, another writes the literal {@code true}, and
+	 * reading either as a preprocessor condition takes the pass away.
+	 */
+	private static final class EnabledExpression {
+
+		private final String text;
+		private final Map<String, String> defines;
+		private final OptionIndex options;
+
+		private int position;
+		private boolean failed;
+
+		private EnabledExpression(String text, Map<String, String> defines, OptionIndex options) {
+			this.text = text;
+			this.defines = defines;
+			this.options = options;
+		}
+
+		/** @return null when the expression cannot be read at all, which the caller takes as true */
+		private Boolean parse() {
+			boolean value = or();
+			skipSpace();
+
+			return this.failed || this.position < this.text.length() ? null : value;
+		}
+
+		private boolean or() {
+			boolean left = and();
+			while (accept("||") || accept("|")) {
+				// Both sides are read whatever the left one said: short circuiting here would
+				// leave the right one in the text and the whole expression unreadable.
+				boolean right = and();
+				left = left || right;
+			}
+
+			return left;
+		}
+
+		private boolean and() {
+			boolean left = unary();
+			while (accept("&&") || accept("&")) {
+				boolean right = unary();
+				left = left && right;
+			}
+
+			return left;
+		}
+
+		private boolean unary() {
+			if (accept("!")) {
+				return !unary();
+			}
+
+			if (accept("(")) {
+				boolean value = or();
+				if (!accept(")")) {
+					this.failed = true;
+				}
+
+				return value;
+			}
+
+			return truth(name());
+		}
+
+		private String name() {
+			skipSpace();
+			int start = this.position;
+			while (this.position < this.text.length() && isNamePart(this.text.charAt(this.position))) {
+				this.position++;
+			}
+
+			if (start == this.position) {
+				this.failed = true;
+			}
+
+			return this.text.substring(start, this.position);
+		}
+
+		private static boolean isNamePart(char c) {
+			return Character.isLetterOrDigit(c) || c == '_' || c == '.';
+		}
+
+		/**
+		 * A switch the pack declares answers with its state; everything else answers true. The
+		 * declaration is what decides, not the value: {@code #define BLOOM} is a switch and
+		 * {@code #define BLOOM_STRENGTH 1.5} is not, however the pack later writes them.
+		 */
+		private boolean truth(String name) {
+			switch (name) {
+				case "true", "1" -> {
+					return true;
+				}
+				case "false", "0" -> {
+					return false;
+				}
+				default -> {
+				}
+			}
+
+			PackOption option = this.options.get(name).orElse(null);
+			if (option == null) {
+				return true;
+			}
+
+			if (option.kind() == PackOption.Kind.TOGGLE) {
+				return this.defines.containsKey(name);
+			}
+
+			if (option.kind() != PackOption.Kind.CONST || !"bool".equals(option.constType())) {
+				return true;
+			}
+
+			String value = this.defines.get(name);
+
+			return value != null && (value.trim().equals("true") || value.trim().equals("1"));
+		}
+
+		private boolean accept(String token) {
+			skipSpace();
+			if (!this.text.startsWith(token, this.position)) {
+				return false;
+			}
+
+			this.position += token.length();
+
+			return true;
+		}
+
+		private void skipSpace() {
+			while (this.position < this.text.length()
+					&& Character.isWhitespace(this.text.charAt(this.position))) {
+				this.position++;
+			}
+		}
 	}
 
 	private static void applyDirective(String keyword, String line, ConditionStack conditions,
