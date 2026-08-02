@@ -20,6 +20,8 @@ runs/
 .classpath
 .project
 .settings/
+# ModDevGradle writes launch configs here, with absolute paths to whoever built them.
+.eclipse/
 bin/
 */bin/
 local.properties
