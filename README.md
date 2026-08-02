@@ -29,17 +29,29 @@ on does not mean giving up the packs you already use.
 
 ## Status
 
-**It draws one pass of a real pack, and only one.** Point it at a pack and it
-will resolve the includes, apply the settings, work out which program serves
-what for every dimension, rewrite each program into GLSL a Vulkan compiler
-accepts, and put that pack's `final` pass on screen over the finished world.
+**It runs a pack's chain of full-screen passes, and answers most of what those
+passes read.** Point it at a pack and it will resolve the includes, apply the
+settings, work out which program serves what for every dimension, rewrite each
+program into GLSL a Vulkan compiler accepts, allocate the colour targets the
+pack declares, and run the passes it declares in order before its `final`.
 Across the eight packs surveyed, 1738 of their 1863 compilation units compile,
-and 743 of their 785 programs compile with their stages linked together.
+and 743 of their 785 programs compile with their stages linked together. Of the
+45117 uniform block members those programs declare between them, 33147 are
+answered, including the ones a pack writes for itself as expressions in its own
+`shaders.properties`. A settings screen reads the pack's own menu layout and
+writes one file per pack.
 
-What it cannot do yet is run the rest of a pack's chain, or supply more than a
-handful of the values those programs read. A pack has dozens of passes and
-expects 274 uniforms; a `final` on its own is the first of them, not the point
-of arrival. Steps 1 to 4 of the plan below are done and step 5 has started.
+What it cannot do yet is draw the world's geometry through a pack's own
+programs. Every target a `gbuffers` program would have written is therefore read
+as the clear left it, which the log names pass by pass along with the reason, so
+a pack runs its whole chain over an image the game finished rather than over one
+it built itself. That is milestone 6, and it is the step that decides whether a
+pack looks right rather than merely runs.
+
+Steps 1 to 4 of the plan below are done. Step 5 is short of one thing: this
+renderer rasterises with a reversed Z that a pack knows nothing about, and the
+depth a pack samples is not yet converted back to the convention it was written
+against.
 
 ## How it works
 
@@ -149,10 +161,14 @@ Build and install instructions are in [INSTALL.md](INSTALL.md).
 
 ## Compatibility
 
-Vitrail hooks the frame through a public NeoForge event rather than a mixin, so
-at this point nothing reaches into Minecraft or Sodium internals. That will stop
-being true at milestone 6, where terrain has to be fed through a pack's own
-program and Sodium offers no other way in.
+Vitrail hooks the frame through a public NeoForge event, and carries exactly one
+mixin. It copies the projection matrix the world is about to be drawn with,
+because that matrix is never stored anywhere: the camera's own field holds the
+version from before the walk bob, the damage tilt, the nausea and the portal
+skew, which is identical standing still and wrong as soon as the player moves.
+Nothing reaches into Sodium's internals yet. That will stop being true at
+milestone 6, where terrain has to be fed through a pack's own program and Sodium
+offers no other way in.
 
 Any mod that unwraps a GPU texture into an OpenGL handle will crash on the
 Vulkan backend, with or without Vitrail. Distant Horizons 3.2.0-b does this and
