@@ -3,7 +3,6 @@ package dev.vitrail.neoforge;
 import dev.vitrail.Vitrail;
 import dev.vitrail.pack.PackReport;
 import dev.vitrail.render.PackChain;
-import dev.vitrail.render.ShaderChain;
 import dev.vitrail.screen.SettingsScreen;
 
 import net.neoforged.api.distmarker.Dist;
@@ -47,8 +46,6 @@ public final class VitrailNeoForge {
 		Vitrail.logger().info("Client setup reached, Sodium is {}",
 				Vitrail.platform().isModLoaded("sodium") ? "present" : "missing");
 
-		ShaderChain.loadShaders();
-
 		// Reading every pack in the folder rather than one: this stage is judged by comparing
 		// its counts against measurements taken from a whole corpus, and one line per pack is
 		// what makes that comparison possible.
@@ -58,16 +55,13 @@ public final class VitrailNeoForge {
 	}
 
 	private void onAfterLevel(RenderLevelStageEvent.AfterLevel event) {
-		// The pack's own chain when there is one, and the hand written one otherwise. Running
-		// both would have the second read what the first wrote, which is a chain nobody asked
-		// for and an image neither of them describes.
-		if (!PackChain.draw(Vitrail.platform().gameDirectory())) {
-			ShaderChain.draw();
-		}
+		// Nothing is drawn when no pack can be: the game's own image is a better answer than
+		// anything this mod could put over it, and the reason is already said, once in the log
+		// and again on the settings screen through PackChain.lastError.
+		PackChain.draw(Vitrail.platform().gameDirectory());
 	}
 
 	private void onClientStopping(ClientStoppingEvent event) {
 		PackChain.close();
-		ShaderChain.close();
 	}
 }
