@@ -55,6 +55,20 @@ public final class LegacyGlsl {
 			"shadow2DProj", "textureProj");
 
 	/**
+	 * The lookups whose result is what the texture holds, and so a depth when the texture holds
+	 * one. Spelled in the names that are left once {@link #DEPRECATED_FUNCTIONS} has been applied,
+	 * since that is the point at which the translator asks.
+	 * <p>
+	 * {@code textureSize}, {@code textureQueryLevels} and {@code textureQueryLod} are missing on
+	 * purpose rather than by oversight: they take a depth sampler like the rest and return a size
+	 * or a level, which no conversion applies to. The corpus calls none of the three on one.
+	 */
+	public static final Set<String> DEPTH_LOOKUPS = Set.of(
+			"texture", "textureLod", "texelFetch", "textureOffset", "textureLodOffset",
+			"textureGrad", "textureProj", "textureProjLod",
+			"textureGather", "textureGatherOffset", "textureGatherOffsets");
+
+	/**
 	 * Words GLSL 4.60 reserves that packs still use as ordinary names. Renaming them is only safe
 	 * where they are used as a name, which the translator decides; this table only says what they
 	 * become.

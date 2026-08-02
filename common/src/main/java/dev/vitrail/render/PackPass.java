@@ -374,9 +374,14 @@ final class PackPass {
 			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 			GpuTextureView bound = switch (binding.kind()) {
 				case COLORTEX -> targets.view(binding.index(), binding.side());
-				// White is not black on purpose: a depth of one is the far plane, so a lookup that
-				// finds nothing reads open sky. Black would put the whole world in shadow.
-				case DEPTH -> depthView == null ? targets.white() : depthView;
+				// Black is not white on purpose, and it used to be the other way round. The pack
+				// still has to read the far plane from a lookup that finds nothing, or it puts the
+				// whole world against the camera, but it no longer reads what is stored: the
+				// translation wraps every depth lookup in of_DepthConv.zw, and under the reversed
+				// convention that is 1 - d. So the far plane is now stored as nought.
+				// Tied to the convention being REVERSED, which it is for every pass while nothing
+				// draws into a target of our own. The day one does, this has to follow.
+				case DEPTH -> depthView == null ? targets.black() : depthView;
 				case SHADOW_DEPTH, SHADOW_COLOUR -> targets.white();
 				case NOISE -> targets.grey();
 				case UNSERVED -> targets.black();

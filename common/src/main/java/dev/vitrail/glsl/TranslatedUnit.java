@@ -55,11 +55,31 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 * @param unwrappedShadow    shadow lookups whose closing parenthesis could not be found, left
 	 *                           as they were. Zero on the corpus, and it should stay zero
 	 * @param strippedExtensions {@code #extension} lines dropped as core in 4.60
+	 * @param depthEpilogue      one when the vertex body was wrapped so that the clip depth it
+	 *                           writes is converted once, after everything the pack did to it
+	 * @param depthReads         lookups on a depth texture wrapped back into the window depth the
+	 *                           pack was written against
+	 * @param depthReadsUnwrapped lookups on a depth texture whose closing parenthesis could not be
+	 *                           found, left as they were and so left reading the raw value
+	 * @param fragCoordZ         reads of {@code gl_FragCoord.z} converted
+	 * @param fragCoordXyz       reads of {@code gl_FragCoord.xyz}, where only the third component
+	 *                           is a depth and the rewrite has to rebuild the vector
+	 * @param fragCoordUnhandled reads of {@code gl_FragCoord} that reach the third component some
+	 *                           other way. Zero on the corpus: a pack that moves it has to show up
+	 *                           here rather than be guessed at
+	 * @param fragDepthWrites    writes to {@code gl_FragDepth} converted back to the convention the
+	 *                           target is rasterised in
+	 * @param fragDepthUnhandled anything else done to {@code gl_FragDepth}, a compound assignment
+	 *                           above all, which cannot be rewritten where it stands because it
+	 *                           reads back a value the stage never wrote
 	 * @param conflictNames      the names behind {@code uniformConflicts}, so a run over a corpus
 	 *                           can name them rather than only count them
 	 */
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
+			int depthEpilogue, int depthReads, int depthReadsUnwrapped,
+			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
+			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames) {
 	}
 }

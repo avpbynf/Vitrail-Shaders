@@ -6,6 +6,7 @@ import dev.vitrail.pack.DrawBuffers;
 import dev.vitrail.pack.EngineDefines;
 import dev.vitrail.pack.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.ProgramStage;
+import dev.vitrail.pack.SamplerPlan;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,6 +38,15 @@ import java.util.TreeMap;
  * every file that was spliced into it, and the compiler will evaluate them again, so the engine's
  * own symbols are written into the header rather than assumed: if the compiler read them
  * differently from the expander, it would take a different branch and fail somewhere unrelated.
+ * <p>
+ * Depth is the other rule that is not the language's. The game rasterises with a reversed Z over
+ * zero to one and a pack is written for the OpenGL volume, minus one to one with the near plane at
+ * minus one; Iris ends by putting the old volume back with {@code glClipControl}, which Vulkan has
+ * no equivalent of. So the conversion is emitted into the shader, in both directions, out of the
+ * one uniform {@code of_DepthConv}: {@code .xy} says how to write a clip depth, {@code .zw} how to
+ * read a window depth back. What it costs to leave undone was measured rather than argued: Body
+ * Camera's motion blur asks for a depth past 0.6 and, reading a reversed depth, would only blur
+ * what stands within eight centimetres of the camera, so it blurred nothing at all.
  * <p>
  * The fragment outputs carry one rule that is not GLSL's and cannot be read off the language.
  * 26.2 does not keep the location a stage declares: {@code IntermediaryShaderModule.createFromSpirv}
@@ -71,6 +81,12 @@ public final class GlslTranslator {
 
 	/** Names the ascending prologue, which nothing else in a pack is going to be called. */
 	private static final String ORDER_OUTPUTS = "ofOrderOutputs";
+
+	/** What the pack's own {@code main} is called once the epilogue has taken the name over. */
+	private static final String PACK_MAIN = "ofPackMain";
+
+	/** {@code (clipA, clipB, readA, readB)}: how to write a depth, then how to read one. */
+	private static final String DEPTH_CONV = "of_DepthConv";
 
 	/** Matches the expander's own ceiling: nothing it produces should ever reach this. */
 	private static final int MAX_SOURCE_CHARACTERS = 4_000_000;
@@ -122,6 +138,14 @@ public final class GlslTranslator {
 	private int shadowCalls;
 	private int unwrappedShadowCalls;
 	private int strippedExtensions;
+	private boolean depthEpilogue;
+	private int depthReads;
+	private int depthReadsUnwrapped;
+	private int fragCoordZ;
+	private int fragCoordXyz;
+	private int fragCoordUnhandled;
+	private int fragDepthWrites;
+	private int fragDepthUnhandled;
 
 	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines,
 			boolean fullscreen) {
@@ -174,11 +198,13 @@ public final class GlslTranslator {
 		collectDrawBuffers();
 		dropVersionAndExtensions();
 		rewriteIdentifiers();
+		convertDepth();
 		dropPrecision();
 		rewriteFragmentOutputs();
 		liftFragmentOutputs();
 		liftUniforms();
 		orderFragmentOutputs();
+		convertClipDepth();
 
 		this.used = usedNames();
 		this.declaredAfter = declaredUnderAType();
@@ -491,6 +517,214 @@ public final class GlslTranslator {
 		return true;
 	}
 
+	/** One closing the wrap owes, put in once the scan that found it has finished reading. */
+	private record Closing(int at, String text, String directive) {
+	}
+
+	/**
+	 * Puts every depth the unit reads back into the window the pack was written for, and every
+	 * depth it writes back into the one the target is rasterised in.
+	 * <p>
+	 * Runs after {@link #rewriteIdentifiers} because it matches lookups by name and that is where
+	 * {@code texture2D} becomes {@code texture}. It matches on the name of the sampler and never on
+	 * its type, which is not a shortcut but the only workable rule: Bliss hands the same helper
+	 * {@code colortex12} in {@code composite1.fsh:987} and {@code depthtex0} two lines below, and a
+	 * colour target holding a depth was written by the pack and is already the right way round.
+	 * <p>
+	 * Hardware comparison samplers are out of scope and cannot be done here at all: what comes back
+	 * from a {@code sampler2DShadow} is the result of a comparison the hardware already made, not a
+	 * depth, so the shadow map has to be written in the convention the comparison expects instead.
+	 * The legacy {@code shadow2D} calls are safe by construction, since they have already been
+	 * turned into {@code Kind#RAW} text that no later pass matches.
+	 */
+	private void convertDepth() {
+		List<Closing> closings = new ArrayList<>();
+
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.IDENTIFIER) {
+				continue;
+			}
+
+			String directive = token.directive();
+			if (directive != null
+					&& (LegacyGlsl.OPAQUE_DIRECTIVES.contains(directive) || this.macroNamePositions.contains(index))) {
+				continue;
+			}
+
+			// A pack that has taken one of these names for a macro of its own converts inside the
+			// body it wrote, once, wherever that body reads a depth. Converting the uses as well
+			// would convert twice, and twice is worse than not at all: it looks right at the far
+			// plane and is wrong everywhere else.
+			if (this.packMacros.contains(token.text())) {
+				continue;
+			}
+
+			if (LegacyGlsl.DEPTH_LOOKUPS.contains(token.text())) {
+				wrapDepthLookup(index, closings);
+				continue;
+			}
+
+			if (this.stage != ProgramStage.FRAGMENT) {
+				continue;
+			}
+
+			if (token.identifier("gl_FragCoord")) {
+				convertFragCoord(index);
+			} else if (token.identifier("gl_FragDepth")) {
+				convertFragDepth(index, closings);
+			}
+		}
+
+		insertClosings(closings);
+	}
+
+	/**
+	 * Wraps the whole lookup rather than the component read off it, which is not a matter of taste.
+	 * The four components of a {@code textureGather} are four depths and all four have to be
+	 * converted, which a scalar multiply and add does by broadcast and a rewrite of the swizzle
+	 * cannot do at all. It also puts the conversion before anything the pack does with the value:
+	 * the reversed convention runs the other way, so a {@code min} over raw depths is a
+	 * {@code max} over the ones the pack thinks it has, and the only place the order is right again
+	 * is at the lookup itself.
+	 * <p>
+	 * The alpha of the wrapped vector is converted along with the rest, so a lookup read as
+	 * {@code .a} would find nought where it expected one. No site in the corpus reads a depth
+	 * lookup as anything but {@code .x} or {@code .r}, so this is counted rather than guarded.
+	 */
+	private void wrapDepthLookup(int index, List<Closing> closings) {
+		int open = callOpener(index);
+		int first = significantAfter(open);
+		if (first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER
+				|| SamplerPlan.classify(this.tokens.get(first).text()) != SamplerPlan.Kind.DEPTH) {
+			return;
+		}
+
+		int close = matchingBracket(open);
+		if (close < 0) {
+			// Unbalanced from here, usually because a macro opened the parenthesis. Left alone and
+			// counted, as an unwrapped shadow lookup is: a half wrapped call would not compile, and
+			// a silent one would read a depth backwards.
+			this.depthReadsUnwrapped++;
+			return;
+		}
+
+		// The addition goes inside the wrap, since what follows the call is the component the pack
+		// reads: closing before it instead leaves the pack's own .x applied to of_DepthConv.w.
+		String directive = this.tokens.get(index).directive();
+		inject(index, "(" + DEPTH_CONV + ".z * " + this.tokens.get(index).text());
+		closings.add(new Closing(close + 1, " + " + DEPTH_CONV + ".w)", directive));
+		takeDepthConv();
+		this.depthReads++;
+	}
+
+	/**
+	 * {@code gl_FragCoord.z} is the window depth the rasteriser produced, so it is in the target's
+	 * convention and asks the same question a depth lookup does, with the same answer.
+	 * <p>
+	 * The component is demanded rather than the vector wrapped. The corpus reads {@code .xy} three
+	 * hundred and forty six times, {@code .x} a hundred and forty eight and {@code .y} a hundred
+	 * and forty three, none of which is a depth, and wrapping the vector would quietly corrupt
+	 * every one of them.
+	 */
+	private void convertFragCoord(int index) {
+		int dot = significantAfter(index);
+		int swizzle = dot >= 0 && this.tokens.get(dot).operator(".") ? significantAfter(dot) : -1;
+		if (swizzle < 0 || this.tokens.get(swizzle).kind() != Kind.IDENTIFIER) {
+			// Reached some other way, a subscript or a whole vector handed to a function. Nothing
+			// in the corpus does it, and a pack that starts has to be visible rather than wrong.
+			this.fragCoordUnhandled++;
+			return;
+		}
+
+		String field = this.tokens.get(swizzle).text();
+		if (field.equals("z")) {
+			inject(index, "(" + DEPTH_CONV + ".z * gl_FragCoord.z + " + DEPTH_CONV + ".w)");
+			this.fragCoordZ++;
+		} else if (field.equals("xyz")) {
+			// Two screen components that convert to nothing and one depth that does not, so the
+			// vector has to be rebuilt. Seven sites, all in gbuffers.
+			inject(index, "vec3(gl_FragCoord.xy, " + DEPTH_CONV + ".z * gl_FragCoord.z + "
+					+ DEPTH_CONV + ".w)");
+			this.fragCoordXyz++;
+		} else {
+			if (namesDepth(field)) {
+				this.fragCoordUnhandled++;
+			}
+
+			return;
+		}
+
+		blank(dot);
+		blank(swizzle);
+		takeDepthConv();
+	}
+
+	/** Whether a swizzle reaches the third component, under any of the three sets of names. */
+	private static boolean namesDepth(String field) {
+		return field.indexOf('z') >= 0 || field.indexOf('b') >= 0 || field.indexOf('p') >= 0;
+	}
+
+	/**
+	 * A write, so the inverse of what a read does. The pack produces a legacy window depth and the
+	 * hardware wants one in the target's convention, {@code d = (v - readB) / readA}; that inverse
+	 * is spelled with the same expression as the read because {@code readA * x + readB} is an
+	 * involution for both conventions, {@code readA} being one or minus one and {@code readB} nought
+	 * or one either way. It is the only reason no division appears here.
+	 * <p>
+	 * If a third convention ever arrives with {@code |readA| != 1}, this site is the one that has to
+	 * become {@code (v - of_DepthConv.w) / of_DepthConv.z}; the reads stay as they are.
+	 */
+	private void convertFragDepth(int index, List<Closing> closings) {
+		if (this.tokens.get(index).directive() != null) {
+			// The end of the statement is where the closing goes, and a macro body has no
+			// semicolon of its own: the search would run into the next statement and put the
+			// bracket in someone else's code.
+			this.fragDepthUnhandled++;
+			return;
+		}
+
+		int eq = significantAfter(index);
+		int after = significantAfter(eq);
+		boolean assignment = eq >= 0 && this.tokens.get(eq).operator("=")
+				&& (after < 0 || !this.tokens.get(after).operator("="));
+		int end = assignment ? statementEnd(eq) : -1;
+		if (end < 0) {
+			// Anything but a plain assignment ending in a semicolon. A compound one reads the
+			// value back before writing it and a fragment stage has no readable depth to start
+			// from, so there is nothing here that a rewrite at this site could mean. Counted
+			// rather than guessed at: the corpus has none of either.
+			this.fragDepthUnhandled++;
+			return;
+		}
+
+		// The pack's expression is parenthesised, which is not decoration: the right hand side may
+		// be a ternary, and multiplying into one without brackets changes what it means.
+		String directive = this.tokens.get(eq).directive();
+		inject(eq, "= (" + DEPTH_CONV + ".z * (");
+		closings.add(new Closing(end, ") + " + DEPTH_CONV + ".w)", directive));
+		takeDepthConv();
+		this.fragDepthWrites++;
+	}
+
+	/** Inserting shifts every index after it, so the last insertion is made first. */
+	private void insertClosings(List<Closing> closings) {
+		closings.sort(Comparator.comparingInt(Closing::at).reversed());
+		for (Closing closing : closings) {
+			this.tokens.add(closing.at(), new Token(Kind.RAW, closing.text(), closing.directive()));
+		}
+	}
+
+	/**
+	 * Asks for the conversion, which is only ever asked for by a rewrite that has just emitted a
+	 * use of it. A member declared and never read still occupies its place in the block of every
+	 * program of the pack, and the block is the layout.
+	 */
+	private void takeDepthConv() {
+		record(this.blockMembers, DEPTH_CONV, "vec4 " + DEPTH_CONV);
+		this.injectedNames.add(DEPTH_CONV);
+	}
+
 	/**
 	 * Precision qualifiers mean nothing on the desktop, but two declarations of one function that
 	 * disagree about them are still a mismatch, which is a failure the packs hit and cannot see.
@@ -740,14 +974,79 @@ public final class GlslTranslator {
 	}
 
 	/**
+	 * Converts the clip depth the vertex stage writes, once, after everything the pack did to it.
+	 * <p>
+	 * The pack leaves {@code gl_Position.z} in the OpenGL volume, near at minus w and far at plus w.
+	 * With {@code clipA} and {@code clipB} at minus a half and a half that becomes
+	 * {@code 0.5 * (w - z)}, which is the reversed Z the game rasterises in; at a half and a half it
+	 * becomes {@code 0.5 * (z + w)}, which is the forward zero to one a target of ours carries. In
+	 * both, w is untouched, so x, y and the perspective divide do not move and the Vulkan clip test
+	 * {@code 0 <= z <= w} is the OpenGL test {@code -w <= z <= w} exactly: the clipping is preserved
+	 * and not only the value.
+	 * <p>
+	 * It is an epilogue and not a rewrite of each write because the corpus writes {@code gl_Position}
+	 * four hundred and ninety times, a hundred and fifty nine of them through a partial swizzle, and
+	 * twenty eight of those go back and touch {@code .z} or {@code .w} afterwards: BSL scales
+	 * {@code gl_Position.z} in {@code shadow.glsl:265}, Bliss subtracts from it in
+	 * {@code all_translucent.vsh:153}. Those touch ups are in legacy space and have to be converted
+	 * after the fact, once, whereas rewriting each write would compose the conversion once per write.
+	 * <p>
+	 * It is a wrapper around {@code main} and not an injection before its closing brace because
+	 * {@link #matchingBracket} cannot close a brace and, more to the point, counts operators without
+	 * looking at whether their line is live: {@link #liftUniforms} refuses to count brace depth for
+	 * that very reason, a pack opening a brace in one branch of an {@code #if} and closing it in
+	 * another. A misplaced closing brace would put the epilogue in the middle of the code. Wrapping
+	 * also survives an early {@code return} from {@code main}, which no vertex stage in the corpus
+	 * does, and the header is already where code of ours is written.
+	 * <p>
+	 * Vertex stages only. A geometry stage writes {@code gl_Position} once per {@code EmitVertex},
+	 * so an epilogue would land in the wrong place, and a program carrying both would have the
+	 * conversion done before the geometry stage read the position back. The corpus has no geometry
+	 * stage at all; the day one appears, {@link #prepare} has to be told the program has one.
+	 */
+	private void convertClipDepth() {
+		if (this.stage != ProgramStage.VERTEX || !namesClipPosition()) {
+			return;
+		}
+
+		int name = mainName();
+		if (name < 0) {
+			return;
+		}
+
+		replace(name, PACK_MAIN);
+		takeDepthConv();
+		this.depthEpilogue = true;
+	}
+
+	private boolean namesClipPosition() {
+		for (Token token : this.tokens) {
+			if (token.identifier("gl_Position")) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * The brace opening the body of {@code main}, or -1 when the unit serves no such function.
+	 */
+	private int mainBrace() {
+		int name = mainName();
+
+		return name < 0 ? -1 : significantAfter(matchingBracket(callOpener(name)));
+	}
+
+	/**
+	 * The name of the {@code main} this unit really serves, or -1 when it serves none.
 	 * <p>
 	 * A dead one is stepped over, for the reason {@link #liftFragmentOutputs} gives about
 	 * declarations: a pack that writes one {@code main} per branch of an {@code #if} would
 	 * otherwise have the prologue put in whichever came first in the file, and the branch the
 	 * compiler actually sees would name its outputs in whatever order the pack wrote them in.
 	 */
-	private int mainBrace() {
+	private int mainName() {
 		int[] lines = lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -759,7 +1058,7 @@ public final class GlslTranslator {
 			int close = matchingBracket(callOpener(index));
 			int brace = significantAfter(close);
 			if (brace >= 0 && this.tokens.get(brace).operator("{")) {
-				return brace;
+				return index;
 			}
 		}
 
@@ -950,6 +1249,14 @@ public final class GlslTranslator {
 			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " float " + FOG_COORD + ";");
 		}
 
+		// Below the block, since it reads it. The pack's body is concatenated after the header, so
+		// its own main is only a name here and has to be declared before it can be called.
+		if (this.depthEpilogue) {
+			lines.add("void " + PACK_MAIN + "();");
+			lines.add("void main() { " + PACK_MAIN + "(); gl_Position.z = " + DEPTH_CONV
+					+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w; }");
+		}
+
 		// From zero up with no gaps, because a location the game finds nothing declared at is not
 		// left empty: it renumbers what is there and everything above the gap moves down one.
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
@@ -1024,7 +1331,10 @@ public final class GlslTranslator {
 	private TranslatedUnit.Notes notes() {
 		return new TranslatedUnit.Notes(this.maxFragmentOutput + 1, this.dynamicFragData,
 				this.conflicts.size(), this.shadowCalls, this.unwrappedShadowCalls,
-				this.strippedExtensions, List.copyOf(this.conflicts));
+				this.strippedExtensions, this.depthEpilogue ? 1 : 0, this.depthReads,
+				this.depthReadsUnwrapped, this.fragCoordZ, this.fragCoordXyz,
+				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
+				List.copyOf(this.conflicts));
 	}
 
 
