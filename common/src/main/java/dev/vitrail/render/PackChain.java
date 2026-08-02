@@ -82,9 +82,6 @@ public final class PackChain {
 	 */
 	private static final AtomicInteger LOADS = new AtomicInteger();
 
-	/** Which dimension's programs are used. The plan falls back to the root when it ships none. */
-	private static final String OVERWORLD = "world0";
-
 	/**
 	 * The line in options.txt that turns the scene seed off. Reserved like {@code profile}, and
 	 * for the same reason: no pack declares a setting under either name. Turning it off leaves the
@@ -165,6 +162,7 @@ public final class PackChain {
 
 	private final PackProgram.Chain chain;
 	private final PackValues values;
+	private final String world;
 	private final ColorTargets targets;
 	private final SceneSeed seed;
 	private final boolean seedEnabled;
@@ -179,9 +177,10 @@ public final class PackChain {
 	private int warmed;
 	private boolean announced;
 
-	private PackChain(PackProgram.Chain chain, PackValues values, boolean seedEnabled) {
+	private PackChain(PackProgram.Chain chain, PackValues values, String world, boolean seedEnabled) {
 		this.chain = chain;
 		this.values = values;
+		this.world = world;
 		this.seedEnabled = seedEnabled;
 		this.load = LOADS.incrementAndGet();
 
@@ -226,18 +225,24 @@ public final class PackChain {
 			dumping = named(chosen.remove(DUMP_KEY));
 			dumpFile = gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt");
 
+			// The world decides the directory, and the pack decides which world that is: a folder
+			// may be named anything and mapped in dimension.properties, so the name is read from
+			// the pack rather than composed from the dimension.
+			String place = PackPlace.place(pack);
+			String world = PackPlace.world();
+
 			// Before the translation and not after: this is what installs the machine's own
 			// symbols, and the biome ones among them decide which branch of the pack compiles.
-			PackValues values = PackValues.read(pack, OVERWORLD, chosen, settings.profile());
+			PackValues values = PackValues.read(pack, place, chosen, settings.profile());
 
 			long began = System.nanoTime();
-			Optional<PackProgram.Chain> read = PackProgram.loadChain(pack, OVERWORLD, chosen,
+			Optional<PackProgram.Chain> read = PackProgram.loadChain(pack, place, chosen,
 					settings.profile(), filter);
 			if (read.isEmpty()) {
-				lastError = pack.getFileName() + " serves no final with both stages, in " + OVERWORLD
-						+ " or at its root";
-				Vitrail.logger().warn("{} serves no final with both stages, in {} or at its root, "
-						+ "nothing to draw", pack.getFileName(), OVERWORLD);
+				String where = place.isEmpty() ? "at its root" : "in " + place + " or at its root";
+				lastError = pack.getFileName() + " serves no final with both stages " + where;
+				Vitrail.logger().warn("{} serves no final with both stages {}, nothing to draw",
+						pack.getFileName(), where);
 				return;
 			}
 
@@ -260,7 +265,7 @@ public final class PackChain {
 			}
 
 			announceRemoved(chain);
-			active = new PackChain(chain, values,
+			active = new PackChain(chain, values, world,
 					seed == null || !seed.isBoolean() || seed.asBoolean());
 		} catch (IOException | RuntimeException e) {
 			disabled = true;
@@ -539,14 +544,26 @@ public final class PackChain {
 		// branch meant for an engine that cannot answer them; joining a world is what makes those
 		// symbols exist, and it happens after the first look at these files.
 		boolean stale = PackDefines.stale();
-		if ((stamp == lastStamp || first) && !stale) {
+		// Asked apart from the symbols above and not folded into them: the stamp those hang on is
+		// the registry the level carries, and walking through a portal in single player leaves it
+		// the very same object, so half of what a pack is would change under a chain that noticed
+		// nothing.
+		boolean moved = PackPlace.moved();
+		if ((stamp == lastStamp || first) && !stale && !moved) {
 			lastStamp = stamp;
 			return;
 		}
 
-		Vitrail.logger().info(stale
-				? "The world's own symbols are known now, reloading the pack against them"
-				: "Settings changed on disk, reloading the pack");
+		if (moved) {
+			Vitrail.logger().info("Left {} for {}: a dimension replaces the root rather than layering "
+					+ "over it, so the whole pack is read, translated and its colour targets allocated "
+					+ "again, which is the hitch at the portal", PackPlace.settled(), PackPlace.world());
+		} else {
+			Vitrail.logger().info(stale
+					? "The world's own symbols are known now, reloading the pack against them"
+					: "Settings changed on disk, reloading the pack");
+		}
+
 		reload(gameDirectory);
 	}
 
@@ -571,9 +588,12 @@ public final class PackChain {
 		// without leaving the game.
 		disabled = false;
 		load(gameDirectory);
-		// A load that gave up before reading a pack settled nothing, and without this the folder
+		// A load that gave up before reading a pack settled nothing, and without these the folder
 		// with no pack in it would be looked at again a second later, and every second after that.
+		// The world is taken with the symbols and for the same reason: a pack that cannot be read
+		// at all must not be read again every second for as long as the player stays in the Nether.
 		PackDefines.settle();
+		PackPlace.settle();
 
 		lastStamp = stamp(gameDirectory);
 		checked = true;
@@ -965,8 +985,12 @@ public final class PackChain {
 		TargetPlan plan = this.chain.targets();
 		ChainPlan unfolded = this.chain.chain();
 
-		Vitrail.logger().info("Drawing {} from {} at {}x{}, {} full screen passes before the final",
-				this.chain.packName(), place(), main.width, main.height, unfolded.passes().size());
+		// The world is printed beside the place because the fallback is silent otherwise: a pack
+		// that serves no Nether draws it from the root, which is a line that reads as ordinary
+		// until it is read next to the world it was chosen for.
+		Vitrail.logger().info("Drawing {} from {} for {}, at {}x{}, {} full screen passes before the "
+				+ "final", this.chain.packName(), place(), this.world, main.width, main.height,
+				unfolded.passes().size());
 
 		for (PackPass pass : this.programs) {
 			Vitrail.logger().info("{}", pass.describe());
