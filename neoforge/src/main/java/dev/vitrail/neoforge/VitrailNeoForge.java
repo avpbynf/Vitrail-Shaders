@@ -4,20 +4,32 @@ import dev.vitrail.Vitrail;
 import dev.vitrail.pack.PackReport;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.ShaderChain;
+import dev.vitrail.screen.SettingsScreen;
 
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.lifecycle.ClientStoppingEvent;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 
 @Mod(value = Vitrail.MOD_ID, dist = Dist.CLIENT)
 public final class VitrailNeoForge {
 
-	public VitrailNeoForge(IEventBus modBus) {
+	public VitrailNeoForge(IEventBus modBus, ModContainer container) {
 		Vitrail.initClient(new NeoForgePlatform());
+
+		// The Config button of the mod list, and the same button under the NeoForge icon of the
+		// pause menu. A two argument lambda rather than a supplier, which is the overload it
+		// would otherwise pick.
+		container.registerExtensionPoint(IConfigScreenFactory.class,
+				(mod, modListScreen) -> new SettingsScreen(modListScreen));
+
+		VitrailKeys.register(modBus);
+		PauseMenuEntry.register();
 
 		modBus.addListener(FMLClientSetupEvent.class, this::onClientSetup);
 

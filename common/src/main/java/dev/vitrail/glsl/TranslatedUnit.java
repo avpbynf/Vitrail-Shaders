@@ -43,8 +43,10 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	}
 
 	/**
-	 * @param fragmentOutputs    how many {@code ofFragData} outputs were declared. An upper bound:
-	 *                           writes from branches nobody takes are counted too, on purpose
+	 * @param fragmentOutputs    how many fragment outputs the header declares, counting both the
+	 *                           {@code ofFragData} slots and the outputs the pack names itself and
+	 *                           the translator lifts. An upper bound: writes from branches nobody
+	 *                           takes are counted too, on purpose
 	 * @param dynamicFragData    writes through {@code gl_FragData[i]} with an index that is not a
 	 *                           literal, which no declaration can be generated for
 	 * @param uniformConflicts   names declared more than once under different types; the first

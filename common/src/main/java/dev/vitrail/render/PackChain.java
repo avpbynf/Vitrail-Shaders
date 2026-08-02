@@ -9,6 +9,9 @@ import dev.vitrail.pack.PackLoader;
 import dev.vitrail.pack.SamplerPlan;
 import dev.vitrail.pack.TargetName;
 import dev.vitrail.pack.TargetPlan;
+import dev.vitrail.settings.PackSession;
+import dev.vitrail.settings.SettingsFile;
+import dev.vitrail.settings.SettingsLayers;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
@@ -78,9 +81,6 @@ public final class PackChain {
 	/** Which dimension's programs are used. The plan falls back to the root when it ships none. */
 	private static final String OVERWORLD = "world0";
 
-	/** The line in options.txt that names a whole set of settings rather than one of them. */
-	private static final String PROFILE_KEY = "profile";
-
 	/**
 	 * The line in options.txt that turns the scene seed off. Reserved like {@code profile}, and
 	 * for the same reason: no pack declares a setting under either name. Turning it off leaves the
@@ -90,13 +90,34 @@ public final class PackChain {
 
 	/**
 	 * The line in options.txt that cuts the chain down: {@code passes=0}, {@code passes=6}, or
-	 * {@code passes=composite4,composite5}. Reserved for the same reason as the other two.
+	 * {@code passes=composite4,composite5}. Reserved for the same reason as the others.
 	 * <p>
 	 * This is how a broken picture is bisected, and it is also the only honest way to price the
 	 * chain: {@code passes=0} is the final alone, which is the image every earlier milestone was
 	 * measured on. The schedule is rebuilt on what it leaves, never trimmed afterwards.
 	 */
 	private static final String PASSES_KEY = "passes";
+
+	/**
+	 * The line in options.txt that says which of its two views the settings screen opens on. Also
+	 * reserved, and read here rather than by the screen so that all four are taken out of the pack's
+	 * settings in one place: a name left in would be written into the head of every unit as
+	 * {@code #define screen settings}, which is a plausible identifier in someone's GLSL.
+	 */
+	private static final String SCREEN_KEY = "screen";
+
+	/** The two words that line takes, the first being what it does when the line is missing. */
+	private static final String ON_PACKS = "packs";
+	private static final String ON_SETTINGS = "settings";
+
+	/**
+	 * The four lines of options.txt that name what this mod does rather than what the pack declares,
+	 * kept together for the one place that has to tell them apart: the log that says what the file
+	 * forces. {@code profile} is the settings layer's own, since that is the side that writes it
+	 * back; the other three are read here and nowhere else.
+	 */
+	private static final Set<String> RESERVED =
+			Set.of(SettingsFile.PROFILE_KEY, SEED_KEY, PASSES_KEY, SCREEN_KEY);
 
 	/**
 	 * The quad a pack expects under a full screen pass, from (0,0) to (1,1), as two triangles.
@@ -126,6 +147,10 @@ public final class PackChain {
 	private static long lastCheckNanos;
 	private static long lastStamp;
 	private static boolean checked;
+	private static volatile PackSession session;
+	private static volatile String lastError;
+	private static volatile Path settingsFile;
+	private static volatile boolean packsFirst = true;
 
 	private final PackProgram.Chain chain;
 	private final ColorTargets targets;
@@ -162,30 +187,36 @@ public final class PackChain {
 	 * starts up, off the render thread, so it touches files and nothing else.
 	 */
 	public static void load(Path gameDirectory) {
+		session = null;
+		settingsFile = null;
+		lastError = null;
+		packsFirst = true;
 		try {
 			List<Path> packs = PackLoader.candidates(gameDirectory);
 			if (packs.isEmpty()) {
+				lastError = "No shader pack in " + PackLoader.directory(gameDirectory);
 				Vitrail.logger().info("No shader pack in {}, nothing to draw",
 						PackLoader.directory(gameDirectory));
 				return;
 			}
 
 			Path pack = choose(gameDirectory, packs);
-			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings(gameDirectory));
-			// Reserved keys rather than options: no pack declares a setting under any of the three,
-			// and a profile is a different thing from a value, it is a whole set of them.
-			OptionValue profile = chosen.remove(PROFILE_KEY);
+			SettingsLayers.Resolved settings = open(gameDirectory, pack);
+			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());
+			// Reserved keys rather than options: no pack declares a setting under any of these
+			// names, and each names something this mod does rather than a value the pack has. The
+			// fourth, profile, never reaches here: the settings layer takes it out and carries it
+			// apart, because it is the side that writes it back into the pack's own file.
 			OptionValue seed = chosen.remove(SEED_KEY);
 			ChainFilter filter = filterOf(chosen.remove(PASSES_KEY));
-			if (!chosen.isEmpty()) {
-				Vitrail.logger().info("Forcing {} pack settings from {}: {}", chosen.size(),
-						optionsFile(gameDirectory), chosen.keySet());
-			}
+			packsFirst = packsFirst(chosen.remove(SCREEN_KEY));
 
 			long began = System.nanoTime();
 			Optional<PackProgram.Chain> read = PackProgram.loadChain(pack, OVERWORLD, chosen,
-					textOf(profile), filter);
+					settings.profile(), filter);
 			if (read.isEmpty()) {
+				lastError = pack.getFileName() + " serves no final with both stages, in " + OVERWORLD
+						+ " or at its root";
 				Vitrail.logger().warn("{} serves no final with both stages, in {} or at its root, "
 						+ "nothing to draw", pack.getFileName(), OVERWORLD);
 				return;
@@ -201,6 +232,9 @@ public final class PackChain {
 			if (!refusals.isEmpty()) {
 				disabled = true;
 				refusals.forEach(refusal -> Vitrail.logger().error("{}", refusal));
+				// The first one, in the pack's own terms, so that the screen says why nothing is
+				// drawn rather than sending the reader to the log for all of them.
+				lastError = chain.packName() + " cannot be drawn as it stands: " + refusals.get(0);
 				Vitrail.logger().error("{} cannot be drawn as it stands, nothing will be drawn",
 						chain.packName());
 				return;
@@ -209,17 +243,9 @@ public final class PackChain {
 			active = new PackChain(chain, seed == null || !seed.isBoolean() || seed.asBoolean());
 		} catch (IOException | RuntimeException e) {
 			disabled = true;
+			lastError = "Could not prepare this pack: " + e;
 			Vitrail.logger().error("Vitrail could not prepare a pack's chain", e);
 		}
-	}
-
-	/** A reserved line read as text, whichever of the two shapes a value happens to have taken. */
-	private static String textOf(OptionValue value) {
-		if (value == null || value.isBoolean()) {
-			return "";
-		}
-
-		return value.text();
 	}
 
 	/**
@@ -247,12 +273,40 @@ public final class PackChain {
 	}
 
 	/**
+	 * Which of its two views the settings screen opens on. A word that is neither opens the pack
+	 * list and says so, rather than quietly opening the other one.
+	 */
+	private static boolean packsFirst(OptionValue value) {
+		if (value == null) {
+			return true;
+		}
+
+		// asText rather than text: a line written screen=on is a boolean, whose text is null.
+		String text = value.asText().trim().toLowerCase(Locale.ROOT);
+		if (ON_SETTINGS.equals(text)) {
+			return false;
+		}
+
+		if (!ON_PACKS.equals(text)) {
+			Vitrail.logger().warn("'{}={}' is neither {} nor {}, so the settings screen opens on the "
+					+ "pack list", SCREEN_KEY, value.asText(), ON_PACKS, ON_SETTINGS);
+		}
+
+		return true;
+	}
+
+	/**
 	 * Which pack to draw. A line in {@code vitrail/pack.txt} naming one, or any part of one, wins;
 	 * otherwise the first in the folder does.
 	 * <p>
 	 * A text file is not a settings screen and is not meant to become one. It exists because
 	 * eight packs sit in that folder and switching between them is most of the work of supplying
 	 * the values they read, so needing to rename files to do it would be a tax on every attempt.
+	 * <p>
+	 * The whole name is tried before the fragment. Two packs of a folder can have one name inside
+	 * the other, a version next to the version it replaces being the ordinary way that happens, and
+	 * on a fragment the shorter one would answer for both: the settings screen writes the whole
+	 * name for that reason and would otherwise be unable to reach the longer one at all.
 	 */
 	private static Path choose(Path gameDirectory, List<Path> packs) throws IOException {
 		Path chosen = gameDirectory.resolve(Vitrail.MOD_ID).resolve("pack.txt");
@@ -263,6 +317,12 @@ public final class PackChain {
 		String wanted = Files.readString(chosen).trim().toLowerCase(Locale.ROOT);
 		if (wanted.isEmpty()) {
 			return packs.get(0);
+		}
+
+		for (Path pack : packs) {
+			if (pack.getFileName().toString().toLowerCase(Locale.ROOT).equals(wanted)) {
+				return pack;
+			}
 		}
 
 		for (Path pack : packs) {
@@ -278,55 +338,125 @@ public final class PackChain {
 	}
 
 	/**
-	 * Settings to force on the pack, one {@code NAME=value} per line in {@code vitrail/options.txt}.
-	 * A value of {@code on} or {@code off} toggles, anything else is written as it stands.
+	 * Everything a pack is configured by, read in one go: its own file under
+	 * {@code vitrail/settings/}, then {@code vitrail/options.txt} forced over it.
 	 * <p>
-	 * This exists to make the chain provable. A pack's own passes are often nearly identities with
-	 * their settings at their defaults, which looks exactly like a pass that never ran; turning one
-	 * of the pack's own features on settles it without touching the pack or writing a test shader
-	 * that proves only itself. It is also the only way to move the ping pong: switching a pass on
-	 * changes the half every pass after it reads, and nothing else in the engine can do that.
+	 * The reading is published as a {@link PackSession} before anything is translated. A screen can
+	 * then be opened on a pack whose GLSL does not compile and used to repair it, and what that
+	 * screen shows is what the image was built from rather than a second reading of the same files
+	 * that could disagree with it.
+	 * <p>
+	 * The top layer stays a file edited by hand, and it wins over the screen rather than the other
+	 * way round, because it is the only way to move the ping pong: switching one of the pack's own
+	 * passes on changes the half every pass after it reads, and nothing else in the engine can do
+	 * that.
 	 */
-	private static Map<String, OptionValue> settings(Path gameDirectory) throws IOException {
-		Path file = optionsFile(gameDirectory);
-		if (!Files.isRegularFile(file)) {
-			return Map.of();
+	private static SettingsLayers.Resolved open(Path gameDirectory, Path pack) throws IOException {
+		Minecraft minecraft = Minecraft.getInstance();
+		PackSession opened = PackSession.read(gameDirectory, pack,
+				minecraft == null ? "en_us" : minecraft.options.languageCode);
+		session = opened;
+		settingsFile = opened.settingsFile();
+
+		Vitrail.logger().info("{} lays out {} settings pages and {} settings, named by {}",
+				opened.packFileName(), opened.menu().pages().size(), opened.menu().optionCount(),
+				opened.menu().lang().file().isEmpty()
+						? "nothing, so its own identifiers are shown"
+						: opened.menu().lang().file());
+
+		// Named rather than counted: each one is a name the pack forgot to declare or a page it
+		// forgot to write, which is one line to fix in the pack and nothing we can do about here.
+		List<String> unshown = opened.menu().warnings();
+		if (!unshown.isEmpty()) {
+			Vitrail.logger().warn("{} entries of this pack's menu name nothing it has, and are shown"
+					+ " blank or greyed: {}", unshown.size(), unshown);
 		}
 
-		Map<String, OptionValue> chosen = new LinkedHashMap<>();
-		for (String line : Files.readAllLines(file)) {
-			String trimmed = line.trim();
-			int equals = trimmed.indexOf('=');
-			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {
-				continue;
-			}
-
-			String name = trimmed.substring(0, equals).trim();
-			String value = trimmed.substring(equals + 1).trim();
-			chosen.put(name, switch (value.toLowerCase(Locale.ROOT)) {
-				case "on", "true" -> OptionValue.on();
-				case "off", "false" -> OptionValue.off();
-				default -> OptionValue.of(value);
-			});
+		if (!opened.readFrom().equals(opened.settingsFile())) {
+			Vitrail.logger().info("Reading the settings Iris left for this pack in {}, which is read"
+					+ " and never written back", opened.readFrom());
 		}
 
-		// Said by the caller and not here: the three reserved lines are taken out first, and a line
-		// naming them among the pack's own settings would be naming something the pack never had.
-		return chosen;
-	}
+		List<String> stale = opened.stale();
+		if (!stale.isEmpty()) {
+			Vitrail.logger().info("{} settings in {} name nothing {} shows and are kept as they are:"
+					+ " {}", stale.size(), opened.readFrom(), opened.packFileName(), stale);
+		}
 
-	private static Path optionsFile(Path gameDirectory) {
-		return gameDirectory.resolve(Vitrail.MOD_ID).resolve("options.txt");
+		announceForced(gameDirectory, opened);
+
+		return opened.settings();
 	}
 
 	/**
-	 * Rebuilds everything when {@code pack.txt} or {@code options.txt} changes on disk, looked at
-	 * once a second at most.
+	 * What {@code options.txt} holds, split in two. The reserved lines are counted apart rather than
+	 * with the rest: a line calling {@code passes} a setting of the pack would send whoever reads
+	 * the log looking through the pack for a setting it never had.
+	 */
+	private static void announceForced(Path gameDirectory, PackSession opened) {
+		List<String> settings = opened.forced().keySet().stream()
+				.filter(name -> !RESERVED.contains(name))
+				.toList();
+		List<String> reserved = opened.forced().keySet().stream()
+				.filter(RESERVED::contains)
+				.toList();
+
+		if (!settings.isEmpty()) {
+			Vitrail.logger().info("Forcing {} pack settings from {}: {}", settings.size(),
+					SettingsLayers.file(gameDirectory), settings);
+		}
+
+		if (!reserved.isEmpty()) {
+			Vitrail.logger().info("{} lines of {} name this engine rather than a setting of the "
+					+ "pack: {}", reserved.size(), SettingsLayers.file(gameDirectory), reserved);
+		}
+	}
+
+	/** The pack being drawn, if there is one, with everything a screen needs to show it. */
+	public static Optional<PackSession> session() {
+		return Optional.ofNullable(session);
+	}
+
+	/**
+	 * Why the last load failed, for a screen to show rather than for the log to swallow.
+	 * <p>
+	 * A pack that read and translated and only then failed to compile leaves nothing behind but the
+	 * flag that stopped it being drawn, so that case is reported as itself rather than as nothing at
+	 * all.
+	 */
+	public static Optional<String> lastError() {
+		String error = lastError;
+		if (error == null && disabled) {
+			error = "This pack stopped drawing after an error, see the log";
+		}
+
+		return Optional.ofNullable(error);
+	}
+
+	/**
+	 * Whether the settings screen opens on the pack list rather than on the loaded pack's settings.
+	 * <p>
+	 * True until a pack has been read, and true again whenever one is read without
+	 * {@code screen=settings} in the file. The list is the view that has something to say when
+	 * nothing is loaded, so it is also the answer when the file was never reached.
+	 */
+	public static boolean opensOnPacks() {
+		return packsFirst;
+	}
+
+	/**
+	 * Rebuilds everything when {@code pack.txt}, {@code options.txt} or the loaded pack's own
+	 * settings file changes on disk, looked at once a second at most.
 	 * <p>
 	 * Watching the files rather than binding a key is not laziness. Forcing a pack's own setting
 	 * turned out to be the only honest way to prove a pass does what it should, so it is done
 	 * constantly, and a restart between attempts costs a minute every time. The price is the
 	 * second a chain takes to read and translate, which shows as a hitch and is the right trade.
+	 * <p>
+	 * It keeps running while the settings screen is open, which is the point: that is exactly when
+	 * one wants to see the world change under it. A file edited by hand and a value clicked in the
+	 * screen then compose, because the screen holds what it has pending rather than a copy of the
+	 * file.
 	 */
 	private static void reloadIfChanged(Path gameDirectory) {
 		long now = System.nanoTime();
@@ -335,8 +465,7 @@ public final class PackChain {
 		}
 
 		lastCheckNanos = now;
-		long stamp = stampOf(gameDirectory.resolve(Vitrail.MOD_ID).resolve("pack.txt"))
-				+ stampOf(optionsFile(gameDirectory));
+		long stamp = stamp(gameDirectory);
 		boolean first = lastStamp == 0L && !checked;
 		checked = true;
 		if (stamp == lastStamp || first) {
@@ -344,9 +473,21 @@ public final class PackChain {
 			return;
 		}
 
-		lastStamp = stamp;
 		Vitrail.logger().info("Settings changed on disk, reloading the pack");
+		reload(gameDirectory);
+	}
 
+	/**
+	 * Throws away the current chain and reads it again from disk, then resynchronises the watcher
+	 * above on what is now on disk, or it would reload a second time within the second.
+	 * <p>
+	 * Render thread only: {@link #release()} closes GPU buffers and hands back the colour targets,
+	 * which has to happen where {@code draw} runs and outside any render pass. The settings screen
+	 * calls this from a button; the watcher calls it when a file changes. Both go through here
+	 * rather than each having a path of its own, so that what the screen applies and what a hand
+	 * edit applies cannot drift apart.
+	 */
+	public static void reload(Path gameDirectory) {
 		PackChain previous = active;
 		if (previous != null) {
 			previous.release();
@@ -357,6 +498,22 @@ public final class PackChain {
 		// without leaving the game.
 		disabled = false;
 		load(gameDirectory);
+
+		lastStamp = stamp(gameDirectory);
+		checked = true;
+	}
+
+	/**
+	 * The three files a reload watches, folded in order rather than added up. A sum of two
+	 * timestamps could already be cancelled out by an edit to each; with three it would become a
+	 * reason for a reload not to happen that nobody would ever find.
+	 */
+	private static long stamp(Path gameDirectory) {
+		long pack = stampOf(gameDirectory.resolve(Vitrail.MOD_ID).resolve("pack.txt"));
+		long options = stampOf(SettingsLayers.file(gameDirectory));
+		long settings = settingsFile == null ? 0L : stampOf(settingsFile);
+
+		return 31L * (31L * pack + options) + settings;
 	}
 
 	private static long stampOf(Path file) {

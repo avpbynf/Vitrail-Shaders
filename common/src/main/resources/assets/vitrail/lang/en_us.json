@@ -1,0 +1,14 @@
+{
+	"options.vitrail.title": "Shader Pack Settings",
+	"options.vitrail.apply": "Apply",
+	"options.vitrail.reload": "Reload",
+	"options.vitrail.packs": "Packs",
+	"options.vitrail.packs_title": "Shader Packs",
+	"options.vitrail.profile": "Profile",
+	"options.vitrail.pending": "Waiting to be applied: %s",
+	"options.vitrail.forced": "Forced by vitrail/options.txt: %s",
+	"options.vitrail.no_pack": "No shader pack is loaded",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "Open shader pack settings",
+	"key.category.vitrail.keybinds": "Vitrail"
+}

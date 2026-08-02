@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Turns one flattened pack unit into GLSL a Vulkan compiler will take.
@@ -36,6 +37,16 @@ import java.util.Set;
  * every file that was spliced into it, and the compiler will evaluate them again, so the engine's
  * own symbols are written into the header rather than assumed: if the compiler read them
  * differently from the expander, it would take a different branch and fail somewhere unrelated.
+ * <p>
+ * The fragment outputs carry one rule that is not GLSL's and cannot be read off the language.
+ * 26.2 does not keep the location a stage declares: {@code IntermediaryShaderModule.createFromSpirv}
+ * asks SPIR-V reflection for the outputs and writes the rank of each one over its own location
+ * decoration. The order reflection answers in is the order the compiler first met the names in, so
+ * a stage that writes output one before output zero has the two swapped, and nothing says a word
+ * about it. Everything below about outputs exists for that: they are all declared here, from zero
+ * up with no gaps, and named once each in ascending order by a function ahead of anything the pack
+ * wrote and called first thing in {@code main}. The rank is then the location and the rewrite is
+ * the identity.
  */
 public final class GlslTranslator {
 
@@ -50,8 +61,16 @@ public final class GlslTranslator {
 	private static final String FOG_STRUCT =
 			"struct OfFog { vec4 color; float density; float start; float end; float scale; };";
 
-	/** OptiFine's colour attachments, so the highest index a fragment output can carry. */
-	private static final int MAX_FRAGMENT_OUTPUTS = 16;
+	/**
+	 * How many outputs a fragment stage may declare. Not OptiFine's sixteen colour targets, which
+	 * is the other question: a pipeline in 26.2 carries eight colour target states and no more,
+	 * {@code ColorTargetState.MAX_COLOR_TARGETS}, and its builder holds them in an array of that
+	 * length, so a ninth output has nowhere to land.
+	 */
+	private static final int MAX_FRAGMENT_OUTPUTS = 8;
+
+	/** Names the ascending prologue, which nothing else in a pack is going to be called. */
+	private static final String ORDER_OUTPUTS = "ofOrderOutputs";
 
 	/** Matches the expander's own ceiling: nothing it produces should ever reach this. */
 	private static final int MAX_SOURCE_CHARACTERS = 4_000_000;
@@ -87,6 +106,9 @@ public final class GlslTranslator {
 	private final Map<String, String> blockMembers = new LinkedHashMap<>();
 	private final Map<String, String> samplers = new LinkedHashMap<>();
 
+	/** Outputs the pack declares itself, by the location it asked for, moved into the header. */
+	private final Map<Integer, Output> packOutputs = new TreeMap<>();
+
 	private final Set<String> injectedNames = new HashSet<>();
 	private final List<String> conflicts = new ArrayList<>();
 	private final List<Integer> drawBuffers = new ArrayList<>();
@@ -95,6 +117,7 @@ public final class GlslTranslator {
 	private Set<String> used = Set.of();
 
 	private int maxFragmentOutput = -1;
+	private boolean ordered;
 	private int dynamicFragData;
 	private int shadowCalls;
 	private int unwrappedShadowCalls;
@@ -153,7 +176,9 @@ public final class GlslTranslator {
 		rewriteIdentifiers();
 		dropPrecision();
 		rewriteFragmentOutputs();
+		liftFragmentOutputs();
 		liftUniforms();
+		orderFragmentOutputs();
 
 		this.used = usedNames();
 		this.declaredAfter = declaredUnderAType();
@@ -214,7 +239,7 @@ public final class GlslTranslator {
 	private TranslatedUnit render(List<TranslatedUnit.Uniform> block,
 			List<TranslatedUnit.Uniform> samplers, Set<String> varyings, Set<String> shadowed) {
 		return new TranslatedUnit(this.unit.entry(), this.stage,
-				header(block, varyings) + body(shadowed) + "\n", notes(),
+				header(block, varyings, shadowed) + body(shadowed) + "\n", notes(),
 				List.copyOf(this.drawBuffers), List.copyOf(block), List.copyOf(samplers));
 	}
 
@@ -315,10 +340,15 @@ public final class GlslTranslator {
 	 * The rule itself is in {@link DrawBuffers}, next to the targets it decides the existence of;
 	 * all that belongs here is the ceiling, since a target that has to exist and an output that
 	 * can be declared are two different questions with two different answers.
+	 * <p>
+	 * The ceiling is on how many are kept and not on how far they count, which is the difference
+	 * between the two questions. Entry {@code n} of this list is where output {@code n} lands, so
+	 * an entry past the eighth belongs to an output that cannot exist; but the entries themselves
+	 * name colour targets and Reverie names {@code colortex19}, which a bound of sixteen on the
+	 * value used to drop, moving every attachment declared after it.
 	 */
 	private void collectDrawBuffers() {
-		List<Integer> raw = DrawBuffers.parse(this.unit);
-		raw.stream().filter(slot -> slot < MAX_FRAGMENT_OUTPUTS).forEach(this.drawBuffers::add);
+		DrawBuffers.parse(this.unit).stream().limit(MAX_FRAGMENT_OUTPUTS).forEach(this.drawBuffers::add);
 	}
 
 	/**
@@ -525,8 +555,8 @@ public final class GlslTranslator {
 			int slot = literalIndexAfter(index);
 			if (slot < 0) {
 				// An index no one can read at translation time. Declaring an output for it would
-				// mean declaring all sixteen, and writing the ones a pack never touches is not
-				// free, so this is counted and left to fail loudly.
+				// mean declaring the lot, and writing the ones a pack never touches is not free,
+				// so this is counted and left to fail loudly.
 				this.dynamicFragData++;
 				continue;
 			}
@@ -570,6 +600,170 @@ public final class GlslTranslator {
 		int slot = Integer.parseInt(text);
 
 		return slot < MAX_FRAGMENT_OUTPUTS ? slot : -1;
+	}
+
+	/** One fragment output the pack declared for itself, once its declaration has been moved. */
+	private record Output(String name, String type) {
+	}
+
+	/**
+	 * Moves the outputs a pack declares for itself up into the header, next to the ones this
+	 * translation declares, so that the whole set is written in one place and in one order.
+	 * <p>
+	 * Half the corpus takes this road rather than {@code gl_FragData}: two hundred and forty three
+	 * fragment stages of the eight packs declare their own outputs, all of them with a location
+	 * they wrote themselves, and none of them mixing the two ways. Reverie's translucent stages are
+	 * where it costs something, since they name {@code Albedo}, {@code buf1}, {@code buf2} and
+	 * {@code Shadow} and write the fourth before the second.
+	 * <p>
+	 * Only a live line is moved, for the reason {@link #liftUniforms} gives about uniforms: a
+	 * declaration in a branch nobody takes would become unconditional on the way up. A declaration
+	 * this refuses simply stays where it stands, which is what happens today, so the refusal costs
+	 * the ordering and nothing else.
+	 */
+	private void liftFragmentOutputs() {
+		if (this.stage != ProgramStage.FRAGMENT) {
+			return;
+		}
+
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (!token.identifier("out") || token.directive() != null) {
+				continue;
+			}
+
+			if (this.unit.isLive(lines[index]) && opensDeclaration(index)) {
+				liftOutput(index);
+			}
+		}
+
+		for (int location : this.packOutputs.keySet()) {
+			this.maxFragmentOutput = Math.max(this.maxFragmentOutput, location);
+		}
+	}
+
+	/**
+	 * Whether this {@code out} opens a declaration rather than qualifying a function parameter.
+	 * Told apart by what stands before it: a parameter follows the opening parenthesis or a comma,
+	 * a declaration follows the end of the last one or a layout qualifier.
+	 */
+	private boolean opensDeclaration(int index) {
+		int before = significantBefore(index);
+		if (before < 0) {
+			return true;
+		}
+
+		Token token = this.tokens.get(before);
+
+		return token.operator(";") || token.operator("}") || token.operator(")");
+	}
+
+	private void liftOutput(int keyword) {
+		int start = statementStart(keyword);
+		int end = statementEnd(keyword);
+		if (start < 0 || end < 0) {
+			return;
+		}
+
+		List<Integer> parts = significantRange(start, end);
+		int cursor = parts.indexOf(keyword);
+
+		// A type, one declarator and the semicolon, and nothing else. A pack that declares two
+		// outputs in one statement, or an array, or a type this cannot name, keeps its declaration
+		// where it wrote it rather than having it guessed at.
+		if (cursor < 0 || parts.size() != cursor + 4) {
+			return;
+		}
+
+		String type = this.tokens.get(parts.get(cursor + 1)).text();
+		Token name = this.tokens.get(parts.get(cursor + 2));
+		if (!LegacyGlsl.TYPE_NAMES.contains(type) || name.kind() != Kind.IDENTIFIER
+				|| !this.tokens.get(parts.get(cursor + 3)).operator(";")) {
+			return;
+		}
+
+		// A location the pack spelled out as a number. Anything else, a macro or nothing at all,
+		// leaves no way to say where the output belongs, and inventing one would be worse than the
+		// disorder this exists to fix.
+		int location = literalLocation(parts, cursor);
+		if (location < 0 || location >= MAX_FRAGMENT_OUTPUTS || location <= this.maxFragmentOutput) {
+			return;
+		}
+
+		if (this.packOutputs.putIfAbsent(location, new Output(name.text(), type)) == null) {
+			blankRange(start, end);
+		}
+	}
+
+	/** The {@code location = n} of a layout qualifier standing before this {@code out}, or -1. */
+	private int literalLocation(List<Integer> parts, int keyword) {
+		for (int at = 0; at + 2 < keyword; at++) {
+			if (!this.tokens.get(parts.get(at)).identifier("location")) {
+				continue;
+			}
+
+			Token number = this.tokens.get(parts.get(at + 2));
+			String text = number.text();
+			if (this.tokens.get(parts.get(at + 1)).operator("=") && number.kind() == Kind.NUMBER
+					&& text.length() <= 2 && text.chars().allMatch(Character::isDigit)) {
+				return Integer.parseInt(text);
+			}
+		}
+
+		return -1;
+	}
+
+	/**
+	 * Makes {@code main} name every output in ascending order before it does anything else, by
+	 * calling the function the header declares for it.
+	 * <p>
+	 * The call goes into {@code main} rather than the naming itself because the order that decides
+	 * is the order the compiler first meets the names in, and it walks the functions in the order
+	 * they were written: a helper standing before {@code main} and writing one output would take
+	 * the first rank whatever {@code main} does afterwards. The function is declared in the header
+	 * and so stands before everything the pack wrote.
+	 * <p>
+	 * The brace is replaced rather than a token inserted, since inserting moves every index after
+	 * it and this runs once the rest of the rewrite has settled.
+	 */
+	private void orderFragmentOutputs() {
+		if (this.stage != ProgramStage.FRAGMENT || this.maxFragmentOutput < 0) {
+			return;
+		}
+
+		int brace = mainBrace();
+		if (brace >= 0) {
+			inject(brace, "{ " + ORDER_OUTPUTS + "();");
+			this.ordered = true;
+		}
+	}
+
+	/**
+	 * The brace opening the body of {@code main}, or -1 when the unit serves no such function.
+	 * <p>
+	 * A dead one is stepped over, for the reason {@link #liftFragmentOutputs} gives about
+	 * declarations: a pack that writes one {@code main} per branch of an {@code #if} would
+	 * otherwise have the prologue put in whichever came first in the file, and the branch the
+	 * compiler actually sees would name its outputs in whatever order the pack wrote them in.
+	 */
+	private int mainBrace() {
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (!token.identifier("main") || token.directive() != null
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int close = matchingBracket(callOpener(index));
+			int brace = significantAfter(close);
+			if (brace >= 0 && this.tokens.get(brace).operator("{")) {
+				return brace;
+			}
+		}
+
+		return -1;
 	}
 
 	/**
@@ -704,7 +898,8 @@ public final class GlslTranslator {
 	}
 
 
-	private String header(List<TranslatedUnit.Uniform> block, Set<String> varyings) {
+	private String header(List<TranslatedUnit.Uniform> block, Set<String> varyings,
+			Set<String> shadowed) {
 		List<String> lines = new ArrayList<>();
 		lines.add(VERSION);
 
@@ -755,20 +950,46 @@ public final class GlslTranslator {
 			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " float " + FOG_COORD + ";");
 		}
 
+		// From zero up with no gaps, because a location the game finds nothing declared at is not
+		// left empty: it renumbers what is there and everything above the gap moves down one.
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
-			lines.add("layout(location = " + slot + ") out vec4 ofFragData" + slot + ";");
+			Output output = this.packOutputs.get(slot);
+			lines.add("layout(location = " + slot + ") out "
+					+ (output == null ? "vec4" : output.type()) + " " + outputName(slot, shadowed) + ";");
+		}
+
+		if (this.ordered) {
+			StringBuilder order = new StringBuilder("void " + ORDER_OUTPUTS + "() {");
+			for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
+				order.append(' ').append(outputName(slot, shadowed)).append(';');
+			}
+
+			lines.add(order.append(" }").toString());
 		}
 
 		return String.join("\n", lines) + "\n";
 	}
 
+	/** What output {@code slot} is called, which is the pack's own name when it declared one. */
+	private String outputName(int slot, Set<String> shadowed) {
+		Output output = this.packOutputs.get(slot);
+		if (output == null) {
+			return "ofFragData" + slot;
+		}
+
+		// Renamed here as well as in the body, since the declaration has moved up out of it and
+		// the two halves of one name have to keep agreeing.
+		return shadowed.contains(output.name()) ? "ofOwn_" + output.name() : output.name();
+	}
+
 	/**
-	 * Every name the translated body mentions. Taken from the tokens rather than the text, so a
-	 * name that only appears inside a comment does not have a uniform declared for it.
+	 * Names declared under a built-in type once the uniforms have been lifted out of the text. The
+	 * outputs moved into the header count too: the body no longer shows them, and a shared block
+	 * that carried the same name would end up declaring it twice.
 	 */
-	/** Names declared under a built-in type once the uniforms have been lifted out of the text. */
 	private Set<String> declaredUnderAType() {
 		Set<String> names = new HashSet<>();
+		this.packOutputs.values().forEach(output -> names.add(output.name()));
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -785,6 +1006,10 @@ public final class GlslTranslator {
 		return names;
 	}
 
+	/**
+	 * Every name the translated body mentions. Taken from the tokens rather than the text, so a
+	 * name that only appears inside a comment does not have a uniform declared for it.
+	 */
 	private Set<String> usedNames() {
 		Set<String> names = new HashSet<>(this.injectedNames);
 		for (Token token : this.tokens) {

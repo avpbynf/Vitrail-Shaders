@@ -3,11 +3,13 @@ package dev.vitrail.pack;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
@@ -41,6 +43,13 @@ public final class ShaderProperties {
 	private static final Pattern CUSTOM_UNIFORM =
 			Pattern.compile("^\\s*(uniform|variable)\\.(\\w+)\\.(\\w+)\\s*=\\s*(.*)$");
 	private static final Pattern SCREEN = Pattern.compile("^\\s*screen(\\.\\w+)?\\s*=\\s*(.*)$");
+	// Both are read before SCREEN, and in this order. "screen.columns=2" matches SCREEN as well,
+	// as a page named columns, which is how a page nobody can reach appears in the one pack that
+	// writes the line; and "screen.NAME.columns=1" matches neither, so it used to be counted as an
+	// unknown key. Packs indent these lines and put spaces around the equals sign, both of which
+	// are why the pattern has to be this loose.
+	private static final Pattern MAIN_COLUMNS = Pattern.compile("^\\s*screen\\.columns\\s*=\\s*(\\d+)\\s*$");
+	private static final Pattern PAGE_COLUMNS = Pattern.compile("^\\s*screen\\.(\\w+)\\.columns\\s*=\\s*(\\d+)\\s*$");
 	private static final Pattern BLEND = Pattern.compile("^\\s*blend\\.([^=\\s.]+)(?:\\.(\\w+))?\\s*=\\s*(.*)$");
 	private static final Pattern ALPHA_TEST = Pattern.compile("^\\s*alphaTest\\.(\\S+)\\s*=\\s*(.*)$");
 	private static final Pattern SLIDERS = Pattern.compile("^\\s*sliders\\s*=\\s*(.*)$");
@@ -58,6 +67,8 @@ public final class ShaderProperties {
 	private final Map<String, String> customUniformTypes;
 	private final Set<String> screenTokens;
 	private final Map<String, List<String>> screens;
+	private final Map<String, List<ScreenToken>> screenLayout;
+	private final Map<String, Integer> columns;
 	private final List<String> sliders;
 	private final List<BlendDirective> blend;
 	private final Map<String, String> sizeBuffers;
@@ -70,10 +81,18 @@ public final class ShaderProperties {
 
 	private ShaderProperties(Builder builder) {
 		this.lines = List.copyOf(builder.lines);
-		this.profiles = Map.copyOf(builder.profiles);
+		// Ordered, like the layout below: a profile selector walks these in the order the pack
+		// wrote them, and BSL's five run from MINIMUM to ULTRA rather than in any order.
+		this.profiles = Collections.unmodifiableMap(new LinkedHashMap<>(builder.profiles));
 		this.customUniformTypes = Map.copyOf(builder.customUniformTypes);
 		this.screenTokens = Set.copyOf(builder.screenTokens);
 		this.screens = Map.copyOf(builder.screens);
+		// Not Map.copyOf: the order pages are declared in is the order a screen offers them, and
+		// an immutable map does not keep one.
+		Map<String, List<ScreenToken>> layout = new LinkedHashMap<>();
+		builder.screenLayout.forEach((page, tokens) -> layout.put(page, List.copyOf(tokens)));
+		this.screenLayout = Collections.unmodifiableMap(layout);
+		this.columns = Map.copyOf(builder.columns);
 		this.sliders = List.copyOf(builder.sliders);
 		this.blend = List.copyOf(builder.blend);
 		this.sizeBuffers = Map.copyOf(builder.sizeBuffers);
@@ -133,14 +152,31 @@ public final class ShaderProperties {
 			return;
 		}
 
+		Matcher mainColumns = MAIN_COLUMNS.matcher(line);
+		if (mainColumns.matches()) {
+			putColumns(builder, "", mainColumns.group(1));
+			return;
+		}
+
+		Matcher pageColumns = PAGE_COLUMNS.matcher(line);
+		if (pageColumns.matches()) {
+			putColumns(builder, pageColumns.group(1), pageColumns.group(2));
+			return;
+		}
+
 		Matcher screen = SCREEN.matcher(line);
 		if (screen.matches()) {
 			// The name of the page, "" for the one the pack opens on. A sub page is referred to
 			// from its parent by its own name, so the two are joined by name rather than nested.
 			String page = screen.group(1) == null ? "" : screen.group(1).substring(1);
 			List<String> layout = builder.screens.computeIfAbsent(page, ignored -> new ArrayList<>());
+			List<ScreenToken> slots = builder.screenLayout.computeIfAbsent(page, ignored -> new ArrayList<>());
 
 			for (String token : screen.group(2).trim().split("\\s+")) {
+				if (token.isEmpty()) {
+					continue;
+				}
+
 				// A blank slot, written <empty>, is layout and has to be kept: it is how a pack
 				// lines its options up in columns.
 				if (SCREEN_TOKEN.matcher(token).matches()) {
@@ -149,6 +185,8 @@ public final class ShaderProperties {
 				} else if (token.equals("<empty>")) {
 					layout.add("");
 				}
+
+				slots.add(slotOf(token));
 			}
 
 			return;
@@ -202,6 +240,52 @@ public final class ShaderProperties {
 		if (other.matches()) {
 			builder.ignoredPrefixes.merge(other.group(1), 1, Integer::sum);
 		}
+	}
+
+	/**
+	 * A count is a number the pack typed, so it can be one no screen could be laid out in. An
+	 * unusable one is dropped here and the line is still consumed either way: letting it fall
+	 * through to the screen pattern is what turns it into a page.
+	 */
+	private static void putColumns(Builder builder, String page, String text) {
+		try {
+			int count = Integer.parseInt(text);
+			if (count > 0) {
+				builder.columns.put(page, count);
+			}
+		} catch (NumberFormatException e) {
+			// More digits than an int holds. The page keeps the default.
+		}
+	}
+
+	/**
+	 * One slot of a page, from the word the pack wrote. Whether the option exists, whether the
+	 * page was ever written, and whether the pack declares any profile at all are three questions
+	 * this class cannot answer, so none of them is asked here: the token is kept as written and
+	 * resolved by whoever holds the rest of the pack.
+	 * <p>
+	 * A link is anything between brackets rather than a name matching a pattern, which is the rule
+	 * packs are written against; one pack in the corpus links to a page it never wrote, and that
+	 * link is shown rather than dropped.
+	 */
+	private static ScreenToken slotOf(String token) {
+		if (token.equals("<empty>")) {
+			return new ScreenToken.Blank();
+		}
+
+		if (token.equals("<profile>")) {
+			return new ScreenToken.Profiles();
+		}
+
+		if (token.startsWith("[") && token.endsWith("]")) {
+			return new ScreenToken.Link(token.substring(1, token.length() - 1));
+		}
+
+		if (token.equals("*")) {
+			return new ScreenToken.Rest();
+		}
+
+		return new ScreenToken.Name(token);
 	}
 
 	/**
@@ -481,6 +565,7 @@ public final class ShaderProperties {
 		return this.present;
 	}
 
+	/** Each profile's unexpanded body, in the order the pack declares them. */
 	public Map<String, String> profiles() {
 		return this.profiles;
 	}
@@ -500,6 +585,29 @@ public final class ShaderProperties {
 
 	public Set<String> screenTokens() {
 		return this.screenTokens;
+	}
+
+	/**
+	 * The same pages with every token kept: a blank slot, an option, a link to another page, the
+	 * profile selector, or the dump of everything no page named.
+	 * <p>
+	 * {@link #screens()} and {@link #screenTokens()} keep the shape and the role they had, because
+	 * the measurements this project compares itself against were taken with them, and they drop the
+	 * three hundred and eighteen tokens of the corpus that are not an option name. They lose one
+	 * thing: reading {@code screen.columns} now consumes that line, so it no longer leaves behind a
+	 * page named {@code columns} that nothing could reach. Bliss is the one pack that writes it, and
+	 * it goes from sixty three pages to sixty two. This is the form a screen reads. Pages come in
+	 * the order the pack declares them, the one it opens on being "".
+	 */
+	public Map<String, List<ScreenToken>> screenLayout() {
+		return this.screenLayout;
+	}
+
+	/** How many columns a page asks for, when it asks. "" is the page the pack opens on. */
+	public OptionalInt columns(String page) {
+		Integer count = this.columns.get(page);
+
+		return count == null ? OptionalInt.empty() : OptionalInt.of(count);
 	}
 
 	public List<String> sliders() {
@@ -540,6 +648,37 @@ public final class ShaderProperties {
 		return new TreeMap<>(this.ignoredPrefixes);
 	}
 
+	/**
+	 * One slot of a settings page, in the order the pack wrote it.
+	 * <p>
+	 * Sealed rather than a string, so that a form a screen forgets to draw is a compile error
+	 * instead of a blank square nobody notices. A blank is one of the five forms and not the
+	 * absence of a form: it is how a pack lines its columns up by hand, and the corpus writes
+	 * seven hundred and seventy three of them.
+	 */
+	public sealed interface ScreenToken {
+
+		/** {@code <empty>}. */
+		record Blank() implements ScreenToken {
+		}
+
+		/** An option, if the pack turns out to declare one by that name. */
+		record Name(String name) implements ScreenToken {
+		}
+
+		/** {@code [NAME]}. Pages are flat and joined by name, never nested. */
+		record Link(String page) implements ScreenToken {
+		}
+
+		/** {@code <profile>}, which a pack declaring no profile does not get. */
+		record Profiles() implements ScreenToken {
+		}
+
+		/** {@code *}, everything no page named, at this position. */
+		record Rest() implements ScreenToken {
+		}
+	}
+
 	/** How a program wants its output blended, either off or four GL factors. */
 	public record BlendDirective(String program, String buffer, String value) {
 
@@ -559,6 +698,8 @@ public final class ShaderProperties {
 		private final Map<String, String> customUniformTypes = new LinkedHashMap<>();
 		private final Set<String> screenTokens = new LinkedHashSet<>();
 		private final Map<String, List<String>> screens = new LinkedHashMap<>();
+		private final Map<String, List<ScreenToken>> screenLayout = new LinkedHashMap<>();
+		private final Map<String, Integer> columns = new LinkedHashMap<>();
 		private final List<String> sliders = new ArrayList<>();
 		private final List<BlendDirective> blend = new ArrayList<>();
 		private final Map<String, String> sizeBuffers = new LinkedHashMap<>();

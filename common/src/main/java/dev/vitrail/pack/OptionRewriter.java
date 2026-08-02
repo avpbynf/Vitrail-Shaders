@@ -22,6 +22,9 @@ public final class OptionRewriter {
 	/** The list of allowed values a pack writes after a declaration, kept when rewriting. */
 	private static final Pattern VALUE_LIST_COMMENT = Pattern.compile("(//\\s*\\[.*)$");
 
+	/** The one constant type a switch can be given, out of the four the pattern above accepts. */
+	private static final String BOOL = "bool";
+
 	private OptionRewriter() {
 	}
 
@@ -51,13 +54,23 @@ public final class OptionRewriter {
 		Matcher constant = CONSTANT.matcher(line);
 		if (constant.matches()) {
 			OptionValue value = chosen.get(constant.group(3));
-			// A boolean says nothing about a constant that holds a number, so leave it alone.
-			if (value == null || value.isBoolean()) {
+			if (value == null) {
 				return line;
 			}
 
+			// A switch says nothing about a constant that holds a number, so that one is left
+			// alone. On a const bool it is written out as true or false, the only pair such a
+			// declaration takes: a constant is read as an expression rather than tested with
+			// #ifdef, so commenting the line out the way a #define is would leave the name
+			// undeclared, and skipping it would drop the setting without a word.
+			if (value.isBoolean() && !BOOL.equals(constant.group(2))) {
+				return line;
+			}
+
+			String text = value.isBoolean() ? Boolean.toString(value.asBoolean()) : value.text();
+
 			return constant.group(1) + "const " + constant.group(2) + " " + constant.group(3)
-					+ " = " + value.text() + ";" + constant.group(5);
+					+ " = " + text + ";" + constant.group(5);
 		}
 
 		return line;
