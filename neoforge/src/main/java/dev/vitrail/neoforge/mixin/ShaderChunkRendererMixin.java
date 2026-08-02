@@ -1,6 +1,6 @@
 package dev.vitrail.neoforge.mixin;
 
-import dev.vitrail.render.PackChain;
+import dev.vitrail.render.TerrainDraw;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.textures.GpuSampler;
@@ -54,7 +54,7 @@ public abstract class ShaderChunkRendererMixin {
 	@Inject(method = "begin", at = @At("HEAD"))
 	private void vitrail$sampler(TerrainRenderPass pass, FogParameters parameters,
 			GpuSampler terrainSampler, CallbackInfo callback) {
-		PackChain.terrainSampler(terrainSampler);
+		TerrainDraw.sampler(terrainSampler);
 	}
 
 	@Inject(method = "compileProgram", at = @At("HEAD"), cancellable = true)
@@ -66,7 +66,7 @@ public abstract class ShaderChunkRendererMixin {
 			return;
 		}
 
-		RenderPipeline ours = PackChain.terrainPipeline(this.vertexFormat, pass.getAtlas());
+		RenderPipeline ours = TerrainDraw.pipeline(this.vertexFormat, pass.getAtlas());
 		if (ours != null) {
 			callback.setReturnValue(ours);
 		}

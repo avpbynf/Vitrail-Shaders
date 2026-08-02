@@ -1,6 +1,6 @@
 package dev.vitrail.neoforge.mixin;
 
-import dev.vitrail.render.PackChain;
+import dev.vitrail.render.TerrainDraw;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -28,6 +28,6 @@ public abstract class VKDrawContextMixin {
 
 	@Inject(method = "setContext", at = @At("HEAD"))
 	private void vitrail$bind(RenderPass pass, RenderPipeline pipeline, CallbackInfo callback) {
-		PackChain.bindTerrain(pass, pipeline);
+		TerrainDraw.bind(pass, pipeline);
 	}
 }

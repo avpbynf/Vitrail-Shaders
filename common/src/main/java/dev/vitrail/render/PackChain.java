@@ -4,7 +4,6 @@ import dev.vitrail.Vitrail;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.pack.ChainPlan;
-import dev.vitrail.pack.EngineDefines;
 import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.PackLoader;
 import dev.vitrail.pack.SamplerPlan;
@@ -12,22 +11,16 @@ import dev.vitrail.pack.TargetName;
 import dev.vitrail.pack.TargetPlan;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsLayers;
-import dev.vitrail.uniform.BiomeCategory;
-import dev.vitrail.uniform.WorldState;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.util.Mth;
@@ -35,7 +28,6 @@ import net.minecraft.util.Mth;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -110,10 +102,6 @@ public final class PackChain {
 	private static volatile List<String> removed = List.of();
 	private static volatile Path settingsFile;
 	private static volatile boolean packsFirst = true;
-	private static volatile String dumping = "";
-	private static volatile Path dumpFile;
-	private static long lastDumpNanos;
-	private static volatile boolean terrainWanted;
 	private static volatile boolean chainWanted = true;
 
 	/**
@@ -134,12 +122,8 @@ public final class PackChain {
 	private final SceneSeed seed;
 	private final boolean seedEnabled;
 	private final int load;
-	private final Path packPath;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
+	private final TerrainDraw terrain;
 
-	private TerrainProgram terrain;
-	private boolean terrainRead;
 	private List<PackPass> programs;
 	private PackPass last;
 	private MappableRingBuffer block;
@@ -155,9 +139,6 @@ public final class PackChain {
 		this.values = values;
 		this.world = world;
 		this.seedEnabled = seedEnabled;
-		this.packPath = packPath;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.load = LOADS.incrementAndGet();
 
 		// None of this touches the device: the textures are allocated by the first frame and this
@@ -167,6 +148,10 @@ public final class PackChain {
 				.filter(where -> this.targets.has(where.target()))
 				.map(where -> new SceneSeed(where, this.targets.format(where.target())))
 				.orElse(null);
+		// Held rather than read: the terrain program is compiled against the chunk mesh format, and
+		// nothing knows that format until the renderer asks for its shader.
+		this.terrain = new TerrainDraw(this, packPath, chain.place(), chosen, profile, values,
+				this.load);
 	}
 
 	/**
@@ -197,10 +182,10 @@ public final class PackChain {
 			// apart, because it is the side that writes it back into the pack's own file.
 			EngineOptions.Read engine = EngineOptions.take(chosen);
 			packsFirst = engine.packsFirst();
-			dumping = engine.dump();
-			terrainWanted = engine.terrain();
 			chainWanted = engine.chain();
-			dumpFile = gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt");
+			TerrainDraw.wanted(engine.terrain());
+			PackDump.configure(engine.dump(),
+					gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt"));
 
 			// The world decides the directory, and the pack decides which world that is: a folder
 			// may be named anything and mapped in dimension.properties, so the name is read from
@@ -563,95 +548,34 @@ public final class PackChain {
 	}
 
 	/**
-	 * Moves the frame on unless something already did, and answers the pack's terrain program.
+	 * The loaded chain's terrain program, or null when there is nothing to draw with.
 	 * <p>
-	 * Called from where Sodium asks for its chunk shader, which is during the world and so before
-	 * {@link #draw}. That is the whole reason the frame boundary moved: the matrices the terrain
-	 * stage is handed have to be this frame's, and the level's projection is captured before
-	 * {@code LevelRenderer.render} runs, so they are there to be read.
-	 *
-	 * @param format the chunk mesh format, which nothing in this module is allowed to name itself
-	 * @param atlas  the block atlas of the pass being drawn
-	 * @return the pipeline to draw the opaque terrain with, or null to leave the game's own alone
+	 * The one place {@link TerrainDraw} reaches the running chain from, so that which pack is loaded
+	 * and whether it is still drawable have a single answer rather than two that could part company.
 	 */
-	public static RenderPipeline terrainPipeline(VertexFormat format, GpuTextureView atlas) {
+	static TerrainDraw terrain() {
 		PackChain chain = active;
-		if (disabled || chain == null || !terrainWanted) {
-			return null;
-		}
 
-		try {
-			return chain.terrain(format, atlas);
-		} catch (RuntimeException e) {
-			terrainWanted = false;
-			Vitrail.logger().error("Vitrail stopped drawing the terrain after an error", e);
-
-			return null;
-		}
-	}
-
-	/** The sampler the game configured for the block atlas, taken where the chunk pass begins. */
-	public static void terrainSampler(GpuSampler sampler) {
-		PackChain chain = active;
-		if (chain != null && chain.terrain != null) {
-			chain.terrain.sampler(sampler);
-		}
+		return disabled || chain == null ? null : chain.terrain;
 	}
 
 	/**
-	 * Binds the terrain program's block and samplers, inside the pass Sodium opened.
-	 * <p>
-	 * Called for every chunk pass and not only ours, so the pipeline that is really bound decides.
-	 * Binding into a pass drawing Sodium's own shader would be harmless, since the descriptor flush
-	 * walks the layout of the bound pipeline, but it would also mean this engine had stopped knowing
-	 * which of the two was drawing.
+	 * Opens the frame if nothing has yet, and takes the dump with it. The one point the frame
+	 * boundary hangs off; see {@link #advanced} for what a second advance would cost.
 	 */
-	public static void bindTerrain(RenderPass pass, RenderPipeline bound) {
-		PackChain chain = active;
-		if (chain != null && chain.terrain != null && chain.terrain.owns(bound)) {
-			chain.terrain.bind(pass);
-		}
-	}
-
-	private RenderPipeline terrain(VertexFormat format, GpuTextureView atlas) {
-		if (!this.terrainRead) {
-			this.terrainRead = true;
-			if (TerrainProgram.carries(format)) {
-				this.terrain = TerrainProgram.read(this.packPath, this.chain.place(),
-						TerrainProgram.PROGRAM, this.chosen, this.profile, this.values, this.load,
-						format).orElse(null);
-			}
-		}
-
-		if (this.terrain == null) {
-			return null;
-		}
-
-		GpuDevice device = RenderSystem.tryGetDevice();
-		if (device == null) {
-			return null;
-		}
-
-		beginFrame();
-
-		return this.terrain.prepare(device, atlas);
-	}
-
-	/** Opens the frame if nothing has yet. The one point the frame boundary hangs off. */
-	private void beginFrame() {
+	void beginFrame() {
 		if (!advanced) {
 			advanced = true;
 			this.values.advance();
-			dump();
+			PackDump.take(this.chain.place(), this.load, this.terrain.program(),
+					this.programs == null ? List.of() : this.programs, this.values.world());
 		}
 	}
 
 	/** Everything the end of a frame owes when the chain itself is not drawn. */
 	private void rotate() {
 		beginFrame();
-		if (this.terrain != null) {
-			this.terrain.rotate();
-		}
+		this.terrain.rotate();
 	}
 
 	/** Called when the client shuts down, while the device is still alive. */
@@ -742,9 +666,7 @@ public final class PackChain {
 		this.targets.swapBack(encoder, this.chain.chain().swapBack());
 
 		this.block.rotate();
-		if (this.terrain != null) {
-			this.terrain.rotate();
-		}
+		this.terrain.rotate();
 	}
 
 	/**
@@ -891,117 +813,6 @@ public final class PackChain {
 	}
 
 	/**
-	 * Writes the program the dump line names as {@code name = value} text, once a second.
-	 * <p>
-	 * Once a second and not once a frame, because the file is meant to be read by a human or tailed
-	 * by a script, and because the values it holds are the frame's own: two passes of one frame are
-	 * handed the same numbers, so a faster rate would say the same thing more often. It is written
-	 * whole each time rather than appended, so what is in it is always this second and never a
-	 * history to scroll through; a curve is taken by reading it repeatedly, which is what the
-	 * halflife checks do.
-	 * <p>
-	 * Failing to write is said once and then dropped. A dump that cannot be taken is a lost
-	 * measurement, and turning it into a crash would make a debugging aid the reason the game
-	 * stopped.
-	 */
-	private void dump() {
-		if (dumping.isEmpty() || dumpFile == null) {
-			return;
-		}
-
-		long now = System.nanoTime();
-		if (lastDumpNanos != 0L && now - lastDumpNanos < 1_000_000_000L) {
-			return;
-		}
-
-		lastDumpNanos = now;
-		List<String> running = new ArrayList<>();
-		String chosenPath = null;
-		String decoded = null;
-
-		// The terrain program first, because it is the one the milestone is being judged on and
-		// because it is answered from a different catalogue: its of_ModelViewMatrix is the world's
-		// and a composite's is the identity, which is exactly the pair a reading has to tell apart.
-		if (this.terrain != null) {
-			running.add(this.terrain.path());
-			if (this.terrain.path().toLowerCase(Locale.ROOT).endsWith(dumping)) {
-				chosenPath = this.terrain.path();
-				decoded = this.terrain.decoded(this.values.world());
-			}
-		}
-
-		for (PackPass pass : this.programs == null ? List.<PackPass>of() : this.programs) {
-			running.add(pass.path());
-			if (decoded == null && pass.path().toLowerCase(Locale.ROOT).endsWith(dumping)) {
-				chosenPath = pass.path();
-				decoded = pass.decoded(this.values.world());
-			}
-		}
-
-		if (decoded == null) {
-			// Nothing is built yet, which is the first frame or two rather than a wrong name. The
-			// line has to survive that or a dump asked for in the file would be turned off before
-			// the thing it names exists.
-			if (running.isEmpty()) {
-				return;
-			}
-
-			Vitrail.logger().warn("{}={} names no program of this chain, so nothing is dumped. This "
-					+ "chain runs: {}", EngineOptions.DUMP_KEY, dumping, running);
-			dumping = "";
-
-			return;
-		}
-
-		String text = "# " + this.chain.place() + ", " + chosenPath + ", load " + this.load + "\n"
-				+ situation()
-				+ decoded;
-		try {
-			Files.createDirectories(dumpFile.getParent());
-			Files.writeString(dumpFile, text, StandardCharsets.UTF_8);
-		} catch (IOException e) {
-			Vitrail.logger().warn("Could not write the decoded dump to {}: {}", dumpFile, e.toString());
-			dumping = "";
-		}
-	}
-
-	/**
-	 * Where the camera stood when these values were taken, and what the biome table says about it.
-	 * <p>
-	 * Written into the same file as the values and read from the same frame, because a reading is
-	 * only worth something if what it describes is known at the same instant. A pack's biome
-	 * uniforms are smoothed over a second, so a player who walked between the screenshot and the
-	 * file is enough to make a table that works look broken, or the other way round, which has
-	 * already happened once.
-	 * <p>
-	 * The define is printed beside the number the uniform carries because those two are the pair
-	 * that has to agree. {@link BiomeClassifier} hands out both from one table so that they cannot
-	 * drift; this line is what proves it rather than assuming it.
-	 */
-	private String situation() {
-		WorldState world = this.values.world();
-		int id = world.biomeId();
-		// Backwards, on purpose. Asking the define table which name carries the number the uniform
-		// just reported is the whole check: the two are built from one walk of the registry and are
-		// meant to agree, and a number no define carries is that promise broken, said out loud here
-		// rather than found later as a pack lighting the wrong biome.
-		String name = EngineDefines.machine().biomes().entrySet().stream()
-				.filter(entry -> entry.getValue() == id)
-				.map(Map.Entry::getKey)
-				.findFirst()
-				.orElse("!! no BIOME_ define carries this number");
-
-		BiomeCategory[] categories = BiomeCategory.values();
-		int category = world.biomeCategory();
-
-		return "# biome " + id + " is BIOME_" + name + ", category " + category + " "
-				+ (category >= 0 && category < categories.length ? categories[category] : "?") + "\n"
-				+ "# camera " + Math.round(world.cameraPosition().x()) + ", "
-				+ Math.round(world.cameraPosition().y()) + ", "
-				+ Math.round(world.cameraPosition().z()) + "\n";
-	}
-
-	/**
 	 * Said once per pack, and grouped by cause rather than by target. A promoted format, a buffer
 	 * nothing writes and a sampler nothing serves all produce a picture that looks entirely
 	 * plausible, so none of the three can be found by looking at one. They are named here instead.
@@ -1144,9 +955,7 @@ public final class PackChain {
 			this.seed.release();
 		}
 
-		if (this.terrain != null) {
-			this.terrain.release();
-		}
+		this.terrain.release();
 
 		if (this.block != null) {
 			this.block.close();
