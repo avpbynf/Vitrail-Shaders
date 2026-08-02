@@ -1,0 +1,135 @@
+package dev.vitrail.uniform.values;
+
+import dev.vitrail.uniform.UniformCatalog;
+import dev.vitrail.uniform.UniformShape;
+import dev.vitrail.uniform.Val;
+import dev.vitrail.uniform.WorldState;
+
+import org.joml.Matrix4f;
+import org.joml.Vector4f;
+
+/**
+ * The sky: where the sun, the moon and the shadow light are, in eye space.
+ * <p>
+ * These live before the projection, so no clip space convention touches them and they are the one
+ * family that carries over unchanged. Two things about them are counter-intuitive and are in the
+ * format rather than in the maths: the positions have length one hundred and are not normalised,
+ * and the moon is not the sun turned round, it is the same rotation applied to the same starting
+ * vector with a different angle.
+ * <p>
+ * Ported from Iris {@code uniforms/CelestialUniforms.java} at b0ae41c, with the rotations written
+ * out in JOML because {@code com.mojang.math.Axis} is a game type and cannot cross into this
+ * package. Three traps came with it, all of them the sort that produce a sky that is off by a
+ * quarter turn and otherwise convincing:
+ * <ul>
+ * <li>the angle a pack reads is the raw attribute plus ninety with <b>one</b> step of wrapping,
+ * not a modulus, and the discontinuity has to sit where it sits;</li>
+ * <li>{@code getMoonPosition} passes a y of minus one hundred that the function never reads, so
+ * the moon starts from the same {@code (0, 100, 0)} the sun does. Honouring that parameter is a
+ * hundred and eighty degree error;</li>
+ * <li>{@code upPosition} skips the sky angle entirely and carries a w of zero, so it is a
+ * direction and not a place.</li>
+ * </ul>
+ * The two dependencies Iris takes on its own pipeline object are cut: whether an end flash exists,
+ * and whether the pack asked its shadows to follow it, are both questions for the world state.
+ */
+public final class CelestialValues {
+
+	/**
+	 * Scratch. Every call overwrites all of it before reading any of it, so two passes of one frame
+	 * still get the same answer, which is the only invariant a source has to keep.
+	 */
+	private static final Matrix4f SCRATCH = new Matrix4f();
+	private static final Vector4f POSITION = new Vector4f();
+
+	private CelestialValues() {
+	}
+
+	public static void register(UniformCatalog.Builder builder) {
+		builder.add("sunAngle", UniformShape.FLOAT,
+				(world, out) -> out.set(sunAngle(world, true) / 360.0F));
+		builder.add("shadowAngle", UniformShape.FLOAT,
+				(world, out) -> out.set(sunAngle(world, isDay(world)) / 360.0F));
+
+		builder.add("sunPosition", UniformShape.VEC3, (world, out) -> celestial(world, true, out));
+		builder.add("moonPosition", UniformShape.VEC3, (world, out) -> celestial(world, false, out));
+		builder.add("upPosition", UniformShape.VEC3, (world, out) -> {
+			// The same fixed quarter turn as the sky, and deliberately not the sky angle: this one
+			// is where up is, not where the sun is.
+			SCRATCH.set(world.gbufferModelView()).rotateY((float) Math.toRadians(-90.0F));
+			POSITION.set(0.0F, 100.0F, 0.0F, 0.0F);
+			SCRATCH.transform(POSITION);
+			out.set(POSITION.x, POSITION.y, POSITION.z);
+		});
+
+		// The pack has to have opted in for this one, and not for the position below it. Where the
+		// light comes from is something a pack is written around; where the flash is is a fact.
+		builder.add("shadowLightPosition", UniformShape.VEC3, (world, out) -> {
+			if (inEndFlash(world) && world.endFlashShadows()) {
+				endFlash(world, out);
+			} else {
+				celestial(world, isDay(world), out);
+			}
+		});
+
+		builder.add("endFlashPosition", UniformShape.VEC3, (world, out) -> {
+			if (inEndFlash(world)) {
+				endFlash(world, out);
+			} else {
+				out.set(0.0F, 0.0F, 0.0F);
+			}
+		});
+
+		builder.add("endFlashIntensity", UniformShape.FLOAT,
+				(world, out) -> out.set(world.endFlashIntensity()));
+		builder.add("previousEndFlashIntensity", UniformShape.FLOAT,
+				(world, out) -> out.set(world.previousEndFlashIntensity()));
+	}
+
+	/** One step of wrapping, not a modulus. See the class note. */
+	private static float sunAngle(WorldState world, boolean sun) {
+		float angle = (sun ? world.sunAngleDegrees() : world.moonAngleDegrees()) + 90.0F;
+		if (angle < 0.0F) {
+			angle += 360.0F;
+		} else if (angle > 360.0F) {
+			angle -= 360.0F;
+		}
+
+		return angle;
+	}
+
+	private static boolean isDay(WorldState world) {
+		return sunAngle(world, true) < 180.0F;
+	}
+
+	private static boolean inEndFlash(WorldState world) {
+		return world.dimensionOrdinal() == 1 && world.hasEndFlash();
+	}
+
+	/**
+	 * The transformation the sky renderer applies, moved forward so that a pack can read the result
+	 * before vanilla performs it. The angle is the <b>raw</b> attribute, not the wrapped one the
+	 * {@code sunAngle} uniform carries.
+	 */
+	private static void celestial(WorldState world, boolean sun, Val out) {
+		SCRATCH.set(world.gbufferModelView())
+				.rotateY((float) Math.toRadians(-90.0F))
+				.rotateZ((float) Math.toRadians(world.sunPathRotation()))
+				.rotateX((float) Math.toRadians(
+						sun ? world.sunAngleDegrees() : world.moonAngleDegrees()));
+
+		POSITION.set(0.0F, 100.0F, 0.0F, 1.0F);
+		SCRATCH.transform(POSITION);
+		out.set(POSITION.x, POSITION.y, POSITION.z);
+	}
+
+	private static void endFlash(WorldState world, Val out) {
+		SCRATCH.set(world.gbufferModelView())
+				.rotateY((float) Math.toRadians(180.0F - world.endFlashYAngleDegrees()))
+				.rotateX((float) Math.toRadians(-90.0F - world.endFlashXAngleDegrees()));
+
+		POSITION.set(0.0F, 100.0F, 0.0F, 0.0F);
+		SCRATCH.transform(POSITION);
+		out.set(POSITION.x, POSITION.y, POSITION.z);
+	}
+}

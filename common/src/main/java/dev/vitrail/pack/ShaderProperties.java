@@ -53,6 +53,7 @@ public final class ShaderProperties {
 	private static final Pattern BLEND = Pattern.compile("^\\s*blend\\.([^=\\s.]+)(?:\\.(\\w+))?\\s*=\\s*(.*)$");
 	private static final Pattern ALPHA_TEST = Pattern.compile("^\\s*alphaTest\\.(\\S+)\\s*=\\s*(.*)$");
 	private static final Pattern SLIDERS = Pattern.compile("^\\s*sliders\\s*=\\s*(.*)$");
+	private static final Pattern END_FLASH_SHADOWS = Pattern.compile("^\\s*endFlashShadows\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern FLIP = Pattern.compile("^\\s*flip\\.([^=\\s.]+)\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern OTHER_KEY = Pattern.compile("^\\s*([A-Za-z_][\\w]*)[.=].*$");
@@ -78,6 +79,7 @@ public final class ShaderProperties {
 	private final int directiveCount;
 	private final int continuationCount;
 	private final boolean present;
+	private final boolean endFlashShadows;
 
 	private ShaderProperties(Builder builder) {
 		this.lines = List.copyOf(builder.lines);
@@ -102,6 +104,7 @@ public final class ShaderProperties {
 		this.directiveCount = builder.directiveCount;
 		this.continuationCount = builder.continuationCount;
 		this.present = builder.present;
+		this.endFlashShadows = builder.endFlashShadows;
 	}
 
 	public static ShaderProperties parse(ShaderPackSource source) throws IOException {
@@ -212,6 +215,15 @@ public final class ShaderProperties {
 				}
 			}
 
+			return;
+		}
+
+		// Whether the pack means its shadows to follow the End flash. Off unless the pack says so,
+		// which is what decides where the shadow light points in that one dimension, and no pack of
+		// the corpus writes it.
+		Matcher endFlash = END_FLASH_SHADOWS.matcher(line);
+		if (endFlash.matches()) {
+			builder.endFlashShadows = endFlash.group(1).trim().equalsIgnoreCase("true");
 			return;
 		}
 
@@ -525,6 +537,43 @@ public final class ShaderProperties {
 	}
 
 	/**
+	 * The uniforms the pack declares for itself, in the order it writes them, with the
+	 * conditionals around them evaluated and the engine's symbols substituted into the expression.
+	 * <p>
+	 * Both halves of that are load bearing, and reading the file flat gets both wrong. BSL writes
+	 * its eleven biome uniforms twice, once against {@code BIOME_*} and once against the numeric
+	 * identifiers of an older Minecraft, under an {@code #if} on the version; flat reading takes
+	 * the second set and lands every biome on the wrong one. Bliss writes
+	 * {@code variable.float.lightningFlash} three times in three branches, the last of which is
+	 * the constant zero. And an expression that still says {@code BIOME_GROVE} does not parse at
+	 * all, because the evaluator has no such name.
+	 */
+	public List<CustomUniform> customUniforms(Map<String, String> defines) {
+		List<CustomUniform> uniforms = new ArrayList<>();
+		ConditionStack conditions = new ConditionStack();
+
+		for (String line : this.lines) {
+			Matcher directive = DIRECTIVE.matcher(line);
+			if (directive.matches()) {
+				applyDirective(directive.group(1), line, conditions, defines);
+				continue;
+			}
+
+			if (!conditions.active()) {
+				continue;
+			}
+
+			Matcher uniform = CUSTOM_UNIFORM.matcher(line);
+			if (uniform.matches()) {
+				uniforms.add(new CustomUniform(uniform.group(1).equals("uniform"), uniform.group(2),
+						uniform.group(3), Macros.expand(uniform.group(4).trim(), defines)));
+			}
+		}
+
+		return uniforms;
+	}
+
+	/**
 	 * The settings a profile chooses. A profile may pull in another one, so this resolves the
 	 * chain; the later choice wins, which is what lets a profile refine the one it includes.
 	 */
@@ -563,6 +612,15 @@ public final class ShaderProperties {
 
 	public boolean present() {
 		return this.present;
+	}
+
+	/**
+	 * Whether the pack asked for its shadows to follow the End flash, off unless it says otherwise.
+	 * It is the pack opting in, so it decides where the shadow light points in the End and nothing
+	 * else; the flash's own position is published either way.
+	 */
+	public boolean endFlashShadows() {
+		return this.endFlashShadows;
 	}
 
 	/** Each profile's unexpanded body, in the order the pack declares them. */
@@ -679,6 +737,13 @@ public final class ShaderProperties {
 		}
 	}
 
+	/**
+	 * One {@code uniform.<type>.<name>} or {@code variable.<type>.<name>} line. A {@code uniform.}
+	 * reaches the shader, a {@code variable.} is only there for the ones that do.
+	 */
+	public record CustomUniform(boolean exposed, String type, String name, String expression) {
+	}
+
 	/** How a program wants its output blended, either off or four GL factors. */
 	public record BlendDirective(String program, String buffer, String value) {
 
@@ -709,5 +774,6 @@ public final class ShaderProperties {
 		private int directiveCount;
 		private int continuationCount;
 		private boolean present;
+		private boolean endFlashShadows;
 	}
 }

@@ -2,7 +2,7 @@ Third-party material in Vitrail
 ===============================
 
 Vitrail is distributed under the GNU Lesser General Public License version 3, in LICENSE.
-The file below contains material from another project, reused under that project's own terms.
+The files below contain material from another project, reused under that project's own terms.
 
 Iris, https://github.com/IrisShaders/Iris
 Copyright the Iris contributors
@@ -47,5 +47,103 @@ GNU Lesser General Public License version 3
   left out of it as they are there. The order the frame runs in, which the same file also carries,
   is not that one and is not from Iris.
 
-  Nothing else in Vitrail is derived from Iris. In particular nothing is taken from its GLSL
-  transformation code, which links against glsl-transformer (AGPL-3.0).
+  common/src/main/java/dev/vitrail/pack/PackDirectives.java gathers the settings a pack declares
+  about itself with the names, the defaults and the precedence of
+  net.irisshaders.iris.shaderpack.properties.PackDirectives and of its shadow counterpart,
+  PackShadowDirectives, adapted in August 2026. That includes one behaviour that is a mistake
+  there and is reproduced deliberately, with a comment saying so: both the wetnessHalflife and the
+  drynessHalflife directives are registered against the rise of wetness, so no pack can change its
+  fall, and packs are written against that. SHADOWHPL, which is a comment directive rather than a
+  const one, is not implemented.
+
+  common/src/main/java/dev/vitrail/pack/EngineDefines.java classifies the operating system, the
+  vendor and the driver into the symbols a pack branches on with the prefix lists of
+  net.irisshaders.iris.gl.shader.StandardMacros, and emits the biome, category and precipitation
+  symbols the way net.irisshaders.iris.shaderpack.IrisDefines emits them, adapted in August 2026.
+  The lists are arguments here rather than calls into a device, so that the table can be built
+  without one.
+
+  common/src/main/java/dev/vitrail/uniform/Smoothed.java adapts the exponential smoothing of
+  net.irisshaders.iris.uniforms.transforms.SmoothedFloat in August 2026, including its half life in
+  deciseconds, its separate rise and fall constants and its lack of smoothing on the first value.
+  The value, the half lives and the frame duration are passed in rather than pulled from a supplier
+  and a global frame clock.
+
+  common/src/main/java/dev/vitrail/uniform/NoiseTexture.java adapts the noise image of
+  net.irisshaders.iris.targets.backed.NativeImageBackedNoiseTexture in August 2026, seed and loop
+  order included, since a pack indexes that image with coordinates of its own. The pixels are laid
+  out into a byte array here rather than through the game's image class.
+
+  common/src/main/java/dev/vitrail/uniform/BiomeCategory.java is the enum
+  net.irisshaders.iris.parsing.BiomeCategories, copied in August 2026 in its own order because the
+  ordinal is the value a pack compares against.
+
+  common/src/main/java/dev/vitrail/uniform/expr/kroppeb/stareval/ is stareval, by Kroppeb,
+  fifty-eight files taken from Iris at commit b0ae41c in August 2026 and relocated under this
+  package so that nothing collides if Iris is installed alongside. The author's own package name
+  is kept inside the path. Three edits: Type.convert answers a UniformShape instead of Iris's GL
+  uniform type enum and gained the reverse direction; FunctionResolver.logAllFunctions, which
+  printed the table to standard output, became names(), which a test can compare against; and
+  fastutil's collections became the JDK's.
+
+  common/src/main/java/dev/vitrail/uniform/expr/ExprFunctions.java,
+  common/src/main/java/dev/vitrail/uniform/expr/ExprGrammar.java,
+  common/src/main/java/dev/vitrail/uniform/expr/VectorType.java,
+  common/src/main/java/dev/vitrail/uniform/expr/MatrixType.java,
+  common/src/main/java/dev/vitrail/uniform/expr/VectorConstructor.java,
+  common/src/main/java/dev/vitrail/uniform/expr/VectorizedFunction.java and
+  common/src/main/java/dev/vitrail/uniform/expr/BooleanVectorizedFunction.java come from
+  net.irisshaders.iris.parsing, same commit and same date, renamed where the old name said Iris.
+  The OptiFine documentation in the header of IrisFunctions is kept word for word: it is the only
+  statement of the contract these packs were written against. Two changes of substance. The six
+  overloads of smooth are built by one method rather than written out, and they take the frame
+  duration from the evaluation context instead of a global timer, so that the smoothing itself is
+  the one in dev.vitrail.uniform.Smoothed rather than a second copy of it. And an implicit cast
+  from int to bool is registered, which Iris does not need: it types a boolean uniform as a
+  boolean, where our catalogue has no boolean shape and hands one over as an integer.
+
+  common/src/main/java/dev/vitrail/uniform/expr/CustomUniforms.java follows the dependency graph of
+  net.irisshaders.iris.uniforms.custom.CustomUniforms, adapted in August 2026: the topological
+  sort, the propagation of a broken uniform to everything that reads it, the refusal of a name that
+  shadows a built in one, and the six types a declaration may take. Two divergences, both stated in
+  the file: a cycle drops the uniforms it runs through and names them where Iris throws, and what
+  survives is pruned by walking back from the exposed uniforms rather than by counting references.
+  HardcodedCustomUniforms, which supplies eleven of these names when a pack does not, is not
+  reused: it is unreachable in Iris.
+
+  common/src/main/java/dev/vitrail/render/FrameState.java reads the frame the way several of the
+  net.irisshaders.iris.uniforms classes read it, adapted in August 2026: the millisecond
+  quantisation and the two wrapping points of SystemTimeUniforms, the walk and teleport ranges of
+  CameraUniforms.CameraPositionTracker together with the fact that only two axes are ever shifted,
+  the Nether and End exception of WorldTimeUniforms, and the sentinels, the ratios and the fixed
+  maxima of IrisExclusiveUniforms. Each of them is marked in the file at the point it is used, with
+  the ones that are mistakes there named as such. What is not reused is the surrounding machinery:
+  the values are read into fields at one named point in the frame rather than pulled through
+  suppliers at a registration frequency, and nothing here holds a uniform.
+
+  common/src/main/java/dev/vitrail/render/ViewMatrices.java builds the four shadow matrices with
+  the construction of net.irisshaders.iris.shadows.ShadowMatrices and of
+  net.irisshaders.iris.shadows.ShadowRenderer, adapted in August 2026: the choice of casting body,
+  the rotation order, and the grid snapping down to its negative remainder, which is a rounding
+  mistake there that packs are written against. The rotations are written out in JOML rather than
+  stacked on a PoseStack, since no game type may cross into the value package, and the orthographic
+  matrix is always built in the legacy volume because this one is published and never drawn with.
+
+  common/src/main/java/dev/vitrail/uniform/values/CelestialValues.java carries the celestial
+  positions of net.irisshaders.iris.uniforms.CelestialUniforms, adapted in August 2026: the single
+  step of wrapping, the starting vector of length one hundred, the unread y of the moon, and the w
+  of zero on the up vector. Same rewriting of the rotations, and the two calls into Iris's own
+  pipeline object are replaced by questions to the world state.
+
+  common/src/main/java/dev/vitrail/uniform/values/DrawValues.java takes the quad projection of
+  net.irisshaders.iris.pipeline.transform.transformer.CompositeTransformer as a literal, since it
+  is what the packs are written for. Its inverse is written out rather than computed, because the
+  matrix is singular and inverting it yields infinities; that constant is this project's own.
+
+  common/src/main/java/dev/vitrail/render/BiomeClassifier.java reproduces the cascade of
+  net.irisshaders.iris.uniforms.BiomeUniforms in August 2026, in its order, because the order is
+  what decides a biome carrying two tags. The two gaps are reproduced with it and named in the
+  file: no category is ever answered UNDERGROUND, and a savanna comes out as plains.
+
+  Nothing else in Vitrail is derived from Iris, and nothing is taken from its GLSL transformation
+  machinery, which links against glsl-transformer (AGPL-3.0).

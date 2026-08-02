@@ -25,7 +25,6 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.util.Mth;
-import org.joml.Matrix4f;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -132,13 +131,6 @@ public final class PackChain {
 			1.0F, 1.0F, 0.0F, 1.0F, 1.0F,
 			0.0F, 1.0F, 0.0F, 0.0F, 1.0F };
 
-	/** Carries that quad from (0,1) to clip space. Iris uses this one, so packs are written for it. */
-	private static final Matrix4f QUAD_PROJECTION = new Matrix4f().set(
-			2.0F, 0.0F, 0.0F, 0.0F,
-			0.0F, 2.0F, 0.0F, 0.0F,
-			0.0F, 0.0F, 0.0F, 0.0F,
-			-1.0F, -1.0F, 0.0F, 1.0F);
-
 	private static final Supplier<String> BLOCK_LABEL = () -> "Vitrail OfGlobals";
 	private static final Supplier<String> QUAD_LABEL = () -> "Vitrail quad";
 
@@ -153,6 +145,7 @@ public final class PackChain {
 	private static volatile boolean packsFirst = true;
 
 	private final PackProgram.Chain chain;
+	private final PackValues values;
 	private final ColorTargets targets;
 	private final SceneSeed seed;
 	private final boolean seedEnabled;
@@ -165,11 +158,11 @@ public final class PackChain {
 	private CompiledRenderPipeline head;
 	private int blockBytes;
 	private int warmed;
-	private long firstFrameNanos;
 	private boolean announced;
 
-	private PackChain(PackProgram.Chain chain, boolean seedEnabled) {
+	private PackChain(PackProgram.Chain chain, PackValues values, boolean seedEnabled) {
 		this.chain = chain;
+		this.values = values;
 		this.seedEnabled = seedEnabled;
 		this.load = LOADS.incrementAndGet();
 
@@ -211,6 +204,10 @@ public final class PackChain {
 			ChainFilter filter = filterOf(chosen.remove(PASSES_KEY));
 			packsFirst = packsFirst(chosen.remove(SCREEN_KEY));
 
+			// Before the translation and not after: this is what installs the machine's own
+			// symbols, and the biome ones among them decide which branch of the pack compiles.
+			PackValues values = PackValues.read(pack, OVERWORLD, chosen, settings.profile());
+
 			long began = System.nanoTime();
 			Optional<PackProgram.Chain> read = PackProgram.loadChain(pack, OVERWORLD, chosen,
 					settings.profile(), filter);
@@ -240,7 +237,8 @@ public final class PackChain {
 				return;
 			}
 
-			active = new PackChain(chain, seed == null || !seed.isBoolean() || seed.asBoolean());
+			active = new PackChain(chain, values,
+					seed == null || !seed.isBoolean() || seed.asBoolean());
 		} catch (IOException | RuntimeException e) {
 			disabled = true;
 			lastError = "Could not prepare this pack: " + e;
@@ -468,12 +466,19 @@ public final class PackChain {
 		long stamp = stamp(gameDirectory);
 		boolean first = lastStamp == 0L && !checked;
 		checked = true;
-		if (stamp == lastStamp || first) {
+		// A stale machine is not a first sighting and is never skipped. The pack was read while
+		// the client was starting up, so it had no biome symbol to compile against and took the
+		// branch meant for an engine that cannot answer them; joining a world is what makes those
+		// symbols exist, and it happens after the first look at these files.
+		boolean stale = PackDefines.stale();
+		if ((stamp == lastStamp || first) && !stale) {
 			lastStamp = stamp;
 			return;
 		}
 
-		Vitrail.logger().info("Settings changed on disk, reloading the pack");
+		Vitrail.logger().info(stale
+				? "The world's own symbols are known now, reloading the pack against them"
+				: "Settings changed on disk, reloading the pack");
 		reload(gameDirectory);
 	}
 
@@ -498,6 +503,9 @@ public final class PackChain {
 		// without leaving the game.
 		disabled = false;
 		load(gameDirectory);
+		// A load that gave up before reading a pack settled nothing, and without this the folder
+		// with no pack in it would be looked at again a second later, and every second after that.
+		PackDefines.settle();
 
 		lastStamp = stamp(gameDirectory);
 		checked = true;
@@ -595,7 +603,7 @@ public final class PackChain {
 		boolean seeding = this.seed != null && this.seedEnabled && this.seed.prepare(device);
 
 		announce(main, seeding);
-		writeBlocks(main);
+		writeBlocks();
 
 		// One encoder for the whole frame. A second one would be a fresh wrapper carrying its own
 		// idea of whether a pass is open, which is the guard that keeps allocations out of one.
@@ -673,7 +681,7 @@ public final class PackChain {
 			}
 
 			built.add(new PackPass(this.chain.place(), pass.program(), loaded, pass, this.targets,
-					this.load, offset));
+					this.values, this.load, offset));
 			offset += Mth.roundToward(PackPass.uniformSizeOf(loaded), alignment);
 		}
 
@@ -767,26 +775,18 @@ public final class PackChain {
 	 * Fills every program's block in one mapping. A builder aligns from where it was handed the
 	 * buffer, so each block is written at its own offset and measured as though it started there.
 	 */
-	private void writeBlocks(RenderTarget main) {
-		if (this.firstFrameNanos == 0L) {
-			this.firstFrameNanos = System.nanoTime();
-		}
-
-		Minecraft minecraft = Minecraft.getInstance();
-		// OptiFine's counter is seconds since the world was entered and wraps at an hour, which
-		// keeps the precision of a float usable for the packs that drive noise with it.
-		float seconds = (float) (((System.nanoTime() - this.firstFrameNanos) / 1.0E9D) % 3600.0D);
-		float rain = minecraft.level == null ? 0.0F : minecraft.level.getRainLevel(1.0F);
-		boolean sneaking = minecraft.player != null && minecraft.player.isShiftKeyDown();
-
-		PackUniforms.Frame frame = new PackUniforms.Frame(main.width, main.height, seconds, rain,
-				sneaking, QUAD_PROJECTION);
+	private void writeBlocks() {
+		// The one point in the frame where the clocks, the counters and the previous frame's
+		// matrices move, and it is before the first block is written on purpose: two passes of one
+		// frame have to be handed the same numbers, or the second one silently reprojects against
+		// itself and a smooth() of the pack fades at twice the speed.
+		this.values.advance();
 
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();
 			for (PackPass pass : this.programs) {
 				data.position(pass.uniformOffset());
-				pass.write(Std140Builder.intoBuffer(data), frame);
+				pass.write(Std140Builder.intoBuffer(data), this.values.world());
 			}
 		}
 	}
@@ -827,6 +827,10 @@ public final class PackChain {
 					+ "frame, because the pack keeps them and the chain left them there: {}",
 					back.size(), back);
 		}
+
+		// The values the pack declares for itself, once for the whole chain: every program was
+		// built against the one catalogue, so a pass saying it would say it once per program.
+		this.values.notes().forEach(note -> Vitrail.logger().info("{}", note));
 
 		// What the picture will be wrong about, in the pack's own terms and naming the pass that
 		// reads it. This is the list that has to be read before the image is, or the image gets

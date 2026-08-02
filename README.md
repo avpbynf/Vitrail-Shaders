@@ -178,6 +178,7 @@ a set of additional permissions on top of the ordinary GPL rather than as a
 standalone document, so a copy of that one is in [GPL-3.0.txt](GPL-3.0.txt) as
 well. Both are needed to read either.
 
-One table in the pack loader, the gbuffers fallback chain, is adapted from Iris.
-Iris is LGPL-3.0 as well, so nothing about the licensing of this repository
-changes. The details are in [NOTICE](NOTICE).
+Parts of the pack loader and of the value catalogue are adapted from Iris, which
+is the reference for what a pack expects. Iris is LGPL-3.0 as well, so nothing
+about the licensing of this repository changes. Every file concerned is listed,
+one by one, in [NOTICE](NOTICE).

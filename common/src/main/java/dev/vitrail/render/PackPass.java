@@ -7,6 +7,7 @@ import dev.vitrail.pack.ChainPlan;
 import dev.vitrail.pack.ProgramStage;
 import dev.vitrail.pack.SamplerPlan;
 import dev.vitrail.pack.TargetName;
+import dev.vitrail.uniform.WorldState;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
@@ -95,6 +96,7 @@ final class PackPass {
 	private final PackProgram.Loaded loaded;
 	private final ChainPlan.Pass pass;
 	private final List<ChainPlan.Attachment> attachments;
+	private final PackValues values;
 	private final PackUniforms uniforms;
 	private final List<String> samplers;
 	private final RenderPipeline pipeline;
@@ -115,12 +117,15 @@ final class PackPass {
 	 *                attachments mean the {@code final}, which writes the game's own target
 	 * @param targets consulted for the format of each attachment, which the pipeline has to agree
 	 *                with exactly, and never held
+	 * @param values  what the pack is answered with: its catalogue fills this program's block, and
+	 *                its reading of the pack tells a name the pack owes itself from one this engine
+	 *                owes
 	 * @param load    the load counter, so that no two loads name their shaders alike
 	 * @param offset  where this program's block sits in the chain's one ring buffer, already
 	 *                rounded to the device's minimum uniform offset alignment
 	 */
 	PackPass(String place, String program, PackProgram.Loaded loaded, ChainPlan.Pass pass,
-			ColorTargets targets, int load, int offset) {
+			ColorTargets targets, PackValues values, int load, int offset) {
 		this.path = place.isEmpty() ? program : place + "/" + program;
 		this.loaded = loaded;
 		this.pass = pass;
@@ -128,7 +133,8 @@ final class PackPass {
 		this.offset = offset;
 		this.last = this.attachments.isEmpty();
 		this.label = () -> "Vitrail " + this.path;
-		this.uniforms = new PackUniforms(loaded.program().uniforms());
+		this.values = values;
+		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.catalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
 
 		if (this.attachments.size() > MAX_ATTACHMENTS) {
@@ -239,8 +245,8 @@ final class PackPass {
 		return Math.max(16, new PackUniforms(loaded.program().uniforms()).size());
 	}
 
-	void write(Std140Builder into, PackUniforms.Frame frame) {
-		this.uniforms.write(into, frame);
+	void write(Std140Builder into, WorldState world) {
+		this.uniforms.write(into, world);
 	}
 
 	/** Two for the block and the globals, then one per sampler. Logged for every program. */
@@ -406,10 +412,36 @@ final class PackPass {
 					+ "the " + PUSH_DESCRIPTORS + " a device commonly allows pushed at once");
 		}
 
-		List<String> unsupplied = this.uniforms.unsupplied();
-		if (!unsupplied.isEmpty()) {
-			this.notes.add(this.path + " reads " + unsupplied.size() + " values written as zeroes "
-					+ "because nothing supplies them yet: " + unsupplied);
+		// What the block could not be given, said as the three different things it is rather than
+		// as one number. A name the pack declares for itself is ours to resolve and the reason is
+		// a line above this one; a name waiting on machinery nobody runs is not a hole in the
+		// catalogue; and only what is left is a value this engine owes.
+		PackValues.Gaps gaps = this.values.classify(this.uniforms.unsupplied());
+		if (!gaps.engine().isEmpty()) {
+			this.notes.add(this.path + " reads " + gaps.engine().size() + " values written as "
+					+ "zeroes because this engine does not supply them yet: " + gaps.engine());
+		}
+
+		if (!gaps.pack().isEmpty()) {
+			this.notes.add(this.path + " reads " + gaps.pack().size() + " values "
+					+ this.loaded.packName() + " declares for itself, and none of those "
+					+ "declarations survived: " + gaps.pack());
+		}
+
+		if (!gaps.awaited().isEmpty()) {
+			this.notes.add(this.path + " reads " + gaps.awaited().size() + " values that wait on a "
+					+ "pass that does not run yet: " + gaps.awaited());
+		}
+
+		// Underneath the three, the members that count as supplied and are not: a zero that
+		// arrived through a registered source is the one failure a screenshot can never show.
+		List<String> standIns = PackValues.standIns(this.loaded.program().uniforms().stream()
+				.map(TranslatedUnit.Uniform::name)
+				.toList());
+		if (!standIns.isEmpty()) {
+			this.notes.add(this.path + " reads " + standIns.size() + " values answered with a "
+					+ "stand-in rather than with a value, which count as supplied everywhere else: "
+					+ standIns);
 		}
 
 		List<String> unserved = this.loaded.samplers().unserved();

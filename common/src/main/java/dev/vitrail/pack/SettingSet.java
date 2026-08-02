@@ -31,7 +31,7 @@ public final class SettingSet {
 		Map<String, OptionValue> chosen = new LinkedHashMap<>(profile);
 		chosen.putAll(user);
 
-		return new SettingSet(chosen, EngineDefines.table(EngineDefines.DEFAULT_MC_VERSION), variantName);
+		return new SettingSet(chosen, EngineDefines.table(EngineDefines.machine()), variantName);
 	}
 
 	public static SettingSet defaults() {

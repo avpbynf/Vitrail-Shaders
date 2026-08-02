@@ -1,0 +1,134 @@
+package dev.vitrail.uniform;
+
+import dev.vitrail.uniform.values.CameraValues;
+import dev.vitrail.uniform.values.CelestialValues;
+import dev.vitrail.uniform.values.DhValues;
+import dev.vitrail.uniform.values.DrawValues;
+import dev.vitrail.uniform.values.MatrixValues;
+import dev.vitrail.uniform.values.PlayerValues;
+import dev.vitrail.uniform.values.ShadowMatrixValues;
+import dev.vitrail.uniform.values.TimeValues;
+import dev.vitrail.uniform.values.WeatherValues;
+import dev.vitrail.uniform.values.WorldValues;
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * The name to source table. Built once, statically, split across the values package.
+ * <p>
+ * A name that is not in the table is not an error and is not guessed at: the block writes zeroes
+ * for it and says the name out loud once. That is the difference between a gap you can read in a
+ * log and a wrong image nobody can explain.
+ * <p>
+ * The engine table is a partition, so registering a name twice is a mistake rather than an
+ * intention and {@link #builder()} refuses it. A pack's own uniforms are a different matter: they
+ * are layered on top with {@link #builder(UniformCatalog)}, where shadowing an engine name is
+ * exactly what the layering is for.
+ */
+public final class UniformCatalog {
+
+	private static volatile UniformCatalog engine;
+
+	private final Map<String, Entry> entries;
+
+	private UniformCatalog(Map<String, Entry> entries) {
+		this.entries = entries;
+	}
+
+	private record Entry(UniformShape natural, UniformSource source) {
+	}
+
+	/**
+	 * Cached. Calls the register method of every class in the values package, in a fixed order.
+	 * <p>
+	 * The order is fixed because it is the order a duplicate would be reported in, not because
+	 * anything downstream depends on it: a block is walked in the order the translation fixed, and
+	 * this table is only ever looked up by name.
+	 */
+	public static UniformCatalog engine() {
+		UniformCatalog built = engine;
+		if (built != null) {
+			return built;
+		}
+
+		synchronized (UniformCatalog.class) {
+			if (engine == null) {
+				Builder builder = builder();
+				DrawValues.register(builder);
+				CameraValues.register(builder);
+				MatrixValues.register(builder);
+				ShadowMatrixValues.register(builder);
+				DhValues.register(builder);
+				CelestialValues.register(builder);
+				TimeValues.register(builder);
+				WeatherValues.register(builder);
+				WorldValues.register(builder);
+				PlayerValues.register(builder);
+				engine = builder.build();
+			}
+
+			return engine;
+		}
+	}
+
+	public static Builder builder() {
+		return new Builder(Map.of());
+	}
+
+	/** Starts from an existing catalogue, so a pack's own uniforms can be layered on the engine. */
+	public static Builder builder(UniformCatalog base) {
+		return new Builder(base.entries);
+	}
+
+	/** null when the name is not in the table. */
+	public UniformSource source(String name) {
+		Entry entry = this.entries.get(name);
+
+		return entry == null ? null : entry.source();
+	}
+
+	public UniformShape natural(String name) {
+		Entry entry = this.entries.get(name);
+
+		return entry == null ? null : entry.natural();
+	}
+
+	public Set<String> names() {
+		return Collections.unmodifiableSet(this.entries.keySet());
+	}
+
+	public static final class Builder {
+
+		private final Map<String, Entry> entries;
+
+		/** Names this builder registered itself, which is what a duplicate is measured against. */
+		private final Set<String> added = new HashSet<>();
+
+		private Builder(Map<String, Entry> base) {
+			this.entries = new LinkedHashMap<>(base);
+		}
+
+		/**
+		 * @param natural the shape the engine holds the value in, which is not necessarily the one
+		 *                a program declares it under. The declaration decides what is written; this
+		 *                only says what there is to write.
+		 */
+		public Builder add(String name, UniformShape natural, UniformSource source) {
+			if (!this.added.add(name)) {
+				throw new IllegalStateException(name + " is registered twice in the same catalogue");
+			}
+
+			this.entries.put(name, new Entry(natural, source));
+
+			return this;
+		}
+
+		public UniformCatalog build() {
+			return new UniformCatalog(Collections.unmodifiableMap(new LinkedHashMap<>(this.entries)));
+		}
+	}
+}

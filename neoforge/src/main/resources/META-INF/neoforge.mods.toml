@@ -22,6 +22,9 @@ the game already ships. Nothing is translated per frame.
 Still early: the machinery underneath works, but no pack is rendered yet.
 '''
 
+[[mixins]]
+config = "vitrail.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId = "minecraft"
 type = "required"

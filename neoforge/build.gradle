@@ -59,4 +59,12 @@ tasks.named("processResources", ProcessResources).configure {
 tasks.named("jar", Jar).configure {
 	archiveVersion = "${project.mod_version}+mc${project.minecraft_version}"
 	from project(":common").sourceSets.main.output
+
+	// The licence has to reach whoever receives the program, and what they receive is this jar.
+	// A licence field in the metadata is a declaration, not a copy.
+	from(rootDir) {
+		include "LICENSE"
+		include "GPL-3.0.txt"
+		include "NOTICE"
+	}
 }

@@ -162,7 +162,7 @@ public final class GlslTranslator {
 	 */
 	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, boolean fullscreen) {
 		GlslTranslator translator = new GlslTranslator(unit, stage,
-				EngineDefines.table(EngineDefines.DEFAULT_MC_VERSION), fullscreen);
+				EngineDefines.table(EngineDefines.machine()), fullscreen);
 		translator.rewrite();
 
 		return new Stage(translator);
