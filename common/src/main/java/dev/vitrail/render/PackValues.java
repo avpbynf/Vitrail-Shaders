@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
+import dev.vitrail.pack.BlockIds;
 import dev.vitrail.pack.OptionIndex;
 import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.PackDirectives;
@@ -82,6 +83,11 @@ public final class PackValues {
 			values.state.directives(PackDirectives.read(source, options, settings, dimension));
 			values.state.endFlashShadows(properties.endFlashShadows());
 			values.declare(properties, settings.globalDefines(options));
+
+			// Read against the same settings as everything above, which is not a formality: BSL wraps
+			// all its declarations in one conditional and keeps a fifth of them under the #else, so a
+			// reading with an empty table measures a different pack.
+			BlockStateIds.install(BlockIds.read(source, settings.globalDefines(options)));
 		}
 
 		return values;

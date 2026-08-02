@@ -64,6 +64,16 @@ public final class TerrainDraw {
 	}
 
 	/**
+	 * The same, for the side that has to decide what the chunk mesh carries.
+	 * <p>
+	 * That decision is taken once for the whole run and never revisited, so this is read at a moment
+	 * of somebody else's choosing rather than per frame, and a pack loaded later cannot move it.
+	 */
+	public static boolean asked() {
+		return wanted;
+	}
+
+	/**
 	 * Answers the pipeline to draw the opaque terrain with, reading and translating the pack's
 	 * program the first time it is asked.
 	 *

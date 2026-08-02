@@ -10,7 +10,7 @@ import java.util.Set;
 /**
  * What Sodium's chunk mesh carries, and how the names a pack reads are made out of it.
  * <p>
- * The mesh is twenty bytes, laid out as follows. {@code a_Position} holds three coordinates of
+ * Sodium's own twenty bytes are laid out as follows. {@code a_Position} holds three coordinates of
  * twenty bits each, split so that the top ten bits of x, y and z sit at bits 0, 10 and 20 of its
  * first component and the bottom ten at the same places of its second; a coordinate counts
  * thirty-two blocks over its full range and starts eight blocks before the section, which is the
@@ -18,18 +18,17 @@ import java.util.Set;
  * multiplied by the ambient occlusion. {@code a_TexCoord} keeps fifteen bits of texture coordinate
  * per axis and spends its top bit on which side of the sprite the corner lies. {@code a_LightAndData}
  * holds the block light, the sky light, a byte of material bits and the index of the draw command,
- * one per byte.
+ * one per byte. The twenty-first to twenty-fourth are this engine's own and hold the block id.
  * <p>
  * <strong>Sodium is under the PolyForm Shield licence, which this project cannot take code
  * from.</strong> So what is written below is this engine's own reading of that layout and not a
  * transcription of Sodium's shader: the layout is a fact about the bytes, the way of undoing it is
  * ours. Nothing here is copied, and nothing here may be replaced by something copied.
  * <p>
- * <strong>Three of the names a pack reads are not in the mesh at all.</strong> There is no block id,
- * no mid texture coordinate and no tangent, so those are given a constant and named in the log. The
- * normal is not among them any more: the facing rides in the spare bits of the material byte, which
- * costs the mesh nothing. Providing the block id for real is what still needs a fifth element on the
- * format.
+ * <strong>Two of the names a pack reads are still not in the mesh.</strong> There is no mid texture
+ * coordinate and no tangent, so those are given a constant and named in the log. The normal is not
+ * among them: the facing rides in the spare bits of the material byte, which costs the mesh nothing.
+ * Neither is the block id, which is the fifth element and the one thing here that does cost bytes.
  * <p>
  * The region offset arrives through push constants, which is the one thing here that has to be got
  * right or nothing else matters. blaze3d never declares a push constant range; Sodium adds one, and
@@ -42,18 +41,34 @@ public final class SodiumVertex {
 	/** What the prologue is called. The wrapper around the pack's own {@code main} calls it. */
 	public static final String PROLOGUE = "ofSodiumVertex";
 
-	/** The elements of {@code CompactChunkVertex}, in order. The format must carry these and no more. */
+	/**
+	 * The block id, packed as Iris packs it: {@code ((id + 1) << 1) | isFluid}, so that nought means
+	 * no declaration matched and comes back out as the -1 every pack tests against.
+	 * <p>
+	 * The fifth element of the format and the only one this engine adds. It is last on purpose:
+	 * an element a shader does not declare shifts the location of every element AFTER it, silently,
+	 * and Sodium's own chunk shader declares the first four and not this one.
+	 */
+	public static final String BLOCK_ID = "a_BlockId";
+
+	/** The elements of the chunk mesh, in order. The format must carry these and no more. */
 	public static final List<String> ATTRIBUTES =
-			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData");
+			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID);
 
 	/**
-	 * Vertex inputs a pack declares for itself that the chunk mesh does not carry. A declaration of
-	 * one of these is taken out of the body and reappears in the header as an ordinary global with a
-	 * value, so that the pack compiles and reads a constant instead of an attribute nothing fills.
+	 * Vertex inputs a pack declares for itself that are not elements of the chunk mesh. A declaration
+	 * of one of these is taken out of the body and reappears in the header as an ordinary global with
+	 * a value, so that the pack compiles and reads that value instead of an attribute nothing fills.
 	 */
 	public static final Set<String> SYNTHESIZED =
 			Set.of("mc_Entity", "mc_midTexCoord", "mc_chunkFade", "at_tangent", "at_midBlock",
 					"vaPosition", "vaNormal", "vaColor", "vaUV0", "vaUV1", "vaUV2", "dhMaterialId");
+
+	/**
+	 * The ones of those the mesh answers for real, out of an element under another name. What is
+	 * left of {@link #SYNTHESIZED} after this is what the log has to call a constant.
+	 */
+	public static final Set<String> ANSWERED = Set.of("mc_Entity");
 
 	/**
 	 * Where the quad's facing sits in the material byte, and why there is room for it.
@@ -132,18 +147,25 @@ public final class SodiumVertex {
 				+ "vec3(0.0, 1.0, 0.0));");
 
 		// The pack's own declaration first, so that a pack asking for a vec2 mc_Entity gets a vec2.
-		synthesized.forEach((name, type) -> lines.add(declare(type, name)));
+		Map<String, String> globals = new LinkedHashMap<>(synthesized);
 		FIXED.forEach((name, type) -> {
 			if (used.contains(name) && !synthesized.containsKey(name)) {
-				lines.add(declare(type, name));
+				globals.put(name, type);
 			}
 		});
 
 		for (String name : SYNTHESIZED) {
 			if (used.contains(name) && !synthesized.containsKey(name)) {
-				lines.add(declare(defaultType(name), name));
+				globals.put(name, defaultType(name));
 			}
 		}
+
+		// A name the mesh answers is left uninitialised here and filled in the prologue below, like
+		// of_Vertex above it. A global initialiser that reads an attribute is not a constant
+		// expression, and the language does not allow one.
+		globals.forEach((name, type) -> lines.add(ANSWERED.contains(name)
+				? type + " " + name + ";"
+				: declare(type, name)));
 
 		// One coordinate out of the pair, given where its ten bit halves sit in each component.
 		lines.add("float ofAxis(uint at) {");
@@ -176,6 +198,12 @@ public final class SodiumVertex {
 		lines.add("\tof_MultiTexCoord1 = vec4(vec2(a_LightAndData.xy) / 256.0, 0.0, 1.0);");
 		lines.add("\tof_Normal = ofFacingNormals[int((a_LightAndData.z >> " + FACING_SHIFT
 				+ "u) & " + FACING_MASK + "u)];");
+		globals.forEach((name, type) -> {
+			if (ANSWERED.contains(name)) {
+				lines.add("\t" + name + " = " + entity(type) + ";");
+			}
+		});
+
 		lines.add("}");
 
 		return List.copyOf(lines);
@@ -186,6 +214,35 @@ public final class SodiumVertex {
 		String better = BETTER_DEFAULTS.get(name);
 
 		return better != null && better.startsWith(type + "(") ? better : zero(type);
+	}
+
+	/**
+	 * {@code mc_Entity} out of the packed element, in the shape the pack declared it under.
+	 * <p>
+	 * The unpacking is Iris's, term for term, because the packs are written against Iris and not
+	 * against a reading of OptiFine: {@code x} is the number from {@code block.properties} or -1
+	 * where nothing matched, and {@code y} is one for a fluid. The engine that writes the element has
+	 * to pack it the same way round, which is the only thing the two sides share.
+	 * <p>
+	 * A type this does not know keeps its zero, which is a pack reading {@code mc_Entity} as
+	 * something the corpus has never declared it as.
+	 */
+	private static String entity(String type) {
+		String id = "int(" + BLOCK_ID + " >> 1u) - 1";
+		String fluid = BLOCK_ID + " & 1u";
+
+		return switch (type) {
+			case "float", "int" -> id;
+			// Iris writes the signed form straight into a uint here, which no strict compiler takes.
+			case "uint" -> "uint(" + id + ")";
+			case "vec2" -> "vec2(" + id + ", " + fluid + ")";
+			case "vec3" -> "vec3(" + id + ", " + fluid + ", 0.0)";
+			case "vec4" -> "vec4(" + id + ", " + fluid + ", 0.0, 1.0)";
+			case "ivec2" -> "ivec2(" + id + ", " + fluid + ")";
+			case "ivec3" -> "ivec3(" + id + ", " + fluid + ", 0)";
+			case "ivec4" -> "ivec4(" + id + ", " + fluid + ", 0, 1)";
+			default -> zero(type);
+		};
 	}
 
 	/** Nought of a type, spelled the way the type takes it. */
@@ -222,11 +279,12 @@ public final class SodiumVertex {
 		};
 	}
 
-	/** The GLSL type of one of Sodium's four elements. */
+	/** The GLSL type of one element of the format. */
 	private static String type(String attribute) {
 		return switch (attribute) {
 			case "a_Position", "a_TexCoord" -> "uvec2";
 			case "a_LightAndData" -> "uvec4";
+			case BLOCK_ID -> "uint";
 			default -> "vec4";
 		};
 	}

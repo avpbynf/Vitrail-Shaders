@@ -213,7 +213,9 @@ public final class TerrainProgram {
 		// moves the location of every element after it without a word, so the picture stays a
 		// picture and the texture coordinates come out of the light map.
 		Vitrail.logger().error("The chunk mesh carries {} and this engine decodes {}, so no terrain "
-				+ "program will be drawn", elements, SodiumVertex.ATTRIBUTES);
+				+ "program will be drawn. The mesh is decided once when the game starts, so this is "
+				+ "what turning the terrain on after that looks like: restart the game", elements,
+				SodiumVertex.ATTRIBUTES);
 
 		return false;
 	}
@@ -401,11 +403,14 @@ public final class TerrainProgram {
 				+ " cutout and translucent left to the game", this.path, this.loaded.packName(),
 				this.loaded.program().uniforms().size(), this.samplers.size());
 
-		Map<String, String> synthesized = this.loaded.program().synthesized();
-		if (!synthesized.isEmpty()) {
-			Vitrail.logger().warn("The chunk mesh carries neither a normal nor a block id, so {} are "
-					+ "answered with a constant and the lighting this program computes is wrong: {}",
-					synthesized.size(), synthesized.keySet());
+		// Split by what the mesh really answers: mc_Entity comes out of the fifth element and is not
+		// a gap, where a tangent and a mid texture coordinate still are and change what is drawn.
+		List<String> constants = this.loaded.program().synthesized().keySet().stream()
+				.filter(name -> !SodiumVertex.ANSWERED.contains(name))
+				.toList();
+		if (!constants.isEmpty()) {
+			Vitrail.logger().warn("The chunk mesh carries none of these, so they are answered with a "
+					+ "constant and what this program computes from them is wrong: {}", constants);
 		}
 
 		List<String> real = this.samplers.stream()
