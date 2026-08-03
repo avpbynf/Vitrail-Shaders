@@ -32,6 +32,14 @@ public final class VitrailNeoForge {
 
 		modBus.addListener(FMLClientSetupEvent.class, this::onClientSetup);
 
+		// AfterOpaqueFeatures fires once the opaque terrain, the entities, the block entities
+		// and the opaque particles are drawn, and before anything translucent is. That is
+		// where the OptiFine model puts the deferred stage, and it is where Iris puts it too.
+		// No render pass is open there, and the game itself relies on that: it clears the
+		// entity outline target four lines later, which refuses outright inside a pass.
+		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterOpaqueFeatures.class,
+				this::onAfterOpaqueFeatures);
+
 		// AfterLevel fires in GameRenderer.renderLevel once LevelRenderer is done and
 		// before anything else touches the main target, outside of any render pass the
 		// game has open. That is the whole reason this hook is an event and not a mixin.
@@ -52,6 +60,19 @@ public final class VitrailNeoForge {
 		PackReport.logAll(Vitrail.platform().gameDirectory());
 
 		PackChain.load(Vitrail.platform().gameDirectory());
+	}
+
+	/**
+	 * Runs the half of the pack's chain that belongs before the world's translucents: the begins,
+	 * the prepares, the scene seed and the deferred stage.
+	 * <p>
+	 * Not a refinement of where it used to run. BSL's {@code gbuffers_water} reads {@code gaux1},
+	 * which its own {@code deferred} writes, and discards every fragment where it reads nought: with
+	 * the whole chain running after the world, that read found a clear colour and the water was
+	 * thrown away in its entirety.
+	 */
+	private void onAfterOpaqueFeatures(RenderLevelStageEvent.AfterOpaqueFeatures event) {
+		PackChain.drawBeforeTranslucents();
 	}
 
 	private void onAfterLevel(RenderLevelStageEvent.AfterLevel event) {

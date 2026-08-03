@@ -7,6 +7,7 @@ import dev.vitrail.pack.TargetName;
 import dev.vitrail.pack.TargetPlan;
 import dev.vitrail.pack.TargetSchedule;
 import dev.vitrail.pack.TargetSize;
+import dev.vitrail.uniform.NoiseTexture;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.TextureTarget;
@@ -17,6 +18,8 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -63,6 +66,7 @@ final class ColorTargets {
 
 	private final TargetPlan plan;
 	private final Set<Integer> doubled;
+	private final int noiseResolution;
 
 	private final Map<Integer, GpuFormat> formats = new LinkedHashMap<>();
 	private final Map<Integer, Vector4fc> clearColours = new LinkedHashMap<>();
@@ -74,6 +78,7 @@ final class ColorTargets {
 	private TextureTarget black;
 	private TextureTarget white;
 	private TextureTarget grey;
+	private TextureTarget noise;
 
 	private int screenWidth;
 	private int screenHeight;
@@ -86,8 +91,12 @@ final class ColorTargets {
 	 * worked out from anything but the schedule the samplers were bound against is a parity that
 	 * disagrees with itself, and that shows as a plausible picture rather than as an error.
 	 */
-	ColorTargets(TargetPlan plan) {
+	ColorTargets(TargetPlan plan, int noiseResolution) {
 		this.plan = plan;
+		// The pack asks for it by directive and 256 is the default. Held rather than looked up at
+		// allocation: this class knows nothing of a frame, and the resolution never moves while a
+		// pack is loaded.
+		this.noiseResolution = noiseResolution;
 		this.doubled = Set.copyOf(plan.schedule().doubled());
 
 		// The format and the starting colour are read once and kept. Neither moves while a pack
@@ -172,6 +181,7 @@ final class ColorTargets {
 			clear(encoder, this.black, OPAQUE_BLACK);
 			clear(encoder, this.white, OPAQUE_WHITE);
 			clear(encoder, this.grey, MID_GREY);
+			uploadNoise(encoder);
 		}
 
 		for (int index : this.plan.ordered()) {
@@ -265,9 +275,14 @@ final class ColorTargets {
 		return this.white == null ? null : this.white.getColorTextureView();
 	}
 
-	/** Mid grey, for a noise lookup: a constant kills dithering, black kills the image. */
+	/** Mid grey, for a lookup this engine has no answer for. */
 	GpuTextureView grey() {
 		return this.grey == null ? null : this.grey.getColorTextureView();
+	}
+
+	/** The pack's noise image, at the resolution it asked for. */
+	GpuTextureView noise() {
+		return this.noise == null ? grey() : this.noise.getColorTextureView();
 	}
 
 	Set<Integer> doubled() {
@@ -300,6 +315,7 @@ final class ColorTargets {
 		this.black = release(this.black);
 		this.white = release(this.white);
 		this.grey = release(this.grey);
+		this.noise = release(this.noise);
 	}
 
 	private boolean ensureConstants() {
@@ -313,7 +329,31 @@ final class ColorTargets {
 		this.white = new TextureTarget("Vitrail white", 1, 1, false, CONSTANT_FORMAT);
 		this.grey = new TextureTarget("Vitrail grey", 1, 1, false, CONSTANT_FORMAT);
 
+		int resolution = this.noiseResolution;
+		this.noise = new TextureTarget("Vitrail noise", resolution, resolution, false,
+				CONSTANT_FORMAT);
+
 		return true;
+	}
+
+	/**
+	 * Uploads the noise image, once, from the generator the harness has a fingerprint for.
+	 * <p>
+	 * A pack indexes this image with coordinates of its own, so it is not enough for the picture to
+	 * look like noise: it has to be the image the pack was tuned against, which is why the generator
+	 * follows Iris bit for bit and why no observation in the game could ever prove it right.
+	 * <p>
+	 * Until this was here every {@code noisetex} lookup read one mid grey pixel, which is a constant
+	 * where the pack asked for a field. That is not a missing detail: BSL builds its cloud distance
+	 * from it, and a cloud distance of nought discards every fragment of water.
+	 */
+	private void uploadNoise(CommandEncoder encoder) {
+		int resolution = this.noise.width;
+		byte[] pixels = NoiseTexture.rgba(resolution);
+		ByteBuffer data = ByteBuffer.allocateDirect(pixels.length).order(ByteOrder.nativeOrder());
+		data.put(pixels).flip();
+
+		encoder.writeToTexture(this.noise.getColorTexture(), data, 0, 0, 0, 0, resolution, resolution);
 	}
 
 	private boolean ensureSide(Map<Integer, TextureTarget> side, int index, int width, int height, String suffix) {

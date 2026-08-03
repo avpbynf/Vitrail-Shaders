@@ -28,6 +28,7 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.renderer.BindGroupLayouts;
@@ -393,7 +394,7 @@ final class PackPass {
 				// draws into a target of our own. The day one does, this has to follow.
 				case DEPTH -> depthView == null ? targets.black() : depthView;
 				case SHADOW_DEPTH, SHADOW_COLOUR -> targets.white();
-				case NOISE -> targets.grey();
+				case NOISE -> targets.noise();
 				// A name this backend cannot bind should have taken its program out of the chain
 				// before a frame was drawn. It is still answered rather than left out, because the
 				// layout carries it either way and the draw throws on the first name it misses.
@@ -404,9 +405,21 @@ final class PackPass {
 					? targets.filter(binding.index())
 					: FilterMode.NEAREST;
 
+			// The noise image repeats and everything else clamps, which is Iris's choice and not a
+			// taste: a pack indexes noisetex with coordinates of its own, in texels and well past
+			// one, and clamped it reads the same edge row for the whole screen. That does not fail,
+			// it produces a field of stripes that reads as an effect nobody asked for, and it takes
+			// whatever the pack built out of it down with it.
 			pass.bindTexture(sampler, bound == null ? targets.black() : bound,
-					RenderSystem.getSamplerCache().getClampToEdge(filter));
+					sampler(binding.kind(), filter));
 		}
+	}
+
+	/** How a name is addressed outside zero to one. Only the noise image tiles. */
+	static GpuSampler sampler(SamplerPlan.Kind kind, FilterMode filter) {
+		return kind == SamplerPlan.Kind.NOISE
+				? RenderSystem.getSamplerCache().getRepeat(filter)
+				: RenderSystem.getSamplerCache().getClampToEdge(filter);
 	}
 
 	private GpuTextureView view(ColorTargets targets, ChainPlan.Attachment attachment) {

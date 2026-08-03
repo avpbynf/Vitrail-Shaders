@@ -30,6 +30,12 @@ public final class ChainPlan {
 	/** A render pass carries at most eight colour attachments, and its pipeline as many states. */
 	public static final int MAX_ATTACHMENTS = 8;
 
+	/**
+	 * Where the deferred stage sits in the frame. Everything at this rank or below belongs before the
+	 * world's translucents, everything above it after the world.
+	 */
+	public static final int DEFERRED_RANK = ProgramNames.frameRank("deferred");
+
 	private static final String FINAL = "final";
 
 	/** What the game's frame is painted in place of. Its fallback tree is followed, not its file. */
@@ -78,6 +84,25 @@ public final class ChainPlan {
 		/** The targets, without their side, which is what a log and a sampler check want. */
 		public List<Integer> targets() {
 			return this.attachments.stream().map(Attachment::target).toList();
+		}
+
+		/**
+		 * Where in the frame this pass belongs, on the scale {@link ProgramNames#frameRank} uses.
+		 * <p>
+		 * Read off the name and never off a position in a list. A stage boundary expressed as an
+		 * index into the running order shifts the moment one program of the chain is refused, and it
+		 * shifts without a word: the passes still run, in the right order, at the wrong moment.
+		 */
+		public int frameRank() {
+			return ProgramNames.frameRank(ProgramNames.familyOf(this.program));
+		}
+
+		/**
+		 * Whether this pass belongs to the deferred stage, which OptiFine runs after the opaque
+		 * geometry and before the translucent geometry rather than after the world.
+		 */
+		public boolean deferred() {
+			return frameRank() == ProgramNames.frameRank("deferred");
 		}
 	}
 

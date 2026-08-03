@@ -99,12 +99,37 @@ public final class LegacyGlsl {
 	 * global initialised from an attribute is not a constant expression and GLSL would refuse it.
 	 * The values are Iris's, since a pack's full screen pass is written expecting them: a quad
 	 * from (0,0) to (1,1), no colour, a normal pointing at the viewer.
+	 * <p>
+	 * <strong>The texture units above nought are here and they are not padding.</strong> Iris
+	 * substitutes {@code vec4(0.0, 0.0, 0.0, 1.0)} for {@code gl_MultiTexCoord1} through
+	 * {@code gl_MultiTexCoord7} in a composite, a deferred or a final, and only unit nought gets a
+	 * real attribute: {@code CompositeTransformer.java:51} calling
+	 * {@code CommonTransformer.replaceGlMultiTexCoordBounded(t, root, 1, 7)}. Without them the two
+	 * Complementary packs do not load at all, at any setting: both write
+	 * {@code vec2 lmCoord = (gl_TextureMatrix[1] * gl_MultiTexCoord1).xy} at the top of
+	 * {@code lib/util/commonFunctions.glsl}, under {@code #ifdef VERTEX_SHADER} and under nothing
+	 * else, so every full screen vertex stage of those packs names an identifier nothing declares.
+	 * Fifty four programs of the corpus, and no other pack writes the name at all.
+	 * <p>
+	 * One residual difference from Iris, which costs nothing measurable here: Iris also overwrites
+	 * {@code gl_TextureMatrix} with the identity in a full screen pass, where ours comes from the
+	 * uniform block, so {@code of_TextureMatrix[1] * of_MultiTexCoord1} gives that matrix's
+	 * translation column rather than exactly nought. No program of the corpus reads it: the only
+	 * live site is the body of a function no full screen pass calls, and an uncalled function is
+	 * gone before the SPIR-V is emitted.
 	 */
 	public static final List<String> FULLSCREEN_ATTRIBUTES = List.of(
 			"in vec3 Position;",
 			"in vec2 UV0;",
 			"#define of_Vertex vec4(Position, 1.0)",
 			"#define of_MultiTexCoord0 vec4(UV0, 0.0, 1.0)",
+			"#define of_MultiTexCoord1 vec4(0.0, 0.0, 0.0, 1.0)",
+			"#define of_MultiTexCoord2 vec4(0.0, 0.0, 0.0, 1.0)",
+			"#define of_MultiTexCoord3 vec4(0.0, 0.0, 0.0, 1.0)",
+			"#define of_MultiTexCoord4 vec4(0.0, 0.0, 0.0, 1.0)",
+			"#define of_MultiTexCoord5 vec4(0.0, 0.0, 0.0, 1.0)",
+			"#define of_MultiTexCoord6 vec4(0.0, 0.0, 0.0, 1.0)",
+			"#define of_MultiTexCoord7 vec4(0.0, 0.0, 0.0, 1.0)",
 			"#define of_Color vec4(1.0)",
 			"#define of_Normal vec3(0.0, 0.0, 1.0)");
 

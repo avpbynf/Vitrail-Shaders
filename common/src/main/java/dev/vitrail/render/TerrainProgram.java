@@ -355,7 +355,12 @@ public final class TerrainProgram {
 			return this.atlasSampler;
 		}
 
-		return RenderSystem.getSamplerCache().getClampToEdge(filter(name));
+		if (LIGHTMAP.equals(name)) {
+			return RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
+		}
+
+		// The noise image tiles and everything else clamps, the same rule the chain follows.
+		return PackPass.sampler(this.loaded.samplers().binding(name).kind(), filter(name));
 	}
 
 	/**
@@ -510,7 +515,7 @@ public final class TerrainProgram {
 		return switch (binding.kind()) {
 			case COLORTEX -> colortex(binding);
 			case SHADOW_DEPTH, SHADOW_COLOUR -> this.white.getColorTextureView();
-			case NOISE -> this.grey.getColorTextureView();
+			case NOISE -> this.targets.noise();
 			default -> this.black.getColorTextureView();
 		};
 	}
@@ -549,6 +554,20 @@ public final class TerrainProgram {
 	 * colour target counts even when it is empty at this point of the frame: it is the pack's own
 	 * image and what it holds is a question about the order of the frame, not about the binding.
 	 */
+	/**
+	 * A sampler's name with what it is really bound to, the half included. The half is the thing to
+	 * read: a colour target read on the wrong one holds a clear colour, which is a picture that
+	 * looks like a feature nobody turned on.
+	 */
+	private String describe(String sampler) {
+		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+		if (binding.kind() != SamplerPlan.Kind.COLORTEX) {
+			return sampler;
+		}
+
+		return sampler + "=" + TargetName.canonical(binding.index()) + " " + binding.side();
+	}
+
 	private boolean readsATexture(String sampler) {
 		return ATLAS.contains(sampler) || LIGHTMAP.equals(sampler)
 				|| this.loaded.samplers().binding(sampler).kind() == SamplerPlan.Kind.COLORTEX;
@@ -605,7 +624,10 @@ public final class TerrainProgram {
 					+ "constant and what this program computes from them is wrong: {}", constants);
 		}
 
-		List<String> real = this.samplers.stream().filter(this::readsATexture).toList();
+		List<String> real = this.samplers.stream()
+				.filter(this::readsATexture)
+				.map(this::describe)
+				.toList();
 		List<String> flat = this.samplers.stream().filter(name -> !readsATexture(name)).toList();
 		Vitrail.logger().info("{} samplers of this program read a real texture: {}", real.size(), real);
 		if (!flat.isEmpty()) {

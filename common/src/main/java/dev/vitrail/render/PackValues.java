@@ -111,6 +111,11 @@ public final class PackValues {
 	}
 
 	/** What a block is written from. The same object every frame, refilled by {@link #advance()}. */
+	/** How big a noise image the pack asked for, its own directive, 256 unless it says otherwise. */
+	public int noiseResolution() {
+		return Math.round(this.state.noiseTextureResolution());
+	}
+
 	public WorldState world() {
 		return this.state;
 	}

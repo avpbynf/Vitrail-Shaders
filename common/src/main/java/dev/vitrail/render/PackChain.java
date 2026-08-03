@@ -122,6 +122,15 @@ public final class PackChain {
 	 */
 	private boolean opened;
 
+	/** Whether the half of the chain that belongs before the world's translucents has run. */
+	private boolean early;
+
+	/** Whether this frame's uniform blocks have been written and its notes said. */
+	private boolean filled;
+
+	/** Whether the split of the chain into two halves has been said. Once a load, not once a frame. */
+	private boolean split;
+
 	private final PackProgram.Chain chain;
 	private final PackValues values;
 	private final String world;
@@ -150,7 +159,7 @@ public final class PackChain {
 
 		// None of this touches the device: the textures are allocated by the first frame and this
 		// runs while the client is still starting up, off the render thread.
-		this.targets = new ColorTargets(chain.targets());
+		this.targets = new ColorTargets(chain.targets(), values.noiseResolution());
 		this.seed = chain.chain().seed()
 				.filter(where -> this.targets.has(where.target()))
 				.map(where -> new SceneSeed(where, this.targets.format(where.target())))
@@ -540,7 +549,7 @@ public final class PackChain {
 			// cleared again if this pack is turned back on.
 			advanced = false;
 			if (chain != null) {
-				chain.opened = false;
+				chain.closeFrame();
 			}
 
 			return false;
@@ -559,7 +568,7 @@ public final class PackChain {
 		}
 
 		advanced = false;
-		chain.opened = false;
+		chain.closeFrame();
 
 		return chainWanted;
 	}
@@ -620,6 +629,17 @@ public final class PackChain {
 		return true;
 	}
 
+	/**
+	 * Closes the frame. Every per frame flag is reset here and nowhere else, so that a frame that
+	 * failed halfway leaves nothing standing: a flag left set stops the targets ever being cleared
+	 * again, or the values ever moving again, and neither shows on screen as itself.
+	 */
+	private void closeFrame() {
+		this.opened = false;
+		this.early = false;
+		this.filled = false;
+	}
+
 	/** Everything the end of a frame owes when the chain itself is not drawn. */
 	private void rotate() {
 		beginFrame();
@@ -634,12 +654,15 @@ public final class PackChain {
 		}
 	}
 
-	private void run() {
-		GpuDevice device = RenderSystem.tryGetDevice();
+	/**
+	 * Everything a frame owes before any pass of the chain can be drawn, or null when it cannot be
+	 * drawn at all. Cheap and idempotent, so both halves of the frame may ask.
+	 */
+	private Ready ready(GpuDevice device) {
 		Minecraft minecraft = Minecraft.getInstance();
 		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
-		if (device == null || main == null || main.getColorTexture() == null) {
-			return;
+		if (main == null || main.getColorTexture() == null) {
+			return null;
 		}
 
 		if (this.programs == null) {
@@ -650,66 +673,175 @@ public final class PackChain {
 		// game keeps its own image for the handful of frames that takes, which is a fade rather
 		// than the three second freeze compiling nine programs at once would be, and that freeze
 		// would be paid again at every resource reload.
-		if (!warm(device)) {
-			return;
-		}
-
-		// Outside any render pass: creating a texture or a buffer records a barrier into the very
-		// command buffer a pass would be recording into, and the clears refuse outright while one
-		// is open.
-		if (!prepare(device, main)) {
-			return;
+		//
+		// Outside any render pass, both of them: creating a texture or a buffer records a barrier
+		// into the very command buffer a pass would be recording into, and the clears refuse
+		// outright while one is open.
+		if (!warm(device) || !prepare(device, main)) {
+			return null;
 		}
 
 		GpuTextureView mainView = main.getColorTextureView();
-		GpuTextureView depthView = main.useDepth ? main.getDepthTextureView() : null;
 		if (mainView == null) {
-			return;
+			return null;
 		}
 
 		// Every frame here as well, and for the same reason as the pipelines of the chain.
 		boolean seeding = this.seed != null && this.seedEnabled && this.seed.prepare(device);
 
-		announce(main, seeding);
-		writeBlocks();
+		// Once a frame, whichever half asks first. The blocks above all: the passes of the early half
+		// have already been recorded against this very buffer by the time the late half runs, and
+		// mapping it again under them is a write to memory a command is holding, even when the bytes
+		// that go back are the same.
+		if (!this.filled) {
+			this.filled = true;
+			announce(main, seeding);
+			writeBlocks();
+		}
 
-		// Free when the terrain has already opened this frame, which is the ordinary case: the
-		// clears belong before the world, or they would wipe what the terrain wrote into them.
 		openTargets(device);
 
-		// One encoder for the whole frame. A second one would be a fresh wrapper carrying its own
-		// idea of whether a pass is open, which is the guard that keeps allocations out of one.
-		CommandEncoder encoder = device.createCommandEncoder();
+		return new Ready(main, mainView, main.useDepth ? main.getDepthTextureView() : null, seeding);
+	}
 
-		// Where the world would have been drawn, which the plan works out and this only reads. A
-		// begin or a prepare runs ahead of it and the schedule gave the seed its half on that
-		// footing, so painting it first would put this frame's world under a pass the walk says
-		// reads a clear colour, and over one the walk says writes after it.
-		int seedAt = seeding ? this.chain.chain().seed().map(ChainPlan.Seed::at).orElse(-1) : -1;
+	/**
+	 * Draws the passes of one half of the frame, in order, painting the seed where the plan puts it.
+	 * <p>
+	 * The two halves share one order and one parity: the range is a window onto the same list, so
+	 * every pass still runs where the schedule put it and the ping pong is untouched. What changes
+	 * is only the moment the commands are recorded.
+	 */
+	private void drawRange(GpuDevice device, Ready ready, int from, int to) {
+		int seedAt = ready.seeding()
+				? this.chain.chain().seed().map(ChainPlan.Seed::at).orElse(-1)
+				: -1;
 
 		// Each pass opens and closes its own render pass. Closing one is what makes the next able
 		// to read it: the Vulkan backend ends a pass with a full memory barrier, so the cost of
 		// the chain is one whole serialisation of the GPU per program and there is no way around
 		// it short of knowing which passes do not overlap.
+		CommandEncoder encoder = device.createCommandEncoder();
 		GpuBuffer buffer = this.block.currentBuffer();
-		for (int at = 0; at < this.programs.size(); at++) {
+		for (int at = from; at < to; at++) {
 			if (at == seedAt) {
-				drawSeed(encoder, mainView);
+				drawSeed(encoder, ready.mainView());
 			}
 
 			PackPass pass = this.programs.get(at);
 			GpuBufferSlice uniforms = buffer.slice(pass.uniformOffset(), pass.uniformSize());
 			if (pass == this.last) {
-				pass.drawFinal(encoder, mainView, this.targets, depthView, this.quad, uniforms);
+				pass.drawFinal(encoder, ready.mainView(), this.targets, ready.depthView(), this.quad,
+						uniforms);
 			} else {
-				pass.draw(encoder, this.targets, depthView, this.quad, uniforms, main.width, main.height);
+				pass.draw(encoder, this.targets, ready.depthView(), this.quad, uniforms,
+						ready.main().width, ready.main().height);
 			}
 		}
 
 		// A place whose whole chain runs before the world still paints it, once everything has run.
-		if (seedAt >= this.programs.size()) {
-			drawSeed(encoder, mainView);
+		if (to >= this.programs.size() && seedAt >= this.programs.size()) {
+			drawSeed(encoder, ready.mainView());
 		}
+	}
+
+	/** What one frame of the chain is drawn against, settled once and read by both halves. */
+	private record Ready(RenderTarget main, GpuTextureView mainView, GpuTextureView depthView,
+			boolean seeding) {
+	}
+
+	/**
+	 * The half of the chain that belongs before the world's translucents: the begins, the prepares,
+	 * the scene seed and the whole deferred stage.
+	 * <p>
+	 * <strong>This is where the deferred stage really belongs, and it is not a refinement.</strong>
+	 * The OptiFine frame runs shadow, prepare, opaque geometry, deferred, translucent geometry,
+	 * composite, final, and packs are written against exactly that: BSL's {@code gbuffers_water}
+	 * reads {@code gaux1}, which its own {@code deferred} writes, and discards every fragment where
+	 * it reads nought. Run after the world, as the whole chain used to be, that read finds a clear
+	 * colour and the water is thrown away in its entirety.
+	 * <p>
+	 * Called from the terrain, at the point the chunk renderer asks for the shader of its
+	 * translucent pass, which is the last moment before it opens that pass. Called from
+	 * {@link #run} as well, for the frames and the configurations where no terrain draws at all, and
+	 * the second call is free.
+	 */
+	public static void drawBeforeTranslucents() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (disabled || chain == null || device == null || !chainWanted) {
+			return;
+		}
+
+		try {
+			chain.drawEarly(device);
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
+	}
+
+	private void drawEarly(GpuDevice device) {
+		if (this.early) {
+			return;
+		}
+
+		Ready ready = ready(device);
+		if (ready == null) {
+			return;
+		}
+
+		this.early = true;
+		int end = deferredEnd();
+		if (!this.split) {
+			this.split = true;
+			// Said once, because the alternative is a chain that silently runs entirely after the
+			// world again: nothing on screen tells the two apart, and the pack that needs the split
+			// is the one whose water disappears.
+			Vitrail.logger().info("{} of this chain run before the world's translucents, {} after: {}",
+					end, this.programs.size() - end,
+					this.programs.stream().limit(end).map(PackPass::path).toList());
+		}
+
+		drawRange(device, ready, 0, end);
+	}
+
+	/**
+	 * How many passes of the chain belong before the world's translucents. They are a prefix because
+	 * the running order is the frame order, and the boundary is read off each program's own name
+	 * rather than off a position: a stage boundary held as an index shifts the moment one program is
+	 * refused, and it shifts in silence, every pass still running in the right order at the wrong
+	 * moment.
+	 */
+	private int deferredEnd() {
+		List<ChainPlan.Pass> planned = this.chain.chain().passes();
+		int end = 0;
+		while (end < planned.size() && planned.get(end).frameRank()
+				<= ChainPlan.DEFERRED_RANK) {
+			end++;
+		}
+
+		return Math.min(end, this.programs.size());
+	}
+
+	private void run() {
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (device == null) {
+			return;
+		}
+
+		drawEarly(device);
+
+		Ready ready = ready(device);
+		if (ready == null) {
+			return;
+		}
+
+		drawRange(device, ready, deferredEnd(), this.programs.size());
+
+		RenderTarget main = ready.main();
+		GpuTextureView mainView = ready.mainView();
+		CommandEncoder encoder = device.createCommandEncoder();
 
 		// Outside any pass, and after the last one. Only the targets the pack keeps between frames
 		// and that the chain left on the far half are copied: the next frame walks from an empty
@@ -972,8 +1104,7 @@ public final class PackChain {
 		named(byKind, SamplerPlan.Kind.DEPTH, "read the world's depth");
 		named(byKind, SamplerPlan.Kind.SHADOW_DEPTH, "read white, no shadow map is drawn yet");
 		named(byKind, SamplerPlan.Kind.SHADOW_COLOUR, "read white, no shadow map is drawn yet");
-		named(byKind, SamplerPlan.Kind.NOISE, "read mid grey, no noise texture is built yet");
-		named(byKind, SamplerPlan.Kind.UNBINDABLE,
+				named(byKind, SamplerPlan.Kind.UNBINDABLE,
 				"are declared under a type this backend cannot bind, and should have gone with "
 						+ "their pass");
 
