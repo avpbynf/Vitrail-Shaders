@@ -113,8 +113,13 @@ public final class PackChain {
 	 * and {@link #draw} closes it. Two advances in one frame would shift the previous frame's
 	 * matrices twice and make every {@code smooth()} in the pack fade at twice the speed, with
 	 * nothing on screen to say so.
+	 * <p>
+	 * The chain's own and not the class's, because the store it guards is the chain's own. A reload
+	 * runs at the top of {@link #draw}, in the middle of a frame the terrain has already opened, and
+	 * a flag held for the class would hand the chain that replaces it a value store still standing
+	 * where it was built: identity matrices, and a view of no width at all.
 	 */
-	private static boolean advanced;
+	private boolean advanced;
 
 	/**
 	 * Whether this frame's colour targets have been allocated and cleared yet. Held beside
@@ -549,11 +554,10 @@ public final class PackChain {
 
 		PackChain chain = active;
 		if (disabled || chain == null) {
-			// The frame is closed whatever happened, and outside the try: a terrain program may have
-			// opened it during the world even when nothing of the chain is drawn afterwards, and a
-			// flag left standing would stop the values ever moving again, or the targets ever being
-			// cleared again if this pack is turned back on.
-			advanced = false;
+			// The frame is closed whatever happened: a terrain program may have opened it during the
+			// world even when nothing of the chain is drawn afterwards, and a flag left standing
+			// would stop the values ever moving again, or the targets ever being cleared again if
+			// this pack is turned back on.
 			if (chain != null) {
 				chain.closeFrame();
 			}
@@ -565,7 +569,9 @@ public final class PackChain {
 			if (chainWanted) {
 				chain.run();
 			} else {
-				chain.rotate();
+				// All a frame owes when the chain itself is not drawn. The ring buffers are not part
+				// of it: closeFrame turns them below, drawn or not.
+				chain.beginFrame();
 			}
 		} catch (RuntimeException e) {
 			disabled = true;
@@ -573,7 +579,7 @@ public final class PackChain {
 			chain.release();
 		}
 
-		advanced = false;
+		// Outside the try: a frame that failed halfway still owes its flags and its ring buffers.
 		chain.closeFrame();
 
 		return chainWanted;
@@ -596,8 +602,8 @@ public final class PackChain {
 	 * boundary hangs off; see {@link #advanced} for what a second advance would cost.
 	 */
 	void beginFrame() {
-		if (!advanced) {
-			advanced = true;
+		if (!this.advanced) {
+			this.advanced = true;
 			this.values.advance();
 			PackDump.take(this.chain.place(), this.load, this.terrain.programs(),
 					this.programs == null ? List.of() : this.programs, this.values.world());
@@ -639,16 +645,28 @@ public final class PackChain {
 	 * Closes the frame. Every per frame flag is reset here and nowhere else, so that a frame that
 	 * failed halfway leaves nothing standing: a flag left set stops the targets ever being cleared
 	 * again, or the values ever moving again, and neither shows on screen as itself.
+	 * <p>
+	 * The ring buffers turn here as well, and unconditionally, which is the only place that holds.
+	 * The chain draws nothing at all while its pipelines are still being compiled, one a frame and
+	 * again after every resource reload, and the terrain draws throughout: turned where the chain
+	 * draws, they would stand still for those frames while the terrain rewrote the very buffer the
+	 * previous frame is still being read for. Nothing else guards that memory, {@link
+	 * MappableRingBuffer} fencing a buffer only where it turns, and the backend keeps two submissions
+	 * in flight.
+	 * <p>
+	 * Before the shadow stage and not after, which is what the stage is built on: it writes its
+	 * blocks into the buffer this turn moved on to, and the next frame's turn is what fences them.
 	 */
 	private void closeFrame() {
+		this.advanced = false;
 		this.opened = false;
 		this.early = false;
 		this.filled = false;
-	}
 
-	/** Everything the end of a frame owes when the chain itself is not drawn. */
-	private void rotate() {
-		beginFrame();
+		if (this.block != null) {
+			this.block.rotate();
+		}
+
 		this.terrain.rotate();
 	}
 
@@ -853,17 +871,10 @@ public final class PackChain {
 
 		drawRange(device, ready, deferredEnd(), this.programs.size());
 
-		RenderTarget main = ready.main();
-		GpuTextureView mainView = ready.mainView();
-		CommandEncoder encoder = device.createCommandEncoder();
-
 		// Outside any pass, and after the last one. Only the targets the pack keeps between frames
 		// and that the chain left on the far half are copied: the next frame walks from an empty
 		// flipped set and would otherwise be handed what was written two frames ago.
-		this.targets.swapBack(encoder, this.chain.chain().swapBack());
-
-		this.block.rotate();
-		this.terrain.rotate();
+		this.targets.swapBack(device.createCommandEncoder(), this.chain.chain().swapBack());
 	}
 
 	/**
