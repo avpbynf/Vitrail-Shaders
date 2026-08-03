@@ -29,11 +29,23 @@ on does not mean giving up the packs you already use.
 
 ## Status
 
-**It runs a pack's chain of full-screen passes, and answers most of what those
-passes read.** Point it at a pack and it will resolve the includes, apply the
+**It draws the world's terrain through a pack's own programs, and runs the
+pack's whole chain of passes around it, in the frame order the format
+prescribes.** Point it at a pack and it will resolve the includes, apply the
 settings, work out which program serves what for every dimension, rewrite each
 program into GLSL a Vulkan compiler accepts, allocate the colour targets the
-pack declares, and run the passes it declares in order before its `final`.
+pack declares, and run its frame in the pack's own order: the deferred passes
+between the opaque world and the translucents, then the composites and the
+`final`. The three chunk passes, solid, cutout and translucent, are drawn on
+Sodium's meshes with the pack's `gbuffers_terrain` and `gbuffers_water`,
+carrying the block ids of `block.properties`, per-quad normals, the pack's
+alpha tests and every draw buffer those programs declare; water blends into
+the pack's own targets at the exact point of the frame the format puts it,
+reading the depth of the world as it stood before the translucents. The
+renderer rasterises with a reversed Z a pack knows nothing about, and every
+depth a pack writes or samples is converted to the convention it was written
+against.
+
 Across the eight packs surveyed, 1738 of their 1863 compilation units compile,
 and 743 of their 785 programs compile with their stages linked together. Of the
 45117 uniform block members those programs declare between them, 33147 are
@@ -41,17 +53,11 @@ answered, including the ones a pack writes for itself as expressions in its own
 `shaders.properties`. A settings screen reads the pack's own menu layout and
 writes one file per pack.
 
-What it cannot do yet is draw the world's geometry through a pack's own
-programs. Every target a `gbuffers` program would have written is therefore read
-as the clear left it, which the log names pass by pass along with the reason, so
-a pack runs its whole chain over an image the game finished rather than over one
-it built itself. That is milestone 6, and it is the step that decides whether a
-pack looks right rather than merely runs.
-
-Steps 1 to 4 of the plan below are done. Step 5 is short of one thing: this
-renderer rasterises with a reversed Z that a pack knows nothing about, and the
-depth a pack samples is not yet converted back to the convention it was written
-against.
+What it cannot do yet: no shadow map is drawn, so everything a pack reads from
+`shadowtex` is white; and the sky, the entities and the particles still come
+from the game rather than from the pack's own programs, so a pack composes over
+an image the game tone mapped once already. Those two steps are what decides
+how close a pack looks to its OpenGL self, and they are what comes next.
 
 ## How it works
 
@@ -110,6 +116,11 @@ that it works.
 4. The translator, ported to Java against the measured corpus.
 5. The uniform surface, where compiling becomes rendering correctly.
 6. Terrain coupling with Sodium.
+7. The rest of the frame through the pack: the shadow map, the sky, the
+   entities and the particles.
+
+Steps 1 to 6 are done. Step 7 is where the remaining distance to the reference
+image lives.
 
 ## Related work
 
@@ -161,14 +172,13 @@ Build and install instructions are in [INSTALL.md](INSTALL.md).
 
 ## Compatibility
 
-Vitrail hooks the frame through a public NeoForge event, and carries exactly one
-mixin. It copies the projection matrix the world is about to be drawn with,
-because that matrix is never stored anywhere: the camera's own field holds the
-version from before the walk bob, the damage tilt, the nausea and the portal
-skew, which is identical standing still and wrong as soon as the player moves.
-Nothing reaches into Sodium's internals yet. That will stop being true at
-milestone 6, where terrain has to be fed through a pack's own program and Sodium
-offers no other way in.
+Vitrail hooks the frame through public NeoForge events where the game offers
+them, and through a small set of mixins where it does not: the matrices the
+world is really drawn with, which are never stored anywhere the camera exposes,
+and Sodium's chunk renderer, which is handed the pack's terrain programs, one
+extra vertex element carrying the block id, and the render pass its draw
+buffers need. Sodium has no API for any of that, which is why its version is
+pinned.
 
 Any mod that unwraps a GPU texture into an OpenGL handle will crash on the
 Vulkan backend, with or without Vitrail. Distant Horizons 3.2.0-b does this and

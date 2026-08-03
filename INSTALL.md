@@ -50,20 +50,24 @@ For a CurseForge instance that is:
 Remove any other shader engine from that folder first. Iris and Vitrail both want
 to own the frame, and there is no reason to have both.
 
-Nothing else has to be copied. On its first start the mod writes its shader sources
-into a `vitrail/` folder next to `mods/`, and reads them from there on every start
-after that:
+Shader packs go into the `shaderpacks/` folder at the root of the instance, the
+same folder OptiFine and Iris use, zipped or unpacked. The mod keeps its own
+files in a `vitrail/` folder next to `mods/`:
 
 ```
-screen.vsh    the vertex stage, shared by every pass
-pass1.fsh     reads what the game drew, writes the first target
-pass2.fsh     reads the first target, writes the second
-compose.fsh   reads the second target, writes back onto the screen
+pack.txt       which pack of the folder to load, by whole or partial name
+options.txt    engine switches, one NAME=value per line; wins over the settings
+settings/      one file per pack, holding what differs from the pack's defaults
 ```
 
-Edit any of them and restart the game to change what the chain draws; the jar does
-not need to be rebuilt. A file that fails to compile is reported in the log and the
-game keeps running without the chain rather than crashing.
+A settings screen covers all of it in game: the I key, the Config button in the
+mod list, or the icon in the pause menu. It opens on the pack list, reads each
+pack's own menu layout, and imports the settings file Iris left in
+`shaderpacks/` when a pack has none here yet. Editing a pack's files or the
+`vitrail/` ones while the game runs is also enough, changes are picked up
+without a restart; the jar never needs rebuilding for any of this. A program
+that fails to compile is reported in the log and the game keeps its own
+rendering rather than crashing.
 
 ## Switching the graphics backend to Vulkan
 
