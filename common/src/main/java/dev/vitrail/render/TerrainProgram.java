@@ -141,6 +141,7 @@ public final class TerrainProgram {
 	private GpuSampler atlasSampler;
 	private boolean cleared;
 	private boolean announced;
+	private boolean drew;
 	private boolean broken;
 
 	/** Targets already reported as read on the half this pass writes. Said once each, not per frame. */
@@ -419,6 +420,15 @@ public final class TerrainProgram {
 	 * constant, which is why the criterion for this step is the albedo and nothing to do with light.
 	 */
 	void bind(RenderPass pass) {
+		// Once, and it is the one thing that tells a pass that draws from a pass that only compiled:
+		// announce() says a program was prepared, which happens whether or not the renderer goes on
+		// to record a single command against it.
+		if (!this.drew) {
+			this.drew = true;
+			Vitrail.logger().info("The {} pass records its first draw with {}",
+					this.pass.name().toLowerCase(Locale.ROOT), this.path);
+		}
+
 		pass.setUniform(UNIFORM_BLOCK, this.block.currentBuffer().slice(0, blockBytes()));
 
 		for (String sampler : this.samplers) {
@@ -841,20 +851,19 @@ public final class TerrainProgram {
 							.toList());
 		}
 
-		// The one thing about the shadow map that no picture explains. A pack declaring
-		// sampler2DShadow is asking the hardware to make the comparison and hand back a fraction,
-		// and blaze3d's GpuSampler carries no compare op at all: address modes, filters, anisotropy
-		// and a maximum level of detail, and nothing else. So the name is bound as an ordinary
-		// sampler, the comparison means nothing, and BSL's whole world comes back in shadow. Said
-		// here because it looks exactly like a shadow map that is drawn wrong.
+		// Said because nothing on screen would. A pack declaring sampler2DShadow asks the hardware
+		// to compare and hand back a filtered fraction; blaze3d's GpuSampler carries no comparison
+		// at all, so the translation makes it instead, one tap and a step. What is lost is the
+		// softness of a compare filtered LINEAR, not the shadow: an edge one texel harder than the
+		// pack drew against.
 		List<String> compared = this.loaded.program().samplers().stream()
 				.filter(sampler -> sampler.type().contains("Shadow"))
 				.map(TranslatedUnit.Uniform::name)
 				.toList();
 		if (!compared.isEmpty()) {
-			Vitrail.logger().warn("{} declares {} as hardware comparison samplers, which this backend "
-					+ "cannot bind as such: what they read is not a comparison, and a pack that "
-					+ "compares this way puts the whole world in shadow", this.path, compared);
+			Vitrail.logger().info("{} asked the hardware to compare {}, which this backend cannot "
+					+ "bind, so the comparison is made in the shader with a single tap", this.path,
+					compared);
 		}
 
 		PackValues.Gaps gaps = this.values.classify(this.uniforms.unsupplied());

@@ -8,11 +8,13 @@ import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.target.DrawBuffers;
 import dev.vitrail.pack.target.SamplerPlan;
+import dev.vitrail.pack.target.SamplerTypes;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -89,6 +91,12 @@ public final class GlslTranslator {
 	/** {@code (clipA, clipB, readA, readB)}: how to write a depth, then how to read one. */
 	private static final String DEPTH_CONV = "of_DepthConv";
 
+	/** The comparison a {@code sampler2DShadow} would have had the hardware make. */
+	private static final String SHADOW_COMPARE = "ofShadowCompare";
+
+	/** What the word sampler is followed by when the declaration asks for a comparison. */
+	private static final String SHADOW_SHAPE = "Shadow";
+
 	/** How far into a sprite a chunk mesh's texture coordinate has to be pulled. */
 	private static final String TEX_SHRINK = "of_TexShrink";
 
@@ -129,6 +137,12 @@ public final class GlslTranslator {
 	private final Map<String, String> blockMembers = new LinkedHashMap<>();
 	private final Map<String, String> samplers = new LinkedHashMap<>();
 
+	/**
+	 * The samplers the pack declared as comparison samplers, by name, and which are declared here as
+	 * ordinary ones. {@link #ofShadowCompare} says why they cannot stay what they were.
+	 */
+	private final Set<String> comparisonSamplers = new LinkedHashSet<>();
+
 	/** Outputs the pack declares itself, by the location it asked for, moved into the header. */
 	private final Map<Integer, Output> packOutputs = new TreeMap<>();
 
@@ -147,6 +161,9 @@ public final class GlslTranslator {
 	private int dynamicFragData;
 	private int shadowCalls;
 	private int unwrappedShadowCalls;
+
+	/** Lookups this unit makes the comparison for itself, because the backend cannot. */
+	private int shadowCompares;
 	private int strippedExtensions;
 	private boolean depthEpilogue;
 	private boolean terrainPrologue;
@@ -219,6 +236,10 @@ public final class GlslTranslator {
 	private void rewrite() {
 		collectMacroNames();
 		collectDeclarations();
+		// Before anything reads a lookup, because that is what it changes. The uniforms are lifted
+		// much later, after the depth conversion, and a set filled there would be empty at the one
+		// moment it decides something.
+		collectComparisonSamplers();
 		collectDrawBuffers();
 		synthesizeAttributes();
 		dropVersionAndExtensions();
@@ -493,10 +514,21 @@ public final class GlslTranslator {
 				}
 
 				if (close >= 0) {
+					// A legacy shadow lookup on a sampler this backend cannot compare with is
+					// rewritten here rather than later: the injection below fuses the name into one
+					// token with the parenthesis, and the depth conversion matches names.
+					int first = significantAfter(callOpener(index));
+					boolean compared = first >= 0
+							&& this.tokens.get(first).kind() == Kind.IDENTIFIER
+							&& this.comparisonSamplers.contains(this.tokens.get(first).text());
+					if (compared) {
+						this.shadowCompares++;
+					}
+
 					// The wrap adds an opening parenthesis, so it has to add a closing one too.
 					// Substituting the head alone is what left the prototype with eighty-six
 					// units ending in "unexpected SEMICOLON, expecting RIGHT_PAREN".
-					inject(index, "vec4(" + shadow);
+					inject(index, "vec4(" + (compared ? SHADOW_COMPARE : shadow));
 					closings.add(close + 1);
 					this.shadowCalls++;
 					continue;
@@ -599,7 +631,12 @@ public final class GlslTranslator {
 			}
 
 			if (LegacyGlsl.DEPTH_LOOKUPS.contains(token.text())) {
-				wrapDepthLookup(index, closings);
+				// The comparison first: a lookup on a comparison sampler is not a depth read at all
+				// and must not be wrapped in of_DepthConv on top of being rewritten.
+				if (!rewriteShadowCompare(index)) {
+					wrapDepthLookup(index, closings);
+				}
+
 				continue;
 			}
 
@@ -615,6 +652,50 @@ public final class GlslTranslator {
 		}
 
 		insertClosings(closings);
+	}
+
+	/**
+	 * Turns a lookup on a comparison sampler into a comparison this engine makes itself.
+	 * <p>
+	 * <strong>The declaration is rewritten because the backend cannot honour it.</strong> A
+	 * {@code sampler2DShadow} asks the hardware to compare the third coordinate against the texel
+	 * and hand back a fraction, and {@code GpuSampler} carries no comparison at all: two address
+	 * modes, two filters, an anisotropy and a maximum level of detail. Bound as an ordinary sampler
+	 * the comparison means nothing, and what a pack gets back is not a wrong shadow but no shadow
+	 * information whatever, which reads on screen as a world entirely in shadow.
+	 * <p>
+	 * Only the plain lookups are rewritten. A projective or gathered comparison is left as it stands
+	 * and counted: what it needs is a different expression, not a different name, and a call that
+	 * silently kept a hardware comparison is exactly the thing this whole rewrite exists to stop.
+	 *
+	 * @return whether this call was a comparison, in which case it is not a depth read as well
+	 */
+	private boolean rewriteShadowCompare(int index) {
+		if (this.comparisonSamplers.isEmpty()) {
+			return false;
+		}
+
+		int open = callOpener(index);
+		int first = open < 0 ? -1 : significantAfter(open);
+		if (first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER
+				|| !this.comparisonSamplers.contains(this.tokens.get(first).text())) {
+			return false;
+		}
+
+		String name = this.tokens.get(index).text();
+		if (!name.equals("texture") && !name.equals("textureLod")) {
+			this.unwrappedShadowCalls++;
+
+			return true;
+		}
+
+		// The name alone: the arguments of texture(sampler, vec3) are the arguments the comparison
+		// takes, so nothing has to be found or balanced. textureLod carries a level this ignores,
+		// which is what a comparison sampler with no mipmaps would have done anyway.
+		replace(index, SHADOW_COMPARE);
+		this.shadowCompares++;
+
+		return true;
 	}
 
 	/**
@@ -1323,13 +1404,70 @@ public final class GlslTranslator {
 		// An opaque uniform is read the same way but keeps its declaration where it stands. It is
 		// still recorded, because the engine has to name every sampler it binds.
 		boolean opaque = LegacyGlsl.isOpaqueType(type);
-		if (!readDeclarators(parts, cursor + 1, type, opaque ? this.samplers : this.blockMembers)) {
+
+		// The comparison is already out of the token stream by now, taken there by
+		// collectComparisonSamplers, so this only has to record it under the same spelling.
+		String plain = withoutComparison(type);
+
+		if (!readDeclarators(parts, cursor + 1, plain, opaque ? this.samplers : this.blockMembers)) {
 			return;
 		}
 
 		if (!opaque) {
 			blankRange(start, end);
 		}
+	}
+
+	/**
+	 * Finds every sampler the pack declared as a comparison sampler, takes the comparison out of its
+	 * declaration, and remembers the name so that {@link #rewriteShadowCompare} knows its lookups.
+	 * <p>
+	 * A pass of its own, and early, because of when the others run: the uniforms are lifted after
+	 * the depth conversion, and the conversion is the one place that has to know. It walks the
+	 * declaration itself rather than reusing the lifting, since all it needs is the type token and
+	 * the names between it and the semicolon, and it must not disturb what the lifting then reads.
+	 */
+	private void collectComparisonSamplers() {
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.IDENTIFIER || token.directive() != null) {
+				continue;
+			}
+
+			String plain = withoutComparison(token.text());
+			if (plain.equals(token.text()) || !LegacyGlsl.isOpaqueType(token.text())) {
+				continue;
+			}
+
+			replace(index, plain);
+
+			// Every identifier up to the semicolon is a name this declaration introduces. Array
+			// bounds and commas are not identifiers, so they are stepped over without a rule.
+			for (int scan = significantAfter(index); scan >= 0; scan = significantAfter(scan)) {
+				Token next = this.tokens.get(scan);
+				if (next.operator(";")) {
+					break;
+				}
+
+				if (next.kind() == Kind.IDENTIFIER) {
+					this.comparisonSamplers.add(next.text());
+				}
+			}
+		}
+	}
+
+	/**
+	 * The same sampler type with the comparison taken out of its spelling, or the type as it stands.
+	 * {@code sampler2DShadow} becomes {@code sampler2D} and {@code sampler2DArrayShadow} becomes
+	 * {@code sampler2DArray}; a name that is not a sampler comes back untouched.
+	 */
+	private static String withoutComparison(String type) {
+		String shape = SamplerTypes.shapeOf(type);
+		if (shape == null || !shape.endsWith(SHADOW_SHAPE)) {
+			return type;
+		}
+
+		return type.substring(0, type.length() - SHADOW_SHAPE.length());
 	}
 
 	/** Records each declarator of one declaration. False if none could be read. */
@@ -1441,6 +1579,21 @@ public final class GlslTranslator {
 					}
 				}
 			}
+		}
+
+		// One tap and a step, which is what a comparison sampler filtered NEAREST does. The softness
+		// of a hardware compare filtered LINEAR, four taps averaged after comparing, is not
+		// reproduced here and would need four of these: a pack that asked for it gets a harder edge
+		// than it drew against, which is a difference of filtering and not of geometry.
+		//
+		// The sense is LEQUAL, which is what OptiFine sets on a shadow texture and therefore what
+		// every pack is written against: one where the fragment is no further from the light than
+		// what the map holds, and the map holds the forward window where nearer is smaller.
+		if (this.shadowCompares > 0) {
+			lines.add("float " + SHADOW_COMPARE + "(sampler2D ofMap, vec3 ofAt) {"
+					+ " return step(ofAt.z, texture(ofMap, ofAt.xy).x); }");
+			lines.add("float " + SHADOW_COMPARE + "(sampler2D ofMap, vec3 ofAt, float ofLod) {"
+					+ " return step(ofAt.z, textureLod(ofMap, ofAt.xy, ofLod).x); }");
 		}
 
 		// Declared on both sides or on neither, whether this stage reads it or not. A varying the
