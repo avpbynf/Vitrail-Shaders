@@ -8,26 +8,26 @@ Iris, https://github.com/IrisShaders/Iris
 Copyright the Iris contributors
 GNU Lesser General Public License version 3
 
-  common/src/main/java/dev/vitrail/pack/ProgramFallbacks.java contains the gbuffers, shadow and
+  common/src/main/java/dev/vitrail/pack/program/ProgramFallbacks.java contains the gbuffers, shadow and
   Distant Horizons fallback table, adapted in 2026 from the enum
   net.irisshaders.iris.shaderpack.loading.ProgramId. The table was reorganised into a name to
   parent map. The blend mode overrides and the IrisProgram API mapping carried by the original
   enum were not reused.
 
-  common/src/main/java/dev/vitrail/pack/TargetFormat.java transcribes the colour format table of
+  common/src/main/java/dev/vitrail/pack/target/TargetFormat.java transcribes the colour format table of
   net.irisshaders.iris.gl.texture.InternalTextureFormat, so that a pack is read against the names
   it was written for. The promotion of the three component formats and the replacement of the
   fixed function relics are this project's own, and are needed because Vulkan attaches neither.
 
-  common/src/main/java/dev/vitrail/pack/ConstDirectives.java and
-  common/src/main/java/dev/vitrail/pack/DrawBuffers.java follow the grammars of
+  common/src/main/java/dev/vitrail/pack/target/ConstDirectives.java and
+  common/src/main/java/dev/vitrail/pack/target/DrawBuffers.java follow the grammars of
   net.irisshaders.iris.shaderpack.parsing.ConstDirectiveParser and of
   net.irisshaders.iris.shaderpack.parsing.CommentDirectiveParser together with
   net.irisshaders.iris.shaderpack.programs.ProgramDirectives. Both rules are odd enough that
   reasoning them out would get them wrong, so they are reproduced rather than reinvented.
 
-  common/src/main/java/dev/vitrail/pack/TargetDirectives.java and
-  common/src/main/java/dev/vitrail/pack/TargetSchedule.java carry the semantics of
+  common/src/main/java/dev/vitrail/pack/target/TargetDirectives.java and
+  common/src/main/java/dev/vitrail/pack/target/TargetSchedule.java carry the semantics of
   net.irisshaders.iris.shaderpack.properties.PackRenderTargetDirectives, of
   net.irisshaders.iris.targets.ClearPassCreator and of net.irisshaders.iris.targets.BufferFlipper:
   the last declaration read overwriting the ones before it, the default clear colours, and which
@@ -35,19 +35,19 @@ GNU Lesser General Public License version 3
   GAUX4FORMAT and the promotion of colortex1 on a gdepth uniform, are not implemented. The flip
   state is carried once rather than as the pair BufferFlipper keeps.
 
-  common/src/main/java/dev/vitrail/pack/TargetSize.java reimplements
+  common/src/main/java/dev/vitrail/pack/target/TargetSize.java reimplements
   net.irisshaders.iris.gl.texture.TextureScaleOverride, down to the dot in the value being what
   tells a fraction of the screen from a count of pixels, together with the rule of
   net.irisshaders.iris.shaderpack.properties.PackDirectives.getTextureScaleOverride that looks the
   legacy name up before the canonical one. One divergence: the two axes share a single relative
   flag here where Iris carries one each.
 
-  common/src/main/java/dev/vitrail/pack/TargetPlan.java folds a dimension's directives in the
+  common/src/main/java/dev/vitrail/pack/target/TargetPlan.java folds a dimension's directives in the
   order of net.irisshaders.iris.shaderpack.programs.ProgramSet.locateDirectives, setup programs
   left out of it as they are there. The order the frame runs in, which the same file also carries,
   is not that one and is not from Iris.
 
-  common/src/main/java/dev/vitrail/pack/PackDirectives.java gathers the settings a pack declares
+  common/src/main/java/dev/vitrail/pack/target/PackDirectives.java gathers the settings a pack declares
   about itself with the names, the defaults and the precedence of
   net.irisshaders.iris.shaderpack.properties.PackDirectives and of its shadow counterpart,
   PackShadowDirectives, adapted in August 2026. That includes one behaviour that is a mistake
@@ -56,12 +56,49 @@ GNU Lesser General Public License version 3
   fall, and packs are written against that. SHADOWHPL, which is a comment directive rather than a
   const one, is not implemented.
 
-  common/src/main/java/dev/vitrail/pack/EngineDefines.java classifies the operating system, the
+  common/src/main/java/dev/vitrail/pack/option/EngineDefines.java classifies the operating system, the
   vendor and the driver into the symbols a pack branches on with the prefix lists of
   net.irisshaders.iris.gl.shader.StandardMacros, and emits the biome, category and precipitation
   symbols the way net.irisshaders.iris.shaderpack.IrisDefines emits them, adapted in August 2026.
   The lists are arguments here rather than calls into a device, so that the table can be built
   without one.
+
+  common/src/main/java/dev/vitrail/pack/program/TerrainPass.java carries the names, the alpha test
+  defaults and the flip snapshot keying of net.irisshaders.iris.pipeline.SodiumPrograms, its Pass
+  enum and getAlphaTest, read on 3 August 2026. They are reproduced rather than chosen because
+  packs are written against Iris and against nothing else. The shadow halves of the enum and
+  everything the passes drive are this project's own.
+
+  common/src/main/java/dev/vitrail/pack/program/AlphaTest.java emits the comparison in the negated
+  form Iris emits, if (!(a > r)) discard, with Iris's translucent threshold of one ten
+  thousandth, and looks an alphaTest override up under the name of the file that really serves
+  the pass, which is Iris's lookup too.
+
+  common/src/main/java/dev/vitrail/pack/source/DimensionSet.java ports the folder conventions of
+  net.irisshaders.iris.shaderpack.ShaderPack, lines 132 to 148, defaults included: the overworld
+  folder answering for every world the pack never names, the other two answering for themselves
+  alone.
+
+  common/src/main/java/dev/vitrail/render/PackPlace.java ports the dimension resolution of
+  net.irisshaders.iris.Iris, lines 606 to 641: a world the pack does not name itself is answered
+  for by its sky rather than by its identifier, and a pack that does name it is taken at its word.
+
+  common/src/main/java/dev/vitrail/pack/id/BlockIds.java and
+  common/src/main/java/dev/vitrail/render/BlockStateIds.java follow the material map rules of
+  net.irisshaders.iris.shaderpack.materialmap: the grammar of BlockEntry.parse, the line splitting
+  substitution for folded continuations, and the putIfAbsent resolution walking the file from the
+  top, under which the first declaration to match a block state wins. The order is the semantics,
+  so it is reproduced rather than reinvented.
+
+  common/src/main/java/dev/vitrail/glsl/SodiumVertex.java packs and unpacks the block id the way
+  Iris does, ((id + 1) << 1) | isFluid and its inverse term for term, so that nought means no
+  declaration matched and comes back out as the -1 every pack tests against. The reading of
+  Sodium's vertex layout in the same file is this project's own and is not from Iris.
+
+  common/src/main/java/dev/vitrail/glsl/LegacyGlsl.java reproduces the constants Iris substitutes
+  for the fixed function vertex inputs of a full screen pass, a quad from (0,0) to (1,1), no
+  colour, a normal pointing at the viewer, and the vec4(0.0, 0.0, 0.0, 1.0) of the texture units
+  above nought, because a pack's full screen pass is written expecting exactly those values.
 
   common/src/main/java/dev/vitrail/uniform/Smoothed.java adapts the exponential smoothing of
   net.irisshaders.iris.uniforms.transforms.SmoothedFloat in August 2026, including its half life in
