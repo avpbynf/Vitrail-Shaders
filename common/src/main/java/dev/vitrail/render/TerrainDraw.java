@@ -1,12 +1,14 @@
 package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
+import dev.vitrail.pack.ChainPlan;
 import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.TerrainPass;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -46,12 +48,14 @@ public final class TerrainDraw {
 	private final String profile;
 	private final PackValues values;
 	private final int load;
+	private final ChainPlan plan;
+	private final ColorTargets targets;
 
 	private Map<TerrainPass, TerrainProgram> programs = Map.of();
 	private boolean read;
 
 	TerrainDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load) {
+			String profile, PackValues values, int load, ChainPlan plan, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
@@ -59,6 +63,8 @@ public final class TerrainDraw {
 		this.profile = profile;
 		this.values = values;
 		this.load = load;
+		this.plan = plan;
+		this.targets = targets;
 	}
 
 	/** Whether a pack's terrain program takes over the opaque chunk pass, from the loaded options. */
@@ -133,12 +139,31 @@ public final class TerrainDraw {
 		}
 	}
 
+	/**
+	 * The render pass one chunk pass wants opened, or null to leave the chunk renderer's own alone.
+	 * <p>
+	 * Asked for every chunk pass and not only ours, so the pass being drawn decides. A program that
+	 * writes one draw buffer never answers: it wants exactly the pass Sodium was going to open, and
+	 * building an identical one of our own would only be a way of getting it wrong later.
+	 */
+	public static RenderPassDescriptor descriptor(TerrainPass pass, GpuTextureView colour,
+			GpuTextureView depth) {
+		TerrainDraw draw = PackChain.terrain();
+		if (draw == null || !wanted) {
+			return null;
+		}
+
+		TerrainProgram program = draw.programs.get(pass);
+
+		return program == null ? null : program.descriptor(colour, depth);
+	}
+
 	private RenderPipeline prepare(TerrainPass pass, VertexFormat format, GpuTextureView atlas) {
 		if (!this.read) {
 			this.read = true;
 			if (TerrainProgram.carries(format)) {
 				this.programs = TerrainProgram.read(this.packPath, this.place, this.chosen,
-						this.profile, this.values, this.load, format);
+						this.profile, this.values, this.load, format, this.plan, this.targets);
 			}
 		}
 
@@ -153,6 +178,12 @@ public final class TerrainDraw {
 		}
 
 		this.owner.beginFrame();
+
+		// Before the pipeline and before the pass, which is the whole point: the clears belong ahead
+		// of the world now that something writes the pack's targets during it. A frame where they
+		// cannot be opened still draws, and the descriptor answers null so the chunk renderer keeps
+		// its own single attachment pass.
+		this.owner.openTargets(device);
 
 		return program.prepare(device, atlas);
 	}

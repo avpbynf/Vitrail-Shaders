@@ -9,6 +9,7 @@
 	"client": [
 		"BlockRendererMixin",
 		"ChunkMeshFormatsMixin",
+		"DefaultChunkRendererMixin",
 		"GameRendererMixin",
 		"ProjectionMatrixBufferMixin",
 		"ShaderChunkRendererMixin",

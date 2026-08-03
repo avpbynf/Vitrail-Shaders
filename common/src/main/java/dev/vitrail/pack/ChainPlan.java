@@ -1,9 +1,11 @@
 package dev.vitrail.pack;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -37,16 +39,19 @@ public final class ChainPlan {
 	private final List<Pass> passes;
 	private final Pass last;
 	private final Seed seed;
+	private final Map<String, Pass> geometry;
 	private final List<Integer> swapBack;
 	private final List<String> refusals;
 	private final List<String> notes;
 
-	private ChainPlan(String place, List<Pass> passes, Pass last, Seed seed, List<Integer> swapBack,
-			List<String> refusals, List<String> notes) {
+	private ChainPlan(String place, List<Pass> passes, Pass last, Seed seed,
+			Map<String, Pass> geometry, List<Integer> swapBack, List<String> refusals,
+			List<String> notes) {
 		this.place = place;
 		this.passes = List.copyOf(passes);
 		this.last = last;
 		this.seed = seed;
+		this.geometry = Map.copyOf(geometry);
 		this.swapBack = List.copyOf(swapBack);
 		this.refusals = List.copyOf(refusals);
 		this.notes = List.copyOf(notes);
@@ -127,7 +132,30 @@ public final class ChainPlan {
 		Set<Integer> back = new TreeSet<>(plan.schedule().flippedAtEnd());
 		back.retainAll(plan.persistent());
 
-		return new ChainPlan(plan.place(), passes, last, seed, List.copyOf(back), refusals, notes);
+		return new ChainPlan(plan.place(), passes, last, seed, geometryOf(plan, resolver, notes),
+				List.copyOf(back), refusals, notes);
+	}
+
+	/**
+	 * The attachments of every geometry program this engine can draw, keyed by the file that serves
+	 * it. Two of the three chunk passes are usually one file, so the map is smaller than the passes.
+	 */
+	private static Map<String, Pass> geometryOf(TargetPlan plan, ProgramResolver resolver,
+			List<String> notes) {
+		Map<String, Pass> geometry = new LinkedHashMap<>();
+		for (TerrainPass pass : TerrainPass.values()) {
+			resolver.lookup(plan.place(), pass.program())
+					.map(ProgramResolver.Resolution::servedBy)
+					.filter(servedBy -> !geometry.containsKey(servedBy))
+					.ifPresent(servedBy -> {
+						Pass attachments = geometryOf(plan, servedBy, notes);
+						if (attachments != null) {
+							geometry.put(servedBy, attachments);
+						}
+					});
+		}
+
+		return geometry;
 	}
 
 	private static Pass passOf(TargetPlan plan, String program, List<String> refusals) {
@@ -140,21 +168,42 @@ public final class ChainPlan {
 			return null;
 		}
 
+		return attachmentsOf(plan, program, writes, refusals);
+	}
+
+	/**
+	 * The same walk for a geometry program, which is asked for by name rather than found in the
+	 * running chain.
+	 * <p>
+	 * Every reason to answer nothing goes to the notes and none of them refuses anything: a geometry
+	 * program is not part of the chain, so a place that cannot carry its targets is a place where
+	 * the geometry writes one attachment instead of several, not a place that draws nothing. A pack
+	 * declaring no draw buffer on its geometry is the ordinary case rather than a fault, which is
+	 * why it is not even said here: {@link #notes()} already carries one line naming all of them.
+	 */
+	private static Pass geometryOf(TargetPlan plan, String program, List<String> notes) {
+		List<Integer> writes = plan.writes(program);
+
+		return writes.isEmpty() ? null : attachmentsOf(plan, program, writes, notes);
+	}
+
+	private static Pass attachmentsOf(TargetPlan plan, String program, List<Integer> writes,
+			List<String> problems) {
 		if (writes.size() > MAX_ATTACHMENTS) {
-			refusals.add(program + " writes " + writes.size() + " targets and one pass carries at "
+			problems.add(program + " writes " + writes.size() + " targets and one pass carries at "
 					+ "most " + MAX_ATTACHMENTS + ": " + writes);
 			return null;
 		}
 
 		if (new LinkedHashSet<>(writes).size() != writes.size()) {
-			refusals.add(program + " names the same target twice in its draw buffers, " + writes
+			problems.add(program + " names the same target twice in its draw buffers, " + writes
 					+ ", and one image cannot be two attachments of one pass");
 			return null;
 		}
 
 		Optional<TargetSchedule.Bound> bound = plan.schedule().step(program);
 		if (bound.isEmpty()) {
-			refusals.add(program + " is meant to run and the schedule holds no step for it");
+			problems.add(program + " writes " + writes + " and the schedule holds no step for it");
 			return null;
 		}
 
@@ -162,7 +211,7 @@ public final class ChainPlan {
 		TargetSize size = null;
 		for (int index : writes) {
 			if (!plan.allocated().contains(index)) {
-				refusals.add(program + " writes " + TargetName.canonical(index)
+				problems.add(program + " writes " + TargetName.canonical(index)
 						+ ", which nothing of this place allocates");
 				return null;
 			}
@@ -173,7 +222,7 @@ public final class ChainPlan {
 			} else if (!size.equals(here)) {
 				// One pass, one render area: the backend refuses attachments of two sizes, and it
 				// refuses them at the first draw rather than at load time.
-				refusals.add(program + " writes targets of two sizes, " + describe(size) + " and "
+				problems.add(program + " writes targets of two sizes, " + describe(size) + " and "
 						+ describe(here) + " for " + TargetName.canonical(index));
 				return null;
 			}
@@ -337,6 +386,21 @@ public final class ChainPlan {
 	/** The final. Its attachments are always empty: it writes the game's own target. */
 	public Optional<Pass> last() {
 		return Optional.ofNullable(this.last);
+	}
+
+	/**
+	 * Where a geometry program's outputs belong, in draw buffer order and each on the half the
+	 * schedule gives it, or empty when this place cannot answer.
+	 * <p>
+	 * Empty is not a failure and covers three cases, all of them normal for a pack: it declares no
+	 * draw buffer on its geometry, which most of the corpus does on at least one place; it writes a
+	 * target this place does not allocate; or its targets are not all the same size, which one
+	 * render pass cannot carry. The last two are said in {@link #notes()}.
+	 *
+	 * @param servedBy the file that serves the pass, not the name the pass asked for
+	 */
+	public Optional<Pass> geometry(String servedBy) {
+		return Optional.ofNullable(this.geometry.get(servedBy));
 	}
 
 	public Optional<Seed> seed() {

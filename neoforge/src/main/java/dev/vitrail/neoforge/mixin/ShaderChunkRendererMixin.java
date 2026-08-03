@@ -1,5 +1,6 @@
 package dev.vitrail.neoforge.mixin;
 
+import dev.vitrail.neoforge.sodium.SodiumPasses;
 import dev.vitrail.pack.TerrainPass;
 import dev.vitrail.render.TerrainDraw;
 
@@ -8,7 +9,6 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.caffeinemc.mods.sodium.client.gpu.device.backend.DrawBackend;
 import net.caffeinemc.mods.sodium.client.render.chunk.ShaderChunkRenderer;
-import net.caffeinemc.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
 import org.spongepowered.asm.mixin.Mixin;
@@ -70,7 +70,7 @@ public abstract class ShaderChunkRendererMixin {
 			return;
 		}
 
-		TerrainPass ours = vitrail$pass(pass);
+		TerrainPass ours = SodiumPasses.of(pass);
 		if (ours == null) {
 			return;
 		}
@@ -79,18 +79,5 @@ public abstract class ShaderChunkRendererMixin {
 		if (pipeline != null) {
 			callback.setReturnValue(pipeline);
 		}
-	}
-
-	/** This engine's name for one of Sodium's three passes, or null for anything else. */
-	private static TerrainPass vitrail$pass(TerrainRenderPass pass) {
-		if (pass == DefaultTerrainRenderPasses.SOLID) {
-			return TerrainPass.SOLID;
-		}
-
-		if (pass == DefaultTerrainRenderPasses.CUTOUT) {
-			return TerrainPass.CUTOUT;
-		}
-
-		return pass == DefaultTerrainRenderPasses.TRANSLUCENT ? TerrainPass.TRANSLUCENT : null;
 	}
 }

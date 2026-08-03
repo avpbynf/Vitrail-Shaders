@@ -115,6 +115,13 @@ public final class PackChain {
 	 */
 	private static boolean advanced;
 
+	/**
+	 * Whether this frame's colour targets have been allocated and cleared yet. Held beside
+	 * {@link #advanced} and reset with it: the two answer the same question, "has this frame been
+	 * opened", for the values and for the targets.
+	 */
+	private boolean opened;
+
 	private final PackProgram.Chain chain;
 	private final PackValues values;
 	private final String world;
@@ -150,8 +157,13 @@ public final class PackChain {
 				.orElse(null);
 		// Held rather than read: the terrain program is compiled against the chunk mesh format, and
 		// nothing knows that format until the renderer asks for its shader.
+		//
+		// It is handed THIS plan and never one of its own, which would be a plan built without the
+		// user's pass filter. The half a program writes comes from the schedule, and a schedule
+		// walked over a different set of passes hands out a different parity: the terrain would then
+		// write one half while the chain read the other, and neither side would say a word.
 		this.terrain = new TerrainDraw(this, packPath, chain.place(), chosen, profile, values,
-				this.load);
+				this.load, chain.chain(), this.targets);
 	}
 
 	/**
@@ -524,8 +536,12 @@ public final class PackChain {
 		if (disabled || chain == null) {
 			// The frame is closed whatever happened, and outside the try: a terrain program may have
 			// opened it during the world even when nothing of the chain is drawn afterwards, and a
-			// flag left standing would stop the values ever moving again.
+			// flag left standing would stop the values ever moving again, or the targets ever being
+			// cleared again if this pack is turned back on.
 			advanced = false;
+			if (chain != null) {
+				chain.opened = false;
+			}
 
 			return false;
 		}
@@ -543,6 +559,7 @@ public final class PackChain {
 		}
 
 		advanced = false;
+		chain.opened = false;
 
 		return chainWanted;
 	}
@@ -570,6 +587,37 @@ public final class PackChain {
 			PackDump.take(this.chain.place(), this.load, this.terrain.programs(),
 					this.programs == null ? List.of() : this.programs, this.values.world());
 		}
+	}
+
+	/**
+	 * Allocates the colour targets if they are not there and clears them, once a frame, and answers
+	 * whether they can be drawn into.
+	 * <p>
+	 * <strong>This has to happen before the world and not where the chain starts.</strong> The chain
+	 * runs once the world is finished; the terrain writes its targets during it. Clearing where the
+	 * chain starts would therefore throw away everything the terrain had just written, and it would
+	 * do it silently, the targets reading exactly as they do when no geometry runs at all.
+	 * <p>
+	 * Called from both sides for that reason, whichever comes first: from the terrain, at the point
+	 * the chunk renderer asks for its shader, which is the last moment before it opens a pass; and
+	 * from the chain, for the frames and the configurations where no terrain runs at all. The second
+	 * call is free.
+	 */
+	boolean openTargets(GpuDevice device) {
+		if (this.opened) {
+			return true;
+		}
+
+		Minecraft minecraft = Minecraft.getInstance();
+		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
+		if (main == null || !this.targets.ensure(main.width, main.height)) {
+			return false;
+		}
+
+		this.opened = true;
+		this.targets.clear(device.createCommandEncoder());
+
+		return true;
 	}
 
 	/** Everything the end of a frame owes when the chain itself is not drawn. */
@@ -625,10 +673,13 @@ public final class PackChain {
 		announce(main, seeding);
 		writeBlocks();
 
+		// Free when the terrain has already opened this frame, which is the ordinary case: the
+		// clears belong before the world, or they would wipe what the terrain wrote into them.
+		openTargets(device);
+
 		// One encoder for the whole frame. A second one would be a fresh wrapper carrying its own
 		// idea of whether a pass is open, which is the guard that keeps allocations out of one.
 		CommandEncoder encoder = device.createCommandEncoder();
-		this.targets.clear(encoder);
 
 		// Where the world would have been drawn, which the plan works out and this only reads. A
 		// begin or a prepare runs ahead of it and the schedule gave the seed its half on that

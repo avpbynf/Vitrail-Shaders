@@ -5,9 +5,12 @@ import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.SodiumVertex;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.pack.AlphaTest;
+import dev.vitrail.pack.ChainPlan;
 import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.ProgramStage;
 import dev.vitrail.pack.SamplerPlan;
+import dev.vitrail.pack.TargetName;
+import dev.vitrail.pack.TargetSize;
 import dev.vitrail.pack.TerrainPass;
 import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
@@ -30,6 +33,7 @@ import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
@@ -102,18 +106,14 @@ public final class TerrainProgram {
 	private static final Vector4f MID_GREY = new Vector4f(0.5F, 0.5F, 0.5F, 1.0F);
 
 	private static final Supplier<String> BLOCK_LABEL = () -> "Vitrail terrain OfGlobals";
-
-	/**
-	 * How a blended chunk pass writes into the target, which is Sodium's own choice reproduced: the
-	 * same {@code BlendFunction.TRANSLUCENT} and the same {@code RGBA8_UNORM}, so that swapping the
-	 * pipeline swaps the shader and nothing else. Sodium's translucent pass is the only one that
-	 * blends; the other two take {@code ColorTargetState.DEFAULT}, which blends nothing.
-	 */
-	private static final ColorTargetState BLENDED = new ColorTargetState(
-			Optional.of(BlendFunction.TRANSLUCENT), GpuFormat.RGBA8_UNORM, ColorTargetState.WRITE_ALL);
+	private static final Supplier<String> PASS_LABEL = () -> "Vitrail terrain";
 
 	private final TerrainPass pass;
 	private final String path;
+
+	/** The pack's own targets, draw buffer nought excluded. Empty when there is nothing to gain. */
+	private final List<ChainPlan.Attachment> extra;
+	private final ColorTargets targets;
 	private final PackProgram.Loaded loaded;
 	private final PackValues values;
 	private final PackUniforms uniforms;
@@ -132,9 +132,16 @@ public final class TerrainProgram {
 	private boolean broken;
 
 	private TerrainProgram(TerrainPass pass, PackProgram.Loaded loaded, PackValues values, int load,
-			VertexFormat format) {
+			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets) {
 		this.pass = pass;
 		this.path = loaded.path();
+		// Draw buffer nought stays where it has always gone, the game's own target, and only the
+		// ones after it are taken. That is what keeps the picture identical: the seed paints the
+		// game's finished frame into the target draw buffer nought names, so writing there directly
+		// would gain nothing and lose the sky and the entities the seed also carries. Everything
+		// above nought is pure gain, because today it is written nowhere at all.
+		this.extra = writes.size() < 2 ? List.of() : List.copyOf(writes.subList(1, writes.size()));
+		this.targets = targets;
 		this.loaded = loaded;
 		this.values = values;
 		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.geometryCatalog());
@@ -163,13 +170,10 @@ public final class TerrainProgram {
 				.withUniform(UNIFORM_BLOCK, UniformType.UNIFORM_BUFFER);
 		this.samplers.forEach(bindings::withSampler);
 
-		// Everything but the shaders and the bind group is Sodium's own, taken from
+		// Everything but the shaders, the bind group and the attachments is Sodium's own, taken from
 		// ShaderChunkRenderer.createShader: the pass this is bound into was opened for that pipeline
 		// and a difference of topology or of depth state would be a difference nobody declared.
-		// One colour target state, because the pass carries one attachment and dynamic rendering
-		// wants the two counts equal. A fragment stage declaring more outputs than that writes the
-		// extra ones nowhere, which is said in the log rather than left to be noticed.
-		this.pipeline = RenderPipeline.builder()
+		RenderPipeline.Builder builder = RenderPipeline.builder()
 				.withLocation(Identifier.fromNamespaceAndPath(NAMESPACE, "pipeline/" + stem))
 				.withVertexShader(vertexId)
 				.withFragmentShader(fragmentId)
@@ -177,9 +181,32 @@ public final class TerrainProgram {
 				.withVertexBinding(0, format)
 				.withPrimitiveTopology(PrimitiveTopology.QUADS)
 				.withDepthStencilState(DepthStencilState.DEFAULT)
-				.withColorTargetState(pass.blended() ? BLENDED : ColorTargetState.DEFAULT)
-				.withCull(true)
-				.build();
+				.withCull(true);
+
+		// One state per attachment, and dynamic rendering wants the two counts equal. Nought is the
+		// game's own target and carries its format; the rest carry the format their colour target
+		// was really allocated as, which is not always the one the pack asked for.
+		// By slot and never by append: the builder holds the states in an array and the argumentless
+		// form writes slot nought every time, so three calls would leave one state and a pipeline
+		// the pass refuses to bind, by name and in the middle of the world.
+		builder.withColorTargetState(0, state(GpuFormat.RGBA8_UNORM));
+		for (int slot = 0; slot < this.extra.size(); slot++) {
+			builder.withColorTargetState(slot + 1,
+					state(targets.format(this.extra.get(slot).target())));
+		}
+
+		this.pipeline = builder.build();
+	}
+
+	/**
+	 * The blend the pass wants, on every attachment alike. That is Iris's default too: a pack moves
+	 * one buffer on its own with {@code blend.<program>.<buffer>}, which nothing here reads yet.
+	 */
+	private ColorTargetState state(GpuFormat format) {
+		return this.pass.blended()
+				? new ColorTargetState(Optional.of(BlendFunction.TRANSLUCENT), format,
+						ColorTargetState.WRITE_ALL)
+				: new ColorTargetState(Optional.empty(), format, ColorTargetState.WRITE_ALL);
 	}
 
 	/**
@@ -195,7 +222,7 @@ public final class TerrainProgram {
 	 */
 	static Map<TerrainPass, TerrainProgram> read(Path packPath, String place,
 			Map<String, OptionValue> chosen, String profile, PackValues values, int load,
-			VertexFormat format) {
+			VertexFormat format, ChainPlan plan, ColorTargets targets) {
 		try {
 			Map<TerrainPass, PackProgram.Loaded> loaded =
 					PackProgram.loadTerrain(packPath, place, chosen, profile);
@@ -208,8 +235,31 @@ public final class TerrainProgram {
 			}
 
 			Map<TerrainPass, TerrainProgram> programs = new EnumMap<>(TerrainPass.class);
-			loaded.forEach((pass, one) ->
-					programs.put(pass, new TerrainProgram(pass, one, values, load, format)));
+			loaded.forEach((pass, one) -> {
+				// The name the plan holds the attachments under is the file that serves the pass,
+				// which is what the plan was asked for and what the path ends with.
+				String servedBy = one.path().substring(one.path().lastIndexOf('/') + 1);
+				// Attachment nought is the game's own target and it is the size of the screen, so
+				// every other attachment of that pass has to be too: one render pass has one render
+				// area. A pack scaling its targets with size.buffer therefore keeps the single
+				// attachment pass, and the log says so rather than the encoder throwing mid frame.
+				List<ChainPlan.Attachment> extra = plan.geometry(servedBy)
+						.filter(geometry -> {
+							if (geometry.size().equals(TargetSize.ofScreen())) {
+								return true;
+							}
+
+							Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so "
+									+ "they cannot share a pass with the game's own target and its "
+									+ "other draw buffers are written nowhere", servedBy);
+
+							return false;
+						})
+						.map(ChainPlan.Pass::attachments)
+						.orElse(List.of());
+				programs.put(pass,
+						new TerrainProgram(pass, one, values, load, format, extra, targets));
+			});
 
 			return programs;
 		} catch (IOException | RuntimeException e) {
@@ -316,6 +366,48 @@ public final class TerrainProgram {
 	/** Whether the pipeline a pass has bound is this program's. */
 	boolean owns(RenderPipeline bound) {
 		return this.pipeline == bound;
+	}
+
+	/**
+	 * The render pass this program wants opened, or null to leave the chunk renderer's own alone.
+	 * <p>
+	 * Null is the ordinary answer and not a failure: a program writing one draw buffer wants exactly
+	 * the pass Sodium would have opened, and BSL is that case. It is also the answer while the
+	 * targets are still being allocated, which is the first frame or two and the frames after a
+	 * resize.
+	 *
+	 * @param colour the colour view the renderer was going to draw into, which stays attachment
+	 *               nought
+	 * @param depth  the depth view it was going to use, kept as it is: the terrain has to test
+	 *               against the sky the game already drew, and everything the game draws afterwards
+	 *               has to test against the terrain
+	 */
+	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
+		if (this.extra.isEmpty()) {
+			return null;
+		}
+
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(PASS_LABEL)
+				.withColorAttachment(colour);
+		for (ChainPlan.Attachment attachment : this.extra) {
+			GpuTextureView view = this.targets.view(attachment.target(), attachment.side());
+			if (view == null) {
+				// The targets are not there yet, or not there any more. Sodium's own pass draws this
+				// frame rather than nothing at all, and the next frame tries again.
+				return null;
+			}
+
+			descriptor.withColorAttachment(view);
+		}
+
+		// Never left out: the encoder refuses a descriptor without one outright, and it refuses it
+		// at the first draw rather than at load time. The size is the screen's because attachment
+		// nought is the game's own target, which is what makes a scaled colour target impossible
+		// here and why the constructor drops those instead of scaling the area to them.
+		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0,
+				this.targets.screenWidth(), this.targets.screenHeight()));
+
+		return depth == null ? descriptor : descriptor.withDepthAttachment(depth);
 	}
 
 	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */
@@ -464,9 +556,18 @@ public final class TerrainProgram {
 					+ "the pack exists: {}", flat.size(), flat);
 		}
 
-		if (outputs > 1) {
-			Vitrail.logger().warn("{} declares {} fragment outputs and the pass it is drawn in carries"
-					+ " one attachment, so all but the first are written nowhere", this.path, outputs);
+		// Draw buffer nought is not named here on purpose: it goes to the game's own target, which is
+		// where it has always gone and where the seed reads it back from.
+		if (this.extra.isEmpty()) {
+			if (outputs > 1) {
+				Vitrail.logger().warn("{} declares {} fragment outputs and writes one draw buffer, so "
+						+ "all but the first are written nowhere", this.path, outputs);
+			}
+		} else {
+			Vitrail.logger().info("Its other draw buffers reach the pack's own targets: {}",
+					this.extra.stream()
+							.map(one -> TargetName.canonical(one.target()) + " " + one.side())
+							.toList());
 		}
 
 		PackValues.Gaps gaps = this.values.classify(this.uniforms.unsupplied());

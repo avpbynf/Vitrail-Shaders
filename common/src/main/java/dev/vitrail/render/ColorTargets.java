@@ -232,6 +232,14 @@ final class ColorTargets {
 		return this.formats.get(index);
 	}
 
+	int screenWidth() {
+		return this.screenWidth;
+	}
+
+	int screenHeight() {
+		return this.screenHeight;
+	}
+
 	/** LINEAR wherever Iris allows it, which is everywhere but an integer format. */
 	FilterMode filter(int index) {
 		TargetFormat format = this.plan.directives().format(index).used();
