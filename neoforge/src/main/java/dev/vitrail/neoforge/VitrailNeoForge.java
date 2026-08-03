@@ -48,6 +48,12 @@ public final class VitrailNeoForge {
 		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterOpaqueFeatures.class,
 				this::onAfterOpaqueFeatures);
 
+		// The pair of events brackets exactly executeTranslucent, which is where the game draws
+		// the translucent features, the player's own body among them. They go into the game's
+		// target, which the pack's final overwrites, so without the layer they simply vanish.
+		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterTranslucentFeatures.class,
+				this::onAfterTranslucentFeatures);
+
 		// AfterLevel fires in GameRenderer.renderLevel once LevelRenderer is done and
 		// before anything else touches the main target, outside of any render pass the
 		// game has open. That is the whole reason this hook is an event and not a mixin.
@@ -89,6 +95,11 @@ public final class VitrailNeoForge {
 	 */
 	private void onAfterOpaqueFeatures(RenderLevelStageEvent.AfterOpaqueFeatures event) {
 		PackChain.drawBeforeTranslucents();
+		PackChain.openFeatures();
+	}
+
+	private void onAfterTranslucentFeatures(RenderLevelStageEvent.AfterTranslucentFeatures event) {
+		PackChain.closeFeatures();
 	}
 
 	private void onAfterLevel(RenderLevelStageEvent.AfterLevel event) {

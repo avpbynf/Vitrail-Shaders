@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.source.PackLoader;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
@@ -143,6 +144,10 @@ public final class PackChain {
 	private final ColorTargets targets;
 	private final SceneSeed seed;
 	private final boolean seedEnabled;
+
+	/** The game's translucent features, caught and composed onto the pack's image. Null when the
+	 * pack serves no translucent pass to compose in front of. */
+	private final FeatureLayer features;
 	private final int load;
 	private final TerrainDraw terrain;
 
@@ -170,6 +175,16 @@ public final class PackChain {
 		this.seed = chain.chain().seed()
 				.filter(where -> this.targets.has(where.target()))
 				.map(where -> new SceneSeed(where, this.targets.format(where.target())))
+				.orElse(null);
+		// Composed where the world's own translucents are about to blend, so it needs that pass to
+		// exist: a pack serving no translucent geometry gets no layer, and the game's features stay
+		// where the game drew them.
+		this.features = chain.chain().geometry(TerrainPass.TRANSLUCENT)
+				.map(ChainPlan.Pass::attachments)
+				.filter(attachments -> !attachments.isEmpty())
+				.map(attachments -> attachments.get(0))
+				.filter(into -> this.targets.has(into.target()))
+				.map(into -> new FeatureLayer(into, this.targets.format(into.target())))
 				.orElse(null);
 		// Held rather than read: the terrain program is compiled against the chunk mesh format, and
 		// nothing knows that format until the renderer asks for its shader.
@@ -805,6 +820,61 @@ public final class PackChain {
 		}
 	}
 
+	/**
+	 * Redirects the game's translucent features, the player's body among them, into the layer that
+	 * will hand them to the pack's image. Called once the early half has run, and undone by
+	 * {@link #closeFeatures()}: the pair brackets exactly the game's {@code executeTranslucent}.
+	 * <p>
+	 * The switch is the game's own, the one it throws around its always-on-top features. The colour
+	 * goes to the layer; the depth keeps pointing at the world's, so the redirected draws still
+	 * hide behind terrain and still leave the depth the water reads untouched.
+	 */
+	public static void openFeatures() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		Minecraft minecraft = Minecraft.getInstance();
+		if (disabled || chain == null || device == null || minecraft == null || !chainWanted
+				|| chain.features == null) {
+			return;
+		}
+
+		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+		if (main == null || !chain.features.prepare(device)) {
+			return;
+		}
+
+		GpuTextureView layer = chain.features.open(device, main.width, main.height);
+		if (layer == null) {
+			return;
+		}
+
+		RenderSystem.outputColorTextureOverride = layer;
+		RenderSystem.outputDepthTextureOverride = main.getDepthTextureView();
+	}
+
+	/**
+	 * Puts the game's overrides back and composes the layer onto the half of the pack's target the
+	 * world's translucents are about to blend onto, which keeps vanilla's order: features first,
+	 * then water.
+	 */
+	public static void closeFeatures() {
+		// Always put back, whatever else happens below: overrides left standing past this point
+		// would swallow every later feature draw of the frame.
+		boolean redirected = RenderSystem.outputColorTextureOverride != null;
+		RenderSystem.outputColorTextureOverride = null;
+		RenderSystem.outputDepthTextureOverride = null;
+
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (!redirected || disabled || chain == null || device == null || chain.features == null) {
+			return;
+		}
+
+		ChainPlan.Attachment into = chain.features.into();
+		chain.features.compose(device.createCommandEncoder(), chain.quad,
+				chain.targets.view(into.target(), into.side()));
+	}
+
 	private void drawEarly(GpuDevice device) {
 		if (this.early) {
 			return;
@@ -1166,6 +1236,10 @@ public final class PackChain {
 		this.targets.release();
 		if (this.seed != null) {
 			this.seed.release();
+		}
+
+		if (this.features != null) {
+			this.features.release();
 		}
 
 		this.terrain.release();
