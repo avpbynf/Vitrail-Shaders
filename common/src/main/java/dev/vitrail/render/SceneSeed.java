@@ -27,12 +27,14 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
- * Draws the game's finished scene into the target the terrain would have written, standing in for
+ * Draws the game's opaque scene into the target the terrain would have written, standing in for
  * a gbuffers stage that does not write into a target of the pack.
  * <p>
- * The chunk passes do run against the pack's own programs, and that changes nothing here: they draw
- * into the game's target, where Sodium opened its pass, so the pack's colour targets are still
- * written by nobody until the geometry gets targets of its own.
+ * The opaque and cutout chunk passes do run against the pack's own programs, and that changes
+ * nothing here: they draw into the game's target, where Sodium opened its pass, so what they paint
+ * reaches the pack's colortex through this seed, together with the sky and the entities the game
+ * drew around them. The translucent pass is the exception: it draws after the seed, straight into
+ * the pack's own targets, and blends onto the image seeded here.
  * <p>
  * This is not a fallback and should not be read as one. The first draw buffer of the terrain pass
  * is, by the definition of the OptiFine model, where the world's colour ends up, so it is the one
@@ -47,10 +49,10 @@ import java.util.function.Supplier;
  * packs; both are thirty two bits wide, so a copy passes every check and hands back nonsense.
  * <p>
  * What the seed cannot repair has to be said out loud rather than assumed: the scene it carries
- * is already tone mapped, already gamma corrected, already has vanilla fog, and it holds the
- * translucents, the weather, the particles and the hand. A pack that exposes automatically works
- * on an image that was exposed once already. The picture is readable and wrong, which is the most
- * misleading shape a result can take, so nothing about a pass is ever proved through it.
+ * is already tone mapped, already gamma corrected, and already has vanilla fog. A pack that
+ * exposes automatically works on an image that was exposed once already. The picture is readable
+ * and wrong, which is the most misleading shape a result can take, so nothing about a pass is
+ * ever proved through it.
  */
 final class SceneSeed {
 
