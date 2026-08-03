@@ -53,10 +53,13 @@ answered, including the ones a pack writes for itself as expressions in its own
 `shaders.properties`. A settings screen reads the pack's own menu layout and
 writes one file per pack.
 
-What it cannot do yet: no shadow map is drawn, so everything a pack reads from
-`shadowtex` is white; and the sky, the entities and the particles still come
-from the game rather than from the pack's own programs, so a pack composes over
-an image the game tone mapped once already. Those two steps are what decides
+The shadow map is drawn with the pack's own `shadow` programs, culled for the
+light, with the translucents in it and `shadowtex1` taken without them; the
+`sampler2DShadow` comparison no sampler on this backend can carry is emitted in
+the shader instead. What it cannot do yet: only the terrain casts, entities and
+block entities do not yet; and the sky, the entities and the particles still
+come from the game rather than from the pack's own programs, so a pack composes
+over an image the game tone mapped once already. Those steps are what decides
 how close a pack looks to its OpenGL self, and they are what comes next.
 
 ## How it works
@@ -119,8 +122,8 @@ that it works.
 7. The rest of the frame through the pack: the shadow map, the sky, the
    entities and the particles.
 
-Steps 1 to 6 are done. Step 7 is where the remaining distance to the reference
-image lives.
+Steps 1 to 6 are done, and the shadow map of step 7 is drawn. The rest of that
+step is where the remaining distance to the reference image lives.
 
 ## Related work
 
