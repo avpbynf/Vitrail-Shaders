@@ -181,6 +181,13 @@ public final class ChainPlan {
 		Map<TerrainPass, Pass> geometry = new EnumMap<>(TerrainPass.class);
 		Map<String, Pass> before = new LinkedHashMap<>();
 		for (TerrainPass pass : TerrainPass.values()) {
+			// A shadow pass writes shadowcolor and never colortex, so this walk has no answer for
+			// it: its draw buffers index a set of targets this plan does not hold, and a number read
+			// as the wrong family would send the shadow map's albedo into somebody's normals.
+			if (pass.shadow()) {
+				continue;
+			}
+
 			Optional<String> served = resolver.lookup(plan.place(), pass.program())
 					.map(ProgramResolver.Resolution::servedBy);
 			if (served.isEmpty()) {

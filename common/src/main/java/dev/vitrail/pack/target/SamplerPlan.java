@@ -53,7 +53,11 @@ public final class SamplerPlan {
 	 */
 	public enum Kind { COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, UNSERVED, UNBINDABLE }
 
-	/** @param index the colour target for {@link Kind#COLORTEX}, -1 otherwise */
+	/**
+	 * @param index the colour target for {@link Kind#COLORTEX}, the shadow colour target for
+	 *              {@link Kind#SHADOW_COLOUR}, -1 otherwise. The two families are numbered apart and
+	 *              never share a texture, so the kind has to be read before the index means anything
+	 */
 	public record Binding(String sampler, Kind kind, int index, TargetSchedule.Side side) {
 	}
 
@@ -128,6 +132,11 @@ public final class SamplerPlan {
 
 		for (String name : declared) {
 			Kind kind = classify(name, types.get(name));
+			if (kind == Kind.SHADOW_COLOUR) {
+				bindings.add(new Binding(name, kind, shadowColour(name), TargetSchedule.Side.MAIN));
+				continue;
+			}
+
 			if (kind != Kind.COLORTEX) {
 				bindings.add(new Binding(name, kind, -1, TargetSchedule.Side.MAIN));
 				continue;
@@ -191,6 +200,16 @@ public final class SamplerPlan {
 				.filter(binding -> binding.kind() == kind)
 				.map(Binding::sampler)
 				.toList();
+	}
+
+	/**
+	 * Which shadow colour target a name reads. The bare {@code shadowcolor} is nought, which is the
+	 * same rule {@code colortex} follows and the same one Iris follows for both.
+	 */
+	public static int shadowColour(String name) {
+		return name.equals(SHADOW_COLOUR_PREFIX)
+				? 0
+				: name.charAt(SHADOW_COLOUR_PREFIX.length()) - '0';
 	}
 
 	private static boolean isShadowColour(String name) {

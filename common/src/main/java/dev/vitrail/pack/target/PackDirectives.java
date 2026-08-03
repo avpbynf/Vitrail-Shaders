@@ -45,6 +45,7 @@ public final class PackDirectives {
 	private final float eyeBrightnessHalflife;
 	private final float centerDepthHalflife;
 	private final int noiseTextureResolution;
+	private final int shadowMapResolution;
 	private final float shadowDistance;
 	private final float shadowNearPlane;
 	private final float shadowFarPlane;
@@ -57,6 +58,7 @@ public final class PackDirectives {
 		this.eyeBrightnessHalflife = builder.eyeBrightnessHalflife;
 		this.centerDepthHalflife = builder.centerDepthHalflife;
 		this.noiseTextureResolution = builder.noiseTextureResolution;
+		this.shadowMapResolution = builder.shadowMapResolution;
 		this.shadowDistance = builder.shadowDistance;
 		this.shadowNearPlane = builder.shadowNearPlane;
 		this.shadowFarPlane = builder.shadowFarPlane;
@@ -142,6 +144,15 @@ public final class PackDirectives {
 		return this.noiseTextureResolution;
 	}
 
+	/**
+	 * How wide the shadow map is, in texels, square. The pack's own number and the one thing about
+	 * the shadow stage it cannot be given a default for without changing what it draws: the whole
+	 * corpus tunes its filter radius in texels of this resolution.
+	 */
+	public int shadowMapResolution() {
+		return this.shadowMapResolution;
+	}
+
 	public float shadowDistance() {
 		return this.shadowDistance;
 	}
@@ -196,6 +207,7 @@ public final class PackDirectives {
 		private float eyeBrightnessHalflife = 10.0F;
 		private float centerDepthHalflife = 1.0F;
 		private int noiseTextureResolution = 256;
+		private int shadowMapResolution = 1024;
 		private float shadowDistance = 160.0F;
 		private float shadowNearPlane = -100.05F;
 		private float shadowFarPlane = 156.0F;
@@ -231,6 +243,7 @@ public final class PackDirectives {
 				case "eyeBrightnessHalflife" -> asFloat(directive, value -> this.eyeBrightnessHalflife = value);
 				case "centerDepthHalflife" -> asFloat(directive, value -> this.centerDepthHalflife = value);
 				case "noiseTextureResolution" -> asInt(directive, value -> this.noiseTextureResolution = value);
+				case "shadowMapResolution" -> asInt(directive, value -> this.shadowMapResolution = value);
 				case "shadowDistance" -> asFloat(directive, value -> this.shadowDistance = value);
 				case "shadowNearPlane" -> asFloat(directive, value -> this.shadowNearPlane = value);
 				case "shadowFarPlane" -> asFloat(directive, value -> this.shadowFarPlane = value);

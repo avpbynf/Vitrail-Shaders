@@ -10,6 +10,7 @@ import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsLayers;
+import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -159,7 +160,8 @@ public final class PackChain {
 
 		// None of this touches the device: the textures are allocated by the first frame and this
 		// runs while the client is still starting up, off the render thread.
-		this.targets = new ColorTargets(chain.targets(), values.noiseResolution());
+		this.targets = new ColorTargets(chain.targets(), values.noiseResolution(),
+				values.shadowResolution());
 		this.seed = chain.chain().seed()
 				.filter(where -> this.targets.has(where.target()))
 				.map(where -> new SceneSeed(where, this.targets.format(where.target())))
@@ -208,6 +210,7 @@ public final class PackChain {
 			packsFirst = engine.packsFirst();
 			chainWanted = engine.chain();
 			TerrainDraw.wanted(engine.terrain());
+			TerrainDraw.shadowWanted(engine.shadow());
 			PackDump.configure(engine.dump(),
 					gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt"));
 
@@ -997,6 +1000,11 @@ public final class PackChain {
 		// A terrain program runs during the world, so it may already have opened this frame.
 		beginFrame();
 
+		// Said rather than inherited. Every pass of the chain draws into a target the game rasterised
+		// under a reversed Z, and the shadow programs, which draw into one of ours and flip this to
+		// the forward window, have already run by the time this does.
+		this.values.convention(ClipSpace.REVERSED);
+
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();
 			for (PackPass pass : this.programs) {
@@ -1113,9 +1121,12 @@ public final class PackChain {
 
 		named(byKind, SamplerPlan.Kind.COLORTEX, "read a real colour target");
 		named(byKind, SamplerPlan.Kind.DEPTH, "read the world's depth");
-		named(byKind, SamplerPlan.Kind.SHADOW_DEPTH, "read white, no shadow map is drawn yet");
-		named(byKind, SamplerPlan.Kind.SHADOW_COLOUR, "read white, no shadow map is drawn yet");
-				named(byKind, SamplerPlan.Kind.UNBINDABLE,
+		String map = this.targets.shadow().depth() == null
+				? "read white, no shadow map is allocated"
+				: "read the shadow map";
+		named(byKind, SamplerPlan.Kind.SHADOW_DEPTH, map);
+		named(byKind, SamplerPlan.Kind.SHADOW_COLOUR, map);
+		named(byKind, SamplerPlan.Kind.UNBINDABLE,
 				"are declared under a type this backend cannot bind, and should have gone with "
 						+ "their pass");
 

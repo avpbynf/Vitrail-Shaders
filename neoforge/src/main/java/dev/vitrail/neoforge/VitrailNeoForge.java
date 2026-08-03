@@ -1,19 +1,26 @@
 package dev.vitrail.neoforge;
 
+import dev.vitrail.neoforge.sodium.ShadowTerrain;
 import dev.vitrail.pack.source.PackReport;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.framegraph.FramePass;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.FrameGraphSetupEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.lifecycle.ClientStoppingEvent;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
+
+import org.joml.Matrix4fc;
 
 @Mod(value = Vitrail.MOD_ID, dist = Dist.CLIENT)
 public final class VitrailNeoForge {
@@ -31,6 +38,16 @@ public final class VitrailNeoForge {
 		PauseMenuEntry.register();
 
 		modBus.addListener(FMLClientSetupEvent.class, this::onClientSetup);
+
+		// The frame graph is built at the top of LevelRenderer.render, before the clear, the sky
+		// and the main pass, and a pass added here is executed before all three: the graph keeps
+		// the order it was given for anything nothing else depends on. That is where the shadow
+		// map belongs, since the first gbuffers program of the frame already reads it.
+		//
+		// It has to say disableCulling, and that is not a precaution. The graph keeps a pass only
+		// when something it writes is reachable from an imported resource, and what this one writes
+		// is a target of ours the graph has never heard of.
+		NeoForge.EVENT_BUS.addListener(FrameGraphSetupEvent.class, this::onFrameGraphSetup);
 
 		// AfterOpaqueFeatures fires once the opaque terrain, the entities, the block entities
 		// and the opaque particles are drawn, and before anything translucent is. That is
@@ -71,6 +88,22 @@ public final class VitrailNeoForge {
 	 * the whole chain running after the world, that read found a clear colour and the water was
 	 * thrown away in its entirety.
 	 */
+	private void onFrameGraphSetup(FrameGraphSetupEvent event) {
+		if (!TerrainDraw.shadows()) {
+			return;
+		}
+
+		FramePass pass = event.getFrameGrapBuilder().addPass("vitrail_shadow");
+		pass.disableCulling();
+
+		// Read here and not in the task: the event's own values are what this frame was set up
+		// with, and by the time the graph runs the camera state has been walked over by everything
+		// between the two.
+		Matrix4fc modelView = event.getModelViewMatrix();
+		Vec3 camera = event.getCameraState().pos;
+		pass.executes(() -> ShadowTerrain.draw(modelView, camera));
+	}
+
 	private void onAfterOpaqueFeatures(RenderLevelStageEvent.AfterOpaqueFeatures event) {
 		PackChain.drawBeforeTranslucents();
 	}

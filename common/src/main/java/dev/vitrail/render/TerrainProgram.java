@@ -12,12 +12,14 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSize;
+import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -109,6 +111,7 @@ public final class TerrainProgram {
 
 	private static final Supplier<String> BLOCK_LABEL = () -> "Vitrail terrain OfGlobals";
 	private static final Supplier<String> PASS_LABEL = () -> "Vitrail terrain";
+	private static final Supplier<String> SHADOW_LABEL = () -> "Vitrail shadow";
 
 	private final TerrainPass pass;
 	private final String path;
@@ -122,6 +125,7 @@ public final class TerrainProgram {
 	/** Whether draw buffer nought goes to the pack rather than to the game. The constructor says why. */
 	private final boolean ownsFirst;
 	private final ColorTargets targets;
+	private final ShadowTargets shadow;
 	private final PackProgram.Loaded loaded;
 	private final PackValues values;
 	private final PackUniforms uniforms;
@@ -170,9 +174,13 @@ public final class TerrainProgram {
 				? List.copyOf(writes)
 				: writes.size() < 2 ? List.of() : List.copyOf(writes.subList(1, writes.size()));
 		this.targets = targets;
+		this.shadow = targets.shadow();
 		this.loaded = loaded;
 		this.values = values;
-		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.geometryCatalog());
+		// A shadow pass is drawn from the light, so the six fixed function names answer the shadow
+		// pair. Everything else in the table is the frame's and is shared with the world.
+		this.uniforms = new PackUniforms(loaded.program().uniforms(),
+				pass.shadow() ? values.shadowGeometryCatalog() : values.geometryCatalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
 
 		String vertex = loaded.program().stages().get(ProgramStage.VERTEX).text();
@@ -198,9 +206,9 @@ public final class TerrainProgram {
 				.withUniform(UNIFORM_BLOCK, UniformType.UNIFORM_BUFFER);
 		this.samplers.forEach(bindings::withSampler);
 
-		// Everything but the shaders, the bind group and the attachments is Sodium's own, taken from
-		// ShaderChunkRenderer.createShader: the pass this is bound into was opened for that pipeline
-		// and a difference of topology or of depth state would be a difference nobody declared.
+		// Everything but the shaders, the bind group, the attachments and the two lines below is
+		// Sodium's own, taken from ShaderChunkRenderer.createShader: the pass this is bound into was
+		// opened for that pipeline and a difference of topology would be a difference nobody declared.
 		RenderPipeline.Builder builder = RenderPipeline.builder()
 				.withLocation(Identifier.fromNamespaceAndPath(NAMESPACE, "pipeline/" + stem))
 				.withVertexShader(vertexId)
@@ -208,26 +216,50 @@ public final class TerrainProgram {
 				.withBindGroupLayout(bindings.build())
 				.withVertexBinding(0, format)
 				.withPrimitiveTopology(PrimitiveTopology.QUADS)
-				.withDepthStencilState(DepthStencilState.DEFAULT)
-				.withCull(true);
+				.withDepthStencilState(depthState())
+				// Nothing is culled in the shadow map. What matters there is which surface is nearest
+				// the light and not which way it faces, and a wall drawn on one side only leaks light
+				// through its back. Iris cuts it for the same reason.
+				.withCull(!pass.shadow());
 
-		// One state per attachment, and dynamic rendering wants the two counts equal. Nought is the
-		// game's own target and carries its format; the rest carry the format their colour target
-		// was really allocated as, which is not always the one the pack asked for.
+		// One state per attachment, and dynamic rendering wants the two counts equal.
 		// By slot and never by append: the builder holds the states in an array and the argumentless
 		// form writes slot nought every time, so three calls would leave one state and a pipeline
 		// the pass refuses to bind, by name and in the middle of the world.
-		int first = this.ownsFirst ? 0 : 1;
-		if (!this.ownsFirst) {
+		if (pass.shadow()) {
+			// One attachment, shadowcolor0, whatever the pack's draw buffers say. A shadow program
+			// writing more than that has its later outputs written nowhere, which announce() says.
 			builder.withColorTargetState(0, state(GpuFormat.RGBA8_UNORM));
-		}
+		} else {
+			// Nought is the game's own target and carries its format; the rest carry the format their
+			// colour target was really allocated as, which is not always the one the pack asked for.
+			int first = this.ownsFirst ? 0 : 1;
+			if (!this.ownsFirst) {
+				builder.withColorTargetState(0, state(GpuFormat.RGBA8_UNORM));
+			}
 
-		for (int slot = 0; slot < this.extra.size(); slot++) {
-			builder.withColorTargetState(slot + first,
-					state(targets.format(this.extra.get(slot).target())));
+			for (int slot = 0; slot < this.extra.size(); slot++) {
+				builder.withColorTargetState(slot + first,
+						state(targets.format(this.extra.get(slot).target())));
+			}
 		}
 
 		this.pipeline = builder.build();
+	}
+
+	/**
+	 * Which way the depth test runs, which follows the window the target stores and nothing else.
+	 * <p>
+	 * The game rasterises the scene under a reversed Z and clears its depth to nought, so its own
+	 * targets keep the default and its greater-or-equal. The shadow map is ours and stores the
+	 * forward window, cleared to one, so its test is the other way round. Getting this pair out of
+	 * step does not fail: it fills the map with the geometry furthest from the light, which is a
+	 * shadow map of the far side of the world and reads as shadows in all the wrong places.
+	 */
+	private DepthStencilState depthState() {
+		return this.pass.shadow()
+				? new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true)
+				: DepthStencilState.DEFAULT;
 	}
 
 	/**
@@ -347,6 +379,13 @@ public final class TerrainProgram {
 			return null;
 		}
 
+		// Refused rather than drawn somewhere else. A shadow program handed back with no map to
+		// draw into would be bound into the pass the renderer opens for itself, which is the game's
+		// own target, and the pack's shadow output would land on the screen.
+		if (this.pass.shadow() && this.shadow.depth() == null) {
+			return null;
+		}
+
 		CompiledRenderPipeline compiled = device.precompilePipeline(this.pipeline, this.source);
 		if (!compiled.isValid()) {
 			// Handing back an invalid pipeline throws inside setPipeline, in the middle of Sodium's
@@ -429,6 +468,10 @@ public final class TerrainProgram {
 	 *               has to test against the terrain
 	 */
 	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
+		if (this.pass.shadow()) {
+			return shadowDescriptor();
+		}
+
 		if (this.extra.isEmpty()) {
 			return null;
 		}
@@ -457,6 +500,26 @@ public final class TerrainProgram {
 				this.targets.screenWidth(), this.targets.screenHeight()));
 
 		return depth == null ? descriptor : descriptor.withDepthAttachment(depth);
+	}
+
+	/**
+	 * The pass the shadow map is drawn into, which shares nothing with the one the renderer opened:
+	 * neither its attachments, which are ours, nor its area, which is the map's own square and not
+	 * the screen's. Null while the map is not there, and then nothing is drawn at all rather than
+	 * the shadow programs writing over the world.
+	 */
+	private RenderPassDescriptor shadowDescriptor() {
+		GpuTextureView colour = this.shadow.colour(0);
+		GpuTextureView depth = this.shadow.depth();
+		if (colour == null || depth == null) {
+			return null;
+		}
+
+		return RenderPassDescriptor.create(SHADOW_LABEL)
+				.withColorAttachment(colour)
+				.withDepthAttachment(depth)
+				.withRenderArea(new RenderPass.RenderArea(0, 0, this.shadow.resolution(),
+						this.shadow.resolution()));
 	}
 
 	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */
@@ -503,6 +566,11 @@ public final class TerrainProgram {
 	}
 
 	private void writeBlock() {
+		// Before the block and never once for the run: the two conventions alternate inside one
+		// frame now that the shadow map is ours and the game's targets are not, and what a vertex
+		// stage does with its clip depth on the way out comes from this pair.
+		this.values.convention(this.pass.shadow() ? ClipSpace.FORWARD : ClipSpace.REVERSED);
+
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();
 			data.position(0);
@@ -549,10 +617,43 @@ public final class TerrainProgram {
 		return switch (binding.kind()) {
 			case COLORTEX -> colortex(binding);
 			case DEPTH -> depth();
-			case SHADOW_DEPTH, SHADOW_COLOUR -> this.white.getColorTextureView();
+			case SHADOW_DEPTH -> shadowDepth();
+			case SHADOW_COLOUR -> shadowColour(binding.index());
 			case NOISE -> this.targets.noise();
 			default -> this.black.getColorTextureView();
 		};
+	}
+
+	/**
+	 * The shadow map, or white for the far plane.
+	 * <p>
+	 * White and not black, which is the opposite of {@link #depth()} and follows from the same rule:
+	 * a {@code shadowtex} lookup is never wrapped in {@code of_DepthConv}, so what is stored is what
+	 * the pack reads, and the map stores the forward window where one is the far plane. A shadow
+	 * lookup that finds nothing has to say "nothing between here and the light".
+	 * <p>
+	 * A shadow pass reads white whatever the map holds: the image it would read is an attachment of
+	 * the very pass it is drawn in, and sampling an attachment is a thing Vulkan gives no meaning to.
+	 */
+	private GpuTextureView shadowDepth() {
+		if (this.pass.shadow()) {
+			return this.white.getColorTextureView();
+		}
+
+		GpuTextureView map = this.shadow.depth();
+
+		return map == null ? this.white.getColorTextureView() : map;
+	}
+
+	/** A shadow colour target, on the same two rules as the depth above. */
+	private GpuTextureView shadowColour(int index) {
+		if (this.pass.shadow()) {
+			return this.white.getColorTextureView();
+		}
+
+		GpuTextureView view = this.shadow.colour(index);
+
+		return view == null ? this.white.getColorTextureView() : view;
 	}
 
 	/**
@@ -629,12 +730,19 @@ public final class TerrainProgram {
 	 * depth sampler counts only on the translucent pass, where the copy answers it.
 	 */
 	private boolean readsATexture(String sampler) {
-		SamplerPlan.Kind kind = this.loaded.samplers().binding(sampler).kind();
+		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+		SamplerPlan.Kind kind = binding.kind();
 
 		return ATLAS.contains(sampler) || LIGHTMAP.equals(sampler)
 				|| kind == SamplerPlan.Kind.COLORTEX
 				|| kind == SamplerPlan.Kind.NOISE
-				|| (kind == SamplerPlan.Kind.DEPTH && this.pass.afterDeferred());
+				|| (kind == SamplerPlan.Kind.DEPTH && this.pass.afterDeferred())
+				// The map exists from the first frame, but a pass that draws it reads its own
+				// attachment and is answered with a constant like everything else that collides.
+				|| (!this.pass.shadow() && kind == SamplerPlan.Kind.SHADOW_DEPTH
+						&& this.shadow.depth() != null)
+				|| (!this.pass.shadow() && kind == SamplerPlan.Kind.SHADOW_COLOUR
+						&& this.shadow.colour(binding.index()) != null);
 	}
 
 	private FilterMode filter(String sampler) {
@@ -701,7 +809,16 @@ public final class TerrainProgram {
 					flat.size(), flat);
 		}
 
-		if (this.ownsFirst) {
+		if (this.pass.shadow()) {
+			Vitrail.logger().info("It draws into the shadow map, {}x{}, storing the forward depth "
+					+ "window, and into shadowcolor0", this.shadow.resolution(),
+					this.shadow.resolution());
+			if (outputs > 1) {
+				Vitrail.logger().warn("{} declares {} fragment outputs and this engine gives the "
+						+ "shadow pass one, so all but the first are written nowhere", this.path,
+						outputs);
+			}
+		} else if (this.ownsFirst) {
 			// Nought included, and the log says the sides because they are the whole fix: a
 			// translucent write on the half the composites do not read is water that vanishes
 			// without a word from anyone.
@@ -722,6 +839,22 @@ public final class TerrainProgram {
 					this.extra.stream()
 							.map(one -> TargetName.canonical(one.target()) + " " + one.side())
 							.toList());
+		}
+
+		// The one thing about the shadow map that no picture explains. A pack declaring
+		// sampler2DShadow is asking the hardware to make the comparison and hand back a fraction,
+		// and blaze3d's GpuSampler carries no compare op at all: address modes, filters, anisotropy
+		// and a maximum level of detail, and nothing else. So the name is bound as an ordinary
+		// sampler, the comparison means nothing, and BSL's whole world comes back in shadow. Said
+		// here because it looks exactly like a shadow map that is drawn wrong.
+		List<String> compared = this.loaded.program().samplers().stream()
+				.filter(sampler -> sampler.type().contains("Shadow"))
+				.map(TranslatedUnit.Uniform::name)
+				.toList();
+		if (!compared.isEmpty()) {
+			Vitrail.logger().warn("{} declares {} as hardware comparison samplers, which this backend "
+					+ "cannot bind as such: what they read is not a comparison, and a pack that "
+					+ "compares this way puts the whole world in shadow", this.path, compared);
 		}
 
 		PackValues.Gaps gaps = this.values.classify(this.uniforms.unsupplied());

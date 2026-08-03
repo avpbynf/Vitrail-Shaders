@@ -3,13 +3,18 @@ package dev.vitrail.pack.program;
 import dev.vitrail.pack.source.ShaderProperties;
 
 /**
- * The three passes the chunk renderer draws the world in, and what a pack owes each of them.
+ * The passes the chunk renderer draws the world in, and what a pack owes each of them.
  * <p>
  * Sodium meshes a section once and draws it three times, in this order, with the same vertex format
  * every time. What changes between them is not the geometry: it is which program of the pack serves
  * the pass, what alpha it discards at, and whether the result is blended into what is already there.
  * All three are properties of the pass rather than of the file, which is why the same
  * {@code gbuffers_terrain} can serve two of them and behave differently in each.
+ * <p>
+ * The shadow map adds two more, drawn from the same mesh with the same renderer and every difference
+ * carried here: another program, another target, another depth convention. They are in this enum
+ * rather than in one of their own because everything downstream is keyed by the pass, and a second
+ * enum would mean a second answer to "which program serves this draw".
  * <p>
  * The names and the defaults are Iris's, taken from {@code SodiumPrograms.Pass} and
  * {@code SodiumPrograms.getAlphaTest}, read on 3 August 2026. Iris is copyright the Iris
@@ -23,26 +28,37 @@ import dev.vitrail.pack.source.ShaderProperties;
 public enum TerrainPass {
 
 	/** Everything opaque. No alpha test at all, and nothing to blend with. */
-	SOLID("gbuffers_terrain_solid", AlphaTest.OFF, false),
+	SOLID("gbuffers_terrain_solid", AlphaTest.OFF, false, false),
 
 	/**
 	 * Leaves, grass, glass panes, torches. The pass whose whole point is the discard, and the reason
 	 * a pack cannot be given the cutout pass without one: the texture is opaque where it is drawn and
 	 * transparent everywhere else, so without a test a leaf is a cube.
 	 */
-	CUTOUT("gbuffers_terrain_cutout", AlphaTest.CUTOUT, false),
+	CUTOUT("gbuffers_terrain_cutout", AlphaTest.CUTOUT, false, false),
 
 	/** Water, ice, stained glass. Blended, and discarding only what is completely transparent. */
-	TRANSLUCENT("gbuffers_water", AlphaTest.NON_ZERO, true);
+	TRANSLUCENT("gbuffers_water", AlphaTest.NON_ZERO, true, false),
+
+	/** The opaque world seen from the light, into the shadow map. */
+	SHADOW_SOLID("shadow_solid", AlphaTest.OFF, false, true),
+
+	/**
+	 * The same for the cutout half, and the discard is what makes it worth a second pass: leaves
+	 * without one cast the shadow of a cube, which is the one shadow artefact everybody recognises.
+	 */
+	SHADOW_CUTOUT("shadow_cutout", AlphaTest.CUTOUT, false, true);
 
 	private final String program;
 	private final AlphaTest fallback;
 	private final boolean blended;
+	private final boolean shadow;
 
-	TerrainPass(String program, AlphaTest fallback, boolean blended) {
+	TerrainPass(String program, AlphaTest fallback, boolean blended, boolean shadow) {
 		this.program = program;
 		this.fallback = fallback;
 		this.blended = blended;
+		this.shadow = shadow;
 	}
 
 	/** The program to ask the pack for. It resolves through the fallback tree like any other. */
@@ -53,6 +69,32 @@ public enum TerrainPass {
 	/** Whether what this pass draws is blended into the target rather than replacing it. */
 	public boolean blended() {
 		return this.blended;
+	}
+
+	/**
+	 * Whether this pass draws the shadow map rather than the world, which decides everything the
+	 * two halves do not share: the target, the matrices the fixed function names answer, the depth
+	 * convention the map stores, and the moment of the frame it is drawn at.
+	 */
+	public boolean shadow() {
+		return this.shadow;
+	}
+
+	/**
+	 * The same geometry drawn into the shadow map, or null for a half the shadow stage does not
+	 * draw. The renderer knows only its own three passes, so this is how one of them becomes the
+	 * shadow pass that shares its mesh.
+	 * <p>
+	 * The translucent half answers null on purpose, and not because a {@code shadow_water} does not
+	 * exist: nothing draws it yet, and a pass with no shadow counterpart has to leave the renderer's
+	 * own shader alone rather than be given a programme written for another one.
+	 */
+	public TerrainPass inShadow() {
+		return switch (this) {
+			case SOLID -> SHADOW_SOLID;
+			case CUTOUT -> SHADOW_CUTOUT;
+			default -> null;
+		};
 	}
 
 	/**

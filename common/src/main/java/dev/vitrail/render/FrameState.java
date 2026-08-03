@@ -215,6 +215,15 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
+	 * What the pack declared about itself. Most of it reaches a shader through the table above; the
+	 * handful that does not, the shadow map's own resolution first among them, is read from here by
+	 * whoever allocates what the directive describes.
+	 */
+	public PackDirectives directives() {
+		return this.directives;
+	}
+
+	/**
 	 * The one thing the pack says about itself that is not in its GLSL. Set on a pack load, next to
 	 * the directives, and for the same reason.
 	 */

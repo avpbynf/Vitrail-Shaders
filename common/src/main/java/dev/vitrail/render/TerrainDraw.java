@@ -42,6 +42,19 @@ public final class TerrainDraw {
 	 */
 	private static volatile boolean wanted;
 
+	/** Off unless the options ask for it, and worth nothing without {@link #wanted}. */
+	private static volatile boolean shadowWanted;
+
+	/**
+	 * Whether the renderer is drawing the shadow map rather than the world at this instant.
+	 * <p>
+	 * A flag and not an argument because the three doors below are the renderer's own calls and it
+	 * knows nothing of a shadow: it is asked for the solid pass twice in one frame and only the
+	 * caller can say which of the two it is. Set for the length of one draw and cleared in a finally,
+	 * because a flag left standing would draw the world into the shadow map.
+	 */
+	private static boolean shadowing;
+
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
@@ -78,6 +91,67 @@ public final class TerrainDraw {
 		wanted = asked;
 	}
 
+	/** Whether the shadow map is drawn, from the loaded options. */
+	static void shadowWanted(boolean asked) {
+		shadowWanted = asked;
+	}
+
+	/**
+	 * Whether a shadow pass may run at all: the pack's own geometry has to be drawing, or the map
+	 * would be filled by the game's chunk shader, which writes the world's colours into it.
+	 */
+	public static boolean shadows() {
+		return wanted && shadowWanted && PackChain.terrain() != null;
+	}
+
+	/**
+	 * Draws one group of the shadow map, by running the caller back over the chunk renderer with the
+	 * flag set. The caller is the only side that can name a Sodium pass, which is why the draw
+	 * arrives as a runnable rather than this module reaching for one.
+	 * <p>
+	 * The map is opened here and the draw refused outright when it could not be. That order is the
+	 * whole safety of this step: with the flag set and no map to draw into, the descriptor would
+	 * come back null, the renderer would open its own pass on the game's target, and the pack's
+	 * shadow program would paint the screen with whatever it writes.
+	 */
+	public static void shadowPass(Runnable draw) {
+		TerrainDraw self = PackChain.terrain();
+		if (self == null || !shadows() || !self.openShadow()) {
+			return;
+		}
+
+		shadowing = true;
+		try {
+			draw.run();
+		} finally {
+			shadowing = false;
+		}
+	}
+
+	/**
+	 * Opens the frame and allocates and clears every target, the shadow map included, and answers
+	 * whether there is a map to draw into. Outside any render pass, which is where the shadow stage
+	 * stands: the frame graph runs one pass at a time and this is the top of ours.
+	 */
+	private boolean openShadow() {
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (device == null) {
+			return false;
+		}
+
+		this.owner.beginFrame();
+
+		return this.owner.openTargets(device) && this.targets.shadow().depth() != null;
+	}
+
+	/**
+	 * Which pass a call from the renderer really means, given where in the frame it arrives. Null
+	 * when the shadow stage has no counterpart for it, and then the renderer keeps its own shader.
+	 */
+	private static TerrainPass drawn(TerrainPass pass) {
+		return shadowing ? pass.inShadow() : pass;
+	}
+
 	/**
 	 * The same, for the side that has to decide what the chunk mesh carries.
 	 * <p>
@@ -101,12 +175,13 @@ public final class TerrainDraw {
 	public static RenderPipeline pipeline(TerrainPass pass, VertexFormat format,
 			GpuTextureView atlas) {
 		TerrainDraw draw = PackChain.terrain();
-		if (draw == null || !wanted) {
+		TerrainPass drawn = drawn(pass);
+		if (draw == null || !wanted || drawn == null) {
 			return null;
 		}
 
 		try {
-			return draw.prepare(pass, format, atlas);
+			return draw.prepare(drawn, format, atlas);
 		} catch (RuntimeException e) {
 			wanted = false;
 			Vitrail.logger().error("Vitrail stopped drawing the terrain after an error", e);
@@ -155,11 +230,12 @@ public final class TerrainDraw {
 	public static RenderPassDescriptor descriptor(TerrainPass pass, GpuTextureView colour,
 			GpuTextureView depth) {
 		TerrainDraw draw = PackChain.terrain();
-		if (draw == null || !wanted) {
+		TerrainPass drawn = drawn(pass);
+		if (draw == null || !wanted || drawn == null) {
 			return null;
 		}
 
-		TerrainProgram program = draw.programs.get(pass);
+		TerrainProgram program = draw.programs.get(drawn);
 
 		return program == null ? null : program.descriptor(colour, depth);
 	}

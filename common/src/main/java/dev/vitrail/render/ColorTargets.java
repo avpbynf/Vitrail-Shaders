@@ -69,6 +69,16 @@ final class ColorTargets {
 	private final Set<Integer> doubled;
 	private final int noiseResolution;
 
+	/**
+	 * The shadow map, allocated and cleared with the rest.
+	 * <p>
+	 * It is held here rather than beside because everything that binds a sampler already holds this
+	 * object, and a second one threaded through the same calls would only be a second chance for the
+	 * two to be allocated, cleared or released at different moments. It is a family of its own all
+	 * the same: its own resolution, its own depth window, its own clear colour.
+	 */
+	private final ShadowTargets shadowMap;
+
 	private final Map<Integer, GpuFormat> formats = new LinkedHashMap<>();
 	private final Map<Integer, Vector4fc> clearColours = new LinkedHashMap<>();
 	private final Map<Integer, TextureTarget> mainSide = new LinkedHashMap<>();
@@ -95,12 +105,13 @@ final class ColorTargets {
 	 * worked out from anything but the schedule the samplers were bound against is a parity that
 	 * disagrees with itself, and that shows as a plausible picture rather than as an error.
 	 */
-	ColorTargets(TargetPlan plan, int noiseResolution) {
+	ColorTargets(TargetPlan plan, int noiseResolution, int shadowResolution) {
 		this.plan = plan;
 		// The pack asks for it by directive and 256 is the default. Held rather than looked up at
 		// allocation: this class knows nothing of a frame, and the resolution never moves while a
 		// pack is loaded.
 		this.noiseResolution = noiseResolution;
+		this.shadowMap = new ShadowTargets(shadowResolution);
 		this.doubled = Set.copyOf(plan.schedule().doubled());
 
 		// The format and the starting colour are read once and kept. Neither moves while a pack
@@ -144,6 +155,10 @@ final class ColorTargets {
 		boolean changed = false;
 		try {
 			changed = ensureConstants();
+			// Not sized on the screen and therefore never resized with it: the pack's own resolution
+			// is the whole point of the map. Its answer is not folded into the debt below because it
+			// pays its own: the map is cleared every frame whatever this says.
+			this.shadowMap.ensure();
 			for (int index : this.plan.ordered()) {
 				// Each target has its own size, so one of them can be half the screen and be the
 				// only one reallocated when the window changes.
@@ -180,6 +195,11 @@ final class ColorTargets {
 	void clear(CommandEncoder encoder) {
 		boolean full = this.clearOwed;
 		this.clearOwed = false;
+
+		// Every frame and not only on a full clear. The shadow map is drawn into every frame and
+		// nothing else empties it, so a map kept from the last frame would hold the world as it was
+		// before the camera moved and cast the shadows of a place the player has left.
+		this.shadowMap.clear(encoder);
 
 		if (full) {
 			clear(encoder, this.black, OPAQUE_BLACK);
@@ -331,6 +351,11 @@ final class ColorTargets {
 		return this.noise == null ? grey() : this.noise.getColorTextureView();
 	}
 
+	/** The shadow map. Never null, and its own images are null until the first frame allocates them. */
+	ShadowTargets shadow() {
+		return this.shadowMap;
+	}
+
 	Set<Integer> doubled() {
 		return this.doubled;
 	}
@@ -362,6 +387,7 @@ final class ColorTargets {
 		this.white = release(this.white);
 		this.grey = release(this.grey);
 		this.noise = release(this.noise);
+		this.shadowMap.release();
 		releaseDepthCopy();
 	}
 

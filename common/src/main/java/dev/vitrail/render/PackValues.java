@@ -13,6 +13,8 @@ import dev.vitrail.uniform.UniformGaps;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
+import org.joml.Vector4fc;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -50,6 +52,7 @@ public final class PackValues {
 	private CustomUniforms customs;
 	private UniformCatalog catalog = UniformCatalog.engine();
 	private UniformCatalog geometry = UniformCatalog.geometry();
+	private UniformCatalog shadowGeometry = UniformCatalog.shadowGeometry();
 
 	private PackValues() {
 	}
@@ -110,10 +113,34 @@ public final class PackValues {
 		return this.geometry;
 	}
 
+	/**
+	 * The same again for a pass drawn from the light. Its own layer for the same reason the other two
+	 * have one: a pack's expression over {@code gl_ModelViewMatrix} has to read the matrix the pass it
+	 * belongs to was drawn with, and there is no frame in which one of the three is the right answer
+	 * for all of them.
+	 */
+	public UniformCatalog shadowGeometryCatalog() {
+		return this.shadowGeometry;
+	}
+
+	/**
+	 * Which depth convention the target the next block is written for carries. A property of where a
+	 * pass draws rather than of the frame, so it is set by the pass, before it writes, and every
+	 * frame: the shadow map is ours and stores the forward window, the game's targets are reversed.
+	 */
+	public void convention(Vector4fc convention) {
+		this.state.convention(convention);
+	}
+
 	/** What a block is written from. The same object every frame, refilled by {@link #advance()}. */
 	/** How big a noise image the pack asked for, its own directive, 256 unless it says otherwise. */
 	public int noiseResolution() {
 		return Math.round(this.state.noiseTextureResolution());
+	}
+
+	/** How wide a shadow map the pack asked for, its own directive, 1024 unless it says otherwise. */
+	public int shadowResolution() {
+		return this.state.directives().shadowMapResolution();
 	}
 
 	public WorldState world() {
@@ -201,6 +228,7 @@ public final class PackValues {
 		this.customs = builder.build(UniformCatalog.engine(), this.problems);
 		this.catalog = this.customs.layerOn(UniformCatalog.engine());
 		this.geometry = this.customs.layerOn(UniformCatalog.geometry());
+		this.shadowGeometry = this.customs.layerOn(UniformCatalog.shadowGeometry());
 	}
 
 	/**

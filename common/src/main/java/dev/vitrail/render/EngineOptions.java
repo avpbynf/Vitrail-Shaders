@@ -72,6 +72,17 @@ final class EngineOptions {
 	private static final String TERRAIN_KEY = "terrain";
 
 	/**
+	 * Draws the world a second time from the light, into the pack's shadow map. Off unless asked
+	 * for, and worth nothing without {@code terrain}: the map is filled by the pack's own shadow
+	 * program or it is not filled at all.
+	 * <p>
+	 * It is a line of its own rather than part of {@code terrain} because it costs a second pass
+	 * over the whole terrain and because it is the one thing that can be turned off to tell a wrong
+	 * shadow from a wrong gbuffer.
+	 */
+	private static final String SHADOW_KEY = "shadow";
+
+	/**
 	 * Stops the composite chain from drawing at all. Different from {@code passes=0}, which still
 	 * draws the {@code final} over the whole screen.
 	 * <p>
@@ -82,18 +93,18 @@ final class EngineOptions {
 	private static final String CHAIN_KEY = "chain";
 
 	/**
-	 * All seven, for the one place that has to tell them from a setting of the pack: the log that
+	 * All eight, for the one place that has to tell them from a setting of the pack: the log that
 	 * says what the file forces. {@code profile} is the settings layer's own, since that is the side
-	 * that writes it back; the other six are read here and nowhere else.
+	 * that writes it back; the other seven are read here and nowhere else.
 	 */
 	private static final Set<String> RESERVED = Set.of(SettingsFile.PROFILE_KEY, SEED_KEY,
-			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY);
+			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY);
 
 	private EngineOptions() {
 	}
 
 	/**
-	 * What the six lines this class reads were set to.
+	 * What the seven lines this class reads were set to.
 	 *
 	 * @param seed       whether the game's finished frame is painted where the world would be
 	 * @param passes     what the user asked to run on top of what the pack keeps
@@ -101,13 +112,14 @@ final class EngineOptions {
 	 * @param dump       the program the decoded dump names, lowercased, or empty
 	 * @param terrain    whether a pack's terrain program takes over the opaque chunk pass
 	 * @param chain      whether the composite chain and the {@code final} draw at all
+	 * @param shadow     whether the world is drawn a second time from the light
 	 */
 	record Read(boolean seed, ChainFilter passes, boolean packsFirst, String dump, boolean terrain,
-			boolean chain) {
+			boolean chain, boolean shadow) {
 	}
 
 	/**
-	 * Reads the seven and <strong>removes them</strong> from what is handed to the pack, which is
+	 * Reads the eight and <strong>removes them</strong> from what is handed to the pack, which is
 	 * the point: what is left is settings the pack declared.
 	 */
 	static Read take(Map<String, OptionValue> chosen) {
@@ -118,7 +130,8 @@ final class EngineOptions {
 				packsFirst(chosen.remove(SCREEN_KEY)),
 				named(chosen.remove(DUMP_KEY)),
 				asked(chosen.remove(TERRAIN_KEY), false),
-				asked(chosen.remove(CHAIN_KEY), true));
+				asked(chosen.remove(CHAIN_KEY), true),
+				asked(chosen.remove(SHADOW_KEY), false));
 	}
 
 	/**

@@ -393,7 +393,12 @@ final class PackPass {
 				// Tied to the convention being REVERSED, which it is for every pass while nothing
 				// draws into a target of our own. The day one does, this has to follow.
 				case DEPTH -> depth(binding.sampler(), targets, depthView);
-				case SHADOW_DEPTH, SHADOW_COLOUR -> targets.white();
+				// White where the map is not there, and white is the far plane rather than a
+				// placeholder: a shadowtex lookup is the one depth read the translation never wraps,
+				// so the map stores the forward window and a lookup that finds nothing has to say
+				// "nothing between here and the light". Black would put the world in its own shadow.
+				case SHADOW_DEPTH -> or(targets.shadow().depth(), targets.white());
+				case SHADOW_COLOUR -> or(targets.shadow().colour(binding.index()), targets.white());
 				case NOISE -> targets.noise();
 				// A name this backend cannot bind should have taken its program out of the chain
 				// before a frame was drawn. It is still answered rather than left out, because the
@@ -432,6 +437,11 @@ final class PackPass {
 		}
 
 		return depthView == null ? targets.black() : depthView;
+	}
+
+	/** The first of the two that exists, for a name whose image may not be allocated yet. */
+	private static GpuTextureView or(GpuTextureView view, GpuTextureView fallback) {
+		return view == null ? fallback : view;
 	}
 
 	/** How a name is addressed outside zero to one. Only the noise image tiles. */

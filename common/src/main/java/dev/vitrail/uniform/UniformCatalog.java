@@ -7,6 +7,7 @@ import dev.vitrail.uniform.values.DrawValues;
 import dev.vitrail.uniform.values.GeometryValues;
 import dev.vitrail.uniform.values.MatrixValues;
 import dev.vitrail.uniform.values.PlayerValues;
+import dev.vitrail.uniform.values.ShadowGeometryValues;
 import dev.vitrail.uniform.values.ShadowMatrixValues;
 import dev.vitrail.uniform.values.TimeValues;
 import dev.vitrail.uniform.values.WeatherValues;
@@ -34,6 +35,7 @@ public final class UniformCatalog {
 
 	private static volatile UniformCatalog engine;
 	private static volatile UniformCatalog geometry;
+	private static volatile UniformCatalog shadowGeometry;
 
 	private final Map<String, Entry> entries;
 
@@ -98,6 +100,29 @@ public final class UniformCatalog {
 			}
 
 			return geometry;
+		}
+	}
+
+	/**
+	 * The same again for a pass drawn from the light, where the six answer the shadow pair. Layered
+	 * over {@link #geometry()} rather than over the engine table, so that the two stay one list of
+	 * six names: a name added to one and forgotten in the other would leave a shadow program reading
+	 * the camera.
+	 */
+	public static UniformCatalog shadowGeometry() {
+		UniformCatalog built = shadowGeometry;
+		if (built != null) {
+			return built;
+		}
+
+		synchronized (UniformCatalog.class) {
+			if (shadowGeometry == null) {
+				Builder builder = builder(geometry());
+				ShadowGeometryValues.register(builder);
+				shadowGeometry = builder.build();
+			}
+
+			return shadowGeometry;
 		}
 	}
 
