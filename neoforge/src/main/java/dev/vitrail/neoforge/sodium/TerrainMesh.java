@@ -37,16 +37,6 @@ import org.lwjgl.system.MemoryUtil;
 public final class TerrainMesh implements ChunkVertexType {
 
 	/**
-	 * Where the block id rides in the int handed to {@code push}, above the material byte.
-	 * <p>
-	 * There is no other way in without a mixin on the vertex itself: the encoder is handed four
-	 * vertices, a section index and that one int, and the vertices carry no field this could go in.
-	 * It costs nothing to pass, since Sodium masks the material to its low eight bits before packing
-	 * and never looks at the rest.
-	 */
-	public static final int ID_SHIFT = 8;
-
-	/**
 	 * What the game will use for as long as it runs, decided the first time it is asked for, and null
 	 * for Sodium's own.
 	 * <p>
@@ -137,14 +127,14 @@ public final class TerrainMesh implements ChunkVertexType {
 	}
 
 	/**
-	 * @param materialBits Sodium's own bits in the low byte, the quad's facing above them, and the
-	 *                     packed block id above that
+	 * @param materialBits Sodium's own bits in the low byte and the quad's facing above them. The
+	 *                     block id is NOT here: it rides on the vertices, because a translucent quad
+	 *                     reaches this encoder from the sorter, under a material Sodium chose itself
 	 */
 	private long encode(long pointer, int materialBits, ChunkVertexEncoder.Vertex[] vertices,
 			int sectionIndex) {
 		this.innerEncoder.write(pointer, materialBits, vertices, sectionIndex);
 
-		int id = (materialBits >>> ID_SHIFT) & BlockStateIds.PACKED_MASK;
 		// Backwards: every vertex moves up, so the one that has not been moved yet is always the
 		// source of the next move. Word by word and from the top of each vertex for the same reason,
 		// the two ranges overlapping for all but the last vertex of a quad.
@@ -155,7 +145,8 @@ public final class TerrainMesh implements ChunkVertexType {
 				MemoryUtil.memPutInt(to + word, MemoryUtil.memGetInt(from + word));
 			}
 
-			MemoryUtil.memPutInt(to + this.innerStride, id);
+			MemoryUtil.memPutInt(to + this.innerStride,
+					((TerrainVertex) vertices[at]).vitrailBlockId() & BlockStateIds.PACKED_MASK);
 		}
 
 		return pointer + (long) vertices.length * this.stride;
