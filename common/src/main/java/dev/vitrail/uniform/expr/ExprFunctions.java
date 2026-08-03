@@ -1,6 +1,5 @@
 package dev.vitrail.uniform.expr;
 
-import dev.vitrail.uniform.Smoothed;
 import dev.vitrail.uniform.expr.kroppeb.stareval.expression.Expression;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.AbstractTypedFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.B2BFunction;
@@ -20,10 +19,11 @@ import dev.vitrail.uniform.expr.kroppeb.stareval.function.II2IFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.III2BFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.III2IFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.Type;
-import dev.vitrail.uniform.expr.kroppeb.stareval.function.TypedFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.TypedFunction.Parameter;
+import dev.vitrail.uniform.expr.kroppeb.stareval.function.TypedFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.V2FFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.V2IFunction;
+import dev.vitrail.uniform.Smoothed;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector2i;

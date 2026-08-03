@@ -1,8 +1,8 @@
 package dev.vitrail.neoforge.mixin;
 
-import dev.vitrail.Vitrail;
 import dev.vitrail.neoforge.sodium.TerrainVertex;
 import dev.vitrail.render.BlockStateIds;
+import dev.vitrail.Vitrail;
 
 import net.caffeinemc.mods.sodium.client.render.chunk.compile.pipeline.DefaultFluidRenderer;
 import net.caffeinemc.mods.sodium.client.model.color.ColorProvider;

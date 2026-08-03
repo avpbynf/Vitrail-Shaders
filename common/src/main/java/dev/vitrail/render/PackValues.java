@@ -1,17 +1,17 @@
 package dev.vitrail.render;
 
-import dev.vitrail.Vitrail;
-import dev.vitrail.pack.BlockIds;
-import dev.vitrail.pack.OptionIndex;
-import dev.vitrail.pack.OptionValue;
-import dev.vitrail.pack.PackDirectives;
-import dev.vitrail.pack.SettingSet;
-import dev.vitrail.pack.ShaderPackSource;
-import dev.vitrail.pack.ShaderProperties;
+import dev.vitrail.pack.id.BlockIds;
+import dev.vitrail.pack.option.OptionIndex;
+import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.option.SettingSet;
+import dev.vitrail.pack.source.ShaderPackSource;
+import dev.vitrail.pack.source.ShaderProperties;
+import dev.vitrail.pack.target.PackDirectives;
+import dev.vitrail.uniform.expr.CustomUniforms;
 import dev.vitrail.uniform.UniformCatalog;
 import dev.vitrail.uniform.UniformGaps;
 import dev.vitrail.uniform.WorldState;
-import dev.vitrail.uniform.expr.CustomUniforms;
+import dev.vitrail.Vitrail;
 
 import java.io.IOException;
 import java.nio.file.Path;

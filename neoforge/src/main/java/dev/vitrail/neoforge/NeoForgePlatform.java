@@ -1,7 +1,7 @@
 package dev.vitrail.neoforge;
 
-import dev.vitrail.Vitrail;
 import dev.vitrail.platform.VitrailPlatform;
+import dev.vitrail.Vitrail;
 
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLPaths;

@@ -1,9 +1,9 @@
 package dev.vitrail.render;
 
-import dev.vitrail.Vitrail;
-import dev.vitrail.pack.EngineDefines;
+import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.uniform.BiomeCategory;
 import dev.vitrail.uniform.WorldState;
+import dev.vitrail.Vitrail;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

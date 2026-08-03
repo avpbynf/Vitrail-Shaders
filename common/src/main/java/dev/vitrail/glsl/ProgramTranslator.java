@@ -1,8 +1,8 @@
 package dev.vitrail.glsl;
 
-import dev.vitrail.pack.AlphaTest;
-import dev.vitrail.pack.IncludeExpander.ExpandedUnit;
-import dev.vitrail.pack.ProgramStage;
+import dev.vitrail.pack.program.AlphaTest;
+import dev.vitrail.pack.program.ProgramStage;
+import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

@@ -1,7 +1,7 @@
 package dev.vitrail.render;
 
+import dev.vitrail.pack.id.BlockIds;
 import dev.vitrail.Vitrail;
-import dev.vitrail.pack.BlockIds;
 
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;

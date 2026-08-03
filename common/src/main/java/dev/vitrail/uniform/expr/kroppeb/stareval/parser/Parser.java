@@ -11,9 +11,9 @@ import dev.vitrail.uniform.expr.kroppeb.stareval.element.token.UnaryOperatorToke
 import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.AccessExpressionElement;
 import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.BinaryExpressionElement;
 import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.FunctionCall;
-import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.UnaryExpressionElement;
 import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.partial.PartialBinaryExpression;
 import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.partial.UnfinishedArgsExpression;
+import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.UnaryExpressionElement;
 import dev.vitrail.uniform.expr.kroppeb.stareval.exception.MissingTokenException;
 import dev.vitrail.uniform.expr.kroppeb.stareval.exception.ParseException;
 import dev.vitrail.uniform.expr.kroppeb.stareval.exception.UnexpectedTokenException;

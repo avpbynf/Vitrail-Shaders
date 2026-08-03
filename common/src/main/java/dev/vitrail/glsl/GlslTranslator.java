@@ -2,12 +2,12 @@ package dev.vitrail.glsl;
 
 import dev.vitrail.glsl.GlslLexer.Kind;
 import dev.vitrail.glsl.GlslLexer.Token;
-import dev.vitrail.pack.AlphaTest;
-import dev.vitrail.pack.DrawBuffers;
-import dev.vitrail.pack.EngineDefines;
-import dev.vitrail.pack.IncludeExpander.ExpandedUnit;
-import dev.vitrail.pack.ProgramStage;
-import dev.vitrail.pack.SamplerPlan;
+import dev.vitrail.pack.option.EngineDefines;
+import dev.vitrail.pack.program.AlphaTest;
+import dev.vitrail.pack.program.ProgramStage;
+import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
+import dev.vitrail.pack.target.DrawBuffers;
+import dev.vitrail.pack.target.SamplerPlan;
 
 import java.util.ArrayList;
 import java.util.Comparator;

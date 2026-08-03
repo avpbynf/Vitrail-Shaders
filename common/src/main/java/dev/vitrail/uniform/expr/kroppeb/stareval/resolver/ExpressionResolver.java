@@ -16,8 +16,8 @@ import dev.vitrail.uniform.expr.kroppeb.stareval.function.FunctionContext;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.FunctionResolver;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.FunctionReturn;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.Type;
-import dev.vitrail.uniform.expr.kroppeb.stareval.function.TypedFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.TypedFunction.Parameter;
+import dev.vitrail.uniform.expr.kroppeb.stareval.function.TypedFunction;
 
 import java.util.ArrayList;
 import java.util.Arrays;

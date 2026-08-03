@@ -1,13 +1,13 @@
 package dev.vitrail.screen;
 
-import dev.vitrail.Vitrail;
-import dev.vitrail.pack.PackLang;
-import dev.vitrail.pack.PackLoader;
 import dev.vitrail.pack.menu.MenuPage;
 import dev.vitrail.pack.menu.MenuValues;
+import dev.vitrail.pack.source.PackLang;
+import dev.vitrail.pack.source.PackLoader;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsFile;
+import dev.vitrail.Vitrail;
 
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;

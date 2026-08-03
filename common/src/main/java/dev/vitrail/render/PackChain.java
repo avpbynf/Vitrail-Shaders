@@ -1,16 +1,16 @@
 package dev.vitrail.render;
 
-import dev.vitrail.Vitrail;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
-import dev.vitrail.pack.ChainPlan;
-import dev.vitrail.pack.OptionValue;
-import dev.vitrail.pack.PackLoader;
-import dev.vitrail.pack.SamplerPlan;
-import dev.vitrail.pack.TargetName;
-import dev.vitrail.pack.TargetPlan;
+import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.source.PackLoader;
+import dev.vitrail.pack.target.ChainPlan;
+import dev.vitrail.pack.target.SamplerPlan;
+import dev.vitrail.pack.target.TargetName;
+import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsLayers;
+import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;

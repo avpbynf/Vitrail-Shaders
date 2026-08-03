@@ -1,9 +1,9 @@
 package dev.vitrail.neoforge.sodium;
 
-import dev.vitrail.Vitrail;
 import dev.vitrail.glsl.SodiumVertex;
 import dev.vitrail.render.BlockStateIds;
 import dev.vitrail.render.TerrainDraw;
+import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;

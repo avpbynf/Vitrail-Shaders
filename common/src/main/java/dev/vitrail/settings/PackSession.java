@@ -1,7 +1,7 @@
 package dev.vitrail.settings;
 
-import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.menu.PackMenu;
+import dev.vitrail.pack.option.OptionValue;
 
 import java.io.IOException;
 import java.nio.file.Path;

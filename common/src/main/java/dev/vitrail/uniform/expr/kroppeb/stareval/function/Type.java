@@ -2,9 +2,9 @@ package dev.vitrail.uniform.expr.kroppeb.stareval.function;
 
 import dev.vitrail.uniform.expr.kroppeb.stareval.expression.ConstantExpression;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.TypedFunction.Parameter;
-import dev.vitrail.uniform.UniformShape;
 import dev.vitrail.uniform.expr.MatrixType;
 import dev.vitrail.uniform.expr.VectorType;
+import dev.vitrail.uniform.UniformShape;
 
 public abstract class Type {
 	public static final Boolean Boolean = new Boolean();

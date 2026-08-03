@@ -1,9 +1,9 @@
 package dev.vitrail.neoforge;
 
-import dev.vitrail.Vitrail;
-import dev.vitrail.pack.PackReport;
+import dev.vitrail.pack.source.PackReport;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.screen.SettingsScreen;
+import dev.vitrail.Vitrail;
 
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;

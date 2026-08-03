@@ -1,8 +1,8 @@
 package dev.vitrail.neoforge;
 
-import dev.vitrail.Vitrail;
 import dev.vitrail.screen.ScreenText;
 import dev.vitrail.screen.SettingsScreen;
+import dev.vitrail.Vitrail;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;

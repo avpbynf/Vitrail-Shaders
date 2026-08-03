@@ -1,14 +1,14 @@
 package dev.vitrail.render;
 
-import dev.vitrail.Vitrail;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
-import dev.vitrail.pack.ChainPlan;
-import dev.vitrail.pack.ProgramStage;
-import dev.vitrail.pack.SamplerPlan;
-import dev.vitrail.pack.TargetName;
+import dev.vitrail.pack.program.ProgramStage;
+import dev.vitrail.pack.target.ChainPlan;
+import dev.vitrail.pack.target.SamplerPlan;
+import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
+import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;

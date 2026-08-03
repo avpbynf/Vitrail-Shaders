@@ -1,7 +1,7 @@
 package dev.vitrail.neoforge.mixin;
 
 import dev.vitrail.neoforge.sodium.SodiumPasses;
-import dev.vitrail.pack.TerrainPass;
+import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.render.TerrainDraw;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;

@@ -1,13 +1,13 @@
 package dev.vitrail.render;
 
-import dev.vitrail.Vitrail;
-import dev.vitrail.pack.TargetDirectives;
-import dev.vitrail.pack.TargetFormat;
-import dev.vitrail.pack.TargetName;
-import dev.vitrail.pack.TargetPlan;
-import dev.vitrail.pack.TargetSchedule;
-import dev.vitrail.pack.TargetSize;
+import dev.vitrail.pack.target.TargetDirectives;
+import dev.vitrail.pack.target.TargetFormat;
+import dev.vitrail.pack.target.TargetName;
+import dev.vitrail.pack.target.TargetPlan;
+import dev.vitrail.pack.target.TargetSchedule;
+import dev.vitrail.pack.target.TargetSize;
 import dev.vitrail.uniform.NoiseTexture;
+import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.TextureTarget;

@@ -1,9 +1,9 @@
 package dev.vitrail.render;
 
-import dev.vitrail.pack.PackDirectives;
+import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.uniform.ClipSpace;
-import dev.vitrail.uniform.WorldState;
 import dev.vitrail.uniform.values.FrameSmoothed;
+import dev.vitrail.uniform.WorldState;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.client.Camera;

@@ -1,9 +1,9 @@
 package dev.vitrail.render;
 
+import dev.vitrail.pack.target.ChainPlan;
+import dev.vitrail.pack.target.TargetName;
+import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.Vitrail;
-import dev.vitrail.pack.ChainPlan;
-import dev.vitrail.pack.TargetName;
-import dev.vitrail.pack.TargetSchedule;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;

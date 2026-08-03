@@ -1,6 +1,6 @@
 package dev.vitrail.render;
 
-import dev.vitrail.pack.EngineDefines;
+import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.uniform.BiomeCategory;
 
 import com.mojang.blaze3d.systems.GpuDevice;

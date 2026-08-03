@@ -1,6 +1,6 @@
 package dev.vitrail.neoforge.sodium;
 
-import dev.vitrail.pack.TerrainPass;
+import dev.vitrail.pack.program.TerrainPass;
 
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;

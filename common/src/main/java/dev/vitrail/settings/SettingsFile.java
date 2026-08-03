@@ -1,6 +1,6 @@
 package dev.vitrail.settings;
 
-import dev.vitrail.pack.PackLoader;
+import dev.vitrail.pack.source.PackLoader;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

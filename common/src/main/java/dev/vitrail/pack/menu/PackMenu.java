@@ -1,11 +1,11 @@
 package dev.vitrail.pack.menu;
 
-import dev.vitrail.pack.OptionIndex;
-import dev.vitrail.pack.OptionValue;
-import dev.vitrail.pack.PackLang;
-import dev.vitrail.pack.PackOption;
-import dev.vitrail.pack.ShaderPackSource;
-import dev.vitrail.pack.ShaderProperties;
+import dev.vitrail.pack.option.OptionIndex;
+import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.option.PackOption;
+import dev.vitrail.pack.source.PackLang;
+import dev.vitrail.pack.source.ShaderPackSource;
+import dev.vitrail.pack.source.ShaderProperties;
 
 import java.io.IOException;
 import java.nio.file.Path;

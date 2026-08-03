@@ -1,6 +1,6 @@
 package dev.vitrail.pack.menu;
 
-import dev.vitrail.pack.PackOption;
+import dev.vitrail.pack.option.PackOption;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +12,7 @@ import java.util.List;
  * The allowed values always contain the pack's own default, added when the pack forgot it.
  * Thirty eight declarations in the corpus offer a list their own default is not in, and without
  * this the value the pack ships cannot be reached by clicking. It is added here and nowhere
- * else: {@link dev.vitrail.pack.OptionIndex} reports what a pack wrote, and adding it there as
+ * else: {@link dev.vitrail.pack.option.OptionIndex} reports what a pack wrote, and adding it there as
  * well would put the same value in the cycle twice.
  */
 public record MenuOption(String name, Form form, String defaultValue, List<String> values,

@@ -1,7 +1,7 @@
 package dev.vitrail.render;
 
-import dev.vitrail.pack.DimensionSet;
-import dev.vitrail.pack.ShaderPackSource;
+import dev.vitrail.pack.source.DimensionSet;
+import dev.vitrail.pack.source.ShaderPackSource;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;

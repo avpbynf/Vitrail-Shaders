@@ -1,6 +1,6 @@
 package dev.vitrail.render;
 
-import dev.vitrail.pack.TargetFormat;
+import dev.vitrail.pack.target.TargetFormat;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.textures.FilterMode;

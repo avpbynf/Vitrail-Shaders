@@ -1,10 +1,5 @@
 package dev.vitrail.uniform.expr;
 
-import dev.vitrail.uniform.UniformCatalog;
-import dev.vitrail.uniform.UniformShape;
-import dev.vitrail.uniform.UniformSource;
-import dev.vitrail.uniform.Val;
-import dev.vitrail.uniform.WorldState;
 import dev.vitrail.uniform.expr.kroppeb.stareval.element.ExpressionElement;
 import dev.vitrail.uniform.expr.kroppeb.stareval.expression.Expression;
 import dev.vitrail.uniform.expr.kroppeb.stareval.expression.VariableExpression;
@@ -13,6 +8,11 @@ import dev.vitrail.uniform.expr.kroppeb.stareval.function.FunctionReturn;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.Type;
 import dev.vitrail.uniform.expr.kroppeb.stareval.parser.Parser;
 import dev.vitrail.uniform.expr.kroppeb.stareval.resolver.ExpressionResolver;
+import dev.vitrail.uniform.UniformCatalog;
+import dev.vitrail.uniform.UniformShape;
+import dev.vitrail.uniform.UniformSource;
+import dev.vitrail.uniform.Val;
+import dev.vitrail.uniform.WorldState;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;

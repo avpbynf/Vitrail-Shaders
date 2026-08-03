@@ -1,11 +1,11 @@
 package dev.vitrail.uniform.expr;
 
-import dev.vitrail.uniform.expr.kroppeb.stareval.Util;
 import dev.vitrail.uniform.expr.kroppeb.stareval.expression.Expression;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.AbstractTypedFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.FunctionContext;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.FunctionReturn;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.Type;
+import dev.vitrail.uniform.expr.kroppeb.stareval.Util;
 
 import java.util.Arrays;
 
