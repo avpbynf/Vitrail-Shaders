@@ -1588,6 +1588,26 @@ public final class FrameState implements WorldState {
 	}
 
 	@Override
+	public Matrix4fc drawnShadowModelView() {
+		return this.view.drawnShadowModelView();
+	}
+
+	@Override
+	public Matrix4fc drawnShadowModelViewInverse() {
+		return this.view.drawnShadowModelViewInverse();
+	}
+
+	@Override
+	public Matrix4fc drawnShadowProjection() {
+		return this.view.drawnShadowProjection();
+	}
+
+	@Override
+	public Matrix4fc drawnShadowProjectionInverse() {
+		return this.view.drawnShadowProjectionInverse();
+	}
+
+	@Override
 	public Matrix4fc dhProjection() {
 		return this.view.dhProjection();
 	}

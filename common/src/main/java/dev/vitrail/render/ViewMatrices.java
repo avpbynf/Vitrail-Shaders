@@ -48,10 +48,23 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f shadowProjection = new Matrix4f();
 	private final Matrix4f shadowProjectionInverse = new Matrix4f();
 
+	/**
+	 * The pair the shadow map on hand was drawn with, which is the previous frame's, because the
+	 * map is drawn at the end of a frame for the next one. It is what every sampling pass is told
+	 * as {@code shadowModelView}: a lookup built from this pair lands on the texel the map really
+	 * holds, where the fresh pair would miss it by one frame of camera motion, and that miss reads
+	 * as the whole picture flickering whenever the player moves.
+	 */
+	private final Matrix4f mapShadowModelView = new Matrix4f();
+	private final Matrix4f mapShadowModelViewInverse = new Matrix4f();
+	private final Matrix4f mapShadowProjection = new Matrix4f();
+	private final Matrix4f mapShadowProjectionInverse = new Matrix4f();
+
 	private final Vector4f convention = new Vector4f(ClipSpace.REVERSED);
 	private float far;
 	private int renderDistanceChunks;
 	private boolean seeded;
+	private boolean shadowSeeded;
 
 	/**
 	 * Takes this frame's view and projection, publishes them, and shifts the previous frame's
@@ -111,6 +124,15 @@ public final class ViewMatrices implements ViewSource {
 	void advanceShadow(float shadowAngle, float sunPathRotation, float intervalSize,
 			Vector3dc camera, float distance, float nearPlane, float farPlane, boolean endFlash,
 			float flashXAngle, float flashYAngle) {
+		// Shifted down before the fresh pair is built, the same move advance makes for previous:
+		// what was drawn with last frame is what the map on hand holds.
+		if (this.shadowSeeded) {
+			this.mapShadowModelView.set(this.shadowModelView);
+			this.mapShadowModelViewInverse.set(this.shadowModelViewInverse);
+			this.mapShadowProjection.set(this.shadowProjection);
+			this.mapShadowProjectionInverse.set(this.shadowProjectionInverse);
+		}
+
 		this.shadowModelView.identity();
 		if (endFlash) {
 			this.shadowModelView.rotateX((float) Math.toRadians(-flashXAngle));
@@ -132,6 +154,16 @@ public final class ViewMatrices implements ViewSource {
 		// We only publish, so this one is always the legacy volume.
 		this.shadowProjection.setOrthoSymmetric(distance * 2.0F, distance * 2.0F, near, far, false);
 		this.shadowProjection.invert(this.shadowProjectionInverse);
+
+		if (!this.shadowSeeded) {
+			// The first frame has no map and no history, so the published pair is the fresh one:
+			// wrong by nothing, since there is nothing to sample yet.
+			this.mapShadowModelView.set(this.shadowModelView);
+			this.mapShadowModelViewInverse.set(this.shadowModelViewInverse);
+			this.mapShadowProjection.set(this.shadowProjection);
+			this.mapShadowProjectionInverse.set(this.shadowProjectionInverse);
+			this.shadowSeeded = true;
+		}
 	}
 
 	/** Which depth convention the target this pass draws into carries. */
@@ -142,6 +174,7 @@ public final class ViewMatrices implements ViewSource {
 	/** Called when the world changes, so that no history crosses a dimension. */
 	void reset() {
 		this.seeded = false;
+		this.shadowSeeded = false;
 	}
 
 	private static float plane(float declared, float fallback) {
@@ -199,21 +232,41 @@ public final class ViewMatrices implements ViewSource {
 
 	@Override
 	public Matrix4fc shadowModelView() {
-		return this.shadowModelView;
+		return this.mapShadowModelView;
 	}
 
 	@Override
 	public Matrix4fc shadowModelViewInverse() {
-		return this.shadowModelViewInverse;
+		return this.mapShadowModelViewInverse;
 	}
 
 	@Override
 	public Matrix4fc shadowProjection() {
-		return this.shadowProjection;
+		return this.mapShadowProjection;
 	}
 
 	@Override
 	public Matrix4fc shadowProjectionInverse() {
+		return this.mapShadowProjectionInverse;
+	}
+
+	@Override
+	public Matrix4fc drawnShadowModelView() {
+		return this.shadowModelView;
+	}
+
+	@Override
+	public Matrix4fc drawnShadowModelViewInverse() {
+		return this.shadowModelViewInverse;
+	}
+
+	@Override
+	public Matrix4fc drawnShadowProjection() {
+		return this.shadowProjection;
+	}
+
+	@Override
+	public Matrix4fc drawnShadowProjectionInverse() {
 		return this.shadowProjectionInverse;
 	}
 

@@ -11,6 +11,10 @@ import dev.vitrail.uniform.UniformShape;
  * the corpus read the two direct ones. Iris registers them unconditionally for the same reason, and
  * they cost nothing to compute: an unshifted camera position, the sky angle, and an orthographic
  * matrix built from the pack's own distance.
+ * <p>
+ * What they answer is the pair the map ON HAND was drawn with, one frame older than the camera,
+ * see {@link dev.vitrail.uniform.ViewSource}. The shadow programs alone read the fresh pair, and
+ * they get it from the layer {@link ShadowGeometryValues} puts over these four names.
  */
 public final class ShadowMatrixValues {
 

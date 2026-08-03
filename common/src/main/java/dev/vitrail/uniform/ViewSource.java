@@ -27,6 +27,13 @@ public interface ViewSource {
 
 	Matrix4fc gbufferPreviousProjection();
 
+	/**
+	 * The four published shadow matrices are the pair the shadow map ON HAND was drawn with, which
+	 * is one frame older than the camera: the map is drawn at the end of a frame for the next one.
+	 * A sampling pass that used the fresh pair instead would miss the map by one frame of camera
+	 * motion, which reads as the whole lit picture flickering whenever the player moves. The
+	 * {@code drawn} four are the fresh pair, for the one stage that draws the map itself.
+	 */
 	Matrix4fc shadowModelView();
 
 	Matrix4fc shadowModelViewInverse();
@@ -34,6 +41,14 @@ public interface ViewSource {
 	Matrix4fc shadowProjection();
 
 	Matrix4fc shadowProjectionInverse();
+
+	Matrix4fc drawnShadowModelView();
+
+	Matrix4fc drawnShadowModelViewInverse();
+
+	Matrix4fc drawnShadowProjection();
+
+	Matrix4fc drawnShadowProjectionInverse();
 
 	Matrix4fc dhProjection();
 

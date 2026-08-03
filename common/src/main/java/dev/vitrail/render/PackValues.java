@@ -134,14 +134,15 @@ public final class PackValues {
 	}
 
 	/**
-	 * The published shadow pair multiplied through, which is the matrix that culls the world for
-	 * the light. The published projection is the legacy volume, and that is the convention JOML's
-	 * plane extraction reads, so the product goes out as it stands.
+	 * The drawn shadow pair multiplied through, which is the matrix that culls the world for the
+	 * light: the same pair the map is about to be drawn with, not the published one, which is a
+	 * frame older. The projection is the legacy volume, and that is the convention JOML's plane
+	 * extraction reads, so the product goes out as it stands.
 	 */
 	public Matrix4f shadowFrustum(Matrix4f dest) {
 		ViewMatrices view = this.state.view();
 
-		return dest.set(view.shadowProjection()).mul(view.shadowModelView());
+		return dest.set(view.drawnShadowProjection()).mul(view.drawnShadowModelView());
 	}
 
 	/** What a block is written from. The same object every frame, refilled by {@link #advance()}. */
