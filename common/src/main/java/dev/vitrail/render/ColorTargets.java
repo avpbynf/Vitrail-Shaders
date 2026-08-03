@@ -156,8 +156,9 @@ final class ColorTargets {
 		try {
 			changed = ensureConstants();
 			// Not sized on the screen and therefore never resized with it: the pack's own resolution
-			// is the whole point of the map. Its answer is not folded into the debt below because it
-			// pays its own: the map is cleared every frame whatever this says.
+			// is the whole point of the map. Its answer is not folded into the debt below because the
+			// map is not cleared here at all: the shadow stage empties it itself, right before it
+			// draws, because its content has to cross the frame boundary.
 			this.shadowMap.ensure();
 			for (int index : this.plan.ordered()) {
 				// Each target has its own size, so one of them can be half the screen and be the
@@ -191,15 +192,16 @@ final class ColorTargets {
 		return true;
 	}
 
-	/** Clears both halves of what the pack asked to have cleared, and pays any full clear owed. */
+	/**
+	 * Clears both halves of what the pack asked to have cleared, and pays any full clear owed.
+	 * <p>
+	 * The shadow map is deliberately not in this list. It is drawn at the end of a frame for the
+	 * next one, so what it holds when the frame opens is exactly what the gbuffers are about to
+	 * read, and the shadow stage empties it itself right before drawing.
+	 */
 	void clear(CommandEncoder encoder) {
 		boolean full = this.clearOwed;
 		this.clearOwed = false;
-
-		// Every frame and not only on a full clear. The shadow map is drawn into every frame and
-		// nothing else empties it, so a map kept from the last frame would hold the world as it was
-		// before the camera moved and cast the shadows of a place the player has left.
-		this.shadowMap.clear(encoder);
 
 		if (full) {
 			clear(encoder, this.black, OPAQUE_BLACK);

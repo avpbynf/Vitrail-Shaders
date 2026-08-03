@@ -13,6 +13,7 @@ import dev.vitrail.uniform.UniformGaps;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
+import org.joml.Matrix4f;
 import org.joml.Vector4fc;
 
 import java.io.IOException;
@@ -130,6 +131,17 @@ public final class PackValues {
 	 */
 	public void convention(Vector4fc convention) {
 		this.state.convention(convention);
+	}
+
+	/**
+	 * The published shadow pair multiplied through, which is the matrix that culls the world for
+	 * the light. The published projection is the legacy volume, and that is the convention JOML's
+	 * plane extraction reads, so the product goes out as it stands.
+	 */
+	public Matrix4f shadowFrustum(Matrix4f dest) {
+		ViewMatrices view = this.state.view();
+
+		return dest.set(view.shadowProjection()).mul(view.shadowModelView());
 	}
 
 	/** What a block is written from. The same object every frame, refilled by {@link #advance()}. */

@@ -13,6 +13,7 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.Minecraft;
+import net.caffeinemc.mods.sodium.client.gui.SodiumOptions;
 import net.caffeinemc.mods.sodium.client.render.chunk.DefaultChunkRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import org.spongepowered.asm.mixin.Mixin;
@@ -74,6 +75,25 @@ public abstract class DefaultChunkRendererMixin {
 		Minecraft minecraft = Minecraft.getInstance();
 
 		return minecraft == null ? original.call(pass) : minecraft.gameRenderer.mainRenderTarget();
+	}
+
+	/**
+	 * Serves every face of a section while the shadow map is drawn.
+	 * <p>
+	 * The batches Sodium builds leave out the faces that point away from the camera, and the light
+	 * is not the camera: a face the player cannot see still stands between the sun and the ground.
+	 * The pipeline of the shadow passes already draws both sides; this reaches the culling that
+	 * happens before any pipeline, when the draw commands are picked. Iris turns the same option
+	 * off at the same point for the same reason.
+	 */
+	@WrapOperation(
+			method = "render",
+			at = @At(value = "FIELD",
+					target = "Lnet/caffeinemc/mods/sodium/client/gui/SodiumOptions$PerformanceSettings;"
+							+ "useBlockFaceCulling:Z"))
+	private boolean vitrail$shadowFaces(SodiumOptions.PerformanceSettings settings,
+			Operation<Boolean> original) {
+		return !TerrainDraw.drawingShadow() && original.call(settings);
 	}
 
 	@WrapOperation(

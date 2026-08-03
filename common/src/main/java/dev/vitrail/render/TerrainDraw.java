@@ -15,6 +15,8 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 
+import org.joml.Matrix4f;
+
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Map;
@@ -118,18 +120,78 @@ public final class TerrainDraw {
 	}
 
 	/**
+	 * Opens the end-of-frame shadow stage: makes the map exist and empties it, once, before the
+	 * groups are drawn into it. Must run outside any render pass, which the end of the frame is.
+	 * <p>
+	 * The map is cleared here and not with the colour targets, and that is the point of the stage
+	 * running where it does. The stage draws at the very end of a frame, for the next one, so the
+	 * map has to survive the frame boundary: the gbuffers read all frame long what the previous
+	 * stage drew, and a clear where the frame opens would hand them an empty map every time.
+	 * <p>
+	 * Nothing here opens the frame itself. By this point the terrain or the chain has opened it,
+	 * and calling {@code beginFrame} again would advance the value store a second time, which turns
+	 * every {@code gbufferPrevious*} of the next frame into the current one.
+	 */
+	public static boolean openShadowStage() {
+		TerrainDraw self = PackChain.terrain();
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (self == null || device == null || !shadows()) {
+			return false;
+		}
+
+		ShadowTargets shadow = self.targets.shadow();
+		if (!self.shadowsServed()) {
+			// A pack that serves no shadow program gets no shadow pass, which is Iris's rule, and
+			// at the end of a frame it is also the only safe answer: with nothing of ours to hand
+			// the renderer, the pass it opens for itself is the game's own target, and the stage
+			// would paint the world over the finished image. The map is emptied rather than left
+			// standing, so a program broken mid-session reads as no shadow and not as the last
+			// map it ever drew, frozen.
+			shadow.clear(device.createCommandEncoder());
+
+			return false;
+		}
+
+		if (!shadow.ensure()) {
+			return false;
+		}
+
+		shadow.clear(device.createCommandEncoder());
+
+		return shadow.depth() != null;
+	}
+
+	/**
+	 * Whether every shadow pass has a program that can still be served. All or nothing: the three
+	 * passes draw into one map, and a stage that drew the opaque half and refused the translucent
+	 * one would read as a pack behaviour rather than as the refusal it is.
+	 */
+	private boolean shadowsServed() {
+		for (TerrainPass pass : TerrainPass.values()) {
+			if (pass.shadow()) {
+				TerrainProgram program = this.programs.get(pass);
+				if (program == null || !program.servable()) {
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	/**
 	 * Draws one group of the shadow map, by running the caller back over the chunk renderer with the
 	 * flag set. The caller is the only side that can name a Sodium pass, which is why the draw
 	 * arrives as a runnable rather than this module reaching for one.
 	 * <p>
-	 * The map is opened here and the draw refused outright when it could not be. That order is the
-	 * whole safety of this step: with the flag set and no map to draw into, the descriptor would
-	 * come back null, the renderer would open its own pass on the game's target, and the pack's
-	 * shadow program would paint the screen with whatever it writes.
+	 * The draw is refused outright when there is no map. That refusal is the whole safety of this
+	 * step: with the flag set and no map to draw into, the descriptor would come back null, the
+	 * renderer would open its own pass on the game's target, and the pack's shadow program would
+	 * paint the screen with whatever it writes.
 	 */
 	public static void shadowPass(Runnable draw) {
 		TerrainDraw self = PackChain.terrain();
-		if (self == null || !shadows() || !self.openShadow()) {
+		if (self == null || !shadows() || self.targets.shadow().depth() == null) {
 			return;
 		}
 
@@ -142,19 +204,13 @@ public final class TerrainDraw {
 	}
 
 	/**
-	 * Opens the frame and allocates and clears every target, the shadow map included, and answers
-	 * whether there is a map to draw into. Outside any render pass, which is where the shadow stage
-	 * stands: the frame graph runs one pass at a time and this is the top of ours.
+	 * The matrix that culls the world for the light, the shadow pair multiplied through, or null
+	 * when no pack is drawing. This frame's pair, which is also the pair the map is drawn with.
 	 */
-	private boolean openShadow() {
-		GpuDevice device = RenderSystem.tryGetDevice();
-		if (device == null) {
-			return false;
-		}
+	public static Matrix4f shadowFrustum(Matrix4f dest) {
+		TerrainDraw self = PackChain.terrain();
 
-		this.owner.beginFrame();
-
-		return this.owner.openTargets(device) && this.targets.shadow().depth() != null;
+		return self == null ? null : self.values.shadowFrustum(dest);
 	}
 
 	/** Whether the renderer is drawing the shadow map at this instant, for the loader side. */
@@ -278,15 +334,23 @@ public final class TerrainDraw {
 			return null;
 		}
 
-		this.owner.beginFrame();
+		// Not during the shadow stage, and that is not an optimisation. The stage runs once the
+		// chain has closed the frame, so the per frame guards are down again: opening here would
+		// advance the value store a second time, which turns every gbufferPrevious* of the next
+		// frame into the current one, and clear the colour targets over what the chain just wrote.
+		// Everything these two calls provide, the stage already has: the values were advanced when
+		// this frame opened, and the map is ensured and emptied by openShadowStage.
+		if (!shadowing) {
+			this.owner.beginFrame();
 
-		// Before the pipeline and before the pass, which is the whole point: the clears belong ahead
-		// of the world now that something writes the pack's targets during it. And a frame where the
-		// targets cannot be opened keeps the game's own shader outright: the pipeline carries one
-		// colour state per attachment the descriptor would have named, and Sodium's own pass, the
-		// only one left to bind it into, carries exactly one.
-		if (!this.owner.openTargets(device)) {
-			return null;
+			// Before the pipeline and before the pass, which is the whole point: the clears belong
+			// ahead of the world now that something writes the pack's targets during it. And a frame
+			// where the targets cannot be opened keeps the game's own shader outright: the pipeline
+			// carries one colour state per attachment the descriptor would have named, and Sodium's
+			// own pass, the only one left to bind it into, carries exactly one.
+			if (!this.owner.openTargets(device)) {
+				return null;
+			}
 		}
 
 		return program.prepare(device, atlas);

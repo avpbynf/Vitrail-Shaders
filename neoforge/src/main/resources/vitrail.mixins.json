@@ -14,7 +14,9 @@
 		"DefaultFluidRendererMixin",
 		"GameRendererMixin",
 		"ProjectionMatrixBufferMixin",
+		"RenderSectionManagerAccessor",
 		"ShaderChunkRendererMixin",
+		"SodiumWorldRendererAccessor",
 		"VKDrawContextMixin"
 	]
 }
