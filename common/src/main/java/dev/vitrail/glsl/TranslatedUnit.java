@@ -79,12 +79,15 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 *                           reads back a value the stage never wrote
 	 * @param conflictNames      the names behind {@code uniformConflicts}, so a run over a corpus
 	 *                           can name them rather than only count them
+	 * @param comparedSamplers   the samplers the pack asked the hardware to compare and that are
+	 *                           declared here as ordinary ones. Read off the declarations rather
+	 *                           than off {@code samplers}, whose types have already been rewritten
 	 */
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
 			int depthEpilogue, int alphaEpilogue, int depthReads, int depthReadsUnwrapped,
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
-			List<String> conflictNames) {
+			List<String> conflictNames, List<String> comparedSamplers) {
 	}
 }

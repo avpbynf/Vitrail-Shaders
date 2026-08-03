@@ -877,9 +877,12 @@ public final class TerrainProgram {
 		// at all, so the translation makes it instead, one tap and a step. What is lost is the
 		// softness of a compare filtered LINEAR, not the shadow: an edge one texel harder than the
 		// pack drew against.
-		List<String> compared = this.loaded.program().samplers().stream()
-				.filter(sampler -> sampler.type().contains("Shadow"))
-				.map(TranslatedUnit.Uniform::name)
+		//
+		// Asked of the notes and not of the samplers: by the time a sampler is one of those, its
+		// type has been rewritten to the ordinary one and there is nothing left to recognise.
+		List<String> compared = this.loaded.program().stages().values().stream()
+				.flatMap(unit -> unit.notes().comparedSamplers().stream())
+				.distinct()
 				.toList();
 		if (!compared.isEmpty()) {
 			Vitrail.logger().info("{} asked the hardware to compare {}, which this backend cannot "

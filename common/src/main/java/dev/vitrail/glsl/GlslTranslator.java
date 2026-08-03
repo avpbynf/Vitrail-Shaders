@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -138,10 +137,10 @@ public final class GlslTranslator {
 	private final Map<String, String> samplers = new LinkedHashMap<>();
 
 	/**
-	 * The samplers the pack declared as comparison samplers, by name, and which are declared here as
-	 * ordinary ones. {@link #ofShadowCompare} says why they cannot stay what they were.
+	 * The samplers the pack declared as comparison samplers, and which are declared here as ordinary
+	 * ones. {@link #ofShadowCompare} says why they cannot stay what they were.
 	 */
-	private final Set<String> comparisonSamplers = new LinkedHashSet<>();
+	private final List<Compared> comparisonSamplers = new ArrayList<>();
 
 	/** Outputs the pack declares itself, by the location it asked for, moved into the header. */
 	private final Map<Integer, Output> packOutputs = new TreeMap<>();
@@ -462,6 +461,7 @@ public final class GlslTranslator {
 
 	private void rewriteIdentifiers() {
 		List<Integer> closings = new ArrayList<>();
+		int[] lines = lineNumbers();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -520,8 +520,16 @@ public final class GlslTranslator {
 					int first = significantAfter(callOpener(index));
 					boolean compared = first >= 0
 							&& this.tokens.get(first).kind() == Kind.IDENTIFIER
-							&& this.comparisonSamplers.contains(this.tokens.get(first).text());
-					if (compared) {
+							&& comparisonAt(this.tokens.get(first).text(), lines[index]);
+
+					// Only the plain lookups are ours to make, as in rewriteShadowCompare and for
+					// the same reason: a projective comparison divides before it compares, which is
+					// a different expression and not a different name. It keeps the modern spelling
+					// and is counted rather than quietly turned into something it is not.
+					if (compared && shadow.equals("textureProj")) {
+						this.unwrappedShadowCalls++;
+						compared = false;
+					} else if (compared) {
 						this.shadowCompares++;
 					}
 
@@ -592,6 +600,16 @@ public final class GlslTranslator {
 	}
 
 	/**
+	 * One name that means a comparison sampler, over the lines where it does. A uniform reaches the
+	 * end of the unit and a parameter stops at its own closing brace.
+	 * <p>
+	 * Lines and not token positions, because the passes that ask this insert tokens and shift every
+	 * index after them, and not one of them inserts a line break.
+	 */
+	private record Compared(String name, int from, int to) {
+	}
+
+	/**
 	 * Puts every depth the unit reads back into the window the pack was written for, and every
 	 * depth it writes back into the one the target is rasterised in.
 	 * <p>
@@ -609,6 +627,7 @@ public final class GlslTranslator {
 	 */
 	private void convertDepth() {
 		List<Closing> closings = new ArrayList<>();
+		int[] lines = lineNumbers();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -633,7 +652,7 @@ public final class GlslTranslator {
 			if (LegacyGlsl.DEPTH_LOOKUPS.contains(token.text())) {
 				// The comparison first: a lookup on a comparison sampler is not a depth read at all
 				// and must not be wrapped in of_DepthConv on top of being rewritten.
-				if (!rewriteShadowCompare(index)) {
+				if (!rewriteShadowCompare(index, lines[index])) {
 					wrapDepthLookup(index, closings);
 				}
 
@@ -668,9 +687,11 @@ public final class GlslTranslator {
 	 * and counted: what it needs is a different expression, not a different name, and a call that
 	 * silently kept a hardware comparison is exactly the thing this whole rewrite exists to stop.
 	 *
+	 * @param line where the call stands, since a comparison sampler taken as a parameter only means
+	 *             one inside the function that took it
 	 * @return whether this call was a comparison, in which case it is not a depth read as well
 	 */
-	private boolean rewriteShadowCompare(int index) {
+	private boolean rewriteShadowCompare(int index, int line) {
 		if (this.comparisonSamplers.isEmpty()) {
 			return false;
 		}
@@ -678,7 +699,7 @@ public final class GlslTranslator {
 		int open = callOpener(index);
 		int first = open < 0 ? -1 : significantAfter(open);
 		if (first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER
-				|| !this.comparisonSamplers.contains(this.tokens.get(first).text())) {
+				|| !comparisonAt(this.tokens.get(first).text(), line)) {
 			return false;
 		}
 
@@ -1425,11 +1446,30 @@ public final class GlslTranslator {
 	 * A pass of its own, and early, because of when the others run: the uniforms are lifted after
 	 * the depth conversion, and the conversion is the one place that has to know. It walks the
 	 * declaration itself rather than reusing the lifting, since all it needs is the type token and
-	 * the names between it and the semicolon, and it must not disturb what the lifting then reads.
+	 * the names it introduces, and it must not disturb what the lifting then reads.
+	 * <p>
+	 * The two forms a comparison sampler is written in are told apart by the parenthesis, and they
+	 * have to be: a declaration lists names until the semicolon, a parameter names one thing and
+	 * ends at the comma. Read as a declaration, {@code shadowsmoothfilter(in sampler2DShadow tex,
+	 * in vec3 uv, ...)} claims every identifier down to the first statement of the body.
 	 */
 	private void collectComparisonSamplers() {
+		int[] lines = lineNumbers();
+		int depth = 0;
+		int parameters = -1;
+
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
+			if (token.directive() == null && token.operator("(")) {
+				if (depth == 0) {
+					parameters = index;
+				}
+
+				depth++;
+			} else if (token.directive() == null && token.operator(")")) {
+				depth--;
+			}
+
 			if (token.kind() != Kind.IDENTIFIER || token.directive() != null) {
 				continue;
 			}
@@ -1441,19 +1481,52 @@ public final class GlslTranslator {
 
 			replace(index, plain);
 
-			// Every identifier up to the semicolon is a name this declaration introduces. Array
-			// bounds and commas are not identifiers, so they are stepped over without a rule.
+			// Every identifier this declaration introduces, and how far what it introduces them
+			// into reaches. Array bounds and commas are not identifiers, so they are stepped over.
+			int last = depth > 0 ? functionEnd(parameters) : this.tokens.size() - 1;
 			for (int scan = significantAfter(index); scan >= 0; scan = significantAfter(scan)) {
 				Token next = this.tokens.get(scan);
-				if (next.operator(";")) {
+				if (next.operator(";") || depth > 0 && (next.operator(",") || next.operator(")"))) {
 					break;
 				}
 
 				if (next.kind() == Kind.IDENTIFIER) {
-					this.comparisonSamplers.add(next.text());
+					this.comparisonSamplers.add(new Compared(next.text(), lines[index], lines[last]));
 				}
 			}
 		}
+	}
+
+	/**
+	 * The last token of the function a parameter list opens, which is the brace that closes the
+	 * body, or the parenthesis itself when the function is only declared.
+	 */
+	private int functionEnd(int parameters) {
+		int close = matchingBracket(parameters);
+		int brace = close < 0 ? -1 : significantAfter(close);
+		if (brace < 0 || !this.tokens.get(brace).operator("{")) {
+			return close < 0 ? this.tokens.size() - 1 : close;
+		}
+
+		int end = matchingBracket(brace);
+
+		return end < 0 ? this.tokens.size() - 1 : end;
+	}
+
+	/**
+	 * Whether this name is a comparison sampler where it stands. A parameter only is inside its own
+	 * function, and Bliss's {@code lib/texFiltering.glsl} is why the question is asked that way: it
+	 * names both its plain sampler and its comparison sampler {@code tex}, in two functions one
+	 * after the other, and a rewrite of the first would not compile.
+	 */
+	private boolean comparisonAt(String name, int line) {
+		for (Compared compared : this.comparisonSamplers) {
+			if (compared.name().equals(name) && line >= compared.from() && line <= compared.to()) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -1701,7 +1774,19 @@ public final class GlslTranslator {
 				this.depthReads,
 				this.depthReadsUnwrapped, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
-				List.copyOf(this.conflicts));
+				List.copyOf(this.conflicts), comparedSamplers());
+	}
+
+	/**
+	 * The comparison samplers this stage is handed from outside, which are the only ones anything
+	 * binds: one taken as a parameter is a name inside a function and never a descriptor.
+	 */
+	private List<String> comparedSamplers() {
+		return this.comparisonSamplers.stream()
+				.map(Compared::name)
+				.distinct()
+				.filter(this.samplers::containsKey)
+				.toList();
 	}
 
 
@@ -1845,7 +1930,11 @@ public final class GlslTranslator {
 		}
 
 		String opening = this.tokens.get(open).text();
-		String closing = opening.equals("(") ? ")" : "]";
+		String closing = switch (opening) {
+			case "(" -> ")";
+			case "{" -> "}";
+			default -> "]";
+		};
 		int depth = 0;
 
 		for (int scan = open; scan < this.tokens.size(); scan++) {
