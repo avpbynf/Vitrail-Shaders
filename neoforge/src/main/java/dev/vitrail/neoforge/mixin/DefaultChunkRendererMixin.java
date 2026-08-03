@@ -7,10 +7,12 @@ import dev.vitrail.render.TerrainDraw;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import net.minecraft.client.Minecraft;
 import net.caffeinemc.mods.sodium.client.render.chunk.DefaultChunkRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import org.spongepowered.asm.mixin.Mixin;
@@ -46,6 +48,33 @@ import java.util.function.Supplier;
  */
 @Mixin(value = DefaultChunkRenderer.class, remap = false)
 public abstract class DefaultChunkRendererMixin {
+
+	/**
+	 * Answers the target question with the game's own while the shadow map is being drawn.
+	 * <p>
+	 * The translucent pass answers it with {@code LevelRenderer.translucentTarget()}, which is a
+	 * frame graph resource that exists only while the pass that declared it is executing. The shadow
+	 * map is drawn before every one of those, so asking there throws "Resource is not currently
+	 * available" from inside Sodium, before our own wrap below is ever reached: the arguments of a
+	 * call are evaluated before the call.
+	 * <p>
+	 * What comes back is thrown away. The descriptor below replaces the whole pass, so this only has
+	 * to be something that exists.
+	 */
+	@WrapOperation(
+			method = "render",
+			at = @At(value = "INVOKE",
+					target = "Lnet/caffeinemc/mods/sodium/client/render/chunk/terrain/TerrainRenderPass;"
+							+ "getTarget()Lcom/mojang/blaze3d/pipeline/RenderTarget;"))
+	private RenderTarget vitrail$target(TerrainRenderPass pass, Operation<RenderTarget> original) {
+		if (!TerrainDraw.drawingShadow()) {
+			return original.call(pass);
+		}
+
+		Minecraft minecraft = Minecraft.getInstance();
+
+		return minecraft == null ? original.call(pass) : minecraft.gameRenderer.mainRenderTarget();
+	}
 
 	@WrapOperation(
 			method = "render",

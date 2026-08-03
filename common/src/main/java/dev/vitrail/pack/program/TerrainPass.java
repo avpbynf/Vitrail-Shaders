@@ -47,7 +47,15 @@ public enum TerrainPass {
 	 * The same for the cutout half, and the discard is what makes it worth a second pass: leaves
 	 * without one cast the shadow of a cube, which is the one shadow artefact everybody recognises.
 	 */
-	SHADOW_CUTOUT("shadow_cutout", AlphaTest.CUTOUT, false, true);
+	SHADOW_CUTOUT("shadow_cutout", AlphaTest.CUTOUT, false, true),
+
+	/**
+	 * Water, ice and stained glass seen from the light, and it is not blended: what a shadow map
+	 * wants from a translucent surface is the depth it stands at and the colour it tints the light
+	 * with, both written outright. Iris gives this half no alpha test either, so a pack that means
+	 * to let something through says so with a discard of its own.
+	 */
+	SHADOW_TRANSLUCENT("shadow_water", AlphaTest.OFF, false, true);
 
 	private final String program;
 	private final AlphaTest fallback;
@@ -85,14 +93,14 @@ public enum TerrainPass {
 	 * draw. The renderer knows only its own three passes, so this is how one of them becomes the
 	 * shadow pass that shares its mesh.
 	 * <p>
-	 * The translucent half answers null on purpose, and not because a {@code shadow_water} does not
-	 * exist: nothing draws it yet, and a pass with no shadow counterpart has to leave the renderer's
-	 * own shader alone rather than be given a programme written for another one.
+	 * A pass with no shadow counterpart answers null and has to leave the renderer's own shader
+	 * alone, rather than be given a program written for another one.
 	 */
 	public TerrainPass inShadow() {
 		return switch (this) {
 			case SOLID -> SHADOW_SOLID;
 			case CUTOUT -> SHADOW_CUTOUT;
+			case TRANSLUCENT -> SHADOW_TRANSLUCENT;
 			default -> null;
 		};
 	}

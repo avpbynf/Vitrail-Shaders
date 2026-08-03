@@ -5,6 +5,8 @@ import dev.vitrail.Vitrail;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
@@ -43,6 +45,20 @@ final class ShadowTargets {
 	private final int resolution;
 
 	private TextureTarget target;
+
+	/**
+	 * The map as it stood before anything translucent was drawn into it, which the OptiFine model
+	 * calls {@code shadowtex1}.
+	 * <p>
+	 * A copy and not a second pass. The two names differ by one thing only, whether the translucent
+	 * geometry is in them, so the cheap way round is to take the depth once the opaque half is done
+	 * and let the translucent half carry on into the original. What a pack does with the pair is
+	 * compare them: a point occluded in nought and clear in one is behind something translucent, and
+	 * that is the whole test a coloured shadow rests on.
+	 */
+	private GpuTexture noTranslucents;
+	private GpuTextureView noTranslucentsView;
+
 	private boolean broken;
 
 	ShadowTargets(int resolution) {
@@ -101,9 +117,45 @@ final class ShadowTargets {
 				this.target.getDepthTexture(), FAR);
 	}
 
-	/** The depth image, which is what every {@code shadowtex} name reads. Null before the first frame. */
+	/**
+	 * Takes the copy the pack reads as {@code shadowtex1}: the map as it stands, which the caller
+	 * has to invoke once the opaque halves are drawn and before the translucent one is. Must run on
+	 * the render thread and outside any render pass.
+	 */
+	void copyWithoutTranslucents(CommandEncoder encoder) {
+		GpuTexture depth = this.target == null ? null : this.target.getDepthTexture();
+		if (depth == null || this.broken) {
+			return;
+		}
+
+		if (this.noTranslucents == null) {
+			// The source's own format rather than an assumed one, the same rule the world's depth
+			// copy follows: a copy whose format differs from its source is refused outright.
+			this.noTranslucents = RenderSystem.getDevice().createTexture(() -> "Vitrail shadowtex1",
+					GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_TEXTURE_BINDING, depth.getFormat(),
+					this.resolution, this.resolution, 1, 1);
+			this.noTranslucentsView = RenderSystem.getDevice().createTextureView(this.noTranslucents);
+		}
+
+		encoder.copyTextureToTexture(depth, this.noTranslucents, 0, 0, 0, 0, 0, this.resolution,
+				this.resolution);
+	}
+
+	/** The depth with everything in it, which the pack reads as {@code shadowtex0}. */
 	GpuTextureView depth() {
 		return this.target == null ? null : this.target.getDepthTextureView();
+	}
+
+	/**
+	 * The depth without the translucents, or the depth with them when no copy has been taken yet.
+	 * <p>
+	 * Falling back to the live image rather than to white is the same choice the world's depth copy
+	 * makes: the wrong moment of the right image says "nothing translucent is in the way", which is
+	 * true of every frame until the translucent shadow pass runs, and white would say the far plane
+	 * and put every surface behind glass.
+	 */
+	GpuTextureView depthWithoutTranslucents() {
+		return this.noTranslucentsView == null ? depth() : this.noTranslucentsView;
 	}
 
 	/**
@@ -123,6 +175,16 @@ final class ShadowTargets {
 		if (this.target != null) {
 			this.target.destroyBuffers();
 			this.target = null;
+		}
+
+		if (this.noTranslucentsView != null) {
+			this.noTranslucentsView.close();
+			this.noTranslucentsView = null;
+		}
+
+		if (this.noTranslucents != null) {
+			this.noTranslucents.close();
+			this.noTranslucents = null;
 		}
 	}
 }

@@ -67,5 +67,13 @@ public final class ShadowTerrain {
 
 		TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.OPAQUE, matrices,
 				camera.x, camera.y, camera.z, sampler));
+
+		// Between the two groups and nowhere else: this is the one moment shadowtex0 and shadowtex1
+		// hold different things, and what separates them is exactly the draw that comes next. The
+		// renderer closes its own render pass before returning, so a copy here is outside one.
+		TerrainDraw.copyShadowDepth();
+
+		TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.TRANSLUCENT,
+				matrices, camera.x, camera.y, camera.z, sampler));
 	}
 }

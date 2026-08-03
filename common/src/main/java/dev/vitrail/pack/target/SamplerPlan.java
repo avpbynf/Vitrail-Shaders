@@ -203,6 +203,18 @@ public final class SamplerPlan {
 	}
 
 	/**
+	 * Whether a shadow depth name reads the map as it stood before the translucents.
+	 * <p>
+	 * {@code shadowtex1} is that one and the two others are the map with everything in it. The pair
+	 * is the whole of what a coloured shadow rests on: a point occluded in nought and clear in one
+	 * has something translucent between it and the light, and the tint comes from
+	 * {@code shadowcolor}.
+	 */
+	public static boolean withoutTranslucents(String name) {
+		return name.equals("shadowtex1");
+	}
+
+	/**
 	 * Which shadow colour target a name reads. The bare {@code shadowcolor} is nought, which is the
 	 * same rule {@code colortex} follows and the same one Iris follows for both.
 	 */

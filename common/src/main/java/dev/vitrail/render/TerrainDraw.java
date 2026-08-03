@@ -105,6 +105,19 @@ public final class TerrainDraw {
 	}
 
 	/**
+	 * Takes the copy the pack reads as {@code shadowtex1}. The caller invokes it between the opaque
+	 * halves of the shadow map and the translucent one, which is the only moment the two names mean
+	 * different things, and outside any render pass: the renderer closes its own before returning.
+	 */
+	public static void copyShadowDepth() {
+		TerrainDraw self = PackChain.terrain();
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (self != null && device != null) {
+			self.targets.shadow().copyWithoutTranslucents(device.createCommandEncoder());
+		}
+	}
+
+	/**
 	 * Draws one group of the shadow map, by running the caller back over the chunk renderer with the
 	 * flag set. The caller is the only side that can name a Sodium pass, which is why the draw
 	 * arrives as a runnable rather than this module reaching for one.
@@ -142,6 +155,11 @@ public final class TerrainDraw {
 		this.owner.beginFrame();
 
 		return this.owner.openTargets(device) && this.targets.shadow().depth() != null;
+	}
+
+	/** Whether the renderer is drawing the shadow map at this instant, for the loader side. */
+	public static boolean drawingShadow() {
+		return shadowing;
 	}
 
 	/**

@@ -627,7 +627,7 @@ public final class TerrainProgram {
 		return switch (binding.kind()) {
 			case COLORTEX -> colortex(binding);
 			case DEPTH -> depth();
-			case SHADOW_DEPTH -> shadowDepth();
+			case SHADOW_DEPTH -> shadowDepth(binding.sampler());
 			case SHADOW_COLOUR -> shadowColour(binding.index());
 			case NOISE -> this.targets.noise();
 			default -> this.black.getColorTextureView();
@@ -645,12 +645,17 @@ public final class TerrainProgram {
 	 * A shadow pass reads white whatever the map holds: the image it would read is an attachment of
 	 * the very pass it is drawn in, and sampling an attachment is a thing Vulkan gives no meaning to.
 	 */
-	private GpuTextureView shadowDepth() {
+	private GpuTextureView shadowDepth(String sampler) {
 		if (this.pass.shadow()) {
 			return this.white.getColorTextureView();
 		}
 
-		GpuTextureView map = this.shadow.depth();
+		// shadowtex1 is the map without the translucents and shadowtex0 the map with them. Serving
+		// one image to both is what makes a pack's coloured shadow branch dead code: it asks whether
+		// a point is occluded in nought and clear in one, and one image can never answer yes.
+		GpuTextureView map = SamplerPlan.withoutTranslucents(sampler)
+				? this.shadow.depthWithoutTranslucents()
+				: this.shadow.depth();
 
 		return map == null ? this.white.getColorTextureView() : map;
 	}
