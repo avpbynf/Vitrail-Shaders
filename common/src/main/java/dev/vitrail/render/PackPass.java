@@ -408,9 +408,13 @@ final class PackPass {
 				case UNSERVED, UNBINDABLE -> targets.black();
 			};
 
-			FilterMode filter = binding.kind() == SamplerPlan.Kind.COLORTEX
-					? targets.filter(binding.index())
-					: FilterMode.NEAREST;
+			// The noise image is LINEAR for the same reason the terrain reads it LINEAR: it is a
+			// continuous field the pack interpolates surfaces out of, and Iris binds it that way.
+			FilterMode filter = switch (binding.kind()) {
+				case COLORTEX -> targets.filter(binding.index());
+				case NOISE -> FilterMode.LINEAR;
+				default -> FilterMode.NEAREST;
+			};
 
 			// The noise image repeats and everything else clamps, which is Iris's choice and not a
 			// taste: a pack indexes noisetex with coordinates of its own, in texels and well past

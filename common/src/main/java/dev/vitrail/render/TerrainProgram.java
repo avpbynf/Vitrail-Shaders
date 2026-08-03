@@ -780,10 +780,14 @@ public final class TerrainProgram {
 		// A colour target is filtered as the chain filters it, LINEAR wherever the format allows it,
 		// so that a name reads the same here and one pass later.
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+		if (binding.kind() == SamplerPlan.Kind.COLORTEX) {
+			return this.targets.filter(binding.index());
+		}
 
-		return binding.kind() == SamplerPlan.Kind.COLORTEX
-				? this.targets.filter(binding.index())
-				: FilterMode.NEAREST;
+		// The noise image is a continuous field, not a lookup table: a pack derives water normals
+		// and cloud shapes from it and counts on the interpolation. Iris binds it LINEAR_REPEAT,
+		// and reading it NEAREST shatters every one of those surfaces into facets.
+		return binding.kind() == SamplerPlan.Kind.NOISE ? FilterMode.LINEAR : FilterMode.NEAREST;
 	}
 
 	/**
