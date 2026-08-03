@@ -50,6 +50,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -130,6 +131,9 @@ public final class TerrainProgram {
 	private boolean cleared;
 	private boolean announced;
 	private boolean broken;
+
+	/** Targets already reported as read on the half this pass writes. Said once each, not per frame. */
+	private final Set<Integer> collisions = new HashSet<>();
 
 	private TerrainProgram(TerrainPass pass, PackProgram.Loaded loaded, PackValues values, int load,
 			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets) {
@@ -490,21 +494,78 @@ public final class TerrainProgram {
 			return lightmap == null ? this.white.getColorTextureView() : lightmap;
 		}
 
+		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+
 		// Black and not white for a depth, and the reason is the convention rather than a taste:
 		// every depth lookup is wrapped in of_DepthConv.zw, which under the reversed Z the game
 		// rasterises in reads nought back as the far plane. White would put the whole world against
 		// the camera. PackPass answers the same way, and the day a target of ours is drawn into,
 		// both have to follow.
-		return switch (SamplerPlan.classify(sampler)) {
+		//
+		// A depth is a constant here where the chain gives it the real one, and that is not an
+		// oversight. The pass this is drawn in has the game's depth as its own attachment, so
+		// sampling it would be reading and writing one image at once, which Vulkan gives no meaning
+		// to at all. The two the packs really want, depthtex1 and depthtex2, are copies taken before
+		// the translucents and before the hand, and nothing takes them yet.
+		return switch (binding.kind()) {
+			case COLORTEX -> colortex(binding);
 			case SHADOW_DEPTH, SHADOW_COLOUR -> this.white.getColorTextureView();
 			case NOISE -> this.grey.getColorTextureView();
 			default -> this.black.getColorTextureView();
 		};
 	}
 
+	/**
+	 * A colour target of the pack, on the half the plan reads it from, or black.
+	 * <p>
+	 * Black covers two cases and only one of them is temporary. The targets may not be allocated
+	 * yet, which is the first frame or two. And the half being read may be a half this very pass is
+	 * writing, which happens when the pack asks for a target it does not double: one image cannot be
+	 * an attachment and a sampled texture of the same pass, so the read is refused rather than left
+	 * to mean whatever the driver decides that frame.
+	 */
+	private GpuTextureView colortex(SamplerPlan.Binding binding) {
+		for (ChainPlan.Attachment attachment : this.extra) {
+			if (attachment.target() == binding.index() && attachment.side() == binding.side()) {
+				if (this.collisions.add(binding.index())) {
+					Vitrail.logger().warn("{} reads {} on the half it writes, so it is answered with "
+							+ "one pixel: the pack does not double that target and one image cannot be "
+							+ "both an attachment and a texture of one pass", this.path,
+							TargetName.canonical(binding.index()));
+				}
+
+				return this.black.getColorTextureView();
+			}
+		}
+
+		GpuTextureView view = this.targets.view(binding.index(), binding.side());
+
+		return view == null ? this.black.getColorTextureView() : view;
+	}
+
 	/** The light map is the one thing here that is interpolated, as it is in the game's own shader. */
-	private static FilterMode filter(String sampler) {
-		return LIGHTMAP.equals(sampler) ? FilterMode.LINEAR : FilterMode.NEAREST;
+	/**
+	 * Whether this name is answered with something the frame really drew, rather than one pixel. A
+	 * colour target counts even when it is empty at this point of the frame: it is the pack's own
+	 * image and what it holds is a question about the order of the frame, not about the binding.
+	 */
+	private boolean readsATexture(String sampler) {
+		return ATLAS.contains(sampler) || LIGHTMAP.equals(sampler)
+				|| this.loaded.samplers().binding(sampler).kind() == SamplerPlan.Kind.COLORTEX;
+	}
+
+	private FilterMode filter(String sampler) {
+		if (LIGHTMAP.equals(sampler)) {
+			return FilterMode.LINEAR;
+		}
+
+		// A colour target is filtered as the chain filters it, LINEAR wherever the format allows it,
+		// so that a name reads the same here and one pass later.
+		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+
+		return binding.kind() == SamplerPlan.Kind.COLORTEX
+				? this.targets.filter(binding.index())
+				: FilterMode.NEAREST;
 	}
 
 	/**
@@ -544,16 +605,14 @@ public final class TerrainProgram {
 					+ "constant and what this program computes from them is wrong: {}", constants);
 		}
 
-		List<String> real = this.samplers.stream()
-				.filter(name -> ATLAS.contains(name) || LIGHTMAP.equals(name))
-				.toList();
-		List<String> flat = this.samplers.stream()
-				.filter(name -> !ATLAS.contains(name) && !LIGHTMAP.equals(name))
-				.toList();
+		List<String> real = this.samplers.stream().filter(this::readsATexture).toList();
+		List<String> flat = this.samplers.stream().filter(name -> !readsATexture(name)).toList();
 		Vitrail.logger().info("{} samplers of this program read a real texture: {}", real.size(), real);
 		if (!flat.isEmpty()) {
-			Vitrail.logger().warn("{} read one pixel, because this step draws before any target of "
-					+ "the pack exists: {}", flat.size(), flat);
+			// What is left is what nothing draws yet: the shadow map, the noise texture, and the
+			// depth copies taken before the translucents and before the hand.
+			Vitrail.logger().warn("{} read one pixel, because nothing fills them yet: {}",
+					flat.size(), flat);
 		}
 
 		// Draw buffer nought is not named here on purpose: it goes to the game's own target, which is
