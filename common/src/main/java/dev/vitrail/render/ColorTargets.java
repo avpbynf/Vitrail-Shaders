@@ -12,6 +12,7 @@ import dev.vitrail.uniform.NoiseTexture;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -79,6 +80,9 @@ final class ColorTargets {
 	private TextureTarget white;
 	private TextureTarget grey;
 	private TextureTarget noise;
+
+	private GpuTexture depthCopy;
+	private GpuTextureView depthCopyView;
 
 	private int screenWidth;
 	private int screenHeight;
@@ -225,6 +229,48 @@ final class ColorTargets {
 		}
 	}
 
+	/**
+	 * Copies the game's depth as it stands, which the OptiFine model calls {@code depthtex1}: the
+	 * depth of the opaque world, taken before anything translucent is drawn. Must run on the render
+	 * thread, outside any render pass, and at the right moment of the frame, which is the caller's
+	 * to know.
+	 * <p>
+	 * The copy carries the source's own format, taken from the texture rather than assumed: the
+	 * game's depth is {@code D32_FLOAT} until a mod asks NeoForge for a stencil, and a depth copy
+	 * with any other format than its source is refused outright by the encoder.
+	 */
+	void copyDepth(CommandEncoder encoder, GpuTexture depth) {
+		if (depth == null || this.broken) {
+			return;
+		}
+
+		int width = depth.getWidth(0);
+		int height = depth.getHeight(0);
+		if (this.depthCopy != null && (this.depthCopy.getWidth(0) != width
+				|| this.depthCopy.getHeight(0) != height
+				|| this.depthCopy.getFormat() != depth.getFormat())) {
+			releaseDepthCopy();
+		}
+
+		if (this.depthCopy == null) {
+			this.depthCopy = RenderSystem.getDevice().createTexture(
+					() -> "Vitrail depthtex1",
+					GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_TEXTURE_BINDING,
+					depth.getFormat(), width, height, 1, 1);
+			this.depthCopyView = RenderSystem.getDevice().createTextureView(this.depthCopy);
+		}
+
+		encoder.copyTextureToTexture(depth, this.depthCopy, 0, 0, 0, 0, 0, width, height);
+	}
+
+	/**
+	 * The copy {@link #copyDepth} last took, or null before the first one. Looked up at every use
+	 * like every other view here: a resize destroys and recreates it.
+	 */
+	GpuTextureView depthCopy() {
+		return this.depthCopyView;
+	}
+
 	/** Never held from one frame to the next. Null when this index was never allocated. */
 	GpuTextureView view(int index, TargetSchedule.Side side) {
 		TextureTarget target = target(index, side);
@@ -316,6 +362,19 @@ final class ColorTargets {
 		this.white = release(this.white);
 		this.grey = release(this.grey);
 		this.noise = release(this.noise);
+		releaseDepthCopy();
+	}
+
+	private void releaseDepthCopy() {
+		if (this.depthCopyView != null) {
+			this.depthCopyView.close();
+			this.depthCopyView = null;
+		}
+
+		if (this.depthCopy != null) {
+			this.depthCopy.close();
+			this.depthCopy = null;
+		}
 	}
 
 	private boolean ensureConstants() {

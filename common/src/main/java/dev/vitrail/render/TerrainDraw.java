@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.Vitrail;
 import dev.vitrail.pack.ChainPlan;
 import dev.vitrail.pack.OptionValue;
+import dev.vitrail.pack.TargetPlan;
 import dev.vitrail.pack.TerrainPass;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -49,13 +50,16 @@ public final class TerrainDraw {
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
+	private final TargetPlan chainTargets;
+	private final boolean chainRuns;
 	private final ColorTargets targets;
 
 	private Map<TerrainPass, TerrainProgram> programs = Map.of();
 	private boolean read;
 
 	TerrainDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, ColorTargets targets) {
+			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
+			boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
@@ -64,6 +68,8 @@ public final class TerrainDraw {
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
+		this.chainTargets = chainTargets;
+		this.chainRuns = chainRuns;
 		this.targets = targets;
 	}
 
@@ -163,7 +169,8 @@ public final class TerrainDraw {
 			this.read = true;
 			if (TerrainProgram.carries(format)) {
 				this.programs = TerrainProgram.read(this.packPath, this.place, this.chosen,
-						this.profile, this.values, this.load, format, this.plan, this.targets);
+						this.profile, this.values, this.load, format, this.plan, this.chainTargets,
+						this.chainRuns, this.targets);
 			}
 		}
 
@@ -180,10 +187,13 @@ public final class TerrainDraw {
 		this.owner.beginFrame();
 
 		// Before the pipeline and before the pass, which is the whole point: the clears belong ahead
-		// of the world now that something writes the pack's targets during it. A frame where they
-		// cannot be opened still draws, and the descriptor answers null so the chunk renderer keeps
-		// its own single attachment pass.
-		this.owner.openTargets(device);
+		// of the world now that something writes the pack's targets during it. And a frame where the
+		// targets cannot be opened keeps the game's own shader outright: the pipeline carries one
+		// colour state per attachment the descriptor would have named, and Sodium's own pass, the
+		// only one left to bind it into, carries exactly one.
+		if (!this.owner.openTargets(device)) {
+			return null;
+		}
 
 		return program.prepare(device, atlas);
 	}

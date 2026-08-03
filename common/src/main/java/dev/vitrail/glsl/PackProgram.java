@@ -17,6 +17,7 @@ import dev.vitrail.pack.SettingSet;
 import dev.vitrail.pack.ShaderProperties;
 import dev.vitrail.pack.ShaderPackSource;
 import dev.vitrail.pack.TargetPlan;
+import dev.vitrail.pack.TargetSchedule;
 import dev.vitrail.pack.TerrainPass;
 
 import java.io.IOException;
@@ -71,6 +72,29 @@ public final class PackProgram {
 			return this.program.samplers().stream()
 					.filter(sampler -> SamplerTypes.refused(sampler.type()))
 					.toList();
+		}
+
+		/**
+		 * The same program bound against another plan, with the reader's own step handed in.
+		 * <p>
+		 * The chunk passes need both halves of that. They are loaded against a plan of their own,
+		 * built without the user's pass filter, while the halves they read have to come from the
+		 * schedule of the chain that really runs: two schedules walked over different sets of
+		 * passes hand out different parities, and a read on the wrong half is a clear colour, not
+		 * an error. And the step is the pass's rather than the file's, because the translucent
+		 * pass reads its targets on the sides the deferred stage leaves them, whatever file
+		 * serves it.
+		 */
+		public Loaded rebind(TargetPlan plan, Optional<TargetSchedule.Bound> step) {
+			List<String> declared = new ArrayList<>();
+			Map<String, String> types = new LinkedHashMap<>();
+			for (TranslatedUnit.Uniform sampler : this.program.samplers()) {
+				declared.add(sampler.name());
+				types.putIfAbsent(sampler.name(), sampler.type());
+			}
+
+			return new Loaded(this.packName, this.path, this.program, plan,
+					SamplerPlan.of(declared, types, plan, step), this.alphaTest);
 		}
 	}
 

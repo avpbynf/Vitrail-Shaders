@@ -67,6 +67,15 @@ public final class SamplerPlan {
 		return type != null && SamplerTypes.refused(type) ? Kind.UNBINDABLE : classify(name);
 	}
 
+	/**
+	 * The two depth copies of the OptiFine model, as opposed to the live depth. {@code depthtex1}
+	 * is taken before the world's translucents and {@code depthtex2} before the hand; nothing here
+	 * draws a hand, so the two moments hold the same image and one copy answers both.
+	 */
+	public static boolean depthCopy(String name) {
+		return name.equals("depthtex1") || name.equals("depthtex2");
+	}
+
 	public static Kind classify(String name) {
 		if (TargetName.index(name).isPresent()) {
 			return Kind.COLORTEX;
@@ -101,7 +110,20 @@ public final class SamplerPlan {
 	 */
 	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
 			String program) {
-		Optional<TargetSchedule.Bound> step = plan.schedule().step(program);
+		return of(declared, types, plan, plan.schedule().step(program));
+	}
+
+	/**
+	 * The same binding with the step handed in rather than looked up, which is what a chunk pass
+	 * needs: its halves are the pass's and not the file's. The translucent pass reads its colour
+	 * targets on the sides the deferred stage leaves them, and looking the file up in the schedule
+	 * would answer for the wrong side of that boundary.
+	 *
+	 * @param step where the reader stands in the frame, deciding the half of every colour target.
+	 *             Empty falls back to MAIN everywhere, as it always has
+	 */
+	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
+			Optional<TargetSchedule.Bound> step) {
 		List<Binding> bindings = new ArrayList<>();
 
 		for (String name : declared) {

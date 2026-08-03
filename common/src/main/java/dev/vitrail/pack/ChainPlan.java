@@ -1,6 +1,7 @@
 package dev.vitrail.pack;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -45,13 +46,13 @@ public final class ChainPlan {
 	private final List<Pass> passes;
 	private final Pass last;
 	private final Seed seed;
-	private final Map<String, Pass> geometry;
+	private final Map<TerrainPass, Pass> geometry;
 	private final List<Integer> swapBack;
 	private final List<String> refusals;
 	private final List<String> notes;
 
 	private ChainPlan(String place, List<Pass> passes, Pass last, Seed seed,
-			Map<String, Pass> geometry, List<Integer> swapBack, List<String> refusals,
+			Map<TerrainPass, Pass> geometry, List<Integer> swapBack, List<String> refusals,
 			List<String> notes) {
 		this.place = place;
 		this.passes = List.copyOf(passes);
@@ -162,22 +163,43 @@ public final class ChainPlan {
 	}
 
 	/**
-	 * The attachments of every geometry program this engine can draw, keyed by the file that serves
-	 * it. Two of the three chunk passes are usually one file, so the map is smaller than the passes.
+	 * The attachments of every chunk pass this engine can draw, keyed by the pass and never by the
+	 * file that serves it. One file usually serves two of the three, and the file is still not the
+	 * key: the passes it serves stand on either side of the deferred stage, so the same draw
+	 * buffers land on different halves depending on which pass is asking. Iris keys the same
+	 * answer the same way, one flip snapshot per {@code Pass}.
+	 * <p>
+	 * The walk before the deferreds is shared by the solid and the cutout pass, so its answer is
+	 * computed once per file, which is also what keeps a broken file from being reported twice.
 	 */
-	private static Map<String, Pass> geometryOf(TargetPlan plan, ProgramResolver resolver,
+	private static Map<TerrainPass, Pass> geometryOf(TargetPlan plan, ProgramResolver resolver,
 			List<String> notes) {
-		Map<String, Pass> geometry = new LinkedHashMap<>();
+		Map<TerrainPass, Pass> geometry = new EnumMap<>(TerrainPass.class);
+		Map<String, Pass> before = new LinkedHashMap<>();
 		for (TerrainPass pass : TerrainPass.values()) {
-			resolver.lookup(plan.place(), pass.program())
-					.map(ProgramResolver.Resolution::servedBy)
-					.filter(servedBy -> !geometry.containsKey(servedBy))
-					.ifPresent(servedBy -> {
-						Pass attachments = geometryOf(plan, servedBy, notes);
-						if (attachments != null) {
-							geometry.put(servedBy, attachments);
-						}
-					});
+			Optional<String> served = resolver.lookup(plan.place(), pass.program())
+					.map(ProgramResolver.Resolution::servedBy);
+			if (served.isEmpty()) {
+				continue;
+			}
+
+			String servedBy = served.get();
+			Pass attachments;
+			if (pass.afterDeferred()) {
+				attachments = geometryOf(plan, servedBy, notes, true);
+			} else {
+				// containsKey rather than computeIfAbsent, because null is an answer here and
+				// recomputing it would say the same note once per pass the file serves.
+				if (!before.containsKey(servedBy)) {
+					before.put(servedBy, geometryOf(plan, servedBy, notes, false));
+				}
+
+				attachments = before.get(servedBy);
+			}
+
+			if (attachments != null) {
+				geometry.put(pass, attachments);
+			}
 		}
 
 		return geometry;
@@ -206,14 +228,27 @@ public final class ChainPlan {
 	 * declaring no draw buffer on its geometry is the ordinary case rather than a fault, which is
 	 * why it is not even said here: {@link #notes()} already carries one line naming all of them.
 	 */
-	private static Pass geometryOf(TargetPlan plan, String program, List<String> notes) {
+	private static Pass geometryOf(TargetPlan plan, String program, List<String> notes,
+			boolean afterDeferred) {
 		List<Integer> writes = plan.writes(program);
+		if (writes.isEmpty()) {
+			return null;
+		}
 
-		return writes.isEmpty() ? null : attachmentsOf(plan, program, writes, notes);
+		Optional<TargetSchedule.Bound> bound = afterDeferred
+				? plan.schedule().stepAfterDeferred(program)
+				: plan.schedule().step(program);
+
+		return attachmentsOf(plan, program, writes, notes, bound);
 	}
 
 	private static Pass attachmentsOf(TargetPlan plan, String program, List<Integer> writes,
 			List<String> problems) {
+		return attachmentsOf(plan, program, writes, problems, plan.schedule().step(program));
+	}
+
+	private static Pass attachmentsOf(TargetPlan plan, String program, List<Integer> writes,
+			List<String> problems, Optional<TargetSchedule.Bound> bound) {
 		if (writes.size() > MAX_ATTACHMENTS) {
 			problems.add(program + " writes " + writes.size() + " targets and one pass carries at "
 					+ "most " + MAX_ATTACHMENTS + ": " + writes);
@@ -226,7 +261,6 @@ public final class ChainPlan {
 			return null;
 		}
 
-		Optional<TargetSchedule.Bound> bound = plan.schedule().step(program);
 		if (bound.isEmpty()) {
 			problems.add(program + " writes " + writes + " and the schedule holds no step for it");
 			return null;
@@ -414,18 +448,20 @@ public final class ChainPlan {
 	}
 
 	/**
-	 * Where a geometry program's outputs belong, in draw buffer order and each on the half the
+	 * Where one chunk pass's outputs belong, in draw buffer order and each on the half the
 	 * schedule gives it, or empty when this place cannot answer.
+	 * <p>
+	 * Keyed by the pass and not by the file that serves it, because the halves are the pass's: the
+	 * translucent pass draws after the deferred stage and its targets are on the sides the
+	 * deferreds leave them, even when the very same file serves the solid pass before them.
 	 * <p>
 	 * Empty is not a failure and covers three cases, all of them normal for a pack: it declares no
 	 * draw buffer on its geometry, which most of the corpus does on at least one place; it writes a
 	 * target this place does not allocate; or its targets are not all the same size, which one
 	 * render pass cannot carry. The last two are said in {@link #notes()}.
-	 *
-	 * @param servedBy the file that serves the pass, not the name the pass asked for
 	 */
-	public Optional<Pass> geometry(String servedBy) {
-		return Optional.ofNullable(this.geometry.get(servedBy));
+	public Optional<Pass> geometry(TerrainPass pass) {
+		return Optional.ofNullable(this.geometry.get(pass));
 	}
 
 	public Optional<Seed> seed() {

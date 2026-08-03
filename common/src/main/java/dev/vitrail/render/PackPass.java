@@ -392,7 +392,7 @@ final class PackPass {
 				// convention that is 1 - d. So the far plane is now stored as nought.
 				// Tied to the convention being REVERSED, which it is for every pass while nothing
 				// draws into a target of our own. The day one does, this has to follow.
-				case DEPTH -> depthView == null ? targets.black() : depthView;
+				case DEPTH -> depth(binding.sampler(), targets, depthView);
 				case SHADOW_DEPTH, SHADOW_COLOUR -> targets.white();
 				case NOISE -> targets.noise();
 				// A name this backend cannot bind should have taken its program out of the chain
@@ -413,6 +413,25 @@ final class PackPass {
 			pass.bindTexture(sampler, bound == null ? targets.black() : bound,
 					sampler(binding.kind(), filter));
 		}
+	}
+
+	/**
+	 * Which depth a name reads. {@code depthtex0} and {@code gdepthtex} are the depth as it stands
+	 * when this pass draws: the live view, which for a deferred is the opaque world and for a
+	 * composite the whole of it. {@code depthtex1} and {@code depthtex2} are the copy taken before
+	 * the world's translucents, and they fall back to the live view rather than to black when no
+	 * copy has been taken yet: the wrong moment of the right image, over a constant.
+	 */
+	private static GpuTextureView depth(String sampler, ColorTargets targets,
+			GpuTextureView depthView) {
+		if (SamplerPlan.depthCopy(sampler)) {
+			GpuTextureView copy = targets.depthCopy();
+			if (copy != null) {
+				return copy;
+			}
+		}
+
+		return depthView == null ? targets.black() : depthView;
 	}
 
 	/** How a name is addressed outside zero to one. Only the noise image tiles. */

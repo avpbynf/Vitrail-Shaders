@@ -54,6 +54,21 @@ public enum TerrainPass {
 	}
 
 	/**
+	 * Whether this pass draws after the deferred stage rather than before it, which decides the
+	 * halves its targets are on.
+	 * <p>
+	 * The OptiFine frame runs the opaque geometry, then the deferreds, then the translucent
+	 * geometry, and Iris wires Sodium the same way: every chunk pass is handed the
+	 * {@code flippedAfterPrepare} snapshot except {@code Pass.TRANSLUCENT}, which is handed
+	 * {@code flippedAfterTranslucent}, the state the deferreds leave behind. Answered by the pass
+	 * and never by the file that serves it, exactly as Iris keys it: one {@code gbuffers_terrain}
+	 * can serve two passes standing on either side of that boundary.
+	 */
+	public boolean afterDeferred() {
+		return this == TRANSLUCENT;
+	}
+
+	/**
 	 * The alpha test this pass is drawn under, once the pack has had its say.
 	 *
 	 * @param servedBy the program that really serves this pass, which is the name the pack writes

@@ -47,15 +47,17 @@ public final class TargetSchedule {
 	private final List<Bound> steps;
 	private final Set<Integer> doubled;
 	private final Set<Integer> flippedAtEnd;
+	private final Set<Integer> afterDeferred;
 	private final Map<String, Map<Integer, Boolean>> forced;
 
 	private TargetSchedule(List<Bound> steps, Set<Integer> doubled, Set<Integer> flippedAtEnd,
-			Map<String, Map<Integer, Boolean>> forced) {
+			Set<Integer> afterDeferred, Map<String, Map<Integer, Boolean>> forced) {
 		this.steps = List.copyOf(steps);
 		// Sorted rather than Set.copyOf: these end up in a log, and an index that moves about
 		// between two runs of the same pack reads as a difference that is not one.
 		this.doubled = sortedCopy(doubled);
 		this.flippedAtEnd = sortedCopy(flippedAtEnd);
+		this.afterDeferred = sortedCopy(afterDeferred);
 
 		Map<String, Map<Integer, Boolean>> copied = new LinkedHashMap<>();
 		forced.forEach((program, indices) -> copied.put(program, Map.copyOf(indices)));
@@ -87,12 +89,23 @@ public final class TargetSchedule {
 		Set<Integer> flipped = new LinkedHashSet<>();
 		Set<Integer> doubled = new TreeSet<>();
 		List<Bound> bound = new ArrayList<>();
+		Set<Integer> afterDeferred = null;
+		int deferredRank = ProgramNames.frameRank("deferred");
 		int opened = 0;
 
 		for (Step step : steps) {
-			opened = openStages(opened,
-					ProgramNames.frameRank(ProgramNames.familyOf(bareName(step.program()))),
-					forced, flipped, doubled);
+			int reached = ProgramNames.frameRank(ProgramNames.familyOf(bareName(step.program())));
+
+			// The snapshot is taken between the last deferred and the first thing after it, with
+			// the deferred stage opened and the composite one not. That is the moment Iris takes
+			// flippedAfterTranslucent at: the deferred renderer has played its own pre directives
+			// and run, and the composite renderer has not yet played its.
+			if (afterDeferred == null && reached > deferredRank) {
+				opened = openStages(opened, deferredRank, forced, flipped, doubled);
+				afterDeferred = sortedCopy(flipped);
+			}
+
+			opened = openStages(opened, reached, forced, flipped, doubled);
 
 			Set<Integer> readsAlt = sortedCopy(flipped);
 			Set<Integer> writesAlt = new TreeSet<>();
@@ -133,10 +146,17 @@ public final class TargetSchedule {
 			});
 		}
 
-		// A stage the place ships nothing for still opens, at the end of the walk if nowhere else.
+		// A stage the place ships nothing for still opens, at the end of the walk if nowhere else,
+		// and the snapshot is still taken: a place running nothing past the deferreds still draws
+		// its translucents, on the halves the walk stands at when the deferred stage has opened.
+		if (afterDeferred == null) {
+			opened = openStages(opened, deferredRank, forced, flipped, doubled);
+			afterDeferred = sortedCopy(flipped);
+		}
+
 		openStages(opened, Integer.MAX_VALUE, forced, flipped, doubled);
 
-		return new TargetSchedule(bound, doubled, flipped, forced);
+		return new TargetSchedule(bound, doubled, flipped, afterDeferred, forced);
 	}
 
 	/**
@@ -180,6 +200,43 @@ public final class TargetSchedule {
 		String wanted = bareName(program);
 
 		return this.steps.stream().filter(step -> bareName(step.program()).equals(wanted)).findFirst();
+	}
+
+	/**
+	 * The same step, taken as if the program ran after the deferred stage: its halves are read off
+	 * the walk as the last deferred leaves it, {@code deferred_pre} directives played and
+	 * {@code composite_pre} ones not.
+	 * <p>
+	 * This is Iris's rule for the translucent chunk pass, and for it alone. Every gbuffers program
+	 * is handed the {@code flippedAfterPrepare} snapshot except {@code Pass.TRANSLUCENT}, which is
+	 * handed {@code flippedAfterTranslucent}, the state the deferred passes leave behind; that one
+	 * line is the whole difference between the water and the terrain in Iris's Sodium wiring. The
+	 * walk keeps every geometry step at the geometry rank, before the deferreds, so asking
+	 * {@link #step} for a program that really draws after them hands back the halves of the wrong
+	 * moment: the pass would write one half while every composite read the other, and nothing on
+	 * either side would say a word.
+	 * <p>
+	 * Only a geometry step can be re-taken this way. It writes the half it reads and flips nothing,
+	 * so moving it in the frame changes which snapshot its halves come from and nothing else. A
+	 * full screen step is itself a flip, and re-binding one here would contradict the walk.
+	 */
+	public Optional<Bound> stepAfterDeferred(String program) {
+		return step(program)
+				.filter(step -> !step.fullscreen())
+				.map(step -> new Bound(step.program(), step.writes(), false, this.afterDeferred,
+						within(this.afterDeferred, step.writes())));
+	}
+
+	/** The indices of {@code writes} that are flipped, which is where a geometry step writes ALT. */
+	private static Set<Integer> within(Set<Integer> flipped, List<Integer> writes) {
+		Set<Integer> found = new TreeSet<>();
+		for (int index : writes) {
+			if (flipped.contains(index)) {
+				found.add(index);
+			}
+		}
+
+		return sortedCopy(found);
 	}
 
 	/**

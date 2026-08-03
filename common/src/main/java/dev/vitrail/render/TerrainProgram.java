@@ -10,6 +10,7 @@ import dev.vitrail.pack.OptionValue;
 import dev.vitrail.pack.ProgramStage;
 import dev.vitrail.pack.SamplerPlan;
 import dev.vitrail.pack.TargetName;
+import dev.vitrail.pack.TargetPlan;
 import dev.vitrail.pack.TargetSize;
 import dev.vitrail.pack.TerrainPass;
 import dev.vitrail.uniform.TextSink;
@@ -112,8 +113,14 @@ public final class TerrainProgram {
 	private final TerrainPass pass;
 	private final String path;
 
-	/** The pack's own targets, draw buffer nought excluded. Empty when there is nothing to gain. */
+	/**
+	 * The attachments this pass adds to or takes instead of the game's target: every draw buffer
+	 * when {@link #ownsFirst}, every one but nought otherwise. Empty when there is nothing to gain.
+	 */
 	private final List<ChainPlan.Attachment> extra;
+
+	/** Whether draw buffer nought goes to the pack rather than to the game. The constructor says why. */
+	private final boolean ownsFirst;
 	private final ColorTargets targets;
 	private final PackProgram.Loaded loaded;
 	private final PackValues values;
@@ -136,15 +143,32 @@ public final class TerrainProgram {
 	private final Set<Integer> collisions = new HashSet<>();
 
 	private TerrainProgram(TerrainPass pass, PackProgram.Loaded loaded, PackValues values, int load,
-			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets) {
+			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets,
+			boolean chainRuns) {
 		this.pass = pass;
 		this.path = loaded.path();
-		// Draw buffer nought stays where it has always gone, the game's own target, and only the
-		// ones after it are taken. That is what keeps the picture identical: the seed paints the
-		// game's finished frame into the target draw buffer nought names, so writing there directly
-		// would gain nothing and lose the sky and the entities the seed also carries. Everything
-		// above nought is pure gain, because today it is written nowhere at all.
-		this.extra = writes.size() < 2 ? List.of() : List.copyOf(writes.subList(1, writes.size()));
+		// Where draw buffer nought goes is the whole difference between the two halves of the world,
+		// and getting it wrong costs the water.
+		//
+		// Opaque and cutout keep it on the game's own target. The seed is painted from that target
+		// once they are done, so what they draw reaches the pack's colortex through the seed, with
+		// the sky and the entities the seed also carries. Writing it into the pack's target directly
+		// would gain nothing and lose those.
+		//
+		// The translucent half is the opposite. It is drawn AFTER the seed has run, so the pack's
+		// own colour target already holds the opaque world, and that is exactly what a
+		// gbuffers_water expects to blend onto. Sent to the game's target instead, the water is
+		// drawn and then thrown away: the final overwrites that target with the image the chain
+		// composed out of a colortex the water never reached.
+		//
+		// Two demotions, both back to the game's target. When the chain is not running there is no
+		// final to bring a colortex to the screen, so water sent there would simply vanish; and
+		// when the plan had no answer there is nowhere else to send it. Either way the pass draws
+		// where Sodium would have, which is also what keeps the pipeline's one state the pass's.
+		this.ownsFirst = pass.blended() && chainRuns && !writes.isEmpty();
+		this.extra = this.ownsFirst
+				? List.copyOf(writes)
+				: writes.size() < 2 ? List.of() : List.copyOf(writes.subList(1, writes.size()));
 		this.targets = targets;
 		this.loaded = loaded;
 		this.values = values;
@@ -193,9 +217,13 @@ public final class TerrainProgram {
 		// By slot and never by append: the builder holds the states in an array and the argumentless
 		// form writes slot nought every time, so three calls would leave one state and a pipeline
 		// the pass refuses to bind, by name and in the middle of the world.
-		builder.withColorTargetState(0, state(GpuFormat.RGBA8_UNORM));
+		int first = this.ownsFirst ? 0 : 1;
+		if (!this.ownsFirst) {
+			builder.withColorTargetState(0, state(GpuFormat.RGBA8_UNORM));
+		}
+
 		for (int slot = 0; slot < this.extra.size(); slot++) {
-			builder.withColorTargetState(slot + 1,
+			builder.withColorTargetState(slot + first,
 					state(targets.format(this.extra.get(slot).target())));
 		}
 
@@ -226,7 +254,8 @@ public final class TerrainProgram {
 	 */
 	static Map<TerrainPass, TerrainProgram> read(Path packPath, String place,
 			Map<String, OptionValue> chosen, String profile, PackValues values, int load,
-			VertexFormat format, ChainPlan plan, ColorTargets targets) {
+			VertexFormat format, ChainPlan plan, TargetPlan chainTargets, boolean chainRuns,
+			ColorTargets targets) {
 		try {
 			Map<TerrainPass, PackProgram.Loaded> loaded =
 					PackProgram.loadTerrain(packPath, place, chosen, profile);
@@ -240,14 +269,22 @@ public final class TerrainProgram {
 
 			Map<TerrainPass, TerrainProgram> programs = new EnumMap<>(TerrainPass.class);
 			loaded.forEach((pass, one) -> {
-				// The name the plan holds the attachments under is the file that serves the pass,
-				// which is what the plan was asked for and what the path ends with.
+				// The samplers are bound again, against the chain's own plan and on the step of the
+				// PASS. What loadTerrain bound them against is a plan without the user's pass
+				// filter and a step looked up by file, and both are the wrong parity in their own
+				// way: the first the moment passes= trims the chain, the second for the translucent
+				// pass, whose reads land on the halves the deferred stage leaves behind. BSL's
+				// gbuffers_water reading gaux1, which its own deferred writes, is the second case.
 				String servedBy = one.path().substring(one.path().lastIndexOf('/') + 1);
+				PackProgram.Loaded bound = one.rebind(chainTargets, pass.afterDeferred()
+						? chainTargets.schedule().stepAfterDeferred(servedBy)
+						: chainTargets.schedule().step(servedBy));
+
 				// Attachment nought is the game's own target and it is the size of the screen, so
 				// every other attachment of that pass has to be too: one render pass has one render
 				// area. A pack scaling its targets with size.buffer therefore keeps the single
 				// attachment pass, and the log says so rather than the encoder throwing mid frame.
-				List<ChainPlan.Attachment> extra = plan.geometry(servedBy)
+				List<ChainPlan.Attachment> writes = plan.geometry(pass)
 						.filter(geometry -> {
 							if (geometry.size().equals(TargetSize.ofScreen())) {
 								return true;
@@ -261,8 +298,8 @@ public final class TerrainProgram {
 						})
 						.map(ChainPlan.Pass::attachments)
 						.orElse(List.of());
-				programs.put(pass,
-						new TerrainProgram(pass, one, values, load, format, extra, targets));
+				programs.put(pass, new TerrainProgram(pass, bound, values, load, format, writes,
+						targets, chainRuns));
 			});
 
 			return programs;
@@ -396,8 +433,11 @@ public final class TerrainProgram {
 			return null;
 		}
 
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(PASS_LABEL)
-				.withColorAttachment(colour);
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(PASS_LABEL);
+		if (!this.ownsFirst) {
+			descriptor.withColorAttachment(colour);
+		}
+
 		for (ChainPlan.Attachment attachment : this.extra) {
 			GpuTextureView view = this.targets.view(attachment.target(), attachment.side());
 			if (view == null) {
@@ -501,23 +541,43 @@ public final class TerrainProgram {
 
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 
-		// Black and not white for a depth, and the reason is the convention rather than a taste:
-		// every depth lookup is wrapped in of_DepthConv.zw, which under the reversed Z the game
-		// rasterises in reads nought back as the far plane. White would put the whole world against
-		// the camera. PackPass answers the same way, and the day a target of ours is drawn into,
-		// both have to follow.
-		//
-		// A depth is a constant here where the chain gives it the real one, and that is not an
-		// oversight. The pass this is drawn in has the game's depth as its own attachment, so
-		// sampling it would be reading and writing one image at once, which Vulkan gives no meaning
-		// to at all. The two the packs really want, depthtex1 and depthtex2, are copies taken before
-		// the translucents and before the hand, and nothing takes them yet.
+		// Black and not white for a depth that stays a constant, and the reason is the convention
+		// rather than a taste: every depth lookup is wrapped in of_DepthConv.zw, which under the
+		// reversed Z the game rasterises in reads nought back as the far plane. White would put the
+		// whole world against the camera. PackPass answers the same way, and the day a target of
+		// ours is drawn into, both have to follow.
 		return switch (binding.kind()) {
 			case COLORTEX -> colortex(binding);
+			case DEPTH -> depth();
 			case SHADOW_DEPTH, SHADOW_COLOUR -> this.white.getColorTextureView();
 			case NOISE -> this.targets.noise();
 			default -> this.black.getColorTextureView();
 		};
+	}
+
+	/**
+	 * What a depth sampler reads, which depends on which side of the frame this pass stands.
+	 * <p>
+	 * The translucent pass gets the copy taken before the translucents, whatever the sampler is
+	 * called. At that point of the frame depthtex0, depthtex1 and depthtex2 are one image, the
+	 * depth of the opaque world, and the copy is exactly that; the live depth cannot be the answer
+	 * for any of them, being an attachment of this very pass, and sampling an attachment is a thing
+	 * Vulkan gives no meaning to. This is what BSL's water fog and refraction read.
+	 * <p>
+	 * The solid and cutout passes stay on the constant. They draw before the copy of THIS frame is
+	 * taken, so the only copy in existence at that moment is the previous frame's, and handing them
+	 * that would be the exact shape of picture this project refuses: plausible, and wrong by one
+	 * frame of camera movement.
+	 */
+	private GpuTextureView depth() {
+		if (this.pass.afterDeferred()) {
+			GpuTextureView copy = this.targets.depthCopy();
+			if (copy != null) {
+				return copy;
+			}
+		}
+
+		return this.black.getColorTextureView();
 	}
 
 	/**
@@ -548,12 +608,6 @@ public final class TerrainProgram {
 		return view == null ? this.black.getColorTextureView() : view;
 	}
 
-	/** The light map is the one thing here that is interpolated, as it is in the game's own shader. */
-	/**
-	 * Whether this name is answered with something the frame really drew, rather than one pixel. A
-	 * colour target counts even when it is empty at this point of the frame: it is the pack's own
-	 * image and what it holds is a question about the order of the frame, not about the binding.
-	 */
 	/**
 	 * A sampler's name with what it is really bound to, the half included. The half is the thing to
 	 * read: a colour target read on the wrong one holds a clear colour, which is a picture that
@@ -568,9 +622,19 @@ public final class TerrainProgram {
 		return sampler + "=" + TargetName.canonical(binding.index()) + " " + binding.side();
 	}
 
+	/**
+	 * Whether this name is answered with something the frame really drew, rather than one pixel. A
+	 * colour target counts even when it is empty at this point of the frame: it is the pack's own
+	 * image and what it holds is a question about the order of the frame, not about the binding. A
+	 * depth sampler counts only on the translucent pass, where the copy answers it.
+	 */
 	private boolean readsATexture(String sampler) {
+		SamplerPlan.Kind kind = this.loaded.samplers().binding(sampler).kind();
+
 		return ATLAS.contains(sampler) || LIGHTMAP.equals(sampler)
-				|| this.loaded.samplers().binding(sampler).kind() == SamplerPlan.Kind.COLORTEX;
+				|| kind == SamplerPlan.Kind.COLORTEX
+				|| kind == SamplerPlan.Kind.NOISE
+				|| (kind == SamplerPlan.Kind.DEPTH && this.pass.afterDeferred());
 	}
 
 	private FilterMode filter(String sampler) {
@@ -631,15 +695,24 @@ public final class TerrainProgram {
 		List<String> flat = this.samplers.stream().filter(name -> !readsATexture(name)).toList();
 		Vitrail.logger().info("{} samplers of this program read a real texture: {}", real.size(), real);
 		if (!flat.isEmpty()) {
-			// What is left is what nothing draws yet: the shadow map, the noise texture, and the
-			// depth copies taken before the translucents and before the hand.
+			// What is left is what nothing draws yet: the shadow map, and the depth on the passes
+			// that draw before the copy of this frame is taken.
 			Vitrail.logger().warn("{} read one pixel, because nothing fills them yet: {}",
 					flat.size(), flat);
 		}
 
-		// Draw buffer nought is not named here on purpose: it goes to the game's own target, which is
-		// where it has always gone and where the seed reads it back from.
-		if (this.extra.isEmpty()) {
+		if (this.ownsFirst) {
+			// Nought included, and the log says the sides because they are the whole fix: a
+			// translucent write on the half the composites do not read is water that vanishes
+			// without a word from anyone.
+			Vitrail.logger().info("Its draw buffers all reach the pack's own targets, nought "
+					+ "included, on the halves after the deferred stage: {}",
+					this.extra.stream()
+							.map(one -> TargetName.canonical(one.target()) + " " + one.side())
+							.toList());
+		} else if (this.extra.isEmpty()) {
+			// Draw buffer nought is not named here on purpose: it goes to the game's own target,
+			// which is where it has always gone and where the seed reads it back from.
 			if (outputs > 1) {
 				Vitrail.logger().warn("{} declares {} fragment outputs and writes one draw buffer, so "
 						+ "all but the first are written nowhere", this.path, outputs);

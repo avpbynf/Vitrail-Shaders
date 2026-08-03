@@ -167,12 +167,15 @@ public final class PackChain {
 		// Held rather than read: the terrain program is compiled against the chunk mesh format, and
 		// nothing knows that format until the renderer asks for its shader.
 		//
-		// It is handed THIS plan and never one of its own, which would be a plan built without the
-		// user's pass filter. The half a program writes comes from the schedule, and a schedule
-		// walked over a different set of passes hands out a different parity: the terrain would then
-		// write one half while the chain read the other, and neither side would say a word.
+		// It is handed THIS chain's plan and schedule and never ones of its own, which would be
+		// built without the user's pass filter. The half a program writes comes from the schedule,
+		// and a schedule walked over a different set of passes hands out a different parity: the
+		// terrain would then write one half while the chain read the other, and neither side would
+		// say a word. Whether the chain runs travels with them, because a translucent pass that
+		// takes draw buffer nought for the pack is drawing for a final: without one, the water
+		// would leave the screen and reach nothing.
 		this.terrain = new TerrainDraw(this, packPath, chain.place(), chosen, profile, values,
-				this.load, chain.chain(), this.targets);
+				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 	}
 
 	/**
@@ -792,6 +795,14 @@ public final class PackChain {
 		}
 
 		this.early = true;
+
+		// The depth of the opaque world, taken before anything translucent is drawn, which is what
+		// the OptiFine model calls depthtex1. Iris takes the same copy at the same moment,
+		// beginTranslucents, before running its deferreds; the deferreds read it too, and nothing
+		// between here and the world's translucents writes the game's depth, so one copy serves the
+		// whole rest of the frame.
+		this.targets.copyDepth(device.createCommandEncoder(), ready.main().getDepthTexture());
+
 		int end = deferredEnd();
 		if (!this.split) {
 			this.split = true;
@@ -1108,14 +1119,12 @@ public final class PackChain {
 				"are declared under a type this backend cannot bind, and should have gone with "
 						+ "their pass");
 
-		// The two copies of the depth taken before the translucents and before the hand cannot be
-		// made from a hook that fires once the world is finished, so both read the final depth.
 		List<String> copies = byKind.getOrDefault(SamplerPlan.Kind.DEPTH, Set.of()).stream()
-				.filter(name -> name.equals("depthtex1") || name.equals("depthtex2"))
+				.filter(SamplerPlan::depthCopy)
 				.toList();
 		if (!copies.isEmpty()) {
-			Vitrail.logger().info("{} read the finished depth rather than the copies taken before "
-					+ "the translucents and before the hand", copies);
+			Vitrail.logger().info("{} read the copy of the depth taken before the world's "
+					+ "translucents", copies);
 		}
 	}
 
