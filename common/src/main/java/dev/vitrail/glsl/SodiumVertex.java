@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * What Sodium's chunk mesh carries, and how the names a pack reads are made out of it.
@@ -56,13 +57,19 @@ public final class SodiumVertex {
 			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID);
 
 	/**
-	 * Vertex inputs a pack declares for itself that are not elements of the chunk mesh. A declaration
+	 * Vertex inputs a pack declares for itself that no mesh of this engine carries. A declaration
 	 * of one of these is taken out of the body and reappears in the header as an ordinary global with
 	 * a value, so that the pack compiles and reads that value instead of an attribute nothing fills.
+	 * <p>
+	 * Sorted, and not a set literal, for the reason {@link LegacyGlsl} gives about its maps: the
+	 * heads walk this to write their globals, and a literal hands its names back in an order the
+	 * runtime picks afresh on every start. Reverie's terrain stage had {@code dhMaterialId} and
+	 * {@code mc_chunkFade} swap places between two runs, which is the same text to a reader and a
+	 * different shader to the game, so it recompiles a pipeline it already has.
 	 */
-	public static final Set<String> SYNTHESIZED =
-			Set.of("mc_Entity", "mc_midTexCoord", "mc_chunkFade", "at_tangent", "at_midBlock",
-					"vaPosition", "vaNormal", "vaColor", "vaUV0", "vaUV1", "vaUV2", "dhMaterialId");
+	public static final Set<String> SYNTHESIZED = Collections.unmodifiableSet(new TreeSet<>(
+			List.of("mc_Entity", "mc_midTexCoord", "mc_chunkFade", "at_tangent", "at_midBlock",
+					"vaPosition", "vaNormal", "vaColor", "vaUV0", "vaUV1", "vaUV2", "dhMaterialId")));
 
 	/**
 	 * The ones of those the mesh answers for real, out of an element under another name. What is
@@ -267,8 +274,11 @@ public final class SodiumVertex {
 		return type + " " + name + " = " + value(name, type) + ";";
 	}
 
-	/** The type a name takes when the pack reads it without ever declaring it. */
-	private static String defaultType(String name) {
+	/**
+	 * The type a name takes when the pack reads it without ever declaring it. Asked by every mesh
+	 * and not only by this one: the question is what the name means, which no mesh gets a say in.
+	 */
+	public static String defaultType(String name) {
 		return switch (name) {
 			case "dhMaterialId" -> "int";
 			case "mc_chunkFade" -> "float";

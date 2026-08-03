@@ -1,5 +1,7 @@
 package dev.vitrail.glsl;
 
+import dev.vitrail.pack.program.ProgramFallbacks;
+
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -87,6 +89,35 @@ public final class LegacyGlsl {
 	public static final Map<String, String> ENGINE_ATTRIBUTES = engineAttributes();
 
 	/**
+	 * Uniforms the engine supplies to a pass that draws an entity, which packs read without ever
+	 * declaring for the same reason as {@link #ENGINE_ATTRIBUTES}: no other engine makes them
+	 * declare one. Iris does not hand them over as uniforms at all. It feeds all three out of one
+	 * {@code ivec3} attribute and rewrites every mention of them into a component of it, so a pack
+	 * has no declaration to write and writes none; that is
+	 * {@code EntityPatcher.patchEntityId}, read on 3 August 2026.
+	 * <p>
+	 * Bliss reads {@code entityId} in {@code dimensions/all_translucent.vsh} and declares it in no
+	 * file that reaches those programs, which costs six programs of the corpus. The other two are
+	 * here because Iris moves the three together and because listing a name nothing reads costs
+	 * nothing: only a name a program mentions and never declares is ever put in the block.
+	 */
+	public static final Map<String, String> ENTITY_UNIFORMS = entityUniforms();
+
+	/**
+	 * The roots of the fallback tree whose programs are drawn from a mesh that carries an entity's
+	 * identity, and so are served {@link #ENTITY_UNIFORMS}.
+	 * <p>
+	 * Iris decides this from the vertex format really bound rather than from a list of names: an
+	 * overlay element is what an entity mesh has and a chunk mesh has not,
+	 * {@code ShaderAttributeInputs.java:38-40}. A name is what this engine has while it translates,
+	 * and the tree makes the two agree, since everything under these five is drawn from that mesh
+	 * and nothing else is.
+	 */
+	private static final Set<String> ENTITY_ROOTS = Set.of(
+			"gbuffers_entities", "gbuffers_block", "gbuffers_hand",
+			"shadow_entities", "shadow_block");
+
+	/**
 	 * What a full screen pass gets instead of vertex inputs of its own.
 	 * <p>
 	 * Attributes are matched by name against the elements of the vertex format, in
@@ -132,6 +163,9 @@ public final class LegacyGlsl {
 			"#define of_MultiTexCoord7 vec4(0.0, 0.0, 0.0, 1.0)",
 			"#define of_Color vec4(1.0)",
 			"#define of_Normal vec3(0.0, 0.0, 1.0)");
+
+	/** The two lines of {@link #FULLSCREEN_ATTRIBUTES} that are inputs rather than macros. */
+	public static final List<String> FULLSCREEN_ELEMENTS = List.of("Position", "UV0");
 
 	/**
 	 * Functions GLSL gained after 120 that a pack written against 120 may define for itself. Its
@@ -190,6 +224,21 @@ public final class LegacyGlsl {
 					"texture", "itexture", "utexture", "subpassInput", "atomic_uint");
 
 	/**
+	 * Whether the pass this program is wanted for draws entities, and so reads
+	 * {@link #ENTITY_UNIFORMS} whether it declares them or not.
+	 * <p>
+	 * Asked of the program the pass wants and never of the file that answers for it. One
+	 * {@code gbuffers_textured_lit} serves the entity pass of a pack that ships nothing else and
+	 * the sky pass of the same pack, and only the first of the two has an entity to name.
+	 *
+	 * @param program the bare name, {@code gbuffers_entities_translucent}, or empty where the
+	 *                caller is measuring a file and no pass is named
+	 */
+	public static boolean drawsEntities(String program) {
+		return ProgramFallbacks.chain(program).stream().anyMatch(ENTITY_ROOTS::contains);
+	}
+
+	/**
 	 * Whether a uniform of this type has to keep its own declaration. Everything else is plain
 	 * data, and Vulkan will only take that inside a block.
 	 */
@@ -230,6 +279,16 @@ public final class LegacyGlsl {
 		attributes.put("dhMaterialId", "int dhMaterialId");
 
 		return Collections.unmodifiableMap(attributes);
+	}
+
+	private static Map<String, String> entityUniforms() {
+		Map<String, String> uniforms = new LinkedHashMap<>();
+
+		uniforms.put("entityId", "int entityId");
+		uniforms.put("blockEntityId", "int blockEntityId");
+		uniforms.put("currentRenderedItemId", "int currentRenderedItemId");
+
+		return Collections.unmodifiableMap(uniforms);
 	}
 
 	private static Map<String, String> fixedFunctionMembers() {

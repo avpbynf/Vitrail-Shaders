@@ -117,6 +117,9 @@ public final class GlslTranslator {
 	/** A pass drawn over a quad rather than over a chunk mesh takes its attributes differently. */
 	private final VertexInputs inputs;
 
+	/** The program the pass wants, which decides what the engine supplies it undeclared. */
+	private final String program;
+
 	/** What the fragment stage discards at, which the fixed function pipeline used to hold. */
 	private final AlphaTest alphaTest;
 	private final List<Token> tokens;
@@ -179,12 +182,13 @@ public final class GlslTranslator {
 	private int fragDepthUnhandled;
 
 	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines,
-			VertexInputs inputs, AlphaTest alphaTest) {
+			VertexInputs inputs, AlphaTest alphaTest, String program) {
 		this.unit = unit;
 		this.stage = stage;
 		this.engineDefines = engineDefines;
 		this.inputs = inputs;
 		this.alphaTest = alphaTest;
+		this.program = program;
 
 		// Tokens cost far more than the text they came from, roughly seventy bytes each, so a unit
 		// the expander should never have produced has to be refused before it is read rather than
@@ -205,7 +209,15 @@ public final class GlslTranslator {
 	 * be given a header together.
 	 */
 	public static TranslatedUnit translate(ExpandedUnit unit, ProgramStage stage) {
-		Stage prepared = prepare(unit, stage, VertexInputs.WORLD);
+		return translate(unit, stage, "");
+	}
+
+	/**
+	 * @param program the bare name of the program this file is the entry point of, or empty where
+	 *                the file is an include and serves no pass of its own
+	 */
+	public static TranslatedUnit translate(ExpandedUnit unit, ProgramStage stage, String program) {
+		Stage prepared = prepare(unit, stage, VertexInputs.WORLD, AlphaTest.OFF, program);
 
 		return prepared.render(prepared.uniforms(), prepared.samplers(), prepared.varyings());
 	}
@@ -213,20 +225,16 @@ public final class GlslTranslator {
 	/**
 	 * Rewrites one stage and stops short of the header, so that a caller can settle it.
 	 *
-	 * @param inputs where this program's vertex stage takes its inputs from
-	 */
-	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs) {
-		return prepare(unit, stage, inputs, AlphaTest.OFF);
-	}
-
-	/**
+	 * @param inputs    where this program's vertex stage takes its inputs from
 	 * @param alphaTest what the fragment stage discards at. {@link AlphaTest#OFF} for every pass
 	 *                  drawn over a quad, and for the solid half of the terrain
+	 * @param program   the bare name of the program the pass wants, which is what decides the
+	 *                  uniforms the engine supplies undeclared
 	 */
 	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs,
-			AlphaTest alphaTest) {
+			AlphaTest alphaTest, String program) {
 		GlslTranslator translator = new GlslTranslator(unit, stage,
-				EngineDefines.table(EngineDefines.machine()), inputs, alphaTest);
+				EngineDefines.table(EngineDefines.machine()), inputs, alphaTest, program);
 		translator.rewrite();
 
 		return new Stage(translator);
@@ -286,9 +294,9 @@ public final class GlslTranslator {
 		}
 
 		/**
-		 * Vertex inputs this stage declared that the chunk mesh has not got, with the type the pack
-		 * gave them. Empty for anything but a terrain stage, and the list of what the picture will be
-		 * wrong about when it is not.
+		 * Vertex inputs this stage declared that the mesh it is drawn from has not got, with the type
+		 * the pack gave them. Empty for anything not drawn from a mesh of the engine's own, and the
+		 * list of what the picture will be wrong about when it is not.
 		 */
 		public Map<String, String> synthesized() {
 			return Map.copyOf(this.translator.synthesized);
@@ -362,6 +370,17 @@ public final class GlslTranslator {
 		for (Map.Entry<String, String> member : LegacyGlsl.FIXED_FUNCTION_MEMBERS.entrySet()) {
 			if (this.used.contains(member.getKey())) {
 				block.add(TranslatedUnit.Uniform.of(member.getKey(), member.getValue()));
+			}
+		}
+
+		// A name the pack did declare is already on its way into the block through liftUniforms,
+		// under the type the pack chose, so only a name it never declares is supplied here.
+		if (LegacyGlsl.drawsEntities(this.program)) {
+			for (Map.Entry<String, String> member : LegacyGlsl.ENTITY_UNIFORMS.entrySet()) {
+				if (this.used.contains(member.getKey())
+						&& !this.declaredNames.contains(member.getKey())) {
+					block.add(TranslatedUnit.Uniform.of(member.getKey(), member.getValue()));
+				}
 			}
 		}
 
@@ -1248,7 +1267,7 @@ public final class GlslTranslator {
 	 * attribute.
 	 */
 	private void synthesizeAttributes() {
-		if (this.stage != ProgramStage.VERTEX || this.inputs != VertexInputs.TERRAIN) {
+		if (this.stage != ProgramStage.VERTEX || !this.inputs.synthesizes()) {
 			return;
 		}
 
@@ -1637,6 +1656,7 @@ public final class GlslTranslator {
 			switch (this.inputs) {
 				case FULLSCREEN -> lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
 				case TERRAIN -> lines.addAll(SodiumVertex.prologue(this.used, this.synthesized));
+				case ENTITY -> lines.addAll(EntityVertex.prologue(this.used, this.synthesized));
 				case WORLD -> {
 					for (Map.Entry<String, String> attribute : LegacyGlsl.FIXED_ATTRIBUTES.entrySet()) {
 						if (this.used.contains(attribute.getKey())) {

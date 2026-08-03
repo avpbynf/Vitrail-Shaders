@@ -1,5 +1,7 @@
 package dev.vitrail.glsl;
 
+import java.util.List;
+
 /**
  * Where a vertex stage takes its inputs from.
  * <p>
@@ -24,5 +26,44 @@ public enum VertexInputs {
 	 * Sodium's chunk mesh: four attributes in twenty bytes, out of which the six names a pack reads
 	 * are made. {@link SodiumVertex} carries the decode and says what it cannot make.
 	 */
-	TERRAIN
+	TERRAIN,
+
+	/**
+	 * The game's own entity mesh: the six elements of {@code DefaultVertexFormat.ENTITY}, out of
+	 * which the five names a pack reads are made. {@link EntityVertex} carries the renaming and
+	 * says which element nothing answers for.
+	 */
+	ENTITY;
+
+	/**
+	 * Whether this is a mesh of the engine's own, and so whether a vertex input the pack declares
+	 * that the mesh has not got has to be taken out of the body and answered with a constant.
+	 * <p>
+	 * False for the two that are not drawn from one. A full screen quad answers for every name a
+	 * composite reads with a macro, and {@link #WORLD} is measured rather than drawn, so leaving a
+	 * declaration standing under either costs nothing.
+	 */
+	public boolean synthesizes() {
+		return this == TERRAIN || this == ENTITY;
+	}
+
+	/**
+	 * The names the head declares as vertex inputs, which the pack may therefore not use for
+	 * anything of its own.
+	 * <p>
+	 * These names are not ours to choose. {@code GlslCompiler.compile} hands {@code rebind} the
+	 * element names of the format and {@code rebind} looks each one up in the SPIR-V under that
+	 * name, so an input has to be spelled the way the format spells it. Where a pack already uses
+	 * one of them, it is the pack's that has to move, which is what {@link ProgramTranslator} does
+	 * with them. Empty for {@link #WORLD}, whose names are the translator's own and which no pack
+	 * writes.
+	 */
+	public List<String> elements() {
+		return switch (this) {
+			case FULLSCREEN -> LegacyGlsl.FULLSCREEN_ELEMENTS;
+			case TERRAIN -> SodiumVertex.ATTRIBUTES;
+			case ENTITY -> EntityVertex.ATTRIBUTES;
+			case WORLD -> List.of();
+		};
+	}
 }

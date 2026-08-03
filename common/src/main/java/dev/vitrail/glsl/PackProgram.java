@@ -175,7 +175,8 @@ public final class PackProgram {
 			// Inside the same opening of the pack, because a zip closed behind us invalidates every
 			// path taken from it and the plan reads thirty more files than this program does.
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimensionOf(path));
-			ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units, inputs);
+			ProgramTranslator.TranslatedProgram program =
+					ProgramTranslator.translate(units, inputs, programOf(path));
 
 			return Optional.of(bind(source.packName(), path, program, targets, AlphaTest.OFF));
 		}
@@ -232,8 +233,11 @@ public final class PackProgram {
 				}
 
 				AlphaTest alphaTest = pass.alphaTest(properties, servedBy);
+				// The pass's own program and not the file that serves it, for the reason the alpha
+				// test is taken that way: what the engine supplies belongs to what is being drawn.
 				loaded.put(pass, bind(source.packName(), path,
-						ProgramTranslator.translate(units, VertexInputs.TERRAIN, alphaTest),
+						ProgramTranslator.translate(units, VertexInputs.TERRAIN, alphaTest,
+								pass.program()),
 						targets, alphaTest));
 			}
 
@@ -385,7 +389,7 @@ public final class PackProgram {
 	private static ProgramTranslator.TranslatedProgram translate(String path,
 			Map<ProgramStage, ExpandedUnit> units) {
 		try {
-			return ProgramTranslator.translate(units, VertexInputs.FULLSCREEN);
+			return ProgramTranslator.translate(units, VertexInputs.FULLSCREEN, programOf(path));
 		} catch (RuntimeException e) {
 			// Named here rather than let through: the message a translator throws says which line
 			// of which unit it choked on and never which program of the chain that unit belongs to.
@@ -439,5 +443,10 @@ public final class PackProgram {
 		int slash = path.indexOf('/');
 
 		return slash < 0 ? ProgramSet.ROOT : path.substring(0, slash);
+	}
+
+	/** The bare name {@code world0/gbuffers_entities} is asked for, without its place. */
+	private static String programOf(String path) {
+		return path.substring(path.lastIndexOf('/') + 1);
 	}
 }

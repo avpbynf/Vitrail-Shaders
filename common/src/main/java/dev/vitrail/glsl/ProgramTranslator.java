@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * Translates the stages of one program together, so that they agree on what they share.
  * <p>
- * A stage translated on its own is not wrong, it is just incomplete. Two of the things the
+ * A stage translated on its own is not wrong, it is just incomplete. Three of the things the
  * translation produces are properties of the program and not of the file:
  * <ul>
  * <li>The uniform block. Both stages call it {@code OfGlobals} and the engine binds one buffer
@@ -24,13 +24,17 @@ import java.util.Set;
  * <li>The varyings the engine names. A varying the vertex stage writes and the fragment stage
  * never declares is accepted without a word and shifts the location of everything after it,
  * which is the failure that leaves no trace at all.</li>
+ * <li>The names the vertex format takes for itself. Only the vertex stage declares an input, but a
+ * pack using one of those names for a varying of its own writes it in one stage and reads it in
+ * the next, so moving it out of the way is a decision about the whole program. See
+ * {@link #clashingElements}.</li>
  * </ul>
- * Both are settled here by giving every stage the union, in one order. A stage then declares
+ * The first two are settled by giving every stage the union, in one order. A stage then declares
  * things it does not use, which costs nothing: an unread uniform is still a member of the block,
  * and an unread varying still occupies its location.
  * <p>
- * Vertex attributes are deliberately not shared. Only a vertex stage has inputs from a buffer, so
- * there is no other side for it to agree with.
+ * Vertex attributes themselves are deliberately not shared. Only a vertex stage has inputs from a
+ * buffer, so there is no other side for it to agree with.
  */
 public final class ProgramTranslator {
 
@@ -61,8 +65,12 @@ public final class ProgramTranslator {
 			Map<String, String> synthesized) {
 	}
 
-	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units) {
-		return translate(units, VertexInputs.WORLD);
+	/**
+	 * @param program the bare name of the program the pass wants, {@code gbuffers_entities}, or
+	 *                empty where the caller is measuring and no pass is named
+	 */
+	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units, String program) {
+		return translate(units, VertexInputs.WORLD, program);
 	}
 
 	/**
@@ -70,15 +78,15 @@ public final class ProgramTranslator {
 	 *                   stage takes its inputs from
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units, boolean fullscreen) {
-		return translate(units, fullscreen ? VertexInputs.FULLSCREEN : VertexInputs.WORLD);
+		return translate(units, fullscreen ? VertexInputs.FULLSCREEN : VertexInputs.WORLD, "");
 	}
 
 	/**
 	 * @param inputs where this program's vertex stage takes its inputs from
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
-			VertexInputs inputs) {
-		return translate(units, inputs, AlphaTest.OFF);
+			VertexInputs inputs, String program) {
+		return translate(units, inputs, AlphaTest.OFF, program);
 	}
 
 	/**
@@ -87,12 +95,12 @@ public final class ProgramTranslator {
 	 *                  the solid half of the chunk pass, with no test, and the cutout half, at a half
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
-			VertexInputs inputs, AlphaTest alphaTest) {
+			VertexInputs inputs, AlphaTest alphaTest, String program) {
 		Map<ProgramStage, GlslTranslator.Stage> prepared = new LinkedHashMap<>();
 		for (ProgramStage stage : PIPELINE_ORDER) {
 			ExpandedUnit unit = units.get(stage);
 			if (unit != null) {
-				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs, alphaTest));
+				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs, alphaTest, program));
 			}
 		}
 
@@ -113,12 +121,44 @@ public final class ProgramTranslator {
 
 		List<TranslatedUnit.Uniform> block = fixedFunctionFirst(uniforms);
 		List<TranslatedUnit.Uniform> bound = List.copyOf(samplers.values());
+		Set<String> elements = clashingElements(prepared, inputs);
 
 		Map<ProgramStage, TranslatedUnit> translated = new LinkedHashMap<>();
-		prepared.forEach((stage, prepare) ->
-				translated.put(stage, prepare.render(block, bound, varyings, shadowedBy(prepare, block))));
+		prepared.forEach((stage, prepare) -> {
+			Set<String> shadowed = new LinkedHashSet<>(elements);
+			shadowed.addAll(shadowedBy(prepare, block));
+			translated.put(stage, prepare.render(block, bound, varyings, shadowed));
+		});
 
 		return new TranslatedProgram(Map.copyOf(translated), block, bound, Map.copyOf(synthesized));
+	}
+
+	/**
+	 * The vertex input names this program uses for something of its own, and which therefore have
+	 * to be moved out of the way in every one of its stages.
+	 * <p>
+	 * The names of a vertex input are not ours to choose: {@code rebind} looks each element of the
+	 * format up in the SPIR-V under the name the format gives it, so the head has to declare
+	 * {@code Normal} and cannot declare {@code ofNormal}. Two packs of the corpus already use
+	 * {@code Normal} or {@code Color} for a varying of their own, on sixteen entity stages between
+	 * them, which is a redefinition at file scope and refuses the stage outright.
+	 * <p>
+	 * <strong>The whole program moves or none of it does.</strong> Body Camera writes
+	 * {@code out vec3 Normal} in its vertex stage and reads it back in its fragment stage; renaming
+	 * one half would leave the other declaring a varying nobody writes, which is the failure that
+	 * says nothing at all and shifts every location after it.
+	 */
+	private static Set<String> clashingElements(Map<ProgramStage, GlslTranslator.Stage> prepared,
+			VertexInputs inputs) {
+		Set<String> clashing = new LinkedHashSet<>();
+
+		for (String element : inputs.elements()) {
+			if (prepared.values().stream().anyMatch(stage -> stage.declared().contains(element))) {
+				clashing.add(element);
+			}
+		}
+
+		return clashing;
 	}
 
 	/**
