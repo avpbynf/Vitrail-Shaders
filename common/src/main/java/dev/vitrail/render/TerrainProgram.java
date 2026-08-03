@@ -463,6 +463,11 @@ public final class TerrainProgram {
 		return this.pipeline == bound;
 	}
 
+	/** Whether this program can still be served, which everything built on it has to agree with. */
+	boolean servable() {
+		return !this.broken;
+	}
+
 	/**
 	 * The render pass this program wants opened, or null to leave the chunk renderer's own alone.
 	 * <p>
@@ -478,6 +483,13 @@ public final class TerrainProgram {
 	 *               has to test against the terrain
 	 */
 	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
+		// The same refusal prepare makes, or the two part company: with the pipeline refused,
+		// Sodium keeps its own shader, which declares one target state, and steering its pass onto
+		// a many target descriptor is refused at setPipeline in the middle of Sodium's own draw.
+		if (this.broken) {
+			return null;
+		}
+
 		if (this.pass.shadow()) {
 			return shadowDescriptor();
 		}
