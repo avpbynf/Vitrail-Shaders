@@ -31,8 +31,6 @@ import java.util.regex.Pattern;
  */
 public final class BlockIds {
 
-	private static final String PREFIX = "block.";
-
 	/**
 	 * Folding a continuation can put two declarations on one line, and a properties reader would
 	 * then take the second one as part of the first one's value. Iris splits them apart with this

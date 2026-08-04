@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class ExpressionResolver {
 	private final FunctionResolver functionResolver;
@@ -158,19 +157,9 @@ public class ExpressionResolver {
 		this.logs = new ArrayList<>();
 	}
 
-	private void log(String str) {
-		if (this.enableDebugging)
-			this.logs.add(str);
-	}
-
 	private void log(String str, Object... args) {
 		if (this.enableDebugging)
 			this.logs.add(String.format(str, args));
-	}
-
-	private void log(Supplier<String> str) {
-		if (this.enableDebugging)
-			this.log(str.get());
 	}
 
 	private Expression resolveExpressionInternal(

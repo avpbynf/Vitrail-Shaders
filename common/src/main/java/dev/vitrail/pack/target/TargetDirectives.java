@@ -1,6 +1,5 @@
 package dev.vitrail.pack.target;
 
-import dev.vitrail.pack.program.ProgramSet;
 import dev.vitrail.pack.source.IncludeExpander;
 import dev.vitrail.pack.source.ShaderProperties;
 
