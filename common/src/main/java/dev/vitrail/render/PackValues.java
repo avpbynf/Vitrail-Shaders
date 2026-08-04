@@ -8,6 +8,7 @@ import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.uniform.expr.CustomUniforms;
+import dev.vitrail.uniform.NoiseTexture;
 import dev.vitrail.uniform.UniformCatalog;
 import dev.vitrail.uniform.UniformGaps;
 import dev.vitrail.uniform.WorldState;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -51,6 +53,7 @@ public final class PackValues {
 	private final List<String> problems = new ArrayList<>();
 
 	private CustomUniforms customs;
+	private NoiseTexture.Image noiseImage;
 	private UniformCatalog catalog = UniformCatalog.engine();
 	private UniformCatalog geometry = UniformCatalog.geometry();
 	private UniformCatalog shadowGeometry = UniformCatalog.shadowGeometry();
@@ -87,6 +90,7 @@ public final class PackValues {
 			values.state.directives(PackDirectives.read(source, options, settings, dimension));
 			values.state.endFlashShadows(properties.endFlashShadows());
 			values.declare(properties, settings.globalDefines(options));
+			values.readNoise(properties, source);
 
 			// Read against the same settings as everything above, which is not a formality: BSL wraps
 			// all its declarations in one conditional and keeps a fifth of them under the #else, so a
@@ -95,6 +99,15 @@ public final class PackValues {
 		}
 
 		return values;
+	}
+
+	/**
+	 * The pack's own noise image, decoded, or null when the pack declares none or it could not be
+	 * read; either way the generated field stands in. Null rather than an empty image, because
+	 * the two answers are allocated at different sizes.
+	 */
+	public NoiseTexture.Image noiseImage() {
+		return this.noiseImage;
 	}
 
 	/** The engine's table with the pack's own uniforms layered over it. */
@@ -229,6 +242,32 @@ public final class PackValues {
 		}
 
 		return List.copyOf(named);
+	}
+
+	/**
+	 * Reads and decodes the image {@code texture.noise} names, when the pack names one. A failure
+	 * of any kind falls back to the generated field and is named in the notes: the stand in looks
+	 * like noise too, which is exactly why silence here would cost somebody a day.
+	 */
+	private void readNoise(ShaderProperties properties, ShaderPackSource source) {
+		String path = properties.noiseTexturePath().orElse(null);
+		if (path == null) {
+			return;
+		}
+
+		Optional<Path> file = source.file(path);
+		if (file.isEmpty()) {
+			this.problems.add("noise image: texture.noise names " + path
+					+ " and no such file is in the pack, so the generated field stands in");
+			return;
+		}
+
+		try {
+			this.noiseImage = NoiseTexture.decode(source.bytes(file.get()));
+		} catch (IOException | RuntimeException e) {
+			this.problems.add("noise image " + path + ": " + e.getMessage()
+					+ ", so the generated field stands in");
+		}
 	}
 
 	private void declare(ShaderProperties properties, Map<String, String> defines) {

@@ -61,6 +61,10 @@ public final class ShaderProperties {
 	private static final Pattern SLIDERS = Pattern.compile("^\\s*sliders\\s*=\\s*(.*)$");
 	private static final Pattern END_FLASH_SHADOWS = Pattern.compile("^\\s*endFlashShadows\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
+	// Only the noise image. The general form texture.<stage>.<sampler> exists and is still counted
+	// with the unknown keys: serving those is a chantier of its own, and half-reading the family
+	// here would make the count lie about what is honoured.
+	private static final Pattern TEXTURE_NOISE = Pattern.compile("^\\s*texture\\.noise\\s*=\\s*(.*)$");
 	private static final Pattern FLIP = Pattern.compile("^\\s*flip\\.([^=\\s.]+)\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern OTHER_KEY = Pattern.compile("^\\s*([A-Za-z_][\\w]*)[.=].*$");
 
@@ -83,6 +87,7 @@ public final class ShaderProperties {
 	private final Map<String, AlphaTest> alphaTest;
 	private final Map<String, String> malformedAlphaTests;
 	private final Map<String, Integer> ignoredPrefixes;
+	private final String noiseTexturePath;
 	private final int directiveCount;
 	private final int continuationCount;
 	private final boolean present;
@@ -109,6 +114,7 @@ public final class ShaderProperties {
 		this.alphaTest = Map.copyOf(builder.alphaTest);
 		this.malformedAlphaTests = Map.copyOf(builder.malformedAlphaTests);
 		this.ignoredPrefixes = Map.copyOf(builder.ignoredPrefixes);
+		this.noiseTexturePath = builder.noiseTexturePath;
 		this.directiveCount = builder.directiveCount;
 		this.continuationCount = builder.continuationCount;
 		this.present = builder.present;
@@ -255,6 +261,15 @@ public final class ShaderProperties {
 						value.equalsIgnoreCase("true")));
 				return;
 			}
+		}
+
+		// The path is relative to shaders/, as every path in this file is. Four packs of the
+		// corpus write the line, and their water and clouds are built against that image: the
+		// generated noise is a stand in with the same look and none of the same values.
+		Matcher noise = TEXTURE_NOISE.matcher(line);
+		if (noise.matches()) {
+			builder.noiseTexturePath = noise.group(1).trim();
+			return;
 		}
 
 		// Anything left is counted by its first segment rather than dropped. That is what makes
@@ -734,6 +749,11 @@ public final class ShaderProperties {
 		return new TreeMap<>(this.ignoredPrefixes);
 	}
 
+	/** The pack's own noise image, {@code texture.noise}, relative to {@code shaders/}. */
+	public Optional<String> noiseTexturePath() {
+		return Optional.ofNullable(this.noiseTexturePath);
+	}
+
 	/**
 	 * One slot of a settings page, in the order the pack wrote it.
 	 * <p>
@@ -800,6 +820,7 @@ public final class ShaderProperties {
 		private final Map<String, AlphaTest> alphaTest = new LinkedHashMap<>();
 		private final Map<String, String> malformedAlphaTests = new LinkedHashMap<>();
 		private final Map<String, Integer> ignoredPrefixes = new LinkedHashMap<>();
+		private String noiseTexturePath;
 		private int directiveCount;
 		private int continuationCount;
 		private boolean present;

@@ -69,6 +69,9 @@ final class ColorTargets {
 	private final Set<Integer> doubled;
 	private final int noiseResolution;
 
+	/** The pack's own noise image, or null when the generated field stands in. */
+	private final NoiseTexture.Image noiseImage;
+
 	/**
 	 * The shadow map, allocated and cleared with the rest.
 	 * <p>
@@ -105,12 +108,16 @@ final class ColorTargets {
 	 * worked out from anything but the schedule the samplers were bound against is a parity that
 	 * disagrees with itself, and that shows as a plausible picture rather than as an error.
 	 */
-	ColorTargets(TargetPlan plan, int noiseResolution, int shadowResolution) {
+	ColorTargets(TargetPlan plan, int noiseResolution, NoiseTexture.Image noiseImage,
+			int shadowResolution) {
 		this.plan = plan;
 		// The pack asks for it by directive and 256 is the default. Held rather than looked up at
 		// allocation: this class knows nothing of a frame, and the resolution never moves while a
 		// pack is loaded.
 		this.noiseResolution = noiseResolution;
+		// The image wins over the directive when the pack ships both: the directive sizes the
+		// generated field, and the image is uploaded as it stands, which is Iris's rule.
+		this.noiseImage = noiseImage;
 		this.shadowMap = new ShadowTargets(shadowResolution);
 		this.doubled = Set.copyOf(plan.schedule().doubled());
 
@@ -416,31 +423,44 @@ final class ColorTargets {
 		this.white = new TextureTarget("Vitrail white", 1, 1, false, CONSTANT_FORMAT);
 		this.grey = new TextureTarget("Vitrail grey", 1, 1, false, CONSTANT_FORMAT);
 
-		int resolution = this.noiseResolution;
-		this.noise = new TextureTarget("Vitrail noise", resolution, resolution, false,
-				CONSTANT_FORMAT);
+		if (this.noiseImage != null) {
+			this.noise = new TextureTarget("Vitrail noise", this.noiseImage.width(),
+					this.noiseImage.height(), false, CONSTANT_FORMAT);
+			Vitrail.logger().info("noisetex is the pack's own image, {}x{}",
+					this.noiseImage.width(), this.noiseImage.height());
+		} else {
+			int resolution = this.noiseResolution;
+			this.noise = new TextureTarget("Vitrail noise", resolution, resolution, false,
+					CONSTANT_FORMAT);
+			Vitrail.logger().info("noisetex is the generated field at {}x{}", resolution, resolution);
+		}
 
 		return true;
 	}
 
 	/**
-	 * Uploads the noise image, once, from the generator the harness has a fingerprint for.
+	 * Uploads the noise image, once: the pack's own when it ships one, otherwise the generator the
+	 * harness has a fingerprint for.
 	 * <p>
 	 * A pack indexes this image with coordinates of its own, so it is not enough for the picture to
 	 * look like noise: it has to be the image the pack was tuned against, which is why the generator
-	 * follows Iris bit for bit and why no observation in the game could ever prove it right.
+	 * follows Iris bit for bit and why no observation in the game could ever prove it right. The
+	 * same rule is what makes {@code texture.noise} matter: four packs of the corpus were tuned
+	 * against a smooth image of their own, and the generated white noise fed to their water octaves
+	 * crumples the surface into facets.
 	 * <p>
 	 * Until this was here every {@code noisetex} lookup read one mid grey pixel, which is a constant
 	 * where the pack asked for a field. That is not a missing detail: BSL builds its cloud distance
 	 * from it, and a cloud distance of nought discards every fragment of water.
 	 */
 	private void uploadNoise(CommandEncoder encoder) {
-		int resolution = this.noise.width;
-		byte[] pixels = NoiseTexture.rgba(resolution);
+		int width = this.noise.width;
+		int height = this.noise.height;
+		byte[] pixels = this.noiseImage != null ? this.noiseImage.rgba() : NoiseTexture.rgba(width);
 		ByteBuffer data = ByteBuffer.allocateDirect(pixels.length).order(ByteOrder.nativeOrder());
 		data.put(pixels).flip();
 
-		encoder.writeToTexture(this.noise.getColorTexture(), data, 0, 0, 0, 0, resolution, resolution);
+		encoder.writeToTexture(this.noise.getColorTexture(), data, 0, 0, 0, 0, width, height);
 	}
 
 	private boolean ensureSide(Map<Integer, TextureTarget> side, int index, int width, int height, String suffix) {

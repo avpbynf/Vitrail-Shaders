@@ -276,6 +276,17 @@ public final class ShaderPackSource implements AutoCloseable {
 		return Files.isRegularFile(target) ? Optional.of(target) : Optional.empty();
 	}
 
+	/** A file's raw bytes, under the same ceiling as the sources: an image is not exempt. */
+	public byte[] bytes(Path file) throws IOException {
+		long size = Files.size(file);
+		if (size > MAX_FILE_BYTES) {
+			throw new IOException(rel(file) + " is " + size + " bytes, past the " + MAX_FILE_BYTES
+					+ " a pack file is allowed");
+		}
+
+		return Files.readAllBytes(file);
+	}
+
 	@Override
 	public void close() throws IOException {
 		if (this.ownedFileSystem != null) {

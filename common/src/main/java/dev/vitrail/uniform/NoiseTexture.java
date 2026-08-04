@@ -1,5 +1,10 @@
 package dev.vitrail.uniform;
 
+import javax.imageio.ImageIO;
+
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.util.Random;
 
 /**
@@ -23,6 +28,44 @@ import java.util.Random;
 public final class NoiseTexture {
 
 	private NoiseTexture() {
+	}
+
+	/** A decoded pack image, in the same byte order {@link #rgba(int)} writes. */
+	public record Image(int width, int height, byte[] rgba) {
+	}
+
+	/**
+	 * Decodes a pack's own noise image, {@code texture.noise}. Four packs of the corpus ship one,
+	 * and theirs is nothing like the generated field: BSL's is blurred smooth, and water octaves
+	 * fed the generated white noise instead crumple into facets.
+	 * <p>
+	 * Decoded with ImageIO rather than the game's image class, for the same reason the generator
+	 * writes raw bytes: this package names no graphics API, which is what lets the harness measure
+	 * it without starting the game. ImageIO is the JDK's and works headless.
+	 */
+	public static Image decode(byte[] png) throws IOException {
+		BufferedImage image = ImageIO.read(new ByteArrayInputStream(png));
+		if (image == null) {
+			throw new IOException("not an image ImageIO recognises");
+		}
+
+		int width = image.getWidth();
+		int height = image.getHeight();
+		byte[] pixels = new byte[width * height * 4];
+		int[] row = new int[width];
+		for (int y = 0; y < height; y++) {
+			image.getRGB(0, y, width, 1, row, 0, width);
+			for (int x = 0; x < width; x++) {
+				int argb = row[x];
+				int offset = (y * width + x) * 4;
+				pixels[offset] = (byte) (argb >> 16);
+				pixels[offset + 1] = (byte) (argb >> 8);
+				pixels[offset + 2] = (byte) argb;
+				pixels[offset + 3] = (byte) (argb >> 24);
+			}
+		}
+
+		return new Image(width, height, pixels);
 	}
 
 	/** @param resolution the width and the height, from the pack's {@code noiseTextureResolution} */

@@ -171,7 +171,7 @@ public final class PackChain {
 		// None of this touches the device: the textures are allocated by the first frame and this
 		// runs while the client is still starting up, off the render thread.
 		this.targets = new ColorTargets(chain.targets(), values.noiseResolution(),
-				values.shadowResolution());
+				values.noiseImage(), values.shadowResolution());
 		this.seed = chain.chain().seed()
 				.filter(where -> this.targets.has(where.target()))
 				.map(where -> new SceneSeed(where, this.targets.format(where.target())))
