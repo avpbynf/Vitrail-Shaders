@@ -112,6 +112,15 @@ public final class UniformBlock {
 					member.shape().zero(sink);
 				}
 			}
+
+			// And once more AFTER the last element, because an array's size is its stride times its
+			// length rather than where its last element happens to stop. Without this a vec3[2]
+			// would end at twenty eight and the member behind it would start there; the compiler
+			// puts that member at thirty two. Only the padding after the last element is missing
+			// from the loop above, since every other element is aligned on its way in.
+			if (member.elements() > 1) {
+				sink.align(16);
+			}
 		}
 
 		return sink;

@@ -48,9 +48,23 @@ public final class Std140Counter implements UniformSink {
 		return advance(8, 8);
 	}
 
+	/**
+	 * Sixteen to start on, TWELVE consumed, and the difference is the whole trap of std140.
+	 * <p>
+	 * A three component vector has a base alignment of sixteen and a size of twelve, so the member
+	 * after it starts twelve bytes later at its own alignment rather than sixteen. Measured on the
+	 * compiler rather than argued from the specification: {@code vec3 a; float b;} puts b at offset
+	 * twelve, and {@code ivec3 a; int b;} does the same. Consuming sixteen here would put every
+	 * member after the first vec3 four bytes past where the shader reads it, which is a block that
+	 * slides rather than one that fails.
+	 * <p>
+	 * The padded form is real too and belongs to matrix columns and array elements, where the
+	 * stride IS sixteen. It is spelled out where it is needed, by {@link #putMat3} and by the
+	 * alignment the block writer puts between array elements, rather than folded in here.
+	 */
 	@Override
 	public UniformSink putVec3(float x, float y, float z) {
-		return advance(16, 16);
+		return advance(16, 12);
 	}
 
 	@Override
@@ -63,9 +77,10 @@ public final class Std140Counter implements UniformSink {
 		return advance(8, 8);
 	}
 
+	/** Twelve consumed, for the reason {@link #putVec3} gives. */
 	@Override
 	public UniformSink putIVec3(int x, int y, int z) {
-		return advance(16, 16);
+		return advance(16, 12);
 	}
 
 	@Override

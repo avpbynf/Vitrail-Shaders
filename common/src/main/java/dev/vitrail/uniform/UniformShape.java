@@ -141,15 +141,23 @@ public enum UniformShape {
 		}
 
 		if (value.rank() == MAT4.rank) {
-			sink.putVec3(value.f(0), value.f(1), value.f(2))
-					.putVec3(value.f(4), value.f(5), value.f(6))
-					.putVec3(value.f(8), value.f(9), value.f(10));
+			// The upper left of a matrix held as a four by four, written as the three by three the
+			// pack declared. The alignment between the columns and after the last one is what makes
+			// it a matrix rather than three loose vectors: a column's stride is sixteen while a
+			// vec3 on its own consumes twelve, so without these the three would pack at nought,
+			// twelve and twenty four and the member after them would start at thirty six.
+			sink.putVec3(value.f(0), value.f(1), value.f(2)).align(16)
+					.putVec3(value.f(4), value.f(5), value.f(6)).align(16)
+					.putVec3(value.f(8), value.f(9), value.f(10)).align(16);
 
 			return;
 		}
 
-		sink.putVec3(value.f(0), value.f(1), value.f(2))
-				.putVec3(value.f(3), value.f(4), value.f(5))
-				.putVec3(value.f(6), value.f(7), value.f(8));
+		// A value held flat, nine components in a row. Same padding as the two branches above and
+		// for the same reason: these are the columns of a matrix, whose stride is sixteen, not
+		// three vectors of twelve laid end to end. This is the branch a zeroed member takes.
+		sink.putVec3(value.f(0), value.f(1), value.f(2)).align(16)
+				.putVec3(value.f(3), value.f(4), value.f(5)).align(16)
+				.putVec3(value.f(6), value.f(7), value.f(8)).align(16);
 	}
 }

@@ -53,9 +53,19 @@ final class Std140Sink implements UniformSink {
 		return this;
 	}
 
+	/**
+	 * Aligned on sixteen and consuming TWELVE, which is not what {@code Std140Builder.putVec3}
+	 * does: that one skips a fourth float on the way out, so a member written after it lands four
+	 * bytes past where the shader reads it. Verified on the compiler: {@code vec3 a; float b;} puts
+	 * b at twelve.
+	 * <p>
+	 * The builder's own padded form is the right one for a matrix column and for an array element,
+	 * where the stride really is sixteen, and {@link #putMat3} still uses it.
+	 */
 	@Override
 	public UniformSink putVec3(float x, float y, float z) {
-		this.builder.putVec3(x, y, z);
+		this.builder.align(16);
+		this.builder.putFloat(x).putFloat(y).putFloat(z);
 
 		return this;
 	}
@@ -74,9 +84,11 @@ final class Std140Sink implements UniformSink {
 		return this;
 	}
 
+	/** Twelve consumed, for the reason {@link #putVec3} gives. */
 	@Override
 	public UniformSink putIVec3(int x, int y, int z) {
-		this.builder.putIVec3(x, y, z);
+		this.builder.align(16);
+		this.builder.putInt(x).putInt(y).putInt(z);
 
 		return this;
 	}
@@ -88,6 +100,12 @@ final class Std140Sink implements UniformSink {
 		return this;
 	}
 
+	/**
+	 * The builder's PADDED vec3 on purpose, and the one place it is right: a matrix is laid out as
+	 * an array of its columns, and an array element's stride is sixteen whatever the element is. So
+	 * the three columns sit at nought, sixteen and thirty two, and the matrix consumes forty eight,
+	 * which is what the compiler reports as its MatrixStride and the offset of the member after it.
+	 */
 	@Override
 	public UniformSink putMat3(Matrix3fc m) {
 		this.builder.putVec3(m.m00(), m.m01(), m.m02())
