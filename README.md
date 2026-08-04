@@ -18,6 +18,24 @@
 
 ---
 
+<p align="center">
+  <img src="docs/screenshot-cave.jpg" alt="A cave lit through its opening, rendered by BSL Shaders on the Vulkan backend" width="830">
+</p>
+<p align="center">
+  <sub>BSL Shaders by Capt Tatsu, running unmodified on the Vulkan backend.</sub>
+</p>
+
+<details>
+<summary>More screenshots</summary>
+<br>
+<p align="center">
+  <img src="docs/screenshot-cherry.jpg" alt="A cherry grove over a valley with waterfalls, rendered by BSL Shaders on the Vulkan backend" width="830">
+</p>
+<p align="center">
+  <img src="docs/screenshot-river.jpg" alt="A river gorge at dawn, lava glowing against the cliff, rendered by BSL Shaders on the Vulkan backend" width="830">
+</p>
+</details>
+
 Minecraft 26.2 ships a native Vulkan renderer alongside the OpenGL one. The
 shader ecosystem grew up on OpenGL and has not crossed over yet: the packs, the
 engines that load them and the habits of the people who write them all assume
@@ -29,38 +47,42 @@ on does not mean giving up the packs you already use.
 
 ## Status
 
-**It draws the world's terrain through a pack's own programs, and runs the
-pack's whole chain of passes around it, in the frame order the format
-prescribes.** Point it at a pack and it will resolve the includes, apply the
-settings, work out which program serves what for every dimension, rewrite each
-program into GLSL a Vulkan compiler accepts, allocate the colour targets the
-pack declares, and run its frame in the pack's own order: the deferred passes
-between the opaque world and the translucents, then the composites and the
-`final`. The three chunk passes, solid, cutout and translucent, are drawn on
-Sodium's meshes with the pack's `gbuffers_terrain` and `gbuffers_water`,
-carrying the block ids of `block.properties`, per-quad normals, the pack's
-alpha tests and every draw buffer those programs declare; water blends into
-the pack's own targets at the exact point of the frame the format puts it,
-reading the depth of the world as it stood before the translucents. The
-renderer rasterises with a reversed Z a pack knows nothing about, and every
-depth a pack writes or samples is converted to the convention it was written
-against.
+In development, and moving quickly. The core is in place: point Vitrail at a
+pack and it loads it, settings and all, translates its programs once, and runs
+its frame on the Vulkan backend, in the order the format prescribes. The world's
+terrain and water are drawn through the pack's own programs, the shadow map is
+drawn and read, and a settings screen reads the pack's own menu layout.
 
-Across the eight packs surveyed, 1738 of their 1863 compilation units compile,
-and 743 of their 785 programs compile with their stages linked together. Of the
-45117 uniform block members those programs declare between them, 33147 are
-answered, including the ones a pack writes for itself as expressions in its own
-`shaders.properties`. A settings screen reads the pack's own menu layout and
-writes one file per pack.
+What is missing is what decides how close a pack looks to its OpenGL self: the
+sky, the entities and the particles are still drawn by the game rather than
+through the pack. Until they are, packs run but do not yet look entirely like
+themselves. Expect visible differences and rough edges rather than a finished
+picture, and expect them to shrink release by release.
 
-The shadow map is drawn with the pack's own `shadow` programs, culled for the
-light, with the translucents in it and `shadowtex1` taken without them; the
-`sampler2DShadow` comparison no sampler on this backend can carry is emitted in
-the shader instead. What it cannot do yet: only the terrain casts, entities and
-block entities do not yet; and the sky, the entities and the particles still
-come from the game rather than from the pack's own programs, so a pack composes
-over an image the game tone mapped once already. Those steps are what decides
-how close a pack looks to its OpenGL self, and they are what comes next.
+## Quick start
+
+| Component | Version |
+| --- | --- |
+| Minecraft | 26.2, running on its Vulkan backend |
+| Loader | NeoForge 26.2.0.32-beta or later in the 26.2 line |
+| Sodium | 0.9.x for NeoForge |
+
+Put the Vitrail jar in `mods/` next to Sodium, and switch the game to Vulkan:
+`preferredGraphicsBackend:"vulkan"` in `options.txt`, or Options, then Video
+Settings, in game. Shader packs go in `shaderpacks/`, as they always have, and
+are selected in game from Vitrail's settings screen.
+
+Client only: it does nothing on a server and does not need to be installed on
+one. Keep Sodium on 0.9.x, and do not run another shader engine alongside.
+
+To build from source:
+
+```
+gradlew build
+```
+
+The jar lands in `build/libs`. The details, and the reasons behind the version
+pins, are in [INSTALL.md](INSTALL.md).
 
 ## How it works
 
@@ -100,30 +122,9 @@ rather than maintaining two. None of this rules out supporting a Vulkan-native
 format later, if one appears and people write for it; it is simply not the
 problem worth solving first.
 
-The cost is known and measured. Eight packs were surveyed before any code was
-written: they expect 274 distinct uniforms between them, and 85 percent of their
-1863 compilation units survived a throwaway mechanical translation written to
-find that number out. That survey is what the figure in the status above should
-be read against. The packs themselves are not redistributable and are not in
-this repository.
-
-## The plan
-
-Ordered by risk rather than by how much there is to show for it. Each step has
-to end in something that can be looked at and judged, rather than in a claim
-that it works.
-
-1. Get a pass of our own into the frame, with GLSL from outside the jar.
-2. The pass graph: our own render targets, chained, safe across a resize.
-3. Pack loading: `shaders.properties`, includes, settings, program fallbacks.
-4. The translator, ported to Java against the measured corpus.
-5. The uniform surface, where compiling becomes rendering correctly.
-6. Terrain coupling with Sodium.
-7. The rest of the frame through the pack: the shadow map, the sky, the
-   entities and the particles.
-
-Steps 1 to 6 are done, and the shadow map of step 7 is drawn. The rest of that
-step is where the remaining distance to the reference image lives.
+The cost was measured before any code was written, against a corpus of real,
+widely used packs, and development is tested against that corpus continuously.
+The packs themselves are not redistributable and are not in this repository.
 
 ## Related work
 
@@ -133,10 +134,9 @@ not competing with the projects below.
 - **[Iris](https://github.com/IrisShaders/Iris)** is the reference
   implementation for OptiFine-format packs and the reason this project is
   LGPL-3.0 as well. It targets OpenGL, which is where the overwhelming majority
-  of packs are still played. One table is borrowed from it, with credit in
-  [NOTICE](NOTICE): the chain saying which program stands in for another when a
-  pack does not ship it. Iris is the only authority for that chain, and the
-  format's own documentation does not spell it out.
+  of packs are still played. Where the format's own documentation runs out,
+  Iris is the authority this engine is checked against; the parts adapted from
+  it are credited in the licence section below.
 - **[Sulkan](https://github.com/mravatins/sulkanShaders)** is an open source
   Vulkan shader engine for Minecraft 26.2 and later, GPLv3, built as a Fabric
   mod. It was already running on the Vulkan renderer when this project started,
@@ -152,27 +152,6 @@ not competing with the projects below.
 None of them covers the narrow case this one is built for: a pack written years
 ago, running as it is, on the renderer that now ships with the game.
 
-## Requirements
-
-| Component | Version |
-| --- | --- |
-| Minecraft | 26.2 |
-| Loader | NeoForge 26.2.0.32-beta or later in the 26.2 line |
-| Sodium | 0.9.x for NeoForge |
-
-The game also has to be running on its Vulkan backend rather than OpenGL, which
-is a setting rather than a dependency: `preferredGraphicsBackend:"vulkan"` in
-`options.txt`, or Options then Video Settings in game.
-
-Client only. It does nothing on a server and does not need to be installed on
-one. Fabric is not supported: the module exists in the build and is empty, which
-is deliberate until NeoForge is proven.
-
-Sodium must stay on 0.9.x. Every shader engine hooks its internals, and it has
-no stable API for that.
-
-Build and install instructions are in [INSTALL.md](INSTALL.md).
-
 ## Compatibility
 
 Vitrail hooks the frame through public NeoForge events where the game offers
@@ -187,14 +166,11 @@ Any mod that unwraps a GPU texture into an OpenGL handle will crash on the
 Vulkan backend, with or without Vitrail. Distant Horizons 3.2.0-b does this and
 dies on the first frame. This is not something Vitrail can work around.
 
-Do not run another shader engine alongside it.
-
 ## Contributing
 
-Open an issue before writing anything substantial. The milestones above are
-ordered by risk rather than by how satisfying they are, and work that lands
-ahead of its milestone usually cannot be verified yet, which makes it hard to
-accept however good it is.
+Open an issue before writing anything substantial. The work is ordered by risk,
+and code that lands ahead of what can be verified is hard to accept however
+good it is.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the rest and is short. Two of its rules
 bite people who skip it: files are UTF-8 without a BOM everywhere, because a BOM
