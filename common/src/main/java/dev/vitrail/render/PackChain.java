@@ -857,13 +857,27 @@ public final class PackChain {
 			return;
 		}
 
-		GpuTextureView layer = chain.features.open(device, main.width, main.height);
-		if (layer == null) {
-			return;
-		}
+		// Caught like every other entry point this bus calls. These two were the only ones without
+		// it, and they are the worst place to be missing one: an exception here reaches the game
+		// through an event handler and comes back on the very next frame, so what the player sees
+		// is not a pack that stopped drawing but a game that will not run.
+		try {
+			GpuTextureView layer = chain.features.open(device, main.width, main.height);
+			if (layer == null) {
+				return;
+			}
 
-		RenderSystem.outputColorTextureOverride = layer;
-		RenderSystem.outputDepthTextureOverride = main.getDepthTextureView();
+			RenderSystem.outputColorTextureOverride = layer;
+			RenderSystem.outputDepthTextureOverride = main.getDepthTextureView();
+		} catch (RuntimeException e) {
+			// The overrides are cleared on the way out rather than left half set: one standing past
+			// this point swallows every later feature draw of the frame.
+			RenderSystem.outputColorTextureOverride = null;
+			RenderSystem.outputDepthTextureOverride = null;
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
 	}
 
 	/**
@@ -884,9 +898,15 @@ public final class PackChain {
 			return;
 		}
 
-		ChainPlan.Attachment into = chain.features.into();
-		chain.features.compose(device.createCommandEncoder(), chain.quad,
-				chain.targets.view(into.target(), into.side()));
+		try {
+			ChainPlan.Attachment into = chain.features.into();
+			chain.features.compose(device.createCommandEncoder(), chain.quad,
+					chain.targets.view(into.target(), into.side()));
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
 	}
 
 	private void drawEarly(GpuDevice device) {
@@ -1050,13 +1070,20 @@ public final class PackChain {
 		return this.warmed == this.programs.size();
 	}
 
-	private static boolean valid(CompiledRenderPipeline compiled, PackPass pass) {
+	/**
+	 * Releases as well as latching, which the two other places that set {@code disabled} already
+	 * did and this one did not. A pack whose one bad program stops the chain kept every colour
+	 * target it had allocated for the rest of the session, ninety nine megabytes of them on BSL,
+	 * for an engine that had just decided to draw nothing.
+	 */
+	private boolean valid(CompiledRenderPipeline compiled, PackPass pass) {
 		if (compiled.isValid()) {
 			return true;
 		}
 
 		disabled = true;
 		Vitrail.logger().error("{} did not compile, nothing of this pack will be drawn", pass.path());
+		release();
 
 		return false;
 	}
