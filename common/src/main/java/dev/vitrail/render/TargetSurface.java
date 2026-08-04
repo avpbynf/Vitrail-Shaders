@@ -170,14 +170,26 @@ final class TargetSurface implements AutoCloseable {
 		// otherwise. Set before anything can read it rather than after, because a resize is exactly
 		// the moment a chain silently stops being true.
 		this.chainWritten = false;
-		this.texture = device.createTexture(this.label, USAGE, this.format, width, height, 1, levels);
-		this.view = device.createTextureView(this.texture);
 
-		if (levels > 1) {
-			this.levelViews = new GpuTextureView[levels];
-			for (int level = 0; level < levels; level++) {
-				this.levelViews[level] = device.createTextureView(this.texture, level, 1);
+		// Everything or nothing. A view that throws after the texture was made would leave that
+		// texture with no owner: the caller only learns of a surface once the constructor returns,
+		// so a half built one is never put in a map, never closed, and not even a resource reload
+		// gets it back. The chain makes this real rather than theoretical, since one surface now
+		// creates up to a dozen views instead of one.
+		try {
+			this.texture = device.createTexture(this.label, USAGE, this.format, width, height, 1,
+					levels);
+			this.view = device.createTextureView(this.texture);
+
+			if (levels > 1) {
+				this.levelViews = new GpuTextureView[levels];
+				for (int level = 0; level < levels; level++) {
+					this.levelViews[level] = device.createTextureView(this.texture, level, 1);
+				}
 			}
+		} catch (RuntimeException e) {
+			close();
+			throw e;
 		}
 	}
 

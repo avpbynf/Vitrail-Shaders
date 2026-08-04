@@ -180,6 +180,22 @@ final class MipmapReduction {
 			return null;
 		}
 
+		// An integer target is refused outright rather than drawn wrong. Two things break at once
+		// on one: a sampler cannot filter it at all on Vulkan, which is the rule
+		// GpuFormats.filterFor already follows for the pack's own bindings, and the shader here
+		// declares a sampler2D and a vec4 output where such a format needs a usampler2D and an
+		// ivec4. Refusing leaves the chain unwritten, which the binding now reads as level nought,
+		// so the pack gets the image it had before there were chains instead of nonsense. No pack
+		// of the corpus declares an integer format and asks for mipmaps on it; this is the guard
+		// for the one that will.
+		if (integer(format) && this.refused.add(format)) {
+			Vitrail.logger().error("The mipmap reduction cannot fill a chain on {}: an integer "
+					+ "format carries no filtering and this reduction writes floats. Targets of "
+					+ "that format keep level 0 alone and a lod read falls back to it", format);
+
+			return null;
+		}
+
 		RenderPipeline pipeline = this.pipelines.computeIfAbsent(format, MipmapReduction::build);
 		if (device.precompilePipeline(pipeline, this.source).isValid()) {
 			return pipeline;
@@ -191,6 +207,14 @@ final class MipmapReduction {
 				+ "format keep level 0 alone and a lod read falls back to it", format);
 
 		return null;
+	}
+
+	/** Whether a lookup on this format comes back as integers, which no sampler here can filter. */
+	private static boolean integer(GpuFormat format) {
+		return switch (format.componentType()) {
+			case UINT_8, SINT_8, UINT_16, SINT_16, UINT_32, SINT_32 -> true;
+			default -> false;
+		};
 	}
 
 	private static RenderPipeline build(GpuFormat format) {
