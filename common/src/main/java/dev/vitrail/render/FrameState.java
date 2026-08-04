@@ -756,11 +756,10 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
-	 * The block state's own emission, which is deprecated only in the sense that NeoForge offers a
-	 * position aware extension. That extension is not reachable from here, this module compiles
-	 * against vanilla alone, and a held item has no position to be aware of anyway.
+	 * The block state's own emission. NeoForge offers a position aware extension of it, which is not
+	 * reachable from here since this module compiles against vanilla alone, and a held item has no
+	 * position to be aware of anyway.
 	 */
-	@SuppressWarnings("deprecation")
 	private static int emission(ItemStack stack) {
 		if (stack == null || stack.isEmpty()) {
 			return 0;
