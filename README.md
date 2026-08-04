@@ -142,8 +142,10 @@ not competing with the projects below.
   mod. It was already running on the Vulkan renderer when this project started,
   and reading where it hooks into the game was useful. None of its code is
   reused here: its licence would not allow it without relicensing all of
-  Vitrail, and a mechanical line comparison is run at every milestone to keep
-  that claim honest.
+  Vitrail. The claim was checked by a mechanical line comparison of the two
+  sources, which found three lines in common, all three of them present verbatim
+  in Minecraft itself. The comparison is repeated whenever this engine takes on
+  a part of the frame Sulkan also touches.
 - **[Aperture](https://github.com/IrisShaders/Aperture-Example-Pack)**, from the
   Iris team, is a newer engine whose packs are written in Slang. Its example
   pack is public. It is a clean break from the OptiFine format rather than a way
@@ -185,5 +187,7 @@ well. Both are needed to read either.
 
 Parts of the pack loader and of the value catalogue are adapted from Iris, which
 is the reference for what a pack expects. Iris is LGPL-3.0 as well, so nothing
-about the licensing of this repository changes. Every file concerned is listed,
-one by one, in [NOTICE](NOTICE).
+about the licensing of this repository changes. [NOTICE](NOTICE) names every
+file concerned by its path, and says for each what was changed; the one library
+taken whole rather than adapted, stareval, is named by its directory and its
+file count instead, with its author and the four edits made to it.

@@ -10,11 +10,29 @@ installed on one.
 | Minecraft | 26.2 |
 | NeoForge | 26.2.0.32-beta or later in the 26.2 line |
 | Sodium | 0.9.x for NeoForge (`sodium-neoforge-0.9.1+mc26.2` or compatible) |
+| Chloride | any 26.2 build, to run on the Vulkan backend at all |
 | Java | 25, to build (the game brings its own runtime) |
 
 Sodium is declared as a required dependency, so the game will refuse to start
 without it. Do not update Sodium past 0.9.x: it has no stable API for what a
 shader engine needs from it.
+
+Chloride is not declared as a dependency and is needed all the same, because
+without it the Vulkan backend has no window to draw into. NeoForge shows an
+early loading screen, and the game then takes that window over instead of making
+one of its own: `Window.createGlfwWindow` calls the backend's `setWindowHints`
+and, if an early loading screen exists, uses `takeOverGlfwWindow` on the window
+that screen already created with an OpenGL client API. The Vulkan surface then
+fails at creation with `GLFW error 65540 ... requires the window to have the
+client API set to GLFW_NO_API`. Chloride is what makes that window Vulkan
+capable.
+
+Worth knowing because the failure hides itself: a Vulkan boot that fails
+downgrades `preferredGraphicsBackend` to `default`, and the dying process writes
+`options.txt` on the way out, after and over any edit you made. The game then
+starts in OpenGL and Vitrail loads and compiles without drawing the world's
+passes. If the picture is unchanged, check the backend in the log before
+anything else.
 
 Fabric is not supported. The module exists in the build but is empty.
 
@@ -63,11 +81,16 @@ settings/      one file per pack, holding what differs from the pack's defaults
 A settings screen covers all of it in game: the I key, the Config button in the
 mod list, or the icon in the pause menu. It opens on the pack list, reads each
 pack's own menu layout, and imports the settings file Iris left in
-`shaderpacks/` when a pack has none here yet. Editing a pack's files or the
-`vitrail/` ones while the game runs is also enough, changes are picked up
-without a restart; the jar never needs rebuilding for any of this. A program
-that fails to compile is reported in the log and the game keeps its own
-rendering rather than crashing.
+`shaderpacks/` when a pack has none here yet. Editing the files under
+`vitrail/` while the game runs is also enough: `pack.txt`, `options.txt` and
+`settings/<pack>.txt` are the three the engine watches, and a change to any of
+them reloads the pack without a restart. The jar never needs rebuilding for any
+of this. A program that fails to compile is reported in the log and the game
+keeps its own rendering rather than crashing.
+
+Editing a pack's own files is a different matter and is **not** picked up on its
+own: nothing watches `shaderpacks/`. Use the settings screen, which reloads on
+demand, or restart the game.
 
 ## Switching the graphics backend to Vulkan
 
