@@ -142,6 +142,10 @@ public final class PackChain {
 	private final PackValues values;
 	private final String world;
 	private final ColorTargets targets;
+
+	/** Fills the mip chains of the targets the programs of this place read at a lod. */
+	private final MipmapReduction mipmaps = new MipmapReduction();
+
 	private final SceneSeed seed;
 	private final boolean seedEnabled;
 
@@ -767,6 +771,16 @@ public final class PackChain {
 			}
 
 			PackPass pass = this.programs.get(at);
+
+			// Right before the program that reads them, and no earlier: a chain is only true of the
+			// level nought it was built from, and every pass between the two may have written it.
+			// The reduction opens render passes of its own, which is why this is here rather than
+			// inside the draw: a pass cannot be opened while another is recording.
+			for (PackPass.LodRead read : pass.lodReads()) {
+				this.mipmaps.generate(encoder, device, this.quad,
+						this.targets.surface(read.target(), read.side()));
+			}
+
 			GpuBufferSlice uniforms = buffer.slice(pass.uniformOffset(), pass.uniformSize());
 			if (pass == this.last) {
 				pass.drawFinal(encoder, ready.mainView(), this.targets, ready.depthView(), this.quad,

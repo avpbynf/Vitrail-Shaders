@@ -10,7 +10,6 @@ import dev.vitrail.uniform.NoiseTexture;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
-import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
@@ -27,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.ToLongFunction;
+import java.util.stream.Collectors;
 
 /**
  * The textures behind one pack's colour targets: what exists, at which format and size, what is
@@ -42,10 +43,18 @@ import java.util.TreeSet;
  * a barrier into the very command buffer a pass would be recording into, and the clear commands
  * refuse outright while one is open.
  * <p>
- * No texture view is ever held. A resize destroys and recreates the texture behind a target,
- * closing its views, and nothing on the Vulkan backend checks that a bound view is still alive:
- * a view kept across a resize is a silent use after free rather than an exception. Views are
- * therefore looked up again at every use, which is what {@link #view} is for.
+ * No caller ever holds a texture view. A resize destroys and recreates the texture behind a target
+ * and closes every view onto it, and nothing on the Vulkan backend checks that a bound view is
+ * still alive: a view kept across a resize is a silent use after free rather than an exception.
+ * Views are therefore looked up again at every use, which is what {@link #view} is for. The views
+ * themselves belong to {@link TargetSurface}, which closes them with the texture they look onto,
+ * so the two can never be freed apart.
+ * <p>
+ * A target some program reads at a lod carries a mip chain, and that is why these are
+ * {@link TargetSurface} rather than the game's own {@code TextureTarget}: that class allocates one
+ * level, hard coded, and cannot express a chain. Filling it is not this class's work, only holding
+ * it. {@link MipmapReduction} writes the levels, and they have to be rewritten whenever level
+ * nought changes, so the moment it runs belongs to whoever walks the frame.
  * <p>
  * A target the schedule turns over carries two textures, and which half a program reads and
  * writes is the schedule's answer rather than a flag kept here. The one thing this class owes the
@@ -84,15 +93,23 @@ final class ColorTargets {
 
 	private final Map<Integer, GpuFormat> formats = new LinkedHashMap<>();
 	private final Map<Integer, Vector4fc> clearColours = new LinkedHashMap<>();
-	private final Map<Integer, TextureTarget> mainSide = new LinkedHashMap<>();
-	private final Map<Integer, TextureTarget> altSide = new LinkedHashMap<>();
+	private final Map<Integer, TargetSurface> mainSide = new LinkedHashMap<>();
+	private final Map<Integer, TargetSurface> altSide = new LinkedHashMap<>();
 	private final Set<Integer> fellBack = new TreeSet<>();
 	private final List<String> notes = new ArrayList<>();
 
-	private TextureTarget black;
-	private TextureTarget white;
-	private TextureTarget grey;
-	private TextureTarget noise;
+	/**
+	 * The targets some program of this place reads at a lod, which are the ones allocated with a mip
+	 * chain. Both halves of a doubled target carry one: which half a program reads is the schedule's
+	 * answer and it is not the same for every reader, so a chain on one half only would serve some
+	 * of them and hand the others an empty level.
+	 */
+	private final Set<Integer> mipmapped;
+
+	private TargetSurface black;
+	private TargetSurface white;
+	private TargetSurface grey;
+	private TargetSurface noise;
 
 	private GpuTexture depthCopy;
 	private GpuTextureView depthCopyView;
@@ -131,6 +148,14 @@ final class ColorTargets {
 			this.formats.put(index, GpuFormats.of(directives.format(index).used()));
 			this.clearColours.put(index, new Vector4f(colour.r(), colour.g(), colour.b(), colour.a()));
 		}
+
+		// Narrowed to what is actually allocated: a pack may turn the directive on for a target no
+		// program of this place writes or samples, and a chain is a property of a texture that
+		// exists. What is dropped here is named below with everything else that was asked for and
+		// is not there.
+		this.mipmapped = directives.mipmapped().stream()
+				.filter(this.formats::containsKey)
+				.collect(Collectors.toCollection(TreeSet::new));
 
 		// A flip directive may turn over a target no program of this place writes or samples, and
 		// nothing is allocated for one of those. Said here because the count of doubled targets is
@@ -242,18 +267,21 @@ final class ColorTargets {
 	 */
 	void swapBack(CommandEncoder encoder, List<Integer> targets) {
 		for (int index : targets) {
-			TextureTarget alt = this.altSide.get(index);
-			TextureTarget main = this.mainSide.get(index);
+			TargetSurface alt = this.altSide.get(index);
+			TargetSurface main = this.mainSide.get(index);
 			if (alt == null || main == null) {
 				note("nothing to copy back for " + TargetName.canonical(index) + ": the plan asks "
 						+ "for it and only one half of it exists");
 				continue;
 			}
 
-			GpuTexture from = alt.getColorTexture();
-			GpuTexture to = main.getColorTexture();
+			GpuTexture from = alt.texture();
+			GpuTexture to = main.texture();
 			if (from != null && to != null) {
-				encoder.copyTextureToTexture(from, to, 0, 0, 0, 0, 0, main.width, main.height);
+				// Level nought alone, chain or no chain. The levels past it are rebuilt from it
+				// before any program reads one, so copying them here would be work whose result is
+				// overwritten before it can be read.
+				encoder.copyTextureToTexture(from, to, 0, 0, 0, 0, 0, main.width(), main.height());
 			}
 		}
 	}
@@ -302,15 +330,37 @@ final class ColorTargets {
 
 	/** Never held from one frame to the next. Null when this index was never allocated. */
 	GpuTextureView view(int index, TargetSchedule.Side side) {
-		TextureTarget target = target(index, side);
+		TargetSurface surface = target(index, side);
 
-		return target == null ? null : target.getColorTextureView();
+		return surface == null ? null : surface.view();
 	}
 
 	GpuTexture texture(int index, TargetSchedule.Side side) {
-		TextureTarget target = target(index, side);
+		TargetSurface surface = target(index, side);
 
-		return target == null ? null : target.getColorTexture();
+		return surface == null ? null : surface.texture();
+	}
+
+	/**
+	 * The surface itself, for the reduction that fills its chain. Null when this index was never
+	 * allocated, and carrying a single level whenever nothing reads this target at a lod.
+	 */
+	TargetSurface surface(int index, TargetSchedule.Side side) {
+		return target(index, side);
+	}
+
+	/**
+	 * Which targets one program reads at a lod, narrowed to those that carry a chain.
+	 * <p>
+	 * Per program and not the union, because this is what decides when a chain is rebuilt. A chain
+	 * is only valid until something writes level nought again, so it is refilled before each program
+	 * that reads one; taking the union here would rebuild every chain before every program that
+	 * happens to sample the target, which is ten render passes apiece for a result nothing reads.
+	 */
+	Set<Integer> lodReads(String program) {
+		return this.plan.directives().mipmapRequests().getOrDefault(program, Set.of()).stream()
+				.filter(this.mipmapped::contains)
+				.collect(Collectors.toCollection(TreeSet::new));
 	}
 
 	GpuFormat format(int index) {
@@ -342,22 +392,22 @@ final class ColorTargets {
 
 	/** Opaque black, one pixel, for a sampler the engine has no answer for. Never the scene. */
 	GpuTextureView black() {
-		return this.black == null ? null : this.black.getColorTextureView();
+		return this.black == null ? null : this.black.view();
 	}
 
 	/** White, so a shadow lookup reads the far plane rather than putting the world in shadow. */
 	GpuTextureView white() {
-		return this.white == null ? null : this.white.getColorTextureView();
+		return this.white == null ? null : this.white.view();
 	}
 
 	/** Mid grey, for a lookup this engine has no answer for. */
 	GpuTextureView grey() {
-		return this.grey == null ? null : this.grey.getColorTextureView();
+		return this.grey == null ? null : this.grey.view();
 	}
 
 	/** The pack's noise image, at the resolution it asked for. */
 	GpuTextureView noise() {
-		return this.noise == null ? grey() : this.noise.getColorTextureView();
+		return this.noise == null ? grey() : this.noise.view();
 	}
 
 	/** The shadow map. Never null, and its own images are null until the first frame allocates them. */
@@ -370,13 +420,22 @@ final class ColorTargets {
 	}
 
 	long bytes() {
+		return sum(TargetSurface::bytes);
+	}
+
+	/** What the same targets would cost with no chain, so that the two costs are read apart. */
+	private long baseBytes() {
+		return sum(TargetSurface::baseBytes);
+	}
+
+	private long sum(ToLongFunction<TargetSurface> cost) {
 		long total = 0L;
-		for (Map.Entry<Integer, TextureTarget> entry : this.mainSide.entrySet()) {
-			total += bytes(entry.getKey(), entry.getValue());
+		for (TargetSurface surface : this.mainSide.values()) {
+			total += cost.applyAsLong(surface);
 		}
 
-		for (Map.Entry<Integer, TextureTarget> entry : this.altSide.entrySet()) {
-			total += bytes(entry.getKey(), entry.getValue());
+		for (TargetSurface surface : this.altSide.values()) {
+			total += cost.applyAsLong(surface);
 		}
 
 		return total;
@@ -387,8 +446,8 @@ final class ColorTargets {
 	}
 
 	void release() {
-		this.mainSide.values().forEach(TextureTarget::destroyBuffers);
-		this.altSide.values().forEach(TextureTarget::destroyBuffers);
+		this.mainSide.values().forEach(TargetSurface::close);
+		this.altSide.values().forEach(TargetSurface::close);
 		this.mainSide.clear();
 		this.altSide.clear();
 
@@ -418,20 +477,21 @@ final class ColorTargets {
 		}
 
 		// One pixel each, and clamped when they are bound, so the value is what a lookup reads
-		// wherever it lands.
-		this.black = new TextureTarget("Vitrail black", 1, 1, false, CONSTANT_FORMAT);
-		this.white = new TextureTarget("Vitrail white", 1, 1, false, CONSTANT_FORMAT);
-		this.grey = new TextureTarget("Vitrail grey", 1, 1, false, CONSTANT_FORMAT);
+		// wherever it lands. None of them carries a chain: a constant has nothing to average, and
+		// the noise image is a field a pack indexes itself rather than one anything reads at a lod.
+		this.black = new TargetSurface("Vitrail black", CONSTANT_FORMAT, false, 1, 1);
+		this.white = new TargetSurface("Vitrail white", CONSTANT_FORMAT, false, 1, 1);
+		this.grey = new TargetSurface("Vitrail grey", CONSTANT_FORMAT, false, 1, 1);
 
 		if (this.noiseImage != null) {
-			this.noise = new TextureTarget("Vitrail noise", this.noiseImage.width(),
-					this.noiseImage.height(), false, CONSTANT_FORMAT);
+			this.noise = new TargetSurface("Vitrail noise", CONSTANT_FORMAT, false,
+					this.noiseImage.width(), this.noiseImage.height());
 			Vitrail.logger().info("noisetex is the pack's own image, {}x{}",
 					this.noiseImage.width(), this.noiseImage.height());
 		} else {
 			int resolution = this.noiseResolution;
-			this.noise = new TextureTarget("Vitrail noise", resolution, resolution, false,
-					CONSTANT_FORMAT);
+			this.noise = new TargetSurface("Vitrail noise", CONSTANT_FORMAT, false, resolution,
+					resolution);
 			Vitrail.logger().info("noisetex is the generated field at {}x{}", resolution, resolution);
 		}
 
@@ -454,23 +514,24 @@ final class ColorTargets {
 	 * from it, and a cloud distance of nought discards every fragment of water.
 	 */
 	private void uploadNoise(CommandEncoder encoder) {
-		int width = this.noise.width;
-		int height = this.noise.height;
+		int width = this.noise.width();
+		int height = this.noise.height();
 		byte[] pixels = this.noiseImage != null ? this.noiseImage.rgba() : NoiseTexture.rgba(width);
 		ByteBuffer data = ByteBuffer.allocateDirect(pixels.length).order(ByteOrder.nativeOrder());
 		data.put(pixels).flip();
 
-		encoder.writeToTexture(this.noise.getColorTexture(), data, 0, 0, 0, 0, width, height);
+		encoder.writeToTexture(this.noise.texture(), data, 0, 0, 0, 0, width, height);
 	}
 
-	private boolean ensureSide(Map<Integer, TextureTarget> side, int index, int width, int height, String suffix) {
-		TextureTarget target = side.get(index);
-		if (target != null && target.width == width && target.height == height) {
+	private boolean ensureSide(Map<Integer, TargetSurface> side, int index, int width, int height, String suffix) {
+		TargetSurface surface = side.get(index);
+		if (surface != null && surface.width() == width && surface.height() == height) {
 			return false;
 		}
 
 		String name = TargetName.canonical(index) + suffix;
-		if (target == null) {
+		boolean mipped = this.mipmapped.contains(index);
+		if (surface == null) {
 			GpuFormat format = this.formats.get(index);
 			TargetDirectives directives = this.plan.directives();
 			// Named before it is allocated, on purpose. RG11B10_FLOAT as a colour attachment is
@@ -478,11 +539,12 @@ final class ColorTargets {
 			// driver whether it has it, so the last line written has to name the format asked for.
 			// The declaration comes with it, because a wrong image starts at a wrong declaration
 			// and reading it off the picture is what has to stop being necessary.
-			Vitrail.logger().info("Allocating {} as {} at {}x{}, declared {} at {}", name, format,
-					width, height, directives.format(index).declared(), directives.formatSource(index));
-			side.put(index, new TextureTarget("Vitrail " + name, width, height, false, format));
+			Vitrail.logger().info("Allocating {} as {} at {}x{}, {} level(s), declared {} at {}", name,
+					format, width, height, TargetSurface.levelsFor(mipped, width, height),
+					directives.format(index).declared(), directives.formatSource(index));
+			side.put(index, new TargetSurface("Vitrail " + name, format, mipped, width, height));
 		} else {
-			target.resize(width, height);
+			surface.resize(width, height);
 		}
 
 		return true;
@@ -490,6 +552,7 @@ final class ColorTargets {
 
 	private void announceSize() {
 		long bytes = bytes();
+		long base = baseBytes();
 		long single = this.plan.bytesAt(this.screenWidth, this.screenHeight, Set.of());
 		Vitrail.logger().info("Colour targets of {} sized for {}x{}: {} targets, {} MiB",
 				this.plan.packName(), this.screenWidth, this.screenHeight, this.mainSide.size(),
@@ -497,9 +560,17 @@ final class ColorTargets {
 
 		// Named and not counted. Which targets take part in the ping pong is the one thing a wrong
 		// picture is read back against, and the cost of the second half is the price of the chain.
+		// Read against the cost of level nought alone, so that this line stays about the doubling:
+		// the mip chains are the next one's to account for.
 		if (!this.doubled.isEmpty()) {
 			Vitrail.logger().info("{} targets doubled: {}, {} MiB instead of {}",
-					this.doubled.size(), this.doubled, megabytes(bytes), megabytes(single));
+					this.doubled.size(), this.doubled, megabytes(base), megabytes(single));
+		}
+
+		if (!this.mipmapped.isEmpty()) {
+			Vitrail.logger().info("{} targets carry a mip chain because a program reads them at a "
+					+ "lod: {}, {} MiB more", this.mipmapped.size(), this.mipmapped,
+					megabytes(bytes - base));
 		}
 
 		if (bytes > LOUD_BYTES) {
@@ -513,11 +584,11 @@ final class ColorTargets {
 		return bytes / (1024L * 1024L);
 	}
 
-	private TextureTarget target(int index, TargetSchedule.Side side) {
+	private TargetSurface target(int index, TargetSchedule.Side side) {
 		// A target nothing flips has one texture, and a schedule asking for its other side is
 		// asking for the only one there is.
 		if (side == TargetSchedule.Side.ALT) {
-			TextureTarget alt = this.altSide.get(index);
+			TargetSurface alt = this.altSide.get(index);
 			if (alt != null) {
 				return alt;
 			}
@@ -536,28 +607,27 @@ final class ColorTargets {
 		return this.mainSide.get(index);
 	}
 
-	private long bytes(int index, TextureTarget target) {
-		GpuFormat format = this.formats.get(index);
-
-		return format == null ? 0L : (long) target.width * target.height * format.blockSize();
-	}
-
 	private void note(String text) {
 		if (!this.notes.contains(text)) {
 			this.notes.add(text);
 		}
 	}
 
-	private static void clear(CommandEncoder encoder, TextureTarget target, Vector4fc colour) {
-		GpuTexture texture = target == null ? null : target.getColorTexture();
+	/**
+	 * Clears level nought, which is the only level a clear has to reach. The levels past it are
+	 * rebuilt from it before any program reads one, so a clear of the whole chain would be writing
+	 * texels that are overwritten before they can be read.
+	 */
+	private static void clear(CommandEncoder encoder, TargetSurface surface, Vector4fc colour) {
+		GpuTexture texture = surface == null ? null : surface.texture();
 		if (texture != null) {
 			encoder.clearColorTexture(texture, colour);
 		}
 	}
 
-	private static TextureTarget release(TextureTarget target) {
-		if (target != null) {
-			target.destroyBuffers();
+	private static TargetSurface release(TargetSurface surface) {
+		if (surface != null) {
+			surface.close();
 		}
 
 		return null;

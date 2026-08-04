@@ -446,7 +446,15 @@ public final class TerrainProgram {
 		}
 
 		// The noise image tiles and everything else clamps, the same rule the chain follows.
-		return PackPass.sampler(this.loaded.samplers().binding(name).kind(), filter(name));
+		//
+		// Never past level nought, even on a target that carries a chain. Nothing fills a chain for
+		// a geometry program: the reduction runs between the full screen passes, and a terrain pass
+		// draws inside a render pass Sodium opened, where no other pass can be started. A sampler
+		// that let these reads climb the chain would hand them levels nothing has written, which is
+		// undefined memory rather than a coarser image. Bliss is the pack this is about: its
+		// gbuffers_water and the three programs beside it ask for mipmaps on gaux1, and they are
+		// the open half of this chantier.
+		return PackPass.sampler(this.loaded.samplers().binding(name).kind(), filter(name), false);
 	}
 
 	/**

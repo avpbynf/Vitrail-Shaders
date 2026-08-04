@@ -528,9 +528,10 @@ public final class TargetPlan {
 		notes.addAll(directives.conflicts());
 
 		if (!directives.mipmapRequests().isEmpty()) {
-			notes.add(directives.mipmapRequests().size() + " programs ask for mipmaps on "
-					+ mipmappedTargets(directives) + " targets, and 26.2 has no way to generate "
-					+ "them: " + directives.mipmapRequests());
+			notes.add(directives.mipmapRequests().size() + " programs read lods, on "
+					+ directives.mipmapped().size() + " targets that carry a mip chain filled by the "
+					+ "engine's own reduction before each of those programs draws: "
+					+ directives.mipmapRequests());
 		}
 
 		List<String> perBuffer = draft.properties.blend().stream()
@@ -603,13 +604,6 @@ public final class TargetPlan {
 		}
 
 		return notes;
-	}
-
-	private static int mipmappedTargets(TargetDirectives directives) {
-		Set<Integer> targets = new TreeSet<>();
-		directives.mipmapRequests().values().forEach(targets::addAll);
-
-		return targets.size();
 	}
 
 	private static List<ProgramSet.ProgramKey> fragmentsOf(ProgramSet programs, String place) {

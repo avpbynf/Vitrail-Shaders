@@ -6,6 +6,7 @@ import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
+import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
@@ -35,9 +36,11 @@ import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -101,6 +104,11 @@ final class PackPass {
 	private final PackValues values;
 	private final PackUniforms uniforms;
 	private final List<String> samplers;
+	private final List<LodRead> lodReads;
+
+	/** The targets of {@link #lodReads}, for the binding to answer one name at a time. */
+	private final Set<Integer> lodTargets;
+
 	private final RenderPipeline pipeline;
 	private final ShaderSource source;
 	private final Supplier<String> label;
@@ -138,6 +146,8 @@ final class PackPass {
 		this.values = values;
 		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.catalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
+		this.lodReads = lodReadsOf(program, loaded, targets);
+		this.lodTargets = this.lodReads.stream().map(LodRead::target).collect(Collectors.toSet());
 
 		if (this.attachments.size() > MAX_ATTACHMENTS) {
 			throw new IllegalStateException(this.path + " writes " + this.attachments.size()
@@ -229,6 +239,56 @@ final class PackPass {
 
 	int uniformOffset() {
 		return this.offset;
+	}
+
+	/**
+	 * The targets this program reads at a lod, each with the half it reads. Empty for all but a
+	 * handful of programs: on BSL it is composite3, composite4, composite6 and composite7.
+	 * <p>
+	 * The caller fills these chains before drawing this program, and it has to be the caller: a
+	 * chain is filled by its own render passes, and a pass cannot be opened inside another one.
+	 */
+	List<LodRead> lodReads() {
+		return this.lodReads;
+	}
+
+	/**
+	 * One target this program reads at a lod, on the half the schedule gives this program.
+	 *
+	 * @param target the colour target index
+	 * @param side   the half this program reads, which is where the chain has to be filled. Filling
+	 *               the other one would leave this read on levels nothing wrote
+	 */
+	record LodRead(int target, TargetSchedule.Side side) {
+	}
+
+	/**
+	 * Which targets this program reads at a lod, taken from its own bindings rather than from the
+	 * directive alone.
+	 * <p>
+	 * The directive names a target and the binding names the half, and only the pair is actionable:
+	 * a chain filled on the half this program does not read is work whose result it never sees. A
+	 * target named by the directive that this program binds no sampler for is dropped here, which is
+	 * what a pack that turns the directive on inside a branch it does not take looks like.
+	 */
+	private static List<LodRead> lodReadsOf(String program, PackProgram.Loaded loaded,
+			ColorTargets targets) {
+		Set<Integer> asked = targets.lodReads(program);
+		if (asked.isEmpty()) {
+			return List.of();
+		}
+
+		Map<Integer, TargetSchedule.Side> reads = new LinkedHashMap<>();
+		for (TranslatedUnit.Uniform uniform : loaded.program().samplers()) {
+			SamplerPlan.Binding binding = loaded.samplers().binding(uniform.name());
+			if (binding.kind() == SamplerPlan.Kind.COLORTEX && asked.contains(binding.index())) {
+				reads.putIfAbsent(binding.index(), binding.side());
+			}
+		}
+
+		return reads.entrySet().stream()
+				.map(entry -> new LodRead(entry.getKey(), entry.getValue()))
+				.toList();
 	}
 
 	/**
@@ -416,13 +476,25 @@ final class PackPass {
 				default -> FilterMode.NEAREST;
 			};
 
+			// A lod read needs a sampler that may climb past level nought, and that is not the
+			// default: the cache's ordinary samplers stop there, so a lod read would come back with
+			// the base image and a filled chain would look like it had never been written.
+			//
+			// Narrowed to the targets THIS program reads at a lod, which are exactly the chains the
+			// caller filled before this draw, and not to every target that carries one. The two are
+			// not the same set, and the difference is not a detail: a chain is only filled before
+			// its reader, so letting an unrelated read climb one would hand it levels that belong
+			// to an earlier moment of the frame, or that nothing has written at all.
+			boolean mipmaps = binding.kind() == SamplerPlan.Kind.COLORTEX
+					&& this.lodTargets.contains(binding.index());
+
 			// The noise image repeats and everything else clamps, which is Iris's choice and not a
 			// taste: a pack indexes noisetex with coordinates of its own, in texels and well past
 			// one, and clamped it reads the same edge row for the whole screen. That does not fail,
 			// it produces a field of stripes that reads as an effect nobody asked for, and it takes
 			// whatever the pack built out of it down with it.
 			pass.bindTexture(sampler, bound == null ? targets.black() : bound,
-					sampler(binding.kind(), filter));
+					sampler(binding.kind(), filter, mipmaps));
 		}
 	}
 
@@ -450,11 +522,15 @@ final class PackPass {
 		return view == null ? fallback : view;
 	}
 
-	/** How a name is addressed outside zero to one. Only the noise image tiles. */
-	static GpuSampler sampler(SamplerPlan.Kind kind, FilterMode filter) {
+	/**
+	 * How a name is addressed outside zero to one, and how far up its chain it may be read. Only the
+	 * noise image tiles, and only a target something reads at a lod is given a sampler that goes
+	 * past level nought.
+	 */
+	static GpuSampler sampler(SamplerPlan.Kind kind, FilterMode filter, boolean mipmaps) {
 		return kind == SamplerPlan.Kind.NOISE
-				? RenderSystem.getSamplerCache().getRepeat(filter)
-				: RenderSystem.getSamplerCache().getClampToEdge(filter);
+				? RenderSystem.getSamplerCache().getRepeat(filter, mipmaps)
+				: RenderSystem.getSamplerCache().getClampToEdge(filter, mipmaps);
 	}
 
 	private GpuTextureView view(ColorTargets targets, ChainPlan.Attachment attachment) {

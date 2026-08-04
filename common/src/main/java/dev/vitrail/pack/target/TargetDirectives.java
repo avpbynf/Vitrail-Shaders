@@ -310,9 +310,23 @@ public final class TargetDirectives {
 		return setting == null || setting.size == null ? TargetSize.ofScreen() : setting.size;
 	}
 
-	/** Which programs asked for mipmaps on which targets. Read, counted, never honoured. */
+	/** Which programs asked for mipmaps on which targets. */
 	public Map<String, Set<Integer>> mipmapRequests() {
 		return this.mipmapRequests;
+	}
+
+	/**
+	 * Every target any program of this pack reads at a lod, which is what has to carry a mip chain.
+	 * <p>
+	 * The union and not the per program answer, because the chain belongs to the target: two
+	 * programs asking for a lod on one target are served by one chain, and a target allocated with
+	 * levels for one reader and without them for another would be two answers to one question.
+	 */
+	public Set<Integer> mipmapped() {
+		Set<Integer> targets = new TreeSet<>();
+		this.mipmapRequests.values().forEach(targets::addAll);
+
+		return Collections.unmodifiableSet(targets);
 	}
 
 	/** Two live declarations of one key that disagree, as text. Empty on the eight packs. */
