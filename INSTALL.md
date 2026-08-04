@@ -19,11 +19,9 @@ shader engine needs from it.
 
 Chloride is not declared as a dependency and is needed all the same, because
 without it the Vulkan backend has no window to draw into. NeoForge shows an
-early loading screen, and the game then takes that window over instead of making
-one of its own: `Window.createGlfwWindow` calls the backend's `setWindowHints`
-and, if an early loading screen exists, uses `takeOverGlfwWindow` on the window
-that screen already created with an OpenGL client API. The Vulkan surface then
-fails at creation with `GLFW error 65540 ... requires the window to have the
+early loading screen, and the game takes that window over rather than making one
+of its own, so the window it inherits was created for OpenGL and the Vulkan
+surface fails at boot with `GLFW error 65540 ... requires the window to have the
 client API set to GLFW_NO_API`. Chloride is what makes that window Vulkan
 capable.
 
@@ -81,12 +79,11 @@ settings/      one file per pack, holding what differs from the pack's defaults
 A settings screen covers all of it in game: the I key, the Config button in the
 mod list, or the icon in the pause menu. It opens on the pack list, reads each
 pack's own menu layout, and imports the settings file Iris left in
-`shaderpacks/` when a pack has none here yet. Editing the files under
-`vitrail/` while the game runs is also enough: `pack.txt`, `options.txt` and
-`settings/<pack>.txt` are the three the engine watches, and a change to any of
-them reloads the pack without a restart. The jar never needs rebuilding for any
-of this. A program that fails to compile is reported in the log and the game
-keeps its own rendering rather than crashing.
+`shaderpacks/` when a pack has none here yet. Editing the files under `vitrail/`
+while the game runs is also enough: a change to any of them reloads the pack
+without a restart, and the jar never needs rebuilding for any of this. A program
+that fails to compile is reported in the log and the game keeps its own
+rendering rather than crashing.
 
 Editing a pack's own files is a different matter and is **not** picked up on its
 own: nothing watches `shaderpacks/`. Use the settings screen, which reloads on
