@@ -135,18 +135,21 @@ public final class TerrainDraw {
 	public static boolean openShadowStage() {
 		TerrainDraw self = PackChain.terrain();
 		GpuDevice device = RenderSystem.tryGetDevice();
-		if (self == null || device == null || !shadows()) {
+		if (self == null || device == null) {
 			return false;
 		}
 
 		ShadowTargets shadow = self.targets.shadow();
-		if (!self.shadowsServed()) {
+		if (!shadows() || !self.shadowsServed()) {
 			// A pack that serves no shadow program gets no shadow pass, which is Iris's rule, and
 			// at the end of a frame it is also the only safe answer: with nothing of ours to hand
 			// the renderer, the pass it opens for itself is the game's own target, and the stage
 			// would paint the world over the finished image. The map is emptied rather than left
 			// standing, so a program broken mid-session reads as no shadow and not as the last
-			// map it ever drew, frozen.
+			// map it ever drew, frozen. The stage switched off by the engine option takes the same
+			// branch and for the same reason: the map is allocated whether or not the stage runs,
+			// and an allocated map nothing ever empties hands the packs undefined memory as a
+			// shadow, where this clear hands them the far plane.
 			shadow.clear(device.createCommandEncoder());
 
 			return false;
