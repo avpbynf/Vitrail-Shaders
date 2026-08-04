@@ -155,6 +155,18 @@ public final class PackProgram {
 	 */
 	public static Optional<Loaded> load(Path packPath, String path, VertexInputs inputs,
 			Map<String, OptionValue> chosen, String profile) throws IOException {
+		return load(packPath, path, inputs, inputs.elements(), chosen, profile);
+	}
+
+	/**
+	 * @param boundElements the elements of the vertex format the pass this program is drawn in
+	 *                      actually binds. Only {@link VertexInputs#SKY} needs it: the sky binds
+	 *                      four formats between its passes, so one program is loaded once per
+	 *                      format it may be drawn against
+	 */
+	public static Optional<Loaded> load(Path packPath, String path, VertexInputs inputs,
+			List<String> boundElements, Map<String, OptionValue> chosen, String profile)
+			throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
 			ShaderProperties properties = ShaderProperties.parse(source);
@@ -175,8 +187,8 @@ public final class PackProgram {
 			// Inside the same opening of the pack, because a zip closed behind us invalidates every
 			// path taken from it and the plan reads thirty more files than this program does.
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimensionOf(path));
-			ProgramTranslator.TranslatedProgram program =
-					ProgramTranslator.translate(units, inputs, programOf(path));
+			ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units, inputs,
+					boundElements, AlphaTest.OFF, programOf(path));
 
 			return Optional.of(bind(source.packName(), path, program, targets, AlphaTest.OFF));
 		}
