@@ -47,22 +47,38 @@ public final class ChainPlan {
 	private static final String SEED_PROGRAM = "gbuffers_terrain";
 
 	private final String place;
+	/** What the game may draw its sky with, in the OptiFine split. Not ours to choose. */
+	private static final List<String> SKY_PROGRAMS =
+			List.of("gbuffers_skybasic", "gbuffers_skytextured", "gbuffers_clouds");
+
 	private final List<Pass> passes;
 	private final Pass last;
 	private final Seed seed;
 	private final Map<TerrainPass, Pass> geometry;
+
+	/**
+	 * Where each sky program's outputs belong, by the bare name the pack serves it under.
+	 * <p>
+	 * Keyed by name and not by an enum of passes, unlike the terrain: the game draws the sky in
+	 * eight passes of its own but they share three programs between them, and what decides the
+	 * halves is the program rather than the pass. All of them draw before the deferred stage, so
+	 * all of them read the snapshot the prepares leave, which is the ordinary geometry walk.
+	 */
+	private final Map<String, Pass> sky;
+
 	private final List<Integer> swapBack;
 	private final List<String> refusals;
 	private final List<String> notes;
 
 	private ChainPlan(String place, List<Pass> passes, Pass last, Seed seed,
-			Map<TerrainPass, Pass> geometry, List<Integer> swapBack, List<String> refusals,
-			List<String> notes) {
+			Map<TerrainPass, Pass> geometry, Map<String, Pass> sky, List<Integer> swapBack,
+			List<String> refusals, List<String> notes) {
 		this.place = place;
 		this.passes = List.copyOf(passes);
 		this.last = last;
 		this.seed = seed;
 		this.geometry = Map.copyOf(geometry);
+		this.sky = Map.copyOf(sky);
 		this.swapBack = List.copyOf(swapBack);
 		this.refusals = List.copyOf(refusals);
 		this.notes = List.copyOf(notes);
@@ -163,7 +179,7 @@ public final class ChainPlan {
 		back.retainAll(plan.persistent());
 
 		return new ChainPlan(plan.place(), passes, last, seed, geometryOf(plan, resolver, notes),
-				List.copyOf(back), refusals, notes);
+				skyOf(plan, resolver, notes), List.copyOf(back), refusals, notes);
 	}
 
 	/**
@@ -214,6 +230,38 @@ public final class ChainPlan {
 		}
 
 		return geometry;
+	}
+
+	/**
+	 * The same walk for the sky, asked once per program the game may draw it with.
+	 * <p>
+	 * The three names are the OptiFine split and they are not ours to choose: untextured geometry
+	 * goes to {@code gbuffers_skybasic}, the sun and the moon to {@code gbuffers_skytextured}, the
+	 * clouds to {@code gbuffers_clouds}. Each is looked up through the fallback tree, so a pack that
+	 * ships none of them still answers here through {@code gbuffers_basic} or
+	 * {@code gbuffers_textured} if it has those.
+	 * <p>
+	 * Always the walk BEFORE the deferreds. The sky is drawn at the third rank of the frame, between
+	 * the prepares and the terrain, so its halves are the ones the prepares leave; only the
+	 * translucent chunk pass is re-taken after the deferred stage, and that rule is its alone.
+	 */
+	private static Map<String, Pass> skyOf(TargetPlan plan, ProgramResolver resolver,
+			List<String> notes) {
+		Map<String, Pass> sky = new LinkedHashMap<>();
+		for (String program : SKY_PROGRAMS) {
+			Optional<String> served = resolver.lookup(plan.place(), program)
+					.map(ProgramResolver.Resolution::servedBy);
+			if (served.isEmpty()) {
+				continue;
+			}
+
+			Pass attachments = geometryOf(plan, served.get(), notes, false);
+			if (attachments != null) {
+				sky.put(program, attachments);
+			}
+		}
+
+		return sky;
 	}
 
 	private static Pass passOf(TargetPlan plan, String program, List<String> refusals) {
@@ -473,6 +521,20 @@ public final class ChainPlan {
 	 */
 	public Optional<Pass> geometry(TerrainPass pass) {
 		return Optional.ofNullable(this.geometry.get(pass));
+	}
+
+	/**
+	 * Where one sky program's outputs belong, in draw buffer order and each on the half the schedule
+	 * gives it, or empty when this place cannot answer.
+	 * <p>
+	 * Empty covers the same three normal cases as {@link #geometry}, plus one of its own: a pack that
+	 * ships no sky program at all and whose fallback tree leads nowhere. None of them is a failure,
+	 * and a place that cannot answer leaves the game drawing its own sky.
+	 *
+	 * @param program the bare name, {@code gbuffers_skybasic}, not the file that ends up serving it
+	 */
+	public Optional<Pass> sky(String program) {
+		return Optional.ofNullable(this.sky.get(program));
 	}
 
 	public Optional<Seed> seed() {
