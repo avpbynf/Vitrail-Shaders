@@ -470,9 +470,17 @@ final class PackPass {
 
 			// The noise image is LINEAR for the same reason the terrain reads it LINEAR: it is a
 			// continuous field the pack interpolates surfaces out of, and Iris binds it that way.
+			//
+			// A shadow COLOUR is LINEAR as well, and that is both authorities rather than a taste:
+			// OptiFine filters shadowcolor linearly unless the pack writes shadowcolorNNearest, and
+			// Iris binds it LINEAR outright (IrisSamplers.addShadowSamplers). It carries the light
+			// that came through stained glass and water, which a pack blurs across a penumbra; read
+			// NEAREST it steps in blocks the size of a shadow texel. The DEPTH beside it stays
+			// NEAREST, and that is not an oversight: it is compared, not interpolated, and an
+			// averaged depth is a comparison against a surface that exists nowhere.
 			FilterMode filter = switch (binding.kind()) {
 				case COLORTEX -> targets.filter(binding.index());
-				case NOISE -> FilterMode.LINEAR;
+				case NOISE, SHADOW_COLOUR -> FilterMode.LINEAR;
 				default -> FilterMode.NEAREST;
 			};
 

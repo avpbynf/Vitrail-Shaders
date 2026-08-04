@@ -799,8 +799,14 @@ public final class TerrainProgram {
 
 		// The noise image is a continuous field, not a lookup table: a pack derives water normals
 		// and cloud shapes from it and counts on the interpolation. Iris binds it LINEAR_REPEAT,
-		// and reading it NEAREST shatters every one of those surfaces into facets.
-		return binding.kind() == SamplerPlan.Kind.NOISE ? FilterMode.LINEAR : FilterMode.NEAREST;
+		// and reading it NEAREST shatters every one of those surfaces into facets. A shadow colour
+		// is continuous in the same way, carrying the light that came through glass and water
+		// across a penumbra, and both OptiFine and Iris filter it linearly. The shadow DEPTH beside
+		// it stays NEAREST because it is compared rather than interpolated.
+		return switch (binding.kind()) {
+			case NOISE, SHADOW_COLOUR -> FilterMode.LINEAR;
+			default -> FilterMode.NEAREST;
+		};
 	}
 
 	/**
