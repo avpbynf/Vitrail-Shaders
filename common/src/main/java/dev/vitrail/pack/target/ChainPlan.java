@@ -248,6 +248,13 @@ public final class ChainPlan {
 	private static Map<String, Pass> skyOf(TargetPlan plan, ProgramResolver resolver,
 			List<String> notes) {
 		Map<String, Pass> sky = new LinkedHashMap<>();
+
+		// Computed once per serving FILE and not once per program, the same reason the geometry walk
+		// gives above: the fallback tree sends skybasic to gbuffers_basic and both skytextured and
+		// clouds to gbuffers_textured, so one file commonly serves two or three of these names, and
+		// walking it again would say the same note about it twice. containsKey rather than
+		// computeIfAbsent, because null is an answer here.
+		Map<String, Pass> byFile = new LinkedHashMap<>();
 		for (String program : SKY_PROGRAMS) {
 			Optional<String> served = resolver.lookup(plan.place(), program)
 					.map(ProgramResolver.Resolution::servedBy);
@@ -255,7 +262,12 @@ public final class ChainPlan {
 				continue;
 			}
 
-			Pass attachments = geometryOf(plan, served.get(), notes, false);
+			String servedBy = served.get();
+			if (!byFile.containsKey(servedBy)) {
+				byFile.put(servedBy, geometryOf(plan, servedBy, notes, false));
+			}
+
+			Pass attachments = byFile.get(servedBy);
 			if (attachments != null) {
 				sky.put(program, attachments);
 			}

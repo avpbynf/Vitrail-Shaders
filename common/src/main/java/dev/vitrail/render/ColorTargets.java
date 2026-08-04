@@ -574,9 +574,14 @@ final class ColorTargets {
 		}
 
 		if (bytes > LOUD_BYTES) {
+			// The second halves cost base minus single, NOT bytes minus single: bytes carries the
+			// mip chains as well, and charging them to the ping pong would name the wrong cause to
+			// somebody reading this line to decide what to turn off. The chains are named on their
+			// own line above.
 			Vitrail.logger().warn("{} takes {} MiB of colour targets at {}x{}, {} of them for the "
-					+ "second halves of {}", this.plan.packName(), megabytes(bytes), this.screenWidth,
-					this.screenHeight, megabytes(bytes - single), this.doubled);
+					+ "second halves of {} and {} for the mip chains", this.plan.packName(),
+					megabytes(bytes), this.screenWidth, this.screenHeight, megabytes(base - single),
+					this.doubled, megabytes(bytes - base));
 		}
 	}
 
@@ -614,9 +619,15 @@ final class ColorTargets {
 	}
 
 	/**
-	 * Clears level nought, which is the only level a clear has to reach. The levels past it are
-	 * rebuilt from it before any program reads one, so a clear of the whole chain would be writing
-	 * texels that are overwritten before they can be read.
+	 * Clears the whole chain, and that is the backend's choice rather than ours: there is no level
+	 * argument on {@code clearColorTexture}, and {@code VulkanCommandEncoder} sets the subresource
+	 * range's {@code levelCount} to the texture's full mip count. So a mipmapped target costs about
+	 * four thirds of a clear rather than one.
+	 * <p>
+	 * Left alone rather than worked around. Clearing only the base would mean opening a render pass
+	 * on its view for what a clear command already does, and the levels past it are rebuilt from the
+	 * base before any program reads one; what the extra work buys is that they hold the clear colour
+	 * instead of the last frame's reduction, which is defined either way.
 	 */
 	private static void clear(CommandEncoder encoder, TargetSurface surface, Vector4fc colour) {
 		GpuTexture texture = surface == null ? null : surface.texture();

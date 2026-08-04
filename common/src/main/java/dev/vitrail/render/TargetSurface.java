@@ -53,6 +53,18 @@ final class TargetSurface implements AutoCloseable {
 	private int height;
 
 	/**
+	 * Whether anything has ever written the levels past the base of THIS texture.
+	 * <p>
+	 * The one thing that decides whether a lod read is safe. A fresh texture's levels hold whatever
+	 * the driver left there, so a sampler allowed to climb the chain before the reduction has run
+	 * once serves undefined memory rather than a coarser image, which is the defect 4d52d20 closed
+	 * for the shadow map. Stale is a different matter and not a danger: a chain built two passes ago
+	 * is a real image of the target, only an older one, and the reduction runs immediately before
+	 * each program that reads one.
+	 */
+	private boolean chainWritten;
+
+	/**
 	 * @param mipped whether this target is read at a lod by any program of the place, which is what
 	 *               decides that it costs a chain. A target nothing samples that way carries one
 	 *               level and one view, exactly as before there were chains at all
@@ -83,6 +95,16 @@ final class TargetSurface implements AutoCloseable {
 
 	GpuTexture texture() {
 		return this.texture;
+	}
+
+	/** Whether the levels past the base have been written since this texture was allocated. */
+	boolean chainWritten() {
+		return this.chainWritten;
+	}
+
+	/** Said by the reduction once it has filled every level, and by nothing else. */
+	void chainWritten(boolean written) {
+		this.chainWritten = written;
 	}
 
 	/** What level nought costs, which is what this surface would have cost with no chain at all. */
@@ -144,6 +166,10 @@ final class TargetSurface implements AutoCloseable {
 
 		this.width = width;
 		this.height = height;
+		// A new image, so its levels are whatever the driver left there until the reduction says
+		// otherwise. Set before anything can read it rather than after, because a resize is exactly
+		// the moment a chain silently stops being true.
+		this.chainWritten = false;
 		this.texture = device.createTexture(this.label, USAGE, this.format, width, height, 1, levels);
 		this.view = device.createTextureView(this.texture);
 

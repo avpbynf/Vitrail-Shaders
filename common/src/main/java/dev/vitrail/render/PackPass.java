@@ -484,8 +484,17 @@ final class PackPass {
 			// caller filled before this draw, and not to every target that carries one. The two are
 			// not the same set, and the difference is not a detail: a chain is only filled before
 			// its reader, so letting an unrelated read climb one would hand it levels that belong
-			// to an earlier moment of the frame, or that nothing has written at all.
-			boolean mipmaps = binding.kind() == SamplerPlan.Kind.COLORTEX
+			// to an earlier moment of the frame.
+			//
+			// And asked of the surface as well, because the reduction is allowed to fail: its
+			// pipeline may refuse to compile for a format, and then the levels hold whatever the
+			// driver left there. Deciding this at the binding rather than when the pass was built
+			// is what makes the fall back real instead of announced: a chain nothing has written
+			// is read at level nought, which is the image the pack had before there were chains.
+			TargetSurface surface = binding.kind() == SamplerPlan.Kind.COLORTEX
+					? targets.surface(binding.index(), binding.side())
+					: null;
+			boolean mipmaps = surface != null && surface.chainWritten()
 					&& this.lodTargets.contains(binding.index());
 
 			// The noise image repeats and everything else clamps, which is Iris's choice and not a

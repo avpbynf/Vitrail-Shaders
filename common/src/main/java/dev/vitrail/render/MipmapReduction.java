@@ -161,6 +161,10 @@ final class MipmapReduction {
 			}
 		}
 
+		// Only now, and only on the way out of the whole loop: a chain filled to level three out of
+		// ten is not a chain, and a reader let loose on it would climb into levels nothing wrote.
+		surface.chainWritten(true);
+
 		return true;
 	}
 
