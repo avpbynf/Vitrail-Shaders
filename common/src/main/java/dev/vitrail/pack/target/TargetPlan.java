@@ -2,6 +2,7 @@ package dev.vitrail.pack.target;
 
 import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.SettingSet;
+import dev.vitrail.pack.program.BlendMode;
 import dev.vitrail.pack.program.ChainFilter;
 import dev.vitrail.pack.program.ProgramNames;
 import dev.vitrail.pack.program.ProgramSet;
@@ -95,6 +96,14 @@ public final class TargetPlan {
 	private final List<String> running;
 	private final Map<String, String> disabled;
 	private final Map<String, List<Integer>> writes;
+
+	/**
+	 * What each program asks to blend with, by its bare name, for the whole program form of the
+	 * directive. Only the programs that say something are in here; a program that says nothing is
+	 * answered by whatever the engine would have used anyway, which is not this plan's business.
+	 */
+	private final Map<String, BlendMode> blend;
+
 	private final Set<String> inferred;
 	private final Map<String, Set<Integer>> samples;
 	private final int geometryAt;
@@ -112,6 +121,7 @@ public final class TargetPlan {
 		this.running = List.copyOf(draft.running);
 		this.disabled = Collections.unmodifiableMap(new LinkedHashMap<>(draft.disabled));
 		this.writes = Collections.unmodifiableMap(new LinkedHashMap<>(draft.effective));
+		this.blend = blendOf(draft);
 		this.inferred = Collections.unmodifiableSet(new TreeSet<>(draft.inferred));
 		this.samples = Collections.unmodifiableMap(new LinkedHashMap<>(draft.samples));
 		this.geometryAt = draft.geometryAt;
@@ -534,6 +544,16 @@ public final class TargetPlan {
 					+ directives.mipmapRequests());
 		}
 
+		List<String> unreadable = draft.properties.blend().stream()
+				.filter(directive -> directive.buffer() == null)
+				.filter(directive -> BlendMode.parse(directive.value()).isEmpty())
+				.map(directive -> directive.program() + "=" + directive.value())
+				.toList();
+		if (!unreadable.isEmpty()) {
+			notes.add("blend directives in a form this engine does not express, so those programs "
+					+ "keep the blending the engine would have used: " + unreadable);
+		}
+
 		List<String> perBuffer = draft.properties.blend().stream()
 				.filter(directive -> directive.buffer() != null)
 				.map(directive -> directive.program() + "." + directive.buffer())
@@ -604,6 +624,38 @@ public final class TargetPlan {
 		}
 
 		return notes;
+	}
+
+	/**
+	 * The whole program blend directives, read once and kept by bare name.
+	 * <p>
+	 * The per buffer form is left out here and named in the notes instead: one pipeline carries one
+	 * blend function for every target it writes, so honouring half of such a directive would be
+	 * worse than honouring none of it. A value in a form this engine cannot read is left out too,
+	 * and named the same way.
+	 */
+	private static Map<String, BlendMode> blendOf(Draft draft) {
+		Map<String, BlendMode> blend = new LinkedHashMap<>();
+		for (ShaderProperties.BlendDirective directive : draft.properties.blend()) {
+			if (directive.buffer() != null) {
+				continue;
+			}
+
+			BlendMode.parse(directive.value())
+					.ifPresent(mode -> blend.put(bareName(directive.program()), mode));
+		}
+
+		return Collections.unmodifiableMap(blend);
+	}
+
+	/**
+	 * What this program asks to blend with, or empty when it asks for nothing and the engine's own
+	 * choice stands.
+	 *
+	 * @param program the bare name, {@code gbuffers_water}, not the file that ends up serving it
+	 */
+	public Optional<BlendMode> blend(String program) {
+		return Optional.ofNullable(this.blend.get(bareName(program)));
 	}
 
 	private static List<ProgramSet.ProgramKey> fragmentsOf(ProgramSet programs, String place) {

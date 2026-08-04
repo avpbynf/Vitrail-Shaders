@@ -264,14 +264,22 @@ public final class TerrainProgram {
 	}
 
 	/**
-	 * The blend the pass wants, on every attachment alike. That is Iris's default too: a pack moves
-	 * one buffer on its own with {@code blend.<program>.<buffer>}, which nothing here reads yet.
+	 * What the pack asked to blend with, falling back to what the pass wants when it asked nothing,
+	 * on every attachment alike. The per buffer form, {@code blend.<program>.<buffer>}, is still
+	 * not read: one pipeline carries one blend function for every target it writes.
+	 * <p>
+	 * Four packs of the corpus name the translucent chunk pass here. Reverie asks for no blending
+	 * at all on its water, which is the opposite of what the pass would have chosen, and Bliss and
+	 * the two Complementary give a function whose alpha half differs from the one assumed.
 	 */
 	private ColorTargetState state(GpuFormat format) {
-		return this.pass.blended()
-				? new ColorTargetState(Optional.of(BlendFunction.TRANSLUCENT), format,
-						ColorTargetState.WRITE_ALL)
-				: new ColorTargetState(Optional.empty(), format, ColorTargetState.WRITE_ALL);
+		Optional<BlendFunction> wanted = this.pass.blended()
+				? Optional.of(BlendFunction.TRANSLUCENT)
+				: Optional.empty();
+
+		return new ColorTargetState(
+				BlendFunctions.of(this.targets.blend(this.loaded.path()), wanted), format,
+				ColorTargetState.WRITE_ALL);
 	}
 
 	/**

@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.pack.program.BlendMode;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetFormat;
 import dev.vitrail.pack.target.TargetName;
@@ -347,6 +348,11 @@ final class ColorTargets {
 	 */
 	TargetSurface surface(int index, TargetSchedule.Side side) {
 		return target(index, side);
+	}
+
+	/** What this program asks to blend with, or null when it asks for nothing. */
+	BlendMode blend(String program) {
+		return this.plan.blend(program).orElse(null);
 	}
 
 	/**

@@ -205,7 +205,12 @@ final class PackPass {
 							+ TargetName.canonical(index) + " and the plan carries no format for it");
 				}
 
-				builder.withColorTargetState(slot, new ColorTargetState(Optional.empty(), format,
+				// A full screen program replaces what it writes unless the pack says otherwise, and
+				// four packs of the corpus do say otherwise: Mellow and Reverie ask six of their
+				// composites to blend ONE ONE, which is an accumulation. Replacing where a pack
+				// asked to add is not a subtle difference, and nothing about it shows as an error.
+				builder.withColorTargetState(slot, new ColorTargetState(
+						BlendFunctions.of(targets.blend(program), Optional.empty()), format,
 						ColorTargetState.WRITE_ALL));
 			}
 
