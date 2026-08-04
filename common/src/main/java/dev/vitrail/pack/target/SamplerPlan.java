@@ -181,7 +181,7 @@ public final class SamplerPlan {
 			grouped.computeIfAbsent(binding.kind(), _ -> new ArrayList<>()).add(binding.sampler());
 		}
 
-		grouped.replaceAll((kind, names) -> List.copyOf(names));
+		grouped.replaceAll((_, names) -> List.copyOf(names));
 
 		return grouped;
 	}

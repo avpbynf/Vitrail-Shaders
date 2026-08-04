@@ -28,7 +28,7 @@ public final class VitrailNeoForge {
 		// pause menu. A two argument lambda rather than a supplier, which is the overload it
 		// would otherwise pick.
 		container.registerExtensionPoint(IConfigScreenFactory.class,
-				(mod, modListScreen) -> new SettingsScreen(modListScreen));
+				(_, modListScreen) -> new SettingsScreen(modListScreen));
 
 		VitrailKeys.register(modBus);
 		PauseMenuEntry.register();

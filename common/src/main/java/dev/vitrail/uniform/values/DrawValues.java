@@ -60,16 +60,16 @@ public final class DrawValues {
 	}
 
 	public static void register(UniformCatalog.Builder builder) {
-		builder.add("of_ModelViewMatrix", UniformShape.MAT4, (world, out) -> out.set(IDENTITY));
-		builder.add("of_ModelViewMatrixInverse", UniformShape.MAT4, (world, out) -> out.set(IDENTITY));
-		builder.add("of_ModelViewProjectionMatrix", UniformShape.MAT4, (world, out) -> out.set(QUAD_PROJECTION));
-		builder.add("of_ProjectionMatrix", UniformShape.MAT4, (world, out) -> out.set(QUAD_PROJECTION));
-		builder.add("of_ProjectionMatrixInverse", UniformShape.MAT4, (world, out) -> out.set(QUAD_PROJECTION_INVERSE));
-		builder.add("of_NormalMatrix", UniformShape.MAT3, (world, out) -> out.set(NORMAL_IDENTITY));
+		builder.add("of_ModelViewMatrix", UniformShape.MAT4, (_, out) -> out.set(IDENTITY));
+		builder.add("of_ModelViewMatrixInverse", UniformShape.MAT4, (_, out) -> out.set(IDENTITY));
+		builder.add("of_ModelViewProjectionMatrix", UniformShape.MAT4, (_, out) -> out.set(QUAD_PROJECTION));
+		builder.add("of_ProjectionMatrix", UniformShape.MAT4, (_, out) -> out.set(QUAD_PROJECTION));
+		builder.add("of_ProjectionMatrixInverse", UniformShape.MAT4, (_, out) -> out.set(QUAD_PROJECTION_INVERSE));
+		builder.add("of_NormalMatrix", UniformShape.MAT3, (_, out) -> out.set(NORMAL_IDENTITY));
 
 		// Eight identities. The pack reads gl_TextureMatrix[0] and expects the texture coordinates
 		// it was handed, which for a quad are already the ones it wants.
-		builder.add("of_TextureMatrix", UniformShape.MAT4, (world, out) -> out.set(IDENTITY));
+		builder.add("of_TextureMatrix", UniformShape.MAT4, (_, out) -> out.set(IDENTITY));
 
 		builder.add("viewWidth", UniformShape.FLOAT, (world, out) -> out.set(world.viewWidth()));
 		builder.add("viewHeight", UniformShape.FLOAT, (world, out) -> out.set(world.viewHeight()));
@@ -83,7 +83,7 @@ public final class DrawValues {
 				world.depthConvention().x(), world.depthConvention().y(),
 				world.depthConvention().z(), world.depthConvention().w()));
 
-		builder.add("pi", UniformShape.FLOAT, (world, out) -> out.set((float) Math.PI));
+		builder.add("pi", UniformShape.FLOAT, (_, out) -> out.set((float) Math.PI));
 		builder.add("atlasSize", UniformShape.IVEC2,
 				(world, out) -> out.set(world.atlasWidth(), world.atlasHeight()));
 		builder.add("renderStage", UniformShape.INT, (world, out) -> out.set(world.renderStage()));
@@ -101,10 +101,10 @@ public final class DrawValues {
 				(world, out) -> out.set(world.noiseTextureResolution()));
 
 		builder.add("entityColor", UniformShape.VEC4,
-				(world, out) -> out.set(0.0F, 0.0F, 0.0F, 0.0F));
-		builder.add("entityId", UniformShape.INT, (world, out) -> out.set(0));
-		builder.add("blockEntityId", UniformShape.INT, (world, out) -> out.set(-1));
-		builder.add("currentRenderedItemId", UniformShape.INT, (world, out) -> out.set(-1));
-		builder.add("alphaTestRef", UniformShape.FLOAT, (world, out) -> out.set(0.0F));
+				(_, out) -> out.set(0.0F, 0.0F, 0.0F, 0.0F));
+		builder.add("entityId", UniformShape.INT, (_, out) -> out.set(0));
+		builder.add("blockEntityId", UniformShape.INT, (_, out) -> out.set(-1));
+		builder.add("currentRenderedItemId", UniformShape.INT, (_, out) -> out.set(-1));
+		builder.add("alphaTestRef", UniformShape.FLOAT, (_, out) -> out.set(0.0F));
 	}
 }

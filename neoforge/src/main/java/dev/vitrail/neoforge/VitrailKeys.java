@@ -40,7 +40,7 @@ public final class VitrailKeys {
 			event.register(OPEN);
 		});
 
-		NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, event -> {
+		NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, _ -> {
 			if (!OPEN.consumeClick()) {
 				return;
 			}

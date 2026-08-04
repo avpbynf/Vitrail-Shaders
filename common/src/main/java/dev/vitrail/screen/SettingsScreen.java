@@ -384,7 +384,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	}
 
 	private Button button(Component label, int width, Runnable action) {
-		return Button.builder(label, pressed -> action.run()).width(width).build();
+		return Button.builder(label, _ -> action.run()).width(width).build();
 	}
 
 	private Component headerTitle() {

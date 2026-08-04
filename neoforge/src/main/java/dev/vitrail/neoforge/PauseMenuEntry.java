@@ -98,7 +98,7 @@ public final class PauseMenuEntry {
 
 		SpriteIconButton button = SpriteIconButton
 				.builder(Component.translatable("options.vitrail.title"),
-						input -> Minecraft.getInstance().gui
+						_ -> Minecraft.getInstance().gui
 								.setScreen(new SettingsScreen(event.getScreen())),
 						true)
 				.width(ICON)
