@@ -33,7 +33,14 @@ public enum VertexInputs {
 	 * which the five names a pack reads are made. {@link EntityVertex} carries the renaming and
 	 * says which element nothing answers for.
 	 */
-	ENTITY;
+	ENTITY,
+
+	/**
+	 * The game's own sky meshes. Alone among these, it is not one format: {@code SkyRenderer} binds
+	 * four between its eight passes, so the elements to declare come from the pass rather than from
+	 * this constant. {@link SkyVertex} carries the renaming and says what the sky has not got.
+	 */
+	SKY;
 
 	/**
 	 * Whether this is a mesh of the engine's own, and so whether a vertex input the pack declares
@@ -44,7 +51,7 @@ public enum VertexInputs {
 	 * declaration standing under either costs nothing.
 	 */
 	public boolean synthesizes() {
-		return this == TERRAIN || this == ENTITY;
+		return this == TERRAIN || this == ENTITY || this == SKY;
 	}
 
 	/**
@@ -57,12 +64,19 @@ public enum VertexInputs {
 	 * one of them, it is the pack's that has to move, which is what {@link ProgramTranslator} does
 	 * with them. Empty for {@link #WORLD}, whose names are the translator's own and which no pack
 	 * writes.
+	 * <p>
+	 * For {@link #SKY} this is the UNION of the four formats and not any one of them, which is the
+	 * one place a union is the right answer: this list only decides which of the pack's own symbols
+	 * are renamed out of the way, and renaming one the bound format happens not to carry costs
+	 * nothing. What gets DECLARED is the bound format alone, and that is
+	 * {@link SkyVertex#prologue}'s to know.
 	 */
 	public List<String> elements() {
 		return switch (this) {
 			case FULLSCREEN -> LegacyGlsl.FULLSCREEN_ELEMENTS;
 			case TERRAIN -> SodiumVertex.ATTRIBUTES;
 			case ENTITY -> EntityVertex.ATTRIBUTES;
+			case SKY -> SkyVertex.ATTRIBUTES;
 			case WORLD -> List.of();
 		};
 	}

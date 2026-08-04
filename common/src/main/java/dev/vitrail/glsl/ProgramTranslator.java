@@ -96,11 +96,25 @@ public final class ProgramTranslator {
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
 			VertexInputs inputs, AlphaTest alphaTest, String program) {
+		return translate(units, inputs, inputs.elements(), alphaTest, program);
+	}
+
+	/**
+	 * The same, for a family that binds more than one vertex format.
+	 * <p>
+	 * Only {@link VertexInputs#SKY} is one today: {@code SkyRenderer} binds four formats between its
+	 * eight passes, so which elements a stage declares is the pass's answer and not the family's.
+	 *
+	 * @param boundElements the elements of the format this pass binds, in the format's own order
+	 */
+	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
+			VertexInputs inputs, List<String> boundElements, AlphaTest alphaTest, String program) {
 		Map<ProgramStage, GlslTranslator.Stage> prepared = new LinkedHashMap<>();
 		for (ProgramStage stage : PIPELINE_ORDER) {
 			ExpandedUnit unit = units.get(stage);
 			if (unit != null) {
-				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs, alphaTest, program));
+				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs, boundElements,
+						alphaTest, program));
 			}
 		}
 

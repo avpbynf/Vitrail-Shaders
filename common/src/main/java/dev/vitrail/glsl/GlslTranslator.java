@@ -117,6 +117,13 @@ public final class GlslTranslator {
 	/** A pass drawn over a quad rather than over a chunk mesh takes its attributes differently. */
 	private final VertexInputs inputs;
 
+	/**
+	 * The elements of the vertex format this pass actually binds, which is only ever different from
+	 * {@code inputs.elements()} for {@link VertexInputs#SKY}: the sky binds four formats between its
+	 * passes and a stage has to declare the one it is drawn with, exactly, or the locations shift.
+	 */
+	private final List<String> bound;
+
 	/** The program the pass wants, which decides what the engine supplies it undeclared. */
 	private final String program;
 
@@ -182,11 +189,12 @@ public final class GlslTranslator {
 	private int fragDepthUnhandled;
 
 	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines,
-			VertexInputs inputs, AlphaTest alphaTest, String program) {
+			VertexInputs inputs, List<String> bound, AlphaTest alphaTest, String program) {
 		this.unit = unit;
 		this.stage = stage;
 		this.engineDefines = engineDefines;
 		this.inputs = inputs;
+		this.bound = List.copyOf(bound);
 		this.alphaTest = alphaTest;
 		this.program = program;
 
@@ -233,8 +241,21 @@ public final class GlslTranslator {
 	 */
 	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs,
 			AlphaTest alphaTest, String program) {
+		return prepare(unit, stage, inputs, inputs.elements(), alphaTest, program);
+	}
+
+	/**
+	 * The same, for a family that binds more than one vertex format and therefore cannot take the
+	 * elements to declare from {@link VertexInputs} alone.
+	 *
+	 * @param bound the elements of the format this pass binds, in the format's own order. Exactly
+	 *              these are declared: a name declared that the format has not got is refused, and
+	 *              an element left undeclared shifts every location after it in silence
+	 */
+	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs,
+			List<String> bound, AlphaTest alphaTest, String program) {
 		GlslTranslator translator = new GlslTranslator(unit, stage,
-				EngineDefines.table(EngineDefines.machine()), inputs, alphaTest, program);
+				EngineDefines.table(EngineDefines.machine()), inputs, bound, alphaTest, program);
 		translator.rewrite();
 
 		return new Stage(translator);
@@ -1657,6 +1678,7 @@ public final class GlslTranslator {
 				case FULLSCREEN -> lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
 				case TERRAIN -> lines.addAll(SodiumVertex.prologue(this.used, this.synthesized));
 				case ENTITY -> lines.addAll(EntityVertex.prologue(this.used, this.synthesized));
+				case SKY -> lines.addAll(SkyVertex.prologue(this.bound, this.used, this.synthesized));
 				case WORLD -> {
 					for (Map.Entry<String, String> attribute : LegacyGlsl.FIXED_ATTRIBUTES.entrySet()) {
 						if (this.used.contains(attribute.getKey())) {
