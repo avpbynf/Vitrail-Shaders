@@ -1197,7 +1197,7 @@ public final class PackChain {
 		Map<SamplerPlan.Kind, Set<String>> byKind = new EnumMap<>(SamplerPlan.Kind.class);
 		for (PackProgram.Loaded loaded : this.chain.programs().values()) {
 			loaded.samplers().byKind().forEach((kind, names) ->
-					byKind.computeIfAbsent(kind, ignored -> new LinkedHashSet<>()).addAll(names));
+					byKind.computeIfAbsent(kind, _ -> new LinkedHashSet<>()).addAll(names));
 		}
 
 		named(byKind, SamplerPlan.Kind.COLORTEX, "read a real colour target");

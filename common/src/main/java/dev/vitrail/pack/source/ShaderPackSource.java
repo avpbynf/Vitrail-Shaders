@@ -233,7 +233,7 @@ public final class ShaderPackSource implements AutoCloseable {
 			return Optional.empty();
 		}
 
-		Map<String, Path> listing = this.listingsByDirectory.computeIfAbsent(rel(parent), ignored -> listing(parent));
+		Map<String, Path> listing = this.listingsByDirectory.computeIfAbsent(rel(parent), _ -> listing(parent));
 		Path found = listing.get(name.toString().toLowerCase(Locale.ROOT));
 		if (found == null) {
 			return Optional.empty();

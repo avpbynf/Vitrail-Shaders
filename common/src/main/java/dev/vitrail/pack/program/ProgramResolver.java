@@ -30,7 +30,7 @@ public final class ProgramResolver {
 		Map<String, Map<String, String>> shipped = new LinkedHashMap<>();
 		for (ProgramSet.ProgramKey key : programs.keys()) {
 			if (key.stage() == ProgramStage.FRAGMENT) {
-				shipped.computeIfAbsent(key.dimension(), ignored -> new LinkedHashMap<>())
+				shipped.computeIfAbsent(key.dimension(), _ -> new LinkedHashMap<>())
 						.put(key.name().baseName(), key.file());
 			}
 		}

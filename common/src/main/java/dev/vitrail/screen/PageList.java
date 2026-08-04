@@ -95,10 +95,10 @@ public final class PageList extends ContainerObjectSelectionList<PageList.Row> {
 
 	private AbstractWidget widgetFor(MenuSlot slot, List<String> profileNames, int width) {
 		return switch (slot) {
-			case MenuSlot.Blank ignored -> new BlankWidget(width);
+			case MenuSlot.Blank _ -> new BlankWidget(width);
 			case MenuSlot.Link link ->
 					new LinkWidget(link.page(), link.resolved(), this.host, width);
-			case MenuSlot.Profiles ignored -> new ProfileWidget(profileNames, this.host, width);
+			case MenuSlot.Profiles _ -> new ProfileWidget(profileNames, this.host, width);
 			case MenuSlot.Option held -> optionWidget(held.option(), width);
 		};
 	}

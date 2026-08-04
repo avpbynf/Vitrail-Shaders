@@ -192,7 +192,7 @@ public final class TargetDirectives {
 
 			if (suffix.equals(MIPMAP)) {
 				Set<Integer> asked = this.mipmapRequests.computeIfAbsent(bareName(program),
-						ignored -> new TreeSet<>());
+						_ -> new TreeSet<>());
 				if (directive.value().equals("true")) {
 					asked.add(split.index());
 				} else if (directive.value().equals("false")) {
@@ -235,7 +235,7 @@ public final class TargetDirectives {
 		}
 
 		private Setting setting(int index) {
-			return this.settings.computeIfAbsent(index, ignored -> new Setting());
+			return this.settings.computeIfAbsent(index, _ -> new Setting());
 		}
 
 		private static Optional<Integer> boxed(String name) {

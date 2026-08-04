@@ -178,7 +178,7 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 			return null;
 		}
 
-		return (ignored, out) -> node.writeInto(out);
+		return (_, out) -> node.writeInto(out);
 	}
 
 	/**

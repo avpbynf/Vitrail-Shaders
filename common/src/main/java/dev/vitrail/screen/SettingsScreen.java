@@ -598,7 +598,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		List<AbstractWidget> buttons = new ArrayList<>(packs.size());
 		for (Path pack : packs) {
 			String name = pack.getFileName().toString();
-			Button button = Button.builder(Component.literal(name), ignored -> choosePack(name))
+			Button button = Button.builder(Component.literal(name), _ -> choosePack(name))
 					.width(Button.BIG_WIDTH).build();
 			button.active = !name.equals(drawn);
 			buttons.add(button);

@@ -178,7 +178,7 @@ public final class SamplerPlan {
 	public Map<Kind, List<String>> byKind() {
 		Map<Kind, List<String>> grouped = new EnumMap<>(Kind.class);
 		for (Binding binding : this.bindings) {
-			grouped.computeIfAbsent(binding.kind(), ignored -> new ArrayList<>()).add(binding.sampler());
+			grouped.computeIfAbsent(binding.kind(), _ -> new ArrayList<>()).add(binding.sampler());
 		}
 
 		grouped.replaceAll((kind, names) -> List.copyOf(names));

@@ -314,7 +314,7 @@ public final class TargetSchedule {
 
 		for (ShaderProperties.FlipDirective directive : explicit) {
 			TargetName.index(directive.buffer()).ifPresent(index ->
-					forced.computeIfAbsent(bareName(directive.program()), ignored -> new LinkedHashMap<>())
+					forced.computeIfAbsent(bareName(directive.program()), _ -> new LinkedHashMap<>())
 							.put(index, directive.value()));
 		}
 

@@ -73,7 +73,7 @@ public final class PackMenu {
 
 			for (ShaderProperties.ScreenToken token : page.getValue()) {
 				switch (token) {
-					case ShaderProperties.ScreenToken.Blank ignored -> slots.add(BLANK);
+					case ShaderProperties.ScreenToken.Blank _ -> slots.add(BLANK);
 					case ShaderProperties.ScreenToken.Name(String name) -> {
 						PackOption declared = index.get(name).orElse(null);
 						if (declared == null) {
@@ -82,7 +82,7 @@ public final class PackMenu {
 							slots.add(BLANK);
 						} else {
 							slots.add(new MenuSlot.Option(options.computeIfAbsent(name,
-									ignored -> MenuOption.of(declared, sliders.contains(name)))));
+									_ -> MenuOption.of(declared, sliders.contains(name)))));
 						}
 					}
 					case ShaderProperties.ScreenToken.Link(String target) -> {
@@ -96,12 +96,12 @@ public final class PackMenu {
 					}
 					// A pack with nothing to choose from loses the token rather than keeping a
 					// blank where the selector would have been.
-					case ShaderProperties.ScreenToken.Profiles ignored -> {
+					case ShaderProperties.ScreenToken.Profiles _ -> {
 						if (hasProfiles) {
 							slots.add(PROFILES);
 						}
 					}
-					case ShaderProperties.ScreenToken.Rest ignored -> {
+					case ShaderProperties.ScreenToken.Rest _ -> {
 						warnings.add(where + " asks for *, which no page shows yet");
 						slots.add(BLANK);
 					}

@@ -180,8 +180,8 @@ public final class ShaderProperties {
 			// The name of the page, "" for the one the pack opens on. A sub page is referred to
 			// from its parent by its own name, so the two are joined by name rather than nested.
 			String page = screen.group(1) == null ? "" : screen.group(1).substring(1);
-			List<String> layout = builder.screens.computeIfAbsent(page, ignored -> new ArrayList<>());
-			List<ScreenToken> slots = builder.screenLayout.computeIfAbsent(page, ignored -> new ArrayList<>());
+			List<String> layout = builder.screens.computeIfAbsent(page, _ -> new ArrayList<>());
+			List<ScreenToken> slots = builder.screenLayout.computeIfAbsent(page, _ -> new ArrayList<>());
 
 			for (String token : screen.group(2).trim().split("\\s+")) {
 				if (token.isEmpty()) {
