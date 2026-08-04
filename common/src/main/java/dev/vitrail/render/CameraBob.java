@@ -43,7 +43,17 @@ public final class CameraBob {
 
 	private static boolean taken;
 	private static boolean trusted = true;
-	private static boolean warned;
+
+	/**
+	 * One flag per warning, and not one for both. They say different things and the quiet one
+	 * happens first: nothing took the bob is a frame where the game did not apply one, which is
+	 * ordinary, while a product that does not match is the engine missing a term the game applies,
+	 * which is the check this class exists for. Sharing a flag let the ordinary one silence the
+	 * serious one for the rest of the session.
+	 */
+	private static boolean warnedNotTaken;
+	private static boolean warnedMismatch;
+
 	private static boolean announced;
 
 	private CameraBob() {
@@ -96,8 +106,8 @@ public final class CameraBob {
 			// Said once, because the quiet answer and the failed one look alike from here: nothing
 			// took the bob either when the game stopped multiplying it in or when this engine
 			// stopped being able to see it, and both leave a pack reading a projection that swings.
-			if (!warned) {
-				warned = true;
+			if (!warnedNotTaken) {
+				warnedNotTaken = true;
 				Vitrail.logger().warn("Nothing took the walk bob out of the projection this frame, so "
 						+ "a pack reads it where OptiFine never put it and anything it places on "
 						+ "screen from a direction will slide as the player walks");
@@ -112,8 +122,8 @@ public final class CameraBob {
 		// coefficient by more than a thousandth.
 		if (!CHECK.equals(rendered, 1.0E-4F)) {
 			trusted = false;
-			if (!warned) {
-				warned = true;
+			if (!warnedMismatch) {
+				warnedMismatch = true;
 				Vitrail.logger().warn("The camera's projection times the bob is not the projection the "
 						+ "level was drawn with, so this engine is missing a term the game applies. "
 						+ "The bob stays in the projection, where packs do not expect it, rather than "
