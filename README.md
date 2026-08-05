@@ -68,10 +68,13 @@ release.
 | Minecraft | 26.2, running on its Vulkan backend |
 | Loader | NeoForge 26.2.0.32-beta or later in the 26.2 line |
 | Sodium | 0.9.x for NeoForge |
+| Chloride | any 26.2 build, or the Vulkan backend has no window to draw into |
 
-Put the Vitrail jar in `mods/` next to Sodium, and switch the game to Vulkan:
-`preferredGraphicsBackend:"vulkan"` in `options.txt`, or Options, then Video
-Settings, in game. Shader packs go in `shaderpacks/`, as they always have, and
+Put the Vitrail jar in `mods/` next to Sodium and Chloride, and switch the game
+to Vulkan: `preferredGraphicsBackend:"vulkan"` in `options.txt`, or Options, then
+Video Settings, in game. Chloride is the one nothing enforces, so
+[INSTALL.md](INSTALL.md) has what its absence looks like and which two of its own
+settings to turn off. Shader packs go in `shaderpacks/`, as they always have, and
 are selected in game from Vitrail's settings screen.
 
 Client only: it does nothing on a server and does not need to be installed on

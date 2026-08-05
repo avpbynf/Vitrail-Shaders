@@ -32,6 +32,11 @@ starts in OpenGL and Vitrail loads and compiles without drawing the world's
 passes. If the picture is unchanged, check the backend in the log before
 anything else.
 
+Two of Chloride's own settings have to come off in `config/chloride-client.toml`.
+`fastBlocks` draws chests and beds by a path this engine's final pass then covers
+over, so they go invisible with no other symptom; `culling.tileEntities` decides
+on its own which of the same objects are drawn at all, and comes off with it.
+
 Fabric is not supported. The module exists in the build but is empty.
 
 ## Building
