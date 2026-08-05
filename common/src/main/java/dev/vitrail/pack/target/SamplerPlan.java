@@ -28,15 +28,18 @@ import java.util.Set;
 public final class SamplerPlan {
 
 	private static final Set<String> DEPTH = Set.of("depthtex0", "depthtex1", "depthtex2", "gdepthtex");
-	private static final Set<String> SHADOW_DEPTH = Set.of("shadowtex0", "shadowtex1", "shadow");
+	private static final Set<String> SHADOW_DEPTH =
+			Set.of("shadowtex0", "shadowtex1", "shadow", "watershadow");
 	private static final String SHADOW_COLOUR_PREFIX = "shadowcolor";
 	private static final String NOISE = "noisetex";
+	private static final String WATER_SHADOW = "watershadow";
 
 	/** Iris allows eight, and the corpus stops at three. */
 	private static final int MAX_SHADOW_COLOURS = 8;
 
 	private final List<Binding> bindings;
 	private final Map<String, Binding> byName;
+	private final boolean waterShadow;
 
 	private SamplerPlan(List<Binding> bindings) {
 		this.bindings = List.copyOf(bindings);
@@ -44,6 +47,7 @@ public final class SamplerPlan {
 		Map<String, Binding> byName = new LinkedHashMap<>();
 		bindings.forEach(binding -> byName.putIfAbsent(binding.sampler(), binding));
 		this.byName = Map.copyOf(byName);
+		this.waterShadow = byName.containsKey(WATER_SHADOW);
 	}
 
 	/**
@@ -205,13 +209,23 @@ public final class SamplerPlan {
 	/**
 	 * Whether a shadow depth name reads the map as it stood before the translucents.
 	 * <p>
-	 * {@code shadowtex1} is that one and the two others are the map with everything in it. The pair
-	 * is the whole of what a coloured shadow rests on: a point occluded in nought and clear in one
-	 * has something translucent between it and the light, and the tint comes from
-	 * {@code shadowcolor}.
+	 * {@code shadowtex1} is always that one and {@code shadowtex0} is never it. The pair is the whole
+	 * of what a coloured shadow rests on: a point occluded in nought and clear in one has something
+	 * translucent between it and the light, and the tint comes from {@code shadowcolor}.
+	 * <p>
+	 * <strong>{@code shadow} has no fixed meaning, which is why this is asked of the plan and not of
+	 * the name.</strong> A program that also declares {@code watershadow} moves it: {@code watershadow}
+	 * then reads the map with the translucents, alongside {@code shadowtex0}, and {@code shadow} falls
+	 * back to the one without, alongside {@code shadowtex1}. A program that does not declare it keeps
+	 * {@code shadow} on the map with everything in it. That is the rule packs are written against, from
+	 * {@code IrisSamplers.addShadowSamplers}, and OptiFine numbers the same one in texture units.
+	 * <p>
+	 * Iris asks whether the linked program has a live uniform by that name rather than whether the
+	 * source declares one, so a declaration that comes in from a shared include and is never read
+	 * would move {@code shadow} here and not there. No pack of the corpus writes the name at all.
 	 */
-	public static boolean withoutTranslucents(String name) {
-		return name.equals("shadowtex1");
+	public boolean withoutTranslucents(String name) {
+		return name.equals("shadowtex1") || (this.waterShadow && name.equals("shadow"));
 	}
 
 	/**

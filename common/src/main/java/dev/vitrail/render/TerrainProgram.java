@@ -806,8 +806,10 @@ public final class TerrainProgram {
 
 		// shadowtex1 is the map without the translucents and shadowtex0 the map with them. Serving
 		// one image to both is what makes a pack's coloured shadow branch dead code: it asks whether
-		// a point is occluded in nought and clear in one, and one image can never answer yes.
-		GpuTextureView map = SamplerPlan.withoutTranslucents(sampler)
+		// a point is occluded in nought and clear in one, and one image can never answer yes. Which
+		// of the two the bare "shadow" names depends on the whole list this program declared, so the
+		// plan answers rather than the name.
+		GpuTextureView map = this.loaded.samplers().withoutTranslucents(sampler)
 				? this.shadow.depthWithoutTranslucents()
 				: this.shadow.depth();
 

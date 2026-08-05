@@ -464,7 +464,7 @@ final class PackPass {
 				// placeholder: a shadowtex lookup is the one depth read the translation never wraps,
 				// so the map stores the forward window and a lookup that finds nothing has to say
 				// "nothing between here and the light". Black would put the world in its own shadow.
-				case SHADOW_DEPTH -> or(SamplerPlan.withoutTranslucents(binding.sampler())
+				case SHADOW_DEPTH -> or(this.loaded.samplers().withoutTranslucents(binding.sampler())
 						? targets.shadow().depthWithoutTranslucents()
 						: targets.shadow().depth(), targets.white());
 				case SHADOW_COLOUR -> or(targets.shadow().colour(binding.index()), targets.white());
