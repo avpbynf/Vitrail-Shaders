@@ -1,5 +1,6 @@
 package dev.vitrail.neoforge;
 
+import dev.vitrail.screen.ScreenText;
 import dev.vitrail.screen.SettingsScreen;
 import dev.vitrail.Vitrail;
 
@@ -97,7 +98,7 @@ public final class PauseMenuEntry {
 		}
 
 		SpriteIconButton button = SpriteIconButton
-				.builder(Component.translatable("options.vitrail.title"),
+				.builder(Component.translatable(ScreenText.TITLE),
 						_ -> Minecraft.getInstance().gui
 								.setScreen(new SettingsScreen(event.getScreen())),
 						true)

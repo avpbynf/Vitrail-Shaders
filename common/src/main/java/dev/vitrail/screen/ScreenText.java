@@ -58,6 +58,13 @@ public final class ScreenText {
 	public static final String ERROR = "options.vitrail.error";
 
 	public static final String OPEN_SETTINGS = "key.vitrail.open_settings";
+
+	/**
+	 * The group that key sits in. Nothing names it and nothing can: the game builds it from the
+	 * category's identifier, in {@code KeyMapping.Category.label()}, so the way to change it is to
+	 * rename {@code VitrailKeys.CATEGORY}. It is written down here anyway, because this list is the
+	 * language file and a key left out of the list is one nobody notices going missing.
+	 */
 	public static final String KEY_CATEGORY = "key.category.vitrail.keybinds";
 
 	/**
