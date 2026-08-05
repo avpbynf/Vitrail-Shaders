@@ -523,7 +523,9 @@ public final class TargetPlan {
 			if (!size.full()) {
 				notes.add(TargetName.canonical(index) + " is sized by shaders.properties, "
 						+ (size.relative() ? size.width() + " by " + size.height() + " of the screen"
-								: (int) size.width() + " by " + (int) size.height() + " pixels"));
+								: (int) size.width() + " by " + (int) size.height() + " pixels")
+						+ (size.overCap() ? ", capped at " + TargetSize.MAX_DIMENSION
+								+ " texels a side, which is all this engine will allocate" : ""));
 			}
 		}
 

@@ -27,6 +27,14 @@ public record TargetSize(boolean relative, float width, float height) {
 	/** How far a setting may point at another setting before the chain is called a loop. */
 	private static final int MAX_SUBSTITUTIONS = 8;
 
+	/**
+	 * How wide a side of a target this engine will allocate, the same ceiling the shadow map keeps
+	 * and for the same reason: it is what Vulkan guarantees of a 2D image, and the number is the
+	 * pack's own with nothing between it and the allocator. {@code size.buffer.colortex0 = 100000
+	 * 100000} asks for forty gigabytes on one target, and the whole corpus writes fractions.
+	 */
+	public static final int MAX_DIMENSION = 16384;
+
 	public static TargetSize ofScreen() {
 		return new TargetSize(true, 1.0F, 1.0F);
 	}
@@ -71,8 +79,20 @@ public record TargetSize(boolean relative, float width, float height) {
 
 	private int scale(int screen, float value) {
 		// Never zero: a target of no pixels is refused by the allocator rather than ignored, and
-		// a pack asking for a twentieth of a small window is one rounding away from it.
-		return Math.max(1, this.relative ? (int) (screen * value) : (int) value);
+		// a pack asking for a twentieth of a small window is one rounding away from it. Never
+		// larger than MAX_DIMENSION either, and in long, because the float this multiplies has no
+		// bound of its own and an allocation that fails takes every other target down with it.
+		return Math.clamp(this.relative ? (long) (screen * value) : (long) value, 1, MAX_DIMENSION);
+	}
+
+	/**
+	 * Whether the pack asked for more than {@link #MAX_DIMENSION} outright, so that the plan can say
+	 * the target is served smaller than it was written. A relative size is not weighed here: it is
+	 * measured against a window the device has already allocated, and a pack writing a multiple of
+	 * the screen rather than a fraction of it is named by the note that prints the factor.
+	 */
+	public boolean overCap() {
+		return !this.relative && (this.width > MAX_DIMENSION || this.height > MAX_DIMENSION);
 	}
 
 	private static String substitute(String token, Map<String, String> defines) {
