@@ -21,6 +21,7 @@ import org.joml.Vector4fc;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -63,10 +64,15 @@ public final class SkyDraw {
 	 * @param stage    what a pack is told it is drawing. Iris sets one per method of the renderer and
 	 *                 these are its six, one for one: {@code renderSkyDisc} is {@code SKY},
 	 *                 {@code renderDarkDisc} is {@code VOID}, and the other four carry their own name
+	 * @param directive the line of {@code shaders.properties} a pack switches this piece off with,
+	 *                  spelled as the file spells it, or "" for the two pieces the format names
+	 *                  nothing for. One directive for one piece and no wider reading of any of them:
+	 *                  {@code sky} is the disc the game draws overhead, and the void plane under the
+	 *                  world is a piece of its own that no pack can ask for or refuse
 	 */
 	private record Element(String label, String program, String element, VertexFormat format,
 			PrimitiveTopology topology, Optional<BlendFunction> blend, boolean rotated,
-			RenderStage stage) {
+			RenderStage stage, String directive) {
 	}
 
 	/**
@@ -85,20 +91,21 @@ public final class SkyDraw {
 
 	static {
 		put(new Element("Sky disc", "gbuffers_skybasic", "disc", DefaultVertexFormat.POSITION,
-				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), false, RenderStage.SKY));
+				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), false, RenderStage.SKY, "sky"));
 		put(new Element("Sky dark", "gbuffers_skybasic", "dark", DefaultVertexFormat.POSITION,
-				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true, RenderStage.VOID));
+				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true, RenderStage.VOID, ""));
 		put(new Element("Stars", "gbuffers_skybasic", "stars", DefaultVertexFormat.POSITION,
 				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true,
-				RenderStage.STARS));
+				RenderStage.STARS, "stars"));
 		put(new Element("Sunrise sunset", "gbuffers_skybasic", "sunrise",
 				DefaultVertexFormat.POSITION_COLOR, PrimitiveTopology.TRIANGLE_FAN,
-				Optional.of(BlendFunction.TRANSLUCENT), true, RenderStage.SUNSET));
+				Optional.of(BlendFunction.TRANSLUCENT), true, RenderStage.SUNSET, ""));
 		put(new Element("Sky sun", "gbuffers_skytextured", "sun", DefaultVertexFormat.POSITION_TEX,
-				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true, RenderStage.SUN));
+				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true, RenderStage.SUN,
+				"sun"));
 		put(new Element("Sky moon", "gbuffers_skytextured", "moon", DefaultVertexFormat.POSITION_TEX,
 				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true,
-				RenderStage.MOON));
+				RenderStage.MOON, "moon"));
 	}
 
 	private static void put(Element element) {
@@ -135,6 +142,14 @@ public final class SkyDraw {
 		this.load = load;
 		this.chainTargets = chainTargets;
 		this.targets = targets;
+
+		// Once at load and only when there is something to say. A piece the pack refuses is a piece
+		// the player stops seeing, and nothing else in the frame would account for it.
+		List<String> off = values.skyElements().off();
+		if (!off.isEmpty()) {
+			Vitrail.logger().info("{} draws its own {}, so the game draws neither that nor a shader "
+					+ "of the pack's in its place", packPath.getFileName(), String.join(" and ", off));
+		}
 	}
 
 	/** Whether a pack's own sky programs take over the game's, from the loaded options. */
@@ -185,6 +200,33 @@ public final class SkyDraw {
 
 			return null;
 		}
+	}
+
+	/**
+	 * Whether the game is to draw one piece of its sky at all, which is the pack's to refuse.
+	 * <p>
+	 * <strong>Not the same question as which shader draws it.</strong> Everywhere else this class
+	 * answers "the pack's program or the game's own"; here the answer is "nothing at all", because a
+	 * pack writing {@code sun=false} has drawn its own sun inside {@code gbuffers_skybasic} and
+	 * handing it the game's on top puts two suns in the sky. Iris cancels the same two methods at
+	 * their head for the same reason.
+	 * <p>
+	 * Tied to this engine drawing the sky, unlike {@link #sunPathRotation()}, and the two are not
+	 * inconsistent. The rotation is a property of the pack's light, which reaches every surface of
+	 * the world whether or not a sky program runs; this is a property of the pack's own sky, and
+	 * with {@code sky=off} in {@code options.txt} there is no sky of the pack's for the refusal to
+	 * be making room for.
+	 *
+	 * @param label the label the game gave the pass it is about to open
+	 */
+	public static boolean draws(String label) {
+		SkyDraw draw = PackChain.sky();
+		Element element = ELEMENTS.get(label);
+		if (draw == null || !wanted || element == null) {
+			return true;
+		}
+
+		return draw.values.skyElements().allows(element.directive());
 	}
 
 	/**

@@ -61,6 +61,7 @@ public final class ShaderProperties {
 	private static final Pattern SLIDERS = Pattern.compile("^\\s*sliders\\s*=\\s*(.*)$");
 	private static final Pattern END_FLASH_SHADOWS = Pattern.compile("^\\s*endFlashShadows\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
+	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
 	// The noise image is answered here because everything else about it is settled: one path, one
 	// sampler, every stage. The general family is not, and is read by customTextures instead.
 	private static final Pattern TEXTURE_NOISE = Pattern.compile("^\\s*texture\\.noise\\s*=\\s*(.*)$");
@@ -262,6 +263,16 @@ public final class ShaderProperties {
 		Matcher size = SIZE_BUFFER.matcher(line);
 		if (size.matches()) {
 			builder.sizeBuffers.put(size.group(1), size.group(2).trim());
+			return;
+		}
+
+		// Consumed only when the value is one of the four words that mean something, and read again
+		// conditionally by skyElements. A line that says anything else falls through to the ignored
+		// keys, which is where a reader has to be able to find it: two packs of the corpus write
+		// sun=off, which neither Iris nor OptiFine reads as false, so their sun keeps being drawn and
+		// nothing else would say why.
+		Matcher element = SKY_ELEMENT.matcher(line);
+		if (element.matches() && truth(element.group(2).trim()) != null) {
 			return;
 		}
 
@@ -677,6 +688,60 @@ public final class ShaderProperties {
 	}
 
 	/**
+	 * Which pieces of the game's own sky the pack still wants drawn, live lines only.
+	 * <p>
+	 * Conditionally and not flat, and here that is not a nicety: both packs of the corpus that write
+	 * one of these lines write it under an {@code #if} on a setting of their own, and both would be
+	 * read backwards flat. Bliss switches its sun and its moon off in the {@code #else} of
+	 * {@code RESOURCEPACK_SKY == 2 || RESOURCEPACK_SKY == 3}, which is the live branch at its
+	 * default of nought; Mellow switches them off under a {@code ROUND_SUN} that its own settings
+	 * leave commented out, so that line is dead and its sun stays.
+	 * <p>
+	 * A value this cannot read leaves the piece as it was, which is what Iris does with the same
+	 * word, and the line stays among the keys nothing reads so that the pack's author can see it.
+	 *
+	 * @see SkyElements
+	 */
+	public SkyElements skyElements(Map<String, String> defines) {
+		Map<String, Boolean> drawn = new LinkedHashMap<>();
+		ConditionStack conditions = new ConditionStack();
+
+		for (String line : this.lines) {
+			Matcher directive = DIRECTIVE.matcher(line);
+			if (directive.matches()) {
+				applyDirective(directive.group(1), line, conditions, defines);
+				continue;
+			}
+
+			Matcher element = SKY_ELEMENT.matcher(line);
+			if (conditions.active() && element.matches()) {
+				Boolean value = truth(element.group(2).trim());
+				if (value != null) {
+					drawn.put(element.group(1), value);
+				}
+			}
+		}
+
+		return new SkyElements(drawn.getOrDefault("sun", true), drawn.getOrDefault("moon", true),
+				drawn.getOrDefault("stars", true), drawn.getOrDefault("sky", true));
+	}
+
+	/**
+	 * The four words a boolean directive of this file may carry, and null for anything else.
+	 * <p>
+	 * Iris reads {@code true} and {@code 1} as one answer and {@code false} and {@code 0} as the
+	 * other; OptiFine reads {@code true} and {@code false} alone. The wider of the two is taken,
+	 * because a pack written against either is then read the way its author meant it.
+	 */
+	private static Boolean truth(String value) {
+		if (value.equals("true") || value.equals("1")) {
+			return Boolean.TRUE;
+		}
+
+		return value.equals("false") || value.equals("0") ? Boolean.FALSE : null;
+	}
+
+	/**
 	 * The sampler names an {@code image.NAME} directive hangs a storage image on, live lines only.
 	 * <p>
 	 * Read for one purpose and no more: to tell a refusal from a refusal. A {@code sampler3D} that
@@ -920,6 +985,50 @@ public final class ShaderProperties {
 
 	/** Whether a program swaps a target's two halves, said outright rather than inferred. */
 	public record FlipDirective(String program, String buffer, boolean value) {
+	}
+
+	/**
+	 * Which pieces of the game's own sky a pack still wants drawn. A pack that says nothing wants
+	 * all four, which is what every one of them was written against.
+	 * <p>
+	 * They are a way of saying "I draw that myself", so the piece has to go rather than fall back to
+	 * the game's own shader: a pack drawing its own sun in {@code gbuffers_skybasic} and handed the
+	 * game's on top has two suns in the sky.
+	 * <p>
+	 * Four and not five. The fifth directive of the family, {@code clouds}, takes
+	 * {@code off}, {@code fast} or {@code fancy} rather than a boolean and names something no
+	 * program of this engine draws, so honouring it would take the game's clouds away and put
+	 * nothing back.
+	 */
+	public record SkyElements(boolean sun, boolean moon, boolean stars, boolean sky) {
+
+		/**
+		 * Whether the piece one directive names is still drawn.
+		 *
+		 * @param directive the key as the file spells it, or anything else for a piece no directive
+		 *                  of the format names, which is then always drawn
+		 */
+		public boolean allows(String directive) {
+			return switch (directive) {
+				case "sun" -> this.sun;
+				case "moon" -> this.moon;
+				case "stars" -> this.stars;
+				case "sky" -> this.sky;
+				default -> true;
+			};
+		}
+
+		/** The pieces the pack switched off, by the name it wrote, for the log. Usually empty. */
+		public List<String> off() {
+			List<String> off = new ArrayList<>();
+			for (String directive : List.of("sun", "moon", "stars", "sky")) {
+				if (!allows(directive)) {
+					off.add(directive);
+				}
+			}
+
+			return off;
+		}
 	}
 
 	private static final class Builder {

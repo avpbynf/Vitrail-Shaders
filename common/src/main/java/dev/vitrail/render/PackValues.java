@@ -55,6 +55,8 @@ public final class PackValues {
 	private final List<String> problems = new ArrayList<>();
 
 	private CustomUniforms customs;
+	private ShaderProperties.SkyElements skyElements = new ShaderProperties.SkyElements(true, true,
+			true, true);
 	private NoiseTexture.Image noiseImage;
 	private PackImages packImages = PackImages.none();
 	private UniformCatalog catalog = UniformCatalog.engine();
@@ -92,6 +94,7 @@ public final class PackValues {
 
 			values.state.directives(PackDirectives.read(source, options, settings, dimension));
 			values.state.endFlashShadows(properties.endFlashShadows());
+			values.skyElements = properties.skyElements(settings.globalDefines(options));
 			values.declare(properties, settings.globalDefines(options));
 			values.readNoise(properties, source);
 			values.packImages =
@@ -229,6 +232,15 @@ public final class PackValues {
 	 */
 	public float sunPathRotation() {
 		return this.state.directives().sunPathRotation();
+	}
+
+	/**
+	 * Which pieces of the game's own sky this pack still wants drawn, all four unless it says
+	 * otherwise. Read once with the settings the rest of the pack was read with, because two packs
+	 * of the corpus write these lines under a conditional on one of their own.
+	 */
+	public ShaderProperties.SkyElements skyElements() {
+		return this.skyElements;
 	}
 
 	public WorldState world() {

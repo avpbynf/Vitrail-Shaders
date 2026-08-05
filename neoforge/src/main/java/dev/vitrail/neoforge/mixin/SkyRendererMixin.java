@@ -40,6 +40,10 @@ import java.util.function.Supplier;
  * table of method names to keep in step with the game: a method whose label this engine has no
  * element for prepares nothing and draws exactly as it did.
  * <p>
+ * <strong>One of the pack's answers is not a shader at all.</strong> Four of these pieces can be
+ * refused outright in {@code shaders.properties}, and a refusal is cancelled at the head of the
+ * method rather than served with a program of ours, because the pack has drawn that piece itself.
+ * <p>
  * <strong>The order of the four wraps is the whole design.</strong> The pass is opened after the
  * game has pushed the model view for this element, so the matrix is final by then and the sun is
  * where the game put it; compiling a pipeline or clearing a target has to happen before the pass
@@ -92,6 +96,48 @@ public abstract class SkyRendererMixin {
 		float tilt = SkyDraw.sunPathRotation();
 		if (tilt != 0.0F) {
 			poseStack.mulPose(Axis.ZP.rotationDegrees(tilt));
+		}
+	}
+
+	/**
+	 * Takes one piece of the sky out of the frame, where the pack asked for it in
+	 * {@code shaders.properties}.
+	 * <p>
+	 * At the head of each method and not at the pass it opens, which is what makes it a removal
+	 * rather than a choice of shader: the piece is not drawn by anybody. The four methods take four
+	 * different arguments, so there are four of these and no way to write one; each is the same two
+	 * lines, and {@link SkyDraw#draws} holds the whole of the decision. The two pieces no directive
+	 * of the format names, the void plane and the sunrise band, have no handler here at all.
+	 */
+	@Inject(method = "renderSkyDisc", at = @At("HEAD"), cancellable = true)
+	private void vitrail$disc(int skyColor, CallbackInfo callback) {
+		vitrail$refuse("Sky disc", callback);
+	}
+
+	@Inject(method = "renderSun", at = @At("HEAD"), cancellable = true)
+	private void vitrail$sun(float rainBrightness, PoseStack poseStack, CallbackInfo callback) {
+		vitrail$refuse("Sky sun", callback);
+	}
+
+	@Inject(method = "renderMoon", at = @At("HEAD"), cancellable = true)
+	private void vitrail$moon(MoonPhase moonPhase, float rainBrightness, PoseStack poseStack,
+			CallbackInfo callback) {
+		vitrail$refuse("Sky moon", callback);
+	}
+
+	@Inject(method = "renderStars", at = @At("HEAD"), cancellable = true)
+	private void vitrail$stars(float starBrightness, PoseStack poseStack, CallbackInfo callback) {
+		vitrail$refuse("Stars", callback);
+	}
+
+	/**
+	 * Safe at the head of all four: each of them pushes the model view it draws under and pops it
+	 * again before it returns, and the pose stack the three celestial ones are handed is pushed and
+	 * popped by the caller. So a method that never runs leaves nothing standing.
+	 */
+	private static void vitrail$refuse(String label, CallbackInfo callback) {
+		if (!SkyDraw.draws(label)) {
+			callback.cancel();
 		}
 	}
 
