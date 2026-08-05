@@ -110,7 +110,14 @@ final class PackImages {
 			images.add(image);
 			byTexture.put(texture, image);
 			if (atlas != null) {
-				volumes.put(texture.sampler(), image);
+				// The FIRST declaration under that name, which is the one whose layout was printed
+				// into every shader: PackTextures keeps the first too. A pack writing two files for
+				// one name on two stages would otherwise have the last file spread over the first
+				// one's tiles, and what comes out of that still looks like noise.
+				if (volumes.putIfAbsent(texture.sampler(), image) != null) {
+					notes.add(texture.path() + " is a second volume under the name "
+							+ texture.sampler() + ", and the shaders read the first");
+				}
 			}
 		}
 
