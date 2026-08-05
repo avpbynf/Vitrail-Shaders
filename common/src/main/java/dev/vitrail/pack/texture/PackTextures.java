@@ -25,9 +25,15 @@ import java.util.Set;
  * The grammar is short and has one trap in it. What a value means is decided by HOW MANY words it
  * holds, not by what they say: one word is the path of an image, six a one dimensional blob, seven
  * a two dimensional one, eight a three dimensional one. Any other count is a line nothing can
- * honour, and it is dropped whole. Iris consumes a forged sampler name for it anyway, leaves the
- * type null and meets that null much later while translating; a directive nobody can read has to
- * cost nothing at all.
+ * honour, and nothing is read out of it. Iris takes the sampler name from it anyway, leaves the
+ * type null and meets that null much later while translating.
+ * <p>
+ * <strong>The KEY is what decides whether a name is taken over, and the value only whether
+ * anything can be put behind it.</strong> A key that names a stage and a sampler has said which
+ * name the pack is claiming, and no word further along the line unsays it: a misspelt pixel type
+ * leaves the sampler black and named in the log, where handing the name back would leave a deferred
+ * reading the scene as a lookup table. Only a key this cannot read that far takes nothing, because
+ * there is no name in it to take.
  * <p>
  * Every declaration is checked against its file, and a declaration whose file is missing,
  * unreadable, or SHORTER than the size it announces is refused rather than bound to black. That is
@@ -51,18 +57,19 @@ public final class PackTextures {
 	private final List<String> notes;
 	private final Map<TextureStage, Map<String, PackTexture>> overrides;
 	private final Map<TextureStage, Set<String>> diverted;
+	private final Set<String> divertedEverywhere;
 	private final Map<String, PackTexture> named;
 
 	/**
 	 * A directive this engine will not honour, with the reason in one clause for the log.
 	 *
-	 * @param stage   present when the line was read far enough to know which name it was taking
-	 *                over. That name is then taken over ANYWAY and left with nothing behind it,
+	 * @param stage   which stage the name is taken over in, absent both for a {@code customTexture},
+	 *                which takes it over everywhere, and for a key too broken to name one
+	 * @param sampler the name being taken over, taken over ANYWAY and left with nothing behind it,
 	 *                which is not a nicety: Mellow points {@code texture.deferred.colortex3} at a
 	 *                texture of the game, and letting the name fall back to colour target three
-	 *                would have its deferred read the scene as a cloud texture. A line this could
-	 *                not read that far takes nothing, and is as good as absent
-	 * @param sampler the name being taken over, empty alongside an absent stage
+	 *                would have its deferred read the scene as a cloud texture. Empty only where the
+	 *                key itself named no sampler, and that line is as good as absent
 	 */
 	public record Refused(String key, String value, String reason, Optional<TextureStage> stage,
 			String sampler) {
@@ -92,11 +99,24 @@ public final class PackTextures {
 		}
 
 		Map<TextureStage, Set<String>> diverted = new EnumMap<>(TextureStage.class);
-		refused.forEach(one -> one.stage().ifPresent(stage ->
-				diverted.computeIfAbsent(stage, _ -> new LinkedHashSet<>()).add(one.sampler())));
+		Set<String> divertedEverywhere = new LinkedHashSet<>();
+		for (Refused one : refused) {
+			if (one.sampler().isEmpty()) {
+				continue;
+			}
+
+			// A refused customTexture names no stage and takes its name over in all of them, exactly
+			// as an honoured one does. Kept apart from the stage map rather than written into all
+			// seven, so that what the pack said stays readable in what is stored.
+			one.stage().ifPresentOrElse(
+					stage -> diverted.computeIfAbsent(stage, _ -> new LinkedHashSet<>())
+							.add(one.sampler()),
+					() -> divertedEverywhere.add(one.sampler()));
+		}
 
 		this.overrides = Map.copyOf(overrides);
 		this.diverted = Map.copyOf(diverted);
+		this.divertedEverywhere = Set.copyOf(divertedEverywhere);
 		this.named = Map.copyOf(named);
 	}
 
@@ -160,11 +180,16 @@ public final class PackTextures {
 			return;
 		}
 
+		// The name is settled by the key alone, so from here on every refusal carries it and leaves
+		// it with nothing behind it. What the value says about the file cannot put the name back:
+		// the pack has said which sampler it is taking over, and a word it misspelled in the rest of
+		// the line does not unsay it. Letting one typo hand colortex3 back to colour target three
+		// would have a deferred read the scene as a lookup table, which is the picture nobody
+		// questions, where black is a question.
 		String[] parts = value.trim().split("\\s+");
 		if (parts.length != PNG_TOKENS && (parts.length < RAW_1D_TOKENS || parts.length > RAW_3D_TOKENS)) {
-			// Nothing is consumed, a forged name least of all: the directive is as good as absent.
-			refused.add(Refused.of(key, value, "holds " + parts.length
-					+ " words, and the format gives a meaning to 1, 6, 7 and 8"));
+			refused.add(new Refused(key, value, "holds " + parts.length
+					+ " words, and the format gives a meaning to 1, 6, 7 and 8", stage, sampler));
 			return;
 		}
 
@@ -172,14 +197,13 @@ public final class PackTextures {
 				? Optional.empty()
 				: rawOf(parts);
 		if (parts.length != PNG_TOKENS && raw.isEmpty()) {
-			refused.add(Refused.of(key, value, "declares a raw texture this cannot read"));
+			refused.add(new Refused(key, value, "declares a raw texture this cannot read", stage,
+					sampler));
 			return;
 		}
 
 		String path = parts[0];
 
-		// Past this line the directive is readable and the name it takes over is settled, so every
-		// refusal below carries the name with it and leaves that name with nothing behind it.
 		//
 		// A namespaced path names a texture the game owns and hands out through its own manager,
 		// which is not something this engine reaches. Said before the file is looked for, because
@@ -451,6 +475,7 @@ public final class PackTextures {
 				.forEach(sampler -> names.addAll(spellings(sampler)));
 		this.diverted.getOrDefault(stage, Set.of())
 				.forEach(sampler -> names.addAll(spellings(sampler)));
+		this.divertedEverywhere.forEach(sampler -> names.addAll(spellings(sampler)));
 
 		return names;
 	}
