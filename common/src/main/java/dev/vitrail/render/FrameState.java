@@ -319,8 +319,10 @@ public final class FrameState implements WorldState {
 		RenderTarget main = renderer.mainRenderTarget();
 		if (main != null) {
 			// The main target and not the window. A pack divides by these to step across a
-			// texture, and the two part company during the panorama capture, which takes the
-			// target to 4096 without going through a resize at all.
+			// texture, and what it steps across is the target that was drawn into: the game only
+			// brings the target to the window's size where it builds a frame, and the panorama
+			// capture goes round that path, resizing the target to 4096 square itself in
+			// Minecraft.grabPanoramixScreenshot.
 			this.viewWidth = main.width;
 			this.viewHeight = main.height;
 		}

@@ -167,10 +167,11 @@ final class ColorTargets {
 	 * about the pack.
 	 * <p>
 	 * The panorama capture is what makes the difference matter. The game takes the main target to
-	 * 4096 square for six frames there, in {@code Minecraft.grabPanoramixScreenshot}, without going
-	 * through a resize at all, and this class follows it: a machine that is comfortable at 1080p can
-	 * fail to find the memory for the same chain sixteen times over, and the pack was then dead for
-	 * the rest of the session, on a window that had gone back to its own size a frame later.
+	 * 4096 square for six frames there, in {@code Minecraft.grabPanoramixScreenshot}, resizing it
+	 * itself rather than through the window the rest of the frame follows, and this class follows the
+	 * target: a machine that is comfortable at 1080p can fail to find the memory for the same chain
+	 * sixteen times over, and the pack was then dead for the rest of the session, on a window that
+	 * had gone back to its own size a frame later.
 	 */
 	private int brokenWidth;
 	private int brokenHeight;
