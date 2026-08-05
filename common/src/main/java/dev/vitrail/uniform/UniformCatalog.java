@@ -134,10 +134,10 @@ public final class UniformCatalog {
 	 * whatever that layer has just put behind the {@code gl_} spelling.
 	 * <p>
 	 * Called last in each of the three tables rather than written into the three values classes,
-	 * because that is what keeps the two spellings the same value: Iris replaces both with one
-	 * target on each of its three paths, {@code CompositeCoreTransformer.java:20-23},
-	 * {@code VanillaCoreTransformer.java:78-83} and {@code SodiumCoreTransformer.java:31-36}, and
-	 * the packs are written against that.
+	 * because that is what keeps the two spellings the same value. It is what Iris does too, one
+	 * family at a time and over two transformers picked by the profile the unit declares; the
+	 * paths and their lines are set out in {@link dev.vitrail.glsl.LegacyGlsl#CORE_MATRICES}, and
+	 * the packs are written against them.
 	 */
 	private static void coreMatrices(Builder builder) {
 		builder.alias("modelViewMatrix", "of_ModelViewMatrix");

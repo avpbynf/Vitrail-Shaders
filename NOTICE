@@ -101,8 +101,11 @@ GNU Lesser General Public License version 3
   above nought, because a pack's full screen pass is written expecting exactly those values. The
   same file, together with common/src/main/java/dev/vitrail/uniform/UniformCatalog.java, carries
   the rule that modelViewMatrix and projectionMatrix mean gl_ModelViewMatrix and
-  gl_ProjectionMatrix: Iris replaces both spellings with a single target on each of its three
-  paths, in the CompositeCore, VanillaCore and SodiumCore transformers of
+  gl_ProjectionMatrix. Iris splits the two spellings over two transformers of the same family,
+  chosen by the profile the unit declares: the bare names are answered by CompositeCoreTransformer,
+  SodiumCoreTransformer and VanillaCoreTransformer, the gl_ names by CompositeTransformer and
+  SodiumTransformer, and each family lands both on the same value. VanillaCoreTransformer is the
+  one that carries the pair side by side. All are in
   net.irisshaders.iris.pipeline.transform.transformer.
 
   common/src/main/java/dev/vitrail/uniform/Smoothed.java adapts the exponential smoothing of

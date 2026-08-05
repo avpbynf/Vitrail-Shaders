@@ -108,13 +108,21 @@ public final class LegacyGlsl {
 	 * the same reason as {@link #ENGINE_ATTRIBUTES} and answered with the same values as their
 	 * {@code gl_} twins.
 	 * <p>
-	 * Not a pair of their own, and that is the whole content of this table. Iris replaces both
-	 * spellings with one target on each of the three paths a pack's stage can take:
-	 * {@code CompositeCoreTransformer.java:20-23} hands a quad the identity and the quad projection,
-	 * {@code VanillaCoreTransformer.java:78-83} hands the world {@code iris_transforms.ModelViewMat}
-	 * and {@code iris_ProjMat}, and {@code SodiumCoreTransformer.java:31-36} renames both onto
-	 * Sodium's own uniforms. The three lines up with the three catalogues this engine layers, so the
-	 * value follows the family without either side saying so twice.
+	 * Not a pair of their own, and that is the whole content of this table. Iris answers the bare
+	 * spelling on one path per family and the {@code gl_} spelling on the other, picking between
+	 * the two by the profile the unit declares ({@code TransformPatcher.java:146}), and both land on
+	 * the same value: a quad gets the identity and the quad projection
+	 * ({@code CompositeCoreTransformer.java:20} and {@code :22}, against
+	 * {@code CompositeTransformer.java:78} and {@code :81}), the world gets
+	 * {@code iris_transforms.ModelViewMat} and {@code iris_ProjMat}
+	 * ({@code VanillaCoreTransformer.java:76} and {@code :80}), and a chunk gets Sodium's own
+	 * uniforms ({@code SodiumCoreTransformer.java:32} and {@code :36}, against
+	 * {@code SodiumTransformer.java:72} and {@code :34}). That lines up with the three catalogues
+	 * this engine layers, so the value follows the family without either side saying so twice.
+	 * <p>
+	 * The vanilla path is the one that names both spellings side by side, and it has to: Iris sends
+	 * a line program down the core transformer whatever profile it declares
+	 * ({@code TransformPatcher.java:144}), which is exactly the {@code gbuffers_line} below.
 	 * <p>
 	 * Both Complementary packs multiply {@code projectionMatrix * VIEW_SCALE * modelViewMatrix} in
 	 * the line branch of {@code program/gbuffers_basic.glsl} and declare neither. That costs six
