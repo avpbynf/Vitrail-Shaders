@@ -91,28 +91,40 @@ public final class BlockStateIds {
 		}
 
 		ids.problems().forEach(problem -> Vitrail.logger().warn("{}", problem));
-		announceStale(previous, built);
+		rebuildIfMoved(previous, built);
 	}
 
 	/**
-	 * Chunk meshes are cached, so a table that changes under them does not reach what is already
-	 * built. Said out loud rather than repaired, because the mesh format is decided once for the
-	 * whole run for the same reason and rebuilding here would make one of the two special.
+	 * Chunk meshes carry the number they were built with, so a table that changes under them does not
+	 * reach what is already meshed: every section in sight keeps the previous pack's numbering until
+	 * it is built again.
+	 * <p>
+	 * Which is not cosmetic, because the numbers are the pack's own and no two packs share them. BSL
+	 * reads Complementary's stone, 10080, as its own id 100, which is waving grass: swap one pack for
+	 * the other in a running game and every stone wall is lit and displaced as foliage until something
+	 * rebuilds it. The only cure the player has then is to place a block, which rebuilds one section,
+	 * so the whole thing reads as the light being broken rather than as a stale mesh.
+	 * <p>
+	 * So the world is rebuilt, through the door F3+A itself uses: {@code LevelExtractor.allChanged}
+	 * raises a flag the next extract consumes, which is a frame boundary, rather than tearing the
+	 * sections down inside the frame this is called from. Iris rebuilds at the same moment, where it
+	 * installs its own ids. What stays decided once for the whole run is the mesh <em>format</em>,
+	 * whether the number is carried at all; that one no reload can move.
 	 * <p>
 	 * Silent at startup, where the level is null and nothing has been meshed yet. That is also the
 	 * ordinary case: a settings file saved with no change to {@code block.properties} rebuilds an
-	 * equal table and says nothing.
+	 * equal table and asks for nothing.
 	 */
-	private static void announceStale(Object2IntMap<BlockState> previous,
+	private static void rebuildIfMoved(Object2IntMap<BlockState> previous,
 			Object2IntMap<BlockState> built) {
 		Minecraft minecraft = Minecraft.getInstance();
 		if (minecraft == null || minecraft.level == null || previous.equals(built)) {
 			return;
 		}
 
-		Vitrail.logger().warn("The block ids moved, from {} states to {}. Sections already meshed "
-				+ "keep the numbers they were built with until they are built again, which F3+A does",
-				previous.size(), built.size());
+		Vitrail.logger().info("The block ids moved, from {} states to {}. The sections carry them, so "
+				+ "they are all built again", previous.size(), built.size());
+		minecraft.levelExtractor.allChanged();
 	}
 
 	/**
