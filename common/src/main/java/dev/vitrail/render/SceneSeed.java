@@ -28,20 +28,20 @@ import java.util.function.Supplier;
 
 /**
  * Draws the game's opaque scene into the target the terrain would have written, standing in for
- * a gbuffers stage that does not write into a target of the pack.
+ * every gbuffers stage that does not run: the sky, the entities, the particles and the weather.
  * <p>
- * The opaque and cutout chunk passes do run against the pack's own programs, and that changes
- * nothing here: they draw into the game's target, where Sodium opened its pass, so what they paint
- * reaches the pack's colortex through this seed, together with the sky and the entities the game
- * drew around them. The translucent pass is the exception: it draws after the seed, straight into
- * the pack's own targets, and blends onto the image seeded here.
+ * It is cut around the pack's own terrain rather than painted over it. The opaque and cutout chunk
+ * passes write that target themselves, and they mark every pixel they covered as they go, so what
+ * lands here is the game's picture everywhere the pack answered for nothing. Without the cut the
+ * two would fight and the game would win, because it is drawn second. The translucent pass is
+ * different again: it draws after this and blends onto what the two of them left.
  * <p>
  * This is not a fallback and should not be read as one. The first draw buffer of the terrain pass
  * is, by the definition of the OptiFine model, where the world's colour ends up, so it is the one
  * place where putting the game's own picture back is the right answer rather than a guess. Which
  * target that is comes from the plan and is not always colortex0: Sildur's serves its terrain
  * through {@code gbuffers_textured}, whose draw buffers start at colortex4. The whole class goes
- * away the day the gbuffers run.
+ * away the day the gbuffers run, and the mask with it.
  * <p>
  * A draw and not a copy. {@code copyTextureToTexture} ends up on {@code vkCmdCopyImage}, which
  * reinterprets bits instead of converting them, and the Java side only checks that both formats

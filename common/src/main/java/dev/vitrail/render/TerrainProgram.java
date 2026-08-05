@@ -121,7 +121,20 @@ public final class TerrainProgram {
 		GAME,
 
 		/** A colour target of the pack, named by the attachment and on the half it names. */
-		PACK
+		PACK,
+
+		/**
+		 * No image at all, and the slot is there to be skipped.
+		 * <p>
+		 * The game writes each fragment output's RANK over the location it declared, so a stage
+		 * declaring more outputs than the pack gave it draw buffers still spends those ranks. They
+		 * are stood for here rather than closed up, or the mask below would land on the rank an
+		 * output of the pack's already holds and read whatever that output happens to carry.
+		 */
+		UNUSED,
+
+		/** The mask saying where this pass drew, which is ours and not in the pack's draw buffers. */
+		COVERAGE
 	}
 
 	/**
@@ -152,6 +165,9 @@ public final class TerrainProgram {
 
 	/** Whether draw buffer nought goes to the pack rather than to the game. The constructor says why. */
 	private final boolean ownsFirst;
+
+	/** Whether this pass writes the mask the scene seed is cut with. Opaque halves only. */
+	private final boolean covers;
 	private final ColorTargets targets;
 	private final ShadowTargets shadow;
 	private final PackProgram.Loaded loaded;
@@ -180,29 +196,55 @@ public final class TerrainProgram {
 			boolean chainRuns) {
 		this.pass = pass;
 		this.path = loaded.path();
-		// Where draw buffer nought goes is the whole difference between the two halves of the world,
-		// and getting it wrong costs the water.
+		TranslatedUnit.Notes notes = loaded.program().stages().get(ProgramStage.FRAGMENT).notes();
+		int outputs = notes.fragmentOutputs();
+
+		// Draw buffer nought goes to the pack, on all three halves of the world, and the whole cost
+		// of that is that somebody else has to stop painting over it.
 		//
-		// Opaque and cutout keep it on the game's own target. The seed is painted from that target
-		// once they are done, so what they draw reaches the pack's colortex through the seed, with
-		// the sky and the entities the seed also carries. Writing it into the pack's target directly
-		// would gain nothing and lose those.
-		//
-		// The translucent half is the opposite. It is drawn AFTER the seed has run, so the pack's
-		// own colour target already holds the opaque world, and that is exactly what a
+		// The translucent half has needed it from the start. It is drawn AFTER the seed has run, so
+		// the pack's own colour target already holds the opaque world, and that is exactly what a
 		// gbuffers_water expects to blend onto. Sent to the game's target instead, the water is
 		// drawn and then thrown away: the final overwrites that target with the image the chain
 		// composed out of a colortex the water never reached.
 		//
-		// Two demotions, both back to the game's target. When the chain is not running there is no
-		// final to bring a colortex to the screen, so water sent there would simply vanish; and
-		// when the plan had no answer there is nowhere else to send it. Either way the pass draws
-		// where Sodium would have, which is also what keeps the pipeline's one state the pass's.
-		this.ownsFirst = pass.blended() && chainRuns && !writes.isEmpty();
+		// The two opaque halves used to keep it on the game's target and reach the pack's colortex
+		// through the seed, which was one conversion too many. What a gbuffers_terrain puts in draw
+		// buffer nought is not a colour but whatever the pack packed there, and the game's target is
+		// eight bits a channel: Bliss packs two values into each channel of a sixteen bit colortex1,
+		// and the trip through the game's target quantised its albedo away entirely, leaving the
+		// encoded normal to be read back as the albedo. So the opaque halves write their target
+		// outright, and the coverage mask below is what keeps the seed off the pixels they wrote.
+		//
+		// Three demotions, all back to the game's target. When the chain is not running there is no
+		// final to bring a colortex to the screen, so anything sent there would simply vanish; when
+		// the plan had no answer there is nowhere else to send it; and when an opaque half could not
+		// be given a mask, the seed would repaint the whole target and take the terrain with it.
+		// Either way the pass draws where Sodium would have, which is also what keeps the pipeline's
+		// one state the pass's.
+		//
+		// Whether the mask was really written is the translation's answer and not a second reading
+		// of the same rule: the stage that could not be given one says so, and an engine that
+		// decided for itself would be attaching an image nothing fills.
+		boolean owns = chainRuns && !writes.isEmpty();
+		this.covers = owns && pass.covers() && notes.coverage() == 1 && writes.size() <= outputs
+				&& outputs < ColorTargetState.MAX_COLOR_TARGETS;
+		this.ownsFirst = owns && (pass.blended() || this.covers);
 		this.extra = this.ownsFirst
 				? List.copyOf(writes)
 				: writes.size() < 2 ? List.of() : List.copyOf(writes.subList(1, writes.size()));
-		this.slots = pass.shadow() ? List.of() : attachments(targets);
+		this.slots = pass.shadow() ? List.of() : attachments(targets, outputs);
+
+		// Said here rather than in announce(), because it is a property of the text and not of a
+		// frame, and because what it costs is invisible: the pass then draws exactly as it did
+		// before the mask existed, and it is Bliss's albedo that pays for it.
+		if (owns && pass.covers() && !this.covers) {
+			Vitrail.logger().warn("{} declares {} fragment outputs against {} draw buffers, so there "
+					+ "is no rank left for a coverage mask: draw buffer nought stays on the game's "
+					+ "target and the scene seed keeps painting the whole of it", this.path, outputs,
+					writes.size());
+		}
+
 		this.targets = targets;
 		this.shadow = targets.shadow();
 		this.loaded = loaded;
@@ -264,7 +306,15 @@ public final class TerrainProgram {
 			builder.withColorTargetState(0, state(targets.shadowFormat()));
 		} else {
 			for (int slot = 0; slot < this.slots.size(); slot++) {
-				builder.withColorTargetState(slot, state(this.slots.get(slot).format()));
+				Slot one = this.slots.get(slot);
+				switch (one.bound()) {
+					case UNUSED -> builder.withUnusedColorTargetState(slot);
+					// The mask is written outright and never blended, whatever the pack asked for its
+					// own targets: a fragment either covered this pixel or it did not.
+					case COVERAGE -> builder.withColorTargetState(slot, new ColorTargetState(
+							Optional.empty(), one.format(), ColorTargetState.WRITE_ALL));
+					default -> builder.withColorTargetState(slot, state(one.format()));
+				}
 			}
 		}
 
@@ -277,8 +327,11 @@ public final class TerrainProgram {
 	 * <p>
 	 * Nought is the game's own target and carries its format; the rest carry the format their colour
 	 * target was really allocated as, which is not always the one the pack asked for.
+	 *
+	 * @param outputs how many outputs the fragment stage declares, which is where the mask goes and
+	 *                not where the pack's draw buffers end. See {@link Bound#UNUSED}
 	 */
-	private List<Slot> attachments(ColorTargets targets) {
+	private List<Slot> attachments(ColorTargets targets, int outputs) {
 		List<Slot> built = new ArrayList<>();
 		if (!this.ownsFirst) {
 			built.add(new Slot(Bound.GAME, null, GpuFormat.RGBA8_UNORM));
@@ -286,6 +339,14 @@ public final class TerrainProgram {
 
 		for (ChainPlan.Attachment attachment : this.extra) {
 			built.add(new Slot(Bound.PACK, attachment, targets.format(attachment.target())));
+		}
+
+		if (this.covers) {
+			while (built.size() < outputs) {
+				built.add(new Slot(Bound.UNUSED, null, null));
+			}
+
+			built.add(new Slot(Bound.COVERAGE, null, targets.coverageFormat()));
 		}
 
 		return List.copyOf(built);
@@ -535,13 +596,13 @@ public final class TerrainProgram {
 	/**
 	 * The render pass this program wants opened, or null to leave the chunk renderer's own alone.
 	 * <p>
-	 * Null is the ordinary answer and not a failure: a program writing one draw buffer wants exactly
-	 * the pass Sodium would have opened, and BSL is that case. It is also the answer while the
-	 * targets are still being allocated, which is the first frame or two and the frames after a
-	 * resize.
+	 * Null is the ordinary answer and not a failure: a pass that gained nothing over the one Sodium
+	 * would have opened wants exactly that one, and building an identical one of our own would only
+	 * be a way of getting it wrong later. It is also the answer while the targets are still being
+	 * allocated, which is the first frame or two and the frames after a resize.
 	 *
-	 * @param colour the colour view the renderer was going to draw into, which stays attachment
-	 *               nought
+	 * @param colour the colour view the renderer was going to draw into, which is attachment nought
+	 *               only where the pack's own targets do not take it
 	 * @param depth  the depth view it was going to use, kept as it is: the terrain has to test
 	 *               against the sky the game already drew, and everything the game draws afterwards
 	 *               has to test against the terrain
@@ -558,12 +619,19 @@ public final class TerrainProgram {
 			return shadowDescriptor();
 		}
 
-		if (this.extra.isEmpty()) {
+		// Nothing gained over the pass the renderer was going to open: one attachment, its own
+		// target, at its own format.
+		if (this.slots.size() == 1 && this.slots.get(0).bound() == Bound.GAME) {
 			return null;
 		}
 
 		RenderPassDescriptor descriptor = RenderPassDescriptor.create(PASS_LABEL);
 		for (Slot slot : this.slots) {
+			if (slot.bound() == Bound.UNUSED) {
+				descriptor.withUnusedColorAttachment();
+				continue;
+			}
+
 			GpuTextureView view = view(slot, colour);
 			if (view == null) {
 				// The targets are not there yet, or not there any more. Sodium's own pass draws this
@@ -575,9 +643,9 @@ public final class TerrainProgram {
 		}
 
 		// Never left out: the encoder refuses a descriptor without one outright, and it refuses it
-		// at the first draw rather than at load time. The size is the screen's because attachment
-		// nought is the game's own target, which is what makes a scaled colour target impossible
-		// here and why the constructor drops those instead of scaling the area to them.
+		// at the first draw rather than at load time. The size is the screen's, and stays the
+		// screen's now that attachment nought may be a target of the pack's: a scaled colour target
+		// is dropped before it gets here, and the game's depth is attached whatever else is.
 		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0,
 				this.targets.screenWidth(), this.targets.screenHeight()));
 
@@ -594,6 +662,8 @@ public final class TerrainProgram {
 		return switch (slot.bound()) {
 			case GAME -> colour;
 			case PACK -> this.targets.view(slot.target().target(), slot.target().side());
+			case COVERAGE -> this.targets.coverage();
+			case UNUSED -> null;
 		};
 	}
 
@@ -929,14 +999,20 @@ public final class TerrainProgram {
 						outputs);
 			}
 		} else if (this.ownsFirst) {
-			// Nought included, and the log says the sides because they are the whole fix: a
-			// translucent write on the half the composites do not read is water that vanishes
-			// without a word from anyone.
+			// Nought included, and the log says the sides because they are the whole fix: a write on
+			// the half the composites do not read is geometry that vanishes without a word from
+			// anyone.
 			Vitrail.logger().info("Its draw buffers all reach the pack's own targets, nought "
-					+ "included, on the halves after the deferred stage: {}",
+					+ "included: {}",
 					this.extra.stream()
 							.map(one -> TargetName.canonical(one.target()) + " " + one.side())
 							.toList());
+			if (this.covers) {
+				// The pair to read this against is the seed's own line: this one says the mask is
+				// written, that one says it is honoured.
+				Vitrail.logger().info("It also writes the coverage mask, so nothing paints the game's "
+						+ "own picture back over what this pass wrote");
+			}
 		} else if (this.extra.isEmpty()) {
 			// Draw buffer nought is not named here on purpose: it goes to the game's own target,
 			// which is where it has always gone and where the seed reads it back from.

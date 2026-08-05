@@ -1209,6 +1209,10 @@ public final class PackChain {
 			// that reads the world of this frame and one that reads what the clear left.
 			Vitrail.logger().info("It is painted where the world would be drawn, after {} passes of "
 					+ "the chain", where.get().at());
+			// The pair to the terrain's own line. A frame where no terrain program of the pack ran
+			// leaves the mask empty and this covers the target whole, which is what it always did.
+			Vitrail.logger().info("It paints only what the pack's own terrain has not written, which "
+					+ "the coverage mask says pixel by pixel");
 		} else if (where.isEmpty()) {
 			Vitrail.logger().info("Nothing carries the game's frame in {}, so every program of the "
 					+ "chain starts from a clear colour", place());

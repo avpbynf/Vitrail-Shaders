@@ -37,12 +37,11 @@ import java.util.function.Supplier;
  * regions, the culling, the push constants. Rewriting any of that is out of the question, it is the
  * most internal code Sodium has and it is under a licence this project cannot copy from.
  * <p>
- * <strong>Draw buffer nought is deliberately left where it was.</strong> It keeps going to the
- * game's own target, so the picture on screen is unchanged and the scene seed still finds the world
- * where it looks for it. What is gained is everything above nought, which costs nothing because it
- * is written nowhere today. Taking nought as well is the next step and it is not this one: the sky
- * and the entities are still drawn by the game, so a colour target holding only the terrain would
- * make the chain composite a world with no sky in it.
+ * <strong>Draw buffer nought comes here too, and the sky and the entities still do not.</strong>
+ * What a {@code gbuffers_terrain} puts there is not a colour but whatever the pack packed there, and
+ * the game's own target is eight bits a channel: a pack encoding two values per channel loses one of
+ * them on the way through. So the pass writes the pack's target outright and marks the pixels it
+ * covered, and the scene seed brings the rest of the game's picture in around them.
  * <p>
  * The depth view is passed through untouched. The terrain has to depth test against the sky the game
  * has already drawn, and the entities, the particles and the hand have to test against the terrain.
