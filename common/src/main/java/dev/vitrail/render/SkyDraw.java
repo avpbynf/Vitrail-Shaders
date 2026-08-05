@@ -459,11 +459,6 @@ public final class SkyDraw {
 		return program.prepare(device, element.rotated() ? modelView : null, colour);
 	}
 
-	/** The programs once they have been read, for the decoded dump. Empty until then. */
-	Iterable<SkyProgram> programs() {
-		return this.programs.values();
-	}
-
 	/** Rotates the ring buffers. Called once the frame's sky draws have been recorded. */
 	void rotate() {
 		this.drawing = null;
