@@ -27,6 +27,21 @@ public final class VolumeAtlas {
 	/** One texel on each side of every tile, holding the wrapped copy of the far edge. */
 	public static final int GUTTER = 1;
 
+	/**
+	 * What the atlas is allowed to come out as, which is not what the volume is allowed to be.
+	 * <p>
+	 * A blob is bounded by the ceiling on a pack file and its declaration is checked against its
+	 * length, so a volume is at most a few million texels; the atlas is what those texels are laid
+	 * out AS, and one long axis lays them out in a line. A megabyte declared as
+	 * {@code 4096 1 2048} spreads to a hundred and eighty eight thousand texels across, which no
+	 * device will allocate and which nothing in the file said. The sides are what a device takes and
+	 * the total is what the memory is: four bytes a texel, so this is half a gigabyte at the very
+	 * most and a megabyte for the two volumes of the corpus.
+	 */
+	private static final int MAX_SIDE = 16384;
+
+	private static final long MAX_TEXELS = 32L * 1024 * 1024;
+
 	/** Four bytes a texel, because that is the format the engine already allocates. */
 	private static final int CHANNELS = 4;
 
@@ -58,6 +73,15 @@ public final class VolumeAtlas {
 
 		return new VolumeAtlas(width, height, depth, tilesPerRow,
 				(depth + tilesPerRow - 1) / tilesPerRow);
+	}
+
+	/**
+	 * Whether this layout is one a device could hold and this engine is willing to spend. Asked
+	 * before a volume is served, because a layout that does not fit is one nothing can draw with.
+	 */
+	public boolean fits() {
+		return atlasWidth() <= MAX_SIDE && atlasHeight() <= MAX_SIDE
+				&& (long) atlasWidth() * atlasHeight() <= MAX_TEXELS;
 	}
 
 	/**

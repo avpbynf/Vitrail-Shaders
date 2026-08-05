@@ -219,8 +219,35 @@ public final class PackTextures {
 		String meta = meta(source, path);
 		boolean sampled = raw.isPresent();
 
-		supplied.add(new PackTexture(sampler, stage, path, raw,
-				field(meta, "blur").orElse(sampled), field(meta, "clamp").orElse(sampled)));
+		PackTexture texture = new PackTexture(sampler, stage, path, raw,
+				field(meta, "blur").orElse(sampled), field(meta, "clamp").orElse(sampled));
+
+		// A volume is served by spreading it over an atlas, so it is the atlas that has to be a
+		// texture a device would take, and the declaration says nothing about how wide that comes
+		// out: the length of the blob is checked and its shape is not. Refused by name, like the
+		// rest, so the sampler reads black.
+		if (flattenable(texture)) {
+			PackTexture.Raw shape = raw.orElseThrow();
+			VolumeAtlas atlas = VolumeAtlas.of(shape.sizeX(), shape.sizeY(), shape.sizeZ());
+			if (!atlas.fits()) {
+				refused.add(new Refused(key, value, path + " lays out flat as " + atlas.atlasWidth()
+						+ "x" + atlas.atlasHeight() + ", which is past what a texture can be", stage,
+						sampler));
+				return;
+			}
+		} else if (volume(texture)) {
+			// A hole rather than a rule, and one that costs the whole pack, so it is said out loud
+			// where the refusal that follows cannot say it. The gutter carries wrapped copies of the
+			// far edge and the printed helper wraps, so serving a clamped volume with them would be
+			// right everywhere except within half a texel of the border, which is the plausible
+			// wrong picture this engine will not draw. It bites easily: a blob is clamped by
+			// default, so a volume shipped WITHOUT its .mcmeta lands here, and the sampler3D it
+			// leaves standing takes every program that declares it.
+			notes.add(path + " is a volume the pack asks to clamp, which is not laid out flat here, "
+					+ "so " + sampler + " stays a sampler3D and no program declaring it can be built");
+		}
+
+		supplied.add(texture);
 	}
 
 	/**
@@ -358,7 +385,15 @@ public final class PackTextures {
 	}
 
 	private static boolean flattenable(PackTexture texture) {
-		return !texture.clamp() && texture.raw()
+		return volume(texture) && !texture.clamp();
+	}
+
+	/**
+	 * A blob of the one shape this lays out flat, whatever addressing it asks for: three dimensional
+	 * and one byte a texel.
+	 */
+	private static boolean volume(PackTexture texture) {
+		return texture.raw()
 				.filter(raw -> raw.shape() == PackTexture.Shape.TEXTURE_3D)
 				.filter(raw -> raw.pixelType().bytesPerTexel(raw.pixelFormat()) == 1L)
 				.isPresent();
