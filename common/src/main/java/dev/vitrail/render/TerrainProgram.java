@@ -52,6 +52,7 @@ import org.joml.Vector4f;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
@@ -113,6 +114,23 @@ public final class TerrainProgram {
 	private static final Supplier<String> PASS_LABEL = () -> "Vitrail terrain";
 	private static final Supplier<String> SHADOW_LABEL = () -> "Vitrail shadow";
 
+	/** Where one colour attachment of a world pass takes its image from. */
+	private enum Bound {
+
+		/** The target the chunk renderer was going to draw into, which carries its own format. */
+		GAME,
+
+		/** A colour target of the pack, named by the attachment and on the half it names. */
+		PACK
+	}
+
+	/**
+	 * One colour attachment, in the order the pipeline's states and the descriptor's views are both
+	 * walked. {@code target} is the pack's answer and is null for anything else.
+	 */
+	private record Slot(Bound bound, ChainPlan.Attachment target, GpuFormat format) {
+	}
+
 	private final TerrainPass pass;
 	private final String path;
 
@@ -121,6 +139,16 @@ public final class TerrainProgram {
 	 * when {@link #ownsFirst}, every one but nought otherwise. Empty when there is nothing to gain.
 	 */
 	private final List<ChainPlan.Attachment> extra;
+
+	/**
+	 * Every colour attachment of a world pass, in order, settled once at load. Empty for a shadow
+	 * pass, which draws into the map and nothing else.
+	 * <p>
+	 * One list rather than two readings of one rule. The pipeline carries a state per element and
+	 * the descriptor names a view per element, and {@code RenderPass.setPipeline} refuses outright,
+	 * in the middle of the world, the moment the two counts or the two formats stop agreeing.
+	 */
+	private final List<Slot> slots;
 
 	/** Whether draw buffer nought goes to the pack rather than to the game. The constructor says why. */
 	private final boolean ownsFirst;
@@ -174,6 +202,7 @@ public final class TerrainProgram {
 		this.extra = this.ownsFirst
 				? List.copyOf(writes)
 				: writes.size() < 2 ? List.of() : List.copyOf(writes.subList(1, writes.size()));
+		this.slots = pass.shadow() ? List.of() : attachments(targets);
 		this.targets = targets;
 		this.shadow = targets.shadow();
 		this.loaded = loaded;
@@ -234,20 +263,32 @@ public final class TerrainProgram {
 			// naming four channels against a one channel attachment is the pipeline refusing to bind.
 			builder.withColorTargetState(0, state(targets.shadowFormat()));
 		} else {
-			// Nought is the game's own target and carries its format; the rest carry the format their
-			// colour target was really allocated as, which is not always the one the pack asked for.
-			int first = this.ownsFirst ? 0 : 1;
-			if (!this.ownsFirst) {
-				builder.withColorTargetState(0, state(GpuFormat.RGBA8_UNORM));
-			}
-
-			for (int slot = 0; slot < this.extra.size(); slot++) {
-				builder.withColorTargetState(slot + first,
-						state(targets.format(this.extra.get(slot).target())));
+			for (int slot = 0; slot < this.slots.size(); slot++) {
+				builder.withColorTargetState(slot, state(this.slots.get(slot).format()));
 			}
 		}
 
 		this.pipeline = builder.build();
+	}
+
+	/**
+	 * The colour attachments of a world pass, in the order both the pipeline and the descriptor walk
+	 * them.
+	 * <p>
+	 * Nought is the game's own target and carries its format; the rest carry the format their colour
+	 * target was really allocated as, which is not always the one the pack asked for.
+	 */
+	private List<Slot> attachments(ColorTargets targets) {
+		List<Slot> built = new ArrayList<>();
+		if (!this.ownsFirst) {
+			built.add(new Slot(Bound.GAME, null, GpuFormat.RGBA8_UNORM));
+		}
+
+		for (ChainPlan.Attachment attachment : this.extra) {
+			built.add(new Slot(Bound.PACK, attachment, targets.format(attachment.target())));
+		}
+
+		return List.copyOf(built);
 	}
 
 	/**
@@ -522,12 +563,8 @@ public final class TerrainProgram {
 		}
 
 		RenderPassDescriptor descriptor = RenderPassDescriptor.create(PASS_LABEL);
-		if (!this.ownsFirst) {
-			descriptor.withColorAttachment(colour);
-		}
-
-		for (ChainPlan.Attachment attachment : this.extra) {
-			GpuTextureView view = this.targets.view(attachment.target(), attachment.side());
+		for (Slot slot : this.slots) {
+			GpuTextureView view = view(slot, colour);
 			if (view == null) {
 				// The targets are not there yet, or not there any more. Sodium's own pass draws this
 				// frame rather than nothing at all, and the next frame tries again.
@@ -545,6 +582,19 @@ public final class TerrainProgram {
 				this.targets.screenWidth(), this.targets.screenHeight()));
 
 		return depth == null ? descriptor : descriptor.withDepthAttachment(depth);
+	}
+
+	/**
+	 * The image one attachment is really drawn into, or null when it is not there yet.
+	 *
+	 * @param colour the colour view the renderer was going to draw into, which is the only image of
+	 *               this pass that is not ours to look up
+	 */
+	private GpuTextureView view(Slot slot, GpuTextureView colour) {
+		return switch (slot.bound()) {
+			case GAME -> colour;
+			case PACK -> this.targets.view(slot.target().target(), slot.target().side());
+		};
 	}
 
 	/**
