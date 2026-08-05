@@ -102,7 +102,11 @@ public final class PauseMenuEntry {
 								.setScreen(new SettingsScreen(event.getScreen())),
 						true)
 				.width(ICON)
-				.sprite(SPRITE, 15, 15)
+				// Sixteen and not the fifteen the game's own icons of that row use, because the
+				// button places a sprite at its centre minus half its width, in whole pixels: an odd
+				// sprite in a twenty wide button lands three pixels from one edge and two from the
+				// other. Even against even is the only pair that comes out centred.
+				.sprite(SPRITE, 16, 16)
 				.withTootip()
 				.build();
 		button.setPosition(left - ICON - GAP, row);
