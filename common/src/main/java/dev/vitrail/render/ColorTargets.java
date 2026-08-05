@@ -278,9 +278,10 @@ final class ColorTargets {
 			changed = ensureConstants();
 			changed |= ensureCoverage(screenWidth, screenHeight);
 			// Not sized on the screen and therefore never resized with it: the pack's own resolution
-			// is the whole point of the map. Its answer is not folded into the debt below because the
-			// map is not cleared here at all: the shadow stage empties it itself, right before it
-			// draws, because its content has to cross the frame boundary.
+			// is the whole point of the map. Its answer is not folded into the debt below because
+			// the map is never in the clear that pays it: it empties itself where it is allocated,
+			// and again at the top of the stage that fills it, because its content has to cross the
+			// frame boundary.
 			this.shadowMap.ensure();
 			for (int index : this.plan.ordered()) {
 				// Each target has its own size, so one of them can be half the screen and be the
