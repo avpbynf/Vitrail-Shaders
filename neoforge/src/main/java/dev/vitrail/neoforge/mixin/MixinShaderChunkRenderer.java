@@ -41,7 +41,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * location of every element after it in silence.
  */
 @Mixin(value = ShaderChunkRenderer.class, remap = false)
-public abstract class ShaderChunkRendererMixin {
+public abstract class MixinShaderChunkRenderer {
 
 	@Shadow
 	protected VertexFormat vertexFormat;

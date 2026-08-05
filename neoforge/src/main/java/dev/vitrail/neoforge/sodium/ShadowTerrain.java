@@ -1,7 +1,7 @@
 package dev.vitrail.neoforge.sodium;
 
+import dev.vitrail.neoforge.mixin.MixinSodiumWorldRenderer;
 import dev.vitrail.neoforge.mixin.RenderSectionManagerAccessor;
-import dev.vitrail.neoforge.mixin.SodiumWorldRendererAccessor;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.Vitrail;
 
@@ -116,7 +116,7 @@ public final class ShadowTerrain {
 		}
 
 		RenderSectionManager manager =
-				((SodiumWorldRendererAccessor) renderer).vitrail$renderSectionManager();
+				((MixinSodiumWorldRenderer) renderer).vitrail$renderSectionManager();
 		Matrix4f light = TerrainDraw.shadowFrustum(LIGHT);
 		if (manager == null || light == null) {
 			return;
@@ -132,7 +132,7 @@ public final class ShadowTerrain {
 		// waits for it.
 		manager.prepareRender();
 		try {
-			FogParameters fog = ((SodiumWorldRendererAccessor) renderer).vitrail$lastFogParameters();
+			FogParameters fog = ((MixinSodiumWorldRenderer) renderer).vitrail$lastFogParameters();
 			Viewport viewport = new Viewport(new SimpleFrustum(new FrustumIntersection(light)),
 					new Vector3d(camera.x, camera.y, camera.z));
 			manager.finalizeRenderLists(minecraft.gameRenderer.mainCamera(), viewport,

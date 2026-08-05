@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * frame measure distance the same way.
  */
 @Mixin(value = SodiumWorldRenderer.class, remap = false)
-public interface SodiumWorldRendererAccessor {
+public interface MixinSodiumWorldRenderer {
 
 	@Accessor("renderSectionManager")
 	RenderSectionManager vitrail$renderSectionManager();

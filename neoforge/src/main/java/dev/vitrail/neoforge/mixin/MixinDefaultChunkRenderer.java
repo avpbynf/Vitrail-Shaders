@@ -47,7 +47,7 @@ import java.util.function.Supplier;
  * has already drawn, and the entities, the particles and the hand have to test against the terrain.
  */
 @Mixin(value = DefaultChunkRenderer.class, remap = false)
-public abstract class DefaultChunkRendererMixin {
+public abstract class MixinDefaultChunkRenderer {
 
 	/**
 	 * Answers the target question with the game's own while the shadow map is being drawn.

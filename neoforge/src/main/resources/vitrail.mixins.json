@@ -10,15 +10,15 @@
 		"BlockRendererMixin",
 		"ChunkMeshFormatsMixin",
 		"ChunkVertexMixin",
-		"DefaultChunkRendererMixin",
+		"MixinDefaultChunkRenderer",
 		"DefaultFluidRendererMixin",
 		"GameRendererMixin",
 		"LevelRendererMixin",
 		"ProjectionMatrixBufferMixin",
 		"RenderSectionManagerAccessor",
-		"ShaderChunkRendererMixin",
+		"MixinShaderChunkRenderer",
 		"SkyRendererMixin",
-		"SodiumWorldRendererAccessor",
+		"MixinSodiumWorldRenderer",
 		"VKDrawContextMixin"
 	]
 }
