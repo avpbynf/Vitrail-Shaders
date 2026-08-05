@@ -1,5 +1,7 @@
 package dev.vitrail.pack.menu;
 
+import dev.vitrail.pack.option.OptionValue;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -323,7 +325,39 @@ public final class MenuValues {
 		return this.menu.option(name).map(MenuOption::defaultValue).orElse("");
 	}
 
-	private static Map<String, String> copy(Map<String, String> values) {
-		return Collections.unmodifiableMap(new LinkedHashMap<>(values));
+	/**
+	 * Every layer read in the words a widget cycles through, so that the screen and the engine
+	 * cannot disagree about the file they both read.
+	 * <p>
+	 * Iris spells a boolean {@code true} and {@code false}, and its files are read as they are.
+	 * {@code SettingsLayers.resolve} takes them through {@link OptionValue#parse}, so the pack
+	 * really is built with those toggles on, while a menu works in {@code on} and {@code off}
+	 * because those are the two values a toggle offers. Handing the file's spelling straight to a
+	 * widget draws every one of them the wrong way round, and silently: both layers carry the same
+	 * word, so nothing is marked as waiting, and the first Apply copies that word into our own
+	 * file, where it stays.
+	 * <p>
+	 * This is the layer that has to do it rather than the reader, which serves the engine too and
+	 * cannot tell a toggle from a cycle whose values happen to be those words. Here the pack has
+	 * already said which is which.
+	 */
+	private Map<String, String> copy(Map<String, String> values) {
+		Map<String, String> copied = new LinkedHashMap<>();
+		values.forEach((name, value) -> copied.put(name, spelt(name, value)));
+
+		return Collections.unmodifiableMap(copied);
+	}
+
+	/**
+	 * Only a toggle is respelt. A name this pack no longer places is left exactly as it was
+	 * written: it is kept rather than dropped, and rewriting a value nothing on screen can explain
+	 * would edit a player's file on the strength of a guess.
+	 */
+	private String spelt(String name, String value) {
+		boolean toggle = this.menu.option(name)
+				.filter(option -> option.form() == MenuOption.Form.TOGGLE)
+				.isPresent();
+
+		return toggle ? OptionValue.parse(value).asText() : value;
 	}
 }
