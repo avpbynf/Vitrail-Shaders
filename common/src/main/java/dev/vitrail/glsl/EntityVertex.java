@@ -1,7 +1,6 @@
 package dev.vitrail.glsl;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,7 +57,7 @@ public final class EntityVertex {
 		List<String> lines = new ArrayList<>();
 
 		for (String attribute : ATTRIBUTES) {
-			lines.add("in " + type(attribute) + " " + attribute + ";");
+			lines.add("in " + VertexPrologue.elementType(attribute) + " " + attribute + ";");
 		}
 
 		lines.add("#define of_Vertex vec4(Position, 1.0)");
@@ -68,39 +67,15 @@ public final class EntityVertex {
 		// Unit two is a second name for the light map and not a unit of its own, which is what Iris
 		// makes of it as well, VanillaTransformer.java:77 renaming one into the other.
 		lines.add("#define of_MultiTexCoord2 vec4(UV2, 0.0, 1.0)");
-		// Above that the mesh has nothing. Iris makes unit three an alias of mc_midTexCoord and
-		// hands back this constant for four to seven; no program of the corpus reads any of them,
-		// so what these lines buy is that such a program names something rather than nothing.
-		for (int unit = 3; unit <= 7; unit++) {
-			lines.add("#define of_MultiTexCoord" + unit + " vec4(0.0, 0.0, 0.0, 1.0)");
-		}
+		lines.addAll(VertexPrologue.blankTexCoords());
 
 		lines.add("#define of_Normal Normal.xyz");
-
-		// The pack's own declaration first, so that a pack asking for a vec2 mc_Entity gets a vec2.
-		Map<String, String> globals = new LinkedHashMap<>(synthesized);
-		for (String name : SodiumVertex.SYNTHESIZED) {
-			if (used.contains(name) && !globals.containsKey(name)) {
-				globals.put(name, SodiumVertex.defaultType(name));
-			}
-		}
 
 		// The chunk mesh answers mc_Entity out of the block id it carries and this one cannot: an
 		// entity mesh has no room for one. So every name here is a constant, including that one,
 		// and what the picture is then wrong about is what the caller has to name in the log.
-		globals.forEach((name, type) ->
-				lines.add(type + " " + name + " = " + SodiumVertex.value(name, type) + ";"));
+		lines.addAll(VertexPrologue.tail(used, synthesized));
 
 		return List.copyOf(lines);
-	}
-
-	/** The GLSL type of one element of the format. */
-	private static String type(String attribute) {
-		return switch (attribute) {
-			case "Position" -> "vec3";
-			case "UV0" -> "vec2";
-			case "UV1", "UV2" -> "ivec2";
-			default -> "vec4";
-		};
 	}
 }

@@ -1,7 +1,6 @@
 package dev.vitrail.glsl;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,7 +76,7 @@ public final class SkyVertex {
 		List<String> lines = new ArrayList<>();
 
 		for (String attribute : bound) {
-			lines.add("in " + type(attribute) + " " + attribute + ";");
+			lines.add("in " + VertexPrologue.elementType(attribute) + " " + attribute + ";");
 		}
 
 		lines.add("#define of_Vertex vec4(Position, 1.0)");
@@ -111,32 +110,11 @@ public final class SkyVertex {
 			lines.add("#define of_MultiTexCoord" + unit + " vec4(0.0, 240.0, 0.0, 1.0)");
 		}
 
-		for (int unit = 3; unit <= 7; unit++) {
-			lines.add("#define of_MultiTexCoord" + unit + " vec4(0.0, 0.0, 0.0, 1.0)");
-		}
+		lines.addAll(VertexPrologue.blankTexCoords());
 
 		lines.add("#define of_Normal vec3(0.0, 0.0, 1.0)");
-
-		// The pack's own declaration first, so that a pack asking for a vec2 mc_Entity gets a vec2.
-		Map<String, String> globals = new LinkedHashMap<>(synthesized);
-		for (String name : SodiumVertex.SYNTHESIZED) {
-			if (used.contains(name) && !globals.containsKey(name)) {
-				globals.put(name, SodiumVertex.defaultType(name));
-			}
-		}
-
-		globals.forEach((name, type) ->
-				lines.add(type + " " + name + " = " + SodiumVertex.value(name, type) + ";"));
+		lines.addAll(VertexPrologue.tail(used, synthesized));
 
 		return List.copyOf(lines);
-	}
-
-	/** The GLSL type of one element of a sky format. */
-	private static String type(String attribute) {
-		return switch (attribute) {
-			case "Position" -> "vec3";
-			case "UV0" -> "vec2";
-			default -> "vec4";
-		};
 	}
 }

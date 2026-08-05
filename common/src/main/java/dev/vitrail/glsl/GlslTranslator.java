@@ -1483,7 +1483,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		if (known && found.keySet().stream().noneMatch(SodiumVertex.SYNTHESIZED::contains)) {
+		if (known && found.keySet().stream().noneMatch(VertexPrologue.SYNTHESIZED::contains)) {
 			return;
 		}
 

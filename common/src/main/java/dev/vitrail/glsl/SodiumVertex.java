@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * What Sodium's chunk mesh carries, and how the names a pack reads are made out of it.
@@ -57,23 +56,8 @@ public final class SodiumVertex {
 			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID);
 
 	/**
-	 * Vertex inputs a pack declares for itself that no mesh of this engine carries. A declaration
-	 * of one of these is taken out of the body and reappears in the header as an ordinary global with
-	 * a value, so that the pack compiles and reads that value instead of an attribute nothing fills.
-	 * <p>
-	 * Sorted, and not a set literal, for the reason {@link LegacyGlsl} gives about its maps: the
-	 * heads walk this to write their globals, and a literal hands its names back in an order the
-	 * runtime picks afresh on every start. Reverie's terrain stage had {@code dhMaterialId} and
-	 * {@code mc_chunkFade} swap places between two runs, which is the same text to a reader and a
-	 * different shader to the game, so it recompiles a pipeline it already has.
-	 */
-	public static final Set<String> SYNTHESIZED = Collections.unmodifiableSet(new TreeSet<>(
-			List.of("mc_Entity", "mc_midTexCoord", "mc_chunkFade", "at_tangent", "at_midBlock",
-					"vaPosition", "vaNormal", "vaColor", "vaUV0", "vaUV1", "vaUV2", "dhMaterialId")));
-
-	/**
-	 * The ones of those the mesh answers for real, out of an element under another name. What is
-	 * left of {@link #SYNTHESIZED} after this is what the log has to call a constant.
+	 * The ones of {@link VertexPrologue#SYNTHESIZED} this mesh answers for real, out of an element
+	 * under another name. What is left of that set is what the log has to call a constant.
 	 */
 	public static final Set<String> ANSWERED = Set.of("mc_Entity");
 
@@ -98,15 +82,6 @@ public final class SodiumVertex {
 	 * prologue works it out instead of standing one in.
 	 */
 	private static final Map<String, String> FIXED = fixed();
-
-	/**
-	 * A tangent of nought is not harmless. Every pack that reads one normalises it, and
-	 * {@code normalize(vec3(0))} is a division by nought whose NaN travels into the colour through
-	 * the tangent frame. So this one gets an axis rather than a zero.
-	 */
-	private static final Map<String, String> BETTER_DEFAULTS = Map.of(
-			"at_tangent", "vec4(1.0, 0.0, 0.0, 1.0)",
-			"of_Normal", "vec3(0.0, 1.0, 0.0)");
 
 	private SodiumVertex() {
 	}
@@ -153,26 +128,14 @@ public final class SodiumVertex {
 				+ "vec3(-1.0, 0.0, 0.0), vec3(0.0, -1.0, 0.0), vec3(0.0, 0.0, -1.0), "
 				+ "vec3(0.0, 1.0, 0.0));");
 
-		// The pack's own declaration first, so that a pack asking for a vec2 mc_Entity gets a vec2.
-		Map<String, String> globals = new LinkedHashMap<>(synthesized);
-		FIXED.forEach((name, type) -> {
-			if (used.contains(name) && !synthesized.containsKey(name)) {
-				globals.put(name, type);
-			}
-		});
-
-		for (String name : SYNTHESIZED) {
-			if (used.contains(name) && !synthesized.containsKey(name)) {
-				globals.put(name, defaultType(name));
-			}
-		}
+		Map<String, String> globals = VertexPrologue.globals(used, synthesized, FIXED);
 
 		// A name the mesh answers is left uninitialised here and filled in the prologue below, like
 		// of_Vertex above it. A global initialiser that reads an attribute is not a constant
 		// expression, and the language does not allow one.
 		globals.forEach((name, type) -> lines.add(ANSWERED.contains(name)
 				? type + " " + name + ";"
-				: declare(type, name)));
+				: VertexPrologue.declaration(name, type)));
 
 		// One coordinate out of the pair, given where its ten bit halves sit in each component.
 		lines.add("float ofAxis(uint at) {");
@@ -216,13 +179,6 @@ public final class SodiumVertex {
 		return List.copyOf(lines);
 	}
 
-	/** What a name the mesh does not carry is worth, given the type the pack declared it under. */
-	public static String value(String name, String type) {
-		String better = BETTER_DEFAULTS.get(name);
-
-		return better != null && better.startsWith(type + "(") ? better : zero(type);
-	}
-
 	/**
 	 * {@code mc_Entity} out of the packed element, in the shape the pack declared it under.
 	 * <p>
@@ -248,44 +204,7 @@ public final class SodiumVertex {
 			case "ivec2" -> "ivec2(" + id + ", " + fluid + ")";
 			case "ivec3" -> "ivec3(" + id + ", " + fluid + ", 0)";
 			case "ivec4" -> "ivec4(" + id + ", " + fluid + ", 0, 1)";
-			default -> zero(type);
-		};
-	}
-
-	/** Nought of a type, spelled the way the type takes it. */
-	public static String zero(String type) {
-		return switch (type) {
-			case "float" -> "0.0";
-			case "int" -> "0";
-			case "uint" -> "0u";
-			case "bool" -> "false";
-			case "vec2", "vec3", "vec4" -> type + "(0.0)";
-			case "ivec2", "ivec3", "ivec4" -> type + "(0)";
-			case "uvec2", "uvec3", "uvec4" -> type + "(0u)";
-			case "bvec2", "bvec3", "bvec4" -> type + "(false)";
-			// A matrix attribute is not something the corpus has, and a constructor from one scalar
-			// is the identity rather than a zero. Left as the language's own default so that a pack
-			// which somehow declares one still compiles.
-			default -> type + "(0.0)";
-		};
-	}
-
-	private static String declare(String type, String name) {
-		return type + " " + name + " = " + value(name, type) + ";";
-	}
-
-	/**
-	 * The type a name takes when the pack reads it without ever declaring it. Asked by every mesh
-	 * and not only by this one: the question is what the name means, which no mesh gets a say in.
-	 */
-	public static String defaultType(String name) {
-		return switch (name) {
-			case "dhMaterialId" -> "int";
-			case "mc_chunkFade" -> "float";
-			case "at_midBlock", "vaPosition", "vaNormal" -> "vec3";
-			case "vaUV1", "vaUV2" -> "ivec2";
-			case "vaUV0" -> "vec2";
-			default -> "vec4";
+			default -> VertexPrologue.zero(type);
 		};
 	}
 
