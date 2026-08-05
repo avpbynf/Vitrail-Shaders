@@ -574,9 +574,23 @@ final class ColorTargets {
 
 		for (PackImages.Image image : images) {
 			Vitrail.logger().info("The pack supplies {}", PackImages.describe(image));
-			this.packSurfaces.put(image, new TargetSurface(
-					"Vitrail " + image.texture().sampler(), CONSTANT_FORMAT, false, image.width(),
-					image.height()));
+
+			// One at a time, because one refusal here must cost one texture and not the pack. These
+			// are the only surfaces of the engine whose size comes from a downloaded file rather
+			// than from the window, and everything else in this method is on the road that sets
+			// broken and draws nothing. Same answer ShadowTargets gives for a size a pack chose: a
+			// lookup table is not worth taking the pack down for, and a sampler with nothing behind
+			// it already reads black.
+			try {
+				this.packSurfaces.put(image, new TargetSurface(
+						"Vitrail " + image.texture().sampler(), CONSTANT_FORMAT, false, image.width(),
+						image.height()));
+			} catch (RuntimeException e) {
+				note(image.texture().sampler() + " could not be allocated at " + image.width() + "x"
+						+ image.height() + ", so it reads one black pixel: " + e.getMessage());
+				Vitrail.logger().warn("Vitrail could not allocate {} at {}x{}, so it reads one black pixel",
+						image.texture().sampler(), image.width(), image.height(), e);
+			}
 		}
 
 		long bytes = this.packImages.bytes();

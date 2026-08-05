@@ -1,10 +1,14 @@
 package dev.vitrail.uniform;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.Random;
 
 /**
@@ -27,6 +31,24 @@ import java.util.Random;
  */
 public final class NoiseTexture {
 
+	/**
+	 * The longest side an image of a pack may decode to. What a device will take: sixteen thousand
+	 * three hundred and eighty four is {@code maxImageDimension2D} on all but a handful of cards.
+	 */
+	private static final int MAX_SIDE = 16384;
+
+	/**
+	 * And the most texels, which is the number that matters and the one nothing else says.
+	 * <p>
+	 * The ceiling on the file is on the bytes ON DISK and has no bearing on this: Body Camera ships
+	 * a lookup table of fifty nine kilobytes that decodes to four thousand and ninety six square,
+	 * sixty four megabytes, and a flat image of thirty thousand square compresses smaller still and
+	 * asks for three and a half gigabytes. This is twice what the corpus needs and a hundredth of
+	 * what such a file would take, and the two allocations it bounds are both made before a pack has
+	 * drawn anything: past it the client would die on the load rather than lose one texture.
+	 */
+	private static final long MAX_TEXELS = 32L * 1024 * 1024;
+
 	private NoiseTexture() {
 	}
 
@@ -35,22 +57,47 @@ public final class NoiseTexture {
 	}
 
 	/**
-	 * Decodes a pack's own noise image, {@code texture.noise}. Four packs of the corpus ship one,
-	 * and theirs is nothing like the generated field: BSL's is blurred smooth, and water octaves
-	 * fed the generated white noise instead crumple into facets.
+	 * Decodes a pack's own noise image, {@code texture.noise}, or any other file it ships.
+	 * Four packs of the corpus ship a noise image, and theirs is nothing like the generated field:
+	 * BSL's is blurred smooth, and water octaves fed the generated white noise instead crumple into
+	 * facets.
 	 * <p>
 	 * Decoded with ImageIO rather than the game's image class, for the same reason the generator
 	 * writes raw bytes: this package names no graphics API, which is what lets the harness measure
 	 * it without starting the game. ImageIO is the JDK's and works headless.
+	 * <p>
+	 * The header is read before the pixels are, and that is the whole point of going through a
+	 * reader rather than through {@code ImageIO.read}: the size is in the first bytes of the file
+	 * and the memory is asked for by the call that follows, so a refusal is only possible in
+	 * between. A pack is downloaded content and its images are read while the client is still
+	 * starting up.
 	 */
 	public static Image decode(byte[] png) throws IOException {
-		BufferedImage image = ImageIO.read(new ByteArrayInputStream(png));
-		if (image == null) {
-			throw new IOException("not an image ImageIO recognises");
-		}
+		try (ImageInputStream stream = new MemoryCacheImageInputStream(new ByteArrayInputStream(png))) {
+			Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
+			if (!readers.hasNext()) {
+				throw new IOException("not an image ImageIO recognises");
+			}
 
-		int width = image.getWidth();
-		int height = image.getHeight();
+			ImageReader reader = readers.next();
+			try {
+				reader.setInput(stream);
+				int width = reader.getWidth(0);
+				int height = reader.getHeight(0);
+				if (width > MAX_SIDE || height > MAX_SIDE || (long) width * height > MAX_TEXELS) {
+					throw new IOException("the header says " + width + "x" + height + ", past the "
+							+ MAX_SIDE + " a side and the " + MAX_TEXELS
+							+ " texels an image of a pack is allowed");
+				}
+
+				return pixels(reader.read(0), width, height);
+			} finally {
+				reader.dispose();
+			}
+		}
+	}
+
+	private static Image pixels(BufferedImage image, int width, int height) {
 		byte[] pixels = new byte[width * height * 4];
 		int[] row = new int[width];
 		for (int y = 0; y < height; y++) {
