@@ -1,8 +1,11 @@
 package dev.vitrail.pack.target;
 
+import dev.vitrail.pack.program.ProgramNames;
+
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,8 +57,13 @@ public final class SamplerPlan {
 	 * {@link #UNSERVED} is a name this engine has nothing to put behind; {@link #UNBINDABLE} is a
 	 * declaration the API cannot express at all. The two are not the same failure and are worth
 	 * telling apart: the first costs one black pixel, the second costs the whole program.
+	 * <p>
+	 * {@link #PACK_TEXTURE} is neither: it is a file the pack ships, under a name of its own or
+	 * over a name that already meant something else.
 	 */
-	public enum Kind { COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, UNSERVED, UNBINDABLE }
+	public enum Kind {
+		COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, PACK_TEXTURE, UNSERVED, UNBINDABLE
+	}
 
 	/**
 	 * @param index the colour target for {@link Kind#COLORTEX}, the shadow colour target for
@@ -72,7 +80,26 @@ public final class SamplerPlan {
 	 *             the name to go on and cannot answer for the type
 	 */
 	public static Kind classify(String name, String type) {
-		return type != null && SamplerTypes.refused(type) ? Kind.UNBINDABLE : classify(name);
+		return classify(name, type, Set.of());
+	}
+
+	/**
+	 * The type, then what the pack supplies, then the name. The middle step is the one that has to
+	 * sit where it does: {@code texture.composite.colortex3} of Mellow puts a SMAA lookup table
+	 * behind a name that is also a real colour target, and reading the name first would hand the
+	 * composites a quarter resolution copy of the scene as a lookup table. It stays after the type
+	 * for the reason it always did, and a declaration that is still three dimensional once the
+	 * translation is done falls exactly as it fell before.
+	 *
+	 * @param supplied the names the pack supplies a file for in this program's stage, already
+	 *                 narrowed to it
+	 */
+	public static Kind classify(String name, String type, Set<String> supplied) {
+		if (type != null && SamplerTypes.refused(type)) {
+			return Kind.UNBINDABLE;
+		}
+
+		return supplied.contains(name) ? Kind.PACK_TEXTURE : classify(name);
 	}
 
 	/**
@@ -118,7 +145,18 @@ public final class SamplerPlan {
 	 */
 	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
 			String program) {
-		return of(declared, types, plan, plan.schedule().step(program));
+		return of(declared, types, plan, program, Set.of());
+	}
+
+	/**
+	 * @param supplied every name the pack supplies a file for at this program's stage. What is
+	 *                 still standing by the time this program draws is worked out here rather than
+	 *                 handed in, because it is the plan that knows
+	 */
+	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
+			String program, Set<String> supplied) {
+		return of(declared, types, plan, plan.schedule().step(program),
+				standing(plan, program, supplied));
 	}
 
 	/**
@@ -132,10 +170,19 @@ public final class SamplerPlan {
 	 */
 	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
 			Optional<TargetSchedule.Bound> step) {
+		return of(declared, types, plan, step, Set.of());
+	}
+
+	/**
+	 * @param supplied the names the pack supplies a file for, already narrowed to this program's
+	 *                 stage and to the overrides that still stand
+	 */
+	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
+			Optional<TargetSchedule.Bound> step, Set<String> supplied) {
 		List<Binding> bindings = new ArrayList<>();
 
 		for (String name : declared) {
-			Kind kind = classify(name, types.get(name));
+			Kind kind = classify(name, types.get(name), supplied);
 			if (kind == Kind.SHADOW_COLOUR) {
 				bindings.add(new Binding(name, kind, shadowColour(name), TargetSchedule.Side.MAIN));
 				continue;
@@ -163,6 +210,76 @@ public final class SamplerPlan {
 		}
 
 		return new SamplerPlan(bindings);
+	}
+
+	/**
+	 * The overrides that are still standing when this program draws.
+	 * <p>
+	 * An override on a colour target is ABANDONED once a program of the same stage has written
+	 * that target in this frame: the pack put a lookup table behind the name, and from the moment
+	 * something in the same stage has drawn into the target, what the pack wants back is what it
+	 * just drew. Iris decides this at load time from a snapshot of what has been flipped so far in
+	 * the same renderer, one accumulator per stage and the final riding with the composites, so
+	 * here the question is static and the plan answers it: {@link TargetPlan#running} is that same
+	 * walk in that same order.
+	 * <p>
+	 * Nothing in the corpus reaches it. BSL's colortex7 is written by no composite, Body Camera's
+	 * colortex6 by none, and Mellow's composites write 0, 1, 2 and 4 while its overrides are on 3
+	 * and 5. The rule is here for the day one does, because that day the difference is a picture
+	 * and not a crash, and nothing would report it.
+	 * <p>
+	 * Geometry is left alone: Iris hands its terrain and gbuffers programs an empty snapshot, so a
+	 * gbuffers override stands for the whole frame however the targets have been flipped.
+	 */
+	private static Set<String> standing(TargetPlan plan, String program, Set<String> supplied) {
+		String bare = bareName(program);
+		String stage = stageOf(bare);
+		if (supplied.isEmpty() || stage == null) {
+			return supplied;
+		}
+
+		Set<String> abandoned = new LinkedHashSet<>();
+		for (String earlier : plan.running()) {
+			if (earlier.equals(bare)) {
+				break;
+			}
+
+			if (stage.equals(stageOf(earlier))) {
+				plan.writes(earlier).forEach(index -> {
+					abandoned.add(TargetName.canonical(index));
+					TargetName.legacyAlias(index).ifPresent(abandoned::add);
+				});
+			}
+		}
+
+		if (abandoned.isEmpty()) {
+			return supplied;
+		}
+
+		Set<String> left = new LinkedHashSet<>(supplied);
+		left.removeAll(abandoned);
+
+		return left;
+	}
+
+	/**
+	 * Which of the four full screen stages a program is drawn in, or null for anything that is not
+	 * drawn in one of them. The final rides with the composites, which is where Iris puts it.
+	 */
+	private static String stageOf(String program) {
+		String family = ProgramNames.familyOf(program);
+
+		return switch (family) {
+			case "begin", "prepare", "deferred", "composite" -> family;
+			case "final" -> "composite";
+			default -> null;
+		};
+	}
+
+	private static String bareName(String program) {
+		int slash = program.lastIndexOf('/');
+
+		return slash < 0 ? program : program.substring(slash + 1);
 	}
 
 	/** In declaration order, one entry per name, never short. */

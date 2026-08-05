@@ -472,7 +472,11 @@ final class PackPass {
 				// A name this backend cannot bind should have taken its program out of the chain
 				// before a frame was drawn. It is still answered rather than left out, because the
 				// layout carries it either way and the draw throws on the first name it misses.
-				case UNSERVED, UNBINDABLE -> targets.black();
+				//
+				// A pack texture is here for the same reason and not for the same one: nothing has
+				// uploaded the pack's files yet, so no plan built by this class can hold the kind,
+				// and the day one does this line is what has to change first.
+				case UNSERVED, UNBINDABLE, PACK_TEXTURE -> targets.black();
 			};
 
 			// The noise image is LINEAR for the same reason the terrain reads it LINEAR: it is a
