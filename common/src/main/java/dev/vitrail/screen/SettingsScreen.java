@@ -50,14 +50,14 @@ import java.util.Objects;
  * every widget here is a vanilla button, so the nine slice sprites, the focus ring, the tooltip
  * and the narration come from the game and work on either backend.
  * <p>
- * Closing applies. Escape walks back one page, then out to the pack list, then closes applying;
- * only Cancel drops. That is Iris's convention and it is kept deliberately, because anyone who has
- * configured a pack before already knows it.
+ * Escape walks back one page, then out to the pack list, then out of the screen. Leaving does not
+ * apply: Iris applies on the way out and that is the one convention of its screen not kept here,
+ * because a pack reloaded by a player who was only looking is a second of hitch nobody asked for.
  * <p>
- * Nothing is written and nothing is recompiled on a click. A pending value only reaches the disk
- * on Apply, and it reaches it by reading the file first and laying the pending table over it, so
- * that an edit made by hand while this screen is open and an edit made here compose instead of
- * overwriting each other.
+ * Nothing is written and nothing is recompiled on a click, and Apply is the only button that
+ * writes. It writes by reading the file first and laying the pending table over it, so that an edit
+ * made by hand while this screen is open and an edit made here compose instead of overwriting each
+ * other.
  */
 public final class SettingsScreen extends Screen implements ScreenHost {
 
@@ -95,7 +95,6 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 
 	private boolean listingPacks;
 	private boolean rebuildQueued;
-	private boolean closeRefused;
 
 	public SettingsScreen(@Nullable Screen parent) {
 		super(Component.translatable(ScreenText.TITLE));
@@ -176,15 +175,9 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	/** Not the default: the default pops a screen layer nobody pushed. */
 	@Override
 	public void onClose() {
-		// A write that failed keeps the screen open once, rather than taking the pending values
-		// down with it without a word. Once only: a folder that stays unwritable would otherwise
-		// be a screen that cannot be left at all.
-		if (!applyIfPending() && !this.closeRefused) {
-			this.closeRefused = true;
-			queueRebuild();
-			return;
-		}
-
+		// Nothing pending is written on the way out, which is the whole point: Done and Escape leave
+		// the world exactly as it was drawn. What was clicked and not applied goes with this screen,
+		// which every entry point builds anew.
 		this.minecraft.gui.setScreen(this.parent);
 	}
 
@@ -343,21 +336,18 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 
 		LinearLayout commit = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
 				LayoutSettings::alignHorizontallyCenter);
-		// Not on the pack list, where they had nothing to act on: openPacks applies what is pending
-		// on the way out, so by the time the list is drawn there is never anything left to apply or
-		// to cancel. They were enabled there on the strength of a pack being loaded, which is not
-		// the same question, and pressing either did nothing a player could see.
-		if (!this.listingPacks) {
-			Button apply = commit.addChild(button(ScreenText.APPLY, WIDE_BUTTON, () -> {
-				apply();
-				queueRebuild();
-			}));
-			Button cancel = commit.addChild(
-					button(CommonComponents.GUI_CANCEL, WIDE_BUTTON, this::cancel));
+		// On the pack list as well, because leaving a page no longer applies: a value clicked on a
+		// page is still waiting once the list is drawn, and the only button that writes it has to be
+		// reachable from wherever the count in the status line is read.
+		Button apply = commit.addChild(button(ScreenText.APPLY, WIDE_BUTTON, () -> {
+			apply();
+			queueRebuild();
+		}));
+		Button cancel = commit.addChild(
+				button(CommonComponents.GUI_CANCEL, WIDE_BUTTON, this::cancel));
 
-			apply.active = this.values != null;
-			cancel.active = this.values != null;
-		}
+		apply.active = this.values != null;
+		cancel.active = this.values != null;
 
 		commit.addChild(button(CommonComponents.GUI_DONE, WIDE_BUTTON, this::onClose));
 
@@ -471,13 +461,6 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		refresh();
 	}
 
-	/** @return whether there is nothing left waiting, so that a caller can stop on a failed write */
-	private boolean applyIfPending() {
-		MenuValues current = this.values;
-
-		return current == null || current.pendingCount() == 0 || apply();
-	}
-
 	/**
 	 * Writes what is pending, then has the pack read again from the file that was just written.
 	 * <p>
@@ -487,11 +470,11 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	 * which is where a button press already is and where the GPU buffers a reload closes have to
 	 * be closed.
 	 */
-	private boolean apply() {
+	private void apply() {
 		PackSession loaded = this.session;
 		MenuValues current = this.values;
 		if (loaded == null || current == null) {
-			return false;
+			return;
 		}
 
 		try {
@@ -504,17 +487,16 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 					new SettingsFile.Stored(current.toSave(), current.chosenProfile()));
 			current.clearPending();
 			this.error = null;
-			this.closeRefused = false;
 		} catch (IOException | RuntimeException e) {
 			this.error = String.valueOf(e.getMessage());
 			Vitrail.logger().error("Vitrail could not write {}", loaded.settingsFile(), e);
-			return false;
+			// The screen stays open and the status line carries the message, which is all a failed
+			// write owes now that leaving no longer writes: what was pending is still pending.
+			return;
 		}
 
 		PackChain.reload(loaded.gameDirectory());
 		adopt(PackChain.session().orElse(null));
-
-		return true;
 	}
 
 	/**
@@ -554,7 +536,6 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		try {
 			SettingsFile.delete(loaded.settingsFile());
 			this.error = null;
-			this.closeRefused = false;
 		} catch (IOException | RuntimeException e) {
 			this.error = String.valueOf(e.getMessage());
 			Vitrail.logger().error("Vitrail could not delete {}", loaded.settingsFile(), e);
@@ -570,9 +551,9 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	}
 
 	private void openPacks() {
-		// Applied on the way out: a pending value belongs to the pack it was set on, and writing
-		// it after the switch would put it in the next pack's file.
-		applyIfPending();
+		// A pending value survives the walk to the list and back, the same way it survives a reload:
+		// nothing about looking at the folder says what was clicked on a page should be written, and
+		// nothing about it says it should be thrown away either.
 		this.listingPacks = true;
 		queueRebuild();
 	}
@@ -612,13 +593,8 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	 * two packs sharing a word cannot swap under the player.
 	 */
 	private void choosePack(String fileName) {
-		// Stopped rather than switched when the write failed: the pending values are this pack's,
-		// and the next pack's file is the wrong place for them.
-		if (!applyIfPending()) {
-			queueRebuild();
-			return;
-		}
-
+		// Whatever is pending goes with the pack it was set on, unwritten. It was never this pack's
+		// to write on the way past, and the next pack's file is the wrong place for it.
 		Path file = gameDirectory().resolve(Vitrail.MOD_ID).resolve("pack.txt");
 		try {
 			Files.createDirectories(file.getParent());
