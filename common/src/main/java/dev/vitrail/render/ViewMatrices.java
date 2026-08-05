@@ -66,6 +66,9 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f passModelView = new Matrix4f();
 	private final Matrix4f passModelViewInverse = new Matrix4f();
 	private boolean passSet;
+
+	/** The colour the pass modulates its draw by, white until a pass says otherwise. */
+	private final Vector4f passColour = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private float far;
 	private int renderDistanceChunks;
 	private boolean seeded;
@@ -191,6 +194,11 @@ public final class ViewMatrices implements ViewSource {
 		}
 	}
 
+	/** The colour the pass modulates its draw by, or null for white. */
+	void passColour(Vector4fc colour) {
+		this.passColour.set(colour == null ? new Vector4f(1.0F, 1.0F, 1.0F, 1.0F) : colour);
+	}
+
 	/** Called when the world changes, so that no history crosses a dimension. */
 	void reset() {
 		this.seeded = false;
@@ -238,6 +246,11 @@ public final class ViewMatrices implements ViewSource {
 	@Override
 	public Matrix4fc passModelViewInverse() {
 		return this.passSet ? this.passModelViewInverse : this.modelViewInverse;
+	}
+
+	@Override
+	public Vector4fc passColour() {
+		return this.passColour;
 	}
 
 	@Override

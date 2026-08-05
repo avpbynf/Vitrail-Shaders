@@ -55,6 +55,13 @@ public final class GeometryValues {
 		builder.add("of_TexShrink", UniformShape.VEC2, (world, out) ->
 				out.set(shrink(world.atlasWidth()), shrink(world.atlasHeight())));
 
+		// The colour the game modulates a whole draw by, which for the sky is where its colour is:
+		// the mesh of a sky disc carries a position and nothing else. White for every pass that has
+		// not set one, which is every pass whose mesh carries its own colours.
+		builder.add("of_PassColour", UniformShape.VEC4, (world, out) -> out.set(
+				world.passColour().x(), world.passColour().y(), world.passColour().z(),
+				world.passColour().w()));
+
 		// The PASS's model view and not the frame's, and the two are the same matrix for every pass
 		// but the sky's. What separates them is written out in ViewSource.passModelView: the game
 		// puts the sun where it is by pushing a rotation onto its own stack, and a pack reads that

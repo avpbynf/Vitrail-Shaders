@@ -113,6 +113,9 @@ public final class GlslTranslator {
 	/** How far into a sprite a chunk mesh's texture coordinate has to be pulled. */
 	private static final String TEX_SHRINK = "of_TexShrink";
 
+	/** The colour a sky pass is modulated by, which the sky prologue spells for of_Color. */
+	private static final String PASS_COLOUR = "of_PassColour";
+
 	/** Matches the expander's own ceiling: nothing it produces should ever reach this. */
 	private static final int MAX_SOURCE_CHARACTERS = 4_000_000;
 
@@ -976,6 +979,20 @@ public final class GlslTranslator {
 	}
 
 	/**
+	 * The colour a sky pass is modulated by, asked for by the one prologue that spells
+	 * {@code of_Color} as a uniform rather than as an element of the mesh.
+	 * <p>
+	 * Asked for HERE and not left to the collector, for the reason every injected member is: the
+	 * collector walks the body, and this name appears only in a line the header prints, so nothing
+	 * in the body would ever ask for it and the stage would name an identifier the block has not
+	 * got.
+	 */
+	private void takePassColour() {
+		record(this.blockMembers, PASS_COLOUR, "vec4 " + PASS_COLOUR);
+		this.injectedNames.add(PASS_COLOUR);
+	}
+
+	/**
 	 * Precision qualifiers mean nothing on the desktop, but two declarations of one function that
 	 * disagree about them are still a mismatch, which is a failure the packs hit and cannot see.
 	 */
@@ -1345,6 +1362,15 @@ public final class GlslTranslator {
 
 		if (this.stage != ProgramStage.VERTEX) {
 			return;
+		}
+
+		// Before the early return below, because this is not about wrapping. The sky prologue spells
+		// of_Color as this uniform whenever the bound format has no colour element, and it prints
+		// that line whatever else the stage does, so the block has to carry the name whatever else
+		// the stage does. Taken for the sky and for no other family: it is a member of the block of
+		// the sky programs only.
+		if (this.inputs == VertexInputs.SKY && !this.bound.contains("Color")) {
+			takePassColour();
 		}
 
 		// A terrain stage is wrapped whatever it writes, and not only when it names gl_Position: the

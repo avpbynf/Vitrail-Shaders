@@ -45,6 +45,7 @@ import net.minecraft.resources.Identifier;
 
 import org.joml.Matrix4fc;
 import org.joml.Vector4f;
+import org.joml.Vector4fc;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -218,6 +219,9 @@ final class GeometryProgram {
 
 	/** The matrix the game pushed for this pass, or null for the frame's camera. */
 	private Matrix4fc modelView;
+
+	/** The colour the game modulates this pass by, or null for white. */
+	private Vector4fc passColour;
 	private GpuSampler atlasSampler;
 	private boolean cleared;
 	private boolean announced;
@@ -436,7 +440,7 @@ final class GeometryProgram {
 	 * @return the pipeline to draw with, or null to leave the game's own shader alone
 	 */
 	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas) {
-		return prepare(device, atlas, null);
+		return prepare(device, atlas, null, null);
 	}
 
 	/**
@@ -446,8 +450,10 @@ final class GeometryProgram {
 	 *                  Kept until the block is written rather than applied here: it is one value of
 	 *                  the block among the rest, and the block is written a few lines below
 	 */
-	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas, Matrix4fc modelView) {
+	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas, Matrix4fc modelView,
+			Vector4fc passColour) {
 		this.modelView = modelView;
+		this.passColour = passColour;
 		if (this.broken) {
 			return null;
 		}
@@ -714,6 +720,7 @@ final class GeometryProgram {
 		// stage does with its clip depth on the way out comes from this pair.
 		this.values.convention(this.pass.shadow() ? ClipSpace.FORWARD : ClipSpace.REVERSED);
 		this.values.modelView(this.modelView);
+		this.values.passColour(this.passColour);
 
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();

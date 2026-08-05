@@ -19,6 +19,7 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
 
 import org.joml.Matrix4fc;
+import org.joml.Vector4fc;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -115,8 +116,8 @@ final class SkyProgram {
 	 * @param modelView the matrix the game pushed for this element, which is where the sun is
 	 * @see GeometryProgram#prepare
 	 */
-	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView) {
-		return this.body.prepare(device, null, modelView);
+	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView, Vector4fc colour) {
+		return this.body.prepare(device, null, modelView, colour);
 	}
 
 	/**

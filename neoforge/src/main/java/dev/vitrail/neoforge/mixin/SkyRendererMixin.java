@@ -7,8 +7,8 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import net.minecraft.client.renderer.DynamicUniforms;
 import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.renderer.SkyRenderer;
@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 import org.joml.Matrix4f;
+import org.joml.Vector4f;
 
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -50,6 +51,39 @@ public abstract class SkyRendererMixin {
 	 */
 	private RenderPipeline vitrail$pipeline;
 
+	/**
+	 * The transform the game wrote for the element being drawn, kept between the moment it writes it
+	 * and the moment the pass opens.
+	 * <p>
+	 * <strong>Taken from the game's own call and not rebuilt.</strong> These two values are what the
+	 * game hands its own shader for this draw, so they are what a pack has to be handed for the same
+	 * draw: the matrix carries the rotation of the day, which is where the sun is, and the colour
+	 * carries the sky's own colour, which for a mesh of bare positions is the only place it exists.
+	 * Reading the model view stack instead would get the matrix and miss the colour entirely.
+	 */
+	private Matrix4f vitrail$modelView;
+	private Vector4f vitrail$colour;
+
+	/**
+	 * Lets the game write its dynamic transform and keeps what it wrote. Every sky pass writes one
+	 * before it opens its pass, so this runs first and outside anything.
+	 */
+	@WrapOperation(
+			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
+					"renderMoon"},
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/renderer/DynamicUniforms;writeTransform("
+							+ "Lorg/joml/Matrix4f;"
+							+ "Lorg/joml/Vector4f;"
+							+ ")Lcom/mojang/blaze3d/buffers/GpuBufferSlice;"))
+	private GpuBufferSlice vitrail$transform(DynamicUniforms uniforms, Matrix4f modelView,
+			Vector4f colour, Operation<GpuBufferSlice> original) {
+		this.vitrail$modelView = modelView;
+		this.vitrail$colour = colour;
+
+		return original.call(uniforms, modelView, colour);
+	}
+
 	@WrapOperation(
 			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
 					"renderMoon"},
@@ -64,10 +98,8 @@ public abstract class SkyRendererMixin {
 	private RenderPass vitrail$open(CommandEncoder encoder, Supplier<String> label,
 			GpuTextureView colour, Optional<?> clearColour, GpuTextureView depth,
 			OptionalDouble clearDepth, Operation<RenderPass> original) {
-		// The model view as the game has just left it, rotation of the day included. Copied, because
-		// the stack is about to be popped and the block is written from it.
-		this.vitrail$pipeline = SkyDraw.element(label.get(),
-				new Matrix4f(RenderSystem.getModelViewStack()));
+		this.vitrail$pipeline = SkyDraw.element(label.get(), this.vitrail$modelView,
+				this.vitrail$colour);
 
 		return original.call(encoder, label, colour, clearColour, depth, clearDepth);
 	}

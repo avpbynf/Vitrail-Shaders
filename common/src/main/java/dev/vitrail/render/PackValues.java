@@ -169,6 +169,15 @@ public final class PackValues {
 	}
 
 	/**
+	 * The colour the next block is written for, or null for white. The game modulates a whole draw
+	 * by one, and for the sky that is where the colour of the disc is: see
+	 * {@link dev.vitrail.uniform.ViewSource#passColour}.
+	 */
+	public void passColour(Vector4fc colour) {
+		this.state.passColour(colour);
+	}
+
+	/**
 	 * The drawn shadow pair multiplied through, which is the matrix that culls the world for the
 	 * light: the same pair the map is about to be drawn with, not the published one, which is a
 	 * frame older. The projection is the legacy volume, and that is the convention JOML's plane

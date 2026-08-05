@@ -254,6 +254,11 @@ public final class FrameState implements WorldState {
 		this.view.passModelView(matrix);
 	}
 
+	/** The colour the pass modulates its draw by, or null for white. Set beside the two above. */
+	public void passColour(Vector4fc colour) {
+		this.view.passColour(colour);
+	}
+
 	/**
 	 * The biome table. Exposed so that whoever writes the {@code BIOME_*} defines writes them from
 	 * the same numbering the {@code biome} uniform carries, because two tables that agree today is
@@ -1563,6 +1568,11 @@ public final class FrameState implements WorldState {
 	@Override
 	public Matrix4fc passModelViewInverse() {
 		return this.view.passModelViewInverse();
+	}
+
+	@Override
+	public Vector4fc passColour() {
+		return this.view.passColour();
 	}
 
 	@Override

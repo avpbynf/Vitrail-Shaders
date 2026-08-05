@@ -38,6 +38,16 @@ public interface ViewSource {
 
 	Matrix4fc passModelViewInverse();
 
+	/**
+	 * The colour the game modulates the pass being drawn by, which a pack reads as its vertex
+	 * colour where the mesh carries none. White for every pass that has not set one.
+	 * <p>
+	 * The sky is why this exists: a sky disc is a mesh of positions, and its colour travels in the
+	 * dynamic transforms of the draw. White is not a neutral stand in, because packs recognise
+	 * vanilla stars by a colour whose channels are equal and above nought.
+	 */
+	Vector4fc passColour();
+
 	Matrix4fc gbufferProjection();
 
 	Matrix4fc gbufferProjectionInverse();

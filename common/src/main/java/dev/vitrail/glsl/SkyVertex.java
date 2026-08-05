@@ -81,9 +81,17 @@ public final class SkyVertex {
 		}
 
 		lines.add("#define of_Vertex vec4(Position, 1.0)");
-		// White rather than the element when the format has not got it: a band that multiplies by
-		// its vertex colour has to keep its colour where no colour is supplied.
-		lines.add(bound.contains("Color") ? "#define of_Color Color" : "#define of_Color vec4(1.0)");
+		// The uniform rather than white where the format has not got the element, and this is the
+		// one line of the prologue that decides a picture rather than guarding one.
+		//
+		// The game does not put the sky's colour in the mesh; it puts it in the colour modulator of
+		// its dynamic transforms, one value for the whole draw, and under OptiFine that value is
+		// what a pack reads as gl_Color. White is not a neutral stand in for it: packs recognise
+		// vanilla's stars by exactly that shape, a colour whose three channels are equal and above
+		// nought, and Body Camera and Sildur's both then take their star branch and paint the whole
+		// sky disc flat. So the engine supplies the modulator the game was going to use, and the
+		// name below is a uniform of the block.
+		lines.add(bound.contains("Color") ? "#define of_Color Color" : "#define of_Color of_PassColour");
 
 		String texture = bound.contains("UV0") ? "vec4(UV0, 0.0, 1.0)" : "vec4(0.0, 0.0, 0.0, 1.0)";
 		lines.add("#define of_MultiTexCoord0 " + texture);

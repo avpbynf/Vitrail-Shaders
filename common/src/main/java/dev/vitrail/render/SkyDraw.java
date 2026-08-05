@@ -16,6 +16,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 
 import org.joml.Matrix4fc;
+import org.joml.Vector4fc;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -144,7 +145,7 @@ public final class SkyDraw {
 	 * @param label the label the game gave the pass it is about to open
 	 * @return the pipeline to draw it with, or null to leave the game's own alone
 	 */
-	public static RenderPipeline element(String label, Matrix4fc modelView) {
+	public static RenderPipeline element(String label, Matrix4fc modelView, Vector4fc colour) {
 		SkyDraw draw = PackChain.sky();
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Element element = ELEMENTS.get(label);
@@ -153,7 +154,7 @@ public final class SkyDraw {
 		}
 
 		try {
-			return draw.prepare(device, element, modelView);
+			return draw.prepare(device, element, modelView, colour);
 		} catch (RuntimeException e) {
 			wanted = false;
 			Vitrail.logger().error("Vitrail stopped drawing the sky after an error", e);
@@ -189,7 +190,8 @@ public final class SkyDraw {
 		}
 	}
 
-	private RenderPipeline prepare(GpuDevice device, Element element, Matrix4fc modelView) {
+	private RenderPipeline prepare(GpuDevice device, Element element, Matrix4fc modelView,
+			Vector4fc colour) {
 		// Read once each, and the miss is REMEMBERED. Never computeIfAbsent here: it records
 		// nothing when the answer is null, so an element the pack serves nothing for would open
 		// the pack again on every frame of the game.
@@ -214,7 +216,10 @@ public final class SkyDraw {
 			return null;
 		}
 
-		return program.prepare(device, element.rotated() ? modelView : null);
+		// The colour goes to every element and the matrix only to those the game rotated: the two
+		// are not the same question. Every sky draw carries a modulator, and the disc is the one
+		// element whose matrix is the camera's already.
+		return program.prepare(device, element.rotated() ? modelView : null, colour);
 	}
 
 	/** The programs once they have been read, for the decoded dump. Empty until then. */
