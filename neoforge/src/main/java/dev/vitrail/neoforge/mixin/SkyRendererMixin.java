@@ -7,13 +7,18 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.DynamicUniforms;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.renderer.SkyRenderer;
+import net.minecraft.world.level.MoonPhase;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
@@ -63,6 +68,32 @@ public abstract class SkyRendererMixin {
 	 */
 	private Matrix4f vitrail$modelView;
 	private Vector4f vitrail$colour;
+
+	/**
+	 * Tilts the path the sun, the moon and the stars travel by what the pack asked for.
+	 * <p>
+	 * <strong>The bodies and not their shader.</strong> {@code sunPathRotation} already turns the
+	 * shadow matrices, so a pack that asks for it lights the world from a place the game's own sun
+	 * does not stand in: BSL asks for minus forty degrees and lights every surface from there while
+	 * the game draws a sun straight overhead. Nothing a sky program does can put it right, because
+	 * the vertices it is handed are where the game decided; what has to turn is the geometry.
+	 * <p>
+	 * Here and not elsewhere, because here is where the three bodies share one matrix. The rotation
+	 * goes in right after the game has turned the celestial space and before it turns for the hour,
+	 * so it tilts the whole path rather than the body of one moment. Iris does exactly this, at the
+	 * same call of the same method, on the same axis; the shadow matrices turn by the same angle on
+	 * X, in the light's own space, and the two are not interchangeable.
+	 */
+	@Inject(method = "renderSunMoonAndStars",
+			at = @At(value = "INVOKE", ordinal = 0, shift = At.Shift.AFTER,
+					target = "Lcom/mojang/blaze3d/vertex/PoseStack;mulPose(Lorg/joml/Quaternionfc;)V"))
+	private void vitrail$tilt(PoseStack poseStack, float sunAngle, float moonAngle, float starAngle,
+			MoonPhase moonPhase, float rainBrightness, float starBrightness, CallbackInfo callback) {
+		float tilt = SkyDraw.sunPathRotation();
+		if (tilt != 0.0F) {
+			poseStack.mulPose(Axis.ZP.rotationDegrees(tilt));
+		}
+	}
 
 	/**
 	 * Lets the game write its dynamic transform and keeps what it wrote. Every sky pass writes one

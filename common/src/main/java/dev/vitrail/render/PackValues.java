@@ -205,6 +205,20 @@ public final class PackValues {
 		return this.state.directives().shadowColour(0);
 	}
 
+	/**
+	 * How far the pack tilts the path the sun and the moon travel, in degrees, nought unless the
+	 * pack says otherwise. BSL asks for minus forty.
+	 * <p>
+	 * It is not only the light's business, and that is the whole point of the directive: the same
+	 * angle has to move the bodies the player sees, or the pack lights a world from one place while
+	 * the game draws its sun in another. The shadow matrices already turn by it on the X axis, in
+	 * the light's own space; the bodies turn by it on Z, in the celestial space the game draws them
+	 * in, which is what Iris does at the same point of the same method.
+	 */
+	public float sunPathRotation() {
+		return this.state.directives().sunPathRotation();
+	}
+
 	public WorldState world() {
 		return this.state;
 	}

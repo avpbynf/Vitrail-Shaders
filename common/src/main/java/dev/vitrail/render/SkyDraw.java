@@ -136,6 +136,23 @@ public final class SkyDraw {
 	}
 
 	/**
+	 * How far the loaded pack tilts the path of the sun and the moon, in degrees, and nought when no
+	 * pack is loaded.
+	 * <p>
+	 * <strong>Not conditioned on this engine drawing the sky</strong>, and that is deliberate. The
+	 * angle is a property of the pack's lighting: its shadow matrices already turn by it, so the
+	 * light comes from a place the game's own sun does not stand in. Leaving the bodies where the
+	 * game put them means a world lit from one direction with a sun visibly in another, which is
+	 * the whole of the defect this closes, and it is just as wrong with {@code sky=off}. Iris ties
+	 * it to a pipeline being loaded for the same reason.
+	 */
+	public static float sunPathRotation() {
+		SkyDraw draw = PackChain.sky();
+
+		return draw == null ? 0.0F : draw.values.sunPathRotation();
+	}
+
+	/**
 	 * Everything that has to happen before the sky renderer opens one of its passes: the program
 	 * read, the pipeline compiled, the frame opened and this frame's block written.
 	 * <p>
