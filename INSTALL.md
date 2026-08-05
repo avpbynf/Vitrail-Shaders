@@ -77,9 +77,11 @@ options.txt    engine switches, one NAME=value per line; wins over the settings
 settings/      one file per pack, holding what differs from the pack's defaults
 ```
 
-None of these files has to exist. Without them the first pack of the folder is
-loaded and drawn whole. `options.txt` is there to take a stage back out again,
-which is how a wrong picture is bisected without a rebuild: `terrain=off` hands
+None of these files has to exist, and without them nothing is drawn: a pack is
+loaded once one is picked, in the screen or in `pack.txt`, and never before.
+What is picked is then drawn whole. `options.txt` is there to take a stage back
+out again, which is how a wrong picture is bisected without a rebuild:
+`terrain=off` hands
 the chunk passes back to the game's own shader, `shadow=off` stops the second
 pass over the world from the light, `chain=off` stops the composites, and
 `passes=N` cuts the chain down to its first N passes.

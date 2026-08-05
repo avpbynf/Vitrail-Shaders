@@ -233,9 +233,9 @@ public final class PackChain {
 			// an empty folder, taken because it was asked for rather than because nothing was found.
 			if (pack == null) {
 				packOff = true;
-				Vitrail.logger().info("{} asks for no pack, so none of the {} in {} is read and the "
-						+ "game draws its own image", packFile(gameDirectory), packs.size(),
-						PackLoader.directory(gameDirectory));
+				Vitrail.logger().info("No pack asked for, so none of the {} in {} is read and the game "
+						+ "draws its own image. Pick one in the settings screen, or name it in {}",
+						packs.size(), PackLoader.directory(gameDirectory), packFile(gameDirectory));
 				return;
 			}
 
@@ -312,8 +312,16 @@ public final class PackChain {
 	}
 
 	/**
-	 * Which pack to draw. A line in {@code vitrail/pack.txt} naming one, or any part of one, wins;
-	 * otherwise the first in the folder does. {@link #NO_PACK} asks for none of them.
+	 * Which pack to draw: the one {@code vitrail/pack.txt} names, by whole or partial name, and none
+	 * at all when it names nothing this folder has, when it says {@link #NO_PACK}, or when it is not
+	 * there.
+	 * <p>
+	 * <strong>Nothing is loaded until something is asked for</strong>, which is the rule every
+	 * shader loader follows and the only one that does not surprise: dropping this mod into an
+	 * instance that already has a shaderpacks folder must not light the world with whichever pack
+	 * happens to sort first. The same answer covers a name that matches nothing, where the older
+	 * behaviour of falling back to the first pack meant a typo drew something the player never
+	 * picked and could not tell from the pack they meant.
 	 * <p>
 	 * A text file is not a settings screen and is not meant to become one. It exists because
 	 * eight packs sit in that folder and switching between them is most of the work of supplying
@@ -324,17 +332,17 @@ public final class PackChain {
 	 * on a fragment the shorter one would answer for both: the settings screen writes the whole
 	 * name for that reason and would otherwise be unable to reach the longer one at all.
 	 *
-	 * @return empty when the file asks for no pack at all
+	 * @return empty when no pack is to be drawn
 	 */
 	private static Optional<Path> choose(Path gameDirectory, List<Path> packs) throws IOException {
 		Path chosen = packFile(gameDirectory);
 		if (!Files.isRegularFile(chosen)) {
-			return Optional.of(packs.get(0));
+			return Optional.empty();
 		}
 
 		String wanted = Files.readString(chosen).trim().toLowerCase(Locale.ROOT);
 		if (wanted.isEmpty()) {
-			return Optional.of(packs.get(0));
+			return Optional.empty();
 		}
 
 		for (Path pack : packs) {
@@ -353,10 +361,10 @@ public final class PackChain {
 			}
 		}
 
-		Vitrail.logger().warn("No pack in the folder matches '{}' from {}, using the first instead",
-				wanted, chosen);
+		Vitrail.logger().warn("No pack in the folder matches '{}' from {}, so none is drawn", wanted,
+				chosen);
 
-		return Optional.of(packs.get(0));
+		return Optional.empty();
 	}
 
 	/**
