@@ -1686,6 +1686,18 @@ public final class GlslTranslator {
 	 * the keyword has to open the statement, and everything before it has to be an interpolation
 	 * qualifier. A parameter list puts the return type and the function's name ahead of it, and a
 	 * caller blanking from there would erase the function.
+	 * <p>
+	 * That rules out one form a pack could legally write, {@code layout(location = N) out}: what
+	 * stands before the keyword is no interpolation qualifier, so this answers null and the varying
+	 * is neither offered to {@link #dropUnprovidedInputs} nor counted as provided. Harmless where
+	 * both stages spell it that way, since neither side is seen. The shape to watch for is a vertex
+	 * stage writing it against a fragment stage that declares the same name plainly and never reads
+	 * it, which would be taken out from under a location the vertex stage still fills. No pack of
+	 * the corpus writes the form: over the stages the harness emits there is not one
+	 * {@code layout} qualified {@code in} among the 905 fragment stages, and not one
+	 * {@code layout} qualified {@code out} among the 903 vertex stages. What this rules out is a
+	 * pack, and never a stage of ours: the fragment outputs the header writes carry the qualifier
+	 * and are never read back through here.
 	 */
 	private FileScope fileScopeDeclaration(int keyword) {
 		int end = statementEnd(keyword);
