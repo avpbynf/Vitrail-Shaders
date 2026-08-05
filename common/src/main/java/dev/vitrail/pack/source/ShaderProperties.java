@@ -419,11 +419,21 @@ public final class ShaderProperties {
 	 */
 	private static final class EnabledExpression {
 
+		/**
+		 * How far a value may nest before it is called unreadable. A pack is downloaded content and
+		 * this runs while the client is starting: a {@code StackOverflowError} is an {@code Error},
+		 * so it walks straight through the {@code catch (IOException | RuntimeException)} of
+		 * {@link dev.vitrail.pack.target.TargetPlan}, of the chain, and of the report that reads
+		 * every pack of the folder at startup, selected or not.
+		 */
+		private static final int MAX_DEPTH = 64;
+
 		private final String text;
 		private final Map<String, String> defines;
 		private final OptionIndex options;
 
 		private int position;
+		private int depth;
 		private boolean failed;
 
 		private EnabledExpression(String text, Map<String, String> defines, OptionIndex options) {
@@ -462,21 +472,32 @@ public final class ShaderProperties {
 			return left;
 		}
 
+		/** The only place the grammar nests, so the one place the budget has to be spent. */
 		private boolean unary() {
-			if (accept("!")) {
-				return !unary();
-			}
-
-			if (accept("(")) {
-				boolean value = or();
-				if (!accept(")")) {
+			this.depth++;
+			try {
+				if (this.depth > MAX_DEPTH) {
 					this.failed = true;
+					return false;
 				}
 
-				return value;
-			}
+				if (accept("!")) {
+					return !unary();
+				}
 
-			return truth(name());
+				if (accept("(")) {
+					boolean value = or();
+					if (!accept(")")) {
+						this.failed = true;
+					}
+
+					return value;
+				}
+
+				return truth(name());
+			} finally {
+				this.depth--;
+			}
 		}
 
 		private String name() {
