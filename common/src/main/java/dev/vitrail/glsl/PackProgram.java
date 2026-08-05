@@ -352,23 +352,51 @@ public final class PackProgram {
 	}
 
 	/**
-	 * Reads and translates one of the three programs the game may draw its sky with, against the
-	 * vertex format the pass that draws it really binds.
-	 * <p>
-	 * One at a time and not three like the terrain, because the three are not asked for together: the
-	 * game opens a render pass per element of the sky and each one binds its own format, so a program
-	 * is loaded when the pass that draws it is first reached. The fallback tree is walked like
-	 * everywhere else, so a pack shipping only {@code gbuffers_basic} still serves the disc.
+	 * One piece of the sky, as a pack has to be read for it.
 	 *
+	 * @param element  what the caller calls this piece, one word, and the key it gets its answer back
+	 *                 under. Not a name of the format: two pieces are commonly one program drawn
+	 *                 under one format, and they are still two programs here, because each carries
+	 *                 its own uniform block and its own compiled module
 	 * @param program the bare name the game would draw with, {@code gbuffers_skybasic}
-	 * @param bound   the elements of the format that pass binds, in the format's own order. Exactly
-	 *                these are declared: the sky binds four different formats between its passes, and
-	 *                an element left undeclared shifts the location of every one after it in silence
-	 * @return empty when the pack serves neither this program nor anything it falls back to, in which
-	 *         case the game keeps its own sky
+	 * @param bound   the elements of the vertex format the pass that draws this piece binds, in the
+	 *                format's own order. Exactly these are declared: the sky binds four different
+	 *                formats between its passes, and an element left undeclared shifts the location
+	 *                of every one after it in silence
 	 */
-	public static Optional<Loaded> loadSky(Path packPath, String place, String program,
-			List<String> bound, Map<String, OptionValue> chosen, String profile) throws IOException {
+	public record SkyElement(String element, String program, List<String> bound) {
+
+		public SkyElement {
+			bound = List.copyOf(bound);
+		}
+
+		/** What two pieces have to agree on to be one translation. The element is not part of it. */
+		private String translation() {
+			return this.program + "|" + String.join(",", this.bound);
+		}
+	}
+
+	/**
+	 * Reads and translates the programs the game draws the pieces of its sky with, in one opening of
+	 * the pack, keyed by the piece each one serves.
+	 * <p>
+	 * All of them together and not one at a time, for the reason {@link #loadTerrain} gives: the plan
+	 * reads thirty odd files whatever is asked of it, so six separate calls would pay for six plans
+	 * to translate six programs, and each of those six would land on the render thread at whatever
+	 * moment of the game first drew that piece. The band at the horizon is the sharpest of them:
+	 * the game skips it until its alpha passes a thousandth, so the pack was opened, expanded and
+	 * compiled in the frame the sun first neared the horizon.
+	 * <p>
+	 * Two pieces that ask for one program under one format share a translation, since the text would
+	 * be identical: the disc, the void plane and the stars are one. They are still two programs to
+	 * the caller, and the file that serves them is expanded once whatever the pieces ask for.
+	 * <p>
+	 * A piece the pack serves nothing for is simply absent from the answer, and the game then keeps
+	 * its own shader for it. The fallback tree is walked like everywhere else, so a pack shipping
+	 * only {@code gbuffers_basic} still serves the disc.
+	 */
+	public static Map<String, Loaded> loadSky(Path packPath, String place, List<SkyElement> elements,
+			Map<String, OptionValue> chosen, String profile) throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
 			ShaderProperties properties = ShaderProperties.parse(source);
@@ -383,24 +411,38 @@ public final class PackProgram {
 			DimensionSet dimensions = DimensionSet.discover(source);
 			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
 					dimensions);
-			Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, program);
-			if (resolution.isEmpty()) {
-				return Optional.empty();
+
+			Map<String, Map<ProgramStage, ExpandedUnit>> expanded = new LinkedHashMap<>();
+			Map<String, Loaded> translated = new LinkedHashMap<>();
+			Map<String, Loaded> loaded = new LinkedHashMap<>();
+			for (SkyElement element : elements) {
+				Optional<ProgramResolver.Resolution> resolution =
+						resolver.lookup(place, element.program());
+				if (resolution.isEmpty()) {
+					continue;
+				}
+
+				String path = pathOf(place, resolution.get().servedBy());
+				if (!expanded.containsKey(path)) {
+					expanded.put(path, read(source, expander, path));
+				}
+
+				Map<ProgramStage, ExpandedUnit> units = expanded.get(path);
+				if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+					continue;
+				}
+
+				// No alpha test anywhere in the sky: the format has no line for one, and nothing the
+				// game draws there is cut out. The program the engine supplies uniforms for is the one
+				// the piece wanted, not the file that ended up serving it, as everywhere else.
+				translated.computeIfAbsent(element.translation(), _ -> bind(source.packName(), path,
+						ProgramTranslator.translate(units, VertexInputs.SKY, element.bound(),
+								AlphaTest.OFF, false, element.program(), textures.volumes()),
+						targets, AlphaTest.OFF, textures));
+				loaded.put(element.element(), translated.get(element.translation()));
 			}
 
-			String path = pathOf(place, resolution.get().servedBy());
-			Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
-			if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
-				return Optional.empty();
-			}
-
-			// No alpha test anywhere in the sky: the format has no line for one, and nothing the game
-			// draws there is cut out. The program the engine supplies uniforms for is the one the pass
-			// wanted, not the file that ended up serving it, as everywhere else.
-			return Optional.of(bind(source.packName(), path,
-					ProgramTranslator.translate(units, VertexInputs.SKY, bound, AlphaTest.OFF, false,
-							program, textures.volumes()),
-					targets, AlphaTest.OFF, textures));
+			return loaded;
 		}
 	}
 

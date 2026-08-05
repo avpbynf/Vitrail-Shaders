@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.TargetPlan;
@@ -15,10 +16,12 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormatElement;
 
 import org.joml.Matrix4fc;
 import org.joml.Vector4fc;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,9 +73,15 @@ public final class SkyDraw {
 	 *                  {@code sky} is the disc the game draws overhead, and the void plane under the
 	 *                  world is a piece of its own that no pack can ask for or refuse
 	 */
-	private record Element(String label, String program, String element, VertexFormat format,
+	record Element(String label, String program, String element, VertexFormat format,
 			PrimitiveTopology topology, Optional<BlendFunction> blend, boolean rotated,
 			RenderStage stage, String directive) {
+
+		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
+		private PackProgram.SkyElement asked() {
+			return new PackProgram.SkyElement(this.element, this.program,
+					this.format.getElements().stream().map(VertexFormatElement::name).toList());
+		}
 	}
 
 	/**
@@ -122,10 +131,12 @@ public final class SkyDraw {
 	private final TargetPlan chainTargets;
 	private final ColorTargets targets;
 
-	/** One program per element, once it has been asked for. A value of null is an element that was
-	 * asked for and that the pack serves nothing for; the difference from an absent key is what
-	 * keeps a refusal from being retried every frame. */
+	/** One program per element the pack serves. Empty until the pack has been read, and it stays
+	 * empty for a pack that serves no sky at all. */
 	private final Map<String, SkyProgram> programs = new LinkedHashMap<>();
+
+	/** Whether the pack has been read for its sky. A reading that served nothing is still one. */
+	private boolean read;
 
 	/** The program of the pass being recorded, between the moment it is prepared and its bind. */
 	private SkyProgram drawing;
@@ -256,17 +267,46 @@ public final class SkyDraw {
 		}
 	}
 
+	/**
+	 * Reads the pack for all six pieces at once, at the first of them the game draws.
+	 * <p>
+	 * All six and not the one being asked for, which is what this used to do. The game reaches four
+	 * of these pieces at moments of its own choosing and three of those moments are conditions of the
+	 * sky itself: the band is skipped until its alpha passes a thousandth, the stars until their
+	 * brightness leaves nought, and the void plane until the eye goes under the world's horizon. Read
+	 * one at a time, the pack was opened, expanded and compiled inside the frame the sun first neared
+	 * the horizon, on the render thread and in the middle of the world.
+	 */
+	private void read() {
+		this.read = true;
+		try {
+			Map<String, PackProgram.Loaded> loaded = PackProgram.loadSky(this.packPath, this.place,
+					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
+			ELEMENTS.values().stream()
+					.filter(element -> loaded.containsKey(element.element()))
+					.forEach(element -> this.programs.put(element.label(), SkyProgram.of(
+							loaded.get(element.element()), element, this.values, this.load,
+							this.chainTargets, this.targets)));
+
+			List<String> missing = ELEMENTS.values().stream()
+					.filter(element -> !loaded.containsKey(element.element()))
+					.map(Element::element)
+					.toList();
+			if (!missing.isEmpty()) {
+				Vitrail.logger().info("{} serves nothing in {} for the {} of its sky, so the game "
+						+ "keeps its own", this.packPath.getFileName(),
+						this.place.isEmpty() ? "its root" : this.place, String.join(", ", missing));
+			}
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().error("Could not prepare the sky programs of "
+					+ this.packPath.getFileName() + ", so the game keeps its own sky", e);
+		}
+	}
+
 	private RenderPipeline prepare(GpuDevice device, Element element, Matrix4fc modelView,
 			Vector4fc colour) {
-		// Read once each, and the miss is REMEMBERED. Never computeIfAbsent here: it records
-		// nothing when the answer is null, so an element the pack serves nothing for would open
-		// the pack again on every frame of the game.
-		if (!this.programs.containsKey(element.label())) {
-			this.programs.put(element.label(),
-					SkyProgram.read(this.packPath, this.place, element.program(), element.element(),
-							this.chosen, this.profile, this.values, this.load, element.format(),
-							element.topology(), element.blend(), element.stage(), this.chainTargets,
-							this.targets));
+		if (!this.read) {
+			read();
 		}
 
 		SkyProgram program = this.programs.get(element.label());
@@ -291,18 +331,19 @@ public final class SkyDraw {
 
 	/** The programs once they have been read, for the decoded dump. Empty until then. */
 	Iterable<SkyProgram> programs() {
-		return this.programs.values().stream().filter(one -> one != null).toList();
+		return this.programs.values();
 	}
 
 	/** Rotates the ring buffers. Called once the frame's sky draws have been recorded. */
 	void rotate() {
 		this.drawing = null;
-		programs().forEach(SkyProgram::rotate);
+		this.programs.values().forEach(SkyProgram::rotate);
 	}
 
 	void release() {
-		programs().forEach(SkyProgram::release);
+		this.programs.values().forEach(SkyProgram::release);
 		this.programs.clear();
 		this.drawing = null;
+		this.read = false;
 	}
 }
