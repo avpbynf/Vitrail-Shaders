@@ -19,6 +19,9 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.SamplerTypes;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSchedule;
+import dev.vitrail.pack.texture.PackTextures;
+import dev.vitrail.pack.texture.TextureStage;
+import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -58,9 +61,16 @@ public final class PackProgram {
 	 * @param alphaTest what the fragment stage was translated to discard at. Carried rather than
 	 *                  worked out again, because the text has already been written for it and a
 	 *                  second answer could differ from the one that is in the shader
+	 * @param supplied  the names the pack supplies a file for at this program's stage, carried for
+	 *                  {@link Loaded#rebind}: a plan rebuilt without it would put the colour target
+	 *                  back behind a name the pack moved onto a lookup table of its own
 	 */
 	public record Loaded(String packName, String path, ProgramTranslator.TranslatedProgram program,
-			TargetPlan targets, SamplerPlan samplers, AlphaTest alphaTest) {
+			TargetPlan targets, SamplerPlan samplers, AlphaTest alphaTest, Set<String> supplied) {
+
+		public Loaded {
+			supplied = Set.copyOf(supplied);
+		}
 
 		/**
 		 * The samplers this program declares under a type no pipeline can carry, with their types.
@@ -95,7 +105,8 @@ public final class PackProgram {
 			}
 
 			return new Loaded(this.packName, this.path, this.program, plan,
-					SamplerPlan.of(declared, types, plan, step), this.alphaTest);
+					SamplerPlan.of(declared, types, plan, step, this.supplied), this.alphaTest,
+					this.supplied);
 		}
 	}
 
@@ -250,10 +261,12 @@ public final class PackProgram {
 			// Inside the same opening of the pack, because a zip closed behind us invalidates every
 			// path taken from it and the plan reads thirty more files than this program does.
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimensionOf(path));
+			PackTextures textures = textures(source, properties, options, settings);
 			ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units, inputs,
-					boundElements, AlphaTest.OFF, programOf(path));
+					boundElements, AlphaTest.OFF, false, programOf(path), textures.volumes());
 
-			return Optional.of(bind(source.packName(), path, program, targets, AlphaTest.OFF));
+			return Optional.of(bind(source.packName(), path, program, targets, AlphaTest.OFF,
+					textures));
 		}
 	}
 
@@ -285,6 +298,7 @@ public final class PackProgram {
 			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
 			IncludeExpander expander = new IncludeExpander(source, options, settings);
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
+			PackTextures textures = textures(source, properties, options, settings);
 
 			DimensionSet dimensions = DimensionSet.discover(source);
 			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
@@ -311,9 +325,10 @@ public final class PackProgram {
 				// The pass's own program and not the file that serves it, for the reason the alpha
 				// test is taken that way: what the engine supplies belongs to what is being drawn.
 				loaded.put(pass, bind(source.packName(), path,
-						ProgramTranslator.translate(units, VertexInputs.TERRAIN, alphaTest,
-								pass.covers(), pass.program()),
-						targets, alphaTest));
+						ProgramTranslator.translate(units, VertexInputs.TERRAIN,
+								VertexInputs.TERRAIN.elements(), alphaTest, pass.covers(),
+								pass.program(), textures.volumes()),
+						targets, alphaTest, textures));
 			}
 
 			return loaded;
@@ -366,6 +381,7 @@ public final class PackProgram {
 				return Optional.empty();
 			}
 
+			PackTextures textures = textures(source, properties, options, settings);
 			Map<String, ProgramTranslator.TranslatedProgram> translated = new LinkedHashMap<>();
 			for (String name : targets.running()) {
 				String path = pathOf(place, name);
@@ -375,7 +391,7 @@ public final class PackProgram {
 							+ " does not serve both of its stages");
 				}
 
-				translated.put(name, translate(path, units));
+				translated.put(name, translate(path, units, textures.volumes()));
 			}
 
 			Map<String, Refusal> refused =
@@ -410,7 +426,7 @@ public final class PackProgram {
 					// A full screen pass has no alpha test. The fixed function one was for geometry, and
 				// nothing in the format lets a composite ask for it.
 				loaded.put(name, bind(source.packName(), pathOf(place, name), program, targets,
-						AlphaTest.OFF));
+						AlphaTest.OFF, textures));
 			}
 
 			return Optional.of(new Chain(source.packName(), place, targets, chain, loaded, refused));
@@ -480,9 +496,10 @@ public final class PackProgram {
 	}
 
 	private static ProgramTranslator.TranslatedProgram translate(String path,
-			Map<ProgramStage, ExpandedUnit> units) {
+			Map<ProgramStage, ExpandedUnit> units, Map<String, VolumeAtlas> volumes) {
 		try {
-			return ProgramTranslator.translate(units, VertexInputs.FULLSCREEN, programOf(path));
+			return ProgramTranslator.translate(units, VertexInputs.FULLSCREEN,
+					VertexInputs.FULLSCREEN.elements(), AlphaTest.OFF, false, programOf(path), volumes);
 		} catch (RuntimeException e) {
 			// Named here rather than let through: the message a translator throws says which line
 			// of which unit it choked on and never which program of the chain that unit belongs to.
@@ -496,7 +513,8 @@ public final class PackProgram {
 	 * text does not depend on the plan, and only the samplers do.
 	 */
 	private static Loaded bind(String packName, String path,
-			ProgramTranslator.TranslatedProgram program, TargetPlan targets, AlphaTest alphaTest) {
+			ProgramTranslator.TranslatedProgram program, TargetPlan targets, AlphaTest alphaTest,
+			PackTextures textures) {
 		List<String> declared = new ArrayList<>();
 		Map<String, String> types = new LinkedHashMap<>();
 		for (TranslatedUnit.Uniform sampler : program.samplers()) {
@@ -504,8 +522,28 @@ public final class PackProgram {
 			types.putIfAbsent(sampler.name(), sampler.type());
 		}
 
+		// The stage of the program the pass draws, which is what narrows a texture.STAGE.NAME
+		// override to the half of the frame the pack meant it for.
+		Set<String> supplied = TextureStage.of(programOf(path))
+				.map(textures::suppliedTo)
+				.orElse(Set.of());
+
 		return new Loaded(packName, path, program, targets,
-				SamplerPlan.of(declared, types, targets, path), alphaTest);
+				SamplerPlan.of(declared, types, targets, path, supplied), alphaTest, supplied);
+	}
+
+	/**
+	 * What the pack ships behind its own names, read inside the opening that is already in hand.
+	 * <p>
+	 * Read here as well as beside the device, and deliberately: this side needs the shape of a
+	 * volume to write the arithmetic into the shader and the list of names to bind, and the other
+	 * side needs the bytes. Both read the same file against the same settings, so the two answers
+	 * are one answer computed twice, and keeping the translation able to run without a device is
+	 * worth the second pass over one text file.
+	 */
+	private static PackTextures textures(ShaderPackSource source, ShaderProperties properties,
+			OptionIndex options, SettingSet settings) throws IOException {
+		return PackTextures.read(properties, settings.globalDefines(options), source);
 	}
 
 	/** Both halves, as files. Iris carries a default vertex stage for old packs and this does not. */

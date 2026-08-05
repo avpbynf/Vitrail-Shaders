@@ -96,6 +96,12 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 * @param storageBlocks      the storage blocks this unit declares at file scope, which nothing
 	 *                           binds and no rewrite can help: they are what refuses the program
 	 *                           that carries one
+	 * @param volumeLookups      lookups on a volume the pack ships, moved onto the flat atlas it was
+	 *                           laid out in
+	 * @param volumesLeftAlone   volumes this unit reaches some way the rewrite does not cover, and
+	 *                           that were therefore not moved at all, declaration included. Zero on
+	 *                           the corpus: it is what would say a pack had started doing otherwise,
+	 *                           and the program it happens to stays refused meanwhile
 	 */
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
@@ -103,6 +109,7 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 			int depthLookups, int parameterLookups,
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
-			List<String> conflictNames, List<String> comparedSamplers, List<String> storageBlocks) {
+			List<String> conflictNames, List<String> comparedSamplers, List<String> storageBlocks,
+			int volumeLookups, int volumesLeftAlone) {
 	}
 }

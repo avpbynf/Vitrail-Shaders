@@ -3,6 +3,7 @@ package dev.vitrail.glsl;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
+import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -106,7 +107,7 @@ public final class ProgramTranslator {
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
 			VertexInputs inputs, AlphaTest alphaTest, boolean coverage, String program) {
-		return translate(units, inputs, inputs.elements(), alphaTest, coverage, program);
+		return translate(units, inputs, inputs.elements(), alphaTest, coverage, program, Map.of());
 	}
 
 	/**
@@ -119,18 +120,28 @@ public final class ProgramTranslator {
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
 			VertexInputs inputs, List<String> boundElements, AlphaTest alphaTest, String program) {
-		return translate(units, inputs, boundElements, alphaTest, false, program);
+		return translate(units, inputs, boundElements, alphaTest, false, program, Map.of());
 	}
 
-	private static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
+	/**
+	 * The same again, told what the pack ships behind the names it samples as volumes.
+	 * <p>
+	 * Handed to every stage and not only to the one that reads: the declaration is what a backend
+	 * refuses, Reverie writes its own in a header its vertex stages include as well, and a program
+	 * whose two stages disagree about the type of one name is built against a type one of the two
+	 * modules has not got.
+	 *
+	 * @param volumes by the name the pack samples them under, each with the layout of its atlas
+	 */
+	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
 			VertexInputs inputs, List<String> boundElements, AlphaTest alphaTest, boolean coverage,
-			String program) {
+			String program, Map<String, VolumeAtlas> volumes) {
 		Map<ProgramStage, GlslTranslator.Stage> prepared = new LinkedHashMap<>();
 		for (ProgramStage stage : PIPELINE_ORDER) {
 			ExpandedUnit unit = units.get(stage);
 			if (unit != null) {
 				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs, boundElements,
-						alphaTest, coverage, program));
+						alphaTest, coverage, program, volumes));
 			}
 		}
 

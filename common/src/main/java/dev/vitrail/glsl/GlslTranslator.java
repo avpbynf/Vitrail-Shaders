@@ -9,6 +9,7 @@ import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.target.DrawBuffers;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.SamplerTypes;
+import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -99,6 +100,13 @@ public final class GlslTranslator {
 	/** The comparison a {@code sampler2DShadow} would have had the hardware make. */
 	private static final String SHADOW_COMPARE = "ofShadowCompare";
 
+	/** What a lookup on a volume the pack ships is called once the volume has been laid out flat. */
+	private static final String VOLUME_LOOKUP = "ofTexture3D_";
+
+	/** The one call a volume lookup may be written as, and the number of arguments it takes. */
+	private static final String LOOKUP = "texture";
+	private static final int LOOKUP_ARGUMENTS = 2;
+
 	/** What the word sampler is followed by when the declaration asks for a comparison. */
 	private static final String SHADOW_SHAPE = "Shadow";
 
@@ -133,6 +141,12 @@ public final class GlslTranslator {
 	/** The program the pass wants, which decides what the engine supplies it undeclared. */
 	private final String program;
 
+	/**
+	 * The volumes the pack ships and this engine serves flat, by the name the pack samples them
+	 * under. Empty everywhere but the two packs of the corpus that ship one.
+	 */
+	private final Map<String, VolumeAtlas> volumes;
+
 	/** What the fragment stage discards at, which the fixed function pipeline used to hold. */
 	private final AlphaTest alphaTest;
 
@@ -157,6 +171,9 @@ public final class GlslTranslator {
 
 	/** Storage blocks this unit declares at file scope, by the name the block is written under. */
 	private final List<String> storageBlocks = new ArrayList<>();
+
+	/** The volumes this unit reads, and so the helpers its header owes, by the pack's own name. */
+	private final Map<String, VolumeAtlas> readVolumes = new LinkedHashMap<>();
 
 	/**
 	 * The samplers the pack declared as comparison samplers, and which are declared here as ordinary
@@ -188,6 +205,8 @@ public final class GlslTranslator {
 	private int dynamicFragData;
 	private int shadowCalls;
 	private int unwrappedShadowCalls;
+	private int volumeLookups;
+	private int volumesLeftAlone;
 
 	/** Lookups this unit makes the comparison for itself, because the backend cannot. */
 	private int shadowCompares;
@@ -211,7 +230,7 @@ public final class GlslTranslator {
 
 	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines,
 			VertexInputs inputs, List<String> bound, AlphaTest alphaTest, boolean coverage,
-			String program) {
+			String program, Map<String, VolumeAtlas> volumes) {
 		this.unit = unit;
 		this.stage = stage;
 		this.engineDefines = engineDefines;
@@ -220,6 +239,7 @@ public final class GlslTranslator {
 		this.alphaTest = alphaTest;
 		this.coverage = coverage;
 		this.program = program;
+		this.volumes = Map.copyOf(volumes);
 
 		// Tokens cost far more than the text they came from, roughly seventy bytes each, so a unit
 		// the expander should never have produced has to be refused before it is read rather than
@@ -281,9 +301,23 @@ public final class GlslTranslator {
 	 */
 	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs,
 			List<String> bound, AlphaTest alphaTest, boolean coverage, String program) {
+		return prepare(unit, stage, inputs, bound, alphaTest, coverage, program, Map.of());
+	}
+
+	/**
+	 * The same again, told what the pack ships behind the names it samples as volumes.
+	 *
+	 * @param volumes the volumes the pack supplies with a file, by the name it samples them under,
+	 *                each with the layout the upload will use. A name missing from it is one nothing
+	 *                can be moved onto, and its declaration stays what the pack wrote, which is what
+	 *                keeps the program refused rather than drawn against nothing
+	 */
+	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs,
+			List<String> bound, AlphaTest alphaTest, boolean coverage, String program,
+			Map<String, VolumeAtlas> volumes) {
 		GlslTranslator translator = new GlslTranslator(unit, stage,
 				EngineDefines.table(EngineDefines.machine()), inputs, bound, alphaTest, coverage,
-				program);
+				program, volumes);
 		translator.rewrite();
 
 		return new Stage(translator);
@@ -304,6 +338,10 @@ public final class GlslTranslator {
 		synthesizeAttributes();
 		dropVersionAndExtensions();
 		rewriteIdentifiers();
+		// After the identifiers and before the depth, and both halves of that matter: the legacy
+		// spellings have to have become texture() before a lookup can be recognised, and what comes
+		// out of here is a call under a name of ours that the depth pass will not look at twice.
+		flattenVolumes();
 		convertDepth();
 		dropPrecision();
 		rewriteFragmentOutputs();
@@ -1641,6 +1679,203 @@ public final class GlslTranslator {
 	}
 
 	/**
+	 * Moves every volume the pack ships onto a flat atlas: the declaration to a {@code sampler2D}
+	 * under a forged name, and each lookup to a helper that reads two slices and mixes them.
+	 * <p>
+	 * <strong>The declaration is what has to go, not the lookup.</strong>
+	 * {@code GlslCompiler.addToBindGroup} refuses anything the reflection reports as neither
+	 * {@code SpvDim2D} nor {@code SpvDimCube}, and the reflection lists a module's whole resource
+	 * list at optimisation level zero, so a {@code sampler3D} declared in a shared include and never
+	 * read costs the program its pipeline exactly as one sampled on every pixel does. Supplying a
+	 * real volume would not help either: the type is the refusal.
+	 * <p>
+	 * <strong>Every program carrying the declaration is rewritten, and Iris rewrites only the stage
+	 * the directive names.</strong> Its {@code TextureTransformer} runs per stage, so under it
+	 * Mellow's composites and its final keep a live {@code sampler3D colortex6} bound to nothing,
+	 * which GL tolerates and Vulkan does not. Renaming everywhere invents nothing: the pack has
+	 * named exactly one file for that identifier, with its shape, its size and its format written
+	 * out, and that file is what every one of those declarations was going to read.
+	 * <p>
+	 * Nothing is moved unless everything can be. A name this unit reaches any other way than as
+	 * {@code texture(name, vec3)} is counted and left exactly as it stands, declaration included, so
+	 * the program stays refused with the message it had. There is no site in the corpus like that,
+	 * and the count is what would say one had appeared.
+	 */
+	private void flattenVolumes() {
+		if (this.volumes.isEmpty()) {
+			return;
+		}
+
+		int[] lines = lineNumbers();
+		this.volumes.forEach((name, atlas) -> flattenOne(name, atlas, lines));
+	}
+
+	private void flattenOne(String name, VolumeAtlas atlas, int[] lines) {
+		// The name token of a declaration, and the pair of tokens each lookup rewrites: the callee
+		// and the argument. Held rather than found again below, so that what is rewritten is what
+		// was judged.
+		List<Integer> declarations = new ArrayList<>();
+		Map<Integer, Integer> lookups = new LinkedHashMap<>();
+		boolean elsewhere = this.packMacros.contains(name);
+
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.IDENTIFIER || !token.text().equals(name)
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int callee = token.directive() == null ? plainLookup(index) : -1;
+			if (token.directive() == null && volumeDeclaration(index)) {
+				declarations.add(index);
+			} else if (callee >= 0) {
+				lookups.put(index, callee);
+			} else {
+				elsewhere = true;
+			}
+		}
+
+		// A unit that reads the name without declaring it has been handed the sampler by something
+		// this pass has not seen, so there is nothing here to rename it against.
+		if (declarations.isEmpty()) {
+			return;
+		}
+
+		if (elsewhere) {
+			this.volumesLeftAlone++;
+			return;
+		}
+
+		String forged = SamplerPlan.forged(name);
+		for (int declaration : declarations) {
+			replace(significantBefore(declaration), "sampler2D");
+			replace(declaration, forged);
+		}
+
+		lookups.forEach((argument, callee) -> {
+			replace(callee, VOLUME_LOOKUP + name);
+			replace(argument, forged);
+		});
+
+		this.volumeLookups += lookups.size();
+		if (!lookups.isEmpty()) {
+			this.readVolumes.put(name, atlas);
+		}
+	}
+
+	/**
+	 * Whether this name is being declared as a uniform of a three dimensional shape here.
+	 * <p>
+	 * The {@code uniform} is demanded and the type is not enough on its own: a function taking a
+	 * {@code sampler3D} parameter of the same name declares a name inside its own body, and renaming
+	 * that would leave the body reading a parameter nobody passes.
+	 */
+	private boolean volumeDeclaration(int index) {
+		int type = significantBefore(index);
+		if (type < 0 || this.tokens.get(type).kind() != Kind.IDENTIFIER
+				|| !"3D".equals(SamplerTypes.shapeOf(this.tokens.get(type).text()))) {
+			return false;
+		}
+
+		int cursor = significantBefore(type);
+		while (cursor >= 0 && isQualifier(this.tokens.get(cursor))) {
+			cursor = significantBefore(cursor);
+		}
+
+		return cursor >= 0 && this.tokens.get(cursor).identifier("uniform");
+	}
+
+	/**
+	 * The {@code texture} this name is the first argument of, or -1 when it is reached any other
+	 * way. The argument count is checked as well as the name: {@code texture(s, p, bias)} compiles
+	 * and means something else, and the helper takes two.
+	 */
+	private int plainLookup(int index) {
+		int open = significantBefore(index);
+		if (open < 0 || !this.tokens.get(open).operator("(")) {
+			return -1;
+		}
+
+		int callee = significantBefore(open);
+		if (callee < 0 || !this.tokens.get(callee).identifier(LOOKUP)) {
+			return -1;
+		}
+
+		int close = matchingBracket(open);
+
+		return close >= 0 && arguments(open, close) == LOOKUP_ARGUMENTS ? callee : -1;
+	}
+
+	/** How many arguments a call holds, counting the commas that belong to it and not to a nested one. */
+	private int arguments(int open, int close) {
+		int depth = 0;
+		int count = 1;
+
+		for (int index = open; index < close; index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.OPERATOR || token.directive() != null) {
+				continue;
+			}
+
+			String text = token.text();
+			if (text.equals("(") || text.equals("[")) {
+				depth++;
+			} else if (text.equals(")") || text.equals("]")) {
+				depth--;
+			} else if (depth == 1 && text.equals(",")) {
+				count++;
+			}
+		}
+
+		return count;
+	}
+
+	/**
+	 * The trilinear read of a volume, over the atlas its slices were laid out in.
+	 * <p>
+	 * The hardware does the two dimensional half: each slice carries one texel of gutter holding the
+	 * wrapped copy of its far edge, so a bilinear tap at the edge of a tile reads what {@code REPEAT}
+	 * would have read on a real volume rather than the slice next door. Only the depth is done here,
+	 * two taps and a mix, because nothing interpolates between tiles of an atlas.
+	 * <p>
+	 * The half texel is the whole of the arithmetic: a lookup at {@code u} samples the volume at
+	 * {@code u * size - 0.5} in texels, and the atlas coordinate has to land on the same pair of
+	 * texels the hardware would have blended. Every constant here comes from {@link VolumeAtlas} so
+	 * that this and the upload cannot drift apart; a layout written twice reads as noise, and noise
+	 * that is wrong looks exactly like noise that is right.
+	 */
+	private static List<String> volumeHelper(String name, VolumeAtlas atlas) {
+		String depth = whole(atlas.depth());
+		String tiles = Integer.toString(atlas.tilesPerRow());
+
+		return List.of(
+				"vec4 " + VOLUME_LOOKUP + name + "(sampler2D ofMap, vec3 ofAt) {",
+				"\tvec3 ofQ = fract(ofAt);",
+				"\tfloat ofZ = ofQ.z * " + depth + " - 0.5;",
+				"\tfloat ofBase = floor(ofZ);",
+				"\tvec2 ofIn = ofQ.xy * vec2(" + whole(atlas.width()) + ", " + whole(atlas.height())
+						+ ") + " + whole(VolumeAtlas.GUTTER) + ";",
+				"\tint ofNear = int(mod(ofBase, " + depth + "));",
+				"\tint ofFar = int(mod(ofBase + 1.0, " + depth + "));",
+				"\tvec2 ofTile = vec2(" + whole(atlas.tileStride()) + ", " + whole(atlas.tileHeight())
+						+ ");",
+				"\tvec2 ofSize = vec2(" + whole(atlas.atlasWidth()) + ", " + whole(atlas.atlasHeight())
+						+ ");",
+				"\tvec2 ofA = (vec2(ofNear % " + tiles + ", ofNear / " + tiles
+						+ ") * ofTile + ofIn) / ofSize;",
+				"\tvec2 ofB = (vec2(ofFar % " + tiles + ", ofFar / " + tiles
+						+ ") * ofTile + ofIn) / ofSize;",
+				"\treturn vec4(mix(texture(ofMap, ofA).x, texture(ofMap, ofB).x, ofZ - ofBase), "
+						+ "0.0, 0.0, 1.0);",
+				"}");
+	}
+
+	/** An integer as a GLSL float literal, spelled by hand so that no locale can put a comma in it. */
+	private static String whole(int value) {
+		return value + ".0";
+	}
+
+	/**
 	 * Records every storage block the unit declares, which nothing here can make bindable.
 	 * <p>
 	 * Named rather than rewritten because the game never looks for one.
@@ -1855,6 +2090,10 @@ public final class GlslTranslator {
 					+ " return step(ofAt.z, textureLod(ofMap, ofAt.xy, ofLod).x); }");
 		}
 
+		// Only where a lookup was moved. A stage carrying the declaration and never reading it, which
+		// is most of them, has its declaration flattened and owes no helper.
+		this.readVolumes.forEach((name, atlas) -> lines.addAll(volumeHelper(name, atlas)));
+
 		// Declared on both sides or on neither, whether this stage reads it or not. A varying the
 		// vertex writes and the fragment never mentions is accepted in silence and shifts the
 		// location of everything declared after it.
@@ -1974,7 +2213,8 @@ public final class GlslTranslator {
 				this.covers ? 1 : 0, this.depthLookups,
 				this.parameterLookups, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
-				List.copyOf(this.conflicts), comparedSamplers(), List.copyOf(this.storageBlocks));
+				List.copyOf(this.conflicts), comparedSamplers(), List.copyOf(this.storageBlocks),
+				this.volumeLookups, this.volumesLeftAlone);
 	}
 
 	/**

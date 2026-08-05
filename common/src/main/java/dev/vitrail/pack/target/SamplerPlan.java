@@ -37,6 +37,17 @@ public final class SamplerPlan {
 	private static final String NOISE = "noisetex";
 	private static final String WATER_SHADOW = "watershadow";
 
+	/**
+	 * What the translation calls a name it has moved off its own declaration and onto a texture the
+	 * pack ships.
+	 * <p>
+	 * A volume cannot be served by binding something else to the name: the shape of the declaration
+	 * is what the backend refuses, so the declaration itself has to change, and once it has, the
+	 * name is the translation's own. Forged rather than kept, so that this class recognises it on
+	 * sight and no table has to be carried from the translation to the binding and kept in step.
+	 */
+	private static final String FORGED = "ofPackTexture_";
+
 	/** Iris allows eight, and the corpus stops at three. */
 	private static final int MAX_SHADOW_COLOURS = 8;
 
@@ -111,7 +122,23 @@ public final class SamplerPlan {
 		return name.equals("depthtex1") || name.equals("depthtex2");
 	}
 
+	/** What a name becomes once the translation has moved it onto a file the pack ships. */
+	public static String forged(String sampler) {
+		return FORGED + sampler;
+	}
+
+	/** The pack's own name behind a forged one, or the name as it stands. */
+	public static String behind(String sampler) {
+		return sampler.startsWith(FORGED) ? sampler.substring(FORGED.length()) : sampler;
+	}
+
 	public static Kind classify(String name) {
+		// First, because it is the only answer that can be right: nothing but the translation
+		// produces this prefix, and it only produces it for a name it has already moved.
+		if (name.startsWith(FORGED)) {
+			return Kind.PACK_TEXTURE;
+		}
+
 		if (TargetName.index(name).isPresent()) {
 			return Kind.COLORTEX;
 		}

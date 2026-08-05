@@ -324,6 +324,41 @@ public final class PackTextures {
 		return this.supplied;
 	}
 
+	/**
+	 * The volumes this engine can serve as a flat atlas, by the name the shaders sample them under,
+	 * each with the layout both sides have to agree on.
+	 * <p>
+	 * The stage a directive names is not consulted, and that is a difference with Iris rather than
+	 * an oversight; {@code VolumeAtlas} and the translation say why. A volume is served by rewriting
+	 * the declaration itself, so every program carrying that declaration is rewritten, and the same
+	 * atlas has to answer for all of them.
+	 * <p>
+	 * Three things have to hold and each of them is a way the picture would be wrong rather than
+	 * absent. The blob has to be three dimensional, since nothing else is laid out in slices; it has
+	 * to hold one byte a texel, which is what the atlas knows how to spread; and the pack has to
+	 * have asked to REPEAT, because the wrapping is baked into the gutter and into the helper and
+	 * neither can be undone at the sampler. Everything else stays refused with its own line.
+	 */
+	public Map<String, VolumeAtlas> volumes() {
+		Map<String, VolumeAtlas> flat = new LinkedHashMap<>();
+		for (PackTexture texture : this.supplied) {
+			if (flattenable(texture)) {
+				PackTexture.Raw raw = texture.raw().orElseThrow();
+				flat.putIfAbsent(texture.sampler(),
+						VolumeAtlas.of(raw.sizeX(), raw.sizeY(), raw.sizeZ()));
+			}
+		}
+
+		return Map.copyOf(flat);
+	}
+
+	private static boolean flattenable(PackTexture texture) {
+		return !texture.clamp() && texture.raw()
+				.filter(raw -> raw.shape() == PackTexture.Shape.TEXTURE_3D)
+				.filter(raw -> raw.pixelType().bytesPerTexel(raw.pixelFormat()) == 1L)
+				.isPresent();
+	}
+
 	/** Every declaration it will not, with the reason. Meant to be logged, one line each. */
 	public List<Refused> refused() {
 		return this.refused;
