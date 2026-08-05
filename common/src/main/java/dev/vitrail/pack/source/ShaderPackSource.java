@@ -277,11 +277,17 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * throws the base away when it is handed something absolute, so the search would drop to the
 	 * root of the archive and find nothing, and a texture that is not found is black rather than
 	 * an error. Mellow and Reverie write every one of their texture paths that way.
+	 * <p>
+	 * Resolved by the same road an {@code #include} takes, and for the same reason: a path written
+	 * in {@code shaders.properties} is downloaded content exactly as an include is, so it is
+	 * normalised and confined to the pack before anything opens it. Without that, one
+	 * {@code customTexture} of dots and slashes reads any file the game can reach and hands it to a
+	 * shader as a picture. The case-insensitive fallback comes with it, which is what a texture path
+	 * needs most: it is typed by hand, and a pack that works as a folder on Windows would otherwise
+	 * lose the same file once it is zipped.
 	 */
 	public Optional<Path> file(String relative) {
-		Path target = this.shadersRoot.resolve(relative.replaceAll("^/+", ""));
-
-		return Files.isRegularFile(target) ? Optional.of(target) : Optional.empty();
+		return resolveInsideShaders(relative);
 	}
 
 	/**
