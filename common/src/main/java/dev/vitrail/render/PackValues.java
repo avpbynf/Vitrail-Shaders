@@ -54,6 +54,7 @@ public final class PackValues {
 
 	private CustomUniforms customs;
 	private NoiseTexture.Image noiseImage;
+	private PackImages packImages = PackImages.none();
 	private UniformCatalog catalog = UniformCatalog.engine();
 	private UniformCatalog geometry = UniformCatalog.geometry();
 	private UniformCatalog shadowGeometry = UniformCatalog.shadowGeometry();
@@ -91,6 +92,8 @@ public final class PackValues {
 			values.state.endFlashShadows(properties.endFlashShadows());
 			values.declare(properties, settings.globalDefines(options));
 			values.readNoise(properties, source);
+			values.packImages =
+					PackImages.read(properties, settings.globalDefines(options), source);
 
 			// Read against the same settings as everything above, which is not a formality: BSL wraps
 			// all its declarations in one conditional and keeps a fifth of them under the #else, so a
@@ -108,6 +111,11 @@ public final class PackValues {
 	 */
 	public NoiseTexture.Image noiseImage() {
 		return this.noiseImage;
+	}
+
+	/** The textures the pack ships as files of its own, decoded and waiting to be uploaded. */
+	PackImages packImages() {
+		return this.packImages;
 	}
 
 	/** The engine's table with the pack's own uniforms layered over it. */
@@ -203,6 +211,7 @@ public final class PackValues {
 		}
 
 		this.problems.forEach(problem -> notes.add("Dropped the pack's own " + problem));
+		notes.addAll(this.packImages.notes());
 
 		return notes;
 	}

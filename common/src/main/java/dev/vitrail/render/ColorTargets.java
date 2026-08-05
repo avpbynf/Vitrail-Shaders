@@ -2,12 +2,14 @@ package dev.vitrail.render;
 
 import dev.vitrail.pack.program.BlendMode;
 import dev.vitrail.pack.target.PackDirectives;
+import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetFormat;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.target.TargetSize;
+import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.uniform.NoiseTexture;
 import dev.vitrail.Vitrail;
 
@@ -62,6 +64,12 @@ import java.util.stream.Collectors;
  * ping pong is {@link #swapBack}: a target the pack keeps between frames and that the chain left
  * on the alternate half has to come back to the main one, because the next frame starts its walk
  * from an empty flipped set and would read the half nothing wrote.
+ * <p>
+ * The files the pack ships as textures of its own live here too, and for one reason: they are
+ * allocated, uploaded and freed at exactly the moments the constants are, and a second holder
+ * threaded through the same calls would only be a second chance for the two to fall out of step.
+ * They are not colour targets in any other sense, {@link PackImages} decides everything about them,
+ * and nothing here ever resizes one.
  */
 final class ColorTargets {
 
@@ -79,12 +87,26 @@ final class ColorTargets {
 	/** Past this much the log says so once. Refusing to allocate would trade a stutter for a black screen. */
 	private static final long LOUD_BYTES = 512L * 1024L * 1024L;
 
+	/**
+	 * What one sampler is handed for a texture the pack ships: the image, and how the pack asked for
+	 * it to be read. The three travel together because they are one answer, written in one directive
+	 * and the {@code .mcmeta} beside its file, rather than three questions for three places.
+	 */
+	record PackBinding(GpuTextureView view, FilterMode filter, boolean repeat) {
+	}
+
 	private final TargetPlan plan;
 	private final Set<Integer> doubled;
 	private final int noiseResolution;
 
 	/** The pack's own noise image, or null when the generated field stands in. */
 	private final NoiseTexture.Image noiseImage;
+
+	/** The textures the pack ships as files, already decoded, waiting for a device to exist. */
+	private final PackImages packImages;
+
+	/** One surface per texture the pack ships, allocated and uploaded with the constants. */
+	private final Map<PackImages.Image, TargetSurface> packSurfaces = new LinkedHashMap<>();
 
 	/**
 	 * The shadow map, allocated and cleared with the rest.
@@ -147,8 +169,9 @@ final class ColorTargets {
 	 * disagrees with itself, and that shows as a plausible picture rather than as an error.
 	 */
 	ColorTargets(TargetPlan plan, int noiseResolution, NoiseTexture.Image noiseImage,
-			int shadowResolution, PackDirectives.ShadowColour shadowColour) {
+			PackImages packImages, int shadowResolution, PackDirectives.ShadowColour shadowColour) {
 		this.plan = plan;
+		this.packImages = packImages;
 		// The pack asks for it by directive and 256 is the default. Held rather than looked up at
 		// allocation: this class knows nothing of a frame, and the resolution never moves while a
 		// pack is loaded.
@@ -262,6 +285,7 @@ final class ColorTargets {
 			clear(encoder, this.white, OPAQUE_WHITE);
 			clear(encoder, this.grey, MID_GREY);
 			uploadNoise(encoder);
+			this.packSurfaces.forEach((image, surface) -> upload(encoder, surface, image.rgba()));
 		}
 
 		// Every frame and never conditionally: the mask answers a question about THIS frame, and an
@@ -474,6 +498,9 @@ final class ColorTargets {
 		this.mainSide.clear();
 		this.altSide.clear();
 
+		this.packSurfaces.values().forEach(TargetSurface::close);
+		this.packSurfaces.clear();
+
 		this.black = release(this.black);
 		this.white = release(this.white);
 		this.grey = release(this.grey);
@@ -507,6 +534,8 @@ final class ColorTargets {
 			Vitrail.logger().info("noisetex is the generated field at {}x{}", resolution, resolution);
 		}
 
+		ensurePackTextures();
+
 		return true;
 	}
 
@@ -527,6 +556,66 @@ final class ColorTargets {
 	}
 
 	/**
+	 * One texture per file the pack ships, at the size it decoded to, with no chain.
+	 * <p>
+	 * No chain because a texture of the pack's own has never had one: Iris forces the maximum level
+	 * to nought on every one of them, and a lookup table read at a level nobody wrote is the kind of
+	 * wrong that looks right. Never resized either, since none of them is sized on the screen.
+	 * <p>
+	 * The size is written out texture by texture and the memory once at the end, because neither is
+	 * readable from the pack: Body Camera's lookup table is fifty nine kilobytes in the zip and
+	 * sixty four megabytes once it is four thousand and ninety six square in memory.
+	 */
+	private void ensurePackTextures() {
+		List<PackImages.Image> images = this.packImages.images();
+		if (images.isEmpty()) {
+			return;
+		}
+
+		for (PackImages.Image image : images) {
+			Vitrail.logger().info("The pack supplies {}", PackImages.describe(image));
+			this.packSurfaces.put(image, new TargetSurface(
+					"Vitrail " + image.texture().sampler(), CONSTANT_FORMAT, false, image.width(),
+					image.height()));
+		}
+
+		long bytes = this.packImages.bytes();
+		Vitrail.logger().info("{} textures of the pack's own, {} MiB once decoded", images.size(),
+				megabytes(bytes));
+
+		if (this.packImages.loud()) {
+			// Said apart because it is invisible from the pack: what is read is compressed and what
+			// is allocated is not, and the two are three orders of magnitude apart for a lookup
+			// table.
+			Vitrail.logger().warn("The pack's own textures take {} MiB of memory, far more than the "
+					+ "files they were read from", megabytes(bytes));
+		}
+	}
+
+	/**
+	 * The image the pack supplies for that name at that stage, with the filter and the addressing it
+	 * asked for, or null when the pack takes the name over and nothing could be put behind it.
+	 * <p>
+	 * A volume is addressed CLAMP whatever the pack wrote, and that is the one answer this class
+	 * overrides. Its wrapping is done by the helper the translation printed, on coordinates that
+	 * never leave the tile; letting the sampler repeat as well would wrap the ATLAS, which is a
+	 * different image, and the gutter would stop being read at all.
+	 */
+	PackBinding packTexture(TextureStage stage, String sampler) {
+		PackImages.Image image = this.packImages.find(stage, sampler);
+		TargetSurface surface = image == null ? null : this.packSurfaces.get(image);
+		if (surface == null || surface.view() == null) {
+			return null;
+		}
+
+		boolean flat = !sampler.equals(SamplerPlan.behind(sampler));
+
+		return new PackBinding(surface.view(),
+				image.texture().blur() ? FilterMode.LINEAR : FilterMode.NEAREST,
+				!flat && !image.texture().clamp());
+	}
+
+	/**
 	 * Uploads the noise image, once: the pack's own when it ships one, otherwise the generator the
 	 * harness has a fingerprint for.
 	 * <p>
@@ -542,13 +631,19 @@ final class ColorTargets {
 	 * from it, and a cloud distance of nought discards every fragment of water.
 	 */
 	private void uploadNoise(CommandEncoder encoder) {
-		int width = this.noise.width();
-		int height = this.noise.height();
-		byte[] pixels = this.noiseImage != null ? this.noiseImage.rgba() : NoiseTexture.rgba(width);
+		byte[] pixels = this.noiseImage != null
+				? this.noiseImage.rgba()
+				: NoiseTexture.rgba(this.noise.width());
+		upload(encoder, this.noise, pixels);
+	}
+
+	/** One image into one surface, whole, at level nought. Outside any render pass, like the clears. */
+	private static void upload(CommandEncoder encoder, TargetSurface surface, byte[] pixels) {
 		ByteBuffer data = ByteBuffer.allocateDirect(pixels.length).order(ByteOrder.nativeOrder());
 		data.put(pixels).flip();
 
-		encoder.writeToTexture(this.noise.texture(), data, 0, 0, 0, 0, width, height);
+		encoder.writeToTexture(surface.texture(), data, 0, 0, 0, 0, surface.width(),
+				surface.height());
 	}
 
 	private boolean ensureSide(Map<Integer, TargetSurface> side, int index, int width, int height, String suffix) {

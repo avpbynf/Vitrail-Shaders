@@ -12,6 +12,7 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSize;
+import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
@@ -571,7 +572,17 @@ public final class TerrainProgram {
 		// Bliss on gaux1 the loudest, and none of those programs ever reads the target at a lod. So
 		// the directive is theirs to declare and dead on their side, and the cost of honouring it
 		// here would be a risk taken for nobody.
-		return PackPass.sampler(this.loaded.samplers().binding(name).kind(), filter(name), false);
+		SamplerPlan.Kind kind = this.loaded.samplers().binding(name).kind();
+		if (kind == SamplerPlan.Kind.PACK_TEXTURE) {
+			// A file of the pack's own is filtered and addressed as the pack asked, in the .mcmeta
+			// beside it, and the name it took over has nothing to say about either.
+			ColorTargets.PackBinding supplied = this.targets.packTexture(TextureStage.GBUFFERS, name);
+			if (supplied != null) {
+				return PackPass.sampler(supplied.repeat(), supplied.filter(), false);
+			}
+		}
+
+		return PackPass.sampler(kind, filter(name), false);
 	}
 
 	/**
@@ -784,8 +795,19 @@ public final class TerrainProgram {
 			case SHADOW_DEPTH -> shadowDepth(binding.sampler());
 			case SHADOW_COLOUR -> shadowColour(binding.index());
 			case NOISE -> this.targets.noise();
+			// Every geometry program is drawn in the gbuffers stage, the shadow passes included,
+			// which is the one thing a texture.STAGE.NAME override needs to know. Mellow moves
+			// noisetex there and nowhere else, so this is not a case the chain also covers.
+			case PACK_TEXTURE -> packTexture(sampler);
 			default -> this.black.getColorTextureView();
 		};
+	}
+
+	/** The pack's own file behind a name, or black when it took the name over and nothing was read. */
+	private GpuTextureView packTexture(String sampler) {
+		ColorTargets.PackBinding supplied = this.targets.packTexture(TextureStage.GBUFFERS, sampler);
+
+		return supplied == null ? this.black.getColorTextureView() : supplied.view();
 	}
 
 	/**

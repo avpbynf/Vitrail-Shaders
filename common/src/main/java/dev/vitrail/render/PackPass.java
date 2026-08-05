@@ -7,6 +7,7 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetSchedule;
+import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
@@ -98,6 +99,14 @@ final class PackPass {
 	private static int issuedFor = -1;
 
 	private final String path;
+
+	/**
+	 * Which of the seven moments of a frame this program is drawn in, which is what narrows a
+	 * {@code texture.STAGE.NAME} override to the half of the frame the pack meant it for. Empty for
+	 * a name no family claims, which is a name nothing runs.
+	 */
+	private final TextureStage textureStage;
+
 	private final PackProgram.Loaded loaded;
 	private final ChainPlan.Pass pass;
 	private final List<ChainPlan.Attachment> attachments;
@@ -137,6 +146,7 @@ final class PackPass {
 	PackPass(String place, String program, PackProgram.Loaded loaded, ChainPlan.Pass pass,
 			ColorTargets targets, PackValues values, int load, int offset) {
 		this.path = place.isEmpty() ? program : place + "/" + program;
+		this.textureStage = TextureStage.of(program).orElse(null);
 		this.loaded = loaded;
 		this.pass = pass;
 		this.attachments = List.copyOf(pass.attachments());
@@ -452,7 +462,15 @@ final class PackPass {
 	private void bindSamplers(RenderPass pass, ColorTargets targets, GpuTextureView depthView) {
 		for (String sampler : this.samplers) {
 			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
-			GpuTextureView bound = switch (binding.kind()) {
+
+			// A texture the pack ships answers all three questions at once, and they are one
+			// answer: which image, how it is filtered, and how it is addressed outside zero to one
+			// are all the pack's to say, in the same directive and the same .mcmeta beside it.
+			ColorTargets.PackBinding supplied = binding.kind() == SamplerPlan.Kind.PACK_TEXTURE
+					? targets.packTexture(this.textureStage, sampler)
+					: null;
+
+			GpuTextureView bound = supplied != null ? supplied.view() : switch (binding.kind()) {
 				case COLORTEX -> targets.view(binding.index(), binding.side());
 				// White where no image is there, and white is the far plane rather than a
 				// placeholder: what a depth lookup reads is now an image already in the pack's own
@@ -473,9 +491,11 @@ final class PackPass {
 				// before a frame was drawn. It is still answered rather than left out, because the
 				// layout carries it either way and the draw throws on the first name it misses.
 				//
-				// A pack texture is here for the same reason and not for the same one: nothing has
-				// uploaded the pack's files yet, so no plan built by this class can hold the kind,
-				// and the day one does this line is what has to change first.
+				// A pack texture reaches this line only when the pack took the name over and
+				// nothing could be read for it. Black rather than the colour target of the same
+				// name, which is the whole point: Mellow's texture.deferred.colortex3 names a
+				// texture of the game, and falling back would have its deferred read the scene as
+				// a cloud texture and look entirely convincing.
 				case UNSERVED, UNBINDABLE, PACK_TEXTURE -> targets.black();
 			};
 
@@ -489,7 +509,7 @@ final class PackPass {
 			// NEAREST it steps in blocks the size of a shadow texel. The DEPTH beside it stays
 			// NEAREST, and that is not an oversight: it is compared, not interpolated, and an
 			// averaged depth is a comparison against a surface that exists nowhere.
-			FilterMode filter = switch (binding.kind()) {
+			FilterMode filter = supplied != null ? supplied.filter() : switch (binding.kind()) {
 				case COLORTEX -> targets.filter(binding.index());
 				case NOISE, SHADOW_COLOUR -> FilterMode.LINEAR;
 				default -> FilterMode.NEAREST;
@@ -520,9 +540,12 @@ final class PackPass {
 			// taste: a pack indexes noisetex with coordinates of its own, in texels and well past
 			// one, and clamped it reads the same edge row for the whole screen. That does not fail,
 			// it produces a field of stripes that reads as an effect nobody asked for, and it takes
-			// whatever the pack built out of it down with it.
+			// whatever the pack built out of it down with it. A texture of the pack's own says for
+			// itself, in the .mcmeta beside the file.
 			pass.bindTexture(sampler, bound == null ? targets.black() : bound,
-					sampler(binding.kind(), filter, mipmaps));
+					supplied != null
+							? sampler(supplied.repeat(), filter, false)
+							: sampler(binding.kind(), filter, mipmaps));
 		}
 	}
 
@@ -556,7 +579,12 @@ final class PackPass {
 	 * past level nought.
 	 */
 	static GpuSampler sampler(SamplerPlan.Kind kind, FilterMode filter, boolean mipmaps) {
-		return kind == SamplerPlan.Kind.NOISE
+		return sampler(kind == SamplerPlan.Kind.NOISE, filter, mipmaps);
+	}
+
+	/** The same, where the addressing is the pack's own answer rather than the name's. */
+	static GpuSampler sampler(boolean repeat, FilterMode filter, boolean mipmaps) {
+		return repeat
 				? RenderSystem.getSamplerCache().getRepeat(filter, mipmaps)
 				: RenderSystem.getSamplerCache().getClampToEdge(filter, mipmaps);
 	}

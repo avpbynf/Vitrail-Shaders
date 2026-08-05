@@ -100,6 +100,11 @@ public final class PackTextures {
 		this.named = Map.copyOf(named);
 	}
 
+	/** A pack that declares none, which is five of the eight, and what stands in before one is read. */
+	public static PackTextures empty() {
+		return new PackTextures(List.of(), List.of(), List.of());
+	}
+
 	/**
 	 * @param defines the settings as they stand, because the lines are read through the pack's own
 	 *                conditionals and two packs put custom textures behind one
