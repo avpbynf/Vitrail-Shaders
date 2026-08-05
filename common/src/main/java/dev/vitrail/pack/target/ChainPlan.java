@@ -416,10 +416,11 @@ public final class ChainPlan {
 	 * the seed filled from the first pass onwards would drop exactly the notes those passes need.
 	 * <p>
 	 * The chunk passes count from where they are drawn for the same reason, and they are counted at
-	 * all because they really are drawn: the opaque halves land where the seed does, the translucent
-	 * one after the last deferred, which is the whole reason its targets are taken on the other
-	 * snapshot. Reading the geometry off the schedule alone, as this did, blamed the clear for a
-	 * half {@code gbuffers_water} had just written.
+	 * all because they really are drawn: the opaque ones before the whole chain, since the chunk
+	 * renderer has finished with them by the time the first half of the frame runs, and the
+	 * translucent one after the last deferred, which is the whole reason its targets are taken on
+	 * the other snapshot. Reading the geometry off the schedule alone, as this did, blamed the clear
+	 * for a half {@code gbuffers_water} had just written.
 	 */
 	private static void verdicts(TargetPlan plan, Seed seed, Map<TerrainPass, Pass> world,
 			List<Pass> passes, Pass last, List<String> notes) {
@@ -437,11 +438,16 @@ public final class ChainPlan {
 
 		// One entry per point of the frame the world goes in at, the solid and the cutout pass sharing
 		// theirs. A set rather than a list: those two are usually one file, hence one identical Pass.
+		//
+		// The opaque passes go in at nought and not where the seed goes. The seed is painted where
+		// OptiFine draws the world, in the middle of the chain, but the chunk renderer is not: it has
+		// drawn the opaque terrain before the first half of the chain is even asked to run, so a
+		// prepare of this engine reads what those passes wrote in THIS frame.
 		int afterDeferred = pastDeferred(ordered);
 		Map<Integer, Set<Pass>> drawn = new LinkedHashMap<>();
 		world.forEach((pass, drawing) -> {
-			drawn.computeIfAbsent(pass.afterDeferred() ? afterDeferred : plan.geometryAt(),
-					_ -> new LinkedHashSet<>()).add(drawing);
+			drawn.computeIfAbsent(pass.afterDeferred() ? afterDeferred : 0, _ -> new LinkedHashSet<>())
+					.add(drawing);
 			undrawn.removeAll(drawing.targets());
 		});
 
