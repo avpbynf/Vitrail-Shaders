@@ -166,14 +166,6 @@ public final class SkyDraw {
 		this.chainTargets = chainTargets;
 		this.chainRuns = chainRuns;
 		this.targets = targets;
-
-		// Once at load and only when there is something to say. A piece the pack refuses is a piece
-		// the player stops seeing, and nothing else in the frame would account for it.
-		List<String> off = values.skyElements().off();
-		if (!off.isEmpty()) {
-			Vitrail.logger().info("{} draws its own {}, so the game draws neither that nor a shader "
-					+ "of the pack's in its place", packPath.getFileName(), String.join(" and ", off));
-		}
 	}
 
 	/** Whether a pack's own sky programs take over the game's, from the loaded options. */
@@ -334,6 +326,18 @@ public final class SkyDraw {
 	 */
 	private void read() {
 		this.read = true;
+
+		// Here and not at the load, because here is the first moment it is true. This runs only
+		// where the sky is really this engine's to draw, which is a place the game opens a sky pass
+		// in and a run with the option on: said at the load it would be said once per place and
+		// would say the opposite of the code with sky=off, the game drawing the piece after all.
+		List<String> off = this.values.skyElements().off();
+		if (!off.isEmpty()) {
+			Vitrail.logger().info("{} draws its own {}, so the game draws neither that nor a shader "
+					+ "of the pack's in its place", this.packPath.getFileName(),
+					String.join(" and ", off));
+		}
+
 		try {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadSky(this.packPath, this.place,
 					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
