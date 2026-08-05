@@ -13,14 +13,18 @@ import java.util.TreeSet;
  * game's own formats give their elements, and the texture units nothing fills.
  * <p>
  * The chunk mesh, the entity mesh and the sky each wrote these three pieces out for themselves, and
- * the entity chantier is about to add a fourth head that would write them again. Neither copy is
+ * the entity work is about to add a fourth head that would write them again. Neither copy is
  * harmless. The tail is an answer to
  * "what is {@code at_tangent} worth when the mesh has not got one", which is a question about the
  * name and not about the mesh, so a family answering it differently from its neighbour is a
- * difference nothing would ever explain. The element types are worse: they decide which names a
- * head declares as vertex inputs, and a head declaring one fewer than the format binds moves the
- * location of every element after it with nothing said by anyone,
- * {@code IntermediaryShaderModule.rebind:148-161}.
+ * difference nothing would ever explain. The element types are worse, because a wrong one is
+ * silent: {@code DefaultVertexFormat} spells {@code UV1} and {@code UV2} as pairs of signed shorts
+ * wherever they appear, so a head declaring one of them a {@code vec2} where its neighbour
+ * declares an {@code ivec2} reads a different number from the same bytes, and nothing anywhere
+ * complains. The list of names is not in here and must not be: it is the format the pass binds,
+ * and a head declaring one fewer than that moves the location of every element after it,
+ * {@code IntermediaryShaderModule.rebind:151-163} counting only what the stage declared where
+ * {@code VulkanRenderPipeline:109-117} counts the whole format.
  * <p>
  * Sodium's chunk mesh keeps a table of its own all the same, in {@link SodiumVertex}, and that is
  * not an oversight: its elements are twenty packed bytes of its own invention, {@code uvec2} and
