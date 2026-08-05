@@ -69,9 +69,13 @@ final class ColorTargets {
 	/** Enough for the three constants: they carry one pixel each and nothing samples their precision. */
 	private static final GpuFormat CONSTANT_FORMAT = GpuFormat.RGBA8_UNORM;
 
+	/** One byte a pixel, which is a yes or a no and nothing else. */
+	private static final GpuFormat COVERAGE_FORMAT = GpuFormat.R8_UNORM;
+
 	private static final Vector4fc OPAQUE_BLACK = new Vector4f(0.0F, 0.0F, 0.0F, 1.0F);
 	private static final Vector4fc OPAQUE_WHITE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private static final Vector4fc MID_GREY = new Vector4f(0.5F, 0.5F, 0.5F, 1.0F);
+	private static final Vector4fc NOTHING = new Vector4f(0.0F, 0.0F, 0.0F, 0.0F);
 
 	/** Past this much the log says so once. Refusing to allocate would trade a stutter for a black screen. */
 	private static final long LOUD_BYTES = 512L * 1024L * 1024L;
@@ -112,6 +116,19 @@ final class ColorTargets {
 	private TargetSurface white;
 	private TargetSurface grey;
 	private TargetSurface noise;
+
+	/**
+	 * Where the pack's own opaque geometry has drawn this frame, one byte a pixel, so that whoever
+	 * puts the game's picture into the same target can leave those pixels alone.
+	 * <p>
+	 * Emptied here at the head of every frame rather than by the pass that writes it, and that is
+	 * the whole safety of the thing. The frames where it is not written are exactly the frames
+	 * nothing of ours would clear it: a pack whose terrain program was refused, a place whose
+	 * targets are scaled, the frames before anything is allocated. A mask left standing from the
+	 * previous frame hides the game's picture behind geometry that has since moved, which reads as
+	 * a smear rather than as a stale mask.
+	 */
+	private TargetSurface coverage;
 
 	private GpuTexture depthCopy;
 	private GpuTextureView depthCopyView;
@@ -189,6 +206,7 @@ final class ColorTargets {
 		boolean changed = false;
 		try {
 			changed = ensureConstants();
+			changed |= ensureCoverage(screenWidth, screenHeight);
 			// Not sized on the screen and therefore never resized with it: the pack's own resolution
 			// is the whole point of the map. Its answer is not folded into the debt below because the
 			// map is not cleared here at all: the shadow stage empties it itself, right before it
@@ -243,6 +261,10 @@ final class ColorTargets {
 			clear(encoder, this.grey, MID_GREY);
 			uploadNoise(encoder);
 		}
+
+		// Every frame and never conditionally: the mask answers a question about THIS frame, and an
+		// answer carried over from the last one is worse than no answer at all.
+		clear(encoder, this.coverage, NOTHING);
 
 		for (int index : this.plan.ordered()) {
 			// A full clear ignores colortexNClear: a target that is kept from one frame to the
@@ -426,6 +448,23 @@ final class ColorTargets {
 		return this.noise == null ? grey() : this.noise.view();
 	}
 
+	/**
+	 * Where the pack's opaque geometry has drawn this frame, or null until the first frame allocates
+	 * it. Never held across a frame by anyone: it is looked up like every other view here.
+	 */
+	GpuTextureView coverage() {
+		return this.coverage == null ? null : this.coverage.view();
+	}
+
+	/**
+	 * The format the mask is allocated in, which the terrain pipeline has to name as well: dynamic
+	 * rendering refuses a pipeline whose colour state does not match the attachment it is bound
+	 * against, by name and in the middle of the world.
+	 */
+	GpuFormat coverageFormat() {
+		return COVERAGE_FORMAT;
+	}
+
 	/** The shadow map. Never null, and its own images are null until the first frame allocates them. */
 	ShadowTargets shadow() {
 		return this.shadowMap;
@@ -471,6 +510,7 @@ final class ColorTargets {
 		this.white = release(this.white);
 		this.grey = release(this.grey);
 		this.noise = release(this.noise);
+		this.coverage = release(this.coverage);
 		this.shadowMap.release();
 		releaseDepthCopy();
 	}
@@ -512,6 +552,22 @@ final class ColorTargets {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Makes the coverage mask exist at the size of the screen, which is the size the geometry it
+	 * records is rasterised at. No chain: nothing reads it at a lod, and a coarser mask would let
+	 * the seed through along every silhouette.
+	 */
+	private boolean ensureCoverage(int width, int height) {
+		if (this.coverage == null) {
+			this.coverage = new TargetSurface("Vitrail terrain coverage", COVERAGE_FORMAT, false,
+					width, height);
+
+			return true;
+		}
+
+		return this.coverage.resize(width, height);
 	}
 
 	/**

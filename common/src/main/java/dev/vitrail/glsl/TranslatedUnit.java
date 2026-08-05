@@ -62,6 +62,12 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 *                           pass asks for no test, and zero where it asked and the stage could
 	 *                           not be given one, which is the case worth reading: the picture is
 	 *                           then drawn without the discard it needed
+	 * @param coverage           one when the fragment stage was given the coverage mask its pass
+	 *                           asked for, an output above every one the pack declared and written
+	 *                           after the discard. Zero where the pass asked for none, and zero
+	 *                           where it asked and there was no rank left to give it, which is the
+	 *                           case worth reading: whoever reads the mask is then reading an image
+	 *                           this stage never wrote
 	 * @param depthReads         lookups on a depth texture wrapped back into the window depth the
 	 *                           pack was written against
 	 * @param depthReadsUnwrapped lookups on a depth texture whose closing parenthesis could not be
@@ -85,7 +91,8 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 */
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
-			int depthEpilogue, int alphaEpilogue, int depthReads, int depthReadsUnwrapped,
+			int depthEpilogue, int alphaEpilogue, int coverage,
+			int depthReads, int depthReadsUnwrapped,
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames, List<String> comparedSamplers) {

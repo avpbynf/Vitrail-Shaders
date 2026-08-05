@@ -990,7 +990,12 @@ public final class PackChain {
 	 * stands in for would have written.
 	 */
 	private void drawSeed(CommandEncoder encoder, GpuTextureView mainView) {
+		// One pixel of black where no mask has been allocated yet, which reads as nought everywhere
+		// and hides nothing. The mask itself is emptied at the head of every frame, so a frame no
+		// terrain program drew in is served an empty one rather than the last one that was written.
+		GpuTextureView covered = this.targets.coverage();
 		this.seed.draw(encoder, this.quad, mainView,
+				covered == null ? this.targets.black() : covered,
 				this.targets.view(this.seed.target(), this.seed.side()));
 	}
 

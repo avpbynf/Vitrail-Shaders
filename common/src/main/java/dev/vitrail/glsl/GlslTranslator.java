@@ -87,6 +87,12 @@ public final class GlslTranslator {
 	/** What the pack's own {@code main} is called once the epilogue has taken the name over. */
 	private static final String PACK_MAIN = "ofPackMain";
 
+	/**
+	 * The one output this engine adds itself: a byte saying that the pack's geometry covered this
+	 * pixel, so that whoever puts the game's own picture into the same target can leave it alone.
+	 */
+	private static final String COVERAGE = "ofCoverage";
+
 	/** {@code (clipA, clipB, readA, readB)}: how to write a depth, then how to read one. */
 	private static final String DEPTH_CONV = "of_DepthConv";
 
@@ -129,6 +135,9 @@ public final class GlslTranslator {
 
 	/** What the fragment stage discards at, which the fixed function pipeline used to hold. */
 	private final AlphaTest alphaTest;
+
+	/** Whether the fragment stage is asked for the coverage mask on top of what the pack writes. */
+	private final boolean coverage;
 	private final List<Token> tokens;
 
 	/** Names the pack defines as macros. Their uses belong to the preprocessor, not to us. */
@@ -178,6 +187,9 @@ public final class GlslTranslator {
 	private boolean terrainPrologue;
 	private boolean alphaEpilogue;
 
+	/** Whether the mask was really given a rank of its own. {@link #planCoverage} says when it is not. */
+	private boolean covers;
+
 	/** Where the fragment stage's own {@code main} stands, once the alpha test has claimed it. */
 	private int packMainName = -1;
 	private int depthReads;
@@ -189,13 +201,15 @@ public final class GlslTranslator {
 	private int fragDepthUnhandled;
 
 	private GlslTranslator(ExpandedUnit unit, ProgramStage stage, Map<String, String> engineDefines,
-			VertexInputs inputs, List<String> bound, AlphaTest alphaTest, String program) {
+			VertexInputs inputs, List<String> bound, AlphaTest alphaTest, boolean coverage,
+			String program) {
 		this.unit = unit;
 		this.stage = stage;
 		this.engineDefines = engineDefines;
 		this.inputs = inputs;
 		this.bound = List.copyOf(bound);
 		this.alphaTest = alphaTest;
+		this.coverage = coverage;
 		this.program = program;
 
 		// Tokens cost far more than the text they came from, roughly seventy bytes each, so a unit
@@ -241,21 +255,26 @@ public final class GlslTranslator {
 	 */
 	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs,
 			AlphaTest alphaTest, String program) {
-		return prepare(unit, stage, inputs, inputs.elements(), alphaTest, program);
+		return prepare(unit, stage, inputs, inputs.elements(), alphaTest, false, program);
 	}
 
 	/**
 	 * The same, for a family that binds more than one vertex format and therefore cannot take the
 	 * elements to declare from {@link VertexInputs} alone.
 	 *
-	 * @param bound the elements of the format this pass binds, in the format's own order. Exactly
-	 *              these are declared: a name declared that the format has not got is refused, and
-	 *              an element left undeclared shifts every location after it in silence
+	 * @param bound    the elements of the format this pass binds, in the format's own order. Exactly
+	 *                 these are declared: a name declared that the format has not got is refused, and
+	 *                 an element left undeclared shifts every location after it in silence
+	 * @param coverage whether the fragment stage writes the coverage mask on top of what the pack
+	 *                 declared. A property of the pass and not of the file: one
+	 *                 {@code gbuffers_terrain} serves an opaque half that writes it and a translucent
+	 *                 half that does not
 	 */
 	public static Stage prepare(ExpandedUnit unit, ProgramStage stage, VertexInputs inputs,
-			List<String> bound, AlphaTest alphaTest, String program) {
+			List<String> bound, AlphaTest alphaTest, boolean coverage, String program) {
 		GlslTranslator translator = new GlslTranslator(unit, stage,
-				EngineDefines.table(EngineDefines.machine()), inputs, bound, alphaTest, program);
+				EngineDefines.table(EngineDefines.machine()), inputs, bound, alphaTest, coverage,
+				program);
 		translator.rewrite();
 
 		return new Stage(translator);
@@ -281,6 +300,7 @@ public final class GlslTranslator {
 		// wrapped is what decides where the ascending call goes, and both are settled from the one
 		// answer rather than each asking again.
 		planAlphaEpilogue();
+		planCoverage();
 		orderFragmentOutputs();
 		wrapMain();
 
@@ -1154,7 +1174,7 @@ public final class GlslTranslator {
 		// Where the body is wrapped, the wrapper makes the call and this must not also make it: the
 		// brace it would replace belongs to a function that is about to be renamed, and a second
 		// call would only name the outputs a second time.
-		if (this.alphaEpilogue) {
+		if (wrapsFragment()) {
 			this.ordered = true;
 			return;
 		}
@@ -1200,6 +1220,40 @@ public final class GlslTranslator {
 	}
 
 	/**
+	 * Works out whether this fragment stage can be given the coverage mask its pass asks for.
+	 * <p>
+	 * The mask is one more output, and where it lands is not where it is declared: the game asks the
+	 * SPIR-V reflection for the outputs and writes each one's rank over its own location, so the
+	 * mask has to be named after every output the pack declared, dead branches included. It is
+	 * refused where there is no room for one more, which is the eight colour targets a pipeline
+	 * carries, and where the stage declares no output at all, since then rank nought would be the
+	 * mask and the pack's colour would have nowhere to go.
+	 * <p>
+	 * A refusal costs the picture nothing by itself. The pass then draws exactly as it did before
+	 * the mask existed, and it is whoever reads the mask that has to notice it was never written.
+	 */
+	private void planCoverage() {
+		if (this.stage != ProgramStage.FRAGMENT || !this.coverage || this.maxFragmentOutput < 0
+				|| this.maxFragmentOutput + 1 >= MAX_FRAGMENT_OUTPUTS) {
+			return;
+		}
+
+		// The assignment goes at the end of main, after the pack has written its colour and after
+		// the discard, so the body is wrapped for the same reason the alpha test wraps it. The two
+		// share the wrapper and the name, and whichever asked first has already found it.
+		if (this.packMainName < 0) {
+			this.packMainName = mainName();
+		}
+
+		this.covers = this.packMainName >= 0;
+	}
+
+	/** Whether the fragment stage's own {@code main} is wrapped, by the alpha test or by the mask. */
+	private boolean wrapsFragment() {
+		return this.alphaEpilogue || this.covers;
+	}
+
+	/**
 	 * Converts the clip depth the vertex stage writes, once, after everything the pack did to it.
 	 * <p>
 	 * The pack leaves {@code gl_Position.z} in the OpenGL volume, near at minus w and far at plus w.
@@ -1231,12 +1285,13 @@ public final class GlslTranslator {
 	 * The corpus has no geometry stage at all; the day one appears, {@link #prepare} has to be told
 	 * the program has one.
 	 * <p>
-	 * A fragment stage is wrapped for one reason only, the alpha test, decided in
-	 * {@link #planAlphaEpilogue}. The same wrapping argument holds and the same header carries it.
+	 * A fragment stage is wrapped for two reasons, the alpha test and the coverage mask, decided in
+	 * {@link #planAlphaEpilogue} and {@link #planCoverage}. The same wrapping argument holds and the
+	 * same header carries it.
 	 */
 	private void wrapMain() {
 		if (this.stage == ProgramStage.FRAGMENT) {
-			if (this.alphaEpilogue) {
+			if (wrapsFragment()) {
 				replace(this.packMainName, PACK_MAIN);
 			}
 
@@ -1726,10 +1781,21 @@ public final class GlslTranslator {
 					+ (output == null ? "vec4" : output.type()) + " " + outputName(slot, shadowed) + ";");
 		}
 
+		// Above everything the pack declared, dead branches included, because the rank is what
+		// becomes the location and the ranks below this one are already spoken for.
+		if (this.covers) {
+			lines.add("layout(location = " + (this.maxFragmentOutput + 1) + ") out float "
+					+ COVERAGE + ";");
+		}
+
 		if (this.ordered) {
 			StringBuilder order = new StringBuilder("void " + ORDER_OUTPUTS + "() {");
 			for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
 				order.append(' ').append(outputName(slot, shadowed)).append(';');
+			}
+
+			if (this.covers) {
+				order.append(' ').append(COVERAGE).append(';');
 			}
 
 			lines.add(order.append(" }").toString());
@@ -1741,17 +1807,20 @@ public final class GlslTranslator {
 		// writes back. It has to be the ascending function that gets there first, so this goes last.
 		// The pack's body is concatenated after the header, so its own main is only a name here and
 		// has to be declared before it can be called.
-		if (this.depthEpilogue || this.terrainPrologue || this.alphaEpilogue) {
+		if (this.depthEpilogue || this.terrainPrologue || wrapsFragment()) {
 			lines.add("void " + PACK_MAIN + "();");
+			// The mask goes last of all, after the discard: a fragment the alpha test threw away
+			// covered nothing, and marking it covered would leave a hole where a leaf was.
 			lines.add("void main() { "
 					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
-					+ (this.alphaEpilogue ? ORDER_OUTPUTS + "(); " : "")
+					+ (wrapsFragment() ? ORDER_OUTPUTS + "(); " : "")
 					+ PACK_MAIN + "();"
 					+ (this.depthEpilogue ? " gl_Position.z = " + DEPTH_CONV
 							+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w;" : "")
 					+ (this.alphaEpilogue
 							? " " + this.alphaTest.discard(outputName(0, shadowed) + ".a")
 							: "")
+					+ (this.covers ? " " + COVERAGE + " = 1.0;" : "")
 					+ " }");
 		}
 
@@ -1813,7 +1882,7 @@ public final class GlslTranslator {
 		return new TranslatedUnit.Notes(this.maxFragmentOutput + 1, this.dynamicFragData,
 				this.conflicts.size(), this.shadowCalls, this.unwrappedShadowCalls,
 				this.strippedExtensions, this.depthEpilogue ? 1 : 0, this.alphaEpilogue ? 1 : 0,
-				this.depthReads,
+				this.covers ? 1 : 0, this.depthReads,
 				this.depthReadsUnwrapped, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
 				List.copyOf(this.conflicts), comparedSamplers());

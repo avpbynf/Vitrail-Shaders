@@ -89,6 +89,18 @@ public enum TerrainPass {
 	}
 
 	/**
+	 * Whether this pass writes the mask saying where it drew, which is what keeps the game's own
+	 * picture off the pixels the pack has already answered for.
+	 * <p>
+	 * The two opaque halves of the world do, and nothing else. The translucent half is drawn after
+	 * that picture has been put in and blends onto it, so it has nothing to keep out; the shadow map
+	 * is not the picture at all.
+	 */
+	public boolean covers() {
+		return !this.blended && !this.shadow;
+	}
+
+	/**
 	 * The same geometry drawn into the shadow map, or null for a half the shadow stage does not
 	 * draw. The renderer knows only its own three passes, so this is how one of them becomes the
 	 * shadow pass that shares its mesh.

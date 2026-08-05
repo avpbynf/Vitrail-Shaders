@@ -96,7 +96,17 @@ public final class ProgramTranslator {
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
 			VertexInputs inputs, AlphaTest alphaTest, String program) {
-		return translate(units, inputs, inputs.elements(), alphaTest, program);
+		return translate(units, inputs, alphaTest, false, program);
+	}
+
+	/**
+	 * @param coverage whether the fragment stage also writes the mask saying where this pass drew.
+	 *                 A property of the pass, like the alpha test: the two opaque halves of the chunk
+	 *                 pass write it and no other pass of the engine does
+	 */
+	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
+			VertexInputs inputs, AlphaTest alphaTest, boolean coverage, String program) {
+		return translate(units, inputs, inputs.elements(), alphaTest, coverage, program);
 	}
 
 	/**
@@ -109,12 +119,18 @@ public final class ProgramTranslator {
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
 			VertexInputs inputs, List<String> boundElements, AlphaTest alphaTest, String program) {
+		return translate(units, inputs, boundElements, alphaTest, false, program);
+	}
+
+	private static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
+			VertexInputs inputs, List<String> boundElements, AlphaTest alphaTest, boolean coverage,
+			String program) {
 		Map<ProgramStage, GlslTranslator.Stage> prepared = new LinkedHashMap<>();
 		for (ProgramStage stage : PIPELINE_ORDER) {
 			ExpandedUnit unit = units.get(stage);
 			if (unit != null) {
 				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs, boundElements,
-						alphaTest, program));
+						alphaTest, coverage, program));
 			}
 		}
 

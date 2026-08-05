@@ -249,7 +249,7 @@ public final class PackProgram {
 				// test is taken that way: what the engine supplies belongs to what is being drawn.
 				loaded.put(pass, bind(source.packName(), path,
 						ProgramTranslator.translate(units, VertexInputs.TERRAIN, alphaTest,
-								pass.program()),
+								pass.covers(), pass.program()),
 						targets, alphaTest));
 			}
 

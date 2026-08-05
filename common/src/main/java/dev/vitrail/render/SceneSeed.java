@@ -63,6 +63,9 @@ final class SceneSeed {
 
 	private static final String SAMPLER = "InSampler";
 
+	/** Where the pack's own opaque geometry has already written, and where this must not paint. */
+	private static final String COVERAGE = "CoverageSampler";
+
 	private static final Supplier<String> LABEL = () -> "Vitrail scene seed";
 
 	/** Two triangles, the same quad the pass itself draws, which is why it is passed in. */
@@ -86,12 +89,17 @@ final class SceneSeed {
 			#version 460 core
 
 			uniform sampler2D InSampler;
+			uniform sampler2D CoverageSampler;
 
 			in vec2 ofTexCoord;
 
 			layout(location = 0) out vec4 ofFragData0;
 
 			void main() {
+				if (texture(CoverageSampler, ofTexCoord).r > 0.5) {
+					discard;
+				}
+
 				ofFragData0 = texture(InSampler, ofTexCoord);
 			}
 			""";
@@ -124,7 +132,10 @@ final class SceneSeed {
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder().withSampler(SAMPLER).build())
+				.withBindGroupLayout(BindGroupLayout.builder()
+						.withSampler(SAMPLER)
+						.withSampler(COVERAGE)
+						.build())
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				// The format of the target as the pack declared it, not the one of the main
 				// target: setting a pipeline whose colour state disagrees with the attachment
@@ -167,24 +178,33 @@ final class SceneSeed {
 	}
 
 	/**
-	 * Draws the scene over the whole of {@code into}. Only worth calling once {@link #prepare} has
-	 * said the pipeline is usable.
+	 * Draws the scene over {@code into}, everywhere {@code covered} says the pack's own geometry has
+	 * not already written. Only worth calling once {@link #prepare} has said the pipeline is usable.
 	 *
+	 * @param covered the mask, which is read and never judged: an image of nought everywhere is a
+	 *                mask that hides nothing and the seed then covers the target whole, which is
+	 *                what the frames with no terrain of the pack's in them have to look like
 	 * @return false when a side of the draw is missing, in which case the target keeps its clear
 	 *         colour rather than holding half an image
 	 */
-	boolean draw(CommandEncoder encoder, GpuBuffer quad, GpuTextureView scene, GpuTextureView into) {
-		if (quad == null || scene == null || into == null) {
+	boolean draw(CommandEncoder encoder, GpuBuffer quad, GpuTextureView scene,
+			GpuTextureView covered, GpuTextureView into) {
+		if (quad == null || scene == null || covered == null || into == null) {
 			return false;
 		}
 
-		// Loaded rather than cleared: the clears have already run and the draw covers the target
-		// whole, so a clear here would be one more write of the same pixels.
+		// Loaded rather than cleared: the clears have already run, and the draw no longer covers the
+		// target whole in any case.
 		try (RenderPass pass = encoder.createRenderPass(LABEL, into, Optional.empty())) {
 			pass.setPipeline(this.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
 			pass.bindTexture(SAMPLER, scene,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			// NEAREST, and the mask is the size of the screen, so a texel is a pixel and the answer
+			// is the one the geometry wrote. Filtered, the edge of every block would read as half
+			// covered and the threshold would move it by half a pixel.
+			pass.bindTexture(COVERAGE, covered,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
