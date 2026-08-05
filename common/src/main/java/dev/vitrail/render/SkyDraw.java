@@ -3,7 +3,9 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
+import dev.vitrail.pack.target.TargetSize;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.PrimitiveTopology;
@@ -11,6 +13,7 @@ import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -41,10 +44,11 @@ import java.util.Optional;
  * at exactly the moment the answer is needed, and it costs no second table that could drift from
  * the first.
  * <p>
- * <strong>What this slice does not do.</strong> Every element draws into the pass the game opened,
- * with the one attachment the game gave it, exactly as a terrain program that gains nothing keeps
- * Sodium's pass. Where a pack's {@code DRAWBUFFERS} really want it is {@code ChainPlan.sky}'s
- * answer, measured out of game and not yet honoured here.
+ * <strong>Every piece draws where the pack's own draw buffers send it</strong>, on the halves the
+ * schedule gives them, which for most of the corpus is colortex0 and for Sildur's is colortex4. The
+ * two pieces that write outright rather than blend also mark the pixels they covered, so the scene
+ * seed stops painting the game's own sky over them, exactly as it stops over the terrain. A place
+ * whose plan has no answer keeps the single attachment the game opened its pass with.
  */
 public final class SkyDraw {
 
@@ -80,7 +84,8 @@ public final class SkyDraw {
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
 		private PackProgram.SkyElement asked() {
 			return new PackProgram.SkyElement(this.element, this.program,
-					this.format.getElements().stream().map(VertexFormatElement::name).toList());
+					this.format.getElements().stream().map(VertexFormatElement::name).toList(),
+					this.blend.isEmpty());
 		}
 	}
 
@@ -128,7 +133,9 @@ public final class SkyDraw {
 	private final String profile;
 	private final PackValues values;
 	private final int load;
+	private final ChainPlan plan;
 	private final TargetPlan chainTargets;
+	private final boolean chainRuns;
 	private final ColorTargets targets;
 
 	/** One program per element the pack serves. Empty until the pack has been read, and it stays
@@ -142,8 +149,8 @@ public final class SkyDraw {
 	private SkyProgram drawing;
 
 	SkyDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, TargetPlan chainTargets,
-			ColorTargets targets) {
+			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
+			boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
@@ -151,7 +158,9 @@ public final class SkyDraw {
 		this.profile = profile;
 		this.values = values;
 		this.load = load;
+		this.plan = plan;
 		this.chainTargets = chainTargets;
+		this.chainRuns = chainRuns;
 		this.targets = targets;
 
 		// Once at load and only when there is something to say. A piece the pack refuses is a piece
@@ -241,6 +250,43 @@ public final class SkyDraw {
 	}
 
 	/**
+	 * The render pass one piece of the sky wants opened, or null to leave the game's own alone.
+	 * <p>
+	 * Asked right after {@link #element} and about the piece that call prepared, which is why it takes
+	 * no label of its own: the two answers are one answer, and a piece named twice is a chance for
+	 * them to differ. They have to be one, because the pipeline carries a colour state per attachment
+	 * this names and setting it against a pass built for anything else throws by name in the middle
+	 * of the sky. Nothing of the game's pass is lost by replacing it, since every one of the six opens
+	 * with the main target's colour and depth and clears neither.
+	 *
+	 * @param colour the colour view the renderer was going to draw into, which stays attachment
+	 *               nought wherever the pack's own targets do not take it
+	 * @param depth  the depth view it was going to use, kept as it is. The sky neither tests nor
+	 *               writes it, and the world drawn afterwards has to find it as the clear left it
+	 */
+	public static RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
+		SkyDraw draw = PackChain.sky();
+		if (draw == null || draw.drawing == null) {
+			return null;
+		}
+
+		return draw.drawing.descriptor(colour, depth);
+	}
+
+	/**
+	 * Whether what the sky writes still reaches the screen this frame.
+	 * <p>
+	 * The same question {@code TerrainDraw.shown} asks and the same answer, because the sky now has
+	 * the same way of leaving the screen: with draw buffer nought going to a target of the pack's,
+	 * the chain's final is the only road back, and the chain draws nothing at all while it is still
+	 * compiling. Those frames would be a sky drawn into a target nothing reads, which is a frame with
+	 * no sky in it.
+	 */
+	private boolean shown() {
+		return !this.chainRuns || this.owner.drawable();
+	}
+
+	/**
 	 * The texture the game was going to draw this element with, on its way past. Recorded rather
 	 * than looked up: the celestial atlas is the renderer's own field, and what a pack reads under
 	 * {@code gtexture} has to be the image the game would have drawn.
@@ -286,7 +332,7 @@ public final class SkyDraw {
 					.filter(element -> loaded.containsKey(element.element()))
 					.forEach(element -> this.programs.put(element.label(), SkyProgram.of(
 							loaded.get(element.element()), element, this.values, this.load,
-							this.chainTargets, this.targets)));
+							writes(element), this.chainTargets, this.targets, this.chainRuns)));
 
 			List<String> missing = ELEMENTS.values().stream()
 					.filter(element -> !loaded.containsKey(element.element()))
@@ -301,6 +347,32 @@ public final class SkyDraw {
 			Vitrail.logger().error("Could not prepare the sky programs of "
 					+ this.packPath.getFileName() + ", so the game keeps its own sky", e);
 		}
+	}
+
+	/**
+	 * Where one piece's outputs belong, which is the plan's answer for the program the game would
+	 * have drawn it with, and empty when this place has none.
+	 * <p>
+	 * A place whose sky targets are not the size of the screen keeps the single attachment the game
+	 * opened its pass with: the depth this pass tests nothing against is still attached to it and is
+	 * the screen's, and one render pass has one render area. No pack of the corpus scales one, and
+	 * the line says so rather than the encoder throwing in the middle of a frame.
+	 */
+	private List<ChainPlan.Attachment> writes(Element element) {
+		return this.plan.sky(element.program())
+				.filter(sky -> {
+					if (sky.size().equals(TargetSize.ofScreen())) {
+						return true;
+					}
+
+					Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so the {} of "
+							+ "the sky keeps the game's own target and its other draw buffers are "
+							+ "written nowhere", sky.program(), element.element());
+
+					return false;
+				})
+				.map(ChainPlan.Pass::attachments)
+				.orElse(List.of());
 	}
 
 	private RenderPipeline prepare(GpuDevice device, Element element, Matrix4fc modelView,
@@ -320,6 +392,14 @@ public final class SkyDraw {
 		// sure the colour targets a sky program samples exist before it reads them.
 		this.owner.beginFrame();
 		if (!this.owner.openTargets(device)) {
+			return null;
+		}
+
+		// After the two calls above and never at the door, for the reason TerrainDraw gives at the
+		// same point: the frame boundary hangs off whichever of the sky, the terrain and the chain
+		// comes first, and the sky is usually first. Refused before opening the frame, the whole warm
+		// up would leave the value store standing.
+		if (!shown()) {
 			return null;
 		}
 

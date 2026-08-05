@@ -358,13 +358,14 @@ public final class PackProgram {
 	 *                 under. Not a name of the format: two pieces are commonly one program drawn
 	 *                 under one format, and they are still two programs here, because each carries
 	 *                 its own uniform block and its own compiled module
-	 * @param program the bare name the game would draw with, {@code gbuffers_skybasic}
-	 * @param bound   the elements of the vertex format the pass that draws this piece binds, in the
-	 *                format's own order. Exactly these are declared: the sky binds four different
-	 *                formats between its passes, and an element left undeclared shifts the location
-	 *                of every one after it in silence
+	 * @param program  the bare name the game would draw with, {@code gbuffers_skybasic}
+	 * @param bound    the elements of the vertex format the pass that draws this piece binds, in the
+	 *                 format's own order. Exactly these are declared: the sky binds four different
+	 *                 formats between its passes, and an element left undeclared shifts the location
+	 *                 of every one after it in silence
+	 * @param coverage whether the fragment stage also writes the mask saying where this piece drew
 	 */
-	public record SkyElement(String element, String program, List<String> bound) {
+	public record SkyElement(String element, String program, List<String> bound, boolean coverage) {
 
 		public SkyElement {
 			bound = List.copyOf(bound);
@@ -372,7 +373,7 @@ public final class PackProgram {
 
 		/** What two pieces have to agree on to be one translation. The element is not part of it. */
 		private String translation() {
-			return this.program + "|" + String.join(",", this.bound);
+			return this.program + "|" + String.join(",", this.bound) + "|" + this.coverage;
 		}
 	}
 
@@ -387,9 +388,10 @@ public final class PackProgram {
 	 * the game skips it until its alpha passes a thousandth, so the pack was opened, expanded and
 	 * compiled in the frame the sun first neared the horizon.
 	 * <p>
-	 * Two pieces that ask for one program under one format share a translation, since the text would
-	 * be identical: the disc, the void plane and the stars are one. They are still two programs to
-	 * the caller, and the file that serves them is expanded once whatever the pieces ask for.
+	 * Two pieces that ask for one program under one format and for the same mask share a translation,
+	 * since the text would be identical: the disc and the void plane are one. They are still two
+	 * programs to the caller, and the file that serves them is expanded once whatever the pieces ask
+	 * for.
 	 * <p>
 	 * A piece the pack serves nothing for is simply absent from the answer, and the game then keeps
 	 * its own shader for it. The fallback tree is walked like everywhere else, so a pack shipping
@@ -437,7 +439,8 @@ public final class PackProgram {
 				// the piece wanted, not the file that ended up serving it, as everywhere else.
 				translated.computeIfAbsent(element.translation(), _ -> bind(source.packName(), path,
 						ProgramTranslator.translate(units, VertexInputs.SKY, element.bound(),
-								AlphaTest.OFF, false, element.program(), textures.volumes()),
+								AlphaTest.OFF, element.coverage(), element.program(),
+								textures.volumes()),
 						targets, AlphaTest.OFF, textures));
 				loaded.put(element.element(), translated.get(element.translation()));
 			}

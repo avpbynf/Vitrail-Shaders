@@ -10,6 +10,7 @@ import dev.vitrail.Vitrail;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 
@@ -56,17 +57,16 @@ final class SkyProgram {
 
 	/**
 	 * Prepares one already read program to be drawn as one piece of the sky.
-	 * <p>
-	 * Nothing is written into the pack's own colour targets yet: the writes handed to the body are
-	 * empty, so the program keeps the one attachment the game opened its pass with and asks for no
-	 * descriptor of its own. What the pack's {@code DRAWBUFFERS} say is {@link ChainPlan#sky}'s
-	 * answer and is the next slice, not this one.
 	 *
 	 * @param loaded the pack's own program, read and translated against the format the pass that
 	 *               draws this piece binds
+	 * @param writes where this piece's outputs belong, {@link ChainPlan#sky}'s answer, in draw buffer
+	 *               order and each on the half the schedule gives it. Empty leaves the piece on the
+	 *               one attachment the game opened its own pass with
 	 */
 	static SkyProgram of(PackProgram.Loaded loaded, SkyDraw.Element element, PackValues values,
-			int load, TargetPlan chainTargets, ColorTargets targets) {
+			int load, List<ChainPlan.Attachment> writes, TargetPlan chainTargets,
+			ColorTargets targets, boolean chainRuns) {
 		// Bound again against the chain's own plan, for the reason the terrain is: what the load
 		// bound them against is a plan without the user's pass filter. The step is the one before
 		// the deferreds, the sky standing at the third rank of the frame.
@@ -74,10 +74,15 @@ final class SkyProgram {
 		PackProgram.Loaded bound =
 				loaded.rebind(chainTargets, chainTargets.schedule().step(servedBy));
 
+		// A piece that writes outright is one the scene seed must not paint over, and a piece that
+		// blends is not: the mask is written whatever the blend, so a star quad, which is a hundred
+		// parts transparent to one part star, would claim every pixel it spans and cut the game's
+		// picture out of all of them. The opaque and cutout chunk passes answer the same question the
+		// same way, and the translucent one answers it no.
 		return new SkyProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY, element.element(),
-				NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, element.blend(), false, false,
-				element.topology(), null, element.stage()),
-				bound, values, load, element.format(), List.of(), targets, false));
+				NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, element.blend(),
+				element.blend().isEmpty(), false, element.topology(), null, element.stage()),
+				bound, values, load, element.format(), writes, targets, chainRuns));
 	}
 
 	/**
@@ -96,6 +101,11 @@ final class SkyProgram {
 	void texture(GpuTextureView view, GpuSampler sampler) {
 		this.body.atlas(view);
 		this.body.sampler(sampler);
+	}
+
+	/** @see GeometryProgram#descriptor */
+	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
+		return this.body.descriptor(colour, depth);
 	}
 
 	/** @see GeometryProgram#bind */

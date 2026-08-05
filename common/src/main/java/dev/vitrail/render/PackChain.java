@@ -254,7 +254,7 @@ public final class PackChain {
 		// demand too, since the game builds its meshes once at startup and a place that never draws
 		// a sky should not pay for one.
 		this.sky = new SkyDraw(this, packPath, chain.place(), chosen, profile, values, this.load,
-				chain.targets(), this.targets);
+				chain.chain(), chain.targets(), chainWanted, this.targets);
 	}
 
 	/**

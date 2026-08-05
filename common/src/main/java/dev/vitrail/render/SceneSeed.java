@@ -30,13 +30,14 @@ import java.util.function.Supplier;
 
 /**
  * Draws the game's opaque scene into the target the terrain would have written, standing in for
- * every gbuffers stage that does not run: the sky, the entities, the particles and the weather.
+ * every gbuffers stage that does not run: the entities, the particles and the weather.
  * <p>
- * It is cut around the pack's own terrain rather than painted over it. The opaque and cutout chunk
- * passes write that target themselves, and they mark every pixel they covered as they go, so what
- * lands here is the game's picture everywhere the pack answered for nothing. Without the cut the
- * two would fight and the game would win, because it is drawn second. The translucent pass is
- * different again: it draws after this and blends onto what the two of them left.
+ * It is cut around the pack's own geometry rather than painted over it. The opaque and cutout chunk
+ * passes write that target themselves, and so do the two pieces of the sky that write outright, and
+ * every one of them marks the pixels it covered as it goes, so what lands here is the game's picture
+ * everywhere the pack answered for nothing. Without the cut the two would fight and the game would
+ * win, because it is drawn second. The pieces that blend are different again, the translucent chunk
+ * pass with them: they draw over what the others left and claim no pixel of their own.
  * <p>
  * <strong>The mask alone cuts too much, and what it cuts is every entity standing in front of a
  * block.</strong> The game draws its opaque features after the chunk passes and into the same

@@ -11,6 +11,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.DynamicUniforms;
 import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.renderer.SkyRenderer;
@@ -33,7 +34,12 @@ import java.util.function.Supplier;
  * The sky is the one piece of the world that opens its own render passes: {@code SkyRenderer} makes
  * one per element, sets a pipeline of the game's and draws a buffer built once at startup. So the
  * hook is not the one the entities will use, and it is smaller: the pipeline is swapped where it is
- * set, and everything else about the pass stays the game's, its attachment included.
+ * set, and the pass is replaced where it is opened so that the pack's own colour targets are what
+ * the piece is drawn into. The two answers are taken on one call of one wrap and cannot part
+ * company: a pipeline carries one colour state per attachment the descriptor names, and setting one
+ * against a pass built for the other throws by name in the middle of the sky. The two arguments
+ * dropped along the way are the clear colour and the clear depth, and all six methods pass both
+ * empty.
  * <p>
  * <strong>An element is recognised by the label the game gives its own pass</strong>, which is the
  * first argument of the call wrapped below. That is what lets one wrap serve six methods without a
@@ -177,8 +183,13 @@ public abstract class SkyRendererMixin {
 			OptionalDouble clearDepth, Operation<RenderPass> original) {
 		this.vitrail$pipeline = SkyDraw.element(label.get(), this.vitrail$modelView,
 				this.vitrail$colour);
+		RenderPassDescriptor descriptor = this.vitrail$pipeline == null
+				? null
+				: SkyDraw.descriptor(colour, depth);
 
-		return original.call(encoder, label, colour, clearColour, depth, clearDepth);
+		return descriptor == null
+				? original.call(encoder, label, colour, clearColour, depth, clearDepth)
+				: encoder.createRenderPass(descriptor);
 	}
 
 	@WrapOperation(
