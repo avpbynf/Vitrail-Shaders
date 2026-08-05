@@ -9,6 +9,7 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.PauseScreen;
+import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.client.event.ScreenEvent;
@@ -18,37 +19,44 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Adds one icon to the row the pause menu already carries, at its right end, opening the settings
- * screen without leaving the world.
+ * Adds one icon to the row of small buttons the title screen and the pause menu each already carry,
+ * opening the settings screen from the menu the player is already in.
  * <p>
- * The row is built by {@code PauseScreen} into a {@code LinearLayout} that has already been laid
- * out by the time any mod sees the screen, so there is nothing to add a child to: the position has
- * to be worked out from the buttons that are there. They are found by shape rather than by type,
- * because the row mixes plain {@code SpriteIconButton} with whatever {@code CommonButtons.friends}
- * returns, and the only thing they all agree on is being twenty by twenty on one line.
+ * Two screens, one piece of code, because the two rows are the same shape. The pause menu builds
+ * its row into a {@code LinearLayout} and {@code TitleScreen} places its four by hand through
+ * {@code getHorizontalPosition}, but both are laid out by the time any mod sees the screen, so
+ * there is nothing to add a child to either way: the position has to be worked out from the buttons
+ * that are there. They are found by shape rather than by type, because the rows mix plain
+ * {@code SpriteIconButton} with whatever {@code CommonButtons.friends} returns and, on the title
+ * screen, with NeoForge's own mods button, and the only thing they all agree on is being twenty by
+ * twenty on one line. Reading the row rather than naming its members is also what keeps this from
+ * caring how many mods have already added to it.
  * <p>
  * No mixin, and none needed: {@code ScreenEvent.Init.Post} is public and is how NeoForge itself
- * expects a mod to reach a vanilla screen. The failure mode is deliberately silent. If the row ever
- * stops looking like a row, no button is added and the pause menu is untouched, which is a missing
- * shortcut rather than a broken screen; the key bound in {@link VitrailKeys} still opens it.
+ * expects a mod to reach a vanilla screen. The failure mode is deliberately silent. If a row ever
+ * stops looking like a row, no button is added and that screen is untouched, which is a missing
+ * shortcut rather than a broken screen; the key bound in {@link VitrailKeys} still opens it, and on
+ * the title screen the row is the only way in, so a player who loses it loses a shortcut and not a
+ * setting.
  */
-public final class PauseMenuEntry {
+public final class MenuEntry {
 
 	/** The size every button in that row has, and the sieve used to recognise them. */
 	private static final int ICON = 20;
 
-	/** The gap {@code PauseScreen} puts between them, so ours does not look bolted on. */
+	/** The gap both screens put between them, so ours does not look bolted on. */
 	private static final int GAP = 4;
 
 	private static final Identifier SPRITE =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "icon/vitrail");
 
-	private PauseMenuEntry() {
+	private MenuEntry() {
 	}
 
 	public static void register() {
 		NeoForge.EVENT_BUS.addListener(ScreenEvent.Init.Post.class, event -> {
-			if (event.getScreen() instanceof PauseScreen) {
+			if (event.getScreen() instanceof PauseScreen
+					|| event.getScreen() instanceof TitleScreen) {
 				add(event);
 			}
 		});
@@ -84,10 +92,11 @@ public final class PauseMenuEntry {
 
 		// To the LEFT of the row, and that is not a matter of taste. The right hand end is where
 		// a mod that draws an icon without registering a widget puts it, and this instance has
-		// one: the layout holds five buttons, whose centred row really does end where the count
-		// says, yet a sixth icon is painted past it. Nothing that is invisible to
+		// one: the pause menu layout holds five buttons, whose centred row really does end where
+		// the count says, yet a sixth icon is painted past it. Nothing that is invisible to
 		// getListenersList can be avoided by measuring, so the only safe slot is the one before
-		// the row, which no layout ever grows into.
+		// the row, which no layout ever grows into. On the title screen the same slot happens to
+		// be the one next to NeoForge's mods button, which is where a player looks for this.
 		int left = Integer.MAX_VALUE;
 		for (GuiEventListener listener : event.getListenersList()) {
 			if (listener instanceof AbstractWidget widget

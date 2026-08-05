@@ -31,7 +31,7 @@ public final class VitrailNeoForge {
 				(_, modListScreen) -> new SettingsScreen(modListScreen));
 
 		VitrailKeys.register(modBus);
-		PauseMenuEntry.register();
+		MenuEntry.register();
 
 		modBus.addListener(FMLClientSetupEvent.class, this::onClientSetup);
 
