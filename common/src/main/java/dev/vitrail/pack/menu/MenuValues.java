@@ -60,7 +60,32 @@ public final class MenuValues {
 		return new MenuValues(menu, saved, savedProfile, forced);
 	}
 
-	/** Replaces the base after a reload, keeping whatever is pending. */
+	/**
+	 * The same choices on a pack that was read again, menu included.
+	 * <p>
+	 * A menu is built from the pack's own source, so a reload can bring back a different one: a
+	 * setting the pack no longer declares, one that turned from a toggle into a cycle, a page that
+	 * moved. {@link #rebase} cannot answer for any of that, the menu being what says which layer a
+	 * value belongs to and how it is spelled, so a reload has to build on the menu it just read
+	 * rather than on the one the screen was holding.
+	 * <p>
+	 * What was clicked and not applied comes across, which is the difference between a reload and
+	 * picking another pack: Cancel is the button that drops a pending value, and a reload the player
+	 * asked for has no more reason to drop it than one the watcher noticed.
+	 */
+	public MenuValues reread(PackMenu menu, Map<String, String> saved, String savedProfile,
+			Map<String, String> forced) {
+		MenuValues next = new MenuValues(menu, saved, savedProfile, forced);
+		next.pending.putAll(this.pending);
+		next.profileChosen = this.profileChosen;
+		if (this.profileChosen) {
+			next.pendingProfile = this.pendingProfile;
+		}
+
+		return next;
+	}
+
+	/** Replaces the base under the same menu, keeping whatever is pending. */
 	public void rebase(Map<String, String> saved, String savedProfile, Map<String, String> forced) {
 		this.saved = copy(saved);
 		this.appliedProfile = savedProfile == null ? "" : savedProfile;

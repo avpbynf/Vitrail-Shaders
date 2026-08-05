@@ -232,8 +232,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	 * <p>
 	 * The same pack keeps what is pending, which is the whole point of holding that apart from the
 	 * file: a line added to {@code options.txt} greys a setting without losing the click made under
-	 * it. Another pack does not, since a value set on one pack has no meaning in the next one's
-	 * file, and since a menu is read once and never replaced.
+	 * it. Another pack drops it, a value set on one pack having no meaning in the next one's file.
 	 */
 	private void syncWithLoadedPack() {
 		PackSession loaded = PackChain.session().orElse(null);
@@ -246,7 +245,11 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		if (loaded != null && held != null && current != null
 				&& loaded.packFileName().equals(held.packFileName())) {
 			this.session = loaded;
-			current.rebase(loaded.saved().values(), loaded.saved().profile(), loaded.forcedText());
+			// On the menu that was just read and not on the one held, since Reload promises to read
+			// everything again and the same file name is not the same pack: a directory pack is
+			// edited in place, and a zip is replaced under its own name often enough.
+			this.values = current.reread(loaded.menu(), loaded.saved().values(),
+					loaded.saved().profile(), loaded.forcedText());
 			dropMissingPage();
 		} else {
 			adopt(loaded);
