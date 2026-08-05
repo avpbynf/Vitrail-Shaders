@@ -95,13 +95,22 @@ public final class CameraBob {
 	 * and a model view that does not make up for it, which is a picture that looks entirely
 	 * plausible and reprojects wrong. So the two are multiplied back together and compared with what
 	 * was captured on its way to the device: they have to be the same matrix, and when they are not,
-	 * the split is abandoned for the frame and the engine goes back to publishing the drawn
+	 * the split is abandoned for the session and the engine goes back to publishing the drawn
 	 * projection whole.
 	 *
 	 * @param camera   the camera's own projection, before any of the four
 	 * @param rendered the projection the level was drawn with, after all four
 	 */
 	static boolean agrees(Matrix4fc camera, Matrix4fc rendered) {
+		// Asked before anything else, because the answer below is per frame and the refusal is not.
+		// One product that did not match takes taken() down to the identity for good, so a later
+		// frame that happened to agree would publish the clean projection against a model view with
+		// no bob in it: the four terms would then be in neither of the two matrices the pack is
+		// handed, which is worse than the frame that failed.
+		if (!trusted) {
+			return false;
+		}
+
 		if (!taken) {
 			// Said once, because the quiet answer and the failed one look alike from here: nothing
 			// took the bob either when the game stopped multiplying it in or when this engine
