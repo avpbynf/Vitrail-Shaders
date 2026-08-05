@@ -320,6 +320,19 @@ public final class TerrainProgram {
 		}
 
 		this.pipeline = builder.build();
+
+		// A storage block is the one refusal that does not announce itself. An unbindable sampler
+		// stops the pipeline from being built and this class already falls back on that; a storage
+		// block compiles, never enters a bind group, and leaves the descriptor on the binding the
+		// pack wrote, which is a draw against nothing. The chain refuses one by name and so does
+		// this, so that the world keeps the game's own shader instead.
+		List<String> storage = loaded.storageBlocks();
+		if (!storage.isEmpty()) {
+			this.broken = true;
+			Vitrail.logger().error("{} declares the storage block {}, which nothing binds, so the "
+					+ "{} pass keeps the game's own shader", this.path, String.join(", ", storage),
+					pass.name().toLowerCase(Locale.ROOT));
+		}
 	}
 
 	/**

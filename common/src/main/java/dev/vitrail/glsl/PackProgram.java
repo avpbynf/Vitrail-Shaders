@@ -86,6 +86,22 @@ public final class PackProgram {
 		}
 
 		/**
+		 * The storage blocks this program declares, which nothing in this game binds. Empty is the
+		 * norm, and the one pack of the corpus that is not says so in every ordinary program.
+		 * <p>
+		 * Worth asking separately from {@link #unbindable}: a sampler the backend refuses stops the
+		 * pipeline from being built, which every caller already notices, and a storage block does
+		 * not. It compiles, it is left out of the bind group, and the descriptor keeps the binding
+		 * the pack wrote.
+		 */
+		public List<String> storageBlocks() {
+			return this.program.stages().values().stream()
+					.flatMap(stage -> stage.notes().storageBlocks().stream())
+					.distinct()
+					.toList();
+		}
+
+		/**
 		 * The same program bound against another plan, with the reader's own step handed in.
 		 * <p>
 		 * The chunk passes need both halves of that. They are loaded against a plan of their own,
