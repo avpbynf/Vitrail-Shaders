@@ -235,6 +235,10 @@ public final class GlslTranslator {
 
 	/** Where the fragment stage's own {@code main} stands, once the alpha test has claimed it. */
 	private int packMainName = -1;
+
+	/** Which function each token sits in, read while every brace is still the pack's own. */
+	private int[] regions = new int[0];
+
 	private int depthLookups;
 	private int parameterLookups;
 	private int fragCoordZ;
@@ -367,6 +371,13 @@ public final class GlslTranslator {
 		// answer rather than each asking again.
 		planAlphaEpilogue();
 		planCoverage();
+		// Before the ascending call goes in, and that is the whole point: the call replaces the
+		// opening brace of main with text of ours, which is no longer an operator, so a brace
+		// counter run afterwards would walk past main without opening it and close one brace too
+		// many at its end. Every function written after main would then read as file scope, where
+		// nothing shadows anything. The token indices are stable from here on, so an array taken
+		// now still describes the tokens dropUnprovidedInputs is handed later.
+		this.regions = regions();
 		orderFragmentOutputs();
 		wrapMain();
 		// Last, and it has to be: rewriteIdentifiers is where varying becomes in or out, and
@@ -1567,10 +1578,13 @@ public final class GlslTranslator {
 	 * Which of these names the body really reads, counting a function that declares one of them for
 	 * itself as meaning its own.
 	 * <p>
-	 * Counting mentions is not enough and Mellow is why: its {@code deferred1} works out a
-	 * {@code vec3 ViewPos} of its own on the second line of {@code main} and reads it four times
-	 * after that, while the varying of the same name, declared in a header it includes, is never
-	 * touched. Six of its varyings are that case.
+	 * Counting mentions is not enough and Mellow is why. Its {@code deferred1} includes a header
+	 * declaring eleven varyings and its own full screen vertex stage writes five of them; of the six
+	 * left over, three go out here. {@code Tangent} is mentioned once in the whole stage, as a
+	 * parameter of the pack's own {@code tbn_decode(vec3 Normal, vec4 Tangent)}, and {@code Normal}
+	 * is mentioned in five functions, each of which declares a {@code Normal} of its own, four as a
+	 * parameter and one as a local. Counting mentions would keep both, and the game would then
+	 * refuse the whole module over two varyings nothing reads.
 	 * <p>
 	 * <strong>Scope is taken at the function and not at the block, which is coarser than the
 	 * language.</strong> A name declared inside an {@code if} and read again after the closing brace
@@ -1587,7 +1601,7 @@ public final class GlslTranslator {
 			}
 		}
 
-		int[] region = regions();
+		int[] region = this.regions;
 		int[] lines = lineNumbers();
 		Map<String, Set<Integer>> shadowed = new HashMap<>();
 		Set<String> read = new HashSet<>();
@@ -1619,6 +1633,9 @@ public final class GlslTranslator {
 	/**
 	 * Which top level block each token belongs to, counting the signature that opens it, or -1 for a
 	 * token at file scope. A local declaration only means its own name inside one of these.
+	 * <p>
+	 * Counts the pack's braces and only those, so it has to be asked while they are all that is
+	 * there. {@link #rewrite} asks it once, at the last moment where that holds.
 	 */
 	private int[] regions() {
 		int[] region = new int[this.tokens.size()];
