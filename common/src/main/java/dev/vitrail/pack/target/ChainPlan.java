@@ -24,11 +24,11 @@ import java.util.TreeSet;
  * What it does own is the guards: an API that throws at the first draw is an API whose refusal
  * belongs at load time, with the program named.
  * <p>
- * The other thing it owns is the honesty of the picture. Nothing draws geometry yet, so the
- * game's own finished frame stands in for the gbuffers and lands in a single target; every other
- * target a pass reads before anything writes it holds a clear colour. Which ones those are, and
- * why, is worked out here and said in the pack's own terms, because the alternative is a plausible
- * image nobody can account for.
+ * The other thing it owns is the honesty of the picture. The chunk passes fill the targets the
+ * pack sends them to and the game's own finished frame stands in for the gbuffers nothing draws
+ * yet, in a single target; every other target a pass reads before anything writes it holds a clear
+ * colour. Which ones those are, and why, is worked out here and said in the pack's own terms,
+ * because the alternative is a plausible image nobody can account for.
  */
 public final class ChainPlan {
 
@@ -172,14 +172,20 @@ public final class ChainPlan {
 			notes.add("this place runs no final, so nothing the chain writes reaches the screen");
 		}
 
+		// Worked out before the verdicts rather than in the return, so that they are handed the
+		// answer instead of asking for it twice: what the chunk passes write is exactly what the
+		// verdicts must not blame the clear for.
+		Map<TerrainPass, Pass> geometry = geometryOf(plan, resolver, notes);
+		Map<String, Pass> sky = skyOf(plan, resolver, notes);
+
 		Seed seed = seedOf(plan, resolver, notes);
-		verdicts(plan, seed, passes, last, notes);
+		verdicts(plan, seed, geometry, passes, last, notes);
 
 		Set<Integer> back = new TreeSet<>(plan.schedule().flippedAtEnd());
 		back.retainAll(plan.persistent());
 
-		return new ChainPlan(plan.place(), passes, last, seed, geometryOf(plan, resolver, notes),
-				skyOf(plan, resolver, notes), List.copyOf(back), refusals, notes);
+		return new ChainPlan(plan.place(), passes, last, seed, geometry, sky, List.copyOf(back),
+				refusals, notes);
 	}
 
 	/**
@@ -408,25 +414,46 @@ public final class ChainPlan {
 	 * The seed counts from where it is drawn and not from the start of the frame. A begin or a
 	 * prepare runs before the world does, so it reads its target as the clear left it, and calling
 	 * the seed filled from the first pass onwards would drop exactly the notes those passes need.
+	 * <p>
+	 * The chunk passes count from where they are drawn for the same reason, and they are counted at
+	 * all because they really are drawn: the opaque halves land where the seed does, the translucent
+	 * one after the last deferred, which is the whole reason its targets are taken on the other
+	 * snapshot. Reading the geometry off the schedule alone, as this did, blamed the clear for a
+	 * half {@code gbuffers_water} had just written.
 	 */
-	private static void verdicts(TargetPlan plan, Seed seed, List<Pass> passes, Pass last,
-			List<String> notes) {
-		Set<Attachment> filled = new LinkedHashSet<>();
-
-		Set<Integer> geometry = new TreeSet<>();
-		plan.schedule().steps().stream()
-				.filter(step -> !step.fullscreen())
-				.forEach(step -> geometry.addAll(step.writes()));
-
+	private static void verdicts(TargetPlan plan, Seed seed, Map<TerrainPass, Pass> world,
+			List<Pass> passes, Pass last, List<String> notes) {
 		List<Pass> ordered = new ArrayList<>(passes);
 		if (last != null) {
 			ordered.add(last);
 		}
 
+		// Every target a gbuffers program declares, less the ones the chunk passes really fill. What
+		// is left is written by geometry alone and by nothing this engine puts in the pack's targets.
+		Set<Integer> undrawn = new TreeSet<>();
+		plan.schedule().steps().stream()
+				.filter(step -> !step.fullscreen())
+				.forEach(step -> undrawn.addAll(step.writes()));
+
+		// One entry per point of the frame the world goes in at, the solid and the cutout pass sharing
+		// theirs. A set rather than a list: those two are usually one file, hence one identical Pass.
+		int afterDeferred = pastDeferred(ordered);
+		Map<Integer, Set<Pass>> drawn = new LinkedHashMap<>();
+		world.forEach((pass, drawing) -> {
+			drawn.computeIfAbsent(pass.afterDeferred() ? afterDeferred : plan.geometryAt(),
+					_ -> new LinkedHashSet<>()).add(drawing);
+			undrawn.removeAll(drawing.targets());
+		});
+
+		Set<Attachment> filled = new LinkedHashSet<>();
 		Set<Attachment> told = new LinkedHashSet<>();
 		for (int at = 0; at < ordered.size(); at++) {
 			if (seed != null && at == seed.at()) {
 				filled.add(new Attachment(seed.target(), seed.side()));
+			}
+
+			for (Pass drawing : drawn.getOrDefault(at, Set.of())) {
+				filled.addAll(drawing.attachments());
 			}
 
 			Pass pass = ordered.get(at);
@@ -440,26 +467,49 @@ public final class ChainPlan {
 					continue;
 				}
 
-				notes.add(verdict(plan, geometry, ordered, at, half, pass.program()));
+				notes.add(verdict(plan, undrawn, ordered, drawn, at, half, pass.program()));
 			}
 
 			filled.addAll(pass.attachments());
 		}
 	}
 
-	private static String verdict(TargetPlan plan, Set<Integer> geometry, List<Pass> ordered, int at,
-			Attachment half, String reader) {
+	/**
+	 * How many of {@code ordered} run before the world's translucents, which is where the chunk pass
+	 * that draws them goes in.
+	 * <p>
+	 * Counted off the ranks rather than off the length of the deferred stage, so that a place
+	 * shipping no deferred at all still puts them before its composites instead of at the end.
+	 */
+	private static int pastDeferred(List<Pass> ordered) {
+		int at = 0;
+		while (at < ordered.size() && ordered.get(at).frameRank() <= DEFERRED_RANK) {
+			at++;
+		}
+
+		return at;
+	}
+
+	/**
+	 * @param undrawn the targets geometry writes and no pass of this engine fills
+	 * @param drawn   the world's own passes, by the point of the frame they are drawn at
+	 */
+	private static String verdict(TargetPlan plan, Set<Integer> undrawn, List<Pass> ordered,
+			Map<Integer, Set<Pass>> drawn, int at, Attachment half, String reader) {
 		String name = TargetName.canonical(half.target());
 		String clear = ", so " + reader + " reads what the clear left there";
 		String before = ", so " + reader + " reads the frame before, and the clear colour on the "
 				+ "first one";
 
-		if (geometry.contains(half.target())) {
-			return name + " is written by programs that draw the world, and none of those run"
-					+ clear;
+		if (undrawn.contains(half.target())) {
+			// Two families end up here and the wording covers both: the geometry nothing draws yet,
+			// entities and particles, and the sky, whose programs are drawn but into the attachment
+			// the game opened its own pass with, SkyProgram handing its body no writes at all.
+			return name + " is written by geometry, none of which this engine draws into the pack's "
+					+ "targets" + clear;
 		}
 
-		String later = writtenLater(ordered, at, half);
+		String later = writtenLater(ordered, drawn, at, half);
 		if (later != null) {
 			return name + " is not written until " + later + ", later in the same frame" + before;
 		}
@@ -478,9 +528,26 @@ public final class ChainPlan {
 						+ "ever, and " + reader + " reads that";
 	}
 
-	private static String writtenLater(List<Pass> ordered, int at, Attachment half) {
-		for (int next = at + 1; next < ordered.size(); next++) {
-			if (ordered.get(next).attachments().contains(half)) {
+	/**
+	 * The first thing that fills this half after the reader, the world included: a prepare reads
+	 * targets the chunk passes fill later in the same frame, and naming the composite that gets to
+	 * them afterwards would send the next diagnostic to the wrong end of the chain.
+	 * <p>
+	 * The bound runs one past the last full screen pass, because a place shipping neither composite
+	 * nor final still draws its translucents, and they still fill what they write.
+	 */
+	private static String writtenLater(List<Pass> ordered, Map<Integer, Set<Pass>> drawn, int at,
+			Attachment half) {
+		for (int next = at + 1; next <= ordered.size(); next++) {
+			// The world goes in ahead of the full screen pass standing at the same point, which is
+			// the order the walk fills them in.
+			for (Pass drawing : drawn.getOrDefault(next, Set.of())) {
+				if (drawing.attachments().contains(half)) {
+					return drawing.program();
+				}
+			}
+
+			if (next < ordered.size() && ordered.get(next).attachments().contains(half)) {
 				return ordered.get(next).program();
 			}
 		}
