@@ -780,6 +780,14 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		this.session = loaded;
 		this.values = loaded == null ? null : MenuValues.of(loaded.menu(),
 				loaded.saved().values(), loaded.saved().profile(), loaded.forcedText());
+		// Out to the list when there is no pack left to configure, which is the view a pack is picked
+		// from and the one the constructor opens on for the same reason. Turning every pack off, or a
+		// pack failing to read, otherwise leaves an empty page under a row of buttons that all return
+		// without doing anything, and the way back to the list under the name of the pack's pages.
+		if (loaded == null) {
+			this.listingPacks = true;
+		}
+
 		dropMissingPage();
 	}
 
