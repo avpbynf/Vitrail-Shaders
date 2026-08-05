@@ -697,6 +697,12 @@ public final class PackChain {
 		this.early = false;
 		this.filled = false;
 
+		// The seed's kept depth is a per frame fact like the four above and belongs with them, the
+		// image itself outliving the frame only because nobody frees a texture every frame.
+		if (this.seed != null) {
+			this.seed.endFrame();
+		}
+
 		if (this.block != null) {
 			this.block.rotate();
 		}

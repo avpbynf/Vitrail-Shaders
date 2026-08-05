@@ -171,6 +171,17 @@ final class SceneSeed {
 	/** The depth the pack's own geometry left, or null until a frame has taken one. */
 	private TargetSurface kept;
 
+	/**
+	 * Whether the image above holds THIS frame's depth. Cleared at the frame boundary and set by a
+	 * capture that really ran, which is the only pair of moments that makes it true.
+	 * <p>
+	 * A frame that could not capture must fall back to the mask alone rather than to the depth of the
+	 * frame before. The image survives the boundary because it is a texture and nobody frees it every
+	 * frame, and the previous frame's depth is the worst answer available here: the camera has moved
+	 * since, so it differs at nearly every pixel of the screen, and the comparison then says that
+	 * something was drawn in front of the pack's terrain everywhere at once. The seed repaints the
+	 * whole target with the game's picture, which is the pack's geometry gone and nothing said.
+	 */
 	private boolean captured;
 
 	private boolean reported;
@@ -293,6 +304,14 @@ final class SceneSeed {
 		this.captured = true;
 
 		return true;
+	}
+
+	/**
+	 * Forgets the depth this frame kept, at the frame boundary and nowhere else, so that the next
+	 * frame answers for itself. See {@link #captured} for what carrying it over would look like.
+	 */
+	void endFrame() {
+		this.captured = false;
 	}
 
 	/** Called every frame: a resource reload empties the pipeline cache. */
