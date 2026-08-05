@@ -511,7 +511,11 @@ public final class ChainPlan {
 
 		String later = writtenLater(ordered, drawn, at, half);
 		if (later != null) {
-			return name + " is not written until " + later + ", later in the same frame" + before;
+			// Which of the two the reader really gets is the clear directive's answer and never the
+			// order's: a target the pack clears is emptied on BOTH halves at the top of every frame,
+			// so nothing of the frame before is left there to be read.
+			return name + " is not written until " + later + ", later in the same frame"
+					+ (plan.persistent().contains(half.target()) ? before : clear);
 		}
 
 		String off = disabledWriter(plan, half.target());
