@@ -61,6 +61,11 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f mapShadowProjectionInverse = new Matrix4f();
 
 	private final Vector4f convention = new Vector4f(ClipSpace.REVERSED);
+
+	/** The pass's own model view and its inverse, standing empty until a pass sets one. */
+	private final Matrix4f passModelView = new Matrix4f();
+	private final Matrix4f passModelViewInverse = new Matrix4f();
+	private boolean passSet;
 	private float far;
 	private int renderDistanceChunks;
 	private boolean seeded;
@@ -171,6 +176,21 @@ public final class ViewMatrices implements ViewSource {
 		this.convention.set(convention);
 	}
 
+	/**
+	 * The model view the pass about to write its block is drawn with, or null for the camera's.
+	 * <p>
+	 * Held rather than composed, and the inverse taken here once: a pass hands in a matrix the game
+	 * built on its own stack, so there is nothing to derive it from, and the pack reads the inverse
+	 * of it as often as the matrix itself.
+	 */
+	void passModelView(Matrix4fc matrix) {
+		this.passSet = matrix != null;
+		if (this.passSet) {
+			this.passModelView.set(matrix);
+			this.passModelView.invert(this.passModelViewInverse);
+		}
+	}
+
 	/** Called when the world changes, so that no history crosses a dimension. */
 	void reset() {
 		this.seeded = false;
@@ -208,6 +228,16 @@ public final class ViewMatrices implements ViewSource {
 	@Override
 	public Matrix4fc gbufferModelViewInverse() {
 		return this.modelViewInverse;
+	}
+
+	@Override
+	public Matrix4fc passModelView() {
+		return this.passSet ? this.passModelView : this.modelView;
+	}
+
+	@Override
+	public Matrix4fc passModelViewInverse() {
+		return this.passSet ? this.passModelViewInverse : this.modelViewInverse;
 	}
 
 	@Override

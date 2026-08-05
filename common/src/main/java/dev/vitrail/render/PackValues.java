@@ -15,6 +15,7 @@ import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 import org.joml.Vector4fc;
 
 import java.io.IOException;
@@ -152,6 +153,19 @@ public final class PackValues {
 	 */
 	public void convention(Vector4fc convention) {
 		this.state.convention(convention);
+	}
+
+	/**
+	 * Which model view the next block is written for: the pass's own, or null for the frame's. Set
+	 * beside the convention and answering the same kind of question, "where does this pass draw".
+	 * <p>
+	 * Null for everything but the sky. The game puts the sun, the moon and the stars where they
+	 * belong by pushing a rotation onto its own stack, so a sky pass hands that matrix in here; see
+	 * {@link dev.vitrail.uniform.ViewSource#passModelView} for what answering it with the camera's
+	 * would do.
+	 */
+	public void modelView(Matrix4fc matrix) {
+		this.state.passModelView(matrix);
 	}
 
 	/**

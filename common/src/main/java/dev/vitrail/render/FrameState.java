@@ -246,6 +246,15 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
+	 * The model view the pass about to write its block draws with, or null for the camera's. Set by
+	 * the pass beside its convention, and for the same reason: both are properties of where the pass
+	 * draws rather than of the frame.
+	 */
+	public void passModelView(Matrix4fc matrix) {
+		this.view.passModelView(matrix);
+	}
+
+	/**
 	 * The biome table. Exposed so that whoever writes the {@code BIOME_*} defines writes them from
 	 * the same numbering the {@code biome} uniform carries, because two tables that agree today is
 	 * the shape of a failure nobody finds.
@@ -1544,6 +1553,16 @@ public final class FrameState implements WorldState {
 	@Override
 	public Matrix4fc gbufferModelViewInverse() {
 		return this.view.gbufferModelViewInverse();
+	}
+
+	@Override
+	public Matrix4fc passModelView() {
+		return this.view.passModelView();
+	}
+
+	@Override
+	public Matrix4fc passModelViewInverse() {
+		return this.view.passModelViewInverse();
 	}
 
 	@Override

@@ -43,6 +43,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.resources.Identifier;
 
+import org.joml.Matrix4fc;
 import org.joml.Vector4f;
 
 import java.nio.ByteBuffer;
@@ -98,8 +99,10 @@ final class GeometryProgram {
 	 * @param shadow       whether this pass is drawn from the light rather than from the camera. It
 	 *                     decides the depth window, the culling, the descriptor and what a
 	 *                     {@code shadowtex} lookup may be answered with
-	 * @param blended      whether the pass blends what it draws, which is the pack's default until a
-	 *                     {@code blend.<program>} says otherwise
+	 * @param blend        what the pass blends with when the pack says nothing, which is the game's
+	 *                     own answer for that pass and not a taste: the sun and the moon are drawn
+	 *                     over the sky and the chunk pass that is translucent is drawn over the
+	 *                     world. Empty for a pass that writes outright
 	 * @param covers       whether this pass is one of the opaque halves that write the mask the scene
 	 *                     seed is cut with
 	 * @param afterDeferred whether the pass is drawn after the deferred stage, which is what decides
@@ -114,8 +117,13 @@ final class GeometryProgram {
 	 *                     world tested against it
 	 */
 	record Pass(String family, String name, String namespace, Set<String> answered, boolean shadow,
-			boolean blended, boolean covers, boolean afterDeferred, PrimitiveTopology topology,
-			DepthStencilState depth) {
+			Optional<BlendFunction> blend, boolean covers, boolean afterDeferred,
+			PrimitiveTopology topology, DepthStencilState depth) {
+
+		/** Whether the pass blends at all, which is the same question as having something to blend with. */
+		boolean blended() {
+			return this.blend.isPresent();
+		}
 	}
 
 	/**
@@ -207,6 +215,9 @@ final class GeometryProgram {
 	private TextureTarget white;
 	private TextureTarget grey;
 	private GpuTextureView atlas;
+
+	/** The matrix the game pushed for this pass, or null for the frame's camera. */
+	private Matrix4fc modelView;
 	private GpuSampler atlasSampler;
 	private boolean cleared;
 	private boolean announced;
@@ -408,12 +419,8 @@ final class GeometryProgram {
 	 * the two Complementary give a function whose alpha half differs from the one assumed.
 	 */
 	private ColorTargetState state(GpuFormat format) {
-		Optional<BlendFunction> wanted = this.pass.blended()
-				? Optional.of(BlendFunction.TRANSLUCENT)
-				: Optional.empty();
-
 		return new ColorTargetState(
-				BlendFunctions.of(this.targets.blend(this.loaded.path()), wanted), format,
+				BlendFunctions.of(this.targets.blend(this.loaded.path()), this.pass.blend()), format,
 				ColorTargetState.WRITE_ALL);
 	}
 
@@ -429,6 +436,18 @@ final class GeometryProgram {
 	 * @return the pipeline to draw with, or null to leave the game's own shader alone
 	 */
 	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas) {
+		return prepare(device, atlas, null);
+	}
+
+	/**
+	 * The same, for a pass the game draws with a model view of its own.
+	 *
+	 * @param modelView the matrix the game pushed for this pass, or null for the frame's camera.
+	 *                  Kept until the block is written rather than applied here: it is one value of
+	 *                  the block among the rest, and the block is written a few lines below
+	 */
+	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas, Matrix4fc modelView) {
+		this.modelView = modelView;
 		if (this.broken) {
 			return null;
 		}
@@ -532,6 +551,14 @@ final class GeometryProgram {
 	 */
 	void sampler(GpuSampler sampler) {
 		this.atlasSampler = sampler;
+	}
+
+	/**
+	 * The image a pass draws with, where the pass has one of its own rather than the block atlas
+	 * { #prepare} was handed. Set before the bind and never during it.
+	 */
+	void atlas(GpuTextureView view) {
+		this.atlas = view;
 	}
 
 	/** Whether the pipeline a pass has bound is this program's. */
@@ -686,6 +713,7 @@ final class GeometryProgram {
 		// frame now that the shadow map is ours and the game's targets are not, and what a vertex
 		// stage does with its clip depth on the way out comes from this pair.
 		this.values.convention(this.pass.shadow() ? ClipSpace.FORWARD : ClipSpace.REVERSED);
+		this.values.modelView(this.modelView);
 
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();

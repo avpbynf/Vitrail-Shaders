@@ -12,6 +12,7 @@ import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -28,6 +29,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * One of the three programs the pack draws a chunk pass with, in place of Sodium's own shader.
@@ -70,7 +72,10 @@ public final class TerrainProgram {
 			boolean chainRuns) {
 		this.body = new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				pass.name().toLowerCase(Locale.ROOT), NAMESPACE, SodiumVertex.ANSWERED,
-				pass.shadow(), pass.blended(), pass.covers(), pass.afterDeferred(),
+				pass.shadow(),
+				// The translucent half blends over the world, the two opaque ones write outright.
+				pass.blended() ? Optional.of(BlendFunction.TRANSLUCENT) : Optional.<BlendFunction>empty(),
+				pass.covers(), pass.afterDeferred(),
 				// Sodium's own, taken from ShaderChunkRenderer.createShader: the pass this is bound
 				// into was opened for that pipeline and a difference of topology would be a
 				// difference nobody declared.

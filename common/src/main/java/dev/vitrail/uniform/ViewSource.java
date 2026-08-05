@@ -19,6 +19,25 @@ public interface ViewSource {
 
 	Matrix4fc gbufferModelViewInverse();
 
+	/**
+	 * The model view of the pass being drawn, which is the camera's for almost all of them and is
+	 * not the same question as {@link #gbufferModelView()}.
+	 * <p>
+	 * <strong>The sky is why the two are apart.</strong> The game draws the sun, the moon, the stars
+	 * and the sunrise band by pushing a rotation of the day onto its model view stack and drawing a
+	 * quad that sits straight above the camera; the rotation IS where the sun is. A pack reads that
+	 * matrix as {@code gl_ModelViewMatrix} and the camera's as {@code gbufferModelView}, and it uses
+	 * both at once: BSL writes {@code gbufferModelViewInverse * gl_ModelViewMatrix * gl_Vertex} to
+	 * get a direction in world space out of a vertex the game placed. Answer the two with one matrix
+	 * and the rotation cancels itself: the sun stops moving and sits at noon all night.
+	 * <p>
+	 * Set by the pass before it writes its block, like the depth convention beside it, and answered
+	 * with the camera's whenever a pass has set nothing.
+	 */
+	Matrix4fc passModelView();
+
+	Matrix4fc passModelViewInverse();
+
 	Matrix4fc gbufferProjection();
 
 	Matrix4fc gbufferProjectionInverse();

@@ -55,10 +55,14 @@ public final class GeometryValues {
 		builder.add("of_TexShrink", UniformShape.VEC2, (world, out) ->
 				out.set(shrink(world.atlasWidth()), shrink(world.atlasHeight())));
 
+		// The PASS's model view and not the frame's, and the two are the same matrix for every pass
+		// but the sky's. What separates them is written out in ViewSource.passModelView: the game
+		// puts the sun where it is by pushing a rotation onto its own stack, and a pack reads that
+		// rotation here while reading the camera under gbufferModelView, using both at once.
 		builder.add("of_ModelViewMatrix", UniformShape.MAT4,
-				(world, out) -> out.set(world.gbufferModelView()));
+				(world, out) -> out.set(world.passModelView()));
 		builder.add("of_ModelViewMatrixInverse", UniformShape.MAT4,
-				(world, out) -> out.set(world.gbufferModelViewInverse()));
+				(world, out) -> out.set(world.passModelViewInverse()));
 		builder.add("of_ProjectionMatrix", UniformShape.MAT4,
 				(world, out) -> out.set(world.gbufferProjection()));
 		builder.add("of_ProjectionMatrixInverse", UniformShape.MAT4,
@@ -69,13 +73,13 @@ public final class GeometryValues {
 		// only reader. Left to right, so that the pack's own gl_ProjectionMatrix * gl_ModelViewMatrix
 		// and its ftransform() are the same matrix.
 		builder.add("of_ModelViewProjectionMatrix", UniformShape.MAT4, (world, out) ->
-				out.set(new Matrix4f(world.gbufferProjection()).mul(world.gbufferModelView())));
+				out.set(new Matrix4f(world.gbufferProjection()).mul(world.passModelView())));
 
 		// The inverse transpose of the model view's rotation. The level's model view is a pure
 		// rotation, so this is its transpose, but it is computed rather than assumed: a shadow pass
 		// or a pack directive could put a scale in it, and normalising a normal afterwards hides
 		// the difference exactly until it does not.
 		builder.add("of_NormalMatrix", UniformShape.MAT3, (world, out) ->
-				out.set(new Matrix3f().set(world.gbufferModelView()).invert().transpose()));
+				out.set(new Matrix3f().set(world.passModelView()).invert().transpose()));
 	}
 }

@@ -9,11 +9,16 @@ import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.textures.GpuSampler;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
+
+import org.joml.Matrix4fc;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -72,7 +77,8 @@ final class SkyProgram {
 	 */
 	static SkyProgram read(Path packPath, String place, String program, String element,
 			Map<String, OptionValue> chosen, String profile, PackValues values, int load,
-			VertexFormat format, TargetPlan chainTargets, ColorTargets targets) {
+			VertexFormat format, PrimitiveTopology topology, Optional<BlendFunction> blend,
+			TargetPlan chainTargets, ColorTargets targets) {
 		try {
 			List<String> elements = format.getElements().stream()
 					.map(VertexFormatElement::name)
@@ -94,8 +100,8 @@ final class SkyProgram {
 					loaded.get().rebind(chainTargets, chainTargets.schedule().step(servedBy));
 
 			return new SkyProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY, element,
-					NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, false, false, false,
-					PrimitiveTopology.TRIANGLE_FAN, null),
+					NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, blend, false, false,
+					topology, null),
 					bound, values, load, format, List.of(), targets, false));
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the sky programs of " + packPath.getFileName()
@@ -105,9 +111,22 @@ final class SkyProgram {
 		}
 	}
 
-	/** @see GeometryProgram#prepare */
-	RenderPipeline prepare(GpuDevice device) {
-		return this.body.prepare(device, null);
+	/**
+	 * @param modelView the matrix the game pushed for this element, which is where the sun is
+	 * @see GeometryProgram#prepare
+	 */
+	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView) {
+		return this.body.prepare(device, null, modelView);
+	}
+
+	/**
+	 * The texture the game was going to draw this element with, and the sampler it configured for
+	 * it: the celestial atlas for the sun and the moon. Handed on so that a pack reading
+	 * {@code gtexture} reads the same image the game would have.
+	 */
+	void texture(GpuTextureView view, GpuSampler sampler) {
+		this.body.atlas(view);
+		this.body.sampler(sampler);
 	}
 
 	/** @see GeometryProgram#bind */
