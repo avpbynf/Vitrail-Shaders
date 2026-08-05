@@ -128,11 +128,14 @@ GNU Lesser General Public License version 3
   that equivalence nowhere; it is read off its transformers, which TransformPatcher picks by the
   version and the profile a unit declares. The bare names are answered by CompositeCoreTransformer,
   SodiumCoreTransformer and VanillaCoreTransformer; the gl_ names by CompositeTransformer,
-  SodiumTransformer, VanillaTransformer and VanillaCoreTransformer again, which is the one place
-  the two spellings sit side by side. On the composite and the Sodium sides the pair lands on the
-  same value whichever of the two transformers answers. The vanilla side is the exception: its non
-  core path answers gl_ModelViewMatrix with a built expression and does not answer the bare name at
-  all. All are in net.irisshaders.iris.pipeline.transform.transformer.
+  SodiumTransformer, VanillaTransformer, DHTerrainTransformer, DHGenericTransformer, and
+  VanillaCoreTransformer again, which is the one place the two spellings sit side by side. On the
+  composite and the Sodium sides the pair lands on the same value whichever of the two transformers
+  answers. The vanilla side is the exception: its non core path answers gl_ModelViewMatrix with a
+  built expression and does not answer the bare name at all. The two Distant Horizons transformers
+  rename the pair exactly as the composite side does, and are named here so that the list is the
+  whole of what answers rather than the part this engine happened to need. All are in
+  net.irisshaders.iris.pipeline.transform.transformer.
 
   common/src/main/java/dev/vitrail/uniform/Smoothed.java adapts the exponential smoothing of
   net.irisshaders.iris.uniforms.transforms.SmoothedFloat in August 2026, including its half life in
