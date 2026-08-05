@@ -81,17 +81,26 @@ public final class SkyVertex {
 		}
 
 		lines.add("#define of_Vertex vec4(Position, 1.0)");
-		// The uniform rather than white where the format has not got the element, and this is the
-		// one line of the prologue that decides a picture rather than guarding one.
+		// The modulator, times the element where the format has one, and this is the one line of the
+		// prologue that decides a picture rather than guarding one.
 		//
 		// The game does not put the sky's colour in the mesh; it puts it in the colour modulator of
 		// its dynamic transforms, one value for the whole draw, and under OptiFine that value is
 		// what a pack reads as gl_Color. White is not a neutral stand in for it: packs recognise
 		// vanilla's stars by exactly that shape, a colour whose three channels are equal and above
 		// nought, and Body Camera and Sildur's both then take their star branch and paint the whole
-		// sky disc flat. So the engine supplies the modulator the game was going to use, and the
-		// name below is a uniform of the block.
-		lines.add(bound.contains("Color") ? "#define of_Color Color" : "#define of_Color of_PassColour");
+		// sky disc flat.
+		//
+		// The two MULTIPLY where both exist, because that is what the game's own shaders do with
+		// them: core/position_color.fsh ends on fragColor = color * ColorModulator, and so does
+		// core/position_tex. The one element of the sky whose format carries a colour is the sunrise
+		// band, and there the mesh is white at the centre fading to a transparent white at the rim,
+		// ARGB.white(1.0F) and ARGB.white(0.0F) in SkyRenderer.buildSunriseFan: every bit of the
+		// band's actual colour is in the modulator, so keeping the element alone draws a white band
+		// at sunset. Dropping the element instead would take the fade with it and paint a disc.
+		lines.add(bound.contains("Color")
+				? "#define of_Color (Color * of_PassColour)"
+				: "#define of_Color of_PassColour");
 
 		String texture = bound.contains("UV0") ? "vec4(UV0, 0.0, 1.0)" : "vec4(0.0, 0.0, 0.0, 1.0)";
 		lines.add("#define of_MultiTexCoord0 " + texture);

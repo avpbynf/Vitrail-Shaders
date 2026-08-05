@@ -56,8 +56,8 @@ public final class GeometryValues {
 				out.set(shrink(world.atlasWidth()), shrink(world.atlasHeight())));
 
 		// The colour the game modulates a whole draw by, which for the sky is where its colour is:
-		// the mesh of a sky disc carries a position and nothing else. White for every pass that has
-		// not set one, which is every pass whose mesh carries its own colours.
+		// the mesh of a sky disc carries a position and nothing else, and the mesh of the sunrise
+		// band carries only the fade. White for every pass that has not set one.
 		builder.add("of_PassColour", UniformShape.VEC4, (world, out) -> out.set(
 				world.passColour().x(), world.passColour().y(), world.passColour().z(),
 				world.passColour().w()));
