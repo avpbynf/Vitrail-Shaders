@@ -44,7 +44,11 @@ public final class TerrainDraw {
 	 */
 	private static volatile boolean wanted;
 
-	/** Off unless the options ask for it, and worth nothing without {@link #wanted}. */
+	/**
+	 * Off unless the options ask for it, and worth nothing without {@link #wanted}. It is also what
+	 * a shadow program that threw latches, for the reason {@link #wanted} gives: the stage and not
+	 * the pack, because a shadow program failing says nothing about the three the camera draws with.
+	 */
 	private static volatile boolean shadowWanted;
 
 	/**
@@ -120,8 +124,9 @@ public final class TerrainDraw {
 	}
 
 	/**
-	 * Opens the end-of-frame shadow stage: makes the map exist and empties it, once, before the
-	 * groups are drawn into it. Must run outside any render pass, which the end of the frame is.
+	 * Opens the end-of-frame shadow stage: makes the map exist, empties it, and settles that its
+	 * three programs will really be served, once and before any group is drawn into it. Must run
+	 * outside any render pass, which the end of the frame is.
 	 * <p>
 	 * The map is cleared here and not with the colour targets, and that is the point of the stage
 	 * running where it does. The stage draws at the very end of a frame, for the next one, so the
@@ -161,13 +166,74 @@ public final class TerrainDraw {
 
 		shadow.clear(device.createCommandEncoder());
 
+		// After the clear, so that a refusal below leaves the map emptied without a second clear of
+		// its own, and before the stage is declared open, which is the whole point of the step.
+		if (!self.shadowsPrepared(device)) {
+			return false;
+		}
+
 		return shadow.depth() != null;
+	}
+
+	/**
+	 * Compiles the three shadow programs and equips them, outside any render pass and before the
+	 * stage is declared open.
+	 * <p>
+	 * {@link #shadowsServed} is a promise the first compilation can still break, because
+	 * {@code broken} is raised by that compilation and it used to happen inside the pass the renderer
+	 * had already opened. A refusal there is safe for a camera pass and is the opposite here: with
+	 * nothing of ours handed back, Sodium opens its own pass on the target {@code vitrail$target}
+	 * gave it, the game's own, and the shadow half repaints the whole opaque world over the finished
+	 * image, coplanar and under the same reversed Z so nothing stops it. Asked here, the same
+	 * refusal only closes the stage.
+	 * <p>
+	 * Everything it does is done again by the real prepare a few lines of the renderer later, and
+	 * every bit of it is idempotent: {@code precompilePipeline} is a computeIfAbsent, the three
+	 * constant textures and the ring buffer are made once, {@code announce} is latched, and the
+	 * block is written again with the same values into the same buffer of the ring, which turns at
+	 * the frame boundary and not here. The atlas is null because there is none to hand yet, and the
+	 * real prepare puts it back well before anything is bound.
+	 * <p>
+	 * Called once {@link #shadowsServed} has said yes, so every shadow pass has a program; a broken
+	 * precondition would throw and be caught below, which is the answer that branch wants anyway.
+	 */
+	private boolean shadowsPrepared(GpuDevice device) {
+		for (TerrainPass pass : TerrainPass.values()) {
+			if (!pass.shadow()) {
+				continue;
+			}
+
+			TerrainProgram program = this.programs.get(pass);
+			try {
+				if (program.prepare(device, null) == null) {
+					// The line this step exists for. Nothing on screen can say it: the artefact lasts
+					// one frame, and a stage that never opens leaves no trace at all.
+					Vitrail.logger().warn("{} refused to prepare, so the shadow stage does not open: "
+							+ "with nothing of ours to hand the renderer, the pass it opens for itself "
+							+ "is the game's own target and the stage would paint the world over the "
+							+ "finished image", program.path());
+
+					return false;
+				}
+			} catch (RuntimeException e) {
+				shadowWanted = false;
+				Vitrail.logger().error("Vitrail stopped drawing the shadow map after an error in "
+						+ program.path(), e);
+
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**
 	 * Whether every shadow pass has a program that can still be served. All or nothing: the three
 	 * passes draw into one map, and a stage that drew the opaque half and refused the translucent
 	 * one would read as a pack behaviour rather than as the refusal it is.
+	 * <p>
+	 * True is a promise about the programs as they stand and not about the ones that have yet to be
+	 * compiled, which is what {@link #shadowsPrepared} settles before the stage opens.
 	 */
 	private boolean shadowsServed() {
 		for (TerrainPass pass : TerrainPass.values()) {
