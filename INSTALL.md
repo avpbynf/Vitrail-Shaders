@@ -71,7 +71,8 @@ same folder OptiFine and Iris use, zipped or unpacked. The mod keeps its own
 files in a `vitrail/` folder next to `mods/`:
 
 ```
-pack.txt       which pack of the folder to load, by whole or partial name
+pack.txt       which pack of the folder to load, by whole or partial name,
+               or none to load nothing at all
 options.txt    engine switches, one NAME=value per line; wins over the settings
 settings/      one file per pack, holding what differs from the pack's defaults
 ```
@@ -79,12 +80,14 @@ settings/      one file per pack, holding what differs from the pack's defaults
 A settings screen covers all of it in game: the I key, the Config button in the
 mod list, or the icon in the pause menu. It opens on the pack list, reads each
 pack's own menu layout, and imports the settings file Iris left in
-`shaderpacks/` when a pack has none here yet. A setting reaches the world when
-Apply is pressed and at no other moment: leaving the screen drops what was
-clicked and never applied. Editing the files under `vitrail/` while the game runs
-is also enough: a change to any of them reloads the pack without a restart, and
-the jar never needs rebuilding for any of this. A program that fails to compile
-is reported in the log and the game keeps its own rendering rather than crashing.
+`shaderpacks/` when a pack has none here yet. The list starts with None, which
+turns every pack off and leaves the game drawing its own image. A setting reaches
+the world when Apply is pressed and at no other moment: leaving the screen drops
+what was clicked and never applied. Editing the files under `vitrail/` while the
+game runs is also enough: a change to any of them reloads the pack without a
+restart, and the jar never needs rebuilding for any of this. A program that fails
+to compile is reported in the log and the game keeps its own rendering rather
+than crashing.
 
 Editing a pack's own files is a different matter and is **not** picked up on its
 own: nothing watches `shaderpacks/`. Use the settings screen, which reloads on

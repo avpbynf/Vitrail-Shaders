@@ -94,6 +94,14 @@ public final class PackChain {
 	private static final Supplier<String> BLOCK_LABEL = () -> "Vitrail OfGlobals";
 	private static final Supplier<String> QUAD_LABEL = () -> "Vitrail quad";
 
+	/**
+	 * The one line {@code pack.txt} takes that is not the name of a pack: draw none of them, and
+	 * leave the game its own image. It is read after the whole names and before the fragments, so a
+	 * folder really called {@code none} is still reachable and a pack whose name merely holds the
+	 * word cannot answer for it.
+	 */
+	public static final String NO_PACK = "none";
+
 	private static volatile PackChain active;
 	private static volatile boolean disabled;
 	private static long lastCheckNanos;
@@ -105,6 +113,7 @@ public final class PackChain {
 	private static volatile Path settingsFile;
 	private static volatile boolean packsFirst = true;
 	private static volatile boolean chainWanted = true;
+	private static volatile boolean packOff;
 
 	/**
 	 * Whether this frame's values have been moved on yet.
@@ -214,6 +223,7 @@ public final class PackChain {
 		lastError = null;
 		removed = List.of();
 		packsFirst = true;
+		packOff = false;
 		try {
 			List<Path> packs = PackLoader.candidates(gameDirectory);
 			if (packs.isEmpty()) {
@@ -223,7 +233,17 @@ public final class PackChain {
 				return;
 			}
 
-			Path pack = choose(gameDirectory, packs);
+			Path pack = choose(gameDirectory, packs).orElse(null);
+			// Nothing is left behind and nothing is reported as an error: this is the same path as
+			// an empty folder, taken because it was asked for rather than because nothing was found.
+			if (pack == null) {
+				packOff = true;
+				Vitrail.logger().info("{} asks for no pack, so none of the {} in {} is read and the "
+						+ "game draws its own image", packFile(gameDirectory), packs.size(),
+						PackLoader.directory(gameDirectory));
+				return;
+			}
+
 			SettingsLayers.Resolved settings = open(gameDirectory, pack);
 			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());
 			// Reserved keys rather than options: no pack declares a setting under any of these
@@ -291,9 +311,14 @@ public final class PackChain {
 	}
 
 
+	/** The file naming the pack to draw, written by the settings screen and edited by hand. */
+	public static Path packFile(Path gameDirectory) {
+		return gameDirectory.resolve(Vitrail.MOD_ID).resolve("pack.txt");
+	}
+
 	/**
 	 * Which pack to draw. A line in {@code vitrail/pack.txt} naming one, or any part of one, wins;
-	 * otherwise the first in the folder does.
+	 * otherwise the first in the folder does. {@link #NO_PACK} asks for none of them.
 	 * <p>
 	 * A text file is not a settings screen and is not meant to become one. It exists because
 	 * eight packs sit in that folder and switching between them is most of the work of supplying
@@ -303,34 +328,40 @@ public final class PackChain {
 	 * the other, a version next to the version it replaces being the ordinary way that happens, and
 	 * on a fragment the shorter one would answer for both: the settings screen writes the whole
 	 * name for that reason and would otherwise be unable to reach the longer one at all.
+	 *
+	 * @return empty when the file asks for no pack at all
 	 */
-	private static Path choose(Path gameDirectory, List<Path> packs) throws IOException {
-		Path chosen = gameDirectory.resolve(Vitrail.MOD_ID).resolve("pack.txt");
+	private static Optional<Path> choose(Path gameDirectory, List<Path> packs) throws IOException {
+		Path chosen = packFile(gameDirectory);
 		if (!Files.isRegularFile(chosen)) {
-			return packs.get(0);
+			return Optional.of(packs.get(0));
 		}
 
 		String wanted = Files.readString(chosen).trim().toLowerCase(Locale.ROOT);
 		if (wanted.isEmpty()) {
-			return packs.get(0);
+			return Optional.of(packs.get(0));
 		}
 
 		for (Path pack : packs) {
 			if (pack.getFileName().toString().toLowerCase(Locale.ROOT).equals(wanted)) {
-				return pack;
+				return Optional.of(pack);
 			}
+		}
+
+		if (NO_PACK.equals(wanted)) {
+			return Optional.empty();
 		}
 
 		for (Path pack : packs) {
 			if (pack.getFileName().toString().toLowerCase(Locale.ROOT).contains(wanted)) {
-				return pack;
+				return Optional.of(pack);
 			}
 		}
 
 		Vitrail.logger().warn("No pack in the folder matches '{}' from {}, using the first instead",
 				wanted, chosen);
 
-		return packs.get(0);
+		return Optional.of(packs.get(0));
 	}
 
 	/**
@@ -457,6 +488,15 @@ public final class PackChain {
 	}
 
 	/**
+	 * Whether {@code pack.txt} asks for no pack at all, which is a different answer from having none
+	 * to draw: nothing failed and nothing is missing, the game draws its own image because that is
+	 * what was asked for. A screen needs the two apart to say which it is showing.
+	 */
+	public static boolean noPackWanted() {
+		return packOff;
+	}
+
+	/**
 	 * Rebuilds everything when {@code pack.txt}, {@code options.txt} or the loaded pack's own
 	 * settings file changes on disk, looked at once a second at most.
 	 * <p>
@@ -546,7 +586,7 @@ public final class PackChain {
 	 * reason for a reload not to happen that nobody would ever find.
 	 */
 	private static long stamp(Path gameDirectory) {
-		long pack = stampOf(gameDirectory.resolve(Vitrail.MOD_ID).resolve("pack.txt"));
+		long pack = stampOf(packFile(gameDirectory));
 		long options = stampOf(SettingsLayers.file(gameDirectory));
 		long settings = settingsFile == null ? 0L : stampOf(settingsFile);
 

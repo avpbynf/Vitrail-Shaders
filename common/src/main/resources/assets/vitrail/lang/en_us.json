@@ -10,6 +10,7 @@
 	"options.vitrail.removed": "Passes this backend cannot build, taken out: %s",
 	"options.vitrail.forced": "Forced by vitrail/options.txt: %s",
 	"options.vitrail.no_pack": "No shader pack is loaded",
+	"options.vitrail.pack_off": "No shader pack: the game draws its own image",
 	"options.vitrail.error": "%s",
 	"key.vitrail.open_settings": "Open shader pack settings",
 	"key.category.vitrail.keybinds": "Vitrail"

@@ -38,6 +38,9 @@ public final class ScreenText {
 
 	public static final String NO_PACK = "options.vitrail.no_pack";
 
+	/** The other reason there is nothing to configure: the folder was left alone on purpose. */
+	public static final String PACK_OFF = "options.vitrail.pack_off";
+
 	/** One argument: why the last load failed. */
 	public static final String ERROR = "options.vitrail.error";
 

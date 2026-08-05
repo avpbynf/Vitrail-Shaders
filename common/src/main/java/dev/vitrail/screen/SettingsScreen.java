@@ -363,10 +363,16 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		Button settings = button(this.title, SETTINGS_BUTTON, this::openSettings);
 		settings.active = this.session != null;
 		if (!settings.active) {
-			settings.setTooltip(Tooltip.create(Component.translatable(ScreenText.NO_PACK)));
+			settings.setTooltip(Tooltip.create(noPackReason()));
 		}
 
 		return settings;
+	}
+
+	/** Why there is nothing to configure: none was asked for, or none could be read. */
+	private static Component noPackReason() {
+		return Component.translatable(
+				PackChain.noPackWanted() ? ScreenText.PACK_OFF : ScreenText.NO_PACK);
 	}
 
 	private Button button(String key, int width, Runnable action) {
@@ -404,7 +410,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		}
 
 		if (this.session == null) {
-			return Component.translatable(ScreenText.NO_PACK);
+			return noPackReason();
 		}
 
 		MenuValues current = this.values;
@@ -576,7 +582,8 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		PackSession loaded = this.session;
 		String drawn = loaded == null ? "" : loaded.packFileName();
 
-		List<AbstractWidget> buttons = new ArrayList<>(packs.size());
+		List<AbstractWidget> buttons = new ArrayList<>(packs.size() + 1);
+		buttons.add(noneButton());
 		for (Path pack : packs) {
 			String name = pack.getFileName().toString();
 			Button button = Button.builder(Component.literal(name), _ -> choosePack(name))
@@ -589,16 +596,34 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	}
 
 	/**
-	 * Writes the whole file name rather than the fragment {@code pack.txt} also accepts, so that
-	 * two packs sharing a word cannot swap under the player.
+	 * Turning every pack off, first in the list rather than last, where a folder of eight would put
+	 * it out of sight. It writes the same file the pack entries write, and what it asks for is the
+	 * path the engine already takes when the folder is empty: nothing is read and the game keeps
+	 * its own image.
 	 */
-	private void choosePack(String fileName) {
+	private Button noneButton() {
+		// The game's own word for it, so it reads in the player's language on a client we ship no
+		// translation for.
+		Button none = Button.builder(Component.translatable("gui.none"),
+				_ -> choosePack(PackChain.NO_PACK)).width(Button.BIG_WIDTH).build();
+		none.active = !PackChain.noPackWanted();
+		none.setTooltip(Tooltip.create(Component.translatable(ScreenText.PACK_OFF)));
+
+		return none;
+	}
+
+	/**
+	 * Writes the whole file name rather than the fragment {@code pack.txt} also accepts, so that
+	 * two packs sharing a word cannot swap under the player, or {@link PackChain#NO_PACK} for none
+	 * of them.
+	 */
+	private void choosePack(String line) {
 		// Whatever is pending goes with the pack it was set on, unwritten. It was never this pack's
 		// to write on the way past, and the next pack's file is the wrong place for it.
-		Path file = gameDirectory().resolve(Vitrail.MOD_ID).resolve("pack.txt");
+		Path file = PackChain.packFile(gameDirectory());
 		try {
 			Files.createDirectories(file.getParent());
-			Files.writeString(file, fileName + System.lineSeparator(), StandardCharsets.UTF_8);
+			Files.writeString(file, line + System.lineSeparator(), StandardCharsets.UTF_8);
 			this.error = null;
 		} catch (IOException e) {
 			this.error = String.valueOf(e.getMessage());
