@@ -44,10 +44,15 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/pack/source/ShaderProperties.java reads the sun, moon, stars and
   sky directives with the four words and the defaults of
   net.irisshaders.iris.shaderpack.properties.ShaderProperties.handleBooleanDirective, read on
-  5 August 2026, and net.irisshaders.iris.mixin.MixinSkyRenderer cancels the same pieces at the head
-  of the same methods. The conditionals around each line are evaluated here where Iris reads them
-  flat, which changes the answer on two packs of the corpus. The clouds directive, which Iris also
-  carries, is not implemented: nothing here draws a cloud.
+  5 August 2026. What is done with the answers is not Iris's and goes further than it: there,
+  net.irisshaders.iris.mixin.MixinSkyRenderer cancels renderSun and renderMoon and nothing else,
+  shouldRenderStars is stored and never read back, and shouldRenderSkyDisc gates the horizon cone
+  Iris draws itself rather than the game's disc. This engine takes all four pieces out, on the
+  reason Iris gives for the two it does take out, that a pack saying it draws a piece itself ends up
+  with two of them; the cost is measured and is that Bliss and Reverie lose the stars Iris leaves
+  them. Two smaller divergences: the conditionals around each line are evaluated here where Iris
+  reads them flat, which changes the answer on two packs of the corpus, and the clouds directive
+  Iris also carries is not implemented, nothing here drawing a cloud.
 
   common/src/main/java/dev/vitrail/pack/target/TargetSize.java reimplements
   net.irisshaders.iris.gl.texture.TextureScaleOverride, down to the dot in the value being what

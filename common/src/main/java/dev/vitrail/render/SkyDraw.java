@@ -232,8 +232,13 @@ public final class SkyDraw {
 	 * <strong>Not the same question as which shader draws it.</strong> Everywhere else this class
 	 * answers "the pack's program or the game's own"; here the answer is "nothing at all", because a
 	 * pack writing {@code sun=false} has drawn its own sun inside {@code gbuffers_skybasic} and
-	 * handing it the game's on top puts two suns in the sky. Iris cancels the same two methods at
-	 * their head for the same reason.
+	 * handing it the game's on top puts two suns in the sky.
+	 * <p>
+	 * <strong>Four pieces where the references take out two, and that is a deviation.</strong> Iris
+	 * cancels {@code renderSun} and {@code renderMoon} at their head for the reason above and takes
+	 * no notice of the {@code stars} and {@code sky} it reads, and OptiFine's own documented format
+	 * has a word for neither. Carrying the reason to all four is this engine's, it costs Bliss and
+	 * Reverie the stars both references leave them, and the NOTICE says so.
 	 * <p>
 	 * Tied to this engine drawing the sky, unlike {@link #sunPathRotation()}, and the two are not
 	 * inconsistent. The rotation is a property of the pack's light, which reaches every surface of
