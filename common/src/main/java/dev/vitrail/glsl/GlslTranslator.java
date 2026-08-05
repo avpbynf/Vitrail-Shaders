@@ -183,7 +183,7 @@ public final class GlslTranslator {
 
 	/**
 	 * The samplers the pack declared as comparison samplers, and which are declared here as ordinary
-	 * ones. {@link #ofShadowCompare} says why they cannot stay what they were.
+	 * ones. {@link #rewriteShadowCompare} says why they cannot stay what they were.
 	 */
 	private final List<Scoped> comparisonSamplers = new ArrayList<>();
 
