@@ -344,7 +344,13 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 			tools.addChild(button(ScreenText.FOLDER, WIDE_BUTTON, this::openFolder));
 			tools.addChild(settingsButton());
 		} else {
-			tools.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
+			// Back only where it means something the switch does not. On a pack's first page the two
+			// are one button drawn twice: walking back from there IS going to the list, and a row
+			// that offers the same door under two names is a row nobody reads.
+			if (!this.history.isEmpty()) {
+				tools.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
+			}
+
 			tools.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
 			tools.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::confirmReset));
 			tools.addChild(button(ScreenText.PACKS, NARROW_BUTTON, this::openPacks));
