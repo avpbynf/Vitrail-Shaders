@@ -70,7 +70,7 @@ public final class VertexPrologue {
 	 *                    the body, by name and with the type the pack gave them. First, so that a
 	 *                    pack asking for a vec2 {@code mc_Entity} gets a vec2
 	 */
-	public static Map<String, String> globals(Set<String> used, Map<String, String> synthesized) {
+	private static Map<String, String> globals(Set<String> used, Map<String, String> synthesized) {
 		return globals(used, synthesized, Map.of());
 	}
 
@@ -145,7 +145,7 @@ public final class VertexPrologue {
 	}
 
 	/** What a name the mesh does not carry is worth, given the type the pack declared it under. */
-	public static String value(String name, String type) {
+	private static String value(String name, String type) {
 		String better = BETTER_DEFAULTS.get(name);
 
 		return better != null && better.startsWith(type + "(") ? better : zero(type);
@@ -173,7 +173,7 @@ public final class VertexPrologue {
 	 * The type a name takes when the pack reads it without ever declaring it. Asked by every mesh
 	 * and not by one of them: the question is what the name means, which no mesh gets a say in.
 	 */
-	public static String defaultType(String name) {
+	private static String defaultType(String name) {
 		return switch (name) {
 			case "dhMaterialId" -> "int";
 			case "mc_chunkFade" -> "float";
