@@ -38,8 +38,11 @@ public final class ChainPlan {
 	/**
 	 * Where the deferred stage sits in the frame. Everything at this rank or below belongs before the
 	 * world's translucents, everything above it after the world.
+	 * <p>
+	 * Not offered outside: whoever needs the boundary needs {@link #deferredEnd()}, and a caller
+	 * handed the rank instead would walk the passes again and could reach another answer.
 	 */
-	public static final int DEFERRED_RANK = ProgramNames.frameRank("deferred");
+	private static final int DEFERRED_RANK = ProgramNames.frameRank("deferred");
 
 	private static final String FINAL = "final";
 
@@ -485,7 +488,9 @@ public final class ChainPlan {
 	 * that draws them goes in.
 	 * <p>
 	 * Counted off the ranks rather than off the length of the deferred stage, so that a place
-	 * shipping no deferred at all still puts them before its composites instead of at the end.
+	 * shipping no deferred at all still puts them before its composites instead of at the end. The
+	 * final may be on the end of the list and never changes the answer: its rank is above the
+	 * deferreds, so the walk has stopped long before reaching it.
 	 */
 	private static int pastDeferred(List<Pass> ordered) {
 		int at = 0;
@@ -588,6 +593,19 @@ public final class ChainPlan {
 	/** Full screen, frame order, the final EXCLUDED. */
 	public List<Pass> passes() {
 		return this.passes;
+	}
+
+	/**
+	 * How many of {@link #passes()} belong before the world's translucents, the deferred stage
+	 * included. It is where the renderer cuts the frame in two.
+	 * <p>
+	 * Answered here and not counted again by the renderer, for the reason this whole class exists:
+	 * the same number already decides where {@link #notes()} puts the translucent chunk pass, and
+	 * two walks of one list in two files are two chances of cutting the frame at different points
+	 * without a word.
+	 */
+	public int deferredEnd() {
+		return pastDeferred(this.passes);
 	}
 
 	/** The final. Its attachments are always empty: it writes the game's own target. */

@@ -1160,21 +1160,15 @@ public final class PackChain {
 	}
 
 	/**
-	 * How many passes of the chain belong before the world's translucents. They are a prefix because
-	 * the running order is the frame order, and the boundary is read off each program's own name
-	 * rather than off a position: a stage boundary held as an index shifts the moment one program is
-	 * refused, and it shifts in silence, every pass still running in the right order at the wrong
-	 * moment.
+	 * How many passes of the chain belong before the world's translucents, which the plan answers
+	 * off the ranks and this only clamps.
+	 * <p>
+	 * The clamp is the one thing the plan cannot answer: a program it counted may have failed to
+	 * build, so this list is the shorter of the two. The range below is walked by index, and a
+	 * boundary past its end would ask for a pass that was never made.
 	 */
 	private int deferredEnd() {
-		List<ChainPlan.Pass> planned = this.chain.chain().passes();
-		int end = 0;
-		while (end < planned.size() && planned.get(end).frameRank()
-				<= ChainPlan.DEFERRED_RANK) {
-			end++;
-		}
-
-		return Math.min(end, this.programs.size());
+		return Math.min(this.chain.chain().deferredEnd(), this.programs.size());
 	}
 
 	private void run() {
