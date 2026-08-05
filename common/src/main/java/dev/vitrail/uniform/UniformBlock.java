@@ -33,7 +33,13 @@ public final class UniformBlock {
 	/** Held rather than allocated per member: a block has up to two hundred of them, every frame. */
 	private final Val carrier = new Val();
 
-	private record Member(String name, UniformShape shape, int elements, UniformSource source) {
+	/**
+	 * @param array whether the declaration carried brackets at all, which is not the same question as
+	 *              whether {@code elements} is one: an array of a single element still pays the
+	 *              sixteen byte stride, and a bare member does not
+	 */
+	private record Member(String name, UniformShape shape, int elements, boolean array,
+			UniformSource source) {
 	}
 
 	public UniformBlock(List<TranslatedUnit.Uniform> members, UniformCatalog catalog) {
@@ -47,11 +53,13 @@ public final class UniformBlock {
 						"Cannot size " + member.declaration() + ": nothing here knows the type " + member.type());
 			}
 
-			int elements = arrayLength(member.declaration());
-			if (elements < 1) {
+			int declared = arrayLength(member.declaration());
+			if (declared < 0) {
 				throw new IllegalStateException(
 						"Cannot size " + member.declaration() + ": the array length is not a literal");
 			}
+
+			boolean array = declared > 0;
 
 			UniformSource source = catalog.source(member.name());
 			// The fog struct is the one shape that cannot be coerced from anything else, so a
@@ -65,7 +73,7 @@ public final class UniformBlock {
 				missing.add(member.name());
 			}
 
-			resolved.add(new Member(member.name(), shape, elements, source));
+			resolved.add(new Member(member.name(), shape, array ? declared : 1, array, source));
 		}
 
 		this.members = List.copyOf(resolved);
@@ -101,8 +109,9 @@ public final class UniformBlock {
 
 			for (int element = 0; element < member.elements(); element++) {
 				// Every element of an array starts on a sixteen byte boundary in std140, which for
-				// anything smaller than a vec4 is not what putting them back to back gives.
-				if (member.elements() > 1) {
+				// anything smaller than a vec4 is not what putting them back to back gives. It is the
+				// FIRST element that carries the rule, so a one element array pays it too.
+				if (member.array()) {
 					sink.align(16);
 				}
 
@@ -118,7 +127,7 @@ public final class UniformBlock {
 			// would end at twenty eight and the member behind it would start there; the compiler
 			// puts that member at thirty two. Only the padding after the last element is missing
 			// from the loop above, since every other element is aligned on its way in.
-			if (member.elements() > 1) {
+			if (member.array()) {
 				sink.align(16);
 			}
 		}
@@ -126,22 +135,46 @@ public final class UniformBlock {
 		return sink;
 	}
 
-	/** 1 when the declaration is not an array, -1 when the length is not a literal. */
+	/**
+	 * How many elements a declaration asks for: 0 when it is not an array at all, -1 when a length is
+	 * not a literal, and the product of every dimension otherwise.
+	 * <p>
+	 * Every group of brackets counts. GLSL writes {@code float x[2][3]} for six floats, and reading
+	 * only the first group writes two of them and leaves everything behind them in the block four
+	 * elements early. Nought and one are told apart for the other half of the same rule: an array of
+	 * one element still has the sixteen byte stride an array element has, so {@code float x[1]} is
+	 * sixteen bytes where {@code float x} is four.
+	 */
 	static int arrayLength(String declaration) {
 		int open = declaration.indexOf('[');
 		if (open < 0) {
-			return 1;
+			return 0;
 		}
 
-		int close = declaration.indexOf(']', open);
-		if (close < 0) {
-			return -1;
+		int elements = 1;
+		while (open >= 0) {
+			int close = declaration.indexOf(']', open);
+			if (close < 0) {
+				return -1;
+			}
+
+			int length;
+			try {
+				length = Integer.parseInt(declaration.substring(open + 1, close).trim());
+			} catch (NumberFormatException e) {
+				return -1;
+			}
+
+			// An unsized or empty dimension is refused rather than taken for one element: a block
+			// measured a member short is every member after it landing where nothing reads it.
+			if (length < 1) {
+				return -1;
+			}
+
+			elements *= length;
+			open = declaration.indexOf('[', close + 1);
 		}
 
-		try {
-			return Integer.parseInt(declaration.substring(open + 1, close).trim());
-		} catch (NumberFormatException e) {
-			return -1;
-		}
+		return elements;
 	}
 }
