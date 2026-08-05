@@ -42,8 +42,11 @@ import org.joml.Vector3d;
  * <strong>The price is that the shadows are one frame late</strong>, drawn with this frame's sun for
  * the next frame's picture. That is a deliberate divergence from Iris, which culls, draws and reads
  * within one frame at the cost of restoring every piece of walk state it touched; a design this
- * project measured three failed attempts against. A sub-frame of sun motion is invisible; if a
- * shadow artefact is ever chased back here, this is the divergence to suspect first.
+ * project measured three failed attempts against. A sub-frame of sun motion is invisible - but only
+ * the sun is allowed to be late, and the camera is not: the map is drawn around wherever the camera
+ * stood on this frame, and the next frame measures its own player space from somewhere else. That
+ * difference is put back where the pair is published, {@code ViewMatrices}, and without it every
+ * shadow in the picture sits one frame of camera motion out of place.
  * <p>
  * Nothing of the draw itself is ours. {@code drawChunkLayer} is Sodium's own public entry; what
  * changes is that our two mixins answer differently while {@link TerrainDraw#shadowPass} holds its

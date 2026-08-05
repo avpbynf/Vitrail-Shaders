@@ -5,6 +5,7 @@ import dev.vitrail.uniform.ViewSource;
 
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
@@ -49,16 +50,31 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f shadowProjectionInverse = new Matrix4f();
 
 	/**
-	 * The pair the shadow map on hand was drawn with, which is the previous frame's, because the
-	 * map is drawn at the end of a frame for the next one. It is what every sampling pass is told
-	 * as {@code shadowModelView}: a lookup built from this pair lands on the texel the map really
-	 * holds, where the fresh pair would miss it by one frame of camera motion, and that miss reads
-	 * as the whole picture flickering whenever the player moves.
+	 * The pair the shadow map on hand was drawn with, which is the previous frame's, because the map
+	 * is drawn at the end of a frame for the next one. It is what every sampling pass is told as
+	 * {@code shadowModelView}, and it is the drawn pair moved onto this frame's camera.
+	 * <p>
+	 * <strong>That move is not a refinement, it is the difference between a lookup that lands and
+	 * one that does not.</strong> These matrices act on player space, and player space is the world
+	 * measured from wherever the camera of the frame doing the measuring stands. The map was drawn
+	 * around where the camera stood a frame ago, so the drawn matrix handed over as it is asks about
+	 * the point one frame of camera motion away from the one being shaded, and every shadow in the
+	 * picture sits that far out of place for as long as the player is moving. Adding the motion back
+	 * costs one translation and makes this pair say exactly what the map holds.
+	 * <p>
+	 * Publishing the fresh pair instead does not do it either, and that is worth saying because it
+	 * looks like it should: the grid snap the pair carries is a function of the camera, so it lands
+	 * on the same place while the camera stays inside a cell and jumps a whole cell the frame it
+	 * leaves one, which is a map read a hundred texels out for that frame. What is left a frame late
+	 * here is the sun angle alone.
 	 */
 	private final Matrix4f mapShadowModelView = new Matrix4f();
 	private final Matrix4f mapShadowModelViewInverse = new Matrix4f();
 	private final Matrix4f mapShadowProjection = new Matrix4f();
 	private final Matrix4f mapShadowProjectionInverse = new Matrix4f();
+
+	/** Where the camera stood when the pair above was built, so the re-origin has a distance. */
+	private final Vector3d shadowCamera = new Vector3d();
 
 	private final Vector4f convention = new Vector4f(ClipSpace.REVERSED);
 
@@ -146,11 +162,20 @@ public final class ViewMatrices implements ViewSource {
 		// Shifted down before the fresh pair is built, the same move advance makes for previous:
 		// what was drawn with last frame is what the map on hand holds.
 		if (this.shadowSeeded) {
-			this.mapShadowModelView.set(this.shadowModelView);
-			this.mapShadowModelViewInverse.set(this.shadowModelViewInverse);
+			// On the right, where the grid snap already stands, so that the motion is added to the
+			// point before the light turns it rather than after: both offsets are distances in
+			// player space, and one applied on the far side of the rotation would be a different
+			// place on the ground.
+			this.mapShadowModelView.set(this.shadowModelView)
+					.translate((float) (camera.x() - this.shadowCamera.x),
+							(float) (camera.y() - this.shadowCamera.y),
+							(float) (camera.z() - this.shadowCamera.z));
+			this.mapShadowModelView.invert(this.mapShadowModelViewInverse);
 			this.mapShadowProjection.set(this.shadowProjection);
 			this.mapShadowProjectionInverse.set(this.shadowProjectionInverse);
 		}
+
+		this.shadowCamera.set(camera);
 
 		this.shadowModelView.identity();
 		if (endFlash) {

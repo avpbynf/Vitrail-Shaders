@@ -62,11 +62,13 @@ public interface ViewSource {
 	Matrix4fc gbufferPreviousProjection();
 
 	/**
-	 * The four published shadow matrices are the pair the shadow map ON HAND was drawn with, which
-	 * is one frame older than the camera: the map is drawn at the end of a frame for the next one.
-	 * A sampling pass that used the fresh pair instead would miss the map by one frame of camera
-	 * motion, which reads as the whole lit picture flickering whenever the player moves. The
-	 * {@code drawn} four are the fresh pair, for the one stage that draws the map itself.
+	 * The four published shadow matrices are the pair the shadow map ON HAND was drawn with, moved
+	 * onto this frame's camera. The map is drawn at the end of a frame for the next one, so its
+	 * light direction and its grid cell are the previous frame's; but these matrices act on player
+	 * space, which every frame measures from wherever its own camera stands, so the drawn matrix
+	 * handed over as it is would ask about a point one frame of camera motion away from the one
+	 * being shaded. What is left a frame late once that motion is added back is the sun angle alone.
+	 * The {@code drawn} four are the pair as it stands, for the one stage that draws the map itself.
 	 */
 	Matrix4fc shadowModelView();
 

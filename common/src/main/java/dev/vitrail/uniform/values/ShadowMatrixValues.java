@@ -12,8 +12,8 @@ import dev.vitrail.uniform.UniformShape;
  * they cost nothing to compute: an unshifted camera position, the sky angle, and an orthographic
  * matrix built from the pack's own distance.
  * <p>
- * What they answer is the pair the map ON HAND was drawn with, one frame older than the camera,
- * see {@link dev.vitrail.uniform.ViewSource}. The shadow programs alone read the fresh pair, and
+ * What they answer is the pair the map ON HAND was drawn with, moved onto this frame's camera, see
+ * {@link dev.vitrail.uniform.ViewSource}. The shadow programs alone read that pair as it stands, and
  * they get it from the layer {@link ShadowGeometryValues} puts over these four names.
  */
 public final class ShadowMatrixValues {
