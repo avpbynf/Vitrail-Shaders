@@ -860,14 +860,16 @@ public final class PackChain {
 	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes: nothing here warms a
 	 * pipeline, prepares a target or clears anything, because all of that belongs to the moment the
 	 * chain runs and moving it a step earlier in the frame would clear away what the chunk passes
-	 * have just written. This copies one image and answers for nothing else.
+	 * have just written. This copies one image and answers for nothing else. The one thing it does
+	 * make is the quad it draws that copy with, which is a vertex buffer and clears nothing, and
+	 * {@link #quad} says why it cannot wait for the chain.
 	 */
 	public static void markGeometryDepth() {
 		PackChain chain = active;
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Minecraft minecraft = Minecraft.getInstance();
 		if (disabled || chain == null || device == null || minecraft == null || !chainWanted
-				|| chain.seed == null || !chain.seedEnabled || chain.quad == null) {
+				|| chain.seed == null || !chain.seedEnabled) {
 			return;
 		}
 
@@ -879,7 +881,7 @@ public final class PackChain {
 		// Caught like every other entry point this bus calls: an exception here reaches the game
 		// through an event handler and comes back on the very next frame.
 		try {
-			chain.seed.capture(device.createCommandEncoder(), device, chain.quad,
+			chain.seed.capture(device.createCommandEncoder(), device, chain.quad(device),
 					main.getDepthTextureView(), main.width, main.height);
 		} catch (RuntimeException e) {
 			disabled = true;
@@ -1155,8 +1157,17 @@ public final class PackChain {
 		return false;
 	}
 
-	/** @return false when the targets could not be prepared, in which case nothing may be drawn */
-	private boolean prepare(GpuDevice device, RenderTarget main) {
+	/**
+	 * The quad every full screen pass of this engine draws, made the first time anything asks for it.
+	 * <p>
+	 * Its own method rather than a line of {@link #prepare}, because two moments of the frame need it
+	 * and they are not the same moment. The chain draws from AfterOpaqueFeatures on; the depth the
+	 * scene seed is cut against is kept at AfterOpaqueBlocks, which is strictly earlier. Built where
+	 * the chain draws alone, the first frame that ever gets that far kept no depth, and a frame with
+	 * no kept depth cuts its seed with the coverage mask alone, which throws away every one of the
+	 * game's opaque features standing in front of the pack's terrain.
+	 */
+	private GpuBuffer quad(GpuDevice device) {
 		if (this.quad == null) {
 			ByteBuffer vertices = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
 					.order(ByteOrder.nativeOrder());
@@ -1164,6 +1175,13 @@ public final class PackChain {
 			this.quad = device.createBuffer(QUAD_LABEL,
 					GpuBuffer.USAGE_VERTEX | GpuBuffer.USAGE_COPY_DST, vertices);
 		}
+
+		return this.quad;
+	}
+
+	/** @return false when the targets could not be prepared, in which case nothing may be drawn */
+	private boolean prepare(GpuDevice device, RenderTarget main) {
+		quad(device);
 
 		if (this.block == null) {
 			// Three buffers and a fence per turn, so a frame never writes over what the previous
