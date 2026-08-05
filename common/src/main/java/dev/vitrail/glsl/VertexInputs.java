@@ -43,15 +43,21 @@ public enum VertexInputs {
 	SKY;
 
 	/**
-	 * Whether this is a mesh of the engine's own, and so whether a vertex input the pack declares
-	 * that the mesh has not got has to be taken out of the body and answered with a constant.
+	 * Whether a vertex input the pack declares that the bound format has not got has to be taken out
+	 * of the body and answered with a constant.
 	 * <p>
-	 * False for the two that are not drawn from one. A full screen quad answers for every name a
-	 * composite reads with a macro, and {@link #WORLD} is measured rather than drawn, so leaving a
-	 * declaration standing under either costs nothing.
+	 * True everywhere a real format is bound, {@link #FULLSCREEN} included, and leaving a
+	 * declaration standing there costs the whole module rather than nothing: a quad carries
+	 * {@code Position} and {@code UV0} and no more, and {@code IntermediaryShaderModule.rebind}
+	 * refuses a stage asking for anything else. What made this look harmless is that a composite
+	 * reads the fixed function names through macros, which is true and is beside the point, since
+	 * what a pack declares for itself is {@code mc_midTexCoord} and its kind.
+	 * <p>
+	 * False for {@link #WORLD} alone, which binds nothing: it is measured rather than drawn, and its
+	 * head declares the fixed function names as inputs rather than answering them.
 	 */
 	public boolean synthesizes() {
-		return this == TERRAIN || this == ENTITY || this == SKY;
+		return this != WORLD;
 	}
 
 	/**

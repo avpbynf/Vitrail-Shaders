@@ -24,7 +24,9 @@ import java.util.Set;
  * is exactly that case, six members each and almost nothing in common.</li>
  * <li>The varyings the engine names. A varying the vertex stage writes and the fragment stage
  * never declares is accepted without a word and shifts the location of everything after it,
- * which is the failure that leaves no trace at all.</li>
+ * which is the failure that leaves no trace at all. The other way round is not silent at all and
+ * is dealt with here too: an input the fragment declares that nothing writes costs the whole
+ * module, so it is taken back out where the body never reads it.</li>
  * <li>The names the vertex format takes for itself. Only the vertex stage declares an input, but a
  * pack using one of those names for a varying of its own writes it in one stage and reads it in
  * the next, so moving it out of the way is a decision about the whole program. See
@@ -143,6 +145,20 @@ public final class ProgramTranslator {
 				prepared.put(stage, GlslTranslator.prepare(unit, stage, inputs, boundElements,
 						alphaTest, coverage, program, volumes));
 			}
+		}
+
+		// Before anything is read off a stage, because it changes what the stages read. A stage is
+		// only ever asked to give up an input against what the stages BEFORE it write, which is the
+		// order rebind pairs them in, so this walks the pipeline rather than the map.
+		if (prepared.containsKey(ProgramStage.VERTEX)) {
+			Set<String> provided = new LinkedHashSet<>();
+			prepared.forEach((stage, prepare) -> {
+				if (stage != ProgramStage.VERTEX) {
+					prepare.dropUnprovidedInputs(provided);
+				}
+
+				provided.addAll(prepare.provides());
+			});
 		}
 
 		Map<String, TranslatedUnit.Uniform> uniforms = new LinkedHashMap<>();

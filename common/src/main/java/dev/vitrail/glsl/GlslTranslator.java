@@ -12,9 +12,12 @@ import dev.vitrail.pack.target.SamplerTypes;
 import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -200,6 +203,15 @@ public final class GlslTranslator {
 	/** Vertex inputs the mesh has not got, taken out of the body with the type the pack gave them. */
 	private final Map<String, String> synthesized = new LinkedHashMap<>();
 
+	/**
+	 * Varyings this stage takes in, declared at file scope on a branch that is taken. Empty for a
+	 * vertex stage, whose file scope {@code in} is an attribute and a different matter entirely.
+	 */
+	private final List<FileScope> declaredInputs = new ArrayList<>();
+
+	/** Varyings this stage hands the next one, which is what says whether an input is provided. */
+	private final Set<String> declaredOutputs = new LinkedHashSet<>();
+
 	private Set<String> declaredAfter = Set.of();
 	private Set<String> used = Set.of();
 
@@ -357,6 +369,9 @@ public final class GlslTranslator {
 		planCoverage();
 		orderFragmentOutputs();
 		wrapMain();
+		// Last, and it has to be: rewriteIdentifiers is where varying becomes in or out, and
+		// dropUnprovidedInputs blanks the ranges recorded here, so nothing may move between the two.
+		collectVaryings();
 
 		this.used = usedNames();
 		this.declaredAfter = declaredUnderAType();
@@ -410,6 +425,19 @@ public final class GlslTranslator {
 		/** Names this stage lifted into the block, where the block member is the real meaning. */
 		public Set<String> lifted() {
 			return this.translator.blockMembers.keySet();
+		}
+
+		/** The varyings this stage hands on, which is what says whether the next one is provided. */
+		public Set<String> provides() {
+			return Set.copyOf(this.translator.declaredOutputs);
+		}
+
+		/**
+		 * Takes back out the inputs this stage declares that no stage before it writes and that its
+		 * own body never reads. See {@link GlslTranslator#dropUnprovidedInputs}.
+		 */
+		public void dropUnprovidedInputs(Set<String> provided) {
+			this.translator.dropUnprovidedInputs(provided);
 		}
 
 		public TranslatedUnit render(List<TranslatedUnit.Uniform> block,
@@ -1442,24 +1470,217 @@ public final class GlslTranslator {
 
 	/** @param known whether the declared name has to be one this engine already calls an attribute */
 	private void synthesizeOne(int keyword, boolean known) {
+		FileScope declared = fileScopeDeclaration(keyword);
+		if (declared == null
+				|| known && declared.names().stream().noneMatch(VertexPrologue.SYNTHESIZED::contains)) {
+			return;
+		}
+
+		declared.names().forEach(name -> this.synthesized.putIfAbsent(name, declared.type()));
+		blankRange(declared.start(), declared.end());
+	}
+
+	/**
+	 * Reads the varyings this stage declares at file scope, both ways round.
+	 * <p>
+	 * The two are not symmetric and neither is what the game does with them.
+	 * {@code IntermediaryShaderModule.rebind} walks the vertex stage's outputs and looks each one up
+	 * in the fragment stage by name: an input the fragment declares that nothing before it writes is
+	 * refused outright, at :205-207, and the whole module goes with it. That is a refusal, not a
+	 * silence, and it costs three packs of the corpus a pass apiece.
+	 * <p>
+	 * A vertex stage is not asked for its inputs. Its file scope {@code in} is an attribute, which
+	 * the vertex format answers and {@link #synthesizeAttributes} has already dealt with.
+	 */
+	private void collectVaryings() {
+		if (this.stage == ProgramStage.COMPUTE) {
+			return;
+		}
+
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() != null || !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			if (token.identifier("out")) {
+				FileScope declared = fileScopeDeclaration(index);
+				if (declared != null) {
+					this.declaredOutputs.addAll(declared.names());
+				}
+			} else if (token.identifier("in") && this.stage != ProgramStage.VERTEX) {
+				FileScope declared = fileScopeDeclaration(index);
+				if (declared != null) {
+					this.declaredInputs.add(declared);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Takes back out every input this stage declares that no stage before it writes and that its own
+	 * body never reads.
+	 * <p>
+	 * <strong>Both halves of the condition earn their place, and the first is what makes this
+	 * safe.</strong> Dropping an input the vertex stage does write would be a silent corruption
+	 * rather than a fix: {@code rebind} only counts the fragment inputs it found, at :148-161, so
+	 * everything declared after the missing one lands a location too low with nothing said by
+	 * anyone. And dropping one the body does read would turn a refusal into an undeclared
+	 * identifier, which is the same pass lost with a worse message. So what is taken out is exactly
+	 * what the game was going to refuse the module for, and never anything else.
+	 * <p>
+	 * A pack does not write these by hand. Mellow's {@code /global/gbuffers.fsh} declares eleven
+	 * varyings and every fragment stage of the pack includes it, so its {@code deferred1}, drawn
+	 * over a quad, asks for the six a geometry pass would have written; Bliss loses
+	 * {@code gbuffers_water} to one name, and its water is then the game's own.
+	 *
+	 * @param provided every name a stage before this one declares as an output
+	 */
+	private void dropUnprovidedInputs(Set<String> provided) {
+		List<FileScope> unprovided = this.declaredInputs.stream()
+				.filter(declared -> declared.names().stream().noneMatch(provided::contains))
+				.toList();
+		if (unprovided.isEmpty()) {
+			return;
+		}
+
+		Set<String> candidates = new HashSet<>();
+		unprovided.forEach(declared -> candidates.addAll(declared.names()));
+		Set<String> read = readNames(candidates);
+
+		boolean dropped = false;
+		for (FileScope declared : unprovided) {
+			if (declared.names().stream().noneMatch(read::contains)) {
+				blankRange(declared.start(), declared.end());
+				dropped = true;
+			}
+		}
+
+		if (dropped) {
+			this.used = usedNames();
+			this.declaredAfter = declaredUnderAType();
+		}
+	}
+
+	/**
+	 * Which of these names the body really reads, counting a function that declares one of them for
+	 * itself as meaning its own.
+	 * <p>
+	 * Counting mentions is not enough and Mellow is why: its {@code deferred1} works out a
+	 * {@code vec3 ViewPos} of its own on the second line of {@code main} and reads it four times
+	 * after that, while the varying of the same name, declared in a header it includes, is never
+	 * touched. Six of its varyings are that case.
+	 * <p>
+	 * <strong>Scope is taken at the function and not at the block, which is coarser than the
+	 * language.</strong> A name declared inside an {@code if} and read again after the closing brace
+	 * is called shadowed here and is not. Nothing in the corpus does it, and the cost if something
+	 * did is bounded by the caller: the only declarations offered here are ones no earlier stage
+	 * writes, so the worst this can do is turn a module the game refuses into a stage that does not
+	 * compile.
+	 */
+	private Set<String> readNames(Set<String> candidates) {
+		boolean[] declaration = new boolean[this.tokens.size()];
+		for (FileScope declared : this.declaredInputs) {
+			for (int index = declared.start(); index <= declared.end(); index++) {
+				declaration[index] = true;
+			}
+		}
+
+		int[] region = regions();
+		int[] lines = lineNumbers();
+		Map<String, Set<Integer>> shadowed = new HashMap<>();
+		Set<String> read = new HashSet<>();
+
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			// A branch nobody takes neither reads the name nor shadows it, since the compiler never
+			// sees either line. Asked of both, so that the two halves keep agreeing.
+			if (token.kind() != Kind.IDENTIFIER || declaration[index]
+					|| !this.unit.isLive(lines[index]) || !candidates.contains(token.text())) {
+				continue;
+			}
+
+			int before = significantBefore(index);
+			boolean declares = before >= 0
+					&& LegacyGlsl.TYPE_NAMES.contains(this.tokens.get(before).text());
+			if (declares && region[index] >= 0) {
+				// From here to the end of the function, and not before it: a mention above the
+				// declaration is still the varying's, which is what the language says.
+				shadowed.computeIfAbsent(token.text(), ignored -> new HashSet<>()).add(region[index]);
+			} else if (!declares && !shadowed.getOrDefault(token.text(), Set.of()).contains(region[index])) {
+				read.add(token.text());
+			}
+		}
+
+		return read;
+	}
+
+	/**
+	 * Which top level block each token belongs to, counting the signature that opens it, or -1 for a
+	 * token at file scope. A local declaration only means its own name inside one of these.
+	 */
+	private int[] regions() {
+		int[] region = new int[this.tokens.size()];
+		Arrays.fill(region, -1);
+
+		int depth = 0;
+		int current = -1;
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() == null && token.operator("{")) {
+				if (depth == 0) {
+					current++;
+					// Back over the signature, so that a parameter counts as declared inside the
+					// body it names things for rather than at file scope beside it.
+					int from = statementStart(index);
+					for (int back = from < 0 ? index : from; back <= index; back++) {
+						region[back] = current;
+					}
+				}
+
+				depth++;
+			} else if (token.directive() == null && token.operator("}")) {
+				depth--;
+			}
+
+			if (depth > 0) {
+				region[index] = current;
+			}
+		}
+
+		return region;
+	}
+
+	/** One declaration at file scope, and the tokens that would go with it if it were taken out. */
+	private record FileScope(List<String> names, String type, int start, int end) {
+	}
+
+	/**
+	 * The declaration a storage keyword opens at file scope, or null where the keyword opens
+	 * something else.
+	 * <p>
+	 * It must not guess: {@code in} and {@code out} are also how a function names a parameter, so
+	 * the keyword has to open the statement, and everything before it has to be an interpolation
+	 * qualifier. A parameter list puts the return type and the function's name ahead of it, and a
+	 * caller blanking from there would erase the function.
+	 */
+	private FileScope fileScopeDeclaration(int keyword) {
 		int end = statementEnd(keyword);
 		int start = end < 0 ? -1 : statementStart(keyword);
 		if (start < 0) {
-			return;
+			return null;
 		}
 
 		List<Integer> parts = significantRange(start, end);
 		int cursor = parts.indexOf(keyword);
 		if (cursor < 0) {
-			return;
+			return null;
 		}
 
-		// Everything before the keyword has to be an interpolation qualifier, or this is not a
-		// declaration at file scope: a parameter list puts the return type and the function's name
-		// ahead of it, and blanking from there would erase the function.
 		for (int before = 0; before < cursor; before++) {
 			if (!LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(this.tokens.get(parts.get(before)).text())) {
-				return;
+				return null;
 			}
 		}
 
@@ -1470,25 +1691,20 @@ public final class GlslTranslator {
 		}
 
 		if (cursor >= parts.size() || this.tokens.get(parts.get(cursor)).kind() != Kind.IDENTIFIER) {
-			return;
+			return null;
 		}
 
 		String type = this.tokens.get(parts.get(cursor)).text();
 		if (!LegacyGlsl.TYPE_NAMES.contains(type)) {
-			return;
+			return null;
 		}
 
 		Map<String, String> found = new LinkedHashMap<>();
 		if (!readDeclarators(parts, cursor + 1, type, found)) {
-			return;
+			return null;
 		}
 
-		if (known && found.keySet().stream().noneMatch(VertexPrologue.SYNTHESIZED::contains)) {
-			return;
-		}
-
-		found.keySet().forEach(name -> this.synthesized.putIfAbsent(name, type));
-		blankRange(start, end);
+		return new FileScope(List.copyOf(found.keySet()), type, start, end);
 	}
 
 	private boolean namesClipPosition() {
@@ -2095,7 +2311,10 @@ public final class GlslTranslator {
 		// from a buffer, so there is no other side to agree with.
 		if (this.stage == ProgramStage.VERTEX) {
 			switch (this.inputs) {
-				case FULLSCREEN -> lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
+				case FULLSCREEN -> {
+					lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
+					lines.addAll(VertexPrologue.tail(this.used, this.synthesized));
+				}
 				case TERRAIN -> lines.addAll(SodiumVertex.prologue(this.used, this.synthesized));
 				case ENTITY -> lines.addAll(EntityVertex.prologue(this.used, this.synthesized));
 				case SKY -> lines.addAll(SkyVertex.prologue(this.bound, this.used, this.synthesized));
