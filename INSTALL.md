@@ -83,15 +83,13 @@ pack's own menu layout, and imports the settings file Iris left in
 `shaderpacks/` when a pack has none here yet. The list starts with None, which
 turns every pack off and leaves the game drawing its own image. A setting reaches
 the world when Apply is pressed and at no other moment: leaving the screen drops
-what was clicked and never applied. Editing the files under `vitrail/` while the
-game runs is also enough: a change to any of them reloads the pack without a
-restart, and the jar never needs rebuilding for any of this. A program that fails
-to compile is reported in the log and the game keeps its own rendering rather
-than crashing.
+what was clicked and never applied. A program that fails to compile is reported
+in the log and the game keeps its own rendering rather than crashing.
 
-Editing a pack's own files is a different matter and is **not** picked up on its
-own: nothing watches `shaderpacks/`. Use the settings screen, which reloads on
-demand, or restart the game.
+Nothing is watched for changes, neither `vitrail/` nor `shaderpacks/`. Edit any
+of it by hand while the game runs, then press Reload in the settings screen and
+the pack is read again from disk, whole; the jar never needs rebuilding for any
+of this.
 
 ## Switching the graphics backend to Vulkan
 

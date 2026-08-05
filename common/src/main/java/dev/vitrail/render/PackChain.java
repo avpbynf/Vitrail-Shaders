@@ -104,13 +104,9 @@ public final class PackChain {
 
 	private static volatile PackChain active;
 	private static volatile boolean disabled;
-	private static long lastCheckNanos;
-	private static long lastStamp;
-	private static boolean checked;
 	private static volatile PackSession session;
 	private static volatile String lastError;
 	private static volatile List<String> removed = List.of();
-	private static volatile Path settingsFile;
 	private static volatile boolean packsFirst = true;
 	private static volatile boolean chainWanted = true;
 	private static volatile boolean packOff;
@@ -219,7 +215,6 @@ public final class PackChain {
 	 */
 	public static void load(Path gameDirectory) {
 		session = null;
-		settingsFile = null;
 		lastError = null;
 		removed = List.of();
 		packsFirst = true;
@@ -383,7 +378,6 @@ public final class PackChain {
 		PackSession opened = PackSession.read(gameDirectory, pack,
 				minecraft == null ? "en_us" : minecraft.options.languageCode);
 		session = opened;
-		settingsFile = opened.settingsFile();
 
 		Vitrail.logger().info("{} lays out {} settings pages and {} settings, named by {}",
 				opened.packFileName(), opened.menu().pages().size(), opened.menu().optionCount(),
@@ -497,41 +491,28 @@ public final class PackChain {
 	}
 
 	/**
-	 * Rebuilds everything when {@code pack.txt}, {@code options.txt} or the loaded pack's own
-	 * settings file changes on disk, looked at once a second at most.
+	 * Rebuilds everything when the world under the pack has changed, which is not the same thing as
+	 * a file having changed and is the only reload nobody can ask for.
 	 * <p>
-	 * Watching the files rather than binding a key is not laziness. Forcing a pack's own setting
-	 * turned out to be the only honest way to prove a pass does what it should, so it is done
-	 * constantly, and a restart between attempts costs a minute every time. The price is the
-	 * second a chain takes to read and translate, which shows as a hitch and is the right trade.
+	 * Two moments, and both are the pack being read against something it could not see before. The
+	 * pack is read while the client starts up, with no biome symbol to compile against, so it takes
+	 * the branch meant for an engine that cannot answer them; joining a world is what makes those
+	 * symbols exist. And a dimension directory replaces the root rather than layering over it, so
+	 * walking through a portal changes half of what a pack is.
 	 * <p>
-	 * It keeps running while the settings screen is open, which is the point: that is exactly when
-	 * one wants to see the world change under it. A file edited by hand and a value clicked in the
-	 * screen then compose, because the screen holds what it has pending rather than a copy of the
-	 * file.
+	 * The two are asked apart rather than folded together: the registry the symbols hang on is the
+	 * very same object on both sides of a portal in single player, so a dimension change would slip
+	 * past a chain that only watched them.
+	 * <p>
+	 * <strong>Nothing here watches a file.</strong> An edit made by hand takes effect on Reload in
+	 * the settings screen, the same button the screen's own Apply goes through, and that is the whole
+	 * of it: a reload costs a second of hitch, and one that nobody asked for is a second of hitch
+	 * nobody asked for.
 	 */
-	private static void reloadIfChanged(Path gameDirectory) {
-		long now = System.nanoTime();
-		if (now - lastCheckNanos < 1_000_000_000L) {
-			return;
-		}
-
-		lastCheckNanos = now;
-		long stamp = stamp(gameDirectory);
-		boolean first = lastStamp == 0L && !checked;
-		checked = true;
-		// A stale machine is not a first sighting and is never skipped. The pack was read while
-		// the client was starting up, so it had no biome symbol to compile against and took the
-		// branch meant for an engine that cannot answer them; joining a world is what makes those
-		// symbols exist, and it happens after the first look at these files.
+	private static void reloadIfTheWorldMoved(Path gameDirectory) {
 		boolean stale = PackDefines.stale();
-		// Asked apart from the symbols above and not folded into them: the stamp those hang on is
-		// the registry the level carries, and walking through a portal in single player leaves it
-		// the very same object, so half of what a pack is would change under a chain that noticed
-		// nothing.
 		boolean moved = PackPlace.moved();
-		if ((stamp == lastStamp || first) && !stale && !moved) {
-			lastStamp = stamp;
+		if (!stale && !moved) {
 			return;
 		}
 
@@ -540,23 +521,22 @@ public final class PackChain {
 					+ "over it, so the whole pack is read, translated and its colour targets allocated "
 					+ "again, which is the hitch at the portal", PackPlace.settled(), PackPlace.world());
 		} else {
-			Vitrail.logger().info(stale
-					? "The world's own symbols are known now, reloading the pack against them"
-					: "Settings changed on disk, reloading the pack");
+			Vitrail.logger().info("The world's own symbols are known now, reloading the pack against "
+					+ "them");
 		}
 
 		reload(gameDirectory);
 	}
 
 	/**
-	 * Throws away the current chain and reads it again from disk, then resynchronises the watcher
-	 * above on what is now on disk, or it would reload a second time within the second.
+	 * Throws away the current chain and reads it again from disk, everything included: the pack
+	 * named by {@code pack.txt}, the engine's own options, and the pack's settings file.
 	 * <p>
 	 * Render thread only: {@link #release()} closes GPU buffers and hands back the colour targets,
 	 * which has to happen where {@code draw} runs and outside any render pass. The settings screen
-	 * calls this from a button; the watcher calls it when a file changes. Both go through here
-	 * rather than each having a path of its own, so that what the screen applies and what a hand
-	 * edit applies cannot drift apart.
+	 * calls this from Apply, from Reload and from a pack being picked; the step above calls it when
+	 * the world moves under the pack. All of them go through here rather than each having a path of
+	 * its own, so that what the screen applies and what a hand edit applies cannot drift apart.
 	 */
 	public static void reload(Path gameDirectory) {
 		PackChain previous = active;
@@ -569,47 +549,22 @@ public final class PackChain {
 		// without leaving the game.
 		disabled = false;
 		load(gameDirectory);
-		// A load that gave up before reading a pack settled nothing, and without these the folder
-		// with no pack in it would be looked at again a second later, and every second after that.
-		// The world is taken with the symbols and for the same reason: a pack that cannot be read
-		// at all must not be read again every second for as long as the player stays in the Nether.
+		// Taken whatever the load did with them. A pack that cannot be read at all settled nothing,
+		// and without these it would be read again on the very next frame, and every frame after
+		// that, for as long as the player stays where it failed.
 		PackDefines.settle();
 		PackPlace.settle();
-
-		lastStamp = stamp(gameDirectory);
-		checked = true;
-	}
-
-	/**
-	 * The three files a reload watches, folded in order rather than added up. A sum of two
-	 * timestamps could already be cancelled out by an edit to each; with three it would become a
-	 * reason for a reload not to happen that nobody would ever find.
-	 */
-	private static long stamp(Path gameDirectory) {
-		long pack = stampOf(packFile(gameDirectory));
-		long options = stampOf(SettingsLayers.file(gameDirectory));
-		long settings = settingsFile == null ? 0L : stampOf(settingsFile);
-
-		return 31L * (31L * pack + options) + settings;
-	}
-
-	private static long stampOf(Path file) {
-		try {
-			return Files.isRegularFile(file) ? Files.getLastModifiedTime(file).toMillis() : 0L;
-		} catch (IOException e) {
-			return 0L;
-		}
 	}
 
 	/**
 	 * Called from the loader module once the world has been rendered.
 	 *
 	 * @return whether a pack was drawn, so that the caller knows to fall back to its own chain.
-	 *         The reload check runs first and unconditionally, or a pack that failed once could
-	 *         never be retried.
+	 *         The world check runs first and before the refusal below, or a pack that failed to
+	 *         compile would never be read again against the symbols joining a world gives it.
 	 */
 	public static boolean draw(Path gameDirectory) {
-		reloadIfChanged(gameDirectory);
+		reloadIfTheWorldMoved(gameDirectory);
 
 		PackChain chain = active;
 		if (disabled || chain == null) {
