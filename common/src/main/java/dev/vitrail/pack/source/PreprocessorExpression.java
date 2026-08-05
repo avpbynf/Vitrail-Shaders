@@ -30,15 +30,20 @@ public final class PreprocessorExpression {
 	/** How far one name may lead to another before the nest is called unresolvable. */
 	private static final int MAX_RESOLUTION_DEPTH = 8;
 
-	/** No real expression nests this deep, and a crafted one must not reach the stack limit. */
-	private static final int MAX_PARENTHESIS_DEPTH = 64;
+	/**
+	 * No real expression nests this deep, and a crafted one must not reach the stack limit. A
+	 * bracket and a prefix operator nest the same way and share the budget, because a bracket
+	 * limit alone bounds nothing: ten thousand exclamation marks in a row cost ten thousand frames
+	 * and no brackets at all.
+	 */
+	private static final int MAX_NESTING_DEPTH = 64;
 
 	private final List<String> tokens;
 	private final Map<String, String> defines;
 	private final int depth;
 
 	private int position;
-	private int parentheses;
+	private int nesting;
 	private boolean failed;
 
 	private PreprocessorExpression(List<String> tokens, Map<String, String> defines, int depth) {
@@ -282,23 +287,33 @@ public final class PreprocessorExpression {
 	}
 
 	private long unary() {
-		if (accept("!")) {
-			return unary() == 0 ? 1 : 0;
+		String token = peek();
+		if (token == null || !isPrefix(token)) {
+			return primary();
 		}
 
-		if (accept("-")) {
-			return -unary();
+		this.position++;
+		if (++this.nesting > MAX_NESTING_DEPTH) {
+			this.failed = true;
+			return 0;
 		}
 
-		if (accept("+")) {
-			return unary();
-		}
+		long value = unary();
+		this.nesting--;
 
-		if (accept("~")) {
-			return ~unary();
-		}
+		return switch (token) {
+			case "!" -> value == 0 ? 1 : 0;
+			case "-" -> -value;
+			case "~" -> ~value;
+			default -> value;
+		};
+	}
 
-		return primary();
+	private static boolean isPrefix(String token) {
+		return switch (token) {
+			case "!", "-", "+", "~" -> true;
+			default -> false;
+		};
 	}
 
 	private long primary() {
@@ -309,13 +324,13 @@ public final class PreprocessorExpression {
 		}
 
 		if (accept("(")) {
-			if (++this.parentheses > MAX_PARENTHESIS_DEPTH) {
+			if (++this.nesting > MAX_NESTING_DEPTH) {
 				this.failed = true;
 				return 0;
 			}
 
 			long value = logicalOr();
-			this.parentheses--;
+			this.nesting--;
 			if (!accept(")")) {
 				this.failed = true;
 			}
