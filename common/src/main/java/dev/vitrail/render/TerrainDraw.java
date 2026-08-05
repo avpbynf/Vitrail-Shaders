@@ -194,8 +194,9 @@ public final class TerrainDraw {
 	 * the frame boundary and not here. The atlas is null because there is none to hand yet, and the
 	 * real prepare puts it back well before anything is bound.
 	 * <p>
-	 * Called once {@link #shadowsServed} has said yes, so every shadow pass has a program; a broken
-	 * precondition would throw and be caught below, which is the answer that branch wants anyway.
+	 * Called once {@link #shadowsServed} has said yes, so every shadow pass has a program. That is a
+	 * precondition and not a hope the catch below covers: the catch names the program it failed on,
+	 * so a missing one would throw a second time from inside it and leave the stage half open.
 	 */
 	private boolean shadowsPrepared(GpuDevice device) {
 		for (TerrainPass pass : TerrainPass.values()) {

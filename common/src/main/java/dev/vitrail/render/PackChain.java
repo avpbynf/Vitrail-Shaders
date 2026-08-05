@@ -192,6 +192,19 @@ public final class PackChain {
 	private int warmed;
 	private boolean announced;
 
+	/**
+	 * Whether {@link #openFeatures()} really posed the game's overrides, which is the one thing
+	 * {@link #closeFeatures()} may take back down and compose on.
+	 * <p>
+	 * Held here rather than read back off {@code RenderSystem.outputColorTextureOverride}, which is
+	 * where it used to be read from. That field is the game's own and the game sets it for its own
+	 * always-on-top features, and openFeatures now has a reason of its own to refuse: the two
+	 * questions were the same only while it never did. Read off the wrong one, a refused frame
+	 * composes a layer nothing drew into, the frame before's, the clear living in the open that
+	 * refusal skipped.
+	 */
+	private boolean redirected;
+
 	private PackChain(PackProgram.Chain chain, PackValues values, String world, boolean seedEnabled,
 			Path packPath, Map<String, OptionValue> chosen, String profile) {
 		this.chain = chain;
@@ -766,8 +779,11 @@ public final class PackChain {
 		// no final ready to bring back and the fade would be a fade to nothing.
 		//
 		// The targets and the buffers first and the compilation second, which is not the order this
-		// had. Behind the warm up, quad and block stayed null for the whole of it while the rest of
-		// the frame reaches for both.
+		// had. What the warm up holds back is the drawing and not the frame, so the block ring and
+		// the targets are standing by the time the last program compiles rather than being allocated
+		// in that one frame on top of it. Not the quad, whatever an earlier reading of this line
+		// said: wherever the seed runs it is made earlier in the same frame, from markGeometryDepth,
+		// and quad() says why it cannot wait for this.
 		//
 		// Outside any render pass, both of them: creating a texture or a buffer records a barrier
 		// into the very command buffer a pass would be recording into, and the clears refuse
@@ -1007,6 +1023,12 @@ public final class PackChain {
 	 * The switch is the game's own, the one it throws around its always-on-top features. The colour
 	 * goes to the layer; the depth keeps pointing at the world's, so the redirected draws still
 	 * hide behind terrain and still leave the depth the water reads untouched.
+	 * <p>
+	 * Nothing is redirected while the chain is still compiling, and that refusal is the same one the
+	 * terrain makes through {@code TerrainDraw.shown()}. What the layer is composed onto is a colour
+	 * target of the pack, and only the final brings that back: caught during the warm up, the
+	 * player's own body and every translucent feature of the game would be dropped for as many
+	 * frames as it lasts, on a screen that otherwise looks entirely right.
 	 */
 	public static void openFeatures() {
 		PackChain chain = active;
@@ -1018,7 +1040,10 @@ public final class PackChain {
 		}
 
 		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
-		if (main == null || !chain.features.prepare(device)) {
+		// The layer's own pipeline is compiled on the refused frames too, and deliberately before the
+		// question below rather than after it: it is one more pipeline the frame that finally draws
+		// would otherwise compile on top of the pack's last one.
+		if (main == null || !chain.features.prepare(device) || !chain.drawable()) {
 			return;
 		}
 
@@ -1034,11 +1059,13 @@ public final class PackChain {
 
 			RenderSystem.outputColorTextureOverride = layer;
 			RenderSystem.outputDepthTextureOverride = main.getDepthTextureView();
+			chain.redirected = true;
 		} catch (RuntimeException e) {
 			// The overrides are cleared on the way out rather than left half set: one standing past
 			// this point swallows every later feature draw of the frame.
 			RenderSystem.outputColorTextureOverride = null;
 			RenderSystem.outputDepthTextureOverride = null;
+			chain.redirected = false;
 			disabled = true;
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
@@ -1068,13 +1095,22 @@ public final class PackChain {
 	public static void closeFeatures() {
 		// Always put back, whatever else happens below: overrides left standing past this point
 		// would swallow every later feature draw of the frame.
-		boolean redirected = RenderSystem.outputColorTextureOverride != null;
 		RenderSystem.outputColorTextureOverride = null;
 		RenderSystem.outputDepthTextureOverride = null;
 
 		PackChain chain = active;
+		if (chain == null || !chain.redirected) {
+			return;
+		}
+
+		// Taken down before anything can throw, so the pair is balanced by the frame that opened it
+		// and never by the next one. Whether the chain may draw cannot have moved between the two
+		// halves of this bracket, the warm up turning on AfterOpaqueFeatures which is the event
+		// openFeatures itself is called from, but the flag makes that a fact rather than a timing.
+		chain.redirected = false;
+
 		GpuDevice device = RenderSystem.tryGetDevice();
-		if (!redirected || disabled || chain == null || device == null || chain.features == null) {
+		if (disabled || device == null || chain.features == null) {
 			return;
 		}
 
