@@ -5,7 +5,7 @@ import dev.vitrail.uniform.expr.kroppeb.stareval.exception.UnexpectedCharacterEx
 /**
  * A class to facilitate the reading of strings.
  */
-public class StringReader {
+public final class StringReader {
 	/**
 	 * The string we are reading
 	 */

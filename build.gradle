@@ -18,9 +18,31 @@ subprojects {
 		}
 	}
 
+	// A warning nobody is required to fix is a warning nobody reads, so what is kept here is what
+	// is wrong rather than what is merely unfashionable, and it fails the build. Left out on
+	// purpose: deprecation, because Minecraft and NeoForge deprecate faster than a mod can follow
+	// and the noise would bury everything else; classfile, which only ever reports annotations
+	// missing from a dependency's own jar; and serial, which asks for a serialVersionUID on
+	// exceptions nothing serialises.
+	//
+	// gradlew build -PlintReport prints what is there without failing, which is how the list gets
+	// read when the point is to look at it rather than to gate on it.
+	def lintReport = providers.gradleProperty("lintReport").present
+
 	tasks.withType(JavaCompile).configureEach {
 		options.encoding = "UTF-8"
 		options.release = Integer.parseInt(project.java_version)
+		options.compilerArgs += [
+				"-Xlint:all,-deprecation,-processing,-classfile,-serial",
+				"-Xdoclint:all,-missing",
+				// stareval is vendored and its javadoc is its author's. Bending borrowed code to
+				// our taste buys nothing and makes the next comparison with upstream harder.
+				"-Xdoclint/package:-dev.vitrail.uniform.expr.kroppeb.*",
+		]
+
+		if (!lintReport) {
+			options.compilerArgs << "-Werror"
+		}
 	}
 
 	tasks.withType(AbstractArchiveTask).configureEach {
