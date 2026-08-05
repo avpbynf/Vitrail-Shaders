@@ -86,8 +86,7 @@ None of these files has to exist, and without them nothing is drawn: a pack is
 loaded once one is picked, in the screen or in `pack.txt`, and never before.
 What is picked is then drawn whole. `options.txt` is there to take a stage back
 out again, which is how a wrong picture is bisected without a rebuild. It reads
-eight names, and nothing else in the file is treated as anything but a setting of
-the pack:
+eight names:
 
 ```
 terrain=off      hands the chunk passes back to the game's own shader
@@ -99,6 +98,11 @@ passes=N         cuts the chain to its first N passes, or to a list of names
 dump=NAME        prints the values one program was handed, decoded
 screen=settings  opens the settings screen on the pack rather than on the list
 ```
+
+One more name is held back rather than handed to the pack as a setting:
+`profile=NAME` picks a whole profile the pack declares, and the settings screen
+greys its own profile selector out for as long as that line is there. Everything
+else in the file is a setting of the pack, by its own name.
 
 Each of the first five is a stage that can be taken out on its own, which is what
 tells a wrong gbuffer from a wrong composite. `dump=` is the one that answers
