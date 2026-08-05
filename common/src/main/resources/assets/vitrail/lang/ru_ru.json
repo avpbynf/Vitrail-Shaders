@@ -1,0 +1,21 @@
+{
+	"options.vitrail.title": "Настройки набора шейдеров",
+	"options.vitrail.apply": "Применить",
+	"options.vitrail.reload": "Перезагрузить",
+	"options.vitrail.reset": "Сбросить",
+	"options.vitrail.reset_confirm": "Сбросить %s к значениям набора по умолчанию?",
+	"options.vitrail.reset_confirm_detail": "%s очищается. Набор сохраняет все настройки, которые объявляет сам, и больше ничего не затрагивается.",
+	"options.vitrail.packs": "Список наборов шейдеров",
+	"options.vitrail.packs_title": "Наборы шейдеров",
+	"options.vitrail.profile": "Профиль",
+	"options.vitrail.profile_custom": "Пользовательский",
+	"options.vitrail.folder": "Папка с наборами",
+	"options.vitrail.pending": "Ожидают применения: %s",
+	"options.vitrail.removed": "Проходы, которые этот бэкенд не может собрать, убраны: %s",
+	"options.vitrail.forced": "Задано принудительно в vitrail/options.txt: %s",
+	"options.vitrail.no_pack": "Набор шейдеров не загружен",
+	"options.vitrail.pack_off": "Набора шейдеров нет: игра рисует собственное изображение",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "Открыть настройки набора шейдеров",
+	"key.category.vitrail.keybinds": "Vitrail"
+}

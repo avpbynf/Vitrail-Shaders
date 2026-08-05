@@ -1,0 +1,21 @@
+{
+	"options.vitrail.title": "Impostazioni del pacchetto di shader",
+	"options.vitrail.apply": "Applica",
+	"options.vitrail.reload": "Ricarica",
+	"options.vitrail.reset": "Ripristina",
+	"options.vitrail.reset_confirm": "Ripristinare %s ai valori predefiniti del pacchetto?",
+	"options.vitrail.reset_confirm_detail": "%s viene svuotato. Il pacchetto mantiene tutte le impostazioni che dichiara da sé, e nient'altro viene toccato.",
+	"options.vitrail.packs": "Elenco dei pacchetti di shader",
+	"options.vitrail.packs_title": "Pacchetti di shader",
+	"options.vitrail.profile": "Profilo",
+	"options.vitrail.profile_custom": "Personalizzato",
+	"options.vitrail.folder": "Cartella dei pacchetti",
+	"options.vitrail.pending": "In attesa di applicazione: %s",
+	"options.vitrail.removed": "Passaggi che questo backend non può costruire, rimossi: %s",
+	"options.vitrail.forced": "Forzate da vitrail/options.txt: %s",
+	"options.vitrail.no_pack": "Nessun pacchetto di shader caricato",
+	"options.vitrail.pack_off": "Nessun pacchetto di shader: il gioco disegna la propria immagine",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "Apri le impostazioni del pacchetto di shader",
+	"key.category.vitrail.keybinds": "Vitrail"
+}

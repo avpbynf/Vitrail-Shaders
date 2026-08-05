@@ -1,0 +1,21 @@
+{
+	"options.vitrail.title": "光影包設定",
+	"options.vitrail.apply": "套用",
+	"options.vitrail.reload": "重新載入",
+	"options.vitrail.reset": "重設",
+	"options.vitrail.reset_confirm": "將 %s 重設為光影包自帶的預設值？",
+	"options.vitrail.reset_confirm_detail": "%s 將被清空。光影包自己宣告的設定全部保留，其他部分不受影響。",
+	"options.vitrail.packs": "光影包清單",
+	"options.vitrail.packs_title": "光影包",
+	"options.vitrail.profile": "設定檔",
+	"options.vitrail.profile_custom": "自訂",
+	"options.vitrail.folder": "開啟資料夾",
+	"options.vitrail.pending": "等待套用：%s",
+	"options.vitrail.removed": "此後端無法建置而被移除的渲染通道：%s",
+	"options.vitrail.forced": "由 vitrail/options.txt 強制指定：%s",
+	"options.vitrail.no_pack": "未載入光影包",
+	"options.vitrail.pack_off": "無光影包：遊戲繪製自己的畫面",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "開啟光影包設定",
+	"key.category.vitrail.keybinds": "Vitrail"
+}

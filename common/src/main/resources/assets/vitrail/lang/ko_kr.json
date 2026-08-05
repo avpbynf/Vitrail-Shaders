@@ -1,0 +1,21 @@
+{
+	"options.vitrail.title": "셰이더 팩 설정",
+	"options.vitrail.apply": "적용",
+	"options.vitrail.reload": "새로 고침",
+	"options.vitrail.reset": "초기화",
+	"options.vitrail.reset_confirm": "%s을(를) 팩 자체의 기본값으로 초기화할까요?",
+	"options.vitrail.reset_confirm_detail": "%s이(가) 비워집니다. 팩이 스스로 선언한 설정은 모두 남고, 그 밖에는 아무것도 건드리지 않습니다.",
+	"options.vitrail.packs": "셰이더 팩 목록",
+	"options.vitrail.packs_title": "셰이더 팩",
+	"options.vitrail.profile": "프로필",
+	"options.vitrail.profile_custom": "사용자 지정",
+	"options.vitrail.folder": "팩 폴더 열기",
+	"options.vitrail.pending": "적용 대기 중: %s",
+	"options.vitrail.removed": "이 백엔드가 만들 수 없어 제외한 패스: %s",
+	"options.vitrail.forced": "vitrail/options.txt에서 강제된 항목: %s",
+	"options.vitrail.no_pack": "불러온 셰이더 팩이 없습니다",
+	"options.vitrail.pack_off": "셰이더 팩 없음: 게임이 자체 화면을 그립니다",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "셰이더 팩 설정 열기",
+	"key.category.vitrail.keybinds": "Vitrail"
+}

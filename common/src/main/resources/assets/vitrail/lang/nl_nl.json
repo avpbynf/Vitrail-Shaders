@@ -1,0 +1,21 @@
+{
+	"options.vitrail.title": "Shader Pack-instellingen",
+	"options.vitrail.apply": "Toepassen",
+	"options.vitrail.reload": "Herladen",
+	"options.vitrail.reset": "Resetten",
+	"options.vitrail.reset_confirm": "%s terugzetten op de standaardwaarden van het pack?",
+	"options.vitrail.reset_confirm_detail": "%s wordt geleegd. Het pack behoudt alle instellingen die het zelf opgeeft, en verder wordt er niets aangeraakt.",
+	"options.vitrail.packs": "Shader Pack-lijst",
+	"options.vitrail.packs_title": "Shader Packs",
+	"options.vitrail.profile": "Profiel",
+	"options.vitrail.profile_custom": "Aangepast",
+	"options.vitrail.folder": "Pakkettenmap openen",
+	"options.vitrail.pending": "Wacht op toepassen: %s",
+	"options.vitrail.removed": "Passes die deze backend niet kan bouwen, verwijderd: %s",
+	"options.vitrail.forced": "Afgedwongen door vitrail/options.txt: %s",
+	"options.vitrail.no_pack": "Er is geen shader pack geladen",
+	"options.vitrail.pack_off": "Geen shader pack: het spel tekent zijn eigen beeld",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "Shader pack-instellingen openen",
+	"key.category.vitrail.keybinds": "Vitrail"
+}

@@ -1,0 +1,21 @@
+{
+	"options.vitrail.title": "Configurações do pacote de sombreadores",
+	"options.vitrail.apply": "Aplicar",
+	"options.vitrail.reload": "Recarregar",
+	"options.vitrail.reset": "Redefinir",
+	"options.vitrail.reset_confirm": "Redefinir %s para os padrões do próprio pacote?",
+	"options.vitrail.reset_confirm_detail": "%s é esvaziado. O pacote mantém todas as configurações que ele mesmo declara, e nada mais é alterado.",
+	"options.vitrail.packs": "Lista de pacotes de sombreadores",
+	"options.vitrail.packs_title": "Pacotes de sombreadores",
+	"options.vitrail.profile": "Perfil",
+	"options.vitrail.profile_custom": "Personalizado",
+	"options.vitrail.folder": "Abrir pasta de pacotes",
+	"options.vitrail.pending": "Aguardando aplicação: %s",
+	"options.vitrail.removed": "Passagens que este backend não consegue construir, removidas: %s",
+	"options.vitrail.forced": "Forçadas por vitrail/options.txt: %s",
+	"options.vitrail.no_pack": "Nenhum pacote de sombreadores carregado",
+	"options.vitrail.pack_off": "Sem pacote de sombreadores: o jogo desenha a própria imagem",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "Abrir configurações do pacote de sombreadores",
+	"key.category.vitrail.keybinds": "Vitrail"
+}

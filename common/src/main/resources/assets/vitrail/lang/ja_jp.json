@@ -1,0 +1,21 @@
+{
+	"options.vitrail.title": "シェーダーパックの設定",
+	"options.vitrail.apply": "適用",
+	"options.vitrail.reload": "再読み込み",
+	"options.vitrail.reset": "リセット",
+	"options.vitrail.reset_confirm": "%sをパック自身のデフォルト値にリセットしますか？",
+	"options.vitrail.reset_confirm_detail": "%sは空になります。パックが自ら宣言している設定はすべて残り、それ以外には何も手を加えません。",
+	"options.vitrail.packs": "シェーダーパック一覧",
+	"options.vitrail.packs_title": "シェーダーパック",
+	"options.vitrail.profile": "プロファイル",
+	"options.vitrail.profile_custom": "カスタム",
+	"options.vitrail.folder": "パックフォルダーを開く",
+	"options.vitrail.pending": "適用待ち：%s",
+	"options.vitrail.removed": "このバックエンドでは構築できず、除外したパス：%s",
+	"options.vitrail.forced": "vitrail/options.txtによる強制：%s",
+	"options.vitrail.no_pack": "シェーダーパックが読み込まれていません",
+	"options.vitrail.pack_off": "シェーダーパックなし：ゲームが自前の映像を描画します",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "シェーダーパックの設定を開く",
+	"key.category.vitrail.keybinds": "Vitrail"
+}

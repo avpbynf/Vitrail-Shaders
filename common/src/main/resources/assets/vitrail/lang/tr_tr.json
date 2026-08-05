@@ -1,0 +1,21 @@
+{
+	"options.vitrail.title": "Shader Paketi Ayarları",
+	"options.vitrail.apply": "Uygula",
+	"options.vitrail.reload": "Yeniden Yükle",
+	"options.vitrail.reset": "Sıfırla",
+	"options.vitrail.reset_confirm": "%s, paketin kendi varsayılan değerlerine sıfırlansın mı?",
+	"options.vitrail.reset_confirm_detail": "%s boşaltılır. Paket, kendi tanımladığı bütün ayarları korur ve başka hiçbir şeye dokunulmaz.",
+	"options.vitrail.packs": "Shader Paketi Listesi",
+	"options.vitrail.packs_title": "Shader Paketleri",
+	"options.vitrail.profile": "Profil",
+	"options.vitrail.profile_custom": "Özel",
+	"options.vitrail.folder": "Paket Klasörünü Aç",
+	"options.vitrail.pending": "Uygulanmayı bekleyen: %s",
+	"options.vitrail.removed": "Bu arka ucun oluşturamadığı, çıkarılan geçişler: %s",
+	"options.vitrail.forced": "vitrail/options.txt tarafından zorlanan: %s",
+	"options.vitrail.no_pack": "Yüklü bir shader paketi yok",
+	"options.vitrail.pack_off": "Shader paketi yok: oyun kendi görüntüsünü çiziyor",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "Shader paketi ayarlarını aç",
+	"key.category.vitrail.keybinds": "Vitrail"
+}

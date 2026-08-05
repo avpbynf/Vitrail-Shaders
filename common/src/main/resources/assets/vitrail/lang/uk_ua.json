@@ -1,0 +1,21 @@
+{
+	"options.vitrail.title": "Налаштування пакета шейдерів",
+	"options.vitrail.apply": "Застосувати",
+	"options.vitrail.reload": "Перезавантажити",
+	"options.vitrail.reset": "Скинути",
+	"options.vitrail.reset_confirm": "Скинути %s до усталених значень самого пакета?",
+	"options.vitrail.reset_confirm_detail": "%s очищується. Пакет зберігає всі налаштування, які оголошує сам, і більше нічого не змінюється.",
+	"options.vitrail.packs": "Список пакетів шейдерів",
+	"options.vitrail.packs_title": "Пакети шейдерів",
+	"options.vitrail.profile": "Профіль",
+	"options.vitrail.profile_custom": "Користувацький",
+	"options.vitrail.folder": "Відкрити теку з пакетами",
+	"options.vitrail.pending": "Очікують застосування: %s",
+	"options.vitrail.removed": "Проходи, які цей бекенд не може зібрати, вилучено: %s",
+	"options.vitrail.forced": "Задано примусово у vitrail/options.txt: %s",
+	"options.vitrail.no_pack": "Пакет шейдерів не завантажено",
+	"options.vitrail.pack_off": "Пакета шейдерів немає: гра малює власне зображення",
+	"options.vitrail.error": "%s",
+	"key.vitrail.open_settings": "Відкрити налаштування пакета шейдерів",
+	"key.category.vitrail.keybinds": "Vitrail"
+}
