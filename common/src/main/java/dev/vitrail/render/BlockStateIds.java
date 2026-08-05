@@ -51,6 +51,14 @@ public final class BlockStateIds {
 	 */
 	public static final int PACKED_MASK = 0x7FFFFF;
 
+	/**
+	 * The largest number a declaration may carry. The encoder keeps {@link #PACKED_MASK} of what
+	 * {@link #packedFrom} produced, and that is even, so the last id whose packed form survives
+	 * whole is one below half the mask: 4194302 packs as 0x7FFFFE and 4194303 packs as 0x800000,
+	 * which the mask takes away entirely.
+	 */
+	private static final int MAX_ID = (PACKED_MASK >> 1) - 1;
+
 	private static volatile Object2IntMap<BlockState> table = empty();
 
 	private BlockStateIds() {
@@ -65,9 +73,13 @@ public final class BlockStateIds {
 		Object2IntMap<BlockState> built = empty();
 		List<String> unknown = new ArrayList<>();
 		for (BlockIds.Entry entry : ids.entries()) {
-			if (packedFrom(entry.id()) > PACKED_MASK) {
+			if (entry.id() > MAX_ID) {
 				// Refused rather than truncated. A number that does not fit would come back out of
 				// the mesh as a different number, which lights the wrong blocks and says nothing.
+				// Weighed on the id and not on its packed form, which overflows an int long before
+				// it passes the mask: block.1073741924 used to be accepted here, the encoder cut it
+				// down, and the shader read the pack's own id 100. The file writes block. followed
+				// by digits, so there is no negative number to weigh.
 				unknown.add("block." + entry.id() + ", too large for the mesh to carry");
 			} else if (entry.tag()) {
 				addTag(entry, built, unknown);
