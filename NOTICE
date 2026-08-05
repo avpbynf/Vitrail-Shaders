@@ -23,7 +23,7 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/pack/target/DrawBuffers.java follow the grammars of
   net.irisshaders.iris.shaderpack.parsing.ConstDirectiveParser and of
   net.irisshaders.iris.shaderpack.parsing.CommentDirectiveParser together with
-  net.irisshaders.iris.shaderpack.programs.ProgramDirectives. Both rules are odd enough that
+  net.irisshaders.iris.shaderpack.properties.ProgramDirectives. Both rules are odd enough that
   reasoning them out would get them wrong, so they are reproduced rather than reinvented.
 
   common/src/main/java/dev/vitrail/pack/target/TargetDirectives.java and
@@ -42,17 +42,19 @@ GNU Lesser General Public License version 3
   starting colour is TargetDirectives above.
 
   common/src/main/java/dev/vitrail/pack/source/ShaderProperties.java reads the sun, moon, stars and
-  sky directives with the four words and the defaults of
-  net.irisshaders.iris.shaderpack.properties.ShaderProperties.handleBooleanDirective, read on
-  5 August 2026. What is done with the answers is not Iris's and goes further than it: there,
-  net.irisshaders.iris.mixin.MixinSkyRenderer cancels renderSun and renderMoon and nothing else,
-  shouldRenderStars is stored and never read back, and shouldRenderSkyDisc gates the horizon cone
-  Iris draws itself rather than the game's disc. This engine takes all four pieces out, on the
-  reason Iris gives for the two it does take out, that a pack saying it draws a piece itself ends up
-  with two of them; the cost is measured and is that Bliss and Reverie lose the stars Iris leaves
-  them. Two smaller divergences: the conditionals around each line are evaluated here where Iris
-  reads them flat, which changes the answer on two packs of the corpus, and the clouds directive
-  Iris also carries is not implemented, nothing here drawing a cloud.
+  sky directives with the four words of
+  net.irisshaders.iris.shaderpack.properties.ShaderProperties, lines 199 to 202, and with the
+  default of PackDirectives beside it, lines 77 to 82, under which a directive the pack does not
+  write leaves the piece drawn. Read on 5 August 2026. What is done with the answers is not Iris's
+  and goes further than it: there, net.irisshaders.iris.mixin.MixinSkyRenderer cancels renderSun and
+  renderMoon and nothing else, shouldRenderStars is stored and has no reader at all, and
+  shouldRenderSkyDisc gates the horizon cone Iris draws itself rather than the game's disc, in
+  IrisRenderingPipeline.onBeginClear. This engine takes all four pieces out, and the reason for that
+  is this project's own: Iris states none, neither at the mixin nor at the directives. The cost is
+  measured, and is that Bliss and Reverie lose the stars Iris leaves them. Both engines evaluate the
+  conditionals around these lines, Iris by running the whole file through PropertiesPreprocessor
+  before it reads a key and this one by its own stack of conditions, and on this corpus the two
+  agree. The clouds directive Iris also carries is not implemented, nothing here drawing a cloud.
 
   common/src/main/java/dev/vitrail/pack/target/TargetSize.java reimplements
   net.irisshaders.iris.gl.texture.TextureScaleOverride, down to the dot in the value being what
@@ -83,8 +85,8 @@ GNU Lesser General Public License version 3
   without one.
 
   common/src/main/java/dev/vitrail/pack/program/TerrainPass.java carries the names, the alpha test
-  defaults and the flip snapshot keying of net.irisshaders.iris.pipeline.SodiumPrograms, its Pass
-  enum and getAlphaTest, read on 3 August 2026. They are reproduced rather than chosen because
+  defaults and the flip snapshot keying of net.irisshaders.iris.pipeline.programs.SodiumPrograms,
+  its Pass enum and getAlphaTest, read on 3 August 2026. They are reproduced rather than chosen because
   packs are written against Iris and against nothing else. The shadow halves of the enum and
   everything the passes drive are this project's own.
 
@@ -114,18 +116,23 @@ GNU Lesser General Public License version 3
   declaration matched and comes back out as the -1 every pack tests against. The reading of
   Sodium's vertex layout in the same file is this project's own and is not from Iris.
 
-  common/src/main/java/dev/vitrail/glsl/LegacyGlsl.java reproduces the constants Iris substitutes
-  for the fixed function vertex inputs of a full screen pass, a quad from (0,0) to (1,1), no
-  colour, a normal pointing at the viewer, and the vec4(0.0, 0.0, 0.0, 1.0) of the texture units
-  above nought, because a pack's full screen pass is written expecting exactly those values. The
-  same file, together with common/src/main/java/dev/vitrail/uniform/UniformCatalog.java, carries
-  the rule that modelViewMatrix and projectionMatrix mean gl_ModelViewMatrix and
-  gl_ProjectionMatrix. Iris splits the two spellings over two transformers of the same family,
-  chosen by the profile the unit declares: the bare names are answered by CompositeCoreTransformer,
-  SodiumCoreTransformer and VanillaCoreTransformer, the gl_ names by CompositeTransformer and
-  SodiumTransformer, and each family lands both on the same value. VanillaCoreTransformer is the
-  one that carries the pair side by side. All are in
-  net.irisshaders.iris.pipeline.transform.transformer.
+  common/src/main/java/dev/vitrail/glsl/LegacyGlsl.java reproduces what Iris puts in place of the
+  fixed function vertex inputs of a full screen pass, in CompositeTransformer lines 47 to 71: the
+  two attributes behind gl_Vertex and gl_MultiTexCoord0, a quad whose coordinates run from (0,0) to
+  (1,1), solid white for gl_Color, the (0,0,1) the current normal starts at without one, and
+  vec4(0.0, 0.0, 0.0, 1.0) for the texture units above nought, that last one through
+  CommonTransformer.replaceGlMultiTexCoordBounded. They are reproduced because a pack's full screen
+  pass is written expecting exactly those values. The same file, together with
+  common/src/main/java/dev/vitrail/uniform/UniformCatalog.java, carries the rule that
+  modelViewMatrix and projectionMatrix mean gl_ModelViewMatrix and gl_ProjectionMatrix. Iris states
+  that equivalence nowhere; it is read off its transformers, which TransformPatcher picks by the
+  version and the profile a unit declares. The bare names are answered by CompositeCoreTransformer,
+  SodiumCoreTransformer and VanillaCoreTransformer; the gl_ names by CompositeTransformer,
+  SodiumTransformer, VanillaTransformer and VanillaCoreTransformer again, which is the one place
+  the two spellings sit side by side. On the composite and the Sodium sides the pair lands on the
+  same value whichever of the two transformers answers. The vanilla side is the exception: its non
+  core path answers gl_ModelViewMatrix with a built expression and does not answer the bare name at
+  all. All are in net.irisshaders.iris.pipeline.transform.transformer.
 
   common/src/main/java/dev/vitrail/uniform/Smoothed.java adapts the exponential smoothing of
   net.irisshaders.iris.uniforms.transforms.SmoothedFloat in August 2026, including its half life in
@@ -148,9 +155,9 @@ GNU Lesser General Public License version 3
   is kept inside the path. Four edits: Type.convert answers a UniformShape instead of Iris's GL
   uniform type enum and gained the reverse direction; FunctionResolver.logAllFunctions, which
   printed the table to standard output, became names(), which a test can compare against;
-  fastutil's collections became the JDK's; and the two log overloads of ExpressionResolver that
-  nothing calls there either, the one taking a Supplier and the one taking a plain String, are
-  not carried.
+  fastutil's collections became the JDK's; and the two unreachable log overloads of
+  ExpressionResolver are not carried, the one taking a Supplier, which nothing calls, and the one
+  taking a plain String, which that first one is the only caller of.
 
   common/src/main/java/dev/vitrail/uniform/expr/ExprFunctions.java,
   common/src/main/java/dev/vitrail/uniform/expr/ExprGrammar.java,
@@ -174,8 +181,9 @@ GNU Lesser General Public License version 3
   shadows a built in one, and the six types a declaration may take. Two divergences, both stated in
   the file: a cycle drops the uniforms it runs through and names them where Iris throws, and what
   survives is pruned by walking back from the exposed uniforms rather than by counting references.
-  HardcodedCustomUniforms, which supplies eleven of these names when a pack does not, is not
-  reused: it is unreachable in Iris.
+  net.irisshaders.iris.uniforms.HardcodedCustomUniforms, which registers twenty-seven of these
+  names itself, copied from BSL and Complementary as its own header says, is not reused: nothing
+  calls it.
 
   common/src/main/java/dev/vitrail/render/FrameState.java reads the frame the way several of the
   net.irisshaders.iris.uniforms classes read it, adapted in August 2026: the millisecond
@@ -211,5 +219,14 @@ GNU Lesser General Public License version 3
   what decides a biome carrying two tags. The two gaps are reproduced with it and named in the
   file: no category is ever answered UNDERGROUND, and a savanna comes out as plains.
 
-  Nothing else in Vitrail is derived from Iris, and nothing is taken from its GLSL transformation
-  machinery, which links against glsl-transformer (AGPL-3.0).
+  common/src/main/resources/assets/vitrail/lang/ follows the Iris translations for the words this
+  screen and Iris's own screens have in common, in the fourteen languages both projects carry, so
+  that a player who has used Iris reads the term he already knows. Of the two hundred and sixty six
+  values in those files, forty one are word for word a string of Iris's language files that the game
+  itself does not use, and twenty five more are a string Iris and the game both use. They are the
+  title, the apply, reload and reset buttons, the pack list and its own title, and the profile pair.
+  The rest is the game's vocabulary or this project's.
+
+  Nothing else in Vitrail is derived from Iris. Of its GLSL transformation machinery, which links
+  against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that
+  code is here, and the translator in dev.vitrail.glsl is this project's own.
