@@ -234,6 +234,14 @@ final class ColorTargets {
 	 * @return false when nothing usable could be prepared, in which case nothing may be drawn
 	 */
 	boolean ensure(int screenWidth, int screenHeight) {
+		// A screen with no surface is refused before anything else, and before the latch below is
+		// consulted at all: a minimised window reports nought, which is another size and would lift
+		// a refusal on a size no allocation is ever attempted at. The frame the window comes back
+		// would then pay the failure again, in full, with its stack trace.
+		if (screenWidth <= 0 || screenHeight <= 0) {
+			return false;
+		}
+
 		// A screen of another size is another question, so it is asked again rather than answered by
 		// the last refusal. Nothing is retried at the size that failed: a screen that stays where it
 		// is would otherwise pay a full allocation and a full log line every frame.
@@ -241,7 +249,7 @@ final class ColorTargets {
 			this.broken = false;
 		}
 
-		if (this.broken || screenWidth <= 0 || screenHeight <= 0) {
+		if (this.broken) {
 			return false;
 		}
 

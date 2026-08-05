@@ -210,11 +210,18 @@ final class PackDepth {
 	 *         falls back to the far plane
 	 */
 	private boolean ensure(int width, int height) {
+		// Before the latch and not after, the same order ColorTargets.ensure keeps and for the
+		// reason written there: a minimised window is another size, and lifting a refusal on a size
+		// nothing is ever allocated at only makes the real size pay the failure twice.
+		if (width <= 0 || height <= 0) {
+			return false;
+		}
+
 		if (this.broken && (width != this.brokenWidth || height != this.brokenHeight)) {
 			this.broken = false;
 		}
 
-		if (this.broken || width <= 0 || height <= 0) {
+		if (this.broken) {
 			return false;
 		}
 
