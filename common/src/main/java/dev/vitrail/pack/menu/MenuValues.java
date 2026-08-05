@@ -125,12 +125,60 @@ public final class MenuValues {
 	}
 
 	/**
-	 * Clears nothing else. A value already queued stays queued even when the chosen profile names
-	 * it, which is what lets a profile be picked and then corrected on a single setting.
+	 * Picks a profile by queueing every value it names.
+	 * <p>
+	 * A profile is a set of values and nothing else, so queueing them is what makes the rest of the
+	 * screen tell the truth about it: the count in the status line, and a commit button that has
+	 * something to commit. Holding the name beside the values instead, which is what this did, left
+	 * a profile picked and no way to apply it.
+	 * <p>
+	 * A value the player queued by hand before picking a profile is overwritten by it. That is the
+	 * way round a player expects, the profile being the broader gesture of the two, and it stays
+	 * correctable afterwards: picking the profile first and the setting second leaves the setting.
 	 */
 	public void queueProfile(String name) {
 		this.pendingProfile = name;
 		this.profileChosen = true;
+		this.pending.putAll(this.menu.profile(name));
+	}
+
+	/**
+	 * Which profile the values in effect amount to, or the empty string when they amount to none of
+	 * them and the screen has to say so itself.
+	 * <p>
+	 * Worked out from the values and never stored, which is Iris's rule
+	 * ({@code ProfileSet.scan}): the honest answer to "which profile is this" is the one the values
+	 * give. Storing the name instead makes a screen answer "none" the moment the file holding it is
+	 * deleted, while the values on screen are exactly the ones a profile names, which is what
+	 * pressing Reset used to look like.
+	 * <p>
+	 * The most constrained profile wins, as it does there, because one profile is usually another
+	 * plus a setting or two and the looser of the pair would otherwise answer for both.
+	 */
+	public String matchedProfile() {
+		String best = "";
+		int constraints = -1;
+		for (String name : this.menu.profileNames()) {
+			Map<String, String> profile = this.menu.profile(name);
+			if (profile.isEmpty() || profile.size() <= constraints || !matches(profile)) {
+				continue;
+			}
+
+			best = name;
+			constraints = profile.size();
+		}
+
+		return best;
+	}
+
+	private boolean matches(Map<String, String> profile) {
+		for (Map.Entry<String, String> setting : profile.entrySet()) {
+			if (!setting.getValue().equals(pending(setting.getKey()))) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**

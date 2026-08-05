@@ -43,21 +43,32 @@ public final class ProfileWidget extends OptionWidget {
 		return Component.translatable(ScreenText.PROFILE);
 	}
 
+	/**
+	 * The profile the values on screen amount to, and {@code Custom} when they amount to none. Read
+	 * from the values rather than from a name held beside them, which is what Iris shows and what
+	 * makes this label survive a Reset: the file is gone, the pack's own values are back, and those
+	 * values are a profile.
+	 */
 	@Override
 	protected Component valueLabel() {
-		String current = host().values().profile();
+		String current = host().values().matchedProfile();
 		return current.isEmpty()
-				? Component.translatable("gui.none")
+				? Component.translatable(ScreenText.PROFILE_CUSTOM)
 				: ScreenText.fromPack(host().lang().profile(current));
 	}
 
+	/**
+	 * Walks from whichever profile the values match, so that a click always lands on the next one in
+	 * the pack's own order. From Custom it starts at the first, since there is no next to a set of
+	 * values that is not a profile.
+	 */
 	@Override
 	protected void cycle(int direction) {
 		if (this.profiles.isEmpty()) {
 			return;
 		}
 
-		int index = this.profiles.indexOf(host().values().profile());
+		int index = this.profiles.indexOf(host().values().matchedProfile());
 		int next = index < 0 ? 0 : Math.floorMod(index + direction, this.profiles.size());
 		host().values().queueProfile(this.profiles.get(next));
 	}
