@@ -16,9 +16,11 @@ import java.util.Map;
  * apart from either.
  * <p>
  * Nothing here is guessed, and nothing here is in the table merely because it is a constant.
- * {@code entityColor} and {@code renderStage} are constants under a full screen pass and that is
- * the right answer, the same one Iris gives; they belong here only once a gbuffers pass reads
- * them. A name is listed because the accessor that answers it says in its own javadoc why it
+ * {@code entityColor} is a constant under a full screen pass and that is the right answer, the same
+ * one Iris gives; it belongs here only once a gbuffers pass reads it. {@code renderStage} was in
+ * that sentence and has left it: the passes that draw the world and the sky each say what they are,
+ * and a full screen pass says the phase Iris calls NONE because that is what it is. A name is
+ * listed because the accessor that answers it says in its own javadoc why it
  * cannot do better, and the sentence is carried across so that the two do not drift apart. A name
  * that stops being a stand-in has to be taken out, and that is the point: a list somebody has to
  * maintain is a list somebody reads.

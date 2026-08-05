@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.Vitrail;
 
@@ -59,9 +60,13 @@ public final class SkyDraw {
 	 *                 where the sun and the moon are. The disc pushes nothing and is drawn under the
 	 *                 camera's, so it is handed none and reads the frame's, which is the same matrix
 	 *                 by another road and the one it has already been seen to draw right under
+	 * @param stage    what a pack is told it is drawing. Iris sets one per method of the renderer and
+	 *                 these are its six, one for one: {@code renderSkyDisc} is {@code SKY},
+	 *                 {@code renderDarkDisc} is {@code VOID}, and the other four carry their own name
 	 */
 	private record Element(String label, String program, String element, VertexFormat format,
-			PrimitiveTopology topology, Optional<BlendFunction> blend, boolean rotated) {
+			PrimitiveTopology topology, Optional<BlendFunction> blend, boolean rotated,
+			RenderStage stage) {
 	}
 
 	/**
@@ -80,18 +85,20 @@ public final class SkyDraw {
 
 	static {
 		put(new Element("Sky disc", "gbuffers_skybasic", "disc", DefaultVertexFormat.POSITION,
-				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), false));
+				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), false, RenderStage.SKY));
 		put(new Element("Sky dark", "gbuffers_skybasic", "dark", DefaultVertexFormat.POSITION,
-				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true));
+				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true, RenderStage.VOID));
 		put(new Element("Stars", "gbuffers_skybasic", "stars", DefaultVertexFormat.POSITION,
-				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true));
+				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true,
+				RenderStage.STARS));
 		put(new Element("Sunrise sunset", "gbuffers_skybasic", "sunrise",
 				DefaultVertexFormat.POSITION_COLOR, PrimitiveTopology.TRIANGLE_FAN,
-				Optional.of(BlendFunction.TRANSLUCENT), true));
+				Optional.of(BlendFunction.TRANSLUCENT), true, RenderStage.SUNSET));
 		put(new Element("Sky sun", "gbuffers_skytextured", "sun", DefaultVertexFormat.POSITION_TEX,
-				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true));
+				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true, RenderStage.SUN));
 		put(new Element("Sky moon", "gbuffers_skytextured", "moon", DefaultVertexFormat.POSITION_TEX,
-				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true));
+				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true,
+				RenderStage.MOON));
 	}
 
 	private static void put(Element element) {
@@ -216,7 +223,8 @@ public final class SkyDraw {
 			this.programs.put(element.label(),
 					SkyProgram.read(this.packPath, this.place, element.program(), element.element(),
 							this.chosen, this.profile, this.values, this.load, element.format(),
-							element.topology(), element.blend(), this.chainTargets, this.targets));
+							element.topology(), element.blend(), element.stage(), this.chainTargets,
+							this.targets));
 		}
 
 		SkyProgram program = this.programs.get(element.label());

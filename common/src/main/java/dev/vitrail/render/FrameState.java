@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.values.FrameSmoothed;
@@ -91,6 +92,14 @@ public final class FrameState implements WorldState {
 	private final CameraShift shift = new CameraShift();
 
 	private PackDirectives directives = PackDirectives.defaults();
+
+	/**
+	 * What the pass about to write its block draws, which every pass says for itself. Set beside the
+	 * depth convention and never carried over: a value left standing from the last pass would be
+	 * read by the whole of the chain, since {@code renderStage} is in the table a full screen pass
+	 * shares with a geometry one.
+	 */
+	private RenderStage stage = RenderStage.NONE;
 
 	/** From the pack's own properties file rather than from its GLSL, hence not a directive. */
 	private boolean endFlashShadows;
@@ -257,6 +266,11 @@ public final class FrameState implements WorldState {
 	/** The colour the pass modulates its draw by, or null for white. Set beside the two above. */
 	public void passColour(Vector4fc colour) {
 		this.view.passColour(colour);
+	}
+
+	/** What the pass about to write its block draws. Set beside the three above, and for once. */
+	public void renderStage(RenderStage stage) {
+		this.stage = stage;
 	}
 
 	/**
@@ -1468,10 +1482,9 @@ public final class FrameState implements WorldState {
 		return this.atlasHeight;
 	}
 
-	/** No gbuffers pass runs, so every draw is at the phase Iris calls NONE, which is zero. */
 	@Override
 	public int renderStage() {
-		return 0;
+		return this.stage.ordinal();
 	}
 
 	@Override

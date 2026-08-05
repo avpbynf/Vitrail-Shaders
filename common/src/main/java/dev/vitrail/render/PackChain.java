@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.source.PackLoader;
 import dev.vitrail.pack.target.ChainPlan;
@@ -1234,6 +1235,11 @@ public final class PackChain {
 		// under a reversed Z, and the shadow programs, which draw into one of ours and flip this to
 		// the forward window, have already run by the time this does.
 		this.values.convention(ClipSpace.REVERSED);
+
+		// The same, and for a sharper reason: renderStage is in the table a full screen pass shares
+		// with a geometry one, and the sky and the terrain have both written theirs by the time this
+		// runs. Left standing, every composite of the frame would be told it was drawing the moon.
+		this.values.renderStage(RenderStage.NONE);
 
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();

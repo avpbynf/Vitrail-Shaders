@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.SkyVertex;
 import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.uniform.WorldState;
@@ -74,12 +75,13 @@ final class SkyProgram {
 	 * @param program the bare name the game would have drawn with, {@code gbuffers_skybasic}
 	 * @param element the pass this is drawn in, one word, which tells two passes of one file apart
 	 * @param format  the vertex format that pass binds, whose elements are declared exactly
+	 * @param stage   what a pack is told it is drawing, one of the six the sky has
 	 * @return empty when the pack serves nothing for it, and the game then keeps its own sky
 	 */
 	static SkyProgram read(Path packPath, String place, String program, String element,
 			Map<String, OptionValue> chosen, String profile, PackValues values, int load,
 			VertexFormat format, PrimitiveTopology topology, Optional<BlendFunction> blend,
-			TargetPlan chainTargets, ColorTargets targets) {
+			RenderStage stage, TargetPlan chainTargets, ColorTargets targets) {
 		try {
 			List<String> elements = format.getElements().stream()
 					.map(VertexFormatElement::name)
@@ -102,7 +104,7 @@ final class SkyProgram {
 
 			return new SkyProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY, element,
 					NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, blend, false, false,
-					topology, null),
+					topology, null, stage),
 					bound, values, load, format, List.of(), targets, false));
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the sky programs of " + packPath.getFileName()

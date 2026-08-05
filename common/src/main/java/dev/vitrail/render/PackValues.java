@@ -4,6 +4,7 @@ import dev.vitrail.pack.id.BlockIds;
 import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.option.SettingSet;
+import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.target.PackDirectives;
@@ -175,6 +176,17 @@ public final class PackValues {
 	 */
 	public void passColour(Vector4fc colour) {
 		this.state.passColour(colour);
+	}
+
+	/**
+	 * What the next block is written for, which a pack reads as {@code renderStage} and branches on
+	 * with {@code MC_RENDER_STAGE_*}. Set beside the convention and answering the same kind of
+	 * question, and said by every writer rather than inherited: this one is in the table a full
+	 * screen pass shares with a geometry pass, so a value left standing after the sky would be read
+	 * by the whole of the chain.
+	 */
+	public void renderStage(RenderStage stage) {
+		this.state.renderStage(stage);
 	}
 
 	/**

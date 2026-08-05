@@ -246,6 +246,11 @@ public interface WorldState extends ViewSource {
 
 	int atlasHeight();
 
+	/**
+	 * What the pass being drawn is, as the ordinal of the phase a pack compares against with
+	 * {@code MC_RENDER_STAGE_*}. A property of the pass and not of the frame, so it is set by the
+	 * pass before it writes its block, beside the depth convention.
+	 */
 	int renderStage();
 
 	float anisotropy();

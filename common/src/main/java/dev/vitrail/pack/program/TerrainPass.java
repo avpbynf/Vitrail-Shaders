@@ -133,6 +133,30 @@ public enum TerrainPass {
 	}
 
 	/**
+	 * What a pack is told it is drawing, which it reads as {@code renderStage}.
+	 * <p>
+	 * The three halves of the world take the name of their own half rather than one name for the
+	 * opaque pair. Iris's vanilla path cannot tell them apart, {@code fromTerrainRenderType} being
+	 * handed a whole {@code ChunkSectionLayerGroup} and answering {@code TERRAIN_SOLID} for both, and
+	 * its Sodium path sets no phase at all; but the constants exist separately, the renderer really
+	 * does draw the two in two passes, and telling a pack that a cutout draw is a solid one is a
+	 * worse answer than the one this can give.
+	 * <p>
+	 * <strong>A shadow half answers the same name as the half it shadows, and that is a judgement
+	 * rather than a reading.</strong> The enum has no shadow value at all, so the choice is between
+	 * naming the geometry and saying nothing, and the geometry is the same terrain drawn by the same
+	 * renderer. Nothing is lost either way: the shadow halves are served by their own programs, so a
+	 * pack tells them apart before it ever looks at this.
+	 */
+	public RenderStage stage() {
+		return switch (this) {
+			case SOLID, SHADOW_SOLID -> RenderStage.TERRAIN_SOLID;
+			case CUTOUT, SHADOW_CUTOUT -> RenderStage.TERRAIN_CUTOUT;
+			case TRANSLUCENT, SHADOW_TRANSLUCENT -> RenderStage.TERRAIN_TRANSLUCENT;
+		};
+	}
+
+	/**
 	 * The alpha test this pass is drawn under, once the pack has had its say.
 	 *
 	 * @param servedBy the program that really serves this pass, which is the name the pack writes

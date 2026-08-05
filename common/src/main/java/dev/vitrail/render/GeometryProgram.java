@@ -4,6 +4,7 @@ import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.ProgramStage;
+import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
@@ -116,10 +117,14 @@ final class GeometryProgram {
 	 *                     depth state, so the disc neither tests nor writes, and a pack's program
 	 *                     given the ordinary state would write the sky into the depth and have the
 	 *                     world tested against it
+	 * @param stage        what a pack is told it is drawing, which it reads as {@code renderStage}
+	 *                     and branches on with {@code MC_RENDER_STAGE_*}. Both Complementary read it,
+	 *                     so a pass that answered {@code NONE} would take them down the branch meant
+	 *                     for a full screen quad
 	 */
 	record Pass(String family, String name, String namespace, Set<String> answered, boolean shadow,
 			Optional<BlendFunction> blend, boolean covers, boolean afterDeferred,
-			PrimitiveTopology topology, DepthStencilState depth) {
+			PrimitiveTopology topology, DepthStencilState depth, RenderStage stage) {
 
 		/** Whether the pass blends at all, which is the same question as having something to blend with. */
 		boolean blended() {
@@ -721,6 +726,7 @@ final class GeometryProgram {
 		this.values.convention(this.pass.shadow() ? ClipSpace.FORWARD : ClipSpace.REVERSED);
 		this.values.modelView(this.modelView);
 		this.values.passColour(this.passColour);
+		this.values.renderStage(this.pass.stage());
 
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();
@@ -954,9 +960,13 @@ final class GeometryProgram {
 		this.announced = true;
 		TranslatedUnit fragment = this.loaded.program().stages().get(ProgramStage.FRAGMENT);
 		int outputs = fragment.notes().fragmentOutputs();
-		Vitrail.logger().info("Drawing the {} {} pass with {} of {}, {} uniforms and {} samplers",
-				this.pass.name(), this.pass.family(), this.path, this.loaded.packName(),
-				this.loaded.program().uniforms().size(), this.samplers.size());
+		// The render stage is in the line rather than left silent, because nothing else can say it:
+		// what a pack does with it is a branch inside its own code, so a pass told the wrong one
+		// draws something that looks like a picture, and this module has no harness to catch that.
+		Vitrail.logger().info("Drawing the {} {} pass with {} of {} at render stage {}, {} uniforms "
+				+ "and {} samplers", this.pass.name(), this.pass.family(), this.path,
+				this.loaded.packName(), this.pass.stage(), this.loaded.program().uniforms().size(),
+				this.samplers.size());
 
 		// A cutout stage without its discard draws a leaf as a cube, which reads as the pack being
 		// wrong rather than as a translation that could not place a statement.

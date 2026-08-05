@@ -79,7 +79,7 @@ public final class TerrainProgram {
 				// Sodium's own, taken from ShaderChunkRenderer.createShader: the pass this is bound
 				// into was opened for that pipeline and a difference of topology would be a
 				// difference nobody declared.
-				PrimitiveTopology.QUADS, depthState(pass)),
+				PrimitiveTopology.QUADS, depthState(pass), pass.stage()),
 				loaded, values, load, format, writes, targets, chainRuns);
 	}
 
