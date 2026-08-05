@@ -56,6 +56,25 @@ GNU Lesser General Public License version 3
   before it reads a key and this one by its own stack of conditions, and on this corpus the two
   agree. The clouds directive Iris also carries is not implemented, nothing here drawing a cloud.
 
+  common/src/main/java/dev/vitrail/render/HorizonCone.java takes the shape of the horizon geometry
+  from net.irisshaders.iris.pathways.HorizonRenderer, read on 6 August 2026, whose own header, lines
+  23 to 31, states what vanilla lacks: an inverted octagonal cone around the player, where the game
+  has a clear colour and a plane overhead. Four things are reproduced. Its two bounds, TOP at plus
+  sixteen and BOTTOM at minus sixteen, lines 37 and 43, which are the very heights SkyRenderer builds
+  its two discs at, so they are the gap itself rather than a taste. Its fan, an apex under the camera
+  and nine ring vertices above it, lines 79 to 86. The direction that ring is walked in, which is
+  what leaves the walls facing inwards, towards a camera standing at the centre, a pipeline that
+  culls back faces having no use for the other one. And the radius, sixteen blocks a chunk of render
+  distance and never past two hundred and fifty six, lines 63 and 73 to 77, together with the reason
+  Iris gives for that cap, that a larger cone breaks packs which rework the vanilla sky, and with the
+  rebuild when the distance changes, lines 90 to 93.
+  Where and how it is drawn is not reused. There the cone is a render pass of its own, opened before
+  the game's sky and handed the fog colour as its modulator, IrisRenderingPipeline lines 1298 to
+  1317; here it is drawn inside the pass the game opens for its own disc and straight after it, so
+  that it is necessarily the same program, the same attachments and the same block. The sequential
+  index buffer Iris draws it through, lines 95 to 106, is not reused either: the ten vertices are
+  drawn unindexed, as SkyRenderer.renderSkyDisc draws its own ten.
+
   common/src/main/java/dev/vitrail/pack/target/TargetSize.java reimplements
   net.irisshaders.iris.gl.texture.TextureScaleOverride, down to the dot in the value being what
   tells a fraction of the screen from a count of pixels, together with the rule of

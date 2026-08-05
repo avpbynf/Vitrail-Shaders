@@ -107,8 +107,14 @@ public final class SkyDraw {
 	 */
 	private static final Map<String, Element> ELEMENTS = new LinkedHashMap<>();
 
+	/**
+	 * The label of the one pass that draws more than the game put in it. The horizon cone has no
+	 * element of its own, so this is how the piece it rides on is recognised.
+	 */
+	private static final String DISC = "Sky disc";
+
 	static {
-		put(new Element("Sky disc", "gbuffers_skybasic", "disc", DefaultVertexFormat.POSITION,
+		put(new Element(DISC, "gbuffers_skybasic", "disc", DefaultVertexFormat.POSITION,
 				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), false, RenderStage.SKY, "sky"));
 		put(new Element("Sky dark", "gbuffers_skybasic", "dark", DefaultVertexFormat.POSITION,
 				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true, RenderStage.VOID, ""));
@@ -145,6 +151,13 @@ public final class SkyDraw {
 	/** One program per element the pack serves. Empty until the pack has been read, and it stays
 	 * empty for a pack that serves no sky at all. */
 	private final Map<String, SkyProgram> programs = new LinkedHashMap<>();
+
+	/**
+	 * The geometry the game has none of, drawn with the disc and in the disc's own pass. Held here
+	 * rather than beside the elements because it is not one: no pass of the game's is named after
+	 * it, and no directive of the format can ask for it or refuse it.
+	 */
+	private final HorizonCone horizon = new HorizonCone();
 
 	/** Whether the pack has been read for its sky. A reading that served nothing is still one. */
 	private boolean read;
@@ -296,6 +309,27 @@ public final class SkyDraw {
 		SkyDraw draw = PackChain.sky();
 		if (draw != null && draw.drawing != null) {
 			draw.drawing.texture(view, sampler);
+		}
+	}
+
+	/**
+	 * Draws the horizon cone, inside the pass the game opened for the sky disc and with the pipeline
+	 * that pass has bound.
+	 * <p>
+	 * <strong>In the disc's pass and not one of its own</strong>, which is the whole of the choice
+	 * made here: the cone is the same program, the same vertex format, the same topology and the same
+	 * attachments as the disc, so a pass of our own would be a second answer to every question this
+	 * class already answers once, and a second chance for the two to differ.
+	 * <p>
+	 * It follows from that that the cone is drawn where the disc is and nowhere else. A pack that
+	 * refuses the disc with {@code sky=false} has drawn its own, and the method the refusal cancels
+	 * is the one this rides in; a place where the game draws no disc at all, the End and the Nether,
+	 * never reaches this. Iris gates its own cone on the same directive.
+	 */
+	public static void horizon(RenderPass pass, RenderPipeline bound) {
+		SkyDraw draw = PackChain.sky();
+		if (draw != null && draw.drawing != null && draw.drawing.owns(bound)) {
+			draw.horizon.draw(pass, draw.drawing.path());
 		}
 	}
 
@@ -462,7 +496,16 @@ public final class SkyDraw {
 		// The colour goes to every element and the matrix only to those the game rotated: the two
 		// are not the same question. Every sky draw carries a modulator, and the disc is the one
 		// element whose matrix is the camera's already.
-		return program.prepare(device, element.rotated() ? modelView : null, colour);
+		RenderPipeline pipeline = program.prepare(device, element.rotated() ? modelView : null, colour);
+
+		// Here and not at the draw, because filling a vertex buffer is a copy the encoder refuses
+		// while a pass is open, and this is the last moment before the disc's pass exists. Only once
+		// the disc really has a pipeline: a place this engine does not draw the sky in pays nothing.
+		if (pipeline != null && DISC.equals(element.label())) {
+			this.horizon.update(device);
+		}
+
+		return pipeline;
 	}
 
 	/** Rotates the ring buffers. Called once the frame's sky draws have been recorded. */
@@ -474,6 +517,7 @@ public final class SkyDraw {
 	void release() {
 		this.programs.values().forEach(SkyProgram::release);
 		this.programs.clear();
+		this.horizon.release();
 		this.drawing = null;
 		this.read = false;
 	}

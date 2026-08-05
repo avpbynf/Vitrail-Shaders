@@ -50,12 +50,13 @@ import java.util.function.Supplier;
  * refused outright in {@code shaders.properties}, and a refusal is cancelled at the head of the
  * method rather than served with a program of ours, because the pack has drawn that piece itself.
  * <p>
- * <strong>The order of the four wraps is the whole design.</strong> The pass is opened after the
- * game has pushed the model view for this element, so the matrix is final by then and the sun is
- * where the game put it; compiling a pipeline or clearing a target has to happen before the pass
- * exists, which is why the preparation hangs off the opening and not off the head of the method.
- * The texture goes past next, and the block and the samplers are bound last, once everything the
- * bind needs is known.
+ * <strong>The order of the wraps is the whole design.</strong> The pass is opened after the game has
+ * pushed the model view for this element, so the matrix is final by then and the sun is where the
+ * game put it; compiling a pipeline or clearing a target has to happen before the pass exists, which
+ * is why the preparation hangs off the opening and not off the head of the method. The texture goes
+ * past next, and the block and the samplers are bound after that, once everything the bind needs is
+ * known. The draw comes last, and it is the one place a piece of geometry the game has none of can
+ * be added to a pass the game built.
  */
 @Mixin(SkyRenderer.class)
 public abstract class SkyRendererMixin {
@@ -219,6 +220,34 @@ public abstract class SkyRendererMixin {
 			GpuSampler sampler, Operation<Void> original) {
 		original.call(pass, name, view, sampler);
 		SkyDraw.texture(view, sampler);
+	}
+
+	/**
+	 * Adds the horizon cone to the pass the disc is drawn in, once the disc itself is recorded.
+	 * <p>
+	 * <strong>The game has no geometry between its two sky discs</strong>, and above sea level it
+	 * draws only the upper one, so everything below 1.79 degrees over the horizontal is a band with
+	 * no surface in it for a pack's sky program to run on. {@code SkyDraw.horizon} says what is drawn
+	 * there and why it rides in this pass rather than one of its own.
+	 * <p>
+	 * After the disc and not before it, which costs one thing and buys another. The two overlap
+	 * between the edge of the disc and the ring of the cone, and there the cone now wins; drawing it
+	 * first would mean re-binding the disc's own vertex buffer afterwards, and this handler is not
+	 * given it. Iris, which draws its cone in a pass of its own before the sky, has the same overlap
+	 * the other way round and calls the difference imperceptible.
+	 * <p>
+	 * Only where a pipeline of ours was handed back: with the game's own sky shader drawing, the
+	 * band is the clear colour and looks as vanilla looks, and a cone drawn into it with the game's
+	 * shader would change a picture nobody complained about.
+	 */
+	@WrapOperation(method = "renderSkyDisc",
+			at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderPass;draw(IIII)V"))
+	private void vitrail$horizon(RenderPass pass, int vertices, int instances, int firstVertex,
+			int firstInstance, Operation<Void> original) {
+		original.call(pass, vertices, instances, firstVertex, firstInstance);
+		if (this.vitrail$pipeline != null) {
+			SkyDraw.horizon(pass, this.vitrail$pipeline);
+		}
 	}
 
 	/**
