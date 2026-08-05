@@ -89,6 +89,16 @@ final class SceneSeed {
 
 	private static final Supplier<String> KEEP_LABEL = () -> "Vitrail depth before the features";
 
+	/**
+	 * The reason a frame kept no depth when nothing else took the blame, which is the reason worth
+	 * telling apart from the rest: the moment came and went without this class being asked at all,
+	 * so what to look at is the hook at AfterOpaqueBlocks rather than anything here.
+	 */
+	private static final String NEVER_ASKED = "nothing asked for it before the game's features";
+
+	/** How many times the cut may change answer before the log stops following it. */
+	private static final int CHANGES = 8;
+
 	/** One float a texel, and no conversion: this is compared with the game's depth, not read as one. */
 	private static final GpuFormat KEEP_FORMAT = GpuFormat.R32_FLOAT;
 
@@ -184,6 +194,14 @@ final class SceneSeed {
 	 */
 	private boolean captured;
 
+	/** Which of the two cuts was last said, whether anything has been said, and how often. */
+	private boolean cutWithKept;
+	private boolean said;
+	private int changes;
+
+	/** Why this frame kept no depth, in the log's own words, or null when it kept one. */
+	private String refusal = NEVER_ASKED;
+
 	private boolean reported;
 
 	/**
@@ -273,8 +291,21 @@ final class SceneSeed {
 	boolean capture(CommandEncoder encoder, GpuDevice device, GpuBuffer quad, GpuTextureView live,
 			int width, int height) {
 		this.captured = false;
-		if (quad == null || live == null || width <= 0 || height <= 0
-				|| !device.precompilePipeline(this.keep, this.source).isValid()) {
+		if (live == null) {
+			this.refusal = "the game's main target carries no depth";
+
+			return false;
+		}
+
+		if (quad == null || width <= 0 || height <= 0) {
+			this.refusal = "there was nothing to draw the copy with, at " + width + "x" + height;
+
+			return false;
+		}
+
+		if (!device.precompilePipeline(this.keep, this.source).isValid()) {
+			this.refusal = "the copy did not compile";
+
 			return false;
 		}
 
@@ -286,6 +317,8 @@ final class SceneSeed {
 		}
 
 		if (this.kept.view() == null) {
+			this.refusal = "the image to keep it in could not be allocated";
+
 			return false;
 		}
 
@@ -302,6 +335,7 @@ final class SceneSeed {
 		}
 
 		this.captured = true;
+		this.refusal = null;
 
 		return true;
 	}
@@ -309,9 +343,14 @@ final class SceneSeed {
 	/**
 	 * Forgets the depth this frame kept, at the frame boundary and nowhere else, so that the next
 	 * frame answers for itself. See {@link #captured} for what carrying it over would look like.
+	 * <p>
+	 * The reason goes back to the one that costs nothing to name: a frame in which the capture was
+	 * never even reached. Every other reason is written where it happens, so the one left standing
+	 * here is the one nothing wrote.
 	 */
 	void endFrame() {
 		this.captured = false;
+		this.refusal = NEVER_ASKED;
 	}
 
 	/** Called every frame: a resource reload empties the pipeline cache. */
@@ -344,11 +383,14 @@ final class SceneSeed {
 	 */
 	boolean draw(CommandEncoder encoder, GpuBuffer quad, GpuTextureView scene,
 			GpuTextureView covered, GpuTextureView live, GpuTextureView into) {
-		GpuTextureView before = this.captured && this.kept != null ? this.kept.view() : live;
+		boolean held = this.captured && this.kept != null;
+		GpuTextureView before = held ? this.kept.view() : live;
 		if (quad == null || scene == null || covered == null || live == null || before == null
 				|| into == null) {
 			return false;
 		}
+
+		say(held);
 
 		// Loaded rather than cleared: the clears have already run, and the draw no longer covers the
 		// target whole in any case.
@@ -374,6 +416,49 @@ final class SceneSeed {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Says which of the two cuts a frame drew with, the first time and at every change of answer
+	 * afterwards. A steady session therefore says it once.
+	 * <p>
+	 * <strong>Neither answer shows on screen as itself, and they are a whole defect apart.</strong>
+	 * Cut against the kept depth, everything the game drew in front of the pack's terrain comes back
+	 * around it; cut against the mask alone, every villager, every item frame and every block entity
+	 * standing in front of a block is thrown away with the block, and what the player sees is not a
+	 * cut but an empty village. The fallback was silent, so a frame that took it read exactly like a
+	 * frame that never had the depth in the first place, and there was no way to tell the two apart
+	 * from the picture. This is the line that tells them apart.
+	 * <p>
+	 * Bounded, because the answer changing every frame is a real possibility and a line a frame at
+	 * sixty frames a second is a log nobody can read and a game nobody can play. The bound is said
+	 * when it is reached, so that a reader is never left thinking the answer settled.
+	 */
+	private void say(boolean held) {
+		if (this.said && held == this.cutWithKept) {
+			return;
+		}
+
+		this.said = true;
+		this.cutWithKept = held;
+		if (this.changes++ >= CHANGES) {
+			if (this.changes == CHANGES + 1) {
+				Vitrail.logger().warn("The scene seed has changed which cut it draws with {} times, so "
+						+ "it stops saying: the answer is not settling and the first lines above say "
+						+ "what the two are", CHANGES);
+			}
+
+			return;
+		}
+
+		if (held) {
+			Vitrail.logger().info("The scene seed is cut against the depth the pack's own geometry left,"
+					+ " so what the game drew in front of it is kept");
+		} else {
+			Vitrail.logger().warn("The scene seed is cut against the coverage mask alone, because {}: "
+					+ "every entity standing in front of the pack's terrain is thrown away with the "
+					+ "terrain", this.refusal);
+		}
 	}
 
 	/**
