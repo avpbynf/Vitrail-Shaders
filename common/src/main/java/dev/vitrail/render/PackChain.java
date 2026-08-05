@@ -1470,8 +1470,8 @@ public final class PackChain {
 	private void announceSeed(boolean seeding) {
 		Optional<ChainPlan.Seed> where = this.chain.chain().seed();
 		if (seeding && where.isPresent()) {
-			Vitrail.logger().info("{} carries the game's opaque frame, drawn in for {}: the sky, the "
-					+ "entities and the weather still come from the game, already tone mapped, and the "
+			Vitrail.logger().info("{} carries the game's opaque frame, drawn in for {}: the entities, "
+					+ "the clouds and the weather still come from the game, already tone mapped, and the "
 					+ "translucent chunk pass blends onto this seed afterwards",
 					TargetName.canonical(where.get().target()), where.get().from());
 			// The number is worth printing on its own: it is the whole difference between a begin

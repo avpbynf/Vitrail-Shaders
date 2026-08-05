@@ -19,9 +19,9 @@ on the Vulkan backend, so that turning Vulkan on does not mean giving up the pac
 Pack GLSL is rewritten once, when the pack is loaded, and compiled to SPIR-V by the compiler
 the game already ships. Nothing is translated per frame.
 
-Still early: the terrain, the water and the shadow map already run on the pack's own
-programs, with the pack's full pass chain and settings screen; the sky, the entities and
-the particles still come from the game.
+Still early: the terrain, the water, the shadow map and the overworld sky already run on
+the pack's own programs, with the pack's full pass chain and settings screen; the entities,
+the particles and the clouds still come from the game.
 '''
 
 [[mixins]]

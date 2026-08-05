@@ -54,10 +54,12 @@ terrain and water are drawn through the pack's own programs, the shadow map is
 drawn and read, and a settings screen reads the pack's own menu layout.
 
 What is missing is what decides how close a pack looks to its OpenGL self: the
-sky, the entities and the particles are still drawn by the game rather than
-through the pack. Until they are, packs run but do not yet look entirely like
-themselves. Expect visible differences and rough edges rather than a finished
-picture, and expect them to shrink release by release.
+entities and the particles are still drawn by the game rather than through the
+pack, and the sky only partly goes through it, the overworld's own elements do,
+the clouds and the End's do not. Until all of it goes through the pack, packs run
+but do not yet look entirely like themselves. Expect visible differences and
+rough edges rather than a finished picture, and expect them to shrink release by
+release.
 
 ## Quick start
 
