@@ -163,6 +163,19 @@ final class ColorTargets {
 	private boolean broken;
 
 	/**
+	 * The screen the allocation failed at, so that the refusal is about that screen rather than
+	 * about the pack.
+	 * <p>
+	 * The panorama capture is what makes the difference matter. The game takes the main target to
+	 * 4096 square for six frames there, in {@code Minecraft.grabPanoramixScreenshot}, without going
+	 * through a resize at all, and this class follows it: a machine that is comfortable at 1080p can
+	 * fail to find the memory for the same chain sixteen times over, and the pack was then dead for
+	 * the rest of the session, on a window that had gone back to its own size a frame later.
+	 */
+	private int brokenWidth;
+	private int brokenHeight;
+
+	/**
 	 * The plan describes the programs that run and no others, so what its schedule turns over is
 	 * exactly what needs a second texture. Nothing is filtered here: a set of doubled targets
 	 * worked out from anything but the schedule the samplers were bound against is a parity that
@@ -221,6 +234,13 @@ final class ColorTargets {
 	 * @return false when nothing usable could be prepared, in which case nothing may be drawn
 	 */
 	boolean ensure(int screenWidth, int screenHeight) {
+		// A screen of another size is another question, so it is asked again rather than answered by
+		// the last refusal. Nothing is retried at the size that failed: a screen that stays where it
+		// is would otherwise pay a full allocation and a full log line every frame.
+		if (this.broken && (screenWidth != this.brokenWidth || screenHeight != this.brokenHeight)) {
+			this.broken = false;
+		}
+
 		if (this.broken || screenWidth <= 0 || screenHeight <= 0) {
 			return false;
 		}
@@ -251,9 +271,12 @@ final class ColorTargets {
 			}
 		} catch (RuntimeException e) {
 			this.broken = true;
+			this.brokenWidth = screenWidth;
+			this.brokenHeight = screenHeight;
 			note("the colour targets could not be allocated: " + e.getMessage());
-			Vitrail.logger().error("Vitrail could not allocate the colour targets of {}, nothing will be drawn",
-					this.plan.packName(), e);
+			Vitrail.logger().error("Vitrail could not allocate the colour targets of {} at {}x{}, so "
+					+ "nothing is drawn until the screen is another size", this.plan.packName(),
+					screenWidth, screenHeight, e);
 
 			return false;
 		}

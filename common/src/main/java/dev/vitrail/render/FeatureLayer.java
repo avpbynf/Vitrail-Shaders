@@ -124,6 +124,15 @@ final class FeatureLayer {
 	private boolean reported;
 
 	/**
+	 * The screen the allocation failed at, so that the refusal is about that screen and not about the
+	 * pack. Same rule and same reason as {@link ColorTargets}: the panorama capture asks for 4096
+	 * square for six frames, and a refusal latched for the session would leave the player's own body
+	 * off the pack's image for the rest of it.
+	 */
+	private int brokenWidth;
+	private int brokenHeight;
+
+	/**
 	 * @param into        the first draw buffer of the translucent geometry pass, which is where the
 	 *                    world's own translucents are about to blend, taken from the plan rather
 	 *                    than assumed
@@ -162,6 +171,10 @@ final class FeatureLayer {
 	 * into. Must run outside any render pass.
 	 */
 	GpuTextureView open(GpuDevice device, int width, int height) {
+		if (this.broken && (width != this.brokenWidth || height != this.brokenHeight)) {
+			this.broken = false;
+		}
+
 		if (this.broken || width <= 0 || height <= 0) {
 			return null;
 		}
@@ -179,8 +192,11 @@ final class FeatureLayer {
 				this.layer = new TextureTarget("Vitrail features", width, height, false, FORMAT);
 			} catch (RuntimeException e) {
 				this.broken = true;
-				Vitrail.logger().error("Vitrail could not allocate the feature layer, so the "
-						+ "game's translucent features stay on the game's target", e);
+				this.brokenWidth = width;
+				this.brokenHeight = height;
+				Vitrail.logger().error("Vitrail could not allocate the feature layer at {}x{}, so the "
+						+ "game's translucent features stay on the game's target until the screen is "
+						+ "another size", width, height, e);
 
 				return null;
 			}

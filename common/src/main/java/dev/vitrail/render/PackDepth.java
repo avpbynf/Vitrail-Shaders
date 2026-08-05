@@ -136,6 +136,15 @@ final class PackDepth {
 	private boolean broken;
 
 	/**
+	 * The screen the allocation failed at, so that the refusal is about that screen and not about the
+	 * pack. Same rule and same reason as {@link ColorTargets}: the panorama capture asks for 4096
+	 * square for six frames, and a refusal latched for the session would leave every depthtex lookup
+	 * of the pack reading the far plane long after the window had gone back to its own size.
+	 */
+	private int brokenWidth;
+	private int brokenHeight;
+
+	/**
 	 * Converts the depth of the opaque world, which the pack reads as {@code depthtex1} and
 	 * {@code depthtex2}, and as {@code depthtex0} for as long as the deferred stage is the present
 	 * half. Must run on the render thread and outside any render pass.
@@ -201,6 +210,10 @@ final class PackDepth {
 	 *         falls back to the far plane
 	 */
 	private boolean ensure(int width, int height) {
+		if (this.broken && (width != this.brokenWidth || height != this.brokenHeight)) {
+			this.broken = false;
+		}
+
 		if (this.broken || width <= 0 || height <= 0) {
 			return false;
 		}
@@ -219,9 +232,12 @@ final class PackDepth {
 					width, height);
 		} catch (RuntimeException e) {
 			this.broken = true;
+			this.brokenWidth = width;
+			this.brokenHeight = height;
 			release();
-			Vitrail.logger().error("Vitrail could not allocate the two depth images the pack reads, so "
-					+ "every depthtex lookup of this pack reads the far plane", e);
+			Vitrail.logger().error("Vitrail could not allocate the two depth images the pack reads at "
+					+ "{}x{}, so every depthtex lookup of this pack reads the far plane until the "
+					+ "screen is another size", width, height, e);
 
 			return false;
 		}
