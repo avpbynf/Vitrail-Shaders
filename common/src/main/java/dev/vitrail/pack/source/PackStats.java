@@ -285,8 +285,8 @@ public final class PackStats {
 	}
 
 	public static String tsvHeader() {
-		return String.join("\t", "pack", "fichiers", "includes", "incl_cond", "incl_abs", "incl_rel",
-				"conditionnelles", "symboles", "options", "opt_gating", "bin", "multi", "max_valeurs",
+		return String.join("\t", "pack", "files", "includes", "incl_cond", "incl_abs", "incl_rel",
+				"conditionals", "symbols", "options", "opt_gating", "bin", "multi", "max_values",
 				"version");
 	}
 
