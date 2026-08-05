@@ -357,8 +357,11 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 				tools.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
 			}
 
-			tools.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
+			// Reset inside the row rather than at its end. It is the only button here that deletes
+			// something the player wrote, and the end of a row is where a hand goes without looking;
+			// Reload is harmless and pressed often, so it takes the edge.
 			tools.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::confirmReset));
+			tools.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
 		}
 
 		LinearLayout commit = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
