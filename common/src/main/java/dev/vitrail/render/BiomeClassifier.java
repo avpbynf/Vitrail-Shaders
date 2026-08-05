@@ -76,6 +76,16 @@ public final class BiomeClassifier {
 		return List.copyOf(this.names);
 	}
 
+	/**
+	 * Drops the table and lets go of the registry it was walked from. For a client leaving a world:
+	 * the registry is held by identity, so keeping it is keeping everything the world hung off it.
+	 */
+	public void forget() {
+		this.ids.clear();
+		this.names.clear();
+		this.registrySeen = null;
+	}
+
 	private void rebuild(Registry<Biome> registry) {
 		this.ids.clear();
 		this.names.clear();

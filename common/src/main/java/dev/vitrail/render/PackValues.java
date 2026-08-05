@@ -251,6 +251,11 @@ public final class PackValues {
 				Vitrail.logger().warn("The pack's own {}", problem));
 	}
 
+	/** Drops what a client that has left a world was still holding, see {@link FrameState#leaveWorld}. */
+	public void leaveWorld() {
+		this.state.leaveWorld();
+	}
+
 	/** One line per declaration the pack lost, and what the pack has left. Said once per load. */
 	public List<String> notes() {
 		List<String> notes = new ArrayList<>();

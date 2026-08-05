@@ -761,6 +761,34 @@ public final class PackChain {
 	}
 
 	/**
+	 * Called when the client leaves a world, on the render thread and between two frames.
+	 * <p>
+	 * Nothing of this engine used to hear about it, and the whole of what a pack costs stayed
+	 * allocated for as long as the player sat in the menu: the colour targets, the shadow map, the two
+	 * depth images, the feature layer and every ring buffer, which is about a hundred megabytes of
+	 * video memory on BSL at 1080p, held for a screen that draws a panorama. What is freed here is
+	 * exactly what a reload frees, and everything of it is made again by the first frame of the next
+	 * world; nothing about which pack is loaded moves, so the settings screen still has one to show.
+	 */
+	public static void leaveWorld() {
+		PackChain chain = active;
+		if (chain == null) {
+			return;
+		}
+
+		try {
+			Vitrail.logger().info("Left the world, so the {} MiB of colour targets, the shadow map and "
+					+ "the buffers of {} go back until one is joined again",
+					chain.targets.bytes() / (1024L * 1024L), chain.chain.packName());
+			chain.release();
+			chain.values.leaveWorld();
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+		}
+	}
+
+	/**
 	 * Everything a frame owes before any pass of the chain can be drawn, or null when it cannot be
 	 * drawn at all. Cheap and idempotent, so both halves of the frame may ask.
 	 */

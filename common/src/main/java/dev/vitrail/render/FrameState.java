@@ -357,6 +357,21 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
+	 * Forgets the world as well as the frame, for a client that has left one rather than moved
+	 * between two.
+	 * <p>
+	 * Both things this drops are held by identity, which is what makes them worth dropping: the level
+	 * of the last frame, so that the change is noticed again when one is joined, and the registry the
+	 * biome numbers were walked from. A client sitting in the menu was keeping the whole
+	 * {@code ClientLevel} it had just left alive through the pair of them.
+	 */
+	public void leaveWorld() {
+		reset();
+		this.lastLevel = null;
+		this.biomes.forget();
+	}
+
+	/**
 	 * Ported from Iris {@code uniforms/SystemTimeUniforms.java:37-95}.
 	 * <p>
 	 * The quantisation to the millisecond is not tidiness. This is the time step every smoothed

@@ -12,6 +12,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.FrameGraphSetupEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.lifecycle.ClientStoppingEvent;
@@ -71,6 +72,13 @@ public final class VitrailNeoForge {
 		// before anything else touches the main target, outside of any render pass the
 		// game has open. That is the whole reason this hook is an event and not a mixin.
 		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterLevel.class, this::onAfterLevel);
+
+		// Leaving a world is the other moment everything a pack costs may be handed back, and the
+		// only one the player reaches twenty times a session. LoggingOut rather than
+		// LevelEvent.Unload: the second one is posted for the integrated server's levels too, from
+		// the server thread, and nothing of what this frees may be touched from there.
+		NeoForge.EVENT_BUS.addListener(ClientPlayerNetworkEvent.LoggingOut.class,
+				this::onLoggingOut);
 
 		// Stopping, not Stopped: the latter is posted after the renderer has been shut down,
 		// and the targets have to be released while the device is still alive.
@@ -135,6 +143,14 @@ public final class VitrailNeoForge {
 		// drew, and this draws the next frame's over it. The end of the frame is the whole
 		// culling design, see ShadowTerrain.
 		ShadowTerrain.draw();
+	}
+
+	/**
+	 * Posted by {@code Minecraft.disconnect} while the level is still standing and the device still
+	 * alive, which is what makes it the place to hand back what a pack costs.
+	 */
+	private void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
+		PackChain.leaveWorld();
 	}
 
 	private void onClientStopping(ClientStoppingEvent event) {
