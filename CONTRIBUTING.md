@@ -70,6 +70,34 @@ gradlew.bat build
 
 Requires JDK 25. Artifacts land in `build/libs`.
 
+## What the build refuses
+
+`gradlew build` is also the check, and it fails on warnings rather than printing them. Not on
+all of them: deprecation is off, because Minecraft and NeoForge deprecate faster than a mod can
+follow and the noise would bury everything else, and so are the category that only ever reports
+annotations missing from a dependency's own jar and the one that asks for a serialVersionUID on
+exceptions nothing serialises.
+
+Javadoc is linted for broken references and malformed tags, which matters more here than it would
+elsewhere. The javadoc carries the design, so a reference that no longer resolves is a piece of
+the design lost, and nothing says so until someone goes looking.
+
+Error Prone runs alongside javac and contributes the checks it rates as errors, the part of its
+catalogue meant to be a bug rather than a preference. Its warnings are worth reading and not
+worth blocking on, so `gradlew build -PlintReport` prints them and lets the build through.
+
+`checkText` covers the two things no compiler sees: a byte order mark, which reaches a GLSL
+compiler as a stray character in front of the version directive and which PowerShell writes
+unless told not to, and typographic punctuation where a straight quote or a plain hyphen is
+meant.
+
+The vendored stareval sources under `uniform/expr/kroppeb/` are left out of the javadoc lint.
+Their javadoc is their author's, and bending borrowed code to this project's taste only makes the
+next comparison with upstream harder to read.
+
+Run it before pushing rather than after. `main` staying buildable is a promise kept by whoever
+pushes.
+
 ## Publishing
 
 Not set up yet. When it is, it will need the Modrinth and CurseForge project ids, a
