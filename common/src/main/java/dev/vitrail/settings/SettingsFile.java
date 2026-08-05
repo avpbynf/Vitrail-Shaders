@@ -153,9 +153,5 @@ public final class SettingsFile {
 		public static Stored empty() {
 			return new Stored(Map.of(), "");
 		}
-
-		public boolean isEmpty() {
-			return this.values.isEmpty() && this.profile.isEmpty();
-		}
 	}
 }
