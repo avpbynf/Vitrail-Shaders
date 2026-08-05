@@ -109,7 +109,24 @@ public final class PauseMenuEntry {
 				.sprite(SPRITE, 16, 16)
 				.withTootip()
 				.build();
-		button.setPosition(left - ICON - GAP, row);
+		// The row was centred before this button widened it, so everything on it moves half a button
+		// right and the new one takes the slot that opens on the left. Recentring rather than growing
+		// the row leftwards is what keeps it under the wide buttons above and below it.
+		//
+		// It composes with another mod doing the same, whichever order the two run in: each one only
+		// ever shifts by half of what it added itself. What it cannot reach is an icon painted
+		// without a widget, which this instance has one of; that one keeps its place while the row
+		// moves, and the day it looks wrong is the day it has to be measured some other way.
+		int shift = (ICON + GAP) / 2;
+		for (GuiEventListener listener : event.getListenersList()) {
+			if (listener instanceof AbstractWidget widget
+					&& widget.getY() < row + ICON && widget.getY() + widget.getHeight() > row
+					&& widget.getWidth() <= ICON * 2) {
+				widget.setX(widget.getX() + shift);
+			}
+		}
+
+		button.setPosition(left - ICON - GAP + shift, row);
 		event.addListener(button);
 	}
 }
