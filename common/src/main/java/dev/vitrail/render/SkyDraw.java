@@ -190,11 +190,17 @@ public final class SkyDraw {
 	}
 
 	private RenderPipeline prepare(GpuDevice device, Element element, Matrix4fc modelView) {
-		SkyProgram program = this.programs.computeIfAbsent(element.label(), _ ->
-				SkyProgram.read(this.packPath, this.place, element.program(), element.element(),
-						this.chosen, this.profile, this.values, this.load, element.format(),
-						element.topology(), element.blend(), this.chainTargets, this.targets));
+		// Read once each, and the miss is REMEMBERED. Never computeIfAbsent here: it records
+		// nothing when the answer is null, so an element the pack serves nothing for would open
+		// the pack again on every frame of the game.
+		if (!this.programs.containsKey(element.label())) {
+			this.programs.put(element.label(),
+					SkyProgram.read(this.packPath, this.place, element.program(), element.element(),
+							this.chosen, this.profile, this.values, this.load, element.format(),
+							element.topology(), element.blend(), this.chainTargets, this.targets));
+		}
 
+		SkyProgram program = this.programs.get(element.label());
 		this.drawing = program;
 		if (program == null) {
 			return null;
