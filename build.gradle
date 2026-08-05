@@ -55,6 +55,19 @@ subprojects {
 		}
 
 		options.errorprone.disableAllWarnings = !lintReport
+
+		// Mixins are outside what this analyser can model, so it is pointed away from them rather
+		// than argued with. A handler is called by the mixin framework and never from our own code,
+		// and its parameters have to match the target method whether it reads them or not: every
+		// one of them reads as unused. Measured before deciding, on the report of 6 August: sixty
+		// of the hundred and sixty four findings were UnusedMethod or UnusedVariable and ALL sixty
+		// were in this one package, none of them dead. Acting on a single one would have deleted a
+		// handler the game calls, and with the defaultRequire this config carries it would have
+		// failed in silence, which is the trap DefaultFluidRendererMixin already documents.
+		//
+		// Only this analyser steps back. The javac warnings still apply here and are still errors,
+		// and they are the ones that catch a real mistake in a mixin.
+		options.errorprone.excludedPaths = ".*/neoforge/mixin/.*"
 	}
 
 	tasks.withType(AbstractArchiveTask).configureEach {
