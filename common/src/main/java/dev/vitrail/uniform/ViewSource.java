@@ -32,7 +32,11 @@ public interface ViewSource {
 	 * and the rotation cancels itself: the sun stops moving and sits at noon all night.
 	 * <p>
 	 * Set by the pass before it writes its block, like the depth convention beside it, and answered
-	 * with the camera's whenever a pass has set nothing.
+	 * with the camera's whenever a pass has set nothing. What a pass hands in is the matrix the game
+	 * built, and what comes back out carries the walk bob on top of it, for the reason the
+	 * implementation spells out: this engine publishes the bob in the model view and not in the
+	 * projection, so a pass matrix without it would be the one matrix of the frame that did not
+	 * multiply back to what was drawn.
 	 */
 	Matrix4fc passModelView();
 

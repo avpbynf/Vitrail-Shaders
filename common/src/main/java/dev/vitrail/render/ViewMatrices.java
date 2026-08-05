@@ -67,6 +67,16 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f passModelViewInverse = new Matrix4f();
 	private boolean passSet;
 
+	/**
+	 * What was pre-multiplied into {@link #modelView} this frame, kept so that a pass handing in a
+	 * matrix of its own is given the same treatment.
+	 * <p>
+	 * Held rather than asked for again. {@link CameraBob#taken()} answers only while the frame is
+	 * being read; {@link FrameState#advance()} clears the capture on its last line, and a pass writes
+	 * its block after that, so asking there would always be handed the identity.
+	 */
+	private final Matrix4f bob = new Matrix4f();
+
 	/** The colour the pass modulates its draw by, white until a pass says otherwise. */
 	private final Vector4f passColour = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private float far;
@@ -99,6 +109,7 @@ public final class ViewMatrices implements ViewSource {
 		// Pre-multiplied and not appended: the bob is applied to the world after the camera has
 		// turned, so it stands to the left. The other way round would bob along the player's own
 		// axes and swing hardest when looking down.
+		this.bob.set(bob);
 		this.modelView.set(bob).mul(view);
 		this.modelView.invert(this.modelViewInverse);
 
@@ -182,14 +193,29 @@ public final class ViewMatrices implements ViewSource {
 	/**
 	 * The model view the pass about to write its block is drawn with, or null for the camera's.
 	 * <p>
-	 * Held rather than composed, and the inverse taken here once: a pass hands in a matrix the game
-	 * built on its own stack, so there is nothing to derive it from, and the pack reads the inverse
-	 * of it as often as the matrix itself.
+	 * The inverse is taken here once: the pack reads it as often as the matrix itself, and there is
+	 * nothing else to derive it from, the matrix having been built on the game's own stack.
+	 * <p>
+	 * <strong>The bob goes on the front, and the whole correctness of the sky hangs off that one
+	 * multiplication.</strong> The game does not put the walk bob in its model view stack: 26.2
+	 * multiplies it into the projection, {@code GameRenderer.renderLevel} doing
+	 * {@code projectionMatrix.mul(bobStack.last().pose())} while the stack the sky renderer writes
+	 * its transform from is {@code viewRotationMatrix} and whatever rotation the element pushed on
+	 * top of it. This engine publishes the projection without the bob and puts it in the model view
+	 * instead, which is where a pack expects it, so a pass matrix handed straight through would be
+	 * the one matrix of the frame the bob had fallen out of: the world would swing as the player
+	 * walked and the sun would stand still against it. Multiplied here, the pack's
+	 * {@code gl_ProjectionMatrix * gl_ModelViewMatrix} is again the matrix the element was really
+	 * drawn with, and {@code gbufferModelViewInverse * gl_ModelViewMatrix}, which is how BSL reaches
+	 * world space, cancels down to the rotation of the day alone, exactly as it did under OptiFine.
+	 * <p>
+	 * The frame that could not be split is right for free: {@link CameraBob#taken()} answers the
+	 * identity then, and the projection published is the one the level was drawn with, bob included.
 	 */
 	void passModelView(Matrix4fc matrix) {
 		this.passSet = matrix != null;
 		if (this.passSet) {
-			this.passModelView.set(matrix);
+			this.passModelView.set(this.bob).mul(matrix);
 			this.passModelView.invert(this.passModelViewInverse);
 		}
 	}
