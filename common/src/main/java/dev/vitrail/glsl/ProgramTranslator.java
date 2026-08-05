@@ -149,16 +149,21 @@ public final class ProgramTranslator {
 
 		// Before anything is read off a stage, because it changes what the stages read. A stage is
 		// only ever asked to give up an input against what the stages BEFORE it write, which is the
-		// order rebind pairs them in, so this walks the pipeline rather than the map.
+		// order rebind pairs them in, so this walks the pipeline and not the map it filled.
 		if (prepared.containsKey(ProgramStage.VERTEX)) {
 			Set<String> provided = new LinkedHashSet<>();
-			prepared.forEach((stage, prepare) -> {
+			for (ProgramStage stage : PIPELINE_ORDER) {
+				GlslTranslator.Stage prepare = prepared.get(stage);
+				if (prepare == null) {
+					continue;
+				}
+
 				if (stage != ProgramStage.VERTEX) {
 					prepare.dropUnprovidedInputs(provided);
 				}
 
 				provided.addAll(prepare.provides());
-			});
+			}
 		}
 
 		Map<String, TranslatedUnit.Uniform> uniforms = new LinkedHashMap<>();

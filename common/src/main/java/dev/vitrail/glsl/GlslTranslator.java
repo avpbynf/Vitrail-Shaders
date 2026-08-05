@@ -446,6 +446,11 @@ public final class GlslTranslator {
 		/**
 		 * Takes back out the inputs this stage declares that no stage before it writes and that its
 		 * own body never reads. See {@link GlslTranslator#dropUnprovidedInputs}.
+		 * <p>
+		 * To be called before anything else on this stage is read. It changes what the body says, so
+		 * what {@link #uniforms}, {@link #varyings}, {@link #declared} and {@link #render} answer
+		 * afterwards is not what they would have answered before, and a caller that renders first
+		 * and drops second emits the text the drop was meant to repair.
 		 */
 		public void dropUnprovidedInputs(Set<String> provided) {
 			this.translator.dropUnprovidedInputs(provided);
