@@ -29,7 +29,7 @@ public final class ScreenText {
 	/** One argument: the pack whose settings would be thrown away. */
 	public static final String RESET_CONFIRM = "options.vitrail.reset_confirm";
 
-	/** One argument: the file that would be deleted, by name. */
+	/** One argument: the file that would be emptied, by name. */
 	public static final String RESET_CONFIRM_DETAIL = "options.vitrail.reset_confirm_detail";
 	/** The view switch seen from a pack's pages. {@link #TITLE} is the same control seen from the list. */
 	public static final String PACKS = "options.vitrail.packs";

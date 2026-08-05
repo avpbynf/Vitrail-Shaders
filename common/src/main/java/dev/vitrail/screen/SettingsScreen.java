@@ -57,10 +57,10 @@ import java.util.Objects;
  * apply: Iris applies on the way out and that is the one convention of its screen not kept here,
  * because a pack reloaded by a player who was only looking is a second of hitch nobody asked for.
  * <p>
- * Nothing is written and nothing is recompiled on a click, and Apply is the only button that
- * writes. It writes by reading the file first and laying the pending table over it, so that an edit
- * made by hand while this screen is open and an edit made here compose instead of overwriting each
- * other.
+ * Nothing is written and nothing is recompiled on a click, and Apply is the only button that writes
+ * what was clicked. It writes by reading the file first and laying the pending table over it, so
+ * that an edit made by hand while this screen is open and an edit made here compose instead of
+ * overwriting each other.
  */
 public final class SettingsScreen extends Screen implements ScreenHost {
 
@@ -562,24 +562,9 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	}
 
 	/**
-	 * Throws away this pack's settings file, so that it goes back to what the pack itself declares.
-	 * <p>
-	 * Three things it deliberately does not do. It does not touch {@code vitrail/options.txt}, which
-	 * is the file that forces settings from outside and is not the player's to lose here; the
-	 * greyed out widgets stay greyed out after a reset, which is the honest answer. It does not
-	 * touch the file Iris left in {@code shaderpacks/}, which is read but never written. And it
-	 * drops what is pending rather than keeping it, because a pending value is a change the player
-	 * made to the settings this is discarding, so keeping it would put back part of what was asked
-	 * to be thrown away.
-	 * <p>
-	 * No confirmation is asked. The file holds only what differs from the pack's own defaults, so
-	 * this loses a set of choices and nothing else, and the reload right after shows the result
-	 * immediately.
-	 */
-	/**
 	 * Reset asks first, and it is the only button here that does. It is also the only one that
-	 * deletes something a player wrote: a settings file can hold an evening of tuning, and it sits
-	 * two slots from Back on a row where every other button is harmless.
+	 * throws away something a player wrote: a settings file can hold an evening of tuning, and it
+	 * sits two slots from Back on a row where every other button is harmless.
 	 * <p>
 	 * The confirmation is the game's own screen rather than a panel of ours, so it is worded, laid
 	 * out and narrated like every other confirmation the player has already answered. Coming back
@@ -605,6 +590,22 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 						loaded.settingsFile().getFileName().toString())));
 	}
 
+	/**
+	 * Empties this pack's settings file, so that it goes back to what the pack itself declares.
+	 * <p>
+	 * Emptied and not deleted, and that is the whole of it: {@link SettingsFile#source} falls back
+	 * on the file Iris left in {@code shaderpacks/} the moment ours is not there, so deleting ours
+	 * would hand the pack Iris's settings rather than its own, and a Reset would land on values the
+	 * player never chose here. A file holding nothing but its header is how this side says out loud
+	 * that nothing was chosen.
+	 * <p>
+	 * Three things it deliberately does not do. It does not touch {@code vitrail/options.txt}, which
+	 * is the file that forces settings from outside and is not the player's to lose here; the
+	 * greyed out widgets stay greyed out after a reset, which is the honest answer. It does not
+	 * touch the file Iris left, which is read but never written. And it drops what is pending rather
+	 * than keeping it, because a pending value is a change the player made to the settings this is
+	 * discarding, so keeping it would put back part of what was asked to be thrown away.
+	 */
 	private void reset() {
 		PackSession loaded = this.session;
 		if (loaded == null) {
@@ -612,16 +613,16 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		}
 
 		try {
-			SettingsFile.delete(loaded.settingsFile());
+			SettingsFile.write(loaded.settingsFile(), SettingsFile.Stored.empty());
 			this.error = null;
 		} catch (IOException | RuntimeException e) {
 			this.error = String.valueOf(e.getMessage());
-			Vitrail.logger().error("Vitrail could not delete {}", loaded.settingsFile(), e);
+			Vitrail.logger().error("Vitrail could not empty {}", loaded.settingsFile(), e);
 
 			return;
 		}
 
-		Vitrail.logger().info("{} is back to the settings it declares itself, {} is gone",
+		Vitrail.logger().info("{} is back to the settings it declares itself, {} is emptied",
 				loaded.packFileName(), loaded.settingsFile().getFileName());
 		PackChain.reload(loaded.gameDirectory());
 		adopt(PackChain.session().orElse(null));

@@ -137,11 +137,6 @@ public final class SettingsFile {
 		}
 	}
 
-	/** Everything back to the pack's defaults. {@code options.txt} is not touched. */
-	public static void delete(Path file) throws IOException {
-		Files.deleteIfExists(file);
-	}
-
 	/**
 	 * @param profile the reserved {@code profile} key, "" when the file names none. No pack
 	 *                declares a setting by that name, and a profile is a different thing from a
