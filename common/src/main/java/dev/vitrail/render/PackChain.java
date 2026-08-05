@@ -148,8 +148,8 @@ public final class PackChain {
 	 * pass exists the depth left standing after the world is the far plane over the whole screen:
 	 * the fog, the depth of field, the ambient occlusion and the volumetric light of the pack then
 	 * all work on a scene made entirely of sky, and not one of them fails. {@link #markSceneDepth}
-	 * therefore keeps it at the head of that pass, and {@link #run} keeps it only for the frames
-	 * where the pass does not exist at all.
+	 * therefore keeps it at the head of that pass, and {@link #run} keeps it whenever nothing kept it
+	 * there, which is normally the frames that pass does not exist on.
 	 */
 	private boolean sceneDepth;
 
@@ -937,6 +937,13 @@ public final class PackChain {
 	 * {@link #markGeometryDepth} is not: nothing here warms a pipeline, prepares a target or clears
 	 * anything, all of which belong to the moment the chain runs. This copies one image and answers
 	 * for nothing else.
+	 * <p>
+	 * That is also why it runs on the frames the chain cannot draw on at all: a frame that still has
+	 * a pipeline to warm allocates the pair of depth images here and converts one of them before a
+	 * single pass of the pack has run. Named rather than guarded, because the guard would be a
+	 * reading of the chain's warmth this callback is written not to need, because the pair is
+	 * allocated once and {@link PackDepth} says its cost out loud, and because what is left after
+	 * that is one full screen conversion on the frames the game had a gizmo to draw.
 	 */
 	public static void markSceneDepth() {
 		PackChain chain = active;
@@ -1142,18 +1149,21 @@ public final class PackChain {
 		}
 
 		// The depth of the whole scene, which by now carries the world's translucents and the
-		// features that were redirected into the pack's image. Kept apart from the opaque world's and
-		// not once for the frame, because the two halves are not asking the same question: a
+		// features that were redirected into the pack's image. Kept apart from the opaque world's
+		// rather than once for both, because the two halves are not asking the same question: a
 		// composite that read the opaque world would blur and fog straight through water, and nothing
 		// about that fails.
 		//
-		// Here only when the frame had no always-on-top pass to keep it at, that pass having cleared
-		// the world's depth by the time this runs; see sceneDepth.
+		// Reached when nothing kept it earlier in the frame, which is normally a frame with no
+		// always-on-top pass to keep it at; see sceneDepth. Normally and not always, which is why the
+		// line says what was seen and not why: a take refused at that pass, or a reload that put a
+		// new chain under the frame the old one took it in, both land here on a depth already
+		// cleared, and a cause said once a load would be wrong for the whole session.
 		if (keepScene(device, ready.depthView(), ready.main().width, ready.main().height)
 				&& !this.saidAfterTheWorld) {
 			this.saidAfterTheWorld = true;
-			Vitrail.logger().info("The scene's depth is kept after the world, this frame having drawn "
-					+ "nothing always on top and so having cleared nothing");
+			Vitrail.logger().info("The scene's depth is kept after the world, nothing having kept it "
+					+ "earlier in this frame");
 		}
 
 		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene());
