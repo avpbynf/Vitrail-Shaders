@@ -321,8 +321,9 @@ public final class SkyDraw {
 	 * of these pieces at moments of its own choosing and three of those moments are conditions of the
 	 * sky itself: the band is skipped until its alpha passes a thousandth, the stars until their
 	 * brightness leaves nought, and the void plane until the eye goes under the world's horizon. Read
-	 * one at a time, the pack was opened, expanded and compiled inside the frame the sun first neared
-	 * the horizon, on the render thread and in the middle of the world.
+	 * one at a time, the pack was opened, expanded and translated inside the frame the sun first
+	 * neared the horizon, on the render thread and in the middle of the world. The compiling is not
+	 * moved with it and still falls where the piece is first drawn, one module a piece.
 	 */
 	private void read() {
 		this.read = true;

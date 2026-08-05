@@ -386,7 +386,11 @@ public final class PackProgram {
 	 * to translate six programs, and each of those six would land on the render thread at whatever
 	 * moment of the game first drew that piece. The band at the horizon is the sharpest of them:
 	 * the game skips it until its alpha passes a thousandth, so the pack was opened, expanded and
-	 * compiled in the frame the sun first neared the horizon.
+	 * translated in the frame the sun first neared the horizon.
+	 * <p>
+	 * What moves is the reading and the translation, and not the compiling: a module is still built
+	 * from this text when the piece it belongs to is first drawn, one per piece, so two pieces that
+	 * share a translation are still compiled twice.
 	 * <p>
 	 * Two pieces that ask for one program under one format and for the same mask share a translation,
 	 * since the text would be identical: the disc and the void plane are one. They are still two
