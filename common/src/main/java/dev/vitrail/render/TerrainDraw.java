@@ -198,10 +198,13 @@ public final class TerrainDraw {
 			// the renderer, the pass it opens for itself is the game's own target, and the stage
 			// would paint the world over the finished image. The map is emptied rather than left
 			// standing, so a program broken mid-session reads as no shadow and not as the last
-			// map it ever drew, frozen. The stage switched off by the engine option takes the same
-			// branch and for the same reason: the map is allocated whether or not the stage runs,
-			// and an allocated map nothing ever empties hands the packs undefined memory as a
-			// shadow, where this clear hands them the far plane.
+			// map it ever drew, frozen.
+			//
+			// The stage switched off by the engine option does not come through here, whatever the
+			// shadows() test above may suggest: the frame graph stops capturing the camera at the
+			// head of the frame, so the stage returns long before it reaches this. Its map is the
+			// one ShadowTargets.ensure empties where it allocates, which is the same answer at no
+			// cost per frame.
 			shadow.clear(device.createCommandEncoder());
 
 			return false;

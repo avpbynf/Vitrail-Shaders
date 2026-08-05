@@ -99,7 +99,16 @@ final class ShadowTargets {
 	}
 
 	/**
-	 * Makes the map exist. Must run on the render thread and outside any render pass.
+	 * Makes the map exist and empties it once. Must run on the render thread and outside any render
+	 * pass.
+	 * <p>
+	 * <strong>Emptied where it is allocated, and that is not a duplicate of the clear the stage does
+	 * at its top.</strong> The map is allocated with the colour targets, at the head of a frame, and
+	 * the stage that fills it runs at the tail of one: the gbuffers in between read a map nothing has
+	 * ever written, which is whatever the driver left in that memory, sampled as a depth. And a stage
+	 * the engine option keeps switched off never opens at all, so the clear at its top is not reached
+	 * once in the session while the map is allocated all the same. One clear here answers both, where
+	 * a clear per frame would pay for a map the size the pack chose to no purpose.
 	 *
 	 * @return false when there is nothing to draw into, in which case no shadow pass may run
 	 */
@@ -118,6 +127,7 @@ final class ShadowTargets {
 			this.target = new TextureTarget("Vitrail shadow", this.resolution, this.resolution, true,
 					this.format);
 			this.unstarted = true;
+			clear(RenderSystem.getDevice().createCommandEncoder());
 			Vitrail.logger().info("Shadow map allocated at {}x{}, depth and shadowcolor0 as {}{}",
 					this.resolution, this.resolution, this.format,
 					this.asked.clear() ? "" : ", which the pack keeps between frames");
@@ -125,6 +135,10 @@ final class ShadowTargets {
 			return true;
 		} catch (RuntimeException e) {
 			this.broken = true;
+			// The images go with the refusal, so that a map allocated and not emptied is never the
+			// one a lookup lands on: ensure answering false only stops the pass being drawn, where
+			// the gbuffers bind whatever depth() still holds.
+			release();
 			Vitrail.logger().error("Vitrail could not allocate the shadow map, so no shadow pass will "
 					+ "run and every shadowtex lookup keeps reading one pixel", e);
 
