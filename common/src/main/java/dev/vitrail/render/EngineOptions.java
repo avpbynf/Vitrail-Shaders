@@ -96,12 +96,21 @@ final class EngineOptions {
 	private static final String CHAIN_KEY = "chain";
 
 	/**
+	 * Draws the game's sky with the pack's own program. On, like the rest.
+	 * <p>
+	 * A line of its own for the same reason { shadow} is one: it is the one thing that can be
+	 * turned off to tell a sky the pack drew from a sky the seed carried in, in one line and without
+	 * a rebuild.
+	 */
+	private static final String SKY_KEY = "sky";
+
+	/**
 	 * All eight, for the one place that has to tell them from a setting of the pack: the log that
 	 * says what the file forces. {@code profile} is the settings layer's own, since that is the side
 	 * that writes it back; the other seven are read here and nowhere else.
 	 */
 	private static final Set<String> RESERVED = Set.of(SettingsFile.PROFILE_KEY, SEED_KEY,
-			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY);
+			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY, SKY_KEY);
 
 	private EngineOptions() {
 	}
@@ -116,9 +125,10 @@ final class EngineOptions {
 	 * @param terrain    whether a pack's terrain program takes over the opaque chunk pass
 	 * @param chain      whether the composite chain and the {@code final} draw at all
 	 * @param shadow     whether the world is drawn a second time from the light
+	 * @param sky        whether the game's sky is drawn with the pack's own program
 	 */
 	record Read(boolean seed, ChainFilter passes, boolean packsFirst, String dump, boolean terrain,
-			boolean chain, boolean shadow) {
+			boolean chain, boolean shadow, boolean sky) {
 	}
 
 	/**
@@ -134,7 +144,8 @@ final class EngineOptions {
 				named(chosen.remove(DUMP_KEY)),
 				asked(chosen.remove(TERRAIN_KEY), true),
 				asked(chosen.remove(CHAIN_KEY), true),
-				asked(chosen.remove(SHADOW_KEY), true));
+				asked(chosen.remove(SHADOW_KEY), true),
+				asked(chosen.remove(SKY_KEY), true));
 	}
 
 	/**

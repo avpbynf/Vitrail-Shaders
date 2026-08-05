@@ -10,6 +10,9 @@ import dev.vitrail.pack.target.TargetSize;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -67,8 +70,27 @@ public final class TerrainProgram {
 			boolean chainRuns) {
 		this.body = new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				pass.name().toLowerCase(Locale.ROOT), NAMESPACE, SodiumVertex.ANSWERED,
-				pass.shadow(), pass.blended(), pass.covers(), pass.afterDeferred()),
+				pass.shadow(), pass.blended(), pass.covers(), pass.afterDeferred(),
+				// Sodium's own, taken from ShaderChunkRenderer.createShader: the pass this is bound
+				// into was opened for that pipeline and a difference of topology would be a
+				// difference nobody declared.
+				PrimitiveTopology.QUADS, depthState(pass)),
 				loaded, values, load, format, writes, targets, chainRuns);
+	}
+
+	/**
+	 * Which way the depth test runs, which follows the window the target stores and nothing else.
+	 * <p>
+	 * The game rasterises the scene under a reversed Z and clears its depth to nought, so its own
+	 * targets keep the default and its greater-or-equal. The shadow map is ours and stores the
+	 * forward window, cleared to one, so its test is the other way round. Getting this pair out of
+	 * step does not fail: it fills the map with the geometry furthest from the light, which is a
+	 * shadow map of the far side of the world and reads as shadows in all the wrong places.
+	 */
+	private static DepthStencilState depthState(TerrainPass pass) {
+		return pass.shadow()
+				? new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true)
+				: DepthStencilState.DEFAULT;
 	}
 
 	/**

@@ -16,6 +16,7 @@
 		"ProjectionMatrixBufferMixin",
 		"RenderSectionManagerAccessor",
 		"ShaderChunkRendererMixin",
+		"SkyRendererMixin",
 		"SodiumWorldRendererAccessor",
 		"VKDrawContextMixin"
 	]

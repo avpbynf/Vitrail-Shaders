@@ -104,9 +104,18 @@ final class GeometryProgram {
 	 *                     seed is cut with
 	 * @param afterDeferred whether the pass is drawn after the deferred stage, which is what decides
 	 *                     that a depth sampler can be answered with the opaque world's image
+	 * @param topology     how the mesh is assembled, which is the game's answer and not a choice:
+	 *                     the pass this is bound into was opened for the pipeline the game built,
+	 *                     and a difference of topology would be a difference nobody declared
+	 * @param depth        the depth test and write, or null for none at all. Null is not an
+	 *                     oversight and the sky is why: the game's own sky pipeline declares no
+	 *                     depth state, so the disc neither tests nor writes, and a pack's program
+	 *                     given the ordinary state would write the sky into the depth and have the
+	 *                     world tested against it
 	 */
 	record Pass(String family, String name, String namespace, Set<String> answered, boolean shadow,
-			boolean blended, boolean covers, boolean afterDeferred) {
+			boolean blended, boolean covers, boolean afterDeferred, PrimitiveTopology topology,
+			DepthStencilState depth) {
 	}
 
 	/**
@@ -305,12 +314,18 @@ final class GeometryProgram {
 				.withFragmentShader(fragmentId)
 				.withBindGroupLayout(bindings.build())
 				.withVertexBinding(0, format)
-				.withPrimitiveTopology(PrimitiveTopology.QUADS)
-				.withDepthStencilState(depthState())
+				.withPrimitiveTopology(pass.topology())
 				// Nothing is culled in the shadow map. What matters there is which surface is nearest
 				// the light and not which way it faces, and a wall drawn on one side only leaks light
 				// through its back. Iris cuts it for the same reason.
 				.withCull(!pass.shadow());
+
+		// Left unset where the family answers null, which is not the same as setting the default one:
+		// the builder hands a null state through to the pipeline, and that is a pass which neither
+		// tests nor writes a depth. It is what the game's own sky is built with.
+		if (pass.depth() != null) {
+			builder.withDepthStencilState(pass.depth());
+		}
 
 		// One state per attachment, and dynamic rendering wants the two counts equal.
 		// By slot and never by append: the builder holds the states in an array and the argumentless
@@ -381,21 +396,6 @@ final class GeometryProgram {
 		}
 
 		return List.copyOf(built);
-	}
-
-	/**
-	 * Which way the depth test runs, which follows the window the target stores and nothing else.
-	 * <p>
-	 * The game rasterises the scene under a reversed Z and clears its depth to nought, so its own
-	 * targets keep the default and its greater-or-equal. The shadow map is ours and stores the
-	 * forward window, cleared to one, so its test is the other way round. Getting this pair out of
-	 * step does not fail: it fills the map with the geometry furthest from the light, which is a
-	 * shadow map of the far side of the world and reads as shadows in all the wrong places.
-	 */
-	private DepthStencilState depthState() {
-		return this.pass.shadow()
-				? new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true)
-				: DepthStencilState.DEFAULT;
 	}
 
 	/**
@@ -713,7 +713,10 @@ final class GeometryProgram {
 
 	private GpuTextureView view(String sampler) {
 		if (ATLAS.contains(sampler)) {
-			return this.atlas;
+			// One pixel where the pass has no atlas of its own, which is every pass of the sky: a
+			// name that is bound to nothing at all throws at the bind, and a program reading a black
+			// atlas draws something that can be looked at and explained.
+			return this.atlas == null ? this.black.getColorTextureView() : this.atlas;
 		}
 
 		if (LIGHTMAP.equals(sampler)) {
@@ -935,8 +938,9 @@ final class GeometryProgram {
 				.filter(name -> !this.pass.answered().contains(name))
 				.toList();
 		if (!constants.isEmpty()) {
-			Vitrail.logger().warn("The chunk mesh carries none of these, so they are answered with a "
-					+ "constant and what this program computes from them is wrong: {}", constants);
+			Vitrail.logger().warn("The {} mesh carries none of these, so they are answered with a "
+					+ "constant and what this program computes from them is wrong: {}",
+					this.pass.family(), constants);
 		}
 
 		List<String> real = this.samplers.stream()

@@ -352,6 +352,59 @@ public final class PackProgram {
 	}
 
 	/**
+	 * Reads and translates one of the three programs the game may draw its sky with, against the
+	 * vertex format the pass that draws it really binds.
+	 * <p>
+	 * One at a time and not three like the terrain, because the three are not asked for together: the
+	 * game opens a render pass per element of the sky and each one binds its own format, so a program
+	 * is loaded when the pass that draws it is first reached. The fallback tree is walked like
+	 * everywhere else, so a pack shipping only {@code gbuffers_basic} still serves the disc.
+	 *
+	 * @param program the bare name the game would draw with, {@code gbuffers_skybasic}
+	 * @param bound   the elements of the format that pass binds, in the format's own order. Exactly
+	 *                these are declared: the sky binds four different formats between its passes, and
+	 *                an element left undeclared shifts the location of every one after it in silence
+	 * @return empty when the pack serves neither this program nor anything it falls back to, in which
+	 *         case the game keeps its own sky
+	 */
+	public static Optional<Loaded> loadSky(Path packPath, String place, String program,
+			List<String> bound, Map<String, OptionValue> chosen, String profile) throws IOException {
+		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
+			OptionIndex options = OptionIndex.build(source);
+			ShaderProperties properties = ShaderProperties.parse(source);
+			Map<String, OptionValue> fromProfile = profile.isEmpty()
+					? Map.of()
+					: properties.expandProfile(profile);
+			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
+			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
+			PackTextures textures = textures(source, properties, options, settings);
+
+			DimensionSet dimensions = DimensionSet.discover(source);
+			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
+					dimensions);
+			Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, program);
+			if (resolution.isEmpty()) {
+				return Optional.empty();
+			}
+
+			String path = pathOf(place, resolution.get().servedBy());
+			Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
+			if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+				return Optional.empty();
+			}
+
+			// No alpha test anywhere in the sky: the format has no line for one, and nothing the game
+			// draws there is cut out. The program the engine supplies uniforms for is the one the pass
+			// wanted, not the file that ended up serving it, as everywhere else.
+			return Optional.of(bind(source.packName(), path,
+					ProgramTranslator.translate(units, VertexInputs.SKY, bound, AlphaTest.OFF, false,
+							program, textures.volumes()),
+					targets, AlphaTest.OFF, textures));
+		}
+	}
+
+	/**
 	 * Reads one dimension's whole chain in one opening of the pack.
 	 * <p>
 	 * Calling {@link #load} once per program would open the pack and build a whole plan each time,

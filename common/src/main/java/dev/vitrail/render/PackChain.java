@@ -158,6 +158,7 @@ public final class PackChain {
 	private final FeatureLayer features;
 	private final int load;
 	private final TerrainDraw terrain;
+	private final SkyDraw sky;
 
 	private List<PackPass> programs;
 	private PackPass last;
@@ -207,6 +208,11 @@ public final class PackChain {
 		// would leave the screen and reach nothing.
 		this.terrain = new TerrainDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
+		// The same plan and the same schedule again, and for the same reason. The sky is read on
+		// demand too, since the game builds its meshes once at startup and a place that never draws
+		// a sky should not pay for one.
+		this.sky = new SkyDraw(this, packPath, chain.place(), chosen, profile, values, this.load,
+				chain.targets(), this.targets);
 	}
 
 	/**
@@ -250,6 +256,7 @@ public final class PackChain {
 			chainWanted = engine.chain();
 			TerrainDraw.wanted(engine.terrain());
 			TerrainDraw.shadowWanted(engine.shadow());
+			SkyDraw.wanted(engine.sky());
 			PackDump.configure(engine.dump(),
 					gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt"));
 
@@ -617,6 +624,13 @@ public final class PackChain {
 		return disabled || chain == null ? null : chain.terrain;
 	}
 
+	/** The same, for the sky. */
+	static SkyDraw sky() {
+		PackChain chain = active;
+
+		return disabled || chain == null ? null : chain.sky;
+	}
+
 	/**
 	 * Opens the frame if nothing has yet, and takes the dump with it. The one point the frame
 	 * boundary hangs off; see {@link #advanced} for what a second advance would cost.
@@ -688,6 +702,7 @@ public final class PackChain {
 		}
 
 		this.terrain.rotate();
+		this.sky.rotate();
 	}
 
 	/** Called when the client shuts down, while the device is still alive. */
@@ -1340,6 +1355,7 @@ public final class PackChain {
 		}
 
 		this.terrain.release();
+		this.sky.release();
 
 		if (this.block != null) {
 			this.block.close();
