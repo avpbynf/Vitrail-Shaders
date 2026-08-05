@@ -351,7 +351,8 @@ public final class TargetDirectives {
 		return this.notes;
 	}
 
-	private static Optional<Colour> parseColour(String value) {
+	/** Package private because the shadow buffers take the same directive and the same grammar. */
+	static Optional<Colour> parseColour(String value) {
 		String text = value.trim();
 		if (!text.startsWith("vec4")) {
 			return Optional.empty();

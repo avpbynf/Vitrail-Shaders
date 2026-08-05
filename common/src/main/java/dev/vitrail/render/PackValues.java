@@ -169,6 +169,11 @@ public final class PackValues {
 		return this.state.directives().shadowMapResolution();
 	}
 
+	/** What the pack asks of {@code shadowcolor0}: its format, and what emptying it means. */
+	public PackDirectives.ShadowColour shadowColour() {
+		return this.state.directives().shadowColour(0);
+	}
+
 	public WorldState world() {
 		return this.state;
 	}

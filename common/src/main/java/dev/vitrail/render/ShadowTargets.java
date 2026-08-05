@@ -1,5 +1,7 @@
 package dev.vitrail.render;
 
+import dev.vitrail.pack.target.PackDirectives;
+import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
@@ -33,9 +35,6 @@ import org.joml.Vector4fc;
  */
 final class ShadowTargets {
 
-	/** What the pack's own {@code shadowcolor} starts every frame as, which is Iris's choice too. */
-	private static final Vector4fc WHITE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
-
 	/** The far plane in the window this map stores. See the class comment before changing it. */
 	private static final double FAR = 1.0;
 
@@ -43,6 +42,17 @@ final class ShadowTargets {
 	private static final int MAX_RESOLUTION = 16384;
 
 	private final int resolution;
+	private final PackDirectives.ShadowColour asked;
+	private final GpuFormat format;
+	private final Vector4fc clearColour;
+
+	/**
+	 * Whether the colour has yet to be emptied once. A pack that turns its own clear off is asking
+	 * to keep what the shadow stage wrote from one frame to the next, not to read whatever the
+	 * allocation left in the image, and Iris says the same on the directive: the clear colour is
+	 * still what the buffer starts life holding.
+	 */
+	private boolean unstarted;
 
 	private TextureTarget target;
 
@@ -61,7 +71,7 @@ final class ShadowTargets {
 
 	private boolean broken;
 
-	ShadowTargets(int resolution) {
+	ShadowTargets(int resolution, PackDirectives.ShadowColour asked) {
 		// Clamped rather than refused: a directive that survived a setting nobody expanded can be
 		// any number at all, and a shadow map is not worth taking the pack down for.
 		this.resolution = Math.clamp(resolution, 1, MAX_RESOLUTION);
@@ -69,6 +79,15 @@ final class ShadowTargets {
 			Vitrail.logger().warn("The pack asks for a shadow map of {} texels, which is outside what "
 					+ "this engine will allocate, so it is drawn at {}", resolution, this.resolution);
 		}
+
+		this.asked = asked;
+		this.format = GpuFormats.of(asked.format().used());
+		TargetDirectives.Colour colour = asked.clearColour();
+		// The same correction the colour targets make: a format that gained an alpha channel on the
+		// way to the device starts opaque, because in GL the three component texture the pack wrote
+		// against always sampled as one and the promoted image returns what is really there.
+		this.clearColour = new Vector4f(colour.r(), colour.g(), colour.b(),
+				asked.format().alphaAdded() ? 1.0F : colour.a());
 	}
 
 	/**
@@ -89,9 +108,11 @@ final class ShadowTargets {
 			// One object for both, so that the colour and the depth cannot part company on a size:
 			// they are attachments of one render pass and one render pass has one render area.
 			this.target = new TextureTarget("Vitrail shadow", this.resolution, this.resolution, true,
-					GpuFormat.RGBA8_UNORM);
-			Vitrail.logger().info("Shadow map allocated at {}x{}, depth and shadowcolor0",
-					this.resolution, this.resolution);
+					this.format);
+			this.unstarted = true;
+			Vitrail.logger().info("Shadow map allocated at {}x{}, depth and shadowcolor0 as {}{}",
+					this.resolution, this.resolution, this.format,
+					this.asked.clear() ? "" : ", which the pack keeps between frames");
 
 			return true;
 		} catch (RuntimeException e) {
@@ -105,16 +126,28 @@ final class ShadowTargets {
 
 	/**
 	 * Empties the map, once a frame, before anything is drawn into it. The depth goes to the far
-	 * plane of the window this map stores and the colour to white, which is what a pack reads as
-	 * "nothing of the shadow stage touched this".
+	 * plane of the window this map stores, and the colour to what the pack asked for, which is white
+	 * unless it said otherwise: white is what a pack reads as "nothing of the shadow stage touched
+	 * this", and it is what a coloured shadow multiplies by.
+	 * <p>
+	 * The depth is emptied whatever the pack says, and only the colour takes the directive.
+	 * {@code shadowcolorNClear} is about the buffer the pack writes; the depth is the map itself, and
+	 * a map carried over from a frame that drew a different world is not something any pack asks for.
 	 */
 	void clear(CommandEncoder encoder) {
 		if (this.target == null) {
 			return;
 		}
 
-		encoder.clearColorAndDepthTextures(this.target.getColorTexture(), WHITE,
-				this.target.getDepthTexture(), FAR);
+		if (this.asked.clear() || this.unstarted) {
+			this.unstarted = false;
+			encoder.clearColorAndDepthTextures(this.target.getColorTexture(), this.clearColour,
+					this.target.getDepthTexture(), FAR);
+
+			return;
+		}
+
+		encoder.clearDepthTexture(this.target.getDepthTexture(), FAR);
 	}
 
 	/**
@@ -169,6 +202,11 @@ final class ShadowTargets {
 
 	int resolution() {
 		return this.resolution;
+	}
+
+	/** What the colour is allocated in, known from the directives before anything is allocated. */
+	GpuFormat format() {
+		return this.format;
 	}
 
 	void release() {

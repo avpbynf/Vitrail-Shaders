@@ -12,10 +12,14 @@ import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * The settings a pack declares about itself, gathered from the {@code const} lines of every one of
@@ -50,6 +54,22 @@ public final class PackDirectives {
 	private final float shadowNearPlane;
 	private final float shadowFarPlane;
 	private final float shadowIntervalSize;
+	private final Map<Integer, ShadowColour> shadowColours;
+
+	/**
+	 * What one {@code shadowcolor} buffer asks for: the format to allocate it in, whether the shadow
+	 * stage empties it at the top of every frame, and the colour it holds where nothing wrote it.
+	 * <p>
+	 * The defaults are Iris's {@code PackShadowDirectives.SamplingSettings}: RGBA8, cleared, white.
+	 * White and not black, and it is the value a pack reads as "the shadow stage put nothing here",
+	 * which is why a coloured shadow multiplies by it.
+	 * <p>
+	 * The clear colour matters even when {@code clear} is false, as Iris says on the same line: it is
+	 * then what the buffer starts its life holding rather than what it returns to every frame.
+	 */
+	public record ShadowColour(TargetFormat.Resolution format, boolean clear,
+			TargetDirectives.Colour clearColour) {
+	}
 
 	private PackDirectives(Builder builder) {
 		this.sunPathRotation = builder.sunPathRotation;
@@ -63,6 +83,10 @@ public final class PackDirectives {
 		this.shadowNearPlane = builder.shadowNearPlane;
 		this.shadowFarPlane = builder.shadowFarPlane;
 		this.shadowIntervalSize = builder.shadowIntervalSize;
+
+		Map<Integer, ShadowColour> colours = new TreeMap<>();
+		builder.shadowColours.forEach((index, setting) -> colours.put(index, setting.build()));
+		this.shadowColours = Collections.unmodifiableMap(colours);
 	}
 
 	/** What a pack that declares nothing gets, which is what most of the corpus gets. */
@@ -169,6 +193,22 @@ public final class PackDirectives {
 		return this.shadowIntervalSize;
 	}
 
+	/**
+	 * What one {@code shadowcolor} buffer asks for, its defaults when the pack said nothing about it.
+	 * Two packs of the corpus say something: Mellow asks for R8 and for its buffer not to be emptied,
+	 * Reverie asks for opaque black on nought and declares two more buffers besides.
+	 */
+	public ShadowColour shadowColour(int index) {
+		ShadowColour declared = this.shadowColours.get(index);
+
+		return declared == null ? Builder.SHADOW_COLOUR_DEFAULT : declared;
+	}
+
+	/** Which {@code shadowcolor} buffers the pack named at all, which is not which ones exist. */
+	public Set<Integer> shadowColoursDeclared() {
+		return this.shadowColours.keySet();
+	}
+
 	private static List<ProgramSet.ProgramKey> fragmentsOf(ProgramSet programs, String place) {
 		return programs.keys().stream()
 				.filter(key -> key.stage() == ProgramStage.FRAGMENT)
@@ -200,6 +240,13 @@ public final class PackDirectives {
 	public static final class Builder {
 
 		private static final float DRYNESS_HALFLIFE = 200.0F;
+
+		private static final String SHADOW_COLOUR = "shadowcolor";
+
+		private static final ShadowColour SHADOW_COLOUR_DEFAULT = new ShadowColour(
+				TargetFormat.defaultFormat(), true, new TargetDirectives.Colour(1.0F, 1.0F, 1.0F, 1.0F));
+
+		private final Map<Integer, ShadowSetting> shadowColours = new TreeMap<>();
 
 		private float sunPathRotation;
 		private float ambientOcclusionLevel = 1.0F;
@@ -248,9 +295,67 @@ public final class PackDirectives {
 				case "shadowNearPlane" -> asFloat(directive, value -> this.shadowNearPlane = value);
 				case "shadowFarPlane" -> asFloat(directive, value -> this.shadowFarPlane = value);
 				case "shadowIntervalSize" -> asFloat(directive, value -> this.shadowIntervalSize = value);
+				default -> shadowColour(directive);
+			}
+		}
+
+		/**
+		 * {@code shadowcolorNFormat}, {@code shadowcolorNClear} and {@code shadowcolorNClearColor}.
+		 * <p>
+		 * The same three suffixes the colour targets take, with the same types and the same grammar,
+		 * on a different family of buffers. Read here rather than in {@link TargetDirectives} for one
+		 * reason and it is not tidiness: that class keys everything by a colortex index, and a shadow
+		 * buffer folded into that space would have {@code shadowcolor0Format} decide the format of
+		 * colortex0.
+		 */
+		private void shadowColour(ConstDirectives.Directive directive) {
+			String name = directive.name();
+			if (!name.startsWith(SHADOW_COLOUR)) {
+				return;
+			}
+
+			int cursor = SHADOW_COLOUR.length();
+			while (cursor < name.length() && Character.isDigit(name.charAt(cursor))) {
+				cursor++;
+			}
+
+			int digits = cursor - SHADOW_COLOUR.length();
+			if (digits < 1 || digits > 2 || cursor == name.length()) {
+				return;
+			}
+
+			int index = Integer.parseInt(name.substring(SHADOW_COLOUR.length(), cursor));
+			String suffix = name.substring(cursor);
+			String type = directive.type();
+			String value = directive.value().trim();
+
+			// The declared type is checked on every one of them, as it is on the colour targets and
+			// for the same reason: Iris ignores a directive written under the wrong type, so a pack
+			// neither of us has seen has to be ignored here too.
+			switch (suffix) {
+				case "Format" -> {
+					if (type.equals("int")) {
+						setting(index).format = TargetFormat.resolve(value);
+					}
+				}
+				case "Clear" -> {
+					if (type.equals("bool") && (value.equals("true") || value.equals("false"))) {
+						setting(index).clear = value.equals("true");
+					}
+				}
+				case "ClearColor" -> {
+					if (type.equals("vec4")) {
+						TargetDirectives.parseColour(value)
+								.ifPresent(colour -> setting(index).clearColour = colour);
+					}
+				}
 				default -> {
 				}
 			}
+		}
+
+		private ShadowSetting setting(int index) {
+			return this.shadowColours.computeIfAbsent(index, _ -> new ShadowSetting());
 		}
 
 		private static void asFloat(ConstDirectives.Directive directive, FloatSetter setter) {
@@ -277,6 +382,21 @@ public final class PackDirectives {
 				setter.set(Integer.parseInt(directive.value().trim()));
 			} catch (NumberFormatException e) {
 				// As above.
+			}
+		}
+
+		/** One buffer's three answers while they are still being folded, any of them still unsaid. */
+		private static final class ShadowSetting {
+
+			private TargetFormat.Resolution format;
+			private Boolean clear;
+			private TargetDirectives.Colour clearColour;
+
+			private ShadowColour build() {
+				return new ShadowColour(
+						this.format == null ? SHADOW_COLOUR_DEFAULT.format() : this.format,
+						this.clear == null ? SHADOW_COLOUR_DEFAULT.clear() : this.clear,
+						this.clearColour == null ? SHADOW_COLOUR_DEFAULT.clearColour() : this.clearColour);
 			}
 		}
 

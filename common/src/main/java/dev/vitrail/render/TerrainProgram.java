@@ -230,7 +230,9 @@ public final class TerrainProgram {
 		if (pass.shadow()) {
 			// One attachment, shadowcolor0, whatever the pack's draw buffers say. A shadow program
 			// writing more than that has its later outputs written nowhere, which announce() says.
-			builder.withColorTargetState(0, state(GpuFormat.RGBA8_UNORM));
+			// The format is the map's own and not a constant: Mellow asks for R8 there, and a state
+			// naming four channels against a one channel attachment is the pipeline refusing to bind.
+			builder.withColorTargetState(0, state(targets.shadowFormat()));
 		} else {
 			// Nought is the game's own target and carries its format; the rest carry the format their
 			// colour target was really allocated as, which is not always the one the pack asked for.

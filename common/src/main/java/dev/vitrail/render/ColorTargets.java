@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.pack.program.BlendMode;
+import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetFormat;
 import dev.vitrail.pack.target.TargetName;
@@ -127,7 +128,7 @@ final class ColorTargets {
 	 * disagrees with itself, and that shows as a plausible picture rather than as an error.
 	 */
 	ColorTargets(TargetPlan plan, int noiseResolution, NoiseTexture.Image noiseImage,
-			int shadowResolution) {
+			int shadowResolution, PackDirectives.ShadowColour shadowColour) {
 		this.plan = plan;
 		// The pack asks for it by directive and 256 is the default. Held rather than looked up at
 		// allocation: this class knows nothing of a frame, and the resolution never moves while a
@@ -136,7 +137,7 @@ final class ColorTargets {
 		// The image wins over the directive when the pack ships both: the directive sizes the
 		// generated field, and the image is uploaded as it stands, which is Iris's rule.
 		this.noiseImage = noiseImage;
-		this.shadowMap = new ShadowTargets(shadowResolution);
+		this.shadowMap = new ShadowTargets(shadowResolution, shadowColour);
 		this.doubled = Set.copyOf(plan.schedule().doubled());
 
 		// The format and the starting colour are read once and kept. Neither moves while a pack
@@ -371,6 +372,15 @@ final class ColorTargets {
 
 	GpuFormat format(int index) {
 		return this.formats.get(index);
+	}
+
+	/**
+	 * The format {@code shadowcolor0} is allocated in, which the pack may have chosen. Read by the
+	 * shadow pipelines: dynamic rendering wants the colour state of a pipeline to name the format of
+	 * the attachment it is bound against, so a pack asking for R8 moves both or neither.
+	 */
+	GpuFormat shadowFormat() {
+		return this.shadowMap.format();
 	}
 
 	int screenWidth() {
