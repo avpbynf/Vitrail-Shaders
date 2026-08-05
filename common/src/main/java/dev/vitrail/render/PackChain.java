@@ -1,7 +1,6 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
-import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.source.PackLoader;
@@ -427,17 +426,15 @@ public final class PackChain {
 	 * cause is not a message from the SPIR-V compiler naming a sampler and no program.
 	 */
 	private static void announceRemoved(PackProgram.Chain chain) {
-		Map<String, List<TranslatedUnit.Uniform>> refused = chain.removed();
+		Map<String, PackProgram.Refusal> refused = chain.removed();
 		if (refused.isEmpty()) {
 			return;
 		}
 
 		List<String> said = new ArrayList<>();
-		refused.forEach((program, samplers) -> said.add(
+		refused.forEach((program, refusal) -> said.add(
 				(chain.place().isEmpty() ? program : chain.place() + "/" + program)
-						+ " is not run: it declares " + PackPass.describe(samplers)
-						+ ", and a pipeline of this game carries two dimensional and cube samplers "
-						+ "and nothing else"));
+						+ " is not run: it " + refusal.reason()));
 
 		removed = List.copyOf(said);
 		said.forEach(line -> Vitrail.logger().warn("{}", line));

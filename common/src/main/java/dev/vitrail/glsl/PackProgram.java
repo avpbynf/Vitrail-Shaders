@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -99,15 +100,77 @@ public final class PackProgram {
 	}
 
 	/**
+	 * Why no pipeline can be built for one program, which is one word over three different
+	 * failures. They are kept apart because what a reader is meant to do about them differs:
+	 * the first is a texture this engine could serve one day, the second waits on machinery
+	 * nothing here runs, and the third cannot be served at all under this API.
+	 *
+	 * @param unbindable samplers declared under a shape the backend refuses, and that nothing this
+	 *                   engine can serve stands behind. A directive may well name one: what it
+	 *                   named was refused in its turn, with its own line and its own reason
+	 * @param volumes    the same shapes, for names an {@code image} directive hangs a volume on.
+	 *                   Nothing is missing there but the compute pass that would fill it, and this
+	 *                   engine runs none; every one of them in the corpus sits under a setting that
+	 *                   is off by default
+	 * @param storage    storage blocks. {@code IntermediaryShaderModule.createFromSpirv} lists a
+	 *                   module's uniform buffers and its sampled images and nothing else, so one of
+	 *                   these never enters a bind group, its binding is never rewritten, and the
+	 *                   descriptor stays on the number the pack wrote
+	 */
+	public record Refusal(List<TranslatedUnit.Uniform> unbindable,
+			List<TranslatedUnit.Uniform> volumes, List<String> storage) {
+
+		public Refusal {
+			unbindable = List.copyOf(unbindable);
+			volumes = List.copyOf(volumes);
+			storage = List.copyOf(storage);
+		}
+
+		public boolean any() {
+			return !this.unbindable.isEmpty() || !this.volumes.isEmpty() || !this.storage.isEmpty();
+		}
+
+		/** What is wrong, in as many clauses as there are kinds of it, each naming its own names. */
+		public String reason() {
+			List<String> said = new ArrayList<>();
+			if (!this.unbindable.isEmpty()) {
+				said.add("declares " + describe(this.unbindable) + ", a shape this backend cannot bind, "
+						+ "with nothing behind that name this engine knows how to serve");
+			}
+
+			if (!this.volumes.isEmpty()) {
+				said.add("declares " + describe(this.volumes) + ", a volume an image directive asks a "
+						+ "compute pass to fill and this engine runs no compute pass");
+			}
+
+			if (!this.storage.isEmpty()) {
+				said.add("declares the storage block " + String.join(", ", this.storage)
+						+ ", which nothing binds: the game lists a module's uniform buffers and its "
+						+ "sampled images and neither includes one, so its descriptor stays on the "
+						+ "binding the pack wrote");
+			}
+
+			return String.join(", and ", said);
+		}
+
+		/** {@code colortex6 as sampler3D}. The type is beside the name because the name misleads. */
+		private static String describe(List<TranslatedUnit.Uniform> samplers) {
+			return samplers.stream()
+					.map(sampler -> sampler.name() + " as " + sampler.type())
+					.collect(Collectors.joining(", "));
+		}
+	}
+
+	/**
 	 * @param place    where the entry points were read from, {@code ""} at the root
 	 * @param programs by bare name, {@code composite4}, in the order they run, the final last
 	 * @param removed  the full screen programs no pipeline can be built for, by bare name, each with
-	 *                 the samplers that did it. They are gone from {@link #programs} and the plan was
-	 *                 rebuilt without them, unless the {@code final} is one of them: nothing is then
-	 *                 removed at all and {@link ChainPlan#refusals()} refuses the whole chain
+	 *                 what did it. They are gone from {@link #programs} and the plan was rebuilt
+	 *                 without them, unless the {@code final} is one of them: nothing is then removed
+	 *                 at all and {@link ChainPlan#refusals()} refuses the whole chain
 	 */
 	public record Chain(String packName, String place, TargetPlan targets, ChainPlan chain,
-			Map<String, Loaded> programs, Map<String, List<TranslatedUnit.Uniform>> removed) {
+			Map<String, Loaded> programs, Map<String, Refusal> removed) {
 
 		public Chain {
 			// Kept in order rather than Map.copyOf: a reader walking this map is walking the frame,
@@ -315,7 +378,8 @@ public final class PackProgram {
 				translated.put(name, translate(path, units));
 			}
 
-			Map<String, List<TranslatedUnit.Uniform>> refused = unbindable(translated);
+			Map<String, Refusal> refused =
+					unbindable(translated, properties.imageSamplers(settings.globalDefines(options)));
 			List<String> refusals = new ArrayList<>();
 			if (refused.containsKey(FINAL)) {
 				// A final is never offered to a filter and cannot be: with it gone nothing of the
@@ -354,12 +418,16 @@ public final class PackProgram {
 	}
 
 	/**
-	 * The programs no pipeline can be built for, by bare name and in frame order, each with the
-	 * samplers that did it.
+	 * The programs no pipeline can be built for, by bare name and in frame order, each with what
+	 * did it.
+	 *
+	 * @param filled the sampler names an {@code image} directive hangs a volume on, which is what
+	 *               tells a name this engine has nothing to put behind from one that waits on a
+	 *               compute pass
 	 */
-	private static Map<String, List<TranslatedUnit.Uniform>> unbindable(
-			Map<String, ProgramTranslator.TranslatedProgram> translated) {
-		Map<String, List<TranslatedUnit.Uniform>> refused = new LinkedHashMap<>();
+	private static Map<String, Refusal> unbindable(
+			Map<String, ProgramTranslator.TranslatedProgram> translated, Set<String> filled) {
+		Map<String, Refusal> refused = new LinkedHashMap<>();
 		translated.forEach((name, program) -> {
 			// Stage by stage, and not through the merged list. That list keeps the first stage to
 			// declare a name, so a vertex declaring sampler2D would hide a fragment declaring the
@@ -367,32 +435,45 @@ public final class PackProgram {
 			// modules does not have. Rare, and the failure it leaves is the raw driver error this
 			// whole check exists to replace.
 			Map<String, TranslatedUnit.Uniform> found = new LinkedHashMap<>();
-			program.stages().values().forEach(stage -> stage.samplers().stream()
-					.filter(sampler -> SamplerTypes.refused(sampler.type()))
-					.forEach(sampler -> found.putIfAbsent(sampler.name(), sampler)));
-			if (!found.isEmpty()) {
-				refused.put(name, List.copyOf(found.values()));
+			List<String> storage = new ArrayList<>();
+			program.stages().values().forEach(stage -> {
+				stage.samplers().stream()
+						.filter(sampler -> SamplerTypes.refused(sampler.type()))
+						.forEach(sampler -> found.putIfAbsent(sampler.name(), sampler));
+				stage.notes().storageBlocks().stream()
+						.filter(block -> !storage.contains(block))
+						.forEach(storage::add);
+			});
+
+			List<TranslatedUnit.Uniform> volumes = found.values().stream()
+					.filter(sampler -> filled.contains(sampler.name()))
+					.toList();
+			List<TranslatedUnit.Uniform> plain = found.values().stream()
+					.filter(sampler -> !filled.contains(sampler.name()))
+					.toList();
+
+			Refusal refusal = new Refusal(plain, volumes, storage);
+			if (refusal.any()) {
+				refused.put(name, refusal);
 			}
 		});
 
 		return refused;
 	}
 
-	/** One sentence naming the sampler, its type, and how much of the pack goes with it. */
-	private static String refusal(String packName, String path,
-			Map<String, List<TranslatedUnit.Uniform>> refused) {
-		TranslatedUnit.Uniform first = refused.get(FINAL).get(0);
-		String line = path + " declares " + first.name() + " as " + first.type()
-				+ ", which this backend cannot bind, and a final cannot be taken out of a chain, so "
-				+ "nothing of " + packName + " can be drawn";
+	/** One sentence naming what refuses the final, and how much of the pack goes with it. */
+	private static String refusal(String packName, String path, Map<String, Refusal> refused) {
+		String line = path + " " + refused.get(FINAL).reason()
+				+ ", and a final cannot be taken out of a chain, so nothing of " + packName
+				+ " can be drawn";
 
 		return refused.size() == 1
 				? line
-				: line + " (" + (refused.size() - 1) + " other passes of this place are refused for "
-						+ "the same reason: " + names(refused) + ")";
+				: line + " (" + (refused.size() - 1) + " other passes of this place are refused as "
+						+ "well: " + names(refused) + ")";
 	}
 
-	private static String names(Map<String, List<TranslatedUnit.Uniform>> refused) {
+	private static String names(Map<String, Refusal> refused) {
 		return refused.keySet().stream()
 				.filter(name -> !name.equals(FINAL))
 				.collect(Collectors.joining(", "));

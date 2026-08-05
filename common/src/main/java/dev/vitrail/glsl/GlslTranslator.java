@@ -155,6 +155,9 @@ public final class GlslTranslator {
 	private final Map<String, String> blockMembers = new LinkedHashMap<>();
 	private final Map<String, String> samplers = new LinkedHashMap<>();
 
+	/** Storage blocks this unit declares at file scope, by the name the block is written under. */
+	private final List<String> storageBlocks = new ArrayList<>();
+
 	/**
 	 * The samplers the pack declared as comparison samplers, and which are declared here as ordinary
 	 * ones. {@link #ofShadowCompare} says why they cannot stay what they were.
@@ -296,6 +299,7 @@ public final class GlslTranslator {
 		// After it, and for the same reason: the comparison has already been taken out of the
 		// spelling by then, so a compared parameter is collected here under sampler2D like any other.
 		collectSamplerParameters();
+		collectStorageBlocks();
 		collectDrawBuffers();
 		synthesizeAttributes();
 		dropVersionAndExtensions();
@@ -1637,6 +1641,42 @@ public final class GlslTranslator {
 	}
 
 	/**
+	 * Records every storage block the unit declares, which nothing here can make bindable.
+	 * <p>
+	 * Named rather than rewritten because the game never looks for one.
+	 * {@code IntermediaryShaderModule.createFromSpirv} lists the module's uniform buffers and its
+	 * sampled images and nothing else, so a storage block never enters a bind group, its binding is
+	 * never rewritten with the rest, and the descriptor stays on whatever number the pack wrote.
+	 * Reverie writes two at set 0, bindings 0 and 1, where the layout already puts the uniform block.
+	 * <p>
+	 * Read on the shape and not on the word alone: {@code buffer} followed by a name and an opening
+	 * brace is an interface block and can be nothing else, so no brace depth has to be counted, which
+	 * this class cannot count anyway. A block in a branch the expander did not take is left out for
+	 * the reason a uniform in one is: the compiler will not see it either.
+	 */
+	private void collectStorageBlocks() {
+		int[] lines = lineNumbers();
+
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (!token.identifier("buffer") || token.directive() != null
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int name = significantAfter(index);
+			if (name < 0 || this.tokens.get(name).kind() != Kind.IDENTIFIER) {
+				continue;
+			}
+
+			int brace = significantAfter(name);
+			if (brace >= 0 && this.tokens.get(brace).operator("{")) {
+				this.storageBlocks.add(this.tokens.get(name).text());
+			}
+		}
+	}
+
+	/**
 	 * The last token of the function a parameter list opens, which is the brace that closes the
 	 * body, or the parenthesis itself when the function is only declared.
 	 */
@@ -1934,7 +1974,7 @@ public final class GlslTranslator {
 				this.covers ? 1 : 0, this.depthLookups,
 				this.parameterLookups, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
-				List.copyOf(this.conflicts), comparedSamplers());
+				List.copyOf(this.conflicts), comparedSamplers(), List.copyOf(this.storageBlocks));
 	}
 
 	/**

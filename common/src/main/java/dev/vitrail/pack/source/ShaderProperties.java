@@ -66,6 +66,7 @@ public final class ShaderProperties {
 	private static final Pattern TEXTURE_NOISE = Pattern.compile("^\\s*texture\\.noise\\s*=\\s*(.*)$");
 	private static final Pattern CUSTOM_TEXTURE =
 			Pattern.compile("^\\s*((?:texture|customTexture)\\.[^=\\s]+)\\s*=\\s*(.*)$");
+	private static final Pattern IMAGE = Pattern.compile("^\\s*image\\.[^=\\s.]+\\s*=\\s*(.*)$");
 	private static final Pattern FLIP = Pattern.compile("^\\s*flip\\.([^=\\s.]+)\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern OTHER_KEY = Pattern.compile("^\\s*([A-Za-z_][\\w]*)[.=].*$");
 
@@ -642,6 +643,40 @@ public final class ShaderProperties {
 		}
 
 		return declared;
+	}
+
+	/**
+	 * The sampler names an {@code image.NAME} directive hangs a storage image on, live lines only.
+	 * <p>
+	 * Read for one purpose and no more: to tell a refusal from a refusal. A {@code sampler3D} that
+	 * nothing in the pack backs with a file is a name this engine has nothing to put behind, and one
+	 * an {@code image} directive names is a volume a compute pass would have filled. Neither can be
+	 * bound, and only the second one says what is missing is a pass rather than a texture.
+	 * <p>
+	 * The sampler is the first word of the value, and {@code none} is the format's way of writing
+	 * that the image is never sampled at all, so it names nothing.
+	 */
+	public Set<String> imageSamplers(Map<String, String> defines) {
+		Set<String> samplers = new LinkedHashSet<>();
+		ConditionStack conditions = new ConditionStack();
+
+		for (String line : this.lines) {
+			Matcher directive = DIRECTIVE.matcher(line);
+			if (directive.matches()) {
+				applyDirective(directive.group(1), line, conditions, defines);
+				continue;
+			}
+
+			Matcher image = IMAGE.matcher(line);
+			if (conditions.active() && image.matches()) {
+				String[] words = image.group(1).trim().split("\\s+");
+				if (words.length > 0 && !words[0].isEmpty() && !words[0].equalsIgnoreCase("none")) {
+					samplers.add(words[0]);
+				}
+			}
+		}
+
+		return samplers;
 	}
 
 	/**

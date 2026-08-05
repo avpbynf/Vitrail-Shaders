@@ -93,6 +93,9 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 * @param comparedSamplers   the samplers the pack asked the hardware to compare and that are
 	 *                           declared here as ordinary ones. Read off the declarations rather
 	 *                           than off {@code samplers}, whose types have already been rewritten
+	 * @param storageBlocks      the storage blocks this unit declares at file scope, which nothing
+	 *                           binds and no rewrite can help: they are what refuses the program
+	 *                           that carries one
 	 */
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
@@ -100,6 +103,6 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 			int depthLookups, int parameterLookups,
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
-			List<String> conflictNames, List<String> comparedSamplers) {
+			List<String> conflictNames, List<String> comparedSamplers, List<String> storageBlocks) {
 	}
 }
