@@ -758,15 +758,21 @@ public final class PackChain {
 			build(device);
 		}
 
-		// One pipeline a frame at most, and nothing is drawn until every one of them is ready: the
-		// game keeps its own image for the handful of frames that takes, which is a fade rather
-		// than the three second freeze compiling nine programs at once would be, and that freeze
-		// would be paid again at every resource reload.
+		// One pipeline a frame at most, and nothing of the chain is drawn until every one of them is
+		// ready: the game keeps its own image for the handful of frames that takes, which is a fade
+		// rather than the three second freeze compiling nine programs at once would be, and that
+		// freeze would be paid again at every resource reload. The terrain stands aside for those
+		// frames too, through drawable(), or the world would be drawn into a colour target this has
+		// no final ready to bring back and the fade would be a fade to nothing.
+		//
+		// The targets and the buffers first and the compilation second, which is not the order this
+		// had. Behind the warm up, quad and block stayed null for the whole of it while the rest of
+		// the frame reaches for both.
 		//
 		// Outside any render pass, both of them: creating a texture or a buffer records a barrier
 		// into the very command buffer a pass would be recording into, and the clears refuse
 		// outright while one is open.
-		if (!warm(device) || !prepare(device, main)) {
+		if (!prepare(device, main) || !warm(device)) {
 			return null;
 		}
 
@@ -1237,7 +1243,9 @@ public final class PackChain {
 	 * emptied its cache, which it does at every resource reload: the alternative is to ask for all
 	 * of them every frame, which pays the whole compilation in the one frame after a reload.
 	 *
-	 * @return false while a program is still missing, in which case the game keeps its own image
+	 * @return false while a program is still missing, in which case nothing of the chain is drawn.
+	 *         What the screen holds for those frames is the terrain's answer and not this one, and
+	 *         {@link #drawable} is where the two are joined
 	 */
 	private boolean warm(GpuDevice device) {
 		if (this.programs.isEmpty()) {
@@ -1266,6 +1274,26 @@ public final class PackChain {
 		}
 
 		return this.warmed == this.programs.size();
+	}
+
+	/**
+	 * Whether the chain is in a state to bring a colour target of the pack back to the screen, asked
+	 * of the frame that is being drawn and not of the load.
+	 * <p>
+	 * The terrain sends draw buffer nought to the pack's own targets, and only the final of this
+	 * chain brings that back. Whether it may was settled once at load, out of the engine option and
+	 * the plan; whether it will is this, and the two are not the same question. {@link #warm}
+	 * compiles one program a frame, so every load, every resource reload and every portal used to
+	 * spend {@code programs.size()} frames with the world drawn into a target nothing read: three
+	 * seconds of a screen with no world in it, at every F3+T.
+	 * <p>
+	 * The empty chain answers no rather than yes on a vacuous count. A place with no program has no
+	 * final either, so nothing would ever bring that target back, and {@link #warm} refuses it in
+	 * its first line for the same reason.
+	 */
+	boolean drawable() {
+		return this.programs != null && !this.programs.isEmpty()
+				&& this.warmed == this.programs.size();
 	}
 
 	/**

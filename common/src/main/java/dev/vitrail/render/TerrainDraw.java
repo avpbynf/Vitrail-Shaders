@@ -378,9 +378,39 @@ public final class TerrainDraw {
 			return null;
 		}
 
+		// The same answer the pipeline gives, and it has to be the same one: the pipeline carries
+		// a colour state per attachment this names, and one of the two refusing alone is setPipeline
+		// throwing by name in the middle of Sodium's own draw. The two are asked at two points of one
+		// pass, begin and render, and nothing between them moves the answer: it turns where the chain
+		// warms up, which is either side of the whole pass and never inside it.
+		if (!shadowing && !draw.shown()) {
+			return null;
+		}
+
 		TerrainProgram program = draw.programs.get(drawn);
 
 		return program == null ? null : program.descriptor(colour, depth);
+	}
+
+	/**
+	 * Whether what a camera pass writes still reaches the screen this frame.
+	 * <p>
+	 * Read by the pipeline and by the descriptor and by nothing else. A pass whose draw buffer nought
+	 * goes to the pack's own target has no way of its own back to the screen; the chain's final is
+	 * that way, and the chain draws nothing at all while it is still compiling, one program a frame
+	 * after every load and every resource reload. Those frames drew the world into a colour target
+	 * nothing read, which is a screen with no world in it for as long as the warm up lasts.
+	 * <p>
+	 * A pack whose chain is switched off never asks: {@code chainRuns} already keeps draw buffer
+	 * nought on the game's target, and the world is drawn where it has always been drawn.
+	 * <p>
+	 * The shadow stage never asks either, and that is the one refusal that would not be safe: with
+	 * nothing of ours handed back, Sodium opens its own pass on the game's target and the shadow half
+	 * paints the world seen from the light over the finished image. {@link #openShadowStage} settles
+	 * that question once, where it can be settled outside a pass.
+	 */
+	private boolean shown() {
+		return !this.chainRuns || this.owner.drawable();
 	}
 
 	private RenderPipeline prepare(TerrainPass pass, VertexFormat format, GpuTextureView atlas) {
@@ -418,6 +448,17 @@ public final class TerrainDraw {
 			// carries one colour state per attachment the descriptor would have named, and Sodium's
 			// own pass, the only one left to bind it into, carries exactly one.
 			if (!this.owner.openTargets(device)) {
+				return null;
+			}
+
+			// After the two calls above and not with the guards at the top of the two doors, which is
+			// the whole reason it sits here. The frame boundary hangs off whichever of the terrain and
+			// the chain comes first, and while the chain is warming up the chain never gets far enough
+			// to open one: refused at the door, these frames would leave the value store standing, and
+			// the frame that finally drew would call the camera of several frames ago its previous one.
+			// The clears are owed for the same reason, or the first frame drawn would compose targets
+			// holding whatever the warm up left in them.
+			if (!shown()) {
 				return null;
 			}
 		}
