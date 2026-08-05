@@ -69,6 +69,14 @@ final class ShadowTargets {
 	private GpuTexture noTranslucents;
 	private GpuTextureView noTranslucentsView;
 
+	/**
+	 * Whether that copy still stands for the map as it is now. Lowered by every clear, because a copy
+	 * is a moment of the map and emptying the map is the moment it stops being one: the same rule
+	 * {@link PackDepth} follows for the two depths it converts, where an image nothing has filled is
+	 * not handed to a pack at all.
+	 */
+	private boolean copied;
+
 	private boolean broken;
 
 	ShadowTargets(int resolution, PackDirectives.ShadowColour asked) {
@@ -133,8 +141,17 @@ final class ShadowTargets {
 	 * The depth is emptied whatever the pack says, and only the colour takes the directive.
 	 * {@code shadowcolorNClear} is about the buffer the pack writes; the depth is the map itself, and
 	 * a map carried over from a frame that drew a different world is not something any pack asks for.
+	 * <p>
+	 * <strong>Emptying the map drops the copy beside it as well</strong>, and it has to: the depth is
+	 * read under two names and the clear only reaches one image. A copy left standing is what
+	 * {@code shadowtex1} keeps being served, so a stage that stops between frames would empty the map
+	 * the pack samples as {@code shadowtex0} and leave the other name on the last half drawn map of
+	 * the session, which is exactly the picture the clear exists to prevent. Dropped rather than
+	 * emptied in turn: {@link #depthWithoutTranslucents} already falls back to the live map, so what
+	 * the pack then reads is the image this call just took to the far plane, at no cost per frame.
 	 */
 	void clear(CommandEncoder encoder) {
+		this.copied = false;
 		if (this.target == null) {
 			return;
 		}
@@ -172,6 +189,7 @@ final class ShadowTargets {
 
 		encoder.copyTextureToTexture(depth, this.noTranslucents, 0, 0, 0, 0, 0, this.resolution,
 				this.resolution);
+		this.copied = true;
 	}
 
 	/** The depth with everything in it, which the pack reads as {@code shadowtex0}. */
@@ -180,7 +198,8 @@ final class ShadowTargets {
 	}
 
 	/**
-	 * The depth without the translucents, or the depth with them when no copy has been taken yet.
+	 * The depth without the translucents, or the depth with them while no copy stands for the map as
+	 * it is now.
 	 * <p>
 	 * Falling back to the live image rather than to white is the same choice the world's depth copy
 	 * makes: the wrong moment of the right image says "nothing translucent is in the way", which is
@@ -188,7 +207,7 @@ final class ShadowTargets {
 	 * and put every surface behind glass.
 	 */
 	GpuTextureView depthWithoutTranslucents() {
-		return this.noTranslucentsView == null ? depth() : this.noTranslucentsView;
+		return this.copied ? this.noTranslucentsView : depth();
 	}
 
 	/**
@@ -210,6 +229,7 @@ final class ShadowTargets {
 	}
 
 	void release() {
+		this.copied = false;
 		if (this.target != null) {
 			this.target.destroyBuffers();
 			this.target = null;

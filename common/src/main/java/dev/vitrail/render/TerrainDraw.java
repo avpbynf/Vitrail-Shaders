@@ -115,14 +115,21 @@ public final class TerrainDraw {
 	 * other refusal, because that branch is out of reach once this flag is down: the frame graph stops
 	 * capturing the camera as soon as {@link #shadows()} answers no, so the stage returns before it
 	 * gets there. Left as the failed frame put it, the pack would keep reading a half drawn map for
-	 * the rest of the session, and half a map looks exactly like a shadow.
+	 * the rest of the session, and half a map looks exactly like a shadow. Both names the depth is
+	 * read under go with it, which is {@link ShadowTargets#clear}'s own doing and is the whole reason
+	 * the promise below can be made: emptying the map alone would leave {@code shadowtex1} on the copy
+	 * the failed frame took, frozen for the session.
+	 * <p>
+	 * Nothing is emptied when there is no chain or no device, and nothing needs to be: the samplers
+	 * are bound by the chain's own programs, and {@link PackChain#terrain()} answers null exactly when
+	 * there is no chain left to bind them.
 	 * <p>
 	 * Public because the stage itself is driven from the loader module, which is where the bus is.
 	 */
 	public static void shadowStageFailed(RuntimeException e) {
 		shadowWanted = false;
 		Vitrail.logger().error("Vitrail stopped drawing the shadow map after an error in the stage, "
-				+ "so the pack reads the far plane wherever it samples one", e);
+				+ "so every shadowtex lookup of the pack reads the far plane", e);
 
 		TerrainDraw self = PackChain.terrain();
 		GpuDevice device = RenderSystem.tryGetDevice();
@@ -133,8 +140,10 @@ public final class TerrainDraw {
 		try {
 			self.targets.shadow().clear(device.createCommandEncoder());
 		} catch (RuntimeException second) {
-			// Swallowed on purpose: this is the handler, and the first error is the one worth reading.
-			// A pass left open by whatever threw above is enough to refuse a clear.
+			// Not rethrown: this is the handler the bus called, and the error above is the one worth
+			// reading. A pass left open by whatever threw there is enough to refuse a clear, so the
+			// second one is said rather than swallowed - it is what makes the line above stop being
+			// true.
 			Vitrail.logger().error("The shadow map could not be emptied either, so what the pack reads "
 					+ "as a shadow is whatever the frame that failed left in it", second);
 		}
