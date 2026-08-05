@@ -270,8 +270,16 @@ public final class ShaderPackSource implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * A path a pack wrote, relative to {@code shaders/} whether or not it opens with a slash.
+	 * <p>
+	 * The leading slash has to come off before the resolution and not after. {@code Path.resolve}
+	 * throws the base away when it is handed something absolute, so the search would drop to the
+	 * root of the archive and find nothing, and a texture that is not found is black rather than
+	 * an error. Mellow and Reverie write every one of their texture paths that way.
+	 */
 	public Optional<Path> file(String relative) {
-		Path target = this.shadersRoot.resolve(relative);
+		Path target = this.shadersRoot.resolve(relative.replaceAll("^/+", ""));
 
 		return Files.isRegularFile(target) ? Optional.of(target) : Optional.empty();
 	}
