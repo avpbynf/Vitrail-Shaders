@@ -1618,6 +1618,13 @@ public final class GlslTranslator {
 	 * have to be: a declaration lists names until the semicolon, a parameter names one thing and
 	 * ends at the comma. Read as a declaration, {@code shadowsmoothfilter(in sampler2DShadow tex,
 	 * in vec3 uv, ...)} claims every identifier down to the first statement of the body.
+	 * <p>
+	 * A declaration in a branch nobody takes says nothing about the name, the way it says nothing to
+	 * {@link #liftUniforms}. Both Complementary packs declare {@code shadowtex0} a plain
+	 * {@code sampler2D} in their {@code composite1} and a {@code sampler2DShadow} in the branch that
+	 * is not composite1; taking the dead one would make every lookup on that name a comparison, in a
+	 * program whose texture is not one. The bracket count still walks every token, live or not,
+	 * because it is the shape of the text and not a statement about the program.
 	 */
 	private void collectComparisonSamplers() {
 		int[] lines = lineNumbers();
@@ -1636,7 +1643,8 @@ public final class GlslTranslator {
 				depth--;
 			}
 
-			if (token.kind() != Kind.IDENTIFIER || token.directive() != null) {
+			if (token.kind() != Kind.IDENTIFIER || token.directive() != null
+					|| !this.unit.isLive(lines[index])) {
 				continue;
 			}
 
