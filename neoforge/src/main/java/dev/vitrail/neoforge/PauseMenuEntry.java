@@ -102,11 +102,12 @@ public final class PauseMenuEntry {
 								.setScreen(new SettingsScreen(event.getScreen())),
 						true)
 				.width(ICON)
-				// Sixteen and not the fifteen the game's own icons of that row use, because the
-				// button places a sprite at its centre minus half its width, in whole pixels: an odd
+				// Even, and never the odd fifteen the game's own icons of that row use, because the
+				// button places a sprite at its centre minus half its width in whole pixels: an odd
 				// sprite in a twenty wide button lands three pixels from one edge and two from the
-				// other. Even against even is the only pair that comes out centred.
-				.sprite(SPRITE, 16, 16)
+				// other. Fourteen leaves three on each side, which is a margin rather than a sprite
+				// pressed against the border.
+				.sprite(SPRITE, 14, 14)
 				.withTootip()
 				.build();
 		// The row was centred before this button widened it, so everything on it moves half a button
