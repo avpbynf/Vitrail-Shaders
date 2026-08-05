@@ -31,6 +31,7 @@ public final class ScreenText {
 
 	/** One argument: the file that would be deleted, by name. */
 	public static final String RESET_CONFIRM_DETAIL = "options.vitrail.reset_confirm_detail";
+	/** The view switch seen from a pack's pages. {@link #TITLE} is the same control seen from the list. */
 	public static final String PACKS = "options.vitrail.packs";
 	public static final String PACKS_TITLE = "options.vitrail.packs_title";
 	public static final String PROFILE = "options.vitrail.profile";

@@ -336,14 +336,20 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		// because this screen has no breadcrumb to hang them from.
 		LinearLayout tools = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
 				LayoutSettings::alignHorizontallyCenter);
+		// The view switch first on both, at one width and under two names that answer each other,
+		// Shader Pack List and Shader Pack Settings. It is one control and a player reads it as one
+		// only if it keeps its place: a button that changes name is ordinary, a button that changes
+		// name and moves is two buttons.
 		if (this.listingPacks) {
+			tools.addChild(settingsButton());
 			// No Reload on the list, and both references agree: neither OptiFine's pack screen nor
 			// Iris's offers to read the pack again from the screen whose whole subject is which pack
 			// to read. Ours offered it by accident of layout, and it reloaded the pack to answer a
 			// question about a directory listing. The folder is watched instead, see watchFolder.
 			tools.addChild(button(ScreenText.FOLDER, WIDE_BUTTON, this::openFolder));
-			tools.addChild(settingsButton());
 		} else {
+			tools.addChild(button(ScreenText.PACKS, SETTINGS_BUTTON, this::openPacks));
+
 			// Back only where it means something the switch does not. On a pack's first page the two
 			// are one button drawn twice: walking back from there IS going to the list, and a row
 			// that offers the same door under two names is a row nobody reads.
@@ -353,7 +359,6 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 
 			tools.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
 			tools.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::confirmReset));
-			tools.addChild(button(ScreenText.PACKS, NARROW_BUTTON, this::openPacks));
 		}
 
 		LinearLayout commit = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
