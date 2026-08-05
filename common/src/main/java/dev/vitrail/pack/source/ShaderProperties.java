@@ -75,6 +75,16 @@ public final class ShaderProperties {
 	/** Deep enough for any real profile chain, and a stop for one that refers to itself. */
 	private static final int MAX_PROFILE_DEPTH = 8;
 
+	/**
+	 * A depth limit alone does not bound the work, for the reason {@link IncludeExpander} spells
+	 * out about its own file budget: profiles form a graph rather than a tree, and one that names
+	 * the next one ten times multiplies at every level. Nine profiles with no cycle in them, each
+	 * naming the next ten times, run for four minutes on this machine and never reach the depth
+	 * limit. A pack is downloaded content and this is read while the client is starting, so the
+	 * total is bounded too. The corpus expands twenty-eight settings at its worst.
+	 */
+	private static final int MAX_PROFILE_EXPANSIONS = 10_000;
+
 	private final List<String> lines;
 	private final Map<String, String> profiles;
 	private final Map<String, String> customUniformTypes;
@@ -706,14 +716,21 @@ public final class ShaderProperties {
 	 */
 	public Map<String, OptionValue> expandProfile(String name) {
 		Map<String, OptionValue> chosen = new LinkedHashMap<>();
-		expandProfile(name, chosen, 0);
+		expandProfile(name, chosen, 0, new int[1]);
 
 		return chosen;
 	}
 
-	private void expandProfile(String name, Map<String, OptionValue> chosen, int depth) {
+	/**
+	 * @param budget how many expansions the whole nest has left, shared rather than restarted at
+	 *               each hop. Neither a set of names already seen nor a set of names on the path
+	 *               would do instead: the first changes what the format means, since the later
+	 *               choice wins and a profile named twice is written twice on purpose, and the
+	 *               second stops only cycles, which are not what costs
+	 */
+	private void expandProfile(String name, Map<String, OptionValue> chosen, int depth, int[] budget) {
 		String body = this.profiles.get(name);
-		if (body == null || depth > MAX_PROFILE_DEPTH) {
+		if (body == null || depth > MAX_PROFILE_DEPTH || ++budget[0] > MAX_PROFILE_EXPANSIONS) {
 			return;
 		}
 
@@ -723,7 +740,7 @@ public final class ShaderProperties {
 			}
 
 			if (token.startsWith("profile.")) {
-				expandProfile(token.substring("profile.".length()), chosen, depth + 1);
+				expandProfile(token.substring("profile.".length()), chosen, depth + 1, budget);
 			} else if (token.startsWith("!")) {
 				chosen.put(token.substring(1), OptionValue.off());
 			} else {
