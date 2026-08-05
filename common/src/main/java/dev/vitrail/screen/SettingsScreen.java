@@ -23,6 +23,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -67,7 +68,11 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	private static final int FOOTER_HEIGHT = 70;
 	private static final int LINE_HEIGHT = 11;
 	private static final int NARROW_BUTTON = 80;
+	private static final int WIDE_BUTTON = 120;
 	private static final int BUTTON_GAP = 8;
+
+	/** How often the pack folder is looked at while the list is drawn, in milliseconds. */
+	private static final long FOLDER_INTERVAL = 1000L;
 
 	/** Wide enough for the screen's own title, which is what the way into a pack's pages says. */
 	private static final int SETTINGS_BUTTON = 150;
@@ -96,6 +101,10 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 
 	private boolean listingPacks;
 	private boolean rebuildQueued;
+
+	/** What the folder held last time it was looked at, and when. See {@link #watchFolder()}. */
+	private List<String> folderNames = List.of();
+	private long folderLooked;
 
 	public SettingsScreen(@Nullable Screen parent) {
 		super(Component.translatable(ScreenText.TITLE));
@@ -166,6 +175,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
 		syncWithLoadedPack();
+		watchFolder();
 		if (this.rebuildQueued) {
 			this.rebuildQueued = false;
 			rebuildWidgets();
@@ -319,37 +329,38 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 				LayoutSettings::alignHorizontallyCenter);
 		this.statusLine.setTooltip(removedTooltip());
 
-		// One row, whichever page is drawn. The screen had two, and the second one carried Apply and
-		// Cancel everywhere: on the pack list they had nothing to act on, since walking back to it
-		// drops what was pending, and Cancel had nothing left to do anywhere once leaving a page
-		// stopped writing. What is left reads left to right as the way out, the way back, and the
-		// one button that commits.
-		LinearLayout row = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
+		// Two rows, and their shape is Iris's rather than ours, because a player who has configured a
+		// pack before has configured it there. Its screen carries the folder and the view switch on
+		// one line and Cancel, Apply and Done on the line under it; what belongs to a pack's own
+		// pages, the way back and the two buttons that touch its file, joins the first line here
+		// because this screen has no breadcrumb to hang them from.
+		LinearLayout tools = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
 				LayoutSettings::alignHorizontallyCenter);
 		if (this.listingPacks) {
-			row.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
-			row.addChild(settingsButton());
-			row.addChild(button(CommonComponents.GUI_DONE, NARROW_BUTTON, this::onClose));
-
-			return footer;
-		}
-
-		row.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
-		row.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::confirmReset));
-		row.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
-
-		// The last slot holds one button and it says what pressing it does: Apply while something is
-		// waiting, Done once nothing is. Two buttons for the two cases would leave one of them dead
-		// at all times, and a dead Apply is what made the old row unreadable.
-		MenuValues current = this.values;
-		if (current != null && current.pendingCount() > 0) {
-			row.addChild(button(ScreenText.APPLY, NARROW_BUTTON, () -> {
-				apply();
-				queueRebuild();
-			}));
+			// No Reload on the list, and both references agree: neither OptiFine's pack screen nor
+			// Iris's offers to read the pack again from the screen whose whole subject is which pack
+			// to read. Ours offered it by accident of layout, and it reloaded the pack to answer a
+			// question about a directory listing. The folder is watched instead, see watchFolder.
+			tools.addChild(button(ScreenText.FOLDER, WIDE_BUTTON, this::openFolder));
+			tools.addChild(settingsButton());
 		} else {
-			row.addChild(button(CommonComponents.GUI_DONE, NARROW_BUTTON, this::onClose));
+			tools.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
+			tools.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
+			tools.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::confirmReset));
+			tools.addChild(button(ScreenText.PACKS, NARROW_BUTTON, this::openPacks));
 		}
+
+		LinearLayout commit = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
+				LayoutSettings::alignHorizontallyCenter);
+		// The same three, in Iris's order, on both views. None of them is ever greyed: Apply with
+		// nothing waiting returns without writing rather than sitting there dead, which is the one
+		// thing about a commit row a player reads at a glance.
+		commit.addChild(button(CommonComponents.GUI_CANCEL, NARROW_BUTTON, this::cancelAndClose));
+		commit.addChild(button(ScreenText.APPLY, NARROW_BUTTON, () -> {
+			apply();
+			queueRebuild();
+		}));
+		commit.addChild(button(CommonComponents.GUI_DONE, NARROW_BUTTON, this::onClose));
 
 		return footer;
 	}
@@ -458,6 +469,16 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		return current == null ? 0 : current.forcedShown();
 	}
 
+	/**
+	 * Cancel, which is Iris's: it drops what is waiting and leaves. Leaving by any other door keeps
+	 * the world as it was drawn too, which is where this screen still differs from Iris on purpose,
+	 * and the difference was asked for: there, Done and Escape both write.
+	 */
+	private void cancelAndClose() {
+		dropPending();
+		onClose();
+	}
+
 	/** Throws away what was clicked and never applied, and puts the widgets back on their values. */
 	private void dropPending() {
 		MenuValues current = this.values;
@@ -481,6 +502,13 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		PackSession loaded = this.session;
 		MenuValues current = this.values;
 		if (loaded == null || current == null) {
+			return;
+		}
+
+		// Nothing waiting, nothing written. The button stays live rather than greying out, since a
+		// commit row is read at a glance and a grey Apply says the screen is stuck; what it must not
+		// do is spend a second reading the pack again to write the file it already holds.
+		if (current.pendingCount() == 0) {
 			return;
 		}
 
@@ -584,6 +612,61 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		PackChain.reload(loaded.gameDirectory());
 		adopt(PackChain.session().orElse(null));
 		queueRebuild();
+	}
+
+	/**
+	 * Opens the folder the packs are read from, which is how a pack gets into the list in the first
+	 * place. Both references put this button on this screen, and it is the reason the list has to
+	 * notice a folder that changed while it is open.
+	 */
+	private void openFolder() {
+		Path directory = PackLoader.directory(gameDirectory());
+		try {
+			Files.createDirectories(directory);
+		} catch (IOException e) {
+			// Opened anyway: a folder that cannot be created is one the platform will report on
+			// better than this line could, and the packs are read from it either way.
+			Vitrail.logger().warn("Vitrail could not create {}", directory, e);
+		}
+
+		Util.getPlatform().openPath(directory);
+	}
+
+	/**
+	 * Notices a pack dropped into the folder while this screen is open, without a button asking for
+	 * it. OptiFine does the same on a timer of its own; the alternative, a Reload on the pack list,
+	 * reads the whole pack again to answer a question about a directory listing.
+	 * <p>
+	 * Names only, and only while the list is the view being drawn. The folder is a handful of files
+	 * and this runs once a second, which is the same budget the engine already spends looking at
+	 * whether the world moved.
+	 */
+	private void watchFolder() {
+		if (!this.listingPacks) {
+			return;
+		}
+
+		long now = Util.getMillis();
+		if (now - this.folderLooked < FOLDER_INTERVAL) {
+			return;
+		}
+
+		this.folderLooked = now;
+		List<String> names;
+		try {
+			names = PackLoader.candidates(gameDirectory()).stream()
+					.map(pack -> pack.getFileName().toString())
+					.toList();
+		} catch (IOException e) {
+			// The list keeps what it has. A folder that cannot be listed is already said once, where
+			// the buttons are built, and saying it again every second would be the whole log.
+			return;
+		}
+
+		if (!names.equals(this.folderNames)) {
+			this.folderNames = names;
+			queueRebuild();
+		}
 	}
 
 	private void openPacks() {

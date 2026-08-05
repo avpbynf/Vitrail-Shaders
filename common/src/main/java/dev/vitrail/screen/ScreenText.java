@@ -35,6 +35,12 @@ public final class ScreenText {
 	public static final String PACKS_TITLE = "options.vitrail.packs_title";
 	public static final String PROFILE = "options.vitrail.profile";
 
+	/** What the selector says when the values match no profile the pack declares. */
+	public static final String PROFILE_CUSTOM = "options.vitrail.profile_custom";
+
+	/** The way to the folder the packs are read from, which both references put on this screen. */
+	public static final String FOLDER = "options.vitrail.folder";
+
 	/** One argument: how many settings are waiting to be applied. */
 	public static final String PENDING = "options.vitrail.pending";
 	public static final String REMOVED = "options.vitrail.removed";

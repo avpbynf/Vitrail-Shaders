@@ -8,6 +8,8 @@
 	"options.vitrail.packs": "Packs",
 	"options.vitrail.packs_title": "Shader Packs",
 	"options.vitrail.profile": "Profile",
+	"options.vitrail.profile_custom": "Custom",
+	"options.vitrail.folder": "Open Pack Folder",
 	"options.vitrail.pending": "Waiting to be applied: %s",
 	"options.vitrail.removed": "Passes this backend cannot build, taken out: %s",
 	"options.vitrail.forced": "Forced by vitrail/options.txt: %s",
