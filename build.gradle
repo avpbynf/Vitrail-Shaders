@@ -1,15 +1,21 @@
 plugins {
 	id "base"
+	id "net.ltgt.errorprone" version "4.1.0" apply false
 }
 
 subprojects {
 	apply plugin: "java"
+	apply plugin: "net.ltgt.errorprone"
 
 	group = project.group_id
 	version = project.mod_version
 
 	repositories {
 		mavenCentral()
+	}
+
+	dependencies {
+		errorprone "com.google.errorprone:error_prone_core:${project.errorprone_version}"
 	}
 
 	java {
@@ -25,8 +31,12 @@ subprojects {
 	// missing from a dependency's own jar; and serial, which asks for a serialVersionUID on
 	// exceptions nothing serialises.
 	//
-	// gradlew build -PlintReport prints what is there without failing, which is how the list gets
-	// read when the point is to look at it rather than to gate on it.
+	// Error Prone contributes the checks it rates as errors, which is the part of its catalogue
+	// meant to be a bug rather than a preference. Its warnings are worth reading and not worth
+	// blocking on, so they are off unless asked for.
+	//
+	// gradlew build -PlintReport prints what is there without failing, which is how both lists get
+	// read when the point is to look at them rather than to gate on them.
 	def lintReport = providers.gradleProperty("lintReport").present
 
 	tasks.withType(JavaCompile).configureEach {
@@ -43,6 +53,8 @@ subprojects {
 		if (!lintReport) {
 			options.compilerArgs << "-Werror"
 		}
+
+		options.errorprone.disableAllWarnings = !lintReport
 	}
 
 	tasks.withType(AbstractArchiveTask).configureEach {
