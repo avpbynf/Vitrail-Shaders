@@ -98,7 +98,12 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/glsl/LegacyGlsl.java reproduces the constants Iris substitutes
   for the fixed function vertex inputs of a full screen pass, a quad from (0,0) to (1,1), no
   colour, a normal pointing at the viewer, and the vec4(0.0, 0.0, 0.0, 1.0) of the texture units
-  above nought, because a pack's full screen pass is written expecting exactly those values.
+  above nought, because a pack's full screen pass is written expecting exactly those values. The
+  same file, together with common/src/main/java/dev/vitrail/uniform/UniformCatalog.java, carries
+  the rule that modelViewMatrix and projectionMatrix mean gl_ModelViewMatrix and
+  gl_ProjectionMatrix: Iris replaces both spellings with a single target on each of its three
+  paths, in the CompositeCore, VanillaCore and SodiumCore transformers of
+  net.irisshaders.iris.pipeline.transform.transformer.
 
   common/src/main/java/dev/vitrail/uniform/Smoothed.java adapts the exponential smoothing of
   net.irisshaders.iris.uniforms.transforms.SmoothedFloat in August 2026, including its half life in

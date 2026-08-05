@@ -72,6 +72,7 @@ public final class UniformCatalog {
 				WeatherValues.register(builder);
 				WorldValues.register(builder);
 				PlayerValues.register(builder);
+				coreMatrices(builder);
 				engine = builder.build();
 			}
 
@@ -96,6 +97,7 @@ public final class UniformCatalog {
 			if (geometry == null) {
 				Builder builder = builder(engine());
 				GeometryValues.register(builder);
+				coreMatrices(builder);
 				geometry = builder.build();
 			}
 
@@ -119,11 +121,27 @@ public final class UniformCatalog {
 			if (shadowGeometry == null) {
 				Builder builder = builder(geometry());
 				ShadowGeometryValues.register(builder);
+				coreMatrices(builder);
 				shadowGeometry = builder.build();
 			}
 
 			return shadowGeometry;
 		}
+	}
+
+	/**
+	 * The two names OptiFine's core profile mode gives the fixed function pair, answered from
+	 * whatever that layer has just put behind the {@code gl_} spelling.
+	 * <p>
+	 * Called last in each of the three tables rather than written into the three values classes,
+	 * because that is what keeps the two spellings the same value: Iris replaces both with one
+	 * target on each of its three paths, {@code CompositeCoreTransformer.java:20-23},
+	 * {@code VanillaCoreTransformer.java:78-83} and {@code SodiumCoreTransformer.java:31-36}, and
+	 * the packs are written against that.
+	 */
+	private static void coreMatrices(Builder builder) {
+		builder.alias("modelViewMatrix", "of_ModelViewMatrix");
+		builder.alias("projectionMatrix", "of_ProjectionMatrix");
 	}
 
 	public static Builder builder() {
@@ -176,6 +194,24 @@ public final class UniformCatalog {
 			this.entries.put(name, new Entry(natural, source));
 
 			return this;
+		}
+
+		/**
+		 * Registers a second spelling of a name already in this builder, reading whatever that name
+		 * holds at this point.
+		 * <p>
+		 * Taken here and not written out again on purpose: the value of the second spelling is the
+		 * value of the first, and a layer that changes one and forgets the other is exactly the
+		 * failure this avoids.
+		 */
+		public Builder alias(String name, String existing) {
+			Entry entry = this.entries.get(existing);
+			if (entry == null) {
+				throw new IllegalStateException(
+						"Cannot make " + name + " a second name for " + existing + ", which is not registered");
+			}
+
+			return add(name, entry.natural(), entry.source());
 		}
 
 		public UniformCatalog build() {

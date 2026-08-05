@@ -469,7 +469,14 @@ public final class GlslTranslator {
 		}
 
 		// A name the pack did declare is already on its way into the block through liftUniforms,
-		// under the type the pack chose, so only a name it never declares is supplied here.
+		// under the type the pack chose, so only a name it never declares is supplied here. That
+		// holds for the entity trio below as well.
+		for (Map.Entry<String, String> member : LegacyGlsl.CORE_MATRICES.entrySet()) {
+			if (this.used.contains(member.getKey()) && !this.declaredNames.contains(member.getKey())) {
+				block.add(TranslatedUnit.Uniform.of(member.getKey(), member.getValue()));
+			}
+		}
+
 		if (LegacyGlsl.drawsEntities(this.program)) {
 			for (Map.Entry<String, String> member : LegacyGlsl.ENTITY_UNIFORMS.entrySet()) {
 				if (this.used.contains(member.getKey())

@@ -104,6 +104,28 @@ public final class LegacyGlsl {
 	public static final Map<String, String> ENTITY_UNIFORMS = entityUniforms();
 
 	/**
+	 * The fixed function pair under the names the core profile spells them with, read undeclared for
+	 * the same reason as {@link #ENGINE_ATTRIBUTES} and answered with the same values as their
+	 * {@code gl_} twins.
+	 * <p>
+	 * Not a pair of their own, and that is the whole content of this table. Iris replaces both
+	 * spellings with one target on each of the three paths a pack's stage can take:
+	 * {@code CompositeCoreTransformer.java:20-23} hands a quad the identity and the quad projection,
+	 * {@code VanillaCoreTransformer.java:78-83} hands the world {@code iris_transforms.ModelViewMat}
+	 * and {@code iris_ProjMat}, and {@code SodiumCoreTransformer.java:31-36} renames both onto
+	 * Sodium's own uniforms. The three lines up with the three catalogues this engine layers, so the
+	 * value follows the family without either side saying so twice.
+	 * <p>
+	 * Both Complementary packs multiply {@code projectionMatrix * VIEW_SCALE * modelViewMatrix} in
+	 * the line branch of {@code program/gbuffers_basic.glsl} and declare neither. That costs six
+	 * entry points of the corpus, and {@code gbuffers_line} is behind no {@code program.enabled}, so
+	 * nothing a user can set makes the pack stop asking. A stage that declares one of them itself is
+	 * left alone: Body Camera names a function parameter {@code projectionMatrix} and Bliss a local,
+	 * and neither means this.
+	 */
+	public static final Map<String, String> CORE_MATRICES = coreMatrices();
+
+	/**
 	 * The roots of the fallback tree whose programs are drawn from a mesh that carries an entity's
 	 * identity, and so are served {@link #ENTITY_UNIFORMS}.
 	 * <p>
@@ -279,6 +301,15 @@ public final class LegacyGlsl {
 		attributes.put("dhMaterialId", "int dhMaterialId");
 
 		return Collections.unmodifiableMap(attributes);
+	}
+
+	private static Map<String, String> coreMatrices() {
+		Map<String, String> matrices = new LinkedHashMap<>();
+
+		matrices.put("modelViewMatrix", "mat4 modelViewMatrix");
+		matrices.put("projectionMatrix", "mat4 projectionMatrix");
+
+		return Collections.unmodifiableMap(matrices);
 	}
 
 	private static Map<String, String> entityUniforms() {
