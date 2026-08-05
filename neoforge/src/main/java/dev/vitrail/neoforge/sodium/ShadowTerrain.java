@@ -89,8 +89,19 @@ public final class ShadowTerrain {
 	/**
 	 * Walks the world for the light and draws the shadow map, using the state captured when this
 	 * frame was set up. One draw per capture: a frame that never set a graph up draws no map.
+	 * <p>
+	 * Caught like every other entry point the bus calls into, and this was the one that was not. What
+	 * it latches is the stage rather than the pack, see {@link TerrainDraw#shadowStageFailed}.
 	 */
 	public static void draw() {
+		try {
+			walk();
+		} catch (RuntimeException e) {
+			TerrainDraw.shadowStageFailed(e);
+		}
+	}
+
+	private static void walk() {
 		Vec3 camera = ShadowTerrain.camera;
 		ShadowTerrain.camera = null;
 

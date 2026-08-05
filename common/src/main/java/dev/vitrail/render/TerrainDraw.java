@@ -103,6 +103,44 @@ public final class TerrainDraw {
 	}
 
 	/**
+	 * Takes the stage down after something in it threw, and empties the map on the way.
+	 * <p>
+	 * The stage and not the pack, which is the call {@link #shadowsPrepared} already makes and for the
+	 * same reason: a shadow program failing says nothing about the three the camera draws with, and a
+	 * map that stops being drawn is a picture without shadows rather than no picture at all. Left
+	 * uncaught the throw reaches the game through an event handler and comes back on the very next
+	 * frame, so what the player would see is not a shadow that stopped but a game that will not run.
+	 * <p>
+	 * The map is emptied here rather than by the branch of {@link #openShadowStage} that empties every
+	 * other refusal, because that branch is out of reach once this flag is down: the frame graph stops
+	 * capturing the camera as soon as {@link #shadows()} answers no, so the stage returns before it
+	 * gets there. Left as the failed frame put it, the pack would keep reading a half drawn map for
+	 * the rest of the session, and half a map looks exactly like a shadow.
+	 * <p>
+	 * Public because the stage itself is driven from the loader module, which is where the bus is.
+	 */
+	public static void shadowStageFailed(RuntimeException e) {
+		shadowWanted = false;
+		Vitrail.logger().error("Vitrail stopped drawing the shadow map after an error in the stage, "
+				+ "so the pack reads the far plane wherever it samples one", e);
+
+		TerrainDraw self = PackChain.terrain();
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (self == null || device == null) {
+			return;
+		}
+
+		try {
+			self.targets.shadow().clear(device.createCommandEncoder());
+		} catch (RuntimeException second) {
+			// Swallowed on purpose: this is the handler, and the first error is the one worth reading.
+			// A pass left open by whatever threw above is enough to refuse a clear.
+			Vitrail.logger().error("The shadow map could not be emptied either, so what the pack reads "
+					+ "as a shadow is whatever the frame that failed left in it", second);
+		}
+	}
+
+	/**
 	 * Whether a shadow pass may run at all: the pack's own geometry has to be drawing, or the map
 	 * would be filled by the game's chunk shader, which writes the world's colours into it.
 	 */
