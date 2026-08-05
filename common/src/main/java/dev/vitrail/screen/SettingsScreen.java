@@ -404,7 +404,13 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		// names being drawn at the same fixed width, so the row does not shift under the hand that
 		// is clicking it. Apply deliberately does not close: a setting is judged by looking at the
 		// world it changed, and a screen that left as it applied would take the world with it.
-		tools.addChild(pending() > 0
+		//
+		// Never Apply on the list, even holding something waiting, and that is not tidiness. This
+		// slot is the only button on the list that leaves the screen at all, since Back is the root
+		// here and has nowhere to go; letting a click made on a pack's page take Done's place would
+		// shut the last door and leave Escape as the way out. What is waiting keeps waiting, and
+		// says so on the page that owns it.
+		tools.addChild(!this.listingPacks && pending() > 0
 				? button(ScreenText.APPLY, NARROW_BUTTON, () -> {
 					apply();
 					queueRebuild();
