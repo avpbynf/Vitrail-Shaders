@@ -65,16 +65,19 @@ final class EngineOptions {
 	static final String DUMP_KEY = "dump";
 
 	/**
-	 * Draws the pack's own terrain program over Sodium's chunk mesh. Off unless asked for, which is
-	 * the opposite of every other line here and deliberately so: it takes over the game's own
-	 * geometry shader, and everything before milestone six was verified without it.
+	 * Draws the pack's own terrain program over Sodium's chunk mesh. On, like every other line here:
+	 * a pack that does not light the world it is loaded for is not the pack the player picked.
+	 * <p>
+	 * It was off while it was being built, because it takes over the game's own geometry shader and
+	 * everything before milestone six was verified without it. Turning it off is now what it is for:
+	 * telling a wrong gbuffer from a wrong composite, in one line and without a rebuild.
 	 */
 	private static final String TERRAIN_KEY = "terrain";
 
 	/**
-	 * Draws the world a second time from the light, into the pack's shadow map. Off unless asked
-	 * for, and worth nothing without {@code terrain}: the map is filled by the pack's own shadow
-	 * program or it is not filled at all.
+	 * Draws the world a second time from the light, into the pack's shadow map. On, and worth
+	 * nothing without {@code terrain}: the map is filled by the pack's own shadow program or it is
+	 * not filled at all.
 	 * <p>
 	 * It is a line of its own rather than part of {@code terrain} because it costs a second pass
 	 * over the whole terrain and because it is the one thing that can be turned off to tell a wrong
@@ -129,9 +132,9 @@ final class EngineOptions {
 				filterOf(chosen.remove(PASSES_KEY)),
 				packsFirst(chosen.remove(SCREEN_KEY)),
 				named(chosen.remove(DUMP_KEY)),
-				asked(chosen.remove(TERRAIN_KEY), false),
+				asked(chosen.remove(TERRAIN_KEY), true),
 				asked(chosen.remove(CHAIN_KEY), true),
-				asked(chosen.remove(SHADOW_KEY), false));
+				asked(chosen.remove(SHADOW_KEY), true));
 	}
 
 	/**
