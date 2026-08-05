@@ -140,8 +140,30 @@ public final class PackChain {
 	/** Whether this frame's uniform blocks have been written and its notes said. */
 	private boolean filled;
 
+	/**
+	 * Whether this frame's whole scene depth has been kept yet.
+	 * <p>
+	 * <strong>There are two moments it can be kept at and they are not equivalent.</strong> The
+	 * game's always-on-top pass clears the world's depth before it draws, so from the moment that
+	 * pass exists the depth left standing after the world is the far plane over the whole screen:
+	 * the fog, the depth of field, the ambient occlusion and the volumetric light of the pack then
+	 * all work on a scene made entirely of sky, and not one of them fails. {@link #markSceneDepth}
+	 * therefore keeps it at the head of that pass, and {@link #run} keeps it only for the frames
+	 * where the pass does not exist at all.
+	 */
+	private boolean sceneDepth;
+
 	/** Whether the split of the chain into two halves has been said. Once a load, not once a frame. */
 	private boolean split;
+
+	/**
+	 * Which of the two moments the scene's depth was kept at has been said. Once a load each, like
+	 * {@link #split}, and one each rather than one saying whichever came last: the answer follows
+	 * whether the game has a gizmo to draw over the world, so it moves with F3+G rather than
+	 * settling, and a line at every change would be a line a frame.
+	 */
+	private boolean saidBeforeClear;
+	private boolean saidAfterTheWorld;
 
 	private final PackProgram.Chain chain;
 	private final PackValues values;
@@ -697,6 +719,7 @@ public final class PackChain {
 		this.opened = false;
 		this.early = false;
 		this.filled = false;
+		this.sceneDepth = false;
 
 		// The seed's kept depth is a per frame fact like the four above and belongs with them, the
 		// image itself outliving the frame only because nobody frees a texture every frame.
@@ -900,6 +923,70 @@ public final class PackChain {
 	}
 
 	/**
+	 * Keeps the depth of the whole scene while it still is the whole scene. Called at the head of the
+	 * game's always-on-top pass, which is the last moment before that pass clears the world's depth
+	 * so that its own gizmos draw over everything.
+	 * <p>
+	 * <strong>It is also the first moment at which the depth is whole</strong>, which is what rules
+	 * out the obvious alternative. The pass is added after the clouds, the weather and the
+	 * transparency chain, so a take at {@code AfterTranslucentParticles} would come before the clouds
+	 * had written theirs, and {@code depthtex0} would stop seeing them on every setup without a
+	 * transparency chain, which is every setup this engine runs on.
+	 * <p>
+	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes, for the same reason
+	 * {@link #markGeometryDepth} is not: nothing here warms a pipeline, prepares a target or clears
+	 * anything, all of which belong to the moment the chain runs. This copies one image and answers
+	 * for nothing else.
+	 */
+	public static void markSceneDepth() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		Minecraft minecraft = Minecraft.getInstance();
+		if (disabled || chain == null || device == null || minecraft == null || !chainWanted) {
+			return;
+		}
+
+		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+		if (main == null) {
+			return;
+		}
+
+		// Caught like every other point the game calls this engine back at: an exception here reaches
+		// the game inside its own frame graph and comes back on the very next frame.
+		try {
+			if (chain.keepScene(device, main.getDepthTextureView(), main.width, main.height)
+					&& !chain.saidBeforeClear) {
+				chain.saidBeforeClear = true;
+				Vitrail.logger().info("The scene's depth is kept before the game clears it for its "
+						+ "always-on-top features, so what this pack reads as depthtex0 is the world "
+						+ "rather than the far plane");
+			}
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
+	}
+
+	/**
+	 * Keeps the depth of the whole scene, at most once a frame, whichever of its two moments asks
+	 * first.
+	 *
+	 * @return whether this call is the one that kept it, so that only the caller that really took it
+	 *         says so
+	 */
+	private boolean keepScene(GpuDevice device, GpuTextureView depth, int width, int height) {
+		if (this.sceneDepth) {
+			return false;
+		}
+
+		this.sceneDepth = this.targets.depth().takeScene(device.createCommandEncoder(), device,
+				quad(device), depth, width, height);
+
+		return this.sceneDepth;
+	}
+
+	/**
 	 * Redirects the game's translucent features, the player's body among them, into the layer that
 	 * will hand them to the pack's image. Called once the early half has run, and undone by
 	 * {@link #closeFeatures()}: the pair brackets exactly the game's {@code executeTranslucent}.
@@ -1055,11 +1142,19 @@ public final class PackChain {
 		}
 
 		// The depth of the whole scene, which by now carries the world's translucents and the
-		// features that were redirected into the pack's image. Taken here and not once for the frame
-		// because the two halves are not asking the same question: a composite that read the opaque
-		// world would blur and fog straight through water, and nothing about that fails.
-		this.targets.depth().takeScene(device.createCommandEncoder(), device, this.quad,
-				ready.depthView(), ready.main().width, ready.main().height);
+		// features that were redirected into the pack's image. Kept apart from the opaque world's and
+		// not once for the frame, because the two halves are not asking the same question: a
+		// composite that read the opaque world would blur and fog straight through water, and nothing
+		// about that fails.
+		//
+		// Here only when the frame had no always-on-top pass to keep it at, that pass having cleared
+		// the world's depth by the time this runs; see sceneDepth.
+		if (keepScene(device, ready.depthView(), ready.main().width, ready.main().height)
+				&& !this.saidAfterTheWorld) {
+			this.saidAfterTheWorld = true;
+			Vitrail.logger().info("The scene's depth is kept after the world, this frame having drawn "
+					+ "nothing always on top and so having cleared nothing");
+		}
 
 		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene());
 

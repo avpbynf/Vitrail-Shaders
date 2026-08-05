@@ -13,6 +13,7 @@
 		"DefaultChunkRendererMixin",
 		"DefaultFluidRendererMixin",
 		"GameRendererMixin",
+		"LevelRendererMixin",
 		"ProjectionMatrixBufferMixin",
 		"RenderSectionManagerAccessor",
 		"ShaderChunkRendererMixin",
