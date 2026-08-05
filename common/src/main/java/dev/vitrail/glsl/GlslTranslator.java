@@ -1540,7 +1540,7 @@ public final class GlslTranslator {
 	 * <p>
 	 * <strong>Both halves of the condition earn their place, and the first is what makes this
 	 * safe.</strong> Dropping an input the vertex stage does write would be a silent corruption
-	 * rather than a fix: {@code rebind} only counts the fragment inputs it found, at :148-161, so
+	 * rather than a fix: {@code rebind} only counts the fragment inputs it found, at :151-163, so
 	 * everything declared after the missing one lands a location too low with nothing said by
 	 * anyone. And dropping one the body does read would turn a refusal into an undeclared
 	 * identifier, which is the same pass lost with a worse message. So what is taken out is exactly
