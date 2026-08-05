@@ -63,6 +63,59 @@ subprojects {
 	}
 }
 
+// Two text rules no compiler can see. The byte order mark is the one that costs an afternoon: it
+// reaches a GLSL compiler as a stray character in front of the version directive, and PowerShell
+// writes one unless told not to. Typographic punctuation is house style and nothing more, but
+// nothing else keeps it, and it arrives by copy and paste rather than by typing.
+tasks.register("checkText") {
+	group = "verification"
+	description = "Rejects a byte order mark or typographic punctuation in a text file."
+
+	// Only what the repository ships. Binary resources are skipped by extension rather than by
+	// listing them, so a new icon does not have to be remembered here.
+	def texts = fileTree(rootDir) {
+		include "*.md", "*.gradle", "*.properties", ".gitattributes", ".gitignore"
+		include "common/src/**", "neoforge/src/**", "fabric/src/**", ".github/**"
+		exclude "**/*.png", "**/*.jpg", "**/*.jar", "**/*.zip"
+	}
+	def root = rootDir.toPath()
+
+	// En and em dashes, curly quotes, the ellipsis character and the non-breaking space. Written
+	// as escapes so that this file passes its own check.
+	def typographic = ~"[\\u2013\\u2014\\u2018\\u2019\\u201C\\u201D\\u2026\\u00A0]"
+
+	inputs.files(texts).withPathSensitivity(PathSensitivity.RELATIVE)
+
+	doLast {
+		def wrong = []
+
+		texts.each { file ->
+			def path = root.relativize(file.toPath())
+			def bytes = file.bytes
+
+			if (bytes.length >= 3 && bytes[0] == (byte) 0xEF && bytes[1] == (byte) 0xBB && bytes[2] == (byte) 0xBF) {
+				wrong << "$path: byte order mark"
+			}
+
+			new String(bytes, "UTF-8").readLines().eachWithIndex { line, index ->
+				def found = typographic.matcher(line)
+				if (found.find()) {
+					def codePoint = String.format("U+%04X", (int) found.group().charAt(0))
+					wrong << "$path:${index + 1}: $codePoint, use plain ASCII punctuation"
+				}
+			}
+		}
+
+		if (wrong) {
+			throw new GradleException("${wrong.size()} text rule violations:\n  " + wrong.join("\n  "))
+		}
+	}
+}
+
+tasks.named("check") {
+	dependsOn tasks.named("checkText")
+}
+
 // Loader jars are what gets shipped, so gather them at the root rather than making
 // people dig through each module.
 tasks.register("collectJars", Copy) {
