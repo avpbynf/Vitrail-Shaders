@@ -514,8 +514,15 @@ public final class ChainPlan {
 
 		if (undrawn.contains(half.target())) {
 			// Two families end up here and the wording covers both: the geometry nothing draws yet,
-			// entities and particles, and the sky, whose programs are drawn but into the attachment
-			// the game opened its own pass with, SkyProgram handing its body no writes at all.
+			// which is the entities and the particles, and the sky.
+			//
+			// The sky is here even though this engine now draws it into the pack's own targets, and
+			// that is deliberate. A plan is built per place and the sky is drawn in some of them and
+			// not others: the game opens no sky pass at all in the Nether, and the End's own sky is
+			// two methods nothing here hooks, so counting the sky as drawn would say so in the two
+			// places the format reserves for exactly those. Measured on the corpus in August 2026,
+			// counting it silenced two notes, both of them Bliss's colortex0 in the Nether and in the
+			// End, both true, and changed nothing anywhere a sky is really drawn.
 			return name + " is written by geometry, none of which this engine draws into the pack's "
 					+ "targets" + clear;
 		}
