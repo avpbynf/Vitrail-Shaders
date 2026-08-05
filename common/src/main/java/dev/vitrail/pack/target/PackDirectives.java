@@ -164,6 +164,11 @@ public final class PackDirectives {
 		return this.centerDepthHalflife;
 	}
 
+	/**
+	 * How wide a noise image the pack asked for, square, 256 unless it says otherwise, and never
+	 * more than this engine will build. The same number reaches the texture and the uniform the
+	 * shader indexes it with, so the cap has to be applied once, here, rather than at either end.
+	 */
 	public int noiseTextureResolution() {
 		return this.noiseTextureResolution;
 	}
@@ -241,6 +246,16 @@ public final class PackDirectives {
 
 		private static final float DRYNESS_HALFLIFE = 200.0F;
 
+		/**
+		 * How wide a noise image this engine will build. The field is generated in full on the heap
+		 * and uploaded through a direct buffer of the same length, so the number squares twice:
+		 * 16384 is two allocations of a gibibyte, taken outside any catch since the upload hangs off
+		 * a clear. Clamped rather than refused, like the shadow map, and here rather than at the
+		 * texture, so that the image and the {@code noiseTextureResolution} the shader is handed
+		 * cannot disagree. The corpus asks for between 32 and 512.
+		 */
+		private static final int MAX_NOISE_RESOLUTION = 4096;
+
 		private static final String SHADOW_COLOUR = "shadowcolor";
 
 		private static final ShadowColour SHADOW_COLOUR_DEFAULT = new ShadowColour(
@@ -289,7 +304,8 @@ public final class PackDirectives {
 				case "drynessHalflife" -> asFloat(directive, value -> this.wetnessHalflife = value);
 				case "eyeBrightnessHalflife" -> asFloat(directive, value -> this.eyeBrightnessHalflife = value);
 				case "centerDepthHalflife" -> asFloat(directive, value -> this.centerDepthHalflife = value);
-				case "noiseTextureResolution" -> asInt(directive, value -> this.noiseTextureResolution = value);
+				case "noiseTextureResolution" -> asInt(directive,
+						value -> this.noiseTextureResolution = Math.clamp(value, 1, MAX_NOISE_RESOLUTION));
 				case "shadowMapResolution" -> asInt(directive, value -> this.shadowMapResolution = value);
 				case "shadowDistance" -> asFloat(directive, value -> this.shadowDistance = value);
 				case "shadowNearPlane" -> asFloat(directive, value -> this.shadowNearPlane = value);
