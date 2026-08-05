@@ -48,6 +48,16 @@ import java.util.function.Supplier;
  * real milestone, entities through the pack's gbuffers, and it goes away with that milestone the
  * same day the seed does.
  * <p>
+ * <strong>What it costs is worth naming, because it looks like something else entirely.</strong> The
+ * redirected draws write the world's depth, and they write it after {@code depthtex1} has been taken
+ * and before {@code depthtex0} is. A pack therefore reads, at every pixel of a body in third person,
+ * a depth that moved between the two images, which is its own definition of a translucent surface
+ * standing in front of the opaque world: it takes the body for water and tints it over the whole
+ * distance to whatever opaque geometry is behind. With a wall behind, that distance is short and the
+ * body is merely washed out; with a lake behind, it is the width of the lake and the body is gone.
+ * Nothing about the composition order changes that, and nothing here can fix it: the body has to
+ * arrive through {@code gbuffers_entities}, which is the milestone.
+ * <p>
  * The composition is premultiplied, {@code ONE, ONE_MINUS_SRC_ALPHA}, and that is not a taste. The
  * game's pipelines blend {@code SRC_ALPHA} onto a layer cleared to transparent black, which leaves
  * the colour already multiplied by its alpha; blending by alpha a second time would darken every

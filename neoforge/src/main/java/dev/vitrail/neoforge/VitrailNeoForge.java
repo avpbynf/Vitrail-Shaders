@@ -40,10 +40,16 @@ public final class VitrailNeoForge {
 		// the model view and the camera position this frame was set up with.
 		NeoForge.EVENT_BUS.addListener(FrameGraphSetupEvent.class, this::onFrameGraphSetup);
 
-		// AfterOpaqueBlocks fires between the two: the chunk passes are done and the game has
-		// not drawn one entity yet. It is the only moment the world's depth is the pack's own
-		// geometry and nothing else, which is what the scene seed needs to tell a mob standing
-		// in front of a wall from the wall.
+		// AfterOpaqueBlocks fires with the chunk passes done and not one entity drawn yet. It is
+		// the only moment the world's depth is the pack's own geometry and nothing else, which is
+		// what the scene seed needs to tell a mob standing in front of a wall from the wall.
+		//
+		// The whole order this and the next two listeners hang off is one lambda of
+		// LevelRenderer.addMainPass, and is worth having in one place because two of the names read
+		// the wrong way round: the opaque chunk group, AfterOpaqueBlocks, executeSolid,
+		// AfterOpaqueFeatures, executeTranslucent, AfterTranslucentFeatures, executeOutline, the
+		// translucent chunk group, AfterTranslucentBlocks. The features are drawn before the water,
+		// and the event named after the features fires before the one named after the blocks.
 		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterOpaqueBlocks.class,
 				this::onAfterOpaqueBlocks);
 
@@ -92,18 +98,24 @@ public final class VitrailNeoForge {
 	}
 
 	/**
+	 * Keeps the world's depth as the pack's own geometry left it, the last moment at which it is
+	 * that and nothing else. The scene seed is cut against it, and what it buys is every entity the
+	 * game draws in front of a block.
+	 */
+	private void onAfterOpaqueBlocks(RenderLevelStageEvent.AfterOpaqueBlocks event) {
+		PackChain.markGeometryDepth();
+	}
+
+	/**
 	 * Runs the half of the pack's chain that belongs before the world's translucents: the begins,
-	 * the prepares, the scene seed and the deferred stage.
+	 * the prepares, the scene seed and the deferred stage. Then redirects the game's translucent
+	 * features into the layer that hands them to the pack's image.
 	 * <p>
 	 * Not a refinement of where it used to run. BSL's {@code gbuffers_water} reads {@code gaux1},
 	 * which its own {@code deferred} writes, and discards every fragment where it reads nought: with
 	 * the whole chain running after the world, that read found a clear colour and the water was
 	 * thrown away in its entirety.
 	 */
-	private void onAfterOpaqueBlocks(RenderLevelStageEvent.AfterOpaqueBlocks event) {
-		PackChain.markGeometryDepth();
-	}
-
 	private void onAfterOpaqueFeatures(RenderLevelStageEvent.AfterOpaqueFeatures event) {
 		PackChain.drawBeforeTranslucents();
 		PackChain.openFeatures();

@@ -837,10 +837,12 @@ public final class PackChain {
 	 * it reads nought. Run after the world, as the whole chain used to be, that read finds a clear
 	 * colour and the water is thrown away in its entirety.
 	 * <p>
-	 * Called from the terrain, at the point the chunk renderer asks for the shader of its
-	 * translucent pass, which is the last moment before it opens that pass. Called from
-	 * {@link #run} as well, for the frames and the configurations where no terrain draws at all, and
-	 * the second call is free.
+	 * Called once a frame, from {@code AfterOpaqueFeatures}, which is the moment the game has
+	 * finished its opaque features and has drawn nothing translucent. Called from {@link #run} as
+	 * well, for the frames where that moment came and went without this being able to draw, and the
+	 * second call is free. <strong>Nothing calls it from the terrain</strong>, whatever an older
+	 * reading of this line said: the moment this runs at is what decides which depth the scene seed
+	 * is cut against, so a wrong sentence here sends a reader chasing the wrong frame.
 	 */
 	public static void drawBeforeTranslucents() {
 		PackChain chain = active;
@@ -946,6 +948,21 @@ public final class PackChain {
 	 * Puts the game's overrides back and composes the layer onto the half of the pack's target the
 	 * world's translucents are about to blend onto, which keeps vanilla's order: features first,
 	 * then water.
+	 * <p>
+	 * <strong>That order was doubted and it is measured, so it is written down here rather than
+	 * doubted again.</strong> {@code LevelRenderer.addMainPass} runs, in this order and in one lambda:
+	 * the opaque chunk group, {@code AfterOpaqueBlocks}, {@code executeSolid}, {@code
+	 * AfterOpaqueFeatures}, {@code executeTranslucent}, {@code AfterTranslucentFeatures}, {@code
+	 * executeOutline}, the translucent chunk group, {@code AfterTranslucentBlocks}. The features
+	 * really are drawn before the water, and the event this runs on really does fire before the one
+	 * named after the blocks, whichever way round the two names read.
+	 * <p>
+	 * Composing after the water instead would also change nothing about a body that vanishes over
+	 * water, which is what the doubt was about. The redirected draws keep the world's depth and write
+	 * it: the game's entity pipelines carry {@code DepthStencilState.DEFAULT}, greater or equal with
+	 * the write on, and so does the pack's translucent chunk pass. Water standing behind a body
+	 * therefore fails the test before it can blend, whichever of the two was composed first. What
+	 * washes the body out is on the pack's side and is milestone nine's, see {@link FeatureLayer}.
 	 */
 	public static void closeFeatures() {
 		// Always put back, whatever else happens below: overrides left standing past this point
