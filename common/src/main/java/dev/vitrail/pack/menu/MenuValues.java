@@ -130,11 +130,17 @@ public final class MenuValues {
 	 * engine rather than the pack, and any other name is a setting no page places, which is exactly
 	 * what that file exists to reach. Neither kind has a widget, so counting them would send a
 	 * player looking for greyed settings that were never drawn.
+	 * <p>
+	 * The profile goes the same way when the pack declares none: {@link PackMenu} drops the selector
+	 * rather than drawing an empty one, and Sildur's declares none at all.
 	 */
 	public int forcedShown() {
 		int count = 0;
 		for (String name : this.forced.keySet()) {
-			if (PROFILE_KEY.equals(name) || this.menu.option(name).isPresent()) {
+			boolean shown = PROFILE_KEY.equals(name)
+					? !this.menu.profileNames().isEmpty()
+					: this.menu.option(name).isPresent();
+			if (shown) {
 				count++;
 			}
 		}
