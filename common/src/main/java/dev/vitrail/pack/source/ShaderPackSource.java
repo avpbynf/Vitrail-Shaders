@@ -284,6 +284,17 @@ public final class ShaderPackSource implements AutoCloseable {
 		return Files.isRegularFile(target) ? Optional.of(target) : Optional.empty();
 	}
 
+	/**
+	 * How many bytes a file holds ON DISK, which for a zip entry is the uncompressed length.
+	 * <p>
+	 * Asked rather than taken from {@link #bytes}, because the one caller that needs it is
+	 * checking whether a raw texture is as long as its directive claims, and a blob that is not is
+	 * to be refused rather than read whole and then refused.
+	 */
+	public long size(Path file) throws IOException {
+		return Files.size(file);
+	}
+
 	/** A file's raw bytes, under the same ceiling as the sources: an image is not exempt. */
 	public byte[] bytes(Path file) throws IOException {
 		long size = Files.size(file);

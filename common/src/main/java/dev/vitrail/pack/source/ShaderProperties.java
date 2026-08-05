@@ -61,10 +61,11 @@ public final class ShaderProperties {
 	private static final Pattern SLIDERS = Pattern.compile("^\\s*sliders\\s*=\\s*(.*)$");
 	private static final Pattern END_FLASH_SHADOWS = Pattern.compile("^\\s*endFlashShadows\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
-	// Only the noise image. The general form texture.<stage>.<sampler> exists and is still counted
-	// with the unknown keys: serving those is a chantier of its own, and half-reading the family
-	// here would make the count lie about what is honoured.
+	// The noise image is answered here because everything else about it is settled: one path, one
+	// sampler, every stage. The general family is not, and is read by customTextures instead.
 	private static final Pattern TEXTURE_NOISE = Pattern.compile("^\\s*texture\\.noise\\s*=\\s*(.*)$");
+	private static final Pattern CUSTOM_TEXTURE =
+			Pattern.compile("^\\s*((?:texture|customTexture)\\.[^=\\s]+)\\s*=\\s*(.*)$");
 	private static final Pattern FLIP = Pattern.compile("^\\s*flip\\.([^=\\s.]+)\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern OTHER_KEY = Pattern.compile("^\\s*([A-Za-z_][\\w]*)[.=].*$");
 
@@ -269,6 +270,13 @@ public final class ShaderProperties {
 		Matcher noise = TEXTURE_NOISE.matcher(line);
 		if (noise.matches()) {
 			builder.noiseTexturePath = noise.group(1).trim();
+			return;
+		}
+
+		// Consumed and not kept: the rest of the family is read by customTextures, which walks the
+		// conditionals. Falling through here would leave those lines among the keys nothing reads
+		// and make that count say the engine ignores what it now honours.
+		if (CUSTOM_TEXTURE.matcher(line).matches()) {
 			return;
 		}
 
@@ -597,6 +605,43 @@ public final class ShaderProperties {
 		}
 
 		return uniforms;
+	}
+
+	/**
+	 * The textures the pack supplies with a file of its own, by the key it wrote, in that order,
+	 * with the conditionals around each line evaluated. {@code texture.noise} is not among them:
+	 * it is answered by {@link #noiseTexturePath()} and is not one of these.
+	 * <p>
+	 * Conditionally and not flat, for the reason every other reader here is conditional.
+	 * Complementary writes two of its {@code customTexture} lines under {@code #if} on its own
+	 * settings, and a {@code texture.deferred.colortex3} read out of a dead branch would take a
+	 * live colour target away from the pass that reads it.
+	 * <p>
+	 * The value is left exactly as written. What it means depends on how many words are in it, and
+	 * on files this class has no business opening.
+	 */
+	public Map<String, String> customTextures(Map<String, String> defines) {
+		Map<String, String> declared = new LinkedHashMap<>();
+		ConditionStack conditions = new ConditionStack();
+
+		for (String line : this.lines) {
+			Matcher directive = DIRECTIVE.matcher(line);
+			if (directive.matches()) {
+				applyDirective(directive.group(1), line, conditions, defines);
+				continue;
+			}
+
+			if (!conditions.active() || TEXTURE_NOISE.matcher(line).matches()) {
+				continue;
+			}
+
+			Matcher texture = CUSTOM_TEXTURE.matcher(line);
+			if (texture.matches()) {
+				declared.put(texture.group(1), texture.group(2).trim());
+			}
+		}
+
+		return declared;
 	}
 
 	/**
