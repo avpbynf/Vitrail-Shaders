@@ -159,11 +159,12 @@ ago, running as it is, on the renderer that now ships with the game.
 
 Vitrail hooks the frame through public NeoForge events where the game offers
 them, and through a small set of mixins where it does not: the matrices the
-world is really drawn with, which are never stored anywhere the camera exposes,
-and Sodium's chunk renderer, which is handed the pack's terrain programs, one
-extra vertex element carrying the block id, and the render pass its draw
-buffers need. Sodium has no API for any of that, which is why its version is
-pinned.
+world is really drawn with, which are never stored anywhere the camera exposes;
+the game's sky renderer, which opens a pass of its own per sky element and is
+handed the pack's program for that element inside it; and Sodium's chunk
+renderer, which is handed the pack's terrain programs, one extra vertex element
+carrying the block id, and the render pass its draw buffers need. Sodium has no
+API for any of that, which is why its version is pinned.
 
 Any mod that unwraps a GPU texture into an OpenGL handle will crash on the
 Vulkan backend, with or without Vitrail. Distant Horizons 3.2.0-b does this and
