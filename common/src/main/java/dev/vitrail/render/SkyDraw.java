@@ -47,8 +47,12 @@ import java.util.Optional;
  * <strong>Every piece draws where the pack's own draw buffers send it</strong>, on the halves the
  * schedule gives them, which for most of the corpus is colortex0 and for Sildur's is colortex4. The
  * two pieces that write outright rather than blend also mark the pixels they covered, so the scene
- * seed stops painting the game's own sky over them, exactly as it stops over the terrain. A place
- * whose plan has no answer keeps the single attachment the game opened its pass with.
+ * seed stops painting the game's own sky over them, exactly as it stops over the terrain.
+ * <p>
+ * <strong>All the pieces or none of them</strong>, settled once per place in {@link #read}. The
+ * mark is what makes it all or nothing: it cuts the seed, and the seed is the one road into the
+ * pack's colour target left to a piece that stayed on the game's, so a place where the disc marks
+ * the sky and the sun is still on the game's target is a place with no sun in it.
  */
 public final class SkyDraw {
 
@@ -328,11 +332,31 @@ public final class SkyDraw {
 		try {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadSky(this.packPath, this.place,
 					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
+
+			// Asked once per PROGRAM and not once per piece: four of the six are drawn with
+			// gbuffers_skybasic, and the plan would answer for that one four times over.
+			Map<String, List<ChainPlan.Attachment>> byProgram = new LinkedHashMap<>();
+			ELEMENTS.values()
+					.forEach(element -> byProgram.computeIfAbsent(element.program(), this::writes));
+
+			// All of them or none of them, for the reason the class comment gives. Body Camera is
+			// the pack this is decided for: it declares draw buffers on gbuffers_skybasic and none
+			// on gbuffers_skytextured, which the format allows, so the disc would mark the whole sky
+			// and its sun and its moon would be drawn on the game's target and cut out of the seed.
+			List<String> behind = behind(loaded, byProgram);
+			if (!behind.isEmpty()) {
+				Vitrail.logger().info("{} has nowhere of its own for the {} of its sky, so the whole "
+						+ "of the sky keeps the game's target and the scene seed brings it across",
+						this.packPath.getFileName(), String.join(", ", behind));
+				byProgram.clear();
+			}
+
 			ELEMENTS.values().stream()
 					.filter(element -> loaded.containsKey(element.element()))
 					.forEach(element -> this.programs.put(element.label(), SkyProgram.of(
 							loaded.get(element.element()), element, this.values, this.load,
-							writes(element), this.chainTargets, this.targets, this.chainRuns)));
+							byProgram.getOrDefault(element.program(), List.of()), this.chainTargets,
+							this.targets, this.chainRuns)));
 
 			List<String> missing = ELEMENTS.values().stream()
 					.filter(element -> !loaded.containsKey(element.element()))
@@ -350,29 +374,50 @@ public final class SkyDraw {
 	}
 
 	/**
-	 * Where one piece's outputs belong, which is the plan's answer for the program the game would
-	 * have drawn it with, and empty when this place has none.
+	 * Where the outputs of one of the programs the sky is drawn with belong, which is the plan's
+	 * answer for it, and empty when this place has none.
 	 * <p>
-	 * A place whose sky targets are not the size of the screen keeps the single attachment the game
-	 * opened its pass with: the depth this pass tests nothing against is still attached to it and is
-	 * the screen's, and one render pass has one render area. No pack of the corpus scales one, and
-	 * the line says so rather than the encoder throwing in the middle of a frame.
+	 * A place whose sky targets are not the size of the screen is refused here rather than at the
+	 * first draw: the depth these passes test nothing against is still attached to them and is the
+	 * screen's, and one render pass has one render area. No pack of the corpus scales one, and the
+	 * line says so rather than the encoder throwing in the middle of a frame.
 	 */
-	private List<ChainPlan.Attachment> writes(Element element) {
-		return this.plan.sky(element.program())
+	private List<ChainPlan.Attachment> writes(String program) {
+		return this.plan.sky(program)
 				.filter(sky -> {
 					if (sky.size().equals(TargetSize.ofScreen())) {
 						return true;
 					}
 
-					Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so the {} of "
-							+ "the sky keeps the game's own target and its other draw buffers are "
-							+ "written nowhere", sky.program(), element.element());
+					Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so every "
+							+ "piece of the sky it draws keeps the game's own target", sky.program());
 
 					return false;
 				})
 				.map(ChainPlan.Pass::attachments)
 				.orElse(List.of());
+	}
+
+	/**
+	 * The pieces of the sky that would keep the game's own target, out of those the game still
+	 * draws. Empty is the answer that lets the sky move into the pack's targets at all.
+	 * <p>
+	 * A piece is one of these for either of two reasons, and they weigh the same: the pack serves no
+	 * program for it, so the game's own shader draws it, or the pack does serve one and declared no
+	 * draw buffer on it, so the plan has nowhere to send what it writes. Both leave that piece
+	 * reaching the pack's colour target through the scene seed alone.
+	 * <p>
+	 * A piece the pack switched off is in neither list. Nothing draws it, so there is nothing about
+	 * it for the seed to carry and nothing for it to hold the rest back over.
+	 */
+	private List<String> behind(Map<String, PackProgram.Loaded> loaded,
+			Map<String, List<ChainPlan.Attachment>> byProgram) {
+		return ELEMENTS.values().stream()
+				.filter(element -> this.values.skyElements().allows(element.directive()))
+				.filter(element -> !loaded.containsKey(element.element())
+						|| byProgram.get(element.program()).isEmpty())
+				.map(Element::element)
+				.toList();
 	}
 
 	private RenderPipeline prepare(GpuDevice device, Element element, Matrix4fc modelView,

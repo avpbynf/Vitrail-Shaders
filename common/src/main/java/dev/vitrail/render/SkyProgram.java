@@ -60,9 +60,10 @@ final class SkyProgram {
 	 *
 	 * @param loaded the pack's own program, read and translated against the format the pass that
 	 *               draws this piece binds
-	 * @param writes where this piece's outputs belong, {@link ChainPlan#sky}'s answer, in draw buffer
-	 *               order and each on the half the schedule gives it. Empty leaves the piece on the
-	 *               one attachment the game opened its own pass with
+	 * @param writes where this piece's outputs belong, in draw buffer order and each on the half the
+	 *               schedule gives it. {@link ChainPlan#sky}'s answer for the program that draws it,
+	 *               unless {@link SkyDraw} emptied it, which it does for the whole sky at once.
+	 *               Empty leaves the piece on the one attachment the game opened its own pass with
 	 */
 	static SkyProgram of(PackProgram.Loaded loaded, SkyDraw.Element element, PackValues values,
 			int load, List<ChainPlan.Attachment> writes, TargetPlan chainTargets,
