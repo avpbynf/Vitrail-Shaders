@@ -705,8 +705,12 @@ public final class PackChain {
 			return false;
 		}
 
-		this.opened = true;
 		this.targets.clear(device.createCommandEncoder());
+		// After the clear and not before. The clear is what pays the debt a fresh allocation owes,
+		// and it is the one call here that can throw; raised first, a frame that failed halfway
+		// counted as opened, so the next frame skipped the clear it never got and the debt died with
+		// the exception rather than with the work.
+		this.opened = true;
 
 		return true;
 	}

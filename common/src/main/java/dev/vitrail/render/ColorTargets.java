@@ -301,7 +301,6 @@ final class ColorTargets {
 	 */
 	void clear(CommandEncoder encoder) {
 		boolean full = this.clearOwed;
-		this.clearOwed = false;
 
 		if (full) {
 			clear(encoder, this.black, OPAQUE_BLACK);
@@ -326,6 +325,12 @@ final class ColorTargets {
 			clear(encoder, this.mainSide.get(index), colour);
 			clear(encoder, this.altSide.get(index), colour);
 		}
+
+		// Last, so the debt is only ever paid off by a clear that got all the way through. Written
+		// off at the top, an upload that threw halfway - the noise field is the one that reads a file
+		// - left the pack sampling whatever the driver had put in a texture nobody had written, for
+		// the rest of the session and without a line to say so.
+		this.clearOwed = false;
 	}
 
 	/**
