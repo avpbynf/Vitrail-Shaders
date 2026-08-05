@@ -707,9 +707,11 @@ public final class PackChain {
 
 		this.targets.clear(device.createCommandEncoder());
 		// After the clear and not before. The clear is what pays the debt a fresh allocation owes,
-		// and it is the one call here that can throw; raised first, a frame that failed halfway
-		// counted as opened, so the next frame skipped the clear it never got and the debt died with
-		// the exception rather than with the work.
+		// and it is the one call here that can throw; raised first, the second call of the same frame
+		// found the frame opened and skipped the clear it never got, and the debt died with the
+		// exception rather than with the work. Of the same frame and not of the next one: closeFrame
+		// lowers the flag on every pass through draw, so what this order protects is the pair of
+		// callers above, and a frame whose throw escaped before draw was reached at all.
 		this.opened = true;
 
 		return true;
@@ -769,6 +771,13 @@ public final class PackChain {
 	 * video memory on BSL at 1080p, held for a screen that draws a panorama. What is freed here is
 	 * exactly what a reload frees, and everything of it is made again by the first frame of the next
 	 * world; nothing about which pack is loaded moves, so the settings screen still has one to show.
+	 * <p>
+	 * The first frame of that next world pays for it twice, and it is worth knowing where. The sky
+	 * and the terrain open the frame while the world is being drawn, so they allocate everything back
+	 * before {@code draw} reaches {@link #reloadIfTheWorldMoved} at the end of it; a world joined
+	 * with symbols this engine has not seen then reloads and makes the same work again. One extra
+	 * allocation and one extra translation, on the frame the world appears, which is the frame
+	 * already carrying every other first cost there is.
 	 */
 	public static void leaveWorld() {
 		PackChain chain = active;
@@ -777,9 +786,20 @@ public final class PackChain {
 		}
 
 		try {
-			Vitrail.logger().info("Left the world, so the {} MiB of colour targets, the shadow map and "
-					+ "the buffers of {} go back until one is joined again",
-					chain.targets.bytes() / (1024L * 1024L), chain.chain.packName());
+			// The line is about what goes back, so it has to be able to say that nothing does. A
+			// chain that threw was released where it threw and a world left before a frame was drawn
+			// never allocated anything, and either way announcing nought mebibytes returning reads
+			// as a leak rather than as the release that already happened.
+			long megabytes = chain.targets.bytes() / (1024L * 1024L);
+			if (megabytes > 0L) {
+				Vitrail.logger().info("Left the world, so the {} MiB of colour targets, the shadow map "
+						+ "and the buffers of {} go back until one is joined again", megabytes,
+						chain.chain.packName());
+			} else {
+				Vitrail.logger().info("Left the world, and {} had nothing left to hand back",
+						chain.chain.packName());
+			}
+
 			chain.release();
 			chain.values.leaveWorld();
 		} catch (RuntimeException e) {
