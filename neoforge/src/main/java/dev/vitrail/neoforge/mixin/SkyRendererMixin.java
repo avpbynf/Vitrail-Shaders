@@ -30,8 +30,9 @@ import java.util.function.Supplier;
  * set, and everything else about the pass stays the game's, its attachment included.
  * <p>
  * <strong>An element is recognised by the label the game gives its own pass</strong>, which is the
- * first argument of the call wrapped below. That is what lets one wrap serve three methods without
- * a table of method names to keep in step with the game.
+ * first argument of the call wrapped below. That is what lets one wrap serve six methods without a
+ * table of method names to keep in step with the game: a method whose label this engine has no
+ * element for prepares nothing and draws exactly as it did.
  * <p>
  * <strong>The order of the four wraps is the whole design.</strong> The pass is opened after the
  * game has pushed the model view for this element, so the matrix is final by then and the sun is
@@ -50,7 +51,8 @@ public abstract class SkyRendererMixin {
 	private RenderPipeline vitrail$pipeline;
 
 	@WrapOperation(
-			method = {"renderSkyDisc", "renderSun", "renderMoon"},
+			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
+					"renderMoon"},
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/CommandEncoder;createRenderPass("
 							+ "Ljava/util/function/Supplier;"
@@ -71,7 +73,8 @@ public abstract class SkyRendererMixin {
 	}
 
 	@WrapOperation(
-			method = {"renderSkyDisc", "renderSun", "renderMoon"},
+			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
+					"renderMoon"},
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/RenderPass;setPipeline("
 							+ "Lcom/mojang/blaze3d/pipeline/RenderPipeline;)V"))
@@ -104,7 +107,8 @@ public abstract class SkyRendererMixin {
 	 * pipeline is set.
 	 */
 	@WrapOperation(
-			method = {"renderSkyDisc", "renderSun", "renderMoon"},
+			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
+					"renderMoon"},
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/RenderPass;setVertexBuffer("
 							+ "ILcom/mojang/blaze3d/buffers/GpuBufferSlice;)V"))

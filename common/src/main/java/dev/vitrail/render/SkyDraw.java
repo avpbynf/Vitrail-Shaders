@@ -64,19 +64,29 @@ public final class SkyDraw {
 	}
 
 	/**
-	 * The three elements this engine draws, out of the eight the renderer has. The dark disc, the
-	 * stars, the sunrise band and the two End passes still go to the game.
+	 * The six elements of the overworld sky, which is all of them but the two the End draws.
 	 * <p>
-	 * The formats and the topologies are the game's, read off {@code RenderPipelines}: {@code SKY}
-	 * is a triangle fan over {@code POSITION} that blends nothing, {@code CELESTIAL} is quads over
-	 * {@code POSITION_TEX} that blend as an overlay. Any of the three getting one of these wrong is
-	 * a pipeline the pass refuses to bind, by name and in the middle of the world.
+	 * The formats, the topologies and the blends are the game's own, read off
+	 * {@code RenderPipelines} one by one rather than guessed at from a family: {@code SKY} is a
+	 * triangle fan over {@code POSITION} that blends nothing, {@code STARS} is quads over the same
+	 * format blended as an overlay, {@code SUNRISE_SUNSET} is a translucent fan over
+	 * {@code POSITION_COLOR}, and {@code CELESTIAL} is quads over {@code POSITION_TEX}, overlaid.
+	 * Any of them getting one of these wrong is a pipeline the pass refuses to bind, by name and in
+	 * the middle of the world, and getting the FORMAT wrong is worse: it shifts the location of
+	 * every element after the one that differs, without a word.
 	 */
 	private static final Map<String, Element> ELEMENTS = new LinkedHashMap<>();
 
 	static {
 		put(new Element("Sky disc", "gbuffers_skybasic", "disc", DefaultVertexFormat.POSITION,
 				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), false));
+		put(new Element("Sky dark", "gbuffers_skybasic", "dark", DefaultVertexFormat.POSITION,
+				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true));
+		put(new Element("Stars", "gbuffers_skybasic", "stars", DefaultVertexFormat.POSITION,
+				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true));
+		put(new Element("Sunrise sunset", "gbuffers_skybasic", "sunrise",
+				DefaultVertexFormat.POSITION_COLOR, PrimitiveTopology.TRIANGLE_FAN,
+				Optional.of(BlendFunction.TRANSLUCENT), true));
 		put(new Element("Sky sun", "gbuffers_skytextured", "sun", DefaultVertexFormat.POSITION_TEX,
 				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true));
 		put(new Element("Sky moon", "gbuffers_skytextured", "moon", DefaultVertexFormat.POSITION_TEX,
