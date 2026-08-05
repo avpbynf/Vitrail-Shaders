@@ -17,7 +17,9 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
 import net.minecraft.client.gui.layouts.LayoutSettings;
 import net.minecraft.client.gui.layouts.LinearLayout;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -65,7 +67,6 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	private static final int FOOTER_HEIGHT = 70;
 	private static final int LINE_HEIGHT = 11;
 	private static final int NARROW_BUTTON = 80;
-	private static final int WIDE_BUTTON = 90;
 	private static final int BUTTON_GAP = 8;
 
 	/** Wide enough for the screen's own title, which is what the way into a pack's pages says. */
@@ -158,8 +159,9 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	 * for the frame lets that focus land on a live widget, and the {@code clearFocus} inside
 	 * {@link #rebuildWidgets()} then clears it.
 	 * <p>
-	 * Following the loaded pack is the other. A file edited by hand reloads the pack under an open
-	 * screen, which is exactly what that watcher is for, and nothing tells the screen about it.
+	 * Following the loaded pack is the other. Reload, Reset and picking a pack all read the pack
+	 * again underneath this screen, and so does walking through a portal; nothing tells the screen
+	 * about any of it, so it looks every frame.
 	 */
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
@@ -317,39 +319,37 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 				LayoutSettings::alignHorizontallyCenter);
 		this.statusLine.setTooltip(removedTooltip());
 
-		LinearLayout navigation = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
+		// One row, whichever page is drawn. The screen had two, and the second one carried Apply and
+		// Cancel everywhere: on the pack list they had nothing to act on, since walking back to it
+		// drops what was pending, and Cancel had nothing left to do anywhere once leaving a page
+		// stopped writing. What is left reads left to right as the way out, the way back, and the
+		// one button that commits.
+		LinearLayout row = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
 				LayoutSettings::alignHorizontallyCenter);
 		if (this.listingPacks) {
-			navigation.addChild(settingsButton());
+			row.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
+			row.addChild(settingsButton());
+			row.addChild(button(CommonComponents.GUI_DONE, NARROW_BUTTON, this::onClose));
+
+			return footer;
+		}
+
+		row.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
+		row.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::confirmReset));
+		row.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
+
+		// The last slot holds one button and it says what pressing it does: Apply while something is
+		// waiting, Done once nothing is. Two buttons for the two cases would leave one of them dead
+		// at all times, and a dead Apply is what made the old row unreadable.
+		MenuValues current = this.values;
+		if (current != null && current.pendingCount() > 0) {
+			row.addChild(button(ScreenText.APPLY, NARROW_BUTTON, () -> {
+				apply();
+				queueRebuild();
+			}));
 		} else {
-			navigation.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
-			// Kept next to Back, which reaches the list too but only from the pack's first page.
-			navigation.addChild(button(ScreenText.PACKS, NARROW_BUTTON, this::openPacks));
+			row.addChild(button(CommonComponents.GUI_DONE, NARROW_BUTTON, this::onClose));
 		}
-
-		navigation.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
-		// Only beside a pack's own settings, because that is the only place it means anything: the
-		// pack list has no file of its own to throw away.
-		if (!this.listingPacks) {
-			navigation.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::reset));
-		}
-
-		LinearLayout commit = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
-				LayoutSettings::alignHorizontallyCenter);
-		// On the pack list as well, because leaving a page no longer applies: a value clicked on a
-		// page is still waiting once the list is drawn, and the only button that writes it has to be
-		// reachable from wherever the count in the status line is read.
-		Button apply = commit.addChild(button(ScreenText.APPLY, WIDE_BUTTON, () -> {
-			apply();
-			queueRebuild();
-		}));
-		Button cancel = commit.addChild(
-				button(CommonComponents.GUI_CANCEL, WIDE_BUTTON, this::cancel));
-
-		apply.active = this.values != null;
-		cancel.active = this.values != null;
-
-		commit.addChild(button(CommonComponents.GUI_DONE, WIDE_BUTTON, this::onClose));
 
 		return footer;
 	}
@@ -458,7 +458,8 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		return current == null ? 0 : current.forcedShown();
 	}
 
-	private void cancel() {
+	/** Throws away what was clicked and never applied, and puts the widgets back on their values. */
+	private void dropPending() {
 		MenuValues current = this.values;
 		if (current != null) {
 			current.clearPending();
@@ -533,6 +534,35 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	 * this loses a set of choices and nothing else, and the reload right after shows the result
 	 * immediately.
 	 */
+	/**
+	 * Reset asks first, and it is the only button here that does. It is also the only one that
+	 * deletes something a player wrote: a settings file can hold an evening of tuning, and it sits
+	 * two slots from Back on a row where every other button is harmless.
+	 * <p>
+	 * The confirmation is the game's own screen rather than a panel of ours, so it is worded, laid
+	 * out and narrated like every other confirmation the player has already answered. Coming back
+	 * hands it this same screen, which rebuilds itself: the page walked into, the scroll and what
+	 * is pending are fields and none of them is touched by going away and returning.
+	 */
+	private void confirmReset() {
+		PackSession loaded = this.session;
+		if (loaded == null) {
+			return;
+		}
+
+		Minecraft client = this.minecraft;
+		client.gui.setScreen(new ConfirmScreen(
+				yes -> {
+					client.gui.setScreen(this);
+					if (yes) {
+						reset();
+					}
+				},
+				Component.translatable(ScreenText.RESET_CONFIRM, loaded.packFileName()),
+				Component.translatable(ScreenText.RESET_CONFIRM_DETAIL,
+						loaded.settingsFile().getFileName().toString())));
+	}
+
 	private void reset() {
 		PackSession loaded = this.session;
 		if (loaded == null) {
@@ -557,9 +587,11 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	}
 
 	private void openPacks() {
-		// A pending value survives the walk to the list and back, the same way it survives a reload:
-		// nothing about looking at the folder says what was clicked on a page should be written, and
-		// nothing about it says it should be thrown away either.
+		// Dropped on the way out, and this is the one place that drops them. A pending value belongs
+		// to a page of one pack; carrying it to a list where the next click may load another pack
+		// leaves it waiting for a file it was never meant for, and the count in the status line then
+		// names settings the reader can no longer see.
+		dropPending();
 		this.listingPacks = true;
 		queueRebuild();
 	}

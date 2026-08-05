@@ -25,6 +25,12 @@ public final class ScreenText {
 	public static final String APPLY = "options.vitrail.apply";
 	public static final String RELOAD = "options.vitrail.reload";
 	public static final String RESET = "options.vitrail.reset";
+
+	/** One argument: the pack whose settings would be thrown away. */
+	public static final String RESET_CONFIRM = "options.vitrail.reset_confirm";
+
+	/** One argument: the file that would be deleted, by name. */
+	public static final String RESET_CONFIRM_DETAIL = "options.vitrail.reset_confirm_detail";
 	public static final String PACKS = "options.vitrail.packs";
 	public static final String PACKS_TITLE = "options.vitrail.packs_title";
 	public static final String PROFILE = "options.vitrail.profile";

@@ -3,6 +3,8 @@
 	"options.vitrail.apply": "Apply",
 	"options.vitrail.reload": "Reload",
 	"options.vitrail.reset": "Reset",
+	"options.vitrail.reset_confirm": "Reset %s to its own defaults?",
+	"options.vitrail.reset_confirm_detail": "%s is deleted. The pack keeps every setting it declares itself, and nothing else is touched.",
 	"options.vitrail.packs": "Packs",
 	"options.vitrail.packs_title": "Shader Packs",
 	"options.vitrail.profile": "Profile",
