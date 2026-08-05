@@ -301,11 +301,13 @@ public final class FrameState implements WorldState {
 		if (this.lastLevel != level) {
 			// A different world, so nothing carried over from the previous frame means anything:
 			// the camera has jumped a dimension's worth of coordinates and the shift, the history
-			// and every motion vector built from them would be one frame of nonsense.
+			// and every motion vector built from them would be one frame of nonsense. The clock is
+			// part of that and used to be the half left out, which only shows on a dimension the
+			// pack serves out of the directory it was already loaded from: nothing is read again
+			// there, so the first frame on the far side published a frameTime measuring the whole
+			// change, seconds of it, into every value a pack integrates over one.
 			this.lastLevel = level;
-			this.view.reset();
-			this.shift.reset();
-			FrameSmoothed.forgetAll();
+			reset();
 		}
 
 		GameRenderer renderer = minecraft.gameRenderer;
