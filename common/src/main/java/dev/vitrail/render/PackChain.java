@@ -771,7 +771,7 @@ public final class PackChain {
 		GpuBuffer buffer = this.block.currentBuffer();
 		for (int at = from; at < to; at++) {
 			if (at == seedAt) {
-				drawSeed(encoder, ready.mainView());
+				drawSeed(encoder, ready.mainView(), ready.depthView());
 			}
 
 			PackPass pass = this.programs.get(at);
@@ -796,7 +796,7 @@ public final class PackChain {
 
 		// A place whose whole chain runs before the world still paints it, once everything has run.
 		if (to >= this.programs.size() && seedAt >= this.programs.size()) {
-			drawSeed(encoder, ready.mainView());
+			drawSeed(encoder, ready.mainView(), ready.depthView());
 		}
 	}
 
@@ -830,6 +830,42 @@ public final class PackChain {
 
 		try {
 			chain.drawEarly(device);
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
+	}
+
+	/**
+	 * Keeps the world's depth as the pack's own geometry left it, which is what tells an entity the
+	 * game drew in front of a block from the block itself. Called once the opaque blocks are drawn
+	 * and before the game has drawn one feature over them.
+	 * <p>
+	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes: nothing here warms a
+	 * pipeline, prepares a target or clears anything, because all of that belongs to the moment the
+	 * chain runs and moving it a step earlier in the frame would clear away what the chunk passes
+	 * have just written. This copies one image and answers for nothing else.
+	 */
+	public static void markGeometryDepth() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		Minecraft minecraft = Minecraft.getInstance();
+		if (disabled || chain == null || device == null || minecraft == null || !chainWanted
+				|| chain.seed == null || !chain.seedEnabled || chain.quad == null) {
+			return;
+		}
+
+		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+		if (main == null) {
+			return;
+		}
+
+		// Caught like every other entry point this bus calls: an exception here reaches the game
+		// through an event handler and comes back on the very next frame.
+		try {
+			chain.seed.capture(device.createCommandEncoder(), device, chain.quad,
+					main.getDepthTextureView(), main.width, main.height);
 		} catch (RuntimeException e) {
 			disabled = true;
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -997,13 +1033,13 @@ public final class PackChain {
 	 * before, or the clear would throw the scene away, and on the half the geometry program it
 	 * stands in for would have written.
 	 */
-	private void drawSeed(CommandEncoder encoder, GpuTextureView mainView) {
+	private void drawSeed(CommandEncoder encoder, GpuTextureView mainView, GpuTextureView depthView) {
 		// One pixel of black where no mask has been allocated yet, which reads as nought everywhere
 		// and hides nothing. The mask itself is emptied at the head of every frame, so a frame no
 		// terrain program drew in is served an empty one rather than the last one that was written.
 		GpuTextureView covered = this.targets.coverage();
 		this.seed.draw(encoder, this.quad, mainView,
-				covered == null ? this.targets.black() : covered,
+				covered == null ? this.targets.black() : covered, depthView,
 				this.targets.view(this.seed.target(), this.seed.side()));
 	}
 

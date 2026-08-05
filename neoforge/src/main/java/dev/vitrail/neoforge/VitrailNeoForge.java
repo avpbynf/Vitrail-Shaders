@@ -40,6 +40,13 @@ public final class VitrailNeoForge {
 		// the model view and the camera position this frame was set up with.
 		NeoForge.EVENT_BUS.addListener(FrameGraphSetupEvent.class, this::onFrameGraphSetup);
 
+		// AfterOpaqueBlocks fires between the two: the chunk passes are done and the game has
+		// not drawn one entity yet. It is the only moment the world's depth is the pack's own
+		// geometry and nothing else, which is what the scene seed needs to tell a mob standing
+		// in front of a wall from the wall.
+		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterOpaqueBlocks.class,
+				this::onAfterOpaqueBlocks);
+
 		// AfterOpaqueFeatures fires once the opaque terrain, the entities, the block entities
 		// and the opaque particles are drawn, and before anything translucent is. That is
 		// where the OptiFine model puts the deferred stage, and it is where Iris puts it too.
@@ -93,6 +100,10 @@ public final class VitrailNeoForge {
 	 * the whole chain running after the world, that read found a clear colour and the water was
 	 * thrown away in its entirety.
 	 */
+	private void onAfterOpaqueBlocks(RenderLevelStageEvent.AfterOpaqueBlocks event) {
+		PackChain.markGeometryDepth();
+	}
+
 	private void onAfterOpaqueFeatures(RenderLevelStageEvent.AfterOpaqueFeatures event) {
 		PackChain.drawBeforeTranslucents();
 		PackChain.openFeatures();
