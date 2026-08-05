@@ -12,6 +12,7 @@ import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsLayers;
 import dev.vitrail.uniform.ClipSpace;
+import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -26,6 +27,8 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.util.Mth;
+
+import org.joml.Vector4f;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -172,6 +175,9 @@ public final class PackChain {
 
 	/** Fills the mip chains of the targets the programs of this place read at a lod. */
 	private final MipmapReduction mipmaps = new MipmapReduction();
+
+	/** What colortex0 is emptied to, refilled once a frame. One object, because a clear is a frame. */
+	private final Vector4f fogClear = new Vector4f(0.0F, 0.0F, 0.0F, 1.0F);
 
 	private final SceneSeed seed;
 	private final boolean seedEnabled;
@@ -705,7 +711,13 @@ public final class PackChain {
 			return false;
 		}
 
-		this.targets.clear(device.createCommandEncoder());
+		// Taken here and not held from the load: it is the fog of THIS frame, and the whole value of
+		// clearing colortex0 to it is that the sky the pack has not drawn over reads as distance
+		// rather than as a hole. Read after beginFrame, which every caller of this does first, so the
+		// state has already been advanced onto this frame.
+		WorldState world = this.values.world();
+		this.fogClear.set(world.fogR(), world.fogG(), world.fogB(), 1.0F);
+		this.targets.clear(device.createCommandEncoder(), this.fogClear);
 		// After the clear and not before. The clear is what pays the debt a fresh allocation owes,
 		// and it is the one call here that can throw; raised first, the second call of the same frame
 		// found the frame opened and skipped the clear it never got, and the debt died with the

@@ -79,6 +79,9 @@ final class ColorTargets {
 	/** One byte a pixel, which is a yes or a no and nothing else. */
 	private static final GpuFormat COVERAGE_FORMAT = GpuFormat.R8_UNORM;
 
+	/** The one target the format says starts at the fog colour. Every other one starts at a constant. */
+	private static final int FOG_TARGET = 0;
+
 	private static final Vector4fc OPAQUE_BLACK = new Vector4f(0.0F, 0.0F, 0.0F, 1.0F);
 	private static final Vector4fc OPAQUE_WHITE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private static final Vector4fc MID_GREY = new Vector4f(0.5F, 0.5F, 0.5F, 1.0F);
@@ -126,6 +129,17 @@ final class ColorTargets {
 
 	private final Map<Integer, GpuFormat> formats = new LinkedHashMap<>();
 	private final Map<Integer, Vector4fc> clearColours = new LinkedHashMap<>();
+
+	/**
+	 * Whether colortex0 starts each frame at the fog colour rather than at the colour below.
+	 * <p>
+	 * That is the rule packs are written against, and it is not a nicety: everything the pack's own
+	 * geometry does not cover is exactly the sky under the horizon, and a target emptied to black
+	 * there hands the whole of the chain a hole where the distance should be. It is a per frame value
+	 * and this class holds no frame, which is why the plan cannot answer it and only says whether the
+	 * pack named a colour of its own instead.
+	 */
+	private final boolean fogCleared;
 	private final Map<Integer, TargetSurface> mainSide = new LinkedHashMap<>();
 	private final Map<Integer, TargetSurface> altSide = new LinkedHashMap<>();
 	private final Set<Integer> fellBack = new TreeSet<>();
@@ -206,6 +220,8 @@ final class ColorTargets {
 			this.formats.put(index, GpuFormats.of(directives.format(index).used()));
 			this.clearColours.put(index, new Vector4f(colour.r(), colour.g(), colour.b(), colour.a()));
 		}
+
+		this.fogCleared = !directives.declaresClearColour(FOG_TARGET);
 
 		// Narrowed to what is actually allocated: a pack may turn the directive on for a target no
 		// program of this place writes or samples, and a chain is a property of a texture that
@@ -307,8 +323,13 @@ final class ColorTargets {
 	 * The shadow map is deliberately not in this list. It is drawn at the end of a frame for the
 	 * next one, so what it holds when the frame opens is exactly what the gbuffers are about to
 	 * read, and the shadow stage empties it itself right before drawing.
+	 *
+	 * @param fog what colortex0 starts this frame at, unless the pack named a colour of its own for
+	 *            it: the fog the game computed, with an alpha of one. The alpha is not a detail and
+	 *            Iris says so where it builds the same vector: a zero there gives Sildur's pink
+	 *            reflections, because the pack reads that channel as something of its own
 	 */
-	void clear(CommandEncoder encoder) {
+	void clear(CommandEncoder encoder, Vector4fc fog) {
 		boolean full = this.clearOwed;
 
 		if (full) {
@@ -330,7 +351,9 @@ final class ColorTargets {
 				continue;
 			}
 
-			Vector4fc colour = this.clearColours.get(index);
+			Vector4fc colour = this.fogCleared && index == FOG_TARGET
+					? fog
+					: this.clearColours.get(index);
 			clear(encoder, this.mainSide.get(index), colour);
 			clear(encoder, this.altSide.get(index), colour);
 		}

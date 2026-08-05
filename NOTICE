@@ -35,6 +35,20 @@ GNU Lesser General Public License version 3
   GAUX4FORMAT and the promotion of colortex1 on a gdepth uniform, are not implemented. The flip
   state is carried once rather than as the pair BufferFlipper keeps.
 
+  common/src/main/java/dev/vitrail/render/ColorTargets.java empties colortex0 to the frame's fog
+  colour with an alpha of one, which is what net.irisshaders.iris.targets.ClearPass.execute does
+  with the default colour IrisRenderingPipeline hands it. The alpha is reproduced along with the
+  reason Iris gives for it, since a pack reads that channel as something of its own. Every other
+  starting colour is TargetDirectives above.
+
+  common/src/main/java/dev/vitrail/pack/source/ShaderProperties.java reads the sun, moon, stars and
+  sky directives with the four words and the defaults of
+  net.irisshaders.iris.shaderpack.properties.ShaderProperties.handleBooleanDirective, read on
+  5 August 2026, and net.irisshaders.iris.mixin.MixinSkyRenderer cancels the same pieces at the head
+  of the same methods. The conditionals around each line are evaluated here where Iris reads them
+  flat, which changes the answer on two packs of the corpus. The clouds directive, which Iris also
+  carries, is not implemented: nothing here draws a cloud.
+
   common/src/main/java/dev/vitrail/pack/target/TargetSize.java reimplements
   net.irisshaders.iris.gl.texture.TextureScaleOverride, down to the dot in the value being what
   tells a fraction of the screen from a count of pixels, together with the rule of

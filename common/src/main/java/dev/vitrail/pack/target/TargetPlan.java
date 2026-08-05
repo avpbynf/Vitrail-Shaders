@@ -529,10 +529,6 @@ public final class TargetPlan {
 			}
 		}
 
-		if (ordered.contains(0) && !directives.declaresClearColour(0)) {
-			notes.add("colortex0 is cleared to opaque black: nothing supplies the fog colour yet");
-		}
-
 		if (!persistent.isEmpty()) {
 			notes.add("targets the pack keeps between frames: " + persistent);
 		}

@@ -270,15 +270,14 @@ public final class TargetDirectives {
 	/**
 	 * What the target holds before anything writes it, which is also what it is cleared to when
 	 * {@link #clears(int)} says so. The defaults are Iris's, because packs are written against
-	 * them, with two corrections this engine has to make and to name:
-	 * <ul>
-	 * <li>colortex0 is meant to start at the fog colour, and nothing supplies the fog colour yet,
-	 * so it starts opaque black instead. That is a missing value like any other and it is in the
-	 * notes rather than guessed at;</li>
-	 * <li>a target whose format gained an alpha channel starts with an alpha of one, because in
-	 * GL a three component texture always sampled as {@code a = 1.0} and a promoted one returns
-	 * whatever is really there.</li>
-	 * </ul>
+	 * them, with one correction this engine has to make and to name: a target whose format gained an
+	 * alpha channel starts with an alpha of one, because in GL a three component texture always
+	 * sampled as {@code a = 1.0} and a promoted one returns whatever is really there.
+	 * <p>
+	 * <strong>colortex0 is the one answer here that is not the whole answer.</strong> The format has
+	 * it start at the fog colour of the frame, which is a value this side of the engine has no way of
+	 * knowing and no business holding; opaque black is what stands in, and the renderer asks
+	 * {@link #declaresClearColour(int)} to know whether it may put the fog colour there instead.
 	 */
 	public Colour clearColour(int index) {
 		Setting setting = this.settings.get(index);
@@ -297,7 +296,11 @@ public final class TargetDirectives {
 		return format(index).alphaAdded() ? OPAQUE_BLACK : TRANSPARENT_BLACK;
 	}
 
-	/** Whether the pack named the colour itself, as against being handed the engine's default. */
+	/**
+	 * Whether the pack named the colour itself, as against being handed the engine's default. Read
+	 * for colortex0 above all: a pack that named one keeps it, and one that did not is handed the
+	 * frame's fog colour by the renderer, which is what the format says it starts at.
+	 */
 	public boolean declaresClearColour(int index) {
 		Setting setting = this.settings.get(index);
 
