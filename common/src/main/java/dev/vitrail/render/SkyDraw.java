@@ -315,7 +315,8 @@ public final class SkyDraw {
 	}
 
 	/**
-	 * Reads the pack for all six pieces at once, at the first of them the game draws.
+	 * Reads the pack for all six pieces at once, at the first of them the game draws, and settles
+	 * where every one of them is drawn.
 	 * <p>
 	 * All six and not the one being asked for, which is what this used to do. The game reaches four
 	 * of these pieces at moments of its own choosing and three of those moments are conditions of the
@@ -417,8 +418,8 @@ public final class SkyDraw {
 	 * draw buffer on it, so the plan has nowhere to send what it writes. Both leave that piece
 	 * reaching the pack's colour target through the scene seed alone.
 	 * <p>
-	 * A piece the pack switched off is in neither list. Nothing draws it, so there is nothing about
-	 * it for the seed to carry and nothing for it to hold the rest back over.
+	 * A piece the pack switched off is not counted at all. Nothing draws it, so there is nothing
+	 * about it for the seed to carry and nothing for it to hold the rest back over.
 	 */
 	private List<String> behind(Map<String, PackProgram.Loaded> loaded,
 			Map<String, List<ChainPlan.Attachment>> byProgram) {
