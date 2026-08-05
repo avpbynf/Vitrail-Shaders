@@ -97,8 +97,8 @@ final class ColorTargets {
 	private final ShadowTargets shadowMap;
 
 	/**
-	 * The world's depth as it stood before the translucents, held here for the same reason the
-	 * shadow map is: everything that binds a sampler already holds this object.
+	 * The world's depth as the pack reads it, held here for the same reason the shadow map is:
+	 * everything that binds a sampler already holds this object.
 	 */
 	private final PackDepth depth = new PackDepth();
 
@@ -313,19 +313,11 @@ final class ColorTargets {
 	}
 
 	/**
-	 * Takes the copy of the world's depth the pack reads as {@code depthtex1}. Must run on the
-	 * render thread, outside any render pass, and at the right moment of the frame, which is the
-	 * caller's to know.
+	 * The world's depth in the window the pack reads it in. Never null, and its own images are null
+	 * until a frame has filled them.
 	 */
-	void copyDepth(CommandEncoder encoder, GpuTexture depth) {
-		if (!this.broken) {
-			this.depth.copy(encoder, depth);
-		}
-	}
-
-	/** The copy {@link #copyDepth} last took, or null before the first one. Never held. */
-	GpuTextureView depthCopy() {
-		return this.depth.view();
+	PackDepth depth() {
+		return this.depth;
 	}
 
 	/** Never held from one frame to the next. Null when this index was never allocated. */

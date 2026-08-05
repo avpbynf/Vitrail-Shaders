@@ -756,8 +756,11 @@ public final class PackChain {
 	 * The two halves share one order and one parity: the range is a window onto the same list, so
 	 * every pass still runs where the schedule put it and the ping pong is untouched. What changes
 	 * is only the moment the commands are recorded.
+	 *
+	 * @param depth what this half's programs read as {@code depthtex0}, in the pack's own window:
+	 *              the opaque world before the translucents and the whole scene after
 	 */
-	private void drawRange(GpuDevice device, Ready ready, int from, int to) {
+	private void drawRange(GpuDevice device, Ready ready, int from, int to, GpuTextureView depth) {
 		int seedAt = ready.seeding()
 				? this.chain.chain().seed().map(ChainPlan.Seed::at).orElse(-1)
 				: -1;
@@ -786,11 +789,10 @@ public final class PackChain {
 
 			GpuBufferSlice uniforms = buffer.slice(pass.uniformOffset(), pass.uniformSize());
 			if (pass == this.last) {
-				pass.drawFinal(encoder, ready.mainView(), this.targets, ready.depthView(), this.quad,
-						uniforms);
+				pass.drawFinal(encoder, ready.mainView(), this.targets, depth, this.quad, uniforms);
 			} else {
-				pass.draw(encoder, this.targets, ready.depthView(), this.quad, uniforms,
-						ready.main().width, ready.main().height);
+				pass.draw(encoder, this.targets, depth, this.quad, uniforms, ready.main().width,
+						ready.main().height);
 			}
 		}
 
@@ -925,11 +927,12 @@ public final class PackChain {
 		this.early = true;
 
 		// The depth of the opaque world, taken before anything translucent is drawn, which is what
-		// the OptiFine model calls depthtex1. Iris takes the same copy at the same moment,
-		// beginTranslucents, before running its deferreds; the deferreds read it too, and nothing
-		// between here and the world's translucents writes the game's depth, so one copy serves the
-		// whole rest of the frame.
-		this.targets.copyDepth(device.createCommandEncoder(), ready.main().getDepthTexture());
+		// the OptiFine model calls depthtex1. Iris takes it at the same moment, beginTranslucents,
+		// before running its deferreds; the deferreds read it too, and nothing between here and the
+		// world's translucents writes the game's depth, so one image serves the whole rest of the
+		// frame. Outside any render pass, exactly as the copy this replaces had to be.
+		this.targets.depth().takeOpaque(device.createCommandEncoder(), device, this.quad,
+				ready.depthView(), ready.main().width, ready.main().height);
 
 		int end = deferredEnd();
 		if (!this.split) {
@@ -942,7 +945,7 @@ public final class PackChain {
 					this.programs.stream().limit(end).map(PackPass::path).toList());
 		}
 
-		drawRange(device, ready, 0, end);
+		drawRange(device, ready, 0, end, this.targets.depth().opaque());
 	}
 
 	/**
@@ -976,7 +979,14 @@ public final class PackChain {
 			return;
 		}
 
-		drawRange(device, ready, deferredEnd(), this.programs.size());
+		// The depth of the whole scene, which by now carries the world's translucents and the
+		// features that were redirected into the pack's image. Taken here and not once for the frame
+		// because the two halves are not asking the same question: a composite that read the opaque
+		// world would blur and fog straight through water, and nothing about that fails.
+		this.targets.depth().takeScene(device.createCommandEncoder(), device, this.quad,
+				ready.depthView(), ready.main().width, ready.main().height);
+
+		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene());
 
 		// Outside any pass, and after the last one. Only the targets the pack keeps between frames
 		// and that the chain left on the far half are copied: the next frame walks from an empty
@@ -1268,7 +1278,7 @@ public final class PackChain {
 				.filter(SamplerPlan::depthCopy)
 				.toList();
 		if (!copies.isEmpty()) {
-			Vitrail.logger().info("{} read the copy of the depth taken before the world's "
+			Vitrail.logger().info("{} read the depth of the world as it stood before its "
 					+ "translucents", copies);
 		}
 	}

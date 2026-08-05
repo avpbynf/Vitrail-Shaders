@@ -1,76 +1,321 @@
 package dev.vitrail.render;
 
+import dev.vitrail.uniform.ClipSpace;
+import dev.vitrail.Vitrail;
+
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.ShaderSource;
+import com.mojang.blaze3d.shaders.ShaderType;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.GpuDevice;
+import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.GpuTexture;
+import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import net.minecraft.client.renderer.BindGroupLayouts;
+import net.minecraft.resources.Identifier;
+
+import java.util.Locale;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
- * The depth of the opaque world, taken before anything translucent is drawn, which the OptiFine
- * model calls {@code depthtex1}.
+ * The world's depth in the window the pack reads depth in: two images, the one taken before the
+ * world's translucents and the one taken after.
  * <p>
- * A class of its own because it is the one image of a place that is neither a colour target nor the
- * shadow map: no directive stands behind it, it has no clear colour and no ping pong, and the moment
- * it is taken is a point of the frame rather than anything the plan carries. {@link ColorTargets}
- * holds it so that everything which binds a sampler already has it to hand.
+ * <strong>The conversion is here and not in the shader, and that is the whole point of the
+ * class.</strong> The game rasterises with a reversed Z over zero to one and a pack is written for
+ * the OpenGL volume, so what a lookup hands back has to be turned round once, {@code readA * d +
+ * readB}. Doing it in the shader means finding the lookups, and a lookup can only be found by the
+ * name of its sampler: Bliss declares
+ * {@code BilateralUpscale_REUSE_Z(sampler2D tex1, sampler2D tex2, sampler2D depth, ...)} and hands
+ * it {@code colortex12} at {@code composite1.fsh:987} and {@code depthtex0} two lines below, both
+ * live in the same body. One of the two has to be turned round and the other must not, and the body
+ * cannot be written twice. Converting the image instead makes every lookup right whatever name it
+ * was reached through, including the ones no rewrite could ever have seen.
+ * <p>
+ * The precedent is the shadow map, which stores the window the pack reads for exactly the same
+ * reason: {@link ShadowTargets} writes the forward window so that a {@code shadowtex} lookup never
+ * has to be wrapped. This is that rule applied to the world's depth as well.
+ * <p>
+ * Nothing is lost against what the shader used to compute. The operation is the same one, in the
+ * same place in the order, applied before any filtering: {@code |readA|} is one, the image is bound
+ * NEAREST, and a {@code textureGather} or a {@code texelFetch} therefore comes back bit for bit
+ * what it came back before. What is spent is memory, two full screen images of one float instead of
+ * one copy of the depth.
+ * <p>
+ * Two images and not one, because the pack asks two different questions. {@code depthtex1} and
+ * {@code depthtex2} are the opaque world, taken before anything translucent is drawn;
+ * {@code depthtex0} is the depth as it stands, which for a deferred is that same opaque world and
+ * for a composite is the whole scene. Served from one image the second half of the frame would blur
+ * and fog straight through water without anything failing.
  */
 final class PackDepth {
 
-	private GpuTexture texture;
-	private GpuTextureView view;
+	private static final Identifier VERTEX_ID =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/depth_window_vertex");
+	private static final Identifier FRAGMENT_ID =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/depth_window_fragment");
+
+	private static final String SAMPLER = "InSampler";
+
+	/** Two triangles, the quad every full screen pass of this engine draws. */
+	private static final int VERTICES = 6;
+
+	/** One float a texel: a window depth is one number and nothing here needs the other three. */
+	private static final GpuFormat FORMAT = GpuFormat.R32_FLOAT;
+
+	private static final Supplier<String> LABEL = () -> "Vitrail depth window";
+
+	private static final String VERTEX = """
+			#version 460 core
+
+			in vec3 Position;
+			in vec2 UV0;
+
+			out vec2 ofTexCoord;
+
+			void main() {
+				ofTexCoord = UV0;
+				gl_Position = vec4(Position.xy * 2.0 - 1.0, 0.0, 1.0);
+			}
+			""";
 
 	/**
-	 * Copies the game's depth as it stands. Must run on the render thread, outside any render pass,
-	 * and at the right moment of the frame, which is the caller's to know.
-	 * <p>
-	 * The copy carries the source's own format, taken from the texture rather than assumed: the
-	 * game's depth is {@code D32_FLOAT} until a mod asks NeoForge for a stencil, and a depth copy
-	 * with any other format than its source is refused outright by the encoder.
+	 * The pair is read off {@link ClipSpace#REVERSED} rather than written out, because the game's own
+	 * targets are what this reads and that constant is where their convention is decided. Written in
+	 * as literals rather than passed as a uniform: this pass has no block of its own, and a number
+	 * that cannot move is one less thing to keep in step.
 	 */
-	void copy(CommandEncoder encoder, GpuTexture depth) {
-		if (depth == null) {
-			return;
+	private static final String FRAGMENT = String.format(Locale.ROOT, """
+			#version 460 core
+
+			uniform sampler2D InSampler;
+
+			in vec2 ofTexCoord;
+
+			layout(location = 0) out vec4 ofFragData0;
+
+			void main() {
+				ofFragData0 = vec4(%s * texture(InSampler, ofTexCoord).r + %s);
+			}
+			""", ClipSpace.REVERSED.z, ClipSpace.REVERSED.w);
+
+	private static final ShaderSource SOURCE = (id, type) -> {
+		if (type == ShaderType.FRAGMENT) {
+			return FRAGMENT_ID.equals(id) ? FRAGMENT : null;
 		}
 
-		int width = depth.getWidth(0);
-		int height = depth.getHeight(0);
-		if (this.texture != null && (this.texture.getWidth(0) != width
-				|| this.texture.getHeight(0) != height
-				|| this.texture.getFormat() != depth.getFormat())) {
-			release();
+		return VERTEX_ID.equals(id) ? VERTEX : null;
+	};
+
+	private RenderPipeline pipeline;
+
+	/** Said once and not per frame, so that a driver that will not have this shader is readable. */
+	private boolean refused;
+
+	private TargetSurface opaque;
+	private TargetSurface scene;
+
+	/**
+	 * Whether anything has written each image since it was allocated.
+	 * <p>
+	 * A fresh texture holds whatever the driver left there, so an image the conversion never managed
+	 * to fill must not be handed to a pack: it would read as a depth and be memory. The same rule
+	 * emptied the shadow map when its stage is off.
+	 */
+	private boolean opaqueWritten;
+	private boolean sceneWritten;
+
+	private boolean broken;
+
+	/**
+	 * Converts the depth of the opaque world, which the pack reads as {@code depthtex1} and
+	 * {@code depthtex2}, and as {@code depthtex0} for as long as the deferred stage is the present
+	 * half. Must run on the render thread and outside any render pass.
+	 *
+	 * @param live the game's depth as it stands, which the caller has to take before anything
+	 *             translucent is drawn
+	 */
+	boolean takeOpaque(CommandEncoder encoder, GpuDevice device, GpuBuffer quad, GpuTextureView live,
+			int width, int height) {
+		if (!ensure(width, height) || !fill(encoder, device, quad, live, this.opaque)) {
+			return false;
 		}
 
-		if (this.texture == null) {
-			this.texture = RenderSystem.getDevice().createTexture(() -> "Vitrail depthtex1",
-					GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_TEXTURE_BINDING, depth.getFormat(),
-					width, height, 1, 1);
-			this.view = RenderSystem.getDevice().createTextureView(this.texture);
-		}
+		this.opaqueWritten = true;
 
-		encoder.copyTextureToTexture(depth, this.texture, 0, 0, 0, 0, 0, width, height);
+		return true;
 	}
 
 	/**
-	 * The copy {@link #copy} last took, or null before the first one. Looked up at every use like
+	 * Converts the depth of the whole scene, the world's translucents and the redirected features
+	 * included, which the pack reads as {@code depthtex0} from the composites on. Must run on the
+	 * render thread and outside any render pass.
+	 */
+	boolean takeScene(CommandEncoder encoder, GpuDevice device, GpuBuffer quad, GpuTextureView live,
+			int width, int height) {
+		if (!ensure(width, height) || !fill(encoder, device, quad, live, this.scene)) {
+			return false;
+		}
+
+		this.sceneWritten = true;
+
+		return true;
+	}
+
+	/**
+	 * The opaque world's depth, or null while nothing has filled it. Looked up at every use like
 	 * every other view of a place: a resize destroys and recreates it.
 	 */
-	GpuTextureView view() {
-		return this.view;
+	GpuTextureView opaque() {
+		return this.opaqueWritten ? this.opaque.view() : null;
+	}
+
+	/** The whole scene's depth, or null while nothing has filled it. Never held. */
+	GpuTextureView scene() {
+		return this.sceneWritten ? this.scene.view() : null;
 	}
 
 	/**
-	 * Frees the image and the view onto it. The view goes first: closing a texture does not close
-	 * the views onto it, and nothing on this backend notices one that has outlived its texture.
+	 * Frees both images. The views go with them, since {@link TargetSurface} closes the two
+	 * together.
 	 */
 	void release() {
-		if (this.view != null) {
-			this.view.close();
-			this.view = null;
+		this.opaque = close(this.opaque);
+		this.scene = close(this.scene);
+		this.opaqueWritten = false;
+		this.sceneWritten = false;
+	}
+
+	/**
+	 * Makes both images exist at the size of the screen, reallocating when it moved.
+	 *
+	 * @return false when there is nothing to draw into, in which case every depth lookup of the pack
+	 *         falls back to the far plane
+	 */
+	private boolean ensure(int width, int height) {
+		if (this.broken || width <= 0 || height <= 0) {
+			return false;
 		}
 
-		if (this.texture != null) {
-			this.texture.close();
-			this.texture = null;
+		if (this.opaque != null && this.opaque.width() == width && this.opaque.height() == height) {
+			return true;
 		}
+
+		try {
+			// Both or neither, and always the same size: one of them left at the old size would be
+			// read at the new one and stretch the depth over the screen rather than fail.
+			release();
+			this.opaque = new TargetSurface("Vitrail depth before the translucents", FORMAT, false,
+					width, height);
+			this.scene = new TargetSurface("Vitrail depth with the translucents", FORMAT, false,
+					width, height);
+		} catch (RuntimeException e) {
+			this.broken = true;
+			release();
+			Vitrail.logger().error("Vitrail could not allocate the two depth images the pack reads, so "
+					+ "every depthtex lookup of this pack reads the far plane", e);
+
+			return false;
+		}
+
+		// Said out loud rather than left to be discovered: this is two full screen images of a float
+		// each where there used to be one copy of the game's depth, about eight more mebibytes at
+		// 1080p and thirty-two at 4K.
+		Vitrail.logger().info("The world's depth is converted into the pack's window in two images at "
+				+ "{}x{}, {} MiB", width, height,
+				(this.opaque.bytes() + this.scene.bytes()) / (1024L * 1024L));
+
+		return true;
+	}
+
+	/**
+	 * Draws one image from the depth as it stands. Opens a render pass of its own, so it must not be
+	 * called while another one is recording; the copy it replaces had the same rule.
+	 */
+	private boolean fill(CommandEncoder encoder, GpuDevice device, GpuBuffer quad,
+			GpuTextureView live, TargetSurface into) {
+		if (quad == null || live == null || into == null) {
+			return false;
+		}
+
+		RenderPipeline compiled = pipeline(device);
+		if (compiled == null) {
+			return false;
+		}
+
+		// Loaded rather than cleared: the draw covers the image whole, so a clear would be one more
+		// write of the same texels.
+		try (RenderPass pass = encoder.createRenderPass(LABEL, into.view(), Optional.empty())) {
+			pass.setPipeline(compiled);
+			RenderSystem.bindDefaultUniforms(pass);
+			pass.setVertexBuffer(0, quad.slice());
+			// NEAREST, and it is what makes this a rewrite of the value and not of the image: one
+			// destination texel covers one source texel, so what a pack fetches here is what it would
+			// have fetched from the depth itself.
+			pass.bindTexture(SAMPLER, live,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			pass.draw(VERTICES, 1, 0, 0);
+		}
+
+		return true;
+	}
+
+	/**
+	 * The pipeline, compiled the first time it is asked for and kept.
+	 * <p>
+	 * The compiled form lives in the device cache, which the game empties at every resource reload,
+	 * so this asks the device every time rather than trusting a flag of its own: that call is a
+	 * {@code computeIfAbsent} on the device side and costs nothing once it has been made.
+	 */
+	private RenderPipeline pipeline(GpuDevice device) {
+		if (this.refused) {
+			return null;
+		}
+
+		if (this.pipeline == null) {
+			this.pipeline = build();
+		}
+
+		if (device.precompilePipeline(this.pipeline, SOURCE).isValid()) {
+			return this.pipeline;
+		}
+
+		this.refused = true;
+		this.pipeline = null;
+		Vitrail.logger().error("The depth conversion did not compile, so every depthtex lookup of this "
+				+ "pack reads the far plane rather than a depth in the wrong direction");
+
+		return null;
+	}
+
+	private static RenderPipeline build() {
+		return RenderPipeline.builder()
+				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/depth_window"))
+				.withVertexShader(VERTEX_ID)
+				.withFragmentShader(FRAGMENT_ID)
+				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
+				.withBindGroupLayout(BindGroupLayout.builder().withSampler(SAMPLER).build())
+				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
+				.withColorTargetState(new ColorTargetState(Optional.empty(), FORMAT,
+						ColorTargetState.WRITE_ALL))
+				.withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+				.withCull(false)
+				.build();
+	}
+
+	private static TargetSurface close(TargetSurface surface) {
+		if (surface != null) {
+			surface.close();
+		}
+
+		return null;
 	}
 }

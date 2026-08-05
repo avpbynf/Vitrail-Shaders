@@ -68,10 +68,15 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 *                           where it asked and there was no rank left to give it, which is the
 	 *                           case worth reading: whoever reads the mask is then reading an image
 	 *                           this stage never wrote
-	 * @param depthReads         lookups on a depth texture wrapped back into the window depth the
-	 *                           pack was written against
-	 * @param depthReadsUnwrapped lookups on a depth texture whose closing parenthesis could not be
-	 *                           found, left as they were and so left reading the raw value
+	 * @param depthLookups       lookups made through a name that says it reads a depth texture. Not
+	 *                           rewritten, and counted only so that the next one can be read against
+	 *                           something
+	 * @param parameterLookups   lookups made through a sampler the enclosing function was handed,
+	 *                           which is the same call whether what it reads is a depth or a colour.
+	 *                           No rule on the name of a sampler can classify one of these, so this
+	 *                           is the size of the blind spot such a rule would have; the engine
+	 *                           binds an image already in the pack's window rather than rewrite the
+	 *                           ones it can see
 	 * @param fragCoordZ         reads of {@code gl_FragCoord.z} converted
 	 * @param fragCoordXyz       reads of {@code gl_FragCoord.xyz}, where only the third component
 	 *                           is a depth and the rewrite has to rebuild the vector
@@ -92,7 +97,7 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
 			int depthEpilogue, int alphaEpilogue, int coverage,
-			int depthReads, int depthReadsUnwrapped,
+			int depthLookups, int parameterLookups,
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames, List<String> comparedSamplers) {

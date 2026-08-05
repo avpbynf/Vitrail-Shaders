@@ -444,19 +444,21 @@ final class PackPass {
 	 * so the plan answers for all of them and a name nothing serves gets one black pixel rather
 	 * than being left out. The half a colour target is read from is the plan's answer for this
 	 * program, taken when the pack was read.
+	 *
+	 * @param depthView the depth of the half this pass stands in, already converted into the pack's
+	 *                  own window. Never the game's live view: a pack reads what it is handed and
+	 *                  has nothing left in it that would turn a reversed depth round
 	 */
 	private void bindSamplers(RenderPass pass, ColorTargets targets, GpuTextureView depthView) {
 		for (String sampler : this.samplers) {
 			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 			GpuTextureView bound = switch (binding.kind()) {
 				case COLORTEX -> targets.view(binding.index(), binding.side());
-				// Black is not white on purpose, and it used to be the other way round. The pack
-				// still has to read the far plane from a lookup that finds nothing, or it puts the
-				// whole world against the camera, but it no longer reads what is stored: the
-				// translation wraps every depth lookup in of_DepthConv.zw, and under the reversed
-				// convention that is 1 - d. So the far plane is now stored as nought.
-				// Tied to the convention being REVERSED, which it is for every pass while nothing
-				// draws into a target of our own. The day one does, this has to follow.
+				// White where no image is there, and white is the far plane rather than a
+				// placeholder: what a depth lookup reads is now an image already in the pack's own
+				// window, where one is the far plane, and the whole world would otherwise be drawn
+				// against the camera. It follows the image and no longer the convention of the
+				// target, which is what makes it the same answer as the shadow map's.
 				case DEPTH -> depth(binding.sampler(), targets, depthView);
 				// White where the map is not there, and white is the far plane rather than a
 				// placeholder: a shadowtex lookup is the one depth read the translation never wraps,
@@ -521,22 +523,22 @@ final class PackPass {
 	}
 
 	/**
-	 * Which depth a name reads. {@code depthtex0} and {@code gdepthtex} are the depth as it stands
-	 * when this pass draws: the live view, which for a deferred is the opaque world and for a
-	 * composite the whole of it. {@code depthtex1} and {@code depthtex2} are the copy taken before
-	 * the world's translucents, and they fall back to the live view rather than to black when no
-	 * copy has been taken yet: the wrong moment of the right image, over a constant.
+	 * Which depth a name reads. {@code depthtex0} and {@code gdepthtex} are the depth of the half
+	 * this pass stands in, which for a deferred is the opaque world and for a composite the whole
+	 * scene. {@code depthtex1} and {@code depthtex2} are the opaque world whichever half asks, and
+	 * they fall back to the half's own image rather than to a constant while nothing has filled
+	 * them: the wrong moment of the right image, over the far plane everywhere.
 	 */
 	private static GpuTextureView depth(String sampler, ColorTargets targets,
 			GpuTextureView depthView) {
 		if (SamplerPlan.depthCopy(sampler)) {
-			GpuTextureView copy = targets.depthCopy();
-			if (copy != null) {
-				return copy;
+			GpuTextureView opaque = targets.depth().opaque();
+			if (opaque != null) {
+				return opaque;
 			}
 		}
 
-		return depthView == null ? targets.black() : depthView;
+		return depthView == null ? targets.white() : depthView;
 	}
 
 	/** The first of the two that exists, for a name whose image may not be allocated yet. */

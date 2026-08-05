@@ -159,7 +159,13 @@ public final class GlslTranslator {
 	 * The samplers the pack declared as comparison samplers, and which are declared here as ordinary
 	 * ones. {@link #ofShadowCompare} says why they cannot stay what they were.
 	 */
-	private final List<Compared> comparisonSamplers = new ArrayList<>();
+	private final List<Scoped> comparisonSamplers = new ArrayList<>();
+
+	/**
+	 * The samplers a function takes as a parameter, over the lines of that function. Nothing is
+	 * rewritten from them; they are what {@link #countDepthLookup} measures the blind spot with.
+	 */
+	private final List<Scoped> samplerParameters = new ArrayList<>();
 
 	/** Outputs the pack declares itself, by the location it asked for, moved into the header. */
 	private final Map<Integer, Output> packOutputs = new TreeMap<>();
@@ -192,8 +198,8 @@ public final class GlslTranslator {
 
 	/** Where the fragment stage's own {@code main} stands, once the alpha test has claimed it. */
 	private int packMainName = -1;
-	private int depthReads;
-	private int depthReadsUnwrapped;
+	private int depthLookups;
+	private int parameterLookups;
 	private int fragCoordZ;
 	private int fragCoordXyz;
 	private int fragCoordUnhandled;
@@ -287,6 +293,9 @@ public final class GlslTranslator {
 		// much later, after the depth conversion, and a set filled there would be empty at the one
 		// moment it decides something.
 		collectComparisonSamplers();
+		// After it, and for the same reason: the comparison has already been taken out of the
+		// spelling by then, so a compared parameter is collected here under sampler2D like any other.
+		collectSamplerParameters();
 		collectDrawBuffers();
 		synthesizeAttributes();
 		dropVersionAndExtensions();
@@ -660,24 +669,32 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * One name that means a comparison sampler, over the lines where it does. A uniform reaches the
+	 * One name that means something particular over the lines where it does. A uniform reaches the
 	 * end of the unit and a parameter stops at its own closing brace.
 	 * <p>
 	 * Lines and not token positions, because the passes that ask this insert tokens and shift every
 	 * index after them, and not one of them inserts a line break.
 	 */
-	private record Compared(String name, int from, int to) {
+	private record Scoped(String name, int from, int to) {
 	}
 
 	/**
-	 * Puts every depth the unit reads back into the window the pack was written for, and every
-	 * depth it writes back into the one the target is rasterised in.
+	 * Puts the builtins back into the window the pack was written for: what
+	 * {@code gl_FragCoord} reports of the target being rasterised, and what {@code gl_FragDepth}
+	 * writes back into it.
+	 * <p>
+	 * <strong>A depth a lookup reads is not converted here, and that is the whole point.</strong> A
+	 * rewrite can only match the name of the sampler, and the name is not enough to decide by: Bliss
+	 * declares {@code BilateralUpscale_REUSE_Z(sampler2D tex1, sampler2D tex2, sampler2D depth, ...)}
+	 * and hands it {@code colortex12} at {@code composite1.fsh:987} and {@code depthtex0} two lines
+	 * below, both live in the same token stream. One of the two has to be converted and the other
+	 * must not, and the body cannot be written twice. So the images are served already converted
+	 * instead, which is what {@link dev.vitrail.pack.target.SamplerPlan.Kind#DEPTH} binds, and every
+	 * lookup is right whatever it is reached through. {@link #countDepthLookup} keeps the two counts
+	 * that say how big the name rule's blind spot was.
 	 * <p>
 	 * Runs after {@link #rewriteIdentifiers} because it matches lookups by name and that is where
-	 * {@code texture2D} becomes {@code texture}. It matches on the name of the sampler and never on
-	 * its type, which is not a shortcut but the only workable rule: Bliss hands the same helper
-	 * {@code colortex12} in {@code composite1.fsh:987} and {@code depthtex0} two lines below, and a
-	 * colour target holding a depth was written by the pack and is already the right way round.
+	 * {@code texture2D} becomes {@code texture}.
 	 * <p>
 	 * Hardware comparison samplers are out of scope and cannot be done here at all: what comes back
 	 * from a {@code sampler2DShadow} is the result of a comparison the hardware already made, not a
@@ -701,19 +718,17 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			// A pack that has taken one of these names for a macro of its own converts inside the
-			// body it wrote, once, wherever that body reads a depth. Converting the uses as well
-			// would convert twice, and twice is worse than not at all: it looks right at the far
-			// plane and is wrong everywhere else.
+			// A pack that has taken one of these names for a macro of its own is left alone, both
+			// for what the macro body does and for what its uses do: the preprocessor owns them.
 			if (this.packMacros.contains(token.text())) {
 				continue;
 			}
 
 			if (LegacyGlsl.DEPTH_LOOKUPS.contains(token.text())) {
-				// The comparison first: a lookup on a comparison sampler is not a depth read at all
-				// and must not be wrapped in of_DepthConv on top of being rewritten.
+				// The comparison first: what a comparison sampler hands back is not a depth, so it
+				// is neither rewritten as a lookup nor counted as one.
 				if (!rewriteShadowCompare(index, lines[index])) {
-					wrapDepthLookup(index, closings);
+					countDepthLookup(index, lines[index]);
 				}
 
 				continue;
@@ -780,42 +795,30 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Wraps the whole lookup rather than the component read off it, which is not a matter of taste.
-	 * The four components of a {@code textureGather} are four depths and all four have to be
-	 * converted, which a scalar multiply and add does by broadcast and a rewrite of the swizzle
-	 * cannot do at all. It also puts the conversion before anything the pack does with the value:
-	 * the reversed convention runs the other way, so a {@code min} over raw depths is a
-	 * {@code max} over the ones the pack thinks it has, and the only place the order is right again
-	 * is at the lookup itself.
+	 * Files one lookup on a depth texture under what its sampler is reached through. Nothing is
+	 * rewritten: both counts describe the source, and one of them is the reason the source is left
+	 * alone.
 	 * <p>
-	 * The alpha of the wrapped vector is converted along with the rest, so a lookup read as
-	 * {@code .a} would find nought where it expected one. No site in the corpus reads a depth
-	 * lookup as anything but {@code .x} or {@code .r}, so this is counted rather than guarded.
+	 * A name the plan classifies says what it reads and could be rewritten by name. A sampler the
+	 * enclosing function was handed says nothing at all, and no rule on names ever could tell those
+	 * apart: it is the same call for a colour target and for a depth. That count is what makes the
+	 * blind spot a number rather than a claim, and it is why the engine converts the image instead.
+	 * The lookups it does not reach either way, through a macro parameter or a local of some kind,
+	 * fall in neither count and are the reason the two are read together rather than differenced.
 	 */
-	private void wrapDepthLookup(int index, List<Closing> closings) {
+	private void countDepthLookup(int index, int line) {
 		int open = callOpener(index);
-		int first = significantAfter(open);
-		if (first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER
-				|| SamplerPlan.classify(this.tokens.get(first).text()) != SamplerPlan.Kind.DEPTH) {
+		int first = open < 0 ? -1 : significantAfter(open);
+		if (first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER) {
 			return;
 		}
 
-		int close = matchingBracket(open);
-		if (close < 0) {
-			// Unbalanced from here, usually because a macro opened the parenthesis. Left alone and
-			// counted, as an unwrapped shadow lookup is: a half wrapped call would not compile, and
-			// a silent one would read a depth backwards.
-			this.depthReadsUnwrapped++;
-			return;
+		String name = this.tokens.get(first).text();
+		if (SamplerPlan.classify(name) == SamplerPlan.Kind.DEPTH) {
+			this.depthLookups++;
+		} else if (scoped(this.samplerParameters, name, line)) {
+			this.parameterLookups++;
 		}
-
-		// The addition goes inside the wrap, since what follows the call is the component the pack
-		// reads: closing before it instead leaves the pack's own .x applied to of_DepthConv.w.
-		String directive = this.tokens.get(index).directive();
-		inject(index, "(" + DEPTH_CONV + ".z * " + this.tokens.get(index).text());
-		closings.add(new Closing(close + 1, " + " + DEPTH_CONV + ".w)", directive));
-		takeDepthConv();
-		this.depthReads++;
 	}
 
 	/**
@@ -1586,8 +1589,49 @@ public final class GlslTranslator {
 				}
 
 				if (next.kind() == Kind.IDENTIFIER) {
-					this.comparisonSamplers.add(new Compared(next.text(), lines[index], lines[last]));
+					this.comparisonSamplers.add(new Scoped(next.text(), lines[index], lines[last]));
 				}
+			}
+		}
+	}
+
+	/**
+	 * Finds every sampler a function takes as a parameter, and over which lines that name means it.
+	 * <p>
+	 * Nothing is rewritten and nothing depends on it being complete: it exists so that a lookup made
+	 * through such a name is counted as one no rule on names could have classified, rather than
+	 * passed over in silence. The old rewrite by name returned on exactly these and moved no
+	 * counter, so the one thing it could not do was also the one thing nothing measured.
+	 */
+	private void collectSamplerParameters() {
+		int[] lines = lineNumbers();
+		int depth = 0;
+		int parameters = -1;
+
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() == null && token.operator("(")) {
+				if (depth == 0) {
+					parameters = index;
+				}
+
+				depth++;
+			} else if (token.directive() == null && token.operator(")")) {
+				depth--;
+			}
+
+			// Inside a parenthesis and nowhere else, which is what tells a parameter from a
+			// declaration: a declaration lists names until the semicolon and would claim the whole
+			// body of whatever follows it.
+			if (depth <= 0 || parameters < 0 || token.directive() != null
+					|| token.kind() != Kind.IDENTIFIER || !LegacyGlsl.isOpaqueType(token.text())) {
+				continue;
+			}
+
+			int name = significantAfter(index);
+			if (name >= 0 && this.tokens.get(name).kind() == Kind.IDENTIFIER) {
+				this.samplerParameters.add(new Scoped(this.tokens.get(name).text(), lines[index],
+						lines[functionEnd(parameters)]));
 			}
 		}
 	}
@@ -1615,8 +1659,13 @@ public final class GlslTranslator {
 	 * after the other, and a rewrite of the first would not compile.
 	 */
 	private boolean comparisonAt(String name, int line) {
-		for (Compared compared : this.comparisonSamplers) {
-			if (compared.name().equals(name) && line >= compared.from() && line <= compared.to()) {
+		return scoped(this.comparisonSamplers, name, line);
+	}
+
+	/** Whether one of these names means what the list says it does on this line. */
+	private static boolean scoped(List<Scoped> names, String name, int line) {
+		for (Scoped scoped : names) {
+			if (scoped.name().equals(name) && line >= scoped.from() && line <= scoped.to()) {
 				return true;
 			}
 		}
@@ -1882,8 +1931,8 @@ public final class GlslTranslator {
 		return new TranslatedUnit.Notes(this.maxFragmentOutput + 1, this.dynamicFragData,
 				this.conflicts.size(), this.shadowCalls, this.unwrappedShadowCalls,
 				this.strippedExtensions, this.depthEpilogue ? 1 : 0, this.alphaEpilogue ? 1 : 0,
-				this.covers ? 1 : 0, this.depthReads,
-				this.depthReadsUnwrapped, this.fragCoordZ, this.fragCoordXyz,
+				this.covers ? 1 : 0, this.depthLookups,
+				this.parameterLookups, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
 				List.copyOf(this.conflicts), comparedSamplers());
 	}
@@ -1894,7 +1943,7 @@ public final class GlslTranslator {
 	 */
 	private List<String> comparedSamplers() {
 		return this.comparisonSamplers.stream()
-				.map(Compared::name)
+				.map(Scoped::name)
 				.distinct()
 				.filter(this.samplers::containsKey)
 				.toList();

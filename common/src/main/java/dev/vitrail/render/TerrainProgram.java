@@ -774,11 +774,10 @@ public final class TerrainProgram {
 
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 
-		// Black and not white for a depth that stays a constant, and the reason is the convention
-		// rather than a taste: every depth lookup is wrapped in of_DepthConv.zw, which under the
-		// reversed Z the game rasterises in reads nought back as the far plane. White would put the
-		// whole world against the camera. PackPass answers the same way, and the day a target of
-		// ours is drawn into, both have to follow.
+		// White and not black for a depth that stays a constant, and the reason is the image rather
+		// than a taste: what a depth lookup reads is already in the pack's own window, where one is
+		// the far plane. Black would put the whole world against the camera. PackPass answers the
+		// same way, and the two have to move together.
 		return switch (binding.kind()) {
 			case COLORTEX -> colortex(binding);
 			case DEPTH -> depth();
@@ -792,10 +791,10 @@ public final class TerrainProgram {
 	/**
 	 * The shadow map, or white for the far plane.
 	 * <p>
-	 * White and not black, which is the opposite of {@link #depth()} and follows from the same rule:
-	 * a {@code shadowtex} lookup is never wrapped in {@code of_DepthConv}, so what is stored is what
-	 * the pack reads, and the map stores the forward window where one is the far plane. A shadow
-	 * lookup that finds nothing has to say "nothing between here and the light".
+	 * White, and the same white {@link #depth()} falls back to, for the same reason: a
+	 * {@code shadowtex} lookup is never rewritten, so what is stored is what the pack reads, and the
+	 * map stores the forward window where one is the far plane. A shadow lookup that finds nothing
+	 * has to say "nothing between here and the light".
 	 * <p>
 	 * A shadow pass reads white whatever the map holds: the image it would read is an attachment of
 	 * the very pass it is drawn in, and sampling an attachment is a thing Vulkan gives no meaning to.
@@ -829,26 +828,26 @@ public final class TerrainProgram {
 	/**
 	 * What a depth sampler reads, which depends on which side of the frame this pass stands.
 	 * <p>
-	 * The translucent pass gets the copy taken before the translucents, whatever the sampler is
-	 * called. At that point of the frame depthtex0, depthtex1 and depthtex2 are one image, the
-	 * depth of the opaque world, and the copy is exactly that; the live depth cannot be the answer
-	 * for any of them, being an attachment of this very pass, and sampling an attachment is a thing
-	 * Vulkan gives no meaning to. This is what BSL's water fog and refraction read.
+	 * The translucent pass gets the opaque world's image, whatever the sampler is called. At that
+	 * point of the frame depthtex0, depthtex1 and depthtex2 are one depth, the opaque world's, and
+	 * that image is exactly it; the live depth cannot be the answer for any of them, being an
+	 * attachment of this very pass, and sampling an attachment is a thing Vulkan gives no meaning
+	 * to. This is what BSL's water fog and refraction read.
 	 * <p>
-	 * The solid and cutout passes stay on the constant. They draw before the copy of THIS frame is
-	 * taken, so the only copy in existence at that moment is the previous frame's, and handing them
-	 * that would be the exact shape of picture this project refuses: plausible, and wrong by one
-	 * frame of camera movement.
+	 * The solid and cutout passes stay on the constant. They draw before the image of THIS frame is
+	 * taken, so the only one in existence at that moment holds the previous frame's, and handing
+	 * them that would be the exact shape of picture this project refuses: plausible, and wrong by
+	 * one frame of camera movement.
 	 */
 	private GpuTextureView depth() {
 		if (this.pass.afterDeferred()) {
-			GpuTextureView copy = this.targets.depthCopy();
-			if (copy != null) {
-				return copy;
+			GpuTextureView opaque = this.targets.depth().opaque();
+			if (opaque != null) {
+				return opaque;
 			}
 		}
 
-		return this.black.getColorTextureView();
+		return this.white.getColorTextureView();
 	}
 
 	/**
