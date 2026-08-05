@@ -53,9 +53,13 @@ import java.util.Objects;
  * every widget here is a vanilla button, so the nine slice sprites, the focus ring, the tooltip
  * and the narration come from the game and work on either backend.
  * <p>
- * Escape walks back one page, then out to the pack list, then out of the screen. Leaving does not
- * apply: Iris applies on the way out and that is the one convention of its screen not kept here,
- * because a pack reloaded by a player who was only looking is a second of hitch nobody asked for.
+ * Escape walks back one page, then out to the pack list, then out of the screen, and leaving never
+ * writes: a pack read again for a player who was only looking is a second of hitch nobody asked
+ * for. Iris applies on the way out and that is the one convention of its screen not kept here.
+ * <p>
+ * What keeps that from being a trap is that Done is not offered while anything is waiting. The last
+ * button of the row is Apply until there is nothing left to apply and only then becomes Done, so
+ * the word that leaves is never the word that would have thrown work away.
  * <p>
  * Nothing is written and nothing is recompiled on a click, and Apply is the only button that writes
  * what was clicked. It writes by reading the file first and laying the pending table over it, so
@@ -65,7 +69,9 @@ import java.util.Objects;
 public final class SettingsScreen extends Screen implements ScreenHost {
 
 	private static final int HEADER_HEIGHT = 33;
-	private static final int FOOTER_HEIGHT = 70;
+	/** One row of buttons and the room around it. The band is centred on its contents by the frame
+	 * the game lays it out in, so this is the button height plus twice the margin it gets. */
+	private static final int FOOTER_HEIGHT = 44;
 	private static final int LINE_HEIGHT = 11;
 	private static final int NARROW_BUTTON = 80;
 	private static final int WIDE_BUTTON = 120;
@@ -74,8 +80,8 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	/** How often the pack folder is looked at while the list is drawn, in milliseconds. */
 	private static final long FOLDER_INTERVAL = 1000L;
 
-	/** Wide enough for the screen's own title, which is what the way into a pack's pages says. */
-	private static final int SETTINGS_BUTTON = 150;
+	/** The room left either side of the longest name the way out takes, so it is not set in it. */
+	private static final int SWITCH_PADDING = 2 * BUTTON_GAP;
 
 	private final @Nullable Screen parent;
 	private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
@@ -102,6 +108,9 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	private boolean listingPacks;
 	private boolean rebuildQueued;
 
+	/** Whether the last row was built with something waiting, so {@link #watchPending} can tell. */
+	private boolean wasWaiting;
+
 	/** What the folder held last time it was looked at, and when. See {@link #watchFolder()}. */
 	private List<String> folderNames = List.of();
 	private long folderLooked;
@@ -122,7 +131,11 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		this.layout.removeChildren();
 		this.layout.setHeaderHeight(
 				forcedCount() > 0 ? HEADER_HEIGHT + LINE_HEIGHT : HEADER_HEIGHT);
-		this.layout.setFooterHeight(FOOTER_HEIGHT);
+		// Grown by exactly what the status line takes when there is one, the same way the header is
+		// grown by the forced count, so that the row keeps the same room under it either way.
+		this.layout.setFooterHeight(status().getString().isEmpty()
+				? FOOTER_HEIGHT
+				: FOOTER_HEIGHT + LINE_HEIGHT);
 		this.layout.addToHeader(header());
 
 		PageList previous = this.list;
@@ -176,6 +189,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
 		syncWithLoadedPack();
 		watchFolder();
+		watchPending();
 		if (this.rebuildQueued) {
 			this.rebuildQueued = false;
 			rebuildWidgets();
@@ -187,9 +201,10 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	/** Not the default: the default pops a screen layer nobody pushed. */
 	@Override
 	public void onClose() {
-		// Nothing pending is written on the way out, which is the whole point: Done and Escape leave
+		// Nothing pending is written on the way out, which is the whole point: every door out leaves
 		// the world exactly as it was drawn. What was clicked and not applied goes with this screen,
-		// which every entry point builds anew.
+		// which every entry point builds anew. Done reaching here without writing is not a hole,
+		// since it is only ever drawn once there is nothing left to write.
 		this.minecraft.gui.setScreen(this.parent);
 	}
 
@@ -225,6 +240,24 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	/** Waited for by {@link #extractRenderState}, which says why. */
 	private void queueRebuild() {
 		this.rebuildQueued = true;
+	}
+
+	/**
+	 * Rebuilds the row when the last button's name changes hands, and only then.
+	 * <p>
+	 * Clicking a value in the page does not go through this screen at all: a widget writes into
+	 * {@link MenuValues} and redraws itself, which is what keeps a click cheap. The footer is built
+	 * once per rebuild though, so the button that reads Apply while something waits and Done once
+	 * nothing does would keep whichever name it was born with. Watching the count instead of
+	 * rebuilding on every click is what keeps that from costing a rebuild per click: only the
+	 * crossing of nought changes a name, and a player crosses it twice.
+	 */
+	private void watchPending() {
+		boolean waiting = pending() > 0;
+		if (waiting != this.wasWaiting) {
+			this.wasWaiting = waiting;
+			queueRebuild();
+		}
 	}
 
 	/**
@@ -327,59 +360,85 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	private LinearLayout footer() {
 		LinearLayout footer = LinearLayout.vertical().spacing(4);
 
-		this.statusLine = footer.addChild(
-				new StringWidget(status(), this.font).setMaxWidth(this.width - 20),
+		// Only when it has something to say. An empty line still stands its full height, and the
+		// band centres whatever it is given, so a blank one lifts the row off the middle and leaves
+		// the buttons sitting against the bottom of the screen with a hole above them.
+		Component said = status();
+		this.statusLine = said.getString().isEmpty() ? null : footer.addChild(
+				new StringWidget(said, this.font).setMaxWidth(this.width - 20),
 				LayoutSettings::alignHorizontallyCenter);
-		this.statusLine.setTooltip(removedTooltip());
+		if (this.statusLine != null) {
+			this.statusLine.setTooltip(removedTooltip());
+		}
 
-		// Two rows, and their shape is Iris's rather than ours, because a player who has configured a
-		// pack before has configured it there. Its screen carries the folder and the view switch on
-		// one line and Cancel, Apply and Done on the line under it; what belongs to a pack's own
-		// pages, the way back and the two buttons that touch its file, joins the first line here
-		// because this screen has no breadcrumb to hang them from.
+		// One row, and it reads left to right as where you are, what you can do here, and the way
+		// on. Iris carries two, the folder and the view switch over Cancel, Apply and Done, but it
+		// needs the second line for a Cancel this screen no longer has and for an Apply that only
+		// one of the two views can use. What is left fits on one line, and one line is one thing to
+		// look at.
 		LinearLayout tools = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
 				LayoutSettings::alignHorizontallyCenter);
-		// The view switch first on both, at one width and under two names that answer each other,
-		// Shader Pack List and Shader Pack Settings. It is one control and a player reads it as one
-		// only if it keeps its place: a button that changes name is ordinary, a button that changes
-		// name and moves is two buttons.
 		if (this.listingPacks) {
-			tools.addChild(settingsButton());
 			// No Reload on the list, and both references agree: neither OptiFine's pack screen nor
 			// Iris's offers to read the pack again from the screen whose whole subject is which pack
 			// to read. Ours offered it by accident of layout, and it reloaded the pack to answer a
 			// question about a directory listing. The folder is watched instead, see watchFolder.
 			tools.addChild(button(ScreenText.FOLDER, WIDE_BUTTON, this::openFolder));
+			tools.addChild(settingsButton());
 		} else {
-			tools.addChild(button(ScreenText.PACKS, SETTINGS_BUTTON, this::openPacks));
+			// The way out first, and only one of them. Back replaces the view switch rather than
+			// standing beside it: from a pack's first page the two lead to the same place, and one
+			// page in the switch would skip however many pages the player walked through. Walking
+			// back reaches the list either way, which is what Escape does too.
+			tools.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
 
-			// Back only where it means something the switch does not. On a pack's first page the two
-			// are one button drawn twice: walking back from there IS going to the list, and a row
-			// that offers the same door under two names is a row nobody reads.
-			if (!this.history.isEmpty()) {
-				tools.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
-			}
-
-			// Reset inside the row rather than at its end. It is the only button here that deletes
-			// something the player wrote, and the end of a row is where a hand goes without looking;
-			// Reload is harmless and pressed often, so it takes the edge.
+			// Reset before Reload rather than at the end. It is the only button here that throws
+			// away something the player wrote, and the end of a row is where a hand goes without
+			// looking; Reload is harmless and pressed often, so it takes that edge instead.
 			tools.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::confirmReset));
 			tools.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
 		}
 
-		LinearLayout commit = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
-				LayoutSettings::alignHorizontallyCenter);
-		// The same three, in Iris's order, on both views. None of them is ever greyed: Apply with
-		// nothing waiting returns without writing rather than sitting there dead, which is the one
-		// thing about a commit row a player reads at a glance.
-		commit.addChild(button(CommonComponents.GUI_CANCEL, NARROW_BUTTON, this::cancelAndClose));
-		commit.addChild(button(ScreenText.APPLY, NARROW_BUTTON, () -> {
-			apply();
-			queueRebuild();
-		}));
-		commit.addChild(button(CommonComponents.GUI_DONE, NARROW_BUTTON, this::onClose));
+		// The last slot is whatever is left to do: Apply while something is waiting, Done once
+		// nothing is. It reads as one control because it never moves and never changes size, both
+		// names being drawn at the same fixed width, so the row does not shift under the hand that
+		// is clicking it. Apply deliberately does not close: a setting is judged by looking at the
+		// world it changed, and a screen that left as it applied would take the world with it.
+		tools.addChild(pending() > 0
+				? button(ScreenText.APPLY, NARROW_BUTTON, () -> {
+					apply();
+					queueRebuild();
+				})
+				: button(CommonComponents.GUI_DONE, NARROW_BUTTON, this::onClose));
 
 		return footer;
+	}
+
+	/**
+	 * How much is clicked and not yet written, which is what decides the name of the last button.
+	 * Nought whenever there is no pack, so the list always ends on Done.
+	 */
+	private int pending() {
+		MenuValues current = this.values;
+
+		return current == null ? 0 : current.pendingCount();
+	}
+
+	/**
+	 * How wide the view switch is drawn, which is the wider of the two names it takes and no wider.
+	 * <p>
+	 * Measured rather than written down. Both are translated, so a number chosen by looking at the
+	 * English is either cramped or padded out in every other language, and it was padded out here:
+	 * the slot was cut for {@code Shader Pack Settings} and kept that width for
+	 * {@code Shader Pack List}, which left the shorter of the two floating in it. Measuring keeps
+	 * the one property the slot has to have, that it does not move when its name changes, without
+	 * paying for it in blank space.
+	 */
+	private int switchWidth() {
+		int widest = Math.max(this.font.width(Component.translatable(ScreenText.TITLE)),
+				this.font.width(Component.translatable(ScreenText.PACKS)));
+
+		return widest + SWITCH_PADDING;
 	}
 
 	/**
@@ -388,7 +447,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	 * it and a pack that failed to read look the same from here otherwise.
 	 */
 	private Button settingsButton() {
-		Button settings = button(this.title, SETTINGS_BUTTON, this::openSettings);
+		Button settings = button(this.title, switchWidth(), this::openSettings);
 		settings.active = this.session != null;
 		if (!settings.active) {
 			settings.setTooltip(Tooltip.create(noPackReason()));
@@ -467,12 +526,19 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 
 	private void updateStatus() {
 		StringWidget line = this.statusLine;
-		if (line == null) {
+		Component now = status();
+		boolean wanted = !now.getString().isEmpty();
+
+		// Whether the line exists at all is settled when the footer is built, because an empty one
+		// still takes its height and would push the buttons off the middle of the band. A status
+		// that turns up, or goes away, is therefore a rebuild and not a message to set.
+		if (wanted != (line != null)) {
+			queueRebuild();
+
 			return;
 		}
 
-		Component now = status();
-		if (now.equals(line.getMessage())) {
+		if (line == null || now.equals(line.getMessage())) {
 			return;
 		}
 
@@ -486,15 +552,6 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		return current == null ? 0 : current.forcedShown();
 	}
 
-	/**
-	 * Cancel, which is Iris's: it drops what is waiting and leaves. Leaving by any other door keeps
-	 * the world as it was drawn too, which is where this screen still differs from Iris on purpose,
-	 * and the difference was asked for: there, Done and Escape both write.
-	 */
-	private void cancelAndClose() {
-		dropPending();
-		onClose();
-	}
 
 	/** Throws away what was clicked and never applied, and puts the widgets back on their values. */
 	private void dropPending() {
