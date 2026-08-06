@@ -1,7 +1,6 @@
 package dev.vitrail.neoforge;
 
 import dev.vitrail.neoforge.sodium.ShadowTerrain;
-import dev.vitrail.pack.source.PackReport;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
@@ -89,11 +88,8 @@ public final class VitrailNeoForge {
 		Vitrail.logger().info("Client setup reached, Sodium is {}",
 				Vitrail.platform().isModLoaded("sodium") ? "present" : "missing");
 
-		// Reading every pack in the folder rather than one: this stage is judged by comparing
-		// its counts against measurements taken from a whole corpus, and one line per pack is
-		// what makes that comparison possible.
-		PackReport.logAll(Vitrail.platform().gameDirectory());
-
+		// The report of the pack goes with the reading of it, in PackChain, where which pack is
+		// being drawn is known.
 		PackChain.load(Vitrail.platform().gameDirectory());
 	}
 

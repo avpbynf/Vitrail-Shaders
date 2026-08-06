@@ -5,6 +5,7 @@ import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.source.PackLoader;
+import dev.vitrail.pack.source.PackReport;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
@@ -286,6 +287,9 @@ public final class PackChain {
 						packs.size(), PackLoader.directory(gameDirectory), packFile(gameDirectory));
 				return;
 			}
+
+			// Where the pack is known, rather than over the whole folder before one was chosen.
+			PackReport.log(pack);
 
 			SettingsLayers.Resolved settings = open(gameDirectory, pack);
 			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());

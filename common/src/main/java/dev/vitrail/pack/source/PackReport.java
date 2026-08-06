@@ -29,31 +29,24 @@ public final class PackReport {
 	private PackReport() {
 	}
 
-	public static void logAll(Path gameDirectory) {
-		List<Path> candidates;
-		try {
-			candidates = PackLoader.candidates(gameDirectory);
-		} catch (IOException e) {
-			Vitrail.logger().error("{}could not read {}", PREFIX, PackLoader.directory(gameDirectory), e);
-			return;
-		}
-
-		if (candidates.isEmpty()) {
-			Vitrail.logger().info("{}no pack in {}, nothing to read", PREFIX, PackLoader.directory(gameDirectory));
-			return;
-		}
-
+	/**
+	 * Reports the one pack that is about to be drawn.
+	 * <p>
+	 * One and not the folder. Reading every pack there cost eight zips and a hundred lines at every
+	 * startup for the seven that were not going to be drawn, and a pack nobody had selected could
+	 * stop the client from reaching its first frame. What the whole corpus says is measured out of
+	 * the game, against the same columns, which is what this report was shaped for in the first place.
+	 */
+	public static void log(Path candidate) {
 		Vitrail.logger().info("{}{}", PREFIX, PackStats.tsvHeader());
 
-		for (Path candidate : candidates) {
-			try {
-				LoadedPack pack = PackLoader.load(candidate);
-				Vitrail.logger().info("{}{}", PREFIX, pack.stats().tsvLine(pack.packName()));
-				detail(pack);
-			} catch (IOException | RuntimeException e) {
-				String name = candidate.getFileName() == null ? "?" : candidate.getFileName().toString();
-				Vitrail.logger().error("{}{} could not be read", PREFIX, name, e);
-			}
+		try {
+			LoadedPack pack = PackLoader.load(candidate);
+			Vitrail.logger().info("{}{}", PREFIX, pack.stats().tsvLine(pack.packName()));
+			detail(pack);
+		} catch (IOException | RuntimeException e) {
+			String name = candidate.getFileName() == null ? "?" : candidate.getFileName().toString();
+			Vitrail.logger().error("{}{} could not be read", PREFIX, name, e);
 		}
 	}
 
