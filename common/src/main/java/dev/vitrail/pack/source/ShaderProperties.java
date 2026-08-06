@@ -26,9 +26,11 @@ import java.util.regex.Pattern;
  * screens, the custom uniforms, and the blending each program wants.
  * <p>
  * The file is not a Java properties file and reading it as one gets it wrong in two ways. Only
- * {@code =} separates a key from a value, never {@code :}; and a line continued with a
- * backslash swallows the leading whitespace of the next line, blank lines included, which is
- * how one pack writes a list of three hundred tokens.
+ * {@code =} separates a key from a value, never {@code :}; and everything after that first
+ * {@code =} is the value, there being no end of line comment. A line continued with a backslash
+ * swallows the next line's indentation and stops at the following newline, which is spelled out at
+ * {@link #CONTINUATION}: crossing a blank line there is what makes a continued key eat the block
+ * underneath it.
  * <p>
  * It also carries conditionals, and they matter: packs switch whole programs off with an
  * {@code #if} on a setting. Reading the file flat would report those programs as present.

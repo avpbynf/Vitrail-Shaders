@@ -10,8 +10,10 @@ import org.joml.Matrix4fc;
  * Puts a block member's bytes into the game's own std140 builder.
  * <p>
  * This is the whole of the contact between the values and the graphics API, and it is deliberately
- * this thin: the layout rules live in the builder, which the game uses for its own blocks, so there
- * is no second implementation of std140 to keep in step with the driver's.
+ * this thin: the layout rules live in the builder, which the game uses for its own blocks, so the
+ * layout is the game's answer rather than a reading of the specification. The contact is not total,
+ * and the two places that step outside it say so where they are: {@link #putVec3} below, and
+ * {@code Std140Counter}, which writes nothing and therefore has no builder to defer to.
  * <p>
  * The builder has no {@code putMat3}, and neither has its size calculator, so a mat3 is composed
  * from three vec3 puts. That is not a workaround, it is what a mat3 is in std140: three columns

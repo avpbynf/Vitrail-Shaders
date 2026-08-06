@@ -64,12 +64,13 @@ public final class SodiumVertex {
 	/**
 	 * Where the quad's facing sits in the material byte, and why there is room for it.
 	 * <p>
-	 * {@code packLightAndData} gives the material a whole byte and Sodium's own
-	 * {@code chunk_material.glsl} uses three bits of it, one for the mipmap and two for the alpha
-	 * cutoff. The facing needs three more, {@code ModelQuadFacing} having seven values, so it goes
-	 * in the five that were spare and the mesh does not grow by one byte. What is stored is the
-	 * ordinal PLUS ONE, so that nought keeps its meaning: nobody wrote a facing here. Fluids take
-	 * the other push site and are not hooked, so nought really happens.
+	 * {@code packLightAndData} gives the material a whole byte, of which three bits are spoken for by
+	 * Sodium's own {@code chunk_material.glsl}: one for the mipmap and two for an alpha cutoff its
+	 * shader no longer calls. The facing needs three more, {@code ModelQuadFacing} having seven
+	 * values, so it goes in the five that were spare and the mesh does not grow by one byte. What is
+	 * stored is the ordinal PLUS ONE, so that nought keeps its meaning: nobody wrote a facing here.
+	 * Fluids take another push site, and a translucent quad is written out later by the sorter under
+	 * a constant material, so neither carries a facing and nought really happens.
 	 */
 	public static final int FACING_SHIFT = 3;
 	public static final int FACING_MASK = 7;

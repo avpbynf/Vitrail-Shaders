@@ -15,9 +15,12 @@ import java.util.Locale;
  * and a {@code sunPosition} handed over in world space stops being a plausible reflection and
  * becomes three numbers that do not match the eye space ones.
  * <p>
- * <strong>Iris cannot do this</strong>, and not for want of trying: it sets each uniform through
- * the GL entry points, and a GL uniform is not readable back from the CPU. Holding the values in a
- * block of our own is what makes them printable, so this costs one class rather than a redesign.
+ * <strong>What buys this is holding the values in a block of our own.</strong> An engine that sets
+ * each uniform through the GL entry points, one at a time, has no single walk to tee off. The
+ * values are readable back from the processor, {@code glGetUniformfv} being there for it, but
+ * reading them back is a SECOND reading, and a second reading disagreeing with the one that ran is
+ * the very class of defect this hunts. Here both come out of the same walk, so this costs one class
+ * rather than a redesign.
  * <p>
  * It is the same walk and not a second one, which is the only reason a line here proves anything
  * about the bytes. A member that reached the buffer through a coercion is printed after that
