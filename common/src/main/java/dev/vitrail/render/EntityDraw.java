@@ -232,7 +232,7 @@ public final class EntityDraw {
 	 * type that does not blend comes through this very door</strong>, and most of them are Iris's
 	 * {@code gbuffers_block} rather than this name. {@link #BLOCK_ELEMENTS} is that half, row for row
 	 * against Iris's own table, and {@link BlockEntityGeometry} is how a draw is known to belong to
-	 * it. Not every block entity is concerned: a head that carries an owner profile takes
+	 * it. Not every block entity is concerned: a PLAYER head that carries an owner profile takes
 	 * {@code entityTranslucent}, which blends and is no row of this table.
 	 * <p>
 	 * Iris keys the same table by the same pipelines, and most of these rows reach a function of its
@@ -284,9 +284,11 @@ public final class EntityDraw {
 	 * <p>
 	 * <strong>A skull is where those two answers really part company</strong>, and it is not a corner
 	 * case: it is a block entity, it draws with {@code ENTITY_CUTOUT_Z_OFFSET}, and so it takes the
-	 * entity program and the block entity phase at once. Every head with no owner profile does, which
-	 * is every skeleton, wither, zombie, creeper, dragon and piglin head in the world; a head that
-	 * carries one takes {@code entityTranslucent} instead and is no row of this table at all.
+	 * entity program and the block entity phase at once. <strong>Almost every head in the world
+	 * does</strong>, and the exception is narrower than it looks: the owner profile is consulted for
+	 * the PLAYER type alone, so a skeleton, wither, zombie, creeper, dragon or piglin head draws here
+	 * whether it carries one or not, and only a player head with a profile goes to
+	 * {@code entityTranslucent} and out of this table.
 	 * <p>
 	 * <strong>The threshold follows the program and not the phase.</strong> Whatever asks for the
 	 * block program discards at a tenth, the solid rows included, because Iris's {@code getSolid}
@@ -533,13 +535,14 @@ public final class EntityDraw {
 
 			// The reason that was silent, and the only one settled by the LOAD rather than by the
 			// frame. It stopped being harmless when the family grew a second name: a piece can now be
-			// missing while its neighbour is served, which paints every chest with the game's shader
-			// and every mob beside it with the pack's, for as long as the pack is loaded.
+			// The reason that was silent, and one of the two settled by the LOAD rather than by the
+			// frame. What it is NOT is a chest against the mob beside it: every road that empties
+			// this map empties it wholesale, so what this announces is the family staying with the
+			// game, not one piece of it parting from the others. Measured on the corpus, no pack
+			// serves some of the pieces and not others.
 			//
-			// What it does NOT say is why, and that is deliberate rather than lazy: the map is empty
-			// both where the pack serves nothing for the piece and where the family was refused its
-			// targets, and those two are told apart by their own lines at load, not by this one. It
-			// names the piece so that a reader can find which.
+			// It names the piece all the same, because the piece is the only thing this end knows;
+			// why the load left nothing is on the load's own lines.
 			return refuse("missing:" + element.element(), true,
 					"the load left no program for the " + element.element() + " piece");
 		}
@@ -592,7 +595,11 @@ public final class EntityDraw {
 		// the whole run shares the one the piece carries. Written into the block a few lines down.
 		RenderPipeline pipeline = program.prepare(device, element.modelView());
 		if (pipeline == null) {
-			return refuse("prepare", "the program refused to prepare, which it says on its own line above");
+			// Lasting, and it took a review to see it: a program that would not compile, or that
+			// declares a storage block, latches broken in GeometryProgram and never unlatches, so
+			// this answers null for the rest of the load rather than for this frame.
+			return refuse("prepare", true,
+					"the program refused to prepare, which it says on its own line above");
 		}
 
 		// The two images the game would have drawn into, worked out as PreparedRenderType works them
@@ -637,15 +644,15 @@ public final class EntityDraw {
 	 * <p>
 	 * <strong>How long it lasts is not the same for all of them, and the line says which.</strong>
 	 * The reasons that answer a question about this FRAME come and go, so the same entity is the
-	 * pack's on one frame and the game's on the next, and that reads as a flicker. The one that
-	 * answers a question about the LOAD cannot come back: it is settled when the pack is read and it
-	 * holds until the pack is read again, so what it paints is not a flicker but a permanent split,
-	 * every chest lit by the game while every mob beside it is lit by the pack. The second is the
-	 * worse picture of the two, because it looks deliberate.
+	 * pack's on one frame and the game's on the next, and that reads as a flicker. The ones settled
+	 * by the LOAD cannot come back: they hold until the pack is read again, so what they paint is
+	 * steady rather than flickering, and steady is the worse of the two to look at because it looks
+	 * deliberate. Which is which is not obvious from the call site and one of them was got wrong for
+	 * a whole review: it is not "did the pack ship it" against "is the frame ready", it is whether
+	 * anything downstream latches, and {@code GeometryProgram} latches broken.
 	 * <p>
-	 * Once per reason, keyed on the reason and never on the sentence: the alternative is a line a
-	 * frame at sixty frames a second, and a key built out of the message would also build that
-	 * message on every draw before finding out it had nothing to say.
+	 * Once per reason and keyed on the reason rather than on the sentence, because the alternative
+	 * is a line a frame at sixty frames a second and the sentences carry the piece's name.
 	 *
 	 * @param reason  what this is, for the dedup and for nothing else
 	 * @param lasting whether it holds for the whole load rather than for this frame
@@ -655,9 +662,9 @@ public final class EntityDraw {
 		if (this.refused.add(reason)) {
 			Vitrail.logger().warn("An entity draw went back to the game's own shader because {}. {}",
 					why, lasting
-							? "It is settled for as long as this pack is loaded, so what it paints is "
-									+ "not a flicker: this geometry is lit by the game and everything "
-									+ "beside it by the pack, every frame"
+							? "It is settled for as long as this pack is loaded, so this geometry is "
+									+ "drawn by the game on every frame until the pack is read again, "
+									+ "steadily rather than as a flicker"
 							: "It is then lit by the game for that frame and by the pack on the frames "
 									+ "it is served, which reads on screen as a flicker");
 		}
