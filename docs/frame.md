@@ -163,11 +163,19 @@ those pixels, only colour. Passes that classify pixels by material read whatever
 those channels, which is why a mob can be treated as a surface to fog by a pack whose water
 composites work that way.
 
-**A pixel the pack's own geometry has covered must not be seeded over.** That is what the coverage
+**A pixel the pack's own terrain has covered must not be seeded over.** That is what the coverage
 mask is for: it is compared against the depth left by the pack's own geometry, so a pixel the pack
 drew belongs to the pack and a pixel it did not belongs to the seed. Comparing against the wrong
 depth - one the game has since cleared - makes the mask wrong everywhere, and things the game drew
 in front of the terrain vanish.
+
+**The entities are the exception, and it is deliberate rather than a gap.** They write no mask, so
+their pixels are seeded over on purpose: the seed is cut against a depth taken before the game draws
+a single feature, and an entity is by definition in front of that depth, so a mask claiming those
+pixels would take them from the very image that carries the entity's colour. What that costs is one
+trip through eight bits a channel for the albedo, and what it buys is every other draw buffer, which
+is where a pack keeps the normal and the material it lights an entity by. So a flat entity is not a
+mask bug: it is what happens when the seed is switched off, not when the mask is.
 
 Which target is seeded is the first draw buffer of the pass that draws the terrain, resolved through
 the fallback tree, and it is not always target zero: one pack of the corpus serves its terrain

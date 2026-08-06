@@ -1,5 +1,6 @@
 package dev.vitrail.neoforge.mixin;
 
+import dev.vitrail.neoforge.BlockEntityMark;
 import dev.vitrail.neoforge.BlockEntityOrigin;
 import dev.vitrail.render.BlockEntityGeometry;
 import dev.vitrail.render.EntityDraw;
@@ -7,13 +8,17 @@ import dev.vitrail.render.EntityDraw;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.renderer.StagedVertexBuffer;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
 
@@ -21,20 +26,32 @@ import java.util.List;
  * Where a submission's origin becomes a draw's origin, and where two origins are kept out of one
  * draw.
  * <p>
- * <strong>The second half is the one that is easy to miss.</strong> A group reuses an existing draw
- * whenever the prepared render type it would make compares equal to one it already holds, and a
- * prepared render type is a record of the pipeline, the output target, the dynamic transforms, the
- * scissor and the textures. Two of those are the same for everything drawn in one level: the
- * transforms are written once per identical value, and every ordinary entity piece is drawn with the
- * frame's own camera. So the comparison comes down to the pipeline and the texture, and there is a
- * real pair that matches on both: a player head, which is a block entity wearing the player's skin,
- * and the player. Left alone, the two would share a draw and the door would have to answer for both
- * at once with one program.
+ * <strong>The second half is the one that is easy to miss, and there are TWO ways into it, not
+ * one.</strong> The obvious one is the reuse inside {@code getOrAddDraw}: a group takes an existing
+ * draw whenever the prepared render type it would make compares equal to one it already holds. The
+ * one that costs a review is above it. {@code getVertexBuilder} hands back {@code lastDraw} without
+ * calling {@code getOrAddDraw} at all whenever the previous submission carried the SAME
+ * {@code RenderType} instance and that type consolidates, which every quad type does; render types
+ * are memoized per texture, and the storages batch by them, so a run of submissions of one type is
+ * the ordinary case rather than the exception. Guarding only the first way leaves the second wide
+ * open, and what comes through it is a whole batch drawn under the origin of whichever submission
+ * happened to be first.
  * <p>
- * The answer is to refuse the reuse rather than to try to describe it, which costs one draw in that
- * pair and nothing anywhere else. It is guarded by {@link EntityDraw#wanted()}: this is a change to
- * how the game groups its own geometry, and it has no business happening when nothing is going to
- * read it.
+ * Both are answered the same way, by refusing the reuse rather than by trying to describe it: the
+ * head of {@code getVertexBuilder} drops {@code lastDraw} when the origin has changed, which sends
+ * the call into {@code getOrAddDraw}, and {@code indexOf} there refuses a match of the other origin.
+ * It costs one draw wherever the two really alternate and nothing anywhere else.
+ * <p>
+ * <strong>No pair of the vanilla game is known to reach it, and that is not a reason to leave it
+ * open.</strong> The pair this class used to name, a player head against the player, is not one: a
+ * head with a resolved profile takes {@code entityTranslucent} and so does the whole
+ * {@code PlayerModel}, and neither blending type is a row of the ten. What makes the guard worth its
+ * two injections is that the cost of being wrong is silent and the cost of the guard is one draw:
+ * the table is keyed by pipeline, a texture is all that separates two of its rows, and nothing
+ * anywhere promises that no mob will ever share a sheet with a block entity.
+ * <p>
+ * Both are guarded by {@link EntityDraw#wanted()}: this is a change to how the game groups its own
+ * geometry, and it has no business happening when nothing is going to read it.
  */
 @Mixin(targets = "net.minecraft.client.renderer.feature.RenderTypeFeatureRenderer$Group")
 public abstract class RenderTypeFeatureRendererGroupMixin {
@@ -42,6 +59,29 @@ public abstract class RenderTypeFeatureRendererGroupMixin {
 	@Shadow
 	@Final
 	private List<StagedVertexBuffer.Draw> draws;
+
+	/** The draw the last submission of this group went into, or null when there was none. */
+	@Shadow
+	private StagedVertexBuffer.Draw lastDraw;
+
+	/**
+	 * Drops the shortcut when the origin has changed, which is the whole of the second way in.
+	 * <p>
+	 * Null and not a decision of our own: what follows in the method is the group's own logic, and
+	 * dropping the last draw is exactly the state it is already written to handle, the first
+	 * submission of a group. It then goes through {@code getOrAddDraw}, where both the mark and the
+	 * refusal of a foreign match live, so the two handlers below stay the only place that decides
+	 * anything.
+	 */
+	@Inject(method = "getVertexBuilder", at = @At("HEAD"), require = 1)
+	private void vitrail$breakTheRun(RenderType renderType,
+			CallbackInfoReturnable<VertexConsumer> callback) {
+		if (this.lastDraw != null && EntityDraw.wanted()
+				&& ((BlockEntityOrigin) this.lastDraw).vitrail$fromBlockEntity()
+						!= BlockEntityGeometry.building()) {
+			this.lastDraw = null;
+		}
+	}
 
 	@WrapOperation(method = "getOrAddDraw", require = 1,
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/StagedVertexBuffer;"
@@ -53,7 +93,7 @@ public abstract class RenderTypeFeatureRendererGroupMixin {
 			PrimitiveTopology topology, VertexSorting sorting,
 			Operation<StagedVertexBuffer.Draw> original) {
 		StagedVertexBuffer.Draw draw = original.call(buffer, format, topology, sorting);
-		((BlockEntityOrigin) draw).vitrail$fromBlockEntity(BlockEntityGeometry.building());
+		((BlockEntityMark) draw).vitrail$fromBlockEntity(BlockEntityGeometry.building());
 
 		return draw;
 	}

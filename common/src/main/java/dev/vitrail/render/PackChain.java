@@ -1657,10 +1657,18 @@ public final class PackChain {
 	private void announceSeed(boolean seeding) {
 		Optional<ChainPlan.Seed> where = this.chain.chain().seed();
 		if (seeding && where.isPresent()) {
-			Vitrail.logger().info("{} carries the game's opaque frame, drawn in for {}: the entities, "
-					+ "the clouds and the weather still come from the game, already tone mapped, and the "
-					+ "translucent chunk pass blends onto this seed afterwards",
-					TargetName.canonical(where.get().target()), where.get().from());
+			// What the seed still carries is not a constant any more, and this line is the one place
+			// a reader is sent for it: the two pages of docs/ that name the scope both decline to
+			// list it themselves and point here. Said from the switch rather than written out, or it
+			// goes stale the day the next family lands, silently and in the one place that must not.
+			Vitrail.logger().info("{} carries the game's opaque frame, drawn in for {}: {} still come "
+					+ "from the game, already tone mapped, and the translucent chunk pass blends onto "
+					+ "this seed afterwards",
+					TargetName.canonical(where.get().target()), where.get().from(),
+					EntityDraw.wanted()
+							? "the clouds, the weather and the entities that blend, the player's own "
+									+ "body among them,"
+							: "the entities, the clouds and the weather");
 			// The number is worth printing on its own: it is the whole difference between a begin
 			// that reads the world of this frame and one that reads what the clear left.
 			Vitrail.logger().info("It is painted where the world would be drawn, after {} passes of "

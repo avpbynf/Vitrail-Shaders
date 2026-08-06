@@ -1,6 +1,6 @@
 package dev.vitrail.neoforge.mixin;
 
-import dev.vitrail.neoforge.BlockEntityOrigin;
+import dev.vitrail.neoforge.BlockEntityMark;
 
 import net.minecraft.client.renderer.StagedVertexBuffer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.Unique;
  * stop matching.
  */
 @Mixin(StagedVertexBuffer.Draw.class)
-public abstract class StagedVertexBufferDrawMixin implements BlockEntityOrigin {
+public abstract class StagedVertexBufferDrawMixin implements BlockEntityMark {
 
 	@Unique
 	private boolean vitrail$blockEntity;

@@ -539,7 +539,14 @@ public final class PackProgram {
 				// of it. The threshold is, because it is written into the fragment stage: two pieces of
 				// one program discarding at different alphas are two texts, and sharing one would draw
 				// a mob with the silhouette of whichever piece was translated first.
-				String key = element.program() + "|" + alphaTest;
+				//
+				// The FILE and not the name asked for, which is the whole point of sharing: the two
+				// names of this family fall back on one file on half the corpus, and keying by name
+				// would then expand, translate and compile that file twice per place, which is the one
+				// thing reading them all at once exists to avoid. What the name still decides is in
+				// the key beside it and nothing else: it reaches the translation only through
+				// LegacyGlsl.drawsEntities, which says whether the entity uniforms are declared.
+				String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program());
 				translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
 						ProgramTranslator.translate(units, VertexInputs.ENTITY,
 								VertexInputs.ENTITY.elements(), alphaTest, false, element.program(),

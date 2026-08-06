@@ -20,8 +20,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * knows.
  * <p>
  * The whole method and not the one call, because the mark costs nothing while it is up and nothing
- * reads it but the grouping: {@code getVertexBuilder} is the first thing the method does, and what
- * follows only writes vertices into what it returned.
+ * reads it but the grouping. {@code getVertexBuilder} is the second thing the method does, the pose
+ * being set first, and everything after it only writes vertices into what it returned.
  */
 @Mixin(ModelFeatureRenderer.class)
 public abstract class ModelFeatureRendererMixin {

@@ -48,16 +48,28 @@ import java.util.Set;
  * {@link SkyProgram} gives: the word is what makes Sodium's mixin push twenty bytes of region offset
  * into the layout, and an entity mesh has no region.
  * <p>
- * <strong>It tells the pack it is drawing nothing in particular</strong>, and that reads as an
- * oversight until Iris is read. What a pack gets under {@code renderStage} is the ordinal of the
- * phase Iris has posed ({@code uniforms/CommonUniforms.java:116}), and the call that would pose the
- * entity one ({@code layer/GbufferPrograms.java:27}) hangs off {@code EntityRenderStateShard}, which
- * nothing there constructs and nothing installs: it survives as an unused import of
- * {@code mixin/entity_render_context/MixinEntityRenderDispatcher.java:8} and nowhere else. Its one
- * live pose is in the shadow map ({@code shadows/ShadowRenderer.java:521}), which this engine does
- * not draw entities into yet, and no phase at all is posed over the feature groups of the main pass.
- * So a pack branching on {@code MC_RENDER_STAGE_ENTITIES} never takes that branch under Iris, and
- * the packs are written against Iris.
+ * <strong>It tells a mob it is drawing nothing in particular, and a block entity that it is drawing
+ * a block entity</strong>, and the first half reads as an oversight until Iris is read. What a pack
+ * gets under {@code renderStage} is the ordinal of the phase Iris has posed
+ * ({@code uniforms/CommonUniforms.java:116}), and the two halves of this family are not in the same
+ * position there.
+ * <p>
+ * The call that would pose the ENTITY phase ({@code layer/GbufferPrograms.java:27}) hangs off
+ * {@code EntityRenderStateShard}, which nothing there constructs and nothing installs: it survives
+ * as an unused import of {@code mixin/entity_render_context/MixinEntityRenderDispatcher.java:8} and
+ * nowhere else. Its one live pose is in the shadow map ({@code shadows/ShadowRenderer.java:521}),
+ * which this engine does not draw entities into yet. So a pack branching on
+ * {@code MC_RENDER_STAGE_ENTITIES} never takes that branch under Iris.
+ * <p>
+ * The BLOCK ENTITY phase is the opposite case and the asymmetry between the two is the whole
+ * evidence. {@code BlockEntityRenderStateShard} ({@code layer/BlockEntityRenderStateShard.java:11}
+ * to {@code layer/GbufferPrograms.java:59}) is installed at four sites,
+ * {@code mixin/entity_render_context/MixinModelStorageTrigger.java:39,48,57} and
+ * {@code MixinGlyphRenderType.java:19}, where the entity one is installed at none. And that phase is
+ * the SOLE condition under which Iris's own table reaches its block programs
+ * ({@code pipeline/programs/ShaderOverrides.java:42-44}, read by
+ * {@code pipeline/IrisPipelines.java:193,205}), so a phase that were never posed would leave the
+ * whole of {@code ProgramId.Block} dead in its main pass. It is posed, and these pieces say so.
  */
 final class EntityProgram {
 
@@ -116,9 +128,10 @@ final class EntityProgram {
 				// and marking a pixel the seed is going to repaint anyway would only take the game's
 				// own picture away from whatever is drawn there next.
 				false, false, game.getPrimitiveTopology(), game.isCull(),
-				// NONE and not ENTITIES, which is Iris's answer rather than a reading of what this
-				// pass is: the class comment has the four file:line it was read from.
-				game.getDepthStencilState(), RenderStage.NONE),
+				// The piece's own, and the two halves answer differently: NONE for a mob, which is
+				// Iris's answer rather than a reading of what the pass is, and BLOCK_ENTITIES for a
+				// block entity, which Iris really does pose. The class comment has the file:line.
+				game.getDepthStencilState(), element.stage()),
 				bound, values, load, DefaultVertexFormat.ENTITY, writes, targets, chainRuns));
 	}
 

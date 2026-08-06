@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.AlphaTest;
+import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
@@ -143,13 +144,24 @@ public final class EntityDraw {
 	 *                  transforms, which is a buffer nothing can read back. The association below is
 	 *                  therefore ours; the transform itself is the game's own constant, so what it
 	 *                  does to the matrix stays the game's answer
+	 * @param stage     what the pack is told it is drawing. {@code NONE} for a mob, which is not a
+	 *                  reading of what the pass is but Iris's answer, and {@link EntityProgram} has
+	 *                  the four places it was read from; {@code BLOCK_ENTITIES} for a block entity,
+	 *                  which Iris really does pose and which is the very phase its own table branches
+	 *                  on to reach {@code gbuffers_block}
 	 */
 	record Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
-			LayeringTransform layering) {
+			LayeringTransform layering, RenderStage stage) {
 
-		/** A piece the game draws where the depth says, which is eight of the ten. */
+		/** A piece the game draws where the depth says, which is six of the ten. */
 		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest) {
 			this(pipeline, element, program, alphaTest, LayeringTransform.NO_LAYERING);
+		}
+
+		/** A piece of the mob half, which is every row of the table above. */
+		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
+				LayeringTransform layering) {
+			this(pipeline, element, program, alphaTest, layering, RenderStage.NONE);
 		}
 
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
@@ -161,16 +173,21 @@ public final class EntityDraw {
 		 * The model view the game would have handed this draw, or null for the frame's own camera.
 		 * <p>
 		 * Taken from {@code RenderSystem} and modified here exactly as {@code RenderType.prepare}
-		 * does it, rather than reproduced: the bias is a tenth of a per mille either way, the
-		 * formula belongs to the projection in force, and a copy of it here would be a second answer
-		 * to drift from. The stack holds the level's own view for the whole of the level render,
-		 * {@code LevelRenderer.render} pushing it before the features are prepared and popping it
-		 * after they have executed, so what is read at the draw is what was read at the prepare.
+		 * does it, rather than reproduced. The formula belongs to the projection in force and is not
+		 * one formula: under a perspective it scales the matrix by {@code 1 - bias/4096}, so about a
+		 * quarter of a per mille, and under an orthographic it TRANSLATES by {@code bias/512}. A copy
+		 * of either here would be a second answer to drift from. The stack holds the level's own view
+		 * for the whole of the level render, {@code LevelRenderer.render} pushing it before the
+		 * features are prepared and popping it after they have executed, so what is read at the draw
+		 * is what was read at the prepare.
 		 * <p>
-		 * What it is for: four of the ten pieces below are drawn a hair towards the camera so that
-		 * they do not fight the skin they cover. Without it every armour piece on every player and
-		 * every mob is drawn at the depth of the body underneath, which is the one thing in this
-		 * family that is visible from across a room.
+		 * What it is for: four of the ten pieces below are moved a hair along the view axis so that
+		 * they do not fight the skin they cover, and <strong>they do not all move the same way</strong>.
+		 * The three that carry {@code VIEW_OFFSET_Z_LAYERING} pass a bias of {@code +1} and come
+		 * towards the viewer; {@code ENTITY_SOLID_Z_OFFSET_FORWARD} passes {@code -1} and goes away
+		 * from it, its name being about the geometry it is meant to sit behind. Without any of it,
+		 * every armour piece on every player and every mob is drawn at the depth of the body
+		 * underneath, which is the one thing in this family that is visible from across a room.
 		 */
 		private Matrix4fc modelView() {
 			Consumer<Matrix4f> modifier = this.layering.getModifier();
@@ -252,13 +269,23 @@ public final class EntityDraw {
 	 * The same pieces asked of {@code gbuffers_block}, for the draws a block entity renderer put
 	 * there.
 	 * <p>
-	 * <strong>Eight of the ten and not all ten</strong>, read in Iris's own table
-	 * ({@code pipeline/IrisPipelines.java:30-85}) rather than reasoned about: the end crystal beam
+	 * <strong>Eight of the ten and not all ten</strong>, read in Iris's own main table
+	 * ({@code pipeline/IrisPipelines.java:25-83}) rather than reasoned about: the end crystal beam
 	 * and the offset cutout are given {@code ENTITIES_CUTOUT} outright there, while the other eight
-	 * go through {@code getSolid} or {@code getCutout}, which answer {@code BLOCK_ENTITY} while the
-	 * block entity phase is up. A pipeline missing from this table is therefore not an oversight and
+	 * go through {@code getSolid} or {@code getCutout}, which answer {@code BLOCK_ENTITY} and
+	 * {@code BLOCK_ENTITY_DIFFUSE} while the block entity phase is up, both of them
+	 * {@code ProgramId.Block}. A pipeline missing from this table is therefore not an oversight and
 	 * is not half served: {@link #element} falls back on the entity row for it, which is the answer
 	 * Iris gives.
+	 * <p>
+	 * <strong>Two things change with the name and neither of them is cosmetic.</strong> The
+	 * threshold: every one of these discards at a tenth, the solid rows included, because Iris's
+	 * {@code getSolid} under that phase answers {@code BLOCK_ENTITY} and not a solid key, and
+	 * {@code BLOCK_ENTITY} carries {@code ONE_TENTH_ALPHA} ({@code pipeline/programs/ShaderKey.java:66})
+	 * where {@code ENTITIES_SOLID} carries {@code OFF} ({@code :38}). Copying the entity row's
+	 * threshold would keep fragments Iris throws away, on a pack that overrides neither. And the
+	 * stage: a block entity really is drawn under a posed phase, which is the one thing the mobs are
+	 * not, so these read {@code BLOCK_ENTITIES} where the rows above read {@code NONE}.
 	 * <p>
 	 * A piece here is a compiled module of its own, like every row above, so it carries a name of its
 	 * own. The name is the entity one with a word in front, because it lands in an identifier the
@@ -272,7 +299,7 @@ public final class EntityDraw {
 				.filter(element -> element.pipeline() != RenderPipelines.END_CRYSTAL_BEAM
 						&& element.pipeline() != RenderPipelines.ENTITY_CUTOUT_Z_OFFSET)
 				.map(element -> new Element(element.pipeline(), "block_" + element.element(), BLOCK,
-						element.alphaTest(), element.layering()))
+						CUTOUT, element.layering(), RenderStage.BLOCK_ENTITIES))
 				.forEach(element -> BLOCK_ELEMENTS.put(element.pipeline(), element));
 	}
 
@@ -710,8 +737,10 @@ public final class EntityDraw {
 	 * picture through the scene seed. <strong>Where it lands is the seed's answer and not
 	 * OptiFine's</strong>, and the two differ: OptiFine infers colortex0 for a program that declares
 	 * nothing, while the seed paints the first draw buffer of the TERRAIN, which is colortex1 on two
-	 * packs of the corpus and colortex4 on a third. No pack of the corpus leaves its entities
-	 * undeclared, so nothing rides on it today.
+	 * packs of the corpus and colortex4 on a third. Two places of the corpus really are in that
+	 * case, Body Camera's {@code world1} and {@code world-1}, whose entities fall back on a
+	 * {@code gbuffers_textured} that declares no draw buffer at all; what keeps it from mattering
+	 * there is not this branch but the one above it, those same two places having no seed either.
 	 * <p>
 	 * Null is a refusal, and there are three of them. The scene seed switched off, which takes the
 	 * only road the first output has. A place whose entity targets are not the size of

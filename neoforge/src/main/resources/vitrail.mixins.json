@@ -16,8 +16,6 @@
 		"MixinDefaultChunkRenderer",
 		"DefaultFluidRendererMixin",
 		"GameRendererMixin",
-		"ItemFeatureRendererMixin",
-		"ItemSubmitMixin",
 		"LevelRendererMixin",
 		"ModelFeatureRendererMixin",
 		"ModelSubmitMixin",

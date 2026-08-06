@@ -36,9 +36,4 @@ public abstract class CustomSubmitMixin implements BlockEntityOrigin {
 	public boolean vitrail$fromBlockEntity() {
 		return this.vitrail$blockEntity;
 	}
-
-	@Override
-	public void vitrail$fromBlockEntity(boolean fromBlockEntity) {
-		this.vitrail$blockEntity = fromBlockEntity;
-	}
 }

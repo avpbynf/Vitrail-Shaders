@@ -24,9 +24,10 @@ public enum RenderStage {
 
 	/**
 	 * Everything drawn outside a gbuffers pass, which is every full screen pass of the chain, and
-	 * the entity pass with them: Iris poses no phase at all over the game's feature groups, so this
-	 * is what a pack reads while it draws a mob. {@code render/EntityProgram} carries the four
-	 * places that were read to establish it.
+	 * the MOB half of the entity pass with them: Iris poses no phase over those draws, so this is
+	 * what a pack reads while it draws a mob. Not the block entity half, which really is drawn under
+	 * {@link #BLOCK_ENTITIES}. {@code render/EntityProgram} carries the places that were read to
+	 * establish both.
 	 */
 	NONE,
 	SKY,

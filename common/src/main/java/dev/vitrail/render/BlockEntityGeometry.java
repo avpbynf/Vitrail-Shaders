@@ -20,10 +20,14 @@ package dev.vitrail.render;
  * that a block entity is drawn with {@code gbuffers_block} and a mob with {@code gbuffers_entities},
  * and the packs are written against that.
  * <p>
- * All three are read and written on the render thread alone, and none of them is a switch: they are
- * raised and lowered around a call, so an unbalanced one is a mob lit as a chest for the rest of the
- * frame rather than a crash. That is why every injection that touches them is required rather than
- * optional, and why the door drops all three at the frame boundary whatever happened in between.
+ * All three are read and written on the render thread alone. They are {@code volatile} all the same,
+ * for the reason {@code PackDump.said} is: the keyword costs less than the arbitration, and a field
+ * this many mixins touch is one somebody will otherwise re-open the question about.
+ * <p>
+ * None of them is a switch: they are raised and lowered around a call, so an unbalanced one is a mob
+ * lit as a chest for the rest of the frame rather than a crash. That is why every injection that
+ * touches them is required rather than optional, and why the door drops all three at the frame
+ * boundary whatever happened in between.
  */
 public final class BlockEntityGeometry {
 
