@@ -494,11 +494,12 @@ final class GeometryProgram {
 			// Handing back an invalid pipeline throws inside setPipeline, in the middle of Sodium's
 			// own pass, which reads as a Sodium failure. Refused here instead, once.
 			this.broken = true;
-			// The family and not "the terrain", which it said from the day only the terrain came
-			// through here. The entity door points a reader at this line by name, so naming the wrong
-			// geometry sends them looking at chunks for a chest that did not compile.
-			Vitrail.logger().error("{} did not compile, so the {} keeps the game's own shader",
-					this.path, this.pass.family());
+			// The PASS and not "the terrain", which it said from the day only the terrain came through
+			// here, and not the family either: the family is one word for all twenty entity pieces,
+			// so it would not say which failed. The same words as the storage block refusal above,
+			// because the two latch the same flag and a reader meeting either has the same question.
+			Vitrail.logger().error("{} did not compile, so the {} pass keeps the game's own shader",
+					this.path, this.pass.name());
 
 			return null;
 		}

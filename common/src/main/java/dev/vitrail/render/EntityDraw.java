@@ -533,16 +533,20 @@ public final class EntityDraw {
 		if (program == null) {
 			end();
 
-			// The reason that was silent, and the only one settled by the LOAD rather than by the
-			// frame. It stopped being harmless when the family grew a second name: a piece can now be
 			// The reason that was silent, and one of the two settled by the LOAD rather than by the
-			// frame. What it is NOT is a chest against the mob beside it: every road that empties
-			// this map empties it wholesale, so what this announces is the family staying with the
-			// game, not one piece of it parting from the others. Measured on the corpus, no pack
-			// serves some of the pieces and not others.
+			// frame.
 			//
-			// It names the piece all the same, because the piece is the only thing this end knows;
-			// why the load left nothing is on the load's own lines.
+			// It names the PIECE and claims nothing about the others, which took two reviews to get
+			// right: the map really can hold one half and not the other. The two names of this family
+			// walk disjoint chains, gbuffers_block through the terrain and gbuffers_entities through
+			// the textured pair, so a pack that ships the first road and not the second resolves
+			// every chest and no mob, and the load drops the mob pieces one at a time rather than
+			// giving up on the family. What that paints is every chest lit by the pack and every mob
+			// beside it lit by the game, for as long as the pack is loaded.
+			//
+			// No pack of the corpus is in that position, measured over its twenty five places. The
+			// line is written for the pack that will be, because this is the one shape of failure
+			// that looks like a decision rather than a fault.
 			return refuse("missing:" + element.element(), true,
 					"the load left no program for the " + element.element() + " piece");
 		}
@@ -598,10 +602,11 @@ public final class EntityDraw {
 			// Lasting, and it took a review to see it: a program that would not compile, or that
 			// declares a storage block, latches broken in GeometryProgram and never unlatches, so
 			// this answers null for the rest of the load rather than for this frame.
-			// Keyed by piece and not by reason alone, unlike the frame's three: the two halves of the
-			// family are usually two files, so one key would name whichever failed first and leave
-			// the other silent.
-			return refuse("prepare:" + element.element(), true,
+			// Keyed by PROGRAM NAME and not by reason alone, unlike the frame's three: the two halves
+			// of the family are usually two files, so one key would name whichever failed first and
+			// leave the other silent. Not by piece either, or a file that will not compile would say
+			// so once per piece it serves, which is ten lines for one fault.
+			return refuse("prepare:" + element.program(), true,
 					"the " + element.element() + " program refused to prepare, which it says on its "
 							+ "own line above");
 		}
