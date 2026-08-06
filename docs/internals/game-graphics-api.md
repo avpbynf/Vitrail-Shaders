@@ -68,6 +68,13 @@ like the previous one, with nothing logged and no compile error to look at. Iden
 to vary with whatever varies in the source; if a pack selection can change the text, the pack must
 be part of the identity.
 
+**And a pipeline that reaches the pass uncompiled compiles against the wrong source.** Binding one
+goes through the same get-or-compute, but hands it the game's *default* shader source rather than
+whatever the caller would have offered. For a pipeline of a mod's own that source has nothing under
+the identifier, so the compile finds no text and the bind then throws about a pipeline that is not
+valid. Precompiling is therefore not an optimisation and not optional: every pipeline a frame will
+bind has to be offered, with its own source, before the frame's first pass opens.
+
 ## The encoder's guard does not cross encoders
 
 The device hands out a **new encoder wrapper on every call**, over a single backend. The flag that
@@ -199,3 +206,11 @@ that is sharper still - that one is in [translation](../translation.md).
   rendering.
 - **Free GPU resources on the client *stopping* event, not the stopped one.** The first is posted
   while the device is still alive; the second comes after the renderer has been shut down.
+- **Clearing through the attachment costs nothing; clearing the texture is another operation
+  entirely.** A clear colour named on the attachment becomes a load operation, which the hardware
+  does as it opens the pass. The standalone texture clear is a command: it wants the copy-destination
+  usage on the texture and refuses to be called while a pass is open.
+- **Sodium filters what it intercepts by pipeline namespace.** Pipelines under a namespace of your
+  own go past its pipeline-layout interception untouched, which is what makes it safe to build them
+  differently from its own. It is also a fact about one version of another mod, so it is worth
+  re-checking whenever that one moves.
