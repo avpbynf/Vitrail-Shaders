@@ -38,6 +38,29 @@ same reason the layout rules are the reference's: it is what the pack's author s
 Apply writes by reading the file first and laying the pending changes over it, so an edit made by
 hand while the screen is open and an edit made here compose rather than overwrite each other.
 
+Two consequences of not applying on the way out are worth knowing before they surprise you.
+**Going back to the pack list throws away what is pending**, deliberately. And **clicking a pack in
+that list is not a selection, it is a load**: it writes the pack file and reloads there and then,
+where the reference would have waited for Apply.
+
+## The profile is worked out, not remembered
+
+A pack can group its settings into profiles, and the screen shows one as if it were an ordinary
+setting whose values are the profile names.
+
+What it shows is derived from the values currently in effect: the most constrained profile all of
+whose values match, and *Custom* when none does. The name is stored in the settings file, but the
+values are the authority - which is what makes the label survive a Reset. After a reset the file is
+gone and the pack's own values are back, and those values still amount to a profile.
+
+Choosing a profile puts its values in the pending set like any other change, so Apply is what makes
+it real.
+
+## The pack list refreshes itself
+
+There is no reload button, in either reference. The folder is looked at about once a second while
+the list is on screen, so a pack dropped in appears on its own.
+
 ## Where settings live, and why one file per pack
 
 Each pack gets its own file, `vitrail/settings/<pack file name>.txt`. That is not tidiness.

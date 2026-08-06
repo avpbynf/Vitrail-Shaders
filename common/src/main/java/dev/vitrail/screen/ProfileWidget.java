@@ -11,10 +11,16 @@ import java.util.Optional;
  * The {@code <profile>} slot, shown as an ordinary setting whose values are the pack's profile
  * names.
  * <p>
- * It is one because that is all it is: a profile is stored by name rather than worked out from
- * the values in effect, so walking through the names is the whole of the interaction. Shift and a
+ * It looks like one because walking through the names is the whole of the interaction. Shift and a
  * click do nothing here, a profile being a whole set of values and not one of them, and choosing
  * one does not clear what the player set on a setting the profile never mentions.
+ * <p>
+ * <strong>What is shown is worked out from the values, not read from a name kept beside them</strong>,
+ * which is what {@link #valueLabel()} and {@link #cycle(int)} both do and what the line below used
+ * to deny. The name IS stored, in the settings file, and it is not the authority: after a Reset
+ * that file is gone and the pack's own values are back, and those values still amount to a profile
+ * that this then names. Storing the answer instead would show Custom over a pack sitting exactly on
+ * its own ULTRA.
  * <p>
  * A pack declaring no profile never reaches this class: the token disappears from the page rather
  * than becoming a blank.
