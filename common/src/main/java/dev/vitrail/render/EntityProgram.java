@@ -23,7 +23,7 @@ import java.util.Set;
  * the game would have used.
  * <p>
  * The body of it is {@link GeometryProgram}'s, as the terrain's and the sky's are; what this class
- * holds is what an entity answers differently, and there are three things.
+ * holds is what an entity answers differently, and there are four things.
  * <p>
  * <strong>The pipeline states are read off the game's own pipeline rather than tabulated.</strong>
  * The sky has to write its blends and its topologies out by hand, because the pass is opened by the
@@ -45,6 +45,17 @@ import java.util.Set;
  * <strong>Its namespace is ours and has no {@code sodium} in it</strong>, for the reason
  * {@link SkyProgram} gives: the word is what makes Sodium's mixin push twenty bytes of region offset
  * into the layout, and an entity mesh has no region.
+ * <p>
+ * <strong>It tells the pack it is drawing nothing in particular</strong>, and that reads as an
+ * oversight until Iris is read. What a pack gets under {@code renderStage} is the ordinal of the
+ * phase Iris has posed ({@code uniforms/CommonUniforms.java:116}), and the call that would pose the
+ * entity one ({@code layer/GbufferPrograms.java:27}) hangs off {@code EntityRenderStateShard}, which
+ * nothing there constructs and nothing installs: it survives as an unused import of
+ * {@code mixin/entity_render_context/MixinEntityRenderDispatcher.java:8} and nowhere else. Its one
+ * live pose is in the shadow map ({@code shadows/ShadowRenderer.java:521}), which this engine does
+ * not draw entities into yet, and no phase at all is posed over the feature groups of the main pass.
+ * So a pack branching on {@code MC_RENDER_STAGE_ENTITIES} never takes that branch under Iris, and
+ * the packs are written against Iris.
  */
 final class EntityProgram {
 
@@ -103,7 +114,9 @@ final class EntityProgram {
 				// and marking a pixel the seed is going to repaint anyway would only take the game's
 				// own picture away from whatever is drawn there next.
 				false, false, game.getPrimitiveTopology(), game.isCull(),
-				game.getDepthStencilState(), RenderStage.ENTITIES),
+				// NONE and not ENTITIES, which is Iris's answer rather than a reading of what this
+				// pass is: the class comment has the four file:line it was read from.
+				game.getDepthStencilState(), RenderStage.NONE),
 				bound, values, load, DefaultVertexFormat.ENTITY, writes, targets, chainRuns));
 	}
 

@@ -22,7 +22,12 @@ package dev.vitrail.pack.program;
  */
 public enum RenderStage {
 
-	/** Everything drawn outside a gbuffers pass, which is every full screen pass of the chain. */
+	/**
+	 * Everything drawn outside a gbuffers pass, which is every full screen pass of the chain, and
+	 * the entity pass with them: Iris poses no phase at all over the game's feature groups, so this
+	 * is what a pack reads while it draws a mob. {@code render/EntityProgram} carries the four
+	 * places that were read to establish it.
+	 */
 	NONE,
 	SKY,
 	SUNSET,
