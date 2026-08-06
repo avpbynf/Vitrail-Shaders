@@ -927,10 +927,13 @@ public final class ShaderProperties {
 	}
 
 	/**
-	 * What the pack would use if it were there, and takes another path without. Read so that the
-	 * count of keys nothing reads stops carrying it, and because it is the list Iris turns into
-	 * {@code IRIS_FEATURE_} defines: this engine defines none, which is what tells a pack to take
-	 * the other path.
+	 * What the pack would use if it were there, and takes another path without. It is the list Iris
+	 * turns into {@code IRIS_FEATURE_} defines for the GLSL; this engine defines none, which is what
+	 * tells a pack to take the other path.
+	 * <p>
+	 * Nothing in the engine reads this, and that is deliberate rather than an oversight: there is
+	 * nothing to decide from it here. What it exists for is the measurement out of the game, which
+	 * is where the corpus is counted, exactly as {@link #malformedAlphaTests} does.
 	 */
 	public List<String> optionalFeatures() {
 		return this.optionalFeatures;

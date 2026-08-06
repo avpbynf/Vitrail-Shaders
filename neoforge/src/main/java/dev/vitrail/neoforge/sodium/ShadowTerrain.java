@@ -155,12 +155,15 @@ public final class ShadowTerrain {
 			manager.finalizeRenderLists(minecraft.gameRenderer.mainCamera(), viewport,
 					fog == null ? FogParameters.NONE : fog, true);
 
-			// Once per pack, and never on a frame where the camera saw nothing. Two equal numbers
-			// mean the cull did not happen, and nothing on screen would say so.
+			// Once per block table, and never on a frame where the camera saw nothing. Two equal
+			// numbers mean the cull did not happen, and nothing on screen would say so. The table is
+			// named because a second load of the same pack prints this again, word for word: it is
+			// what tells the two readings apart, not a property of the cull itself.
 			if (measured != BlockStateIds.generation() && seen > 0) {
 				measured = BlockStateIds.generation();
 				Vitrail.logger().info("Shadow cull walked {} sections for the light against {} "
-						+ "for the camera", sections(manager.getRenderLists()), seen);
+						+ "for the camera, on block table {}", sections(manager.getRenderLists()),
+						seen, measured);
 			}
 
 			draw(renderer, minecraft, camera);

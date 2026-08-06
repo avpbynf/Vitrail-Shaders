@@ -80,7 +80,11 @@ public abstract class DefaultFluidRendererMixin {
 		// the shader and was ignored, and the two are a mixin apart.
 		int table = BlockStateIds.generation();
 		if (vitrail$said.getAndSet(table) != table) {
-			Vitrail.logger().info("The first fluid meshed is {} and it carries the packed id {}",
+			// The table is named, because this line is no longer the only one of the run: two loads
+			// of the same pack print it twice, word for word, and nothing else would say which
+			// reading belongs to which table.
+			Vitrail.logger().info("The first fluid meshed against block table {} is {} and it "
+					+ "carries the packed id {}", table,
 					fluidState == null ? "nothing" : fluidState.createLegacyBlock(), this.vitrail$id);
 		}
 	}

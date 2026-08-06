@@ -31,6 +31,20 @@ public final class PackLoader {
 	private PackLoader() {
 	}
 
+	/**
+	 * Just {@code shaders.properties}, for the checks that have to be made at every load and before
+	 * anything is translated.
+	 * <p>
+	 * One file out of a pack rather than {@link #load}, which enumerates every program and expands
+	 * every include: those checks run again at each portal and at each Apply, on the render thread,
+	 * and none of them needs any of that.
+	 */
+	public static ShaderProperties properties(Path packPath) throws IOException {
+		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
+			return ShaderProperties.parse(source);
+		}
+	}
+
 	public static LoadedPack load(Path packPath) throws IOException {
 		long start = System.nanoTime();
 

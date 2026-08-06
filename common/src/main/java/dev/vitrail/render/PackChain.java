@@ -4,7 +4,6 @@ import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
-import dev.vitrail.pack.source.LoadedPack;
 import dev.vitrail.pack.source.PackLoader;
 import dev.vitrail.pack.source.PackReport;
 import dev.vitrail.pack.target.ChainPlan;
@@ -109,6 +108,9 @@ public final class PackChain {
 
 	private static volatile PackChain active;
 	private static volatile boolean disabled;
+
+	/** The pack the report was last taken of, so that a portal does not pay for it a second time. */
+	private static volatile Path reported;
 	private static volatile PackSession session;
 	private static volatile String lastError;
 	private static volatile List<String> removed = List.of();
@@ -289,24 +291,23 @@ public final class PackChain {
 				return;
 			}
 
-			// Where the pack is known, rather than over the whole folder before one was chosen. The
-			// same reading answers both questions asked of a pack before anything is translated:
-			// what is in it, and what it says it cannot be drawn without.
+			// Where the pack is known, rather than over the whole folder before one was chosen, and
+			// once per pack rather than at every load. This reading walks the whole archive, and
+			// this method is the road every reload takes: a portal and an Apply both come back
+			// through here, on the render thread, and neither has anything new to report.
 			//
-			// Never fatal, and that is the whole reason for the catch. This reading is a report and
-			// a check, not the drawing: the report used to swallow its own failures and the pack was
-			// prepared anyway, and letting one reach the catch below would turn a diagnosis that
-			// could not be taken into a pack that is not drawn.
-			LoadedPack opened = null;
-			try {
-				opened = PackLoader.load(pack);
-			} catch (IOException | RuntimeException e) {
-				Vitrail.logger().warn("{} could not be read for its report, so the pack is prepared "
-						+ "without one and without its feature check", pack.getFileName(), e);
-			}
-
-			if (opened != null) {
-				PackReport.log(opened);
+			// Never fatal either, and that is the whole reason for the catch. It is a report and not
+			// the drawing: it used to swallow its own failures and the pack was prepared anyway, and
+			// letting one reach the catch below would turn a diagnosis that could not be taken into
+			// a pack that is not drawn.
+			if (!pack.equals(reported)) {
+				try {
+					PackReport.log(PackLoader.load(pack));
+					reported = pack;
+				} catch (IOException | RuntimeException e) {
+					Vitrail.logger().warn("{} could not be read for its report, so the pack is "
+							+ "prepared without one", pack.getFileName(), e);
+				}
 			}
 
 			SettingsLayers.Resolved settings = open(gameDirectory, pack);
@@ -325,14 +326,17 @@ public final class PackChain {
 			// A deliberate divergence, and worth naming because it is one: Iris refuses a required
 			// flag only when the name is unknown to it or the hardware cannot serve it, so it draws
 			// Reverie where this does not. It can afford to, having built all four.
-			List<String> required = opened == null ? List.of() : opened.properties().requiredFeatures();
+			//
+			// Read from the one file rather than from the report above, because a refusal has to
+			// hold at every load and the report is taken once.
+			List<String> required = PackLoader.properties(pack).requiredFeatures();
 			if (!required.isEmpty()) {
 				disabled = true;
 				String names = String.join(", ", required);
-				lastError = opened.packName() + " requires " + names
+				lastError = pack.getFileName() + " requires " + names
 						+ ", and this engine serves no feature flag";
 				Vitrail.logger().error("{} requires {}, and this engine serves none of them, so "
-						+ "nothing is drawn", opened.packName(), names);
+						+ "nothing is drawn", pack.getFileName(), names);
 				return;
 			}
 			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());
