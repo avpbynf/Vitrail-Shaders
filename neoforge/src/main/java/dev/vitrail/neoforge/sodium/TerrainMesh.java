@@ -14,9 +14,10 @@ import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexT
 
 import org.lwjgl.system.MemoryUtil;
 
+import java.util.Arrays;
+
 /**
- * The chunk mesh with a fifth element on it, holding the number {@code block.properties} gave each
- * block state.
+ * The chunk mesh with the elements a pack reads and Sodium does not carry, appended after its own.
  * <p>
  * <strong>Not one byte of Sodium's own twenty is written here.</strong> Sodium is under the PolyForm
  * Shield licence and this project is under the LGPL, so its encoder is called as a black box and
@@ -28,11 +29,12 @@ import org.lwjgl.system.MemoryUtil;
  * three after the first land where this format does not want them and are moved up, backwards and
  * word by word so that a vertex is never written over a word still to be read.
  * <p>
- * <strong>The new element has to stay last.</strong> An element the shader does not declare shifts
- * the location of every element AFTER it, in silence, because the pipeline counts every element of
- * the format and the shader module only counts the ones a stage declared. Sodium's own chunk shader
- * declares the first four and knows nothing of this one, so being last is the whole reason it can
- * carry on drawing through this format.
+ * <strong>The new elements have to stay last, and after Sodium's four.</strong> An element the shader
+ * does not declare shifts the location of every element AFTER it, in silence, because the pipeline
+ * counts every element of the format and the shader module only counts the ones a stage declared.
+ * Sodium's own chunk shader declares the first four and knows nothing of ours, so being last is the
+ * whole reason it can carry on drawing through this format. Their order among themselves is
+ * {@link Extra}'s and is read back by {@link SodiumVertex}, which has to agree with it.
  */
 public final class TerrainMesh implements ChunkVertexType {
 
@@ -48,6 +50,12 @@ public final class TerrainMesh implements ChunkVertexType {
 	 */
 	private static TerrainMesh latched;
 	private static boolean decided;
+
+	/**
+	 * What a texture coordinate is multiplied by before it is stored, which is Sodium's own
+	 * {@code 1 << 15} and therefore also the number the prologue divides by.
+	 */
+	private static final float TEXTURE_SCALE = 32768.0F;
 
 	private final ChunkVertexType inner = ChunkMeshFormats.COMPACT;
 	private final ChunkVertexEncoder innerEncoder = this.inner.getEncoder();
@@ -102,8 +110,9 @@ public final class TerrainMesh implements ChunkVertexType {
 		}
 
 		Vitrail.logger().info("The chunk mesh carries {} bytes a vertex for the rest of this run "
-				+ "instead of {}, the difference being the block id a pack reads as mc_Entity",
-				latched.stride, latched.innerStride);
+				+ "instead of {}, the difference being what a pack reads and Sodium does not carry: {}",
+				latched.stride, latched.innerStride,
+				Arrays.stream(Extra.values()).map(Extra::attribute).toList());
 
 		return latched;
 	}
@@ -132,10 +141,52 @@ public final class TerrainMesh implements ChunkVertexType {
 					element.format(), 1);
 		}
 
-		return builder
-				.addAttribute(SodiumVertex.BLOCK_ID, base.getVertexSize(), GpuFormat.R32_UINT.blockSize(),
-						GpuFormat.R32_UINT, 1)
-				.build();
+		int at = base.getVertexSize();
+		for (Extra extra : Extra.values()) {
+			builder.addAttribute(extra.attribute(), at, extra.format().blockSize(), extra.format(), 1);
+			at += extra.format().blockSize();
+		}
+
+		return builder.build();
+	}
+
+	/**
+	 * The elements this engine adds after Sodium's own, in the order they are laid out.
+	 * <p>
+	 * Each is four bytes and each is named by {@link SodiumVertex}, which is the side that decodes
+	 * them. They are all appended rather than chosen per pack, and that is the one place this engine
+	 * cannot follow Iris: {@code FormatAnalyzer} builds a format out of the names a pack's compiled
+	 * programs really reference, which Iris can do because it settles the format when a pack loads.
+	 * Here the format is settled before any pack is chosen, {@link #latched} says why, so the choice
+	 * is between carrying them always and carrying them never. What a conditional would save is also
+	 * small: seven packs of the corpus read {@code mc_midTexCoord} and eight read {@code at_tangent}.
+	 */
+	private enum Extra {
+
+		/** The number {@code block.properties} gave the block state, which a pack reads as {@code mc_Entity}. */
+		BLOCK_ID(SodiumVertex.BLOCK_ID, GpuFormat.R32_UINT),
+
+		/**
+		 * The middle of the sprite this quad is mapped to, quantised exactly as Sodium quantises the
+		 * corner coordinate, so that the two divide down by the same number in the prologue.
+		 */
+		MID_TEX_COORD(SodiumVertex.MID_TEX_COORD, GpuFormat.RG16_UINT);
+
+		private final String attribute;
+		private final GpuFormat format;
+
+		Extra(String attribute, GpuFormat format) {
+			this.attribute = attribute;
+			this.format = format;
+		}
+
+		String attribute() {
+			return this.attribute;
+		}
+
+		GpuFormat format() {
+			return this.format;
+		}
 	}
 
 	/**
@@ -147,6 +198,12 @@ public final class TerrainMesh implements ChunkVertexType {
 			int sectionIndex) {
 		this.innerEncoder.write(pointer, materialBits, vertices, sectionIndex);
 
+		// One value for the whole quad, taken before anything moves: it is the middle of the sprite
+		// and not a property of a corner, so the four vertices carry the same number. Iris does the
+		// same and packs it the same way, which is what lets a pack divide it by the number it
+		// already divides its own texture coordinate by.
+		int middle = midTexCoord(vertices);
+
 		// Backwards: every vertex moves up, so the one that has not been moved yet is always the
 		// source of the next move. Word by word and from the top of each vertex for the same reason,
 		// the two ranges overlapping for all but the last vertex of a quad.
@@ -157,10 +214,42 @@ public final class TerrainMesh implements ChunkVertexType {
 				MemoryUtil.memPutInt(to + word, MemoryUtil.memGetInt(from + word));
 			}
 
-			MemoryUtil.memPutInt(to + this.innerStride,
+			long extra = to + this.innerStride;
+			MemoryUtil.memPutInt(extra,
 					((TerrainVertex) vertices[at]).vitrailBlockId() & BlockStateIds.PACKED_MASK);
+			MemoryUtil.memPutInt(extra + Integer.BYTES, middle);
 		}
 
 		return pointer + (long) vertices.length * this.stride;
+	}
+
+	/**
+	 * The middle of the sprite this quad is mapped to, both axes in one word.
+	 * <p>
+	 * The mean of the corners, quantised by the same {@code 1 << 15} Sodium quantises a corner with,
+	 * and masked to sixteen bits so that the pair reads as the {@code uvec2} the format declares.
+	 * Iris packs it identically, {@code XHFPModelVertexType.encodeOld}, and a pack divides it by
+	 * 32768 exactly as it divides its own texture coordinate.
+	 * <p>
+	 * The mean is taken over however many vertices the encoder was handed rather than over four. It
+	 * is always four today, the chunk renderer meshing quads and nothing else, but a hardcoded
+	 * quarter would answer a quarter of the truth rather than fail if that ever stopped being so.
+	 */
+	private static int midTexCoord(ChunkVertexEncoder.Vertex[] vertices) {
+		if (vertices.length == 0) {
+			return 0;
+		}
+
+		float u = 0.0F;
+		float v = 0.0F;
+		for (ChunkVertexEncoder.Vertex vertex : vertices) {
+			u += vertex.u;
+			v += vertex.v;
+		}
+
+		u /= vertices.length;
+		v /= vertices.length;
+
+		return (Math.round(u * TEXTURE_SCALE) & 0xFFFF) | ((Math.round(v * TEXTURE_SCALE) & 0xFFFF) << 16);
 	}
 }

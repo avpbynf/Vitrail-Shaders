@@ -25,10 +25,10 @@ import java.util.Set;
  * transcription of Sodium's shader: the layout is a fact about the bytes, the way of undoing it is
  * ours. Nothing here is copied, and nothing here may be replaced by something copied.
  * <p>
- * <strong>Two of the names a pack reads are still not in the mesh.</strong> There is no mid texture
- * coordinate and no tangent, so those are given a constant and named in the log. The normal is not
- * among them: the facing rides in the spare bits of the material byte, which costs the mesh nothing.
- * Neither is the block id, which is the fifth element and the one thing here that does cost bytes.
+ * <strong>One of the names a pack reads is still not in the mesh.</strong> There is no tangent, so it
+ * is given a constant and named in the log. The normal is not among them: the facing rides in the
+ * spare bits of the material byte, which costs the mesh nothing. Neither are the block id and the mid
+ * texture coordinate, which are elements of their own and the two things here that do cost bytes.
  * <p>
  * The region offset arrives through push constants, which is the one thing here that has to be got
  * right or nothing else matters. blaze3d never declares a push constant range; Sodium adds one, and
@@ -45,21 +45,34 @@ public final class SodiumVertex {
 	 * The block id, packed as Iris packs it: {@code ((id + 1) << 1) | isFluid}, so that nought means
 	 * no declaration matched and comes back out as the -1 every pack tests against.
 	 * <p>
-	 * The fifth element of the format and the only one this engine adds. It is last on purpose:
-	 * an element a shader does not declare shifts the location of every element AFTER it, silently,
-	 * and Sodium's own chunk shader declares the first four and not this one.
+	 * One of the elements this engine appends. They are last on purpose: an element a shader does not
+	 * declare shifts the location of every element AFTER it, silently, and Sodium's own chunk shader
+	 * declares the first four and none of ours.
 	 */
 	public static final String BLOCK_ID = "a_BlockId";
 
-	/** The elements of the chunk mesh, in order. The format must carry these and no more. */
+	/**
+	 * The middle of the sprite a quad is mapped to, both axes in one element and quantised exactly as
+	 * {@code a_TexCoord} is, so that the two divide down by the same number below.
+	 * <p>
+	 * It is a property of the QUAD and not of a corner: the four vertices carry the same pair. That is
+	 * what a pack tests a corner against to know which side of its sprite the corner lies on, which is
+	 * how a leaf knows which of its vertices are the top ones and may be moved by the wind.
+	 */
+	public static final String MID_TEX_COORD = "a_MidTexCoord";
+
+	/**
+	 * The elements of the chunk mesh, in order. The format must carry these and no more, and the
+	 * order after {@code a_LightAndData} is the one {@code TerrainMesh.Extra} lays out.
+	 */
 	public static final List<String> ATTRIBUTES =
-			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID);
+			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID, MID_TEX_COORD);
 
 	/**
 	 * The ones of {@link VertexPrologue#SYNTHESIZED} this mesh answers for real, out of an element
 	 * under another name. What is left of that set is what the log has to call a constant.
 	 */
-	public static final Set<String> ANSWERED = Set.of("mc_Entity");
+	public static final Set<String> ANSWERED = Set.of("mc_Entity", "mc_midTexCoord");
 
 	/**
 	 * Where the quad's facing sits in the material byte, and why there is room for it.
@@ -171,13 +184,42 @@ public final class SodiumVertex {
 				+ "u) & " + FACING_MASK + "u)];");
 		globals.forEach((name, type) -> {
 			if (ANSWERED.contains(name)) {
-				lines.add("\t" + name + " = " + entity(type) + ";");
+				lines.add("\t" + name + " = " + answer(name, type) + ";");
 			}
 		});
 
 		lines.add("}");
 
 		return List.copyOf(lines);
+	}
+
+	/** One of the names the mesh answers, in the shape the pack declared it under. */
+	private static String answer(String name, String type) {
+		return name.equals("mc_midTexCoord") ? midTexCoord(type) : entity(type);
+	}
+
+	/**
+	 * {@code mc_midTexCoord} out of the element, in the shape the pack declared it under.
+	 * <p>
+	 * The stored pair is the mean of the quad's corners under the same {@code 1 << 15} Sodium
+	 * quantises a corner with, so the division here is the one the corner coordinate already gets.
+	 * The shapes are Iris's, form for form, from {@code SodiumTransformer.replaceMidTexCoord}: a pack
+	 * declaring a float reads the u alone, and one declaring three or four components gets nought and
+	 * one in the places the pair does not fill.
+	 * <p>
+	 * A type this does not know keeps its zero, which is a pack declaring this name as something the
+	 * corpus has never used.
+	 */
+	private static String midTexCoord(String type) {
+		String pair = "vec2(" + MID_TEX_COORD + ") * (1.0 / 32768.0)";
+
+		return switch (type) {
+			case "float" -> "float(" + MID_TEX_COORD + ".x) * (1.0 / 32768.0)";
+			case "vec2" -> pair;
+			case "vec3" -> "vec3(" + pair + ", 0.0)";
+			case "vec4" -> "vec4(" + pair + ", 0.0, 1.0)";
+			default -> VertexPrologue.zero(type);
+		};
 	}
 
 	/**
@@ -212,7 +254,7 @@ public final class SodiumVertex {
 	/** The GLSL type of one element of the format. */
 	private static String type(String attribute) {
 		return switch (attribute) {
-			case "a_Position", "a_TexCoord" -> "uvec2";
+			case "a_Position", "a_TexCoord", MID_TEX_COORD -> "uvec2";
 			case "a_LightAndData" -> "uvec4";
 			case BLOCK_ID -> "uint";
 			default -> "vec4";
