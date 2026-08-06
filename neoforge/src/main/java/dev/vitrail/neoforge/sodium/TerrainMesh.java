@@ -77,6 +77,15 @@ public final class TerrainMesh implements ChunkVertexType {
 
 		decided = true;
 		if (!TerrainDraw.asked()) {
+			// Said out loud, and it is the one branch here that used to be silent. This decision is
+			// taken once for the whole run: a line switching the terrain off at the moment the mesh
+			// format is settled leaves the block id off the vertex until the game is restarted, and
+			// turning the terrain back on afterwards, from the screen or from the file, cannot put
+			// it there. Silence would read as the line having done nothing.
+			Vitrail.logger().info("The terrain is switched off where the chunk mesh format is "
+					+ "settled, so it keeps Sodium's own for the rest of this run and carries no "
+					+ "block id");
+
 			return null;
 		}
 
