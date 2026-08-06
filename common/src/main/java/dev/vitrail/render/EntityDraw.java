@@ -22,8 +22,12 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.StagedVertexBuffer;
+import net.minecraft.client.renderer.rendertype.LayeringTransform;
 import net.minecraft.client.renderer.rendertype.OutputTarget;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
+
+import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -35,6 +39,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -123,12 +128,52 @@ public final class EntityDraw {
 	 *                  {@code ALPHA_CUTOUT} define for that pipeline, a tenth where there is one and
 	 *                  no test at all where there is none, and Iris gives the entity programs the
 	 *                  same tenth
+	 * @param layering  the depth nudge the game gives this piece before it draws it, and the one
+	 *                  thing in this record that is tabulated rather than read off the pipeline.
+	 *                  {@code RenderType.prepare} takes it from the render type and not from the
+	 *                  pipeline, and applies it to the matrix it writes into the draw's dynamic
+	 *                  transforms, which is a buffer nothing can read back. The association below is
+	 *                  therefore ours; the transform itself is the game's own constant, so what it
+	 *                  does to the matrix stays the game's answer
 	 */
-	record Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest) {
+	record Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
+			LayeringTransform layering) {
+
+		/** A piece the game draws where the depth says, which is eight of the ten. */
+		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest) {
+			this(pipeline, element, program, alphaTest, LayeringTransform.NO_LAYERING);
+		}
 
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
 		private PackProgram.EntityElement asked() {
 			return new PackProgram.EntityElement(this.element, this.program, this.alphaTest);
+		}
+
+		/**
+		 * The model view the game would have handed this draw, or null for the frame's own camera.
+		 * <p>
+		 * Taken from {@code RenderSystem} and modified here exactly as {@code RenderType.prepare}
+		 * does it, rather than reproduced: the bias is a tenth of a per mille either way, the
+		 * formula belongs to the projection in force, and a copy of it here would be a second answer
+		 * to drift from. The stack holds the level's own view for the whole of the level render,
+		 * {@code LevelRenderer.render} pushing it before the features are prepared and popping it
+		 * after they have executed, so what is read at the draw is what was read at the prepare.
+		 * <p>
+		 * What it is for: four of the ten pieces below are drawn a hair towards the camera so that
+		 * they do not fight the skin they cover. Without it every armour piece on every player and
+		 * every mob is drawn at the depth of the body underneath, which is the one thing in this
+		 * family that is visible from across a room.
+		 */
+		private Matrix4fc modelView() {
+			Consumer<Matrix4f> modifier = this.layering.getModifier();
+			if (modifier == null) {
+				return null;
+			}
+
+			Matrix4f matrix = RenderSystem.getModelViewMatrixCopy();
+			modifier.accept(matrix);
+
+			return matrix;
 		}
 	}
 
@@ -179,13 +224,16 @@ public final class EntityDraw {
 	static {
 		put(new Element(RenderPipelines.ENTITY_SOLID, "solid", ENTITIES, AlphaTest.OFF));
 		put(new Element(RenderPipelines.ENTITY_SOLID_Z_OFFSET_FORWARD, "solid_offset", ENTITIES,
-				AlphaTest.OFF));
+				AlphaTest.OFF, LayeringTransform.VIEW_OFFSET_Z_LAYERING_FORWARD));
 		put(new Element(RenderPipelines.ENTITY_CUTOUT, "cutout", ENTITIES, CUTOUT));
 		put(new Element(RenderPipelines.ENTITY_CUTOUT_CULL, "cutout_cull", ENTITIES, CUTOUT));
-		put(new Element(RenderPipelines.ENTITY_CUTOUT_Z_OFFSET, "cutout_offset", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.ENTITY_CUTOUT_Z_OFFSET, "cutout_offset", ENTITIES, CUTOUT,
+				LayeringTransform.VIEW_OFFSET_Z_LAYERING));
 		put(new Element(RenderPipelines.ENTITY_CUTOUT_DISSOLVE, "cutout_dissolve", ENTITIES, CUTOUT));
-		put(new Element(RenderPipelines.ARMOR_CUTOUT_NO_CULL, "armor", ENTITIES, CUTOUT));
-		put(new Element(RenderPipelines.ARMOR_DECAL_CUTOUT_NO_CULL, "armor_decal", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.ARMOR_CUTOUT_NO_CULL, "armor", ENTITIES, CUTOUT,
+				LayeringTransform.VIEW_OFFSET_Z_LAYERING));
+		put(new Element(RenderPipelines.ARMOR_DECAL_CUTOUT_NO_CULL, "armor_decal", ENTITIES, CUTOUT,
+				LayeringTransform.VIEW_OFFSET_Z_LAYERING));
 		put(new Element(RenderPipelines.END_CRYSTAL_BEAM, "crystal_beam", ENTITIES, CUTOUT));
 		put(new Element(RenderPipelines.ITEM_CUTOUT, "item", ENTITIES, CUTOUT));
 	}
@@ -350,7 +398,7 @@ public final class EntityDraw {
 			return false;
 		}
 
-		if (this.drawing != program && !begin(device, program, prepared)) {
+		if (this.drawing != program && !begin(device, element, program, prepared)) {
 			return false;
 		}
 
@@ -380,7 +428,8 @@ public final class EntityDraw {
 	 *
 	 * @return whether the pass was opened, and false leaves the draw to the game
 	 */
-	private boolean begin(GpuDevice device, EntityProgram program, PreparedRenderType prepared) {
+	private boolean begin(GpuDevice device, Element element, EntityProgram program,
+			PreparedRenderType prepared) {
 		end();
 		this.owner.beginFrame();
 		if (!this.owner.openTargets(device)) {
@@ -392,7 +441,10 @@ public final class EntityDraw {
 					+ "would reach the screen yet");
 		}
 
-		RenderPipeline pipeline = program.prepare(device);
+		// The matrix belongs to the RUN and not to the draw, which is what makes it settleable here:
+		// the depth nudge is the render type's and every draw of a run is one piece of the table, so
+		// the whole run shares the one the piece carries. Written into the block a few lines down.
+		RenderPipeline pipeline = program.prepare(device, element.modelView());
 		if (pipeline == null) {
 			return refuse("the program refused to prepare, which it says on its own line above");
 		}

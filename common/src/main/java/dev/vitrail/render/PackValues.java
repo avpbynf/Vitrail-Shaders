@@ -163,10 +163,13 @@ public final class PackValues {
 	 * Which model view the next block is written for: the pass's own, or null for the frame's. Set
 	 * beside the convention and answering the same kind of question, "where does this pass draw".
 	 * <p>
-	 * Null for everything but the sky. The game puts the sun, the moon and the stars where they
-	 * belong by pushing a rotation onto its own stack, so a sky pass hands that matrix in here; see
+	 * Null for the terrain, and set by the two families the game hands a matrix of its own to. The
+	 * sky is the loud one: the game puts the sun, the moon and the stars where they belong by
+	 * pushing a rotation onto its own stack, so a sky pass hands that matrix in here; see
 	 * {@link dev.vitrail.uniform.ViewSource#passModelView} for what answering it with the camera's
-	 * would do.
+	 * would do. The entities are the quiet one: four of the ten pieces are drawn a hair towards the
+	 * viewer so that an armour piece does not fight the skin it covers, and that hair is a
+	 * modification of this matrix and of nothing else.
 	 */
 	public void modelView(Matrix4fc matrix) {
 		this.state.passModelView(matrix);

@@ -31,6 +31,11 @@ public interface ViewSource {
 	 * get a direction in world space out of a vertex the game placed. Answer the two with one matrix
 	 * and the rotation cancels itself: the sun stops moving and sits at noon all night.
 	 * <p>
+	 * The entities are the second family to set one, and by a far smaller amount. The game draws an
+	 * armour piece, a decal and two offset pieces with the camera scaled a hair towards the viewer,
+	 * so that they do not fight the depth of the body they cover; it is the same matrix modified,
+	 * not a matrix of its own, and it is applied here because that is where the game applies it.
+	 * <p>
 	 * Set by the pass before it writes its block, like the depth convention beside it, and answered
 	 * with the camera's whenever a pass has set nothing. What a pass hands in is the matrix the game
 	 * built, and what comes back out carries the walk bob on top of it, for the reason the

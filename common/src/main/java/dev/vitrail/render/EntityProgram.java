@@ -15,6 +15,8 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 
+import org.joml.Matrix4fc;
+
 import java.util.List;
 import java.util.Set;
 
@@ -120,9 +122,15 @@ final class EntityProgram {
 				bound, values, load, DefaultVertexFormat.ENTITY, writes, targets, chainRuns));
 	}
 
-	/** @see GeometryProgram#prepare */
-	RenderPipeline prepare(GpuDevice device) {
-		return this.body.prepare(device, null);
+	/**
+	 * @param modelView the matrix the game would have drawn this piece with, which is the frame's
+	 *                  camera for six of the ten pieces and null for them. The four that carry a
+	 *                  layering transform hand in the camera with the transform applied, so that a
+	 *                  piece the game nudges towards the viewer is nudged here too
+	 * @see GeometryProgram#prepare
+	 */
+	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView) {
+		return this.body.prepare(device, null, modelView, null);
 	}
 
 	/**

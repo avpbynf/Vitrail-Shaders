@@ -144,19 +144,22 @@ public final class ViewMatrices implements ViewSource {
 			this.seeded = true;
 		}
 
-		// The pass matrix and the pass colour go back to the camera's and to white here, and the
-		// boundary is the only place they can: they are set by whoever is about to write a block and
-		// nobody owes them a clear afterwards. A geometry program that has locked broken never
+		// The pass matrix and the pass colour go back to the camera's and to white here, because
+		// they are set by whoever is about to write a block and nobody owes them a clear
+		// afterwards. A geometry program that has locked broken never
 		// reaches its writeBlock, so the last matrix any pass set, which is the moon's on a frame
 		// that drew the sky, would stand in for the camera's in everything read after it, the
 		// decoded dump first of all.
 		//
 		// Here and not beside the two things FrameState clears at the same boundary, which are
 		// cleared on both its paths: a frame with no level returns before this is reached, and
-		// nothing draws in one, so there is nothing for a stale matrix to reach. The render stage is
-		// the third value a pass sets and is deliberately NOT dropped here: the chain already puts
-		// it back to NONE before it writes its own blocks, so the only reader left holding a stale
-		// one is the decoded dump, and that is said where the dump is taken.
+		// nothing draws in one, so there is nothing for a stale matrix to reach. The chain drops
+		// these same two again before it writes its own blocks, and that is not this one written
+		// twice: this one covers whatever reads between the boundary and the first geometry pass,
+		// and that one covers the composites, which run after every geometry family has written its
+		// own. The render stage is the third value a pass sets and is dropped by the chain alone,
+		// the only reader left holding a stale one being the decoded dump, and that is said where
+		// the dump is taken.
 		this.passSet = false;
 		this.passColour.set(1.0F, 1.0F, 1.0F, 1.0F);
 
