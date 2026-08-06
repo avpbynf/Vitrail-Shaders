@@ -54,10 +54,11 @@ final class PackDump {
 	 * the render stage one. All three are set by whoever is about to write a block, and this is taken
 	 * as the frame opens, before any pass has written one. The matrix and the colour therefore read
 	 * back as the camera's and as white, which is what the frame boundary leaves; the render stage
-	 * reads back as whatever was set last, which is {@code NONE} in any frame the chain ran in, since
-	 * the chain puts it there before its own blocks. So the six pieces of the sky dump alike on
-	 * exactly what tells them apart, and so do the three chunk passes. Everything else is the named
-	 * program's own.
+	 * reads back as whatever the last block of the frame before set, and that is NOT the chain's
+	 * {@code NONE}, whatever the order of a frame suggests: the shadow stage draws at the end of a
+	 * frame for the next one, after the chain has run, so a dump of the sky's disc comes out at
+	 * stage 17, measured in game. So the six pieces of the sky dump alike on exactly what tells them
+	 * apart, and so do the three chunk passes. Everything else is the named program's own.
 	 *
 	 * @param terrain the pack's terrain programs, empty until they are read, and first on purpose:
 	 *                they are answered from a different catalogue, their {@code of_ModelViewMatrix}
