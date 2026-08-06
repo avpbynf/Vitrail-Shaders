@@ -286,10 +286,19 @@ final class GeometryProgram {
 		// frame, and because what it costs is invisible: the pass then draws exactly as it did
 		// before the mask existed, and it is Bliss's albedo that pays for it.
 		if (owns && pass.covers() && !this.covers) {
-			Vitrail.logger().warn("{} declares {} fragment outputs against {} draw buffers, so there "
-					+ "is no rank left for a coverage mask: draw buffer nought stays on the game's "
-					+ "target and the scene seed keeps painting the whole of it", this.path, outputs,
-					writes.size());
+			// Split by cause, because they are not one defect and the numbers belong to only one of
+			// them: a stage the translation could not place the mask in has ranks to spare, and a
+			// line reading them out would send the next diagnosis at the draw buffers.
+			if (notes.coverage() == 1) {
+				Vitrail.logger().warn("{} declares {} fragment outputs against {} draw buffers, so "
+						+ "there is no rank left for the coverage mask of the {} pass: draw buffer "
+						+ "nought stays on the game's target and the scene seed keeps painting the "
+						+ "whole of it", this.path, outputs, writes.size(), pass.name());
+			} else {
+				Vitrail.logger().warn("{} could not be given a coverage mask by the translation, so "
+						+ "draw buffer nought of the {} pass stays on the game's target and the scene "
+						+ "seed keeps painting the whole of it", this.path, pass.name());
+			}
 		}
 
 		this.targets = targets;
@@ -986,8 +995,8 @@ final class GeometryProgram {
 		AlphaTest alphaTest = this.loaded.alphaTest();
 		if (alphaTest.tests() && fragment.notes().alphaEpilogue() == 0) {
 			Vitrail.logger().warn("This pass discards at {} {} and the program could not be given the "
-					+ "test, so nothing is discarded at all", alphaTest.function(),
-					alphaTest.reference());
+					+ "test, so nothing beyond the pack's own discards is thrown away",
+					alphaTest.function(), alphaTest.reference());
 		}
 
 		// Split by what the mesh really answers: mc_Entity comes out of the fifth element and is not

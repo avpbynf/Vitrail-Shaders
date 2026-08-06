@@ -216,7 +216,8 @@ public final class TargetPlan {
 			// A shadow composite runs over the shadow targets, with a flip counter of its own, so
 			// its draw buffers name shadowcolor and never colortex. Left in the walk it would
 			// allocate colour targets on their indices, draw a full screen pass over them and move
-			// the half every later pass reads. It belongs to the shadow stage, which nothing runs.
+			// the half every later pass reads. It belongs to a stage of its own, after the shadow
+			// map is drawn and over its colour buffers, and this engine has no such stage.
 			if (ProgramNames.shadowComposite(family)) {
 				draft.shadowComposites.add(name);
 				continue;
@@ -570,9 +571,10 @@ public final class TargetPlan {
 		}
 
 		if (!draft.shadowComposites.isEmpty()) {
-			notes.add("shadow composites skipped, they draw over the shadow targets and nothing "
-					+ "draws a shadow map yet, so their draw buffers name no colour target of this "
-					+ "place: " + draft.shadowComposites);
+			notes.add("shadow composites skipped, they draw full screen over the shadow colour "
+					+ "buffers on a flip counter of their own and this engine runs no stage there, "
+					+ "so their draw buffers name no colour target of this place: "
+					+ draft.shadowComposites);
 		}
 
 		// In frame order rather than sorted, so that the line reads the way the chain runs, and
