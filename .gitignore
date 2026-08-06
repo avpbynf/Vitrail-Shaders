@@ -46,6 +46,12 @@ replay_pid*.log
 /.*/
 !/.github/
 
+# Pages being written. A page moves out of here and into docs/ when it has been read back
+# against the source and stops moving; until then it is a draft, and publishing a draft is how
+# a wrong mechanism gets quoted back at you six weeks later. Ignored rather than deleted so the
+# matter survives being wrong.
+/docs/in-progress/
+
 # Shader packs used for testing are not redistributable and must never be committed.
 *.zip
 
