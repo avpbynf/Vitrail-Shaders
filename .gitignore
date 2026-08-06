@@ -36,14 +36,15 @@ replay_pid*.log
 *.hprof
 
 # Working notes, planning and measurement work. Useful to have next to the code,
-# but none of it is part of what the project ships.
-CLAUDE.md
-NOTES.md
-ROADMAP.md
-notes/
-notes-fusion/
-research/
-.claude/
+# but none of it is part of what the project ships. Matched by shape rather than
+# listed by name: any Markdown at the root that is not one of the three published
+# pages, and any dotted directory that is not the workflow definitions.
+/*.md
+!/README.md
+!/INSTALL.md
+!/CONTRIBUTING.md
+/.*/
+!/.github/
 
 # Shader packs used for testing are not redistributable and must never be committed.
 *.zip
