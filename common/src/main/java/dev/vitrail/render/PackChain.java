@@ -292,21 +292,40 @@ public final class PackChain {
 			// Where the pack is known, rather than over the whole folder before one was chosen. The
 			// same reading answers both questions asked of a pack before anything is translated:
 			// what is in it, and what it says it cannot be drawn without.
-			LoadedPack opened = PackLoader.load(pack);
-			PackReport.log(opened);
+			//
+			// Never fatal, and that is the whole reason for the catch. This reading is a report and
+			// a check, not the drawing: the report used to swallow its own failures and the pack was
+			// prepared anyway, and letting one reach the catch below would turn a diagnosis that
+			// could not be taken into a pack that is not drawn.
+			LoadedPack opened = null;
+			try {
+				opened = PackLoader.load(pack);
+			} catch (IOException | RuntimeException e) {
+				Vitrail.logger().warn("{} could not be read for its report, so the pack is prepared "
+						+ "without one and without its feature check", pack.getFileName(), e);
+			}
 
-			// Refused by name, and before a single program is TRANSLATED: the reading above has
-			// already enumerated them and expanded their includes, which is the cheap half. This
-			// engine serves no feature flag at all and defines no IRIS_FEATURE_, which is the honest
-			// answer and the one that keeps a pack on its fallback path; a pack that says it
-			// REQUIRES one is asking for something that is not here. Left unread, the refusal came
-			// much later and named whichever sampler the missing feature stood behind, which is a
-			// wrong diagnosis rather than an incomplete one.
+			if (opened != null) {
+				PackReport.log(opened);
+			}
+
+			SettingsLayers.Resolved settings = open(gameDirectory, pack);
+
+			// Refused by name, and before a single program is TRANSLATED. This engine serves no
+			// feature flag at all and defines no IRIS_FEATURE_, which is the honest answer and the
+			// one that keeps a pack on its fallback path; a pack that says it REQUIRES one is asking
+			// for something that is not here. Left unread, the refusal came much later and named
+			// whichever sampler the missing feature stood behind, which is a wrong diagnosis rather
+			// than an incomplete one.
+			//
+			// After open() and not before, so that the session is published and the settings screen
+			// shows the pack it is refusing rather than an empty list, which is where the two other
+			// refusals of this method already stand.
 			//
 			// A deliberate divergence, and worth naming because it is one: Iris refuses a required
 			// flag only when the name is unknown to it or the hardware cannot serve it, so it draws
 			// Reverie where this does not. It can afford to, having built all four.
-			List<String> required = opened.properties().requiredFeatures();
+			List<String> required = opened == null ? List.of() : opened.properties().requiredFeatures();
 			if (!required.isEmpty()) {
 				disabled = true;
 				String names = String.join(", ", required);
@@ -316,8 +335,6 @@ public final class PackChain {
 						+ "nothing is drawn", opened.packName(), names);
 				return;
 			}
-
-			SettingsLayers.Resolved settings = open(gameDirectory, pack);
 			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());
 			// Reserved keys rather than options: no pack declares a setting under any of these
 			// names, and each names something this mod does rather than a value the pack has. The

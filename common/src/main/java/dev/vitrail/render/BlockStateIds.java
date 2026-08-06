@@ -129,8 +129,10 @@ public final class BlockStateIds {
 		// more states than the pack wrote: the declaration paints the whole block where it meant to
 		// paint the half of it that is lit, or wet, or open.
 		if (!widened.isEmpty()) {
-			// Filters and not declarations: one declaration naming two absent properties is two
-			// lines here, and calling them declarations would make the count disagree with the file.
+			// Filters and not declarations: one declaration naming two absent properties is two lines
+			// here. The set is keyed by the id, the name and the property, so two declarations that
+			// agree on all three fold into one line; naming them declarations would be wrong more
+			// often than naming them filters is.
 			Vitrail.logger().warn("{} filters name a property their block has not got, so the "
 					+ "declarations that carry them bind more states than the pack named: {}",
 					widened.size(), widened);

@@ -154,8 +154,9 @@ public final class ViewMatrices implements ViewSource {
 		// Here and not beside the two things FrameState clears at the same boundary, which are
 		// cleared on both its paths: a frame with no level returns before this is reached, and
 		// nothing draws in one, so there is nothing for a stale matrix to reach. The render stage is
-		// the third value of a pass and is deliberately NOT dropped: a full screen pass reads it
-		// too, and what it should read when no geometry has run is a question this does not answer.
+		// the third value a pass sets and is deliberately NOT dropped here: the chain already puts
+		// it back to NONE before it writes its own blocks, so the only reader left holding a stale
+		// one is the decoded dump, and that is said where the dump is taken.
 		this.passSet = false;
 		this.passColour.set(1.0F, 1.0F, 1.0F, 1.0F);
 

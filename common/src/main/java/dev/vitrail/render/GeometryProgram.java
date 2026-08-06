@@ -293,10 +293,14 @@ final class GeometryProgram {
 			// draw buffers than its fragment stage declares outputs, and the numbers describe that
 			// and nothing else.
 			if (notes.coverage() == 1) {
+				// Present tense, and it is worse than a lost mask: the translation was asked for one
+				// by the family and placed it one rank above the outputs, so the fragment writes it
+				// at a rank this attachment list fills with a colour target of the pack. Nothing
+				// downgrades on that side, and what the pack meant to write there is written over.
 				Vitrail.logger().warn("{} writes {} draw buffers where the {} pass declares {} "
-						+ "fragment outputs, so the coverage mask would land on a rank one of those "
-						+ "draw buffers already holds: draw buffer nought stays on the game's target "
-						+ "and the scene seed keeps painting the whole of it", this.path,
+						+ "fragment outputs, so the coverage mask sits at a rank one of those draw "
+						+ "buffers holds and is written over it: draw buffer nought stays on the "
+						+ "game's target and the scene seed keeps painting the whole of it", this.path,
 						writes.size(), pass.name(), outputs);
 			} else {
 				Vitrail.logger().warn("{} could not be given a coverage mask by the translation, so "
