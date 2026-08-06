@@ -10,7 +10,6 @@ rather than guess.
 | Water is missing, or looks like the game's | [The water](#the-water) |
 | A hard straight line across the sky near the horizon | [The horizon line](#the-horizon-line) |
 | Mobs, particles or the held item look flat and unlit | [Anything that moves](#anything-that-moves) |
-| The sun is in one place, the shadows point another way | [Sun and shadows disagree](#sun-and-shadows-disagree) |
 | The sky turns into a flat grey sheet at sunrise | [The sky goes flat](#the-sky-goes-flat) |
 | Blocks wave, glow or cast wrong shadows after switching packs | [You just changed packs](#you-just-changed-packs) |
 | The terrain is uniformly too dark | [Terrain that is too dark](#terrain-that-is-too-dark) |
@@ -90,17 +89,23 @@ outside the chain entirely.
 
 ## The horizon line
 
-**A straight edge across the sky, with a paler band under it, more visible the further you can
-see.** This is a property of the game rather than of your pack.
+**A straight edge across the sky, with a paler band under it, wherever the distant horizon is
+clear.** This is a property of the game rather than of your pack.
 
 The game builds its sky as two discs, one above the camera and one below, with a fixed radius. That
 leaves a wedge near the horizon covered by nothing, and above sea level the lower disc is not drawn
 at all, so *everything* below the upper disc's rim is uncovered. Whatever fills that wedge is what
-you see, and a straight rim makes a straight line.
+you see, and a straight rim makes a straight line. It does not take a mountain: anywhere the terrain
+does not stand in the way will do.
 
 Vitrail fills it the way the reference implementation does, by drawing geometry the game does not
 have: an inverted octagonal cone between the two planes, drawn with the pack's own basic sky
 program. If you see the line, that geometry is not reaching your pack's shader.
+
+There are two cases where it is deliberately not drawn, and the log says so in the second: a pack
+that switches the sky disc off has taken away the pass the cone rides in, and a frame where the
+world's own geometry has not marked the pixels it wrote gets no cone, because one drawn there would
+cut the ground out of the picture instead.
 
 The full mechanism is in [Sky and shadows](sky-and-shadows.md#the-horizon-gap).
 
@@ -168,23 +173,29 @@ than better.
 A short reference, if you are writing a pack or wondering why yours is treated differently.
 
 - **Where a pack keeps its programs is not fixed.** Sildur's keeps them at the root of `shaders/`
-  rather than in a dimension folder. A dimension folder *replaces* the root rather than layering
-  over it, so a pack shipping two programs in one has exactly two programs there.
+  rather than in a dimension folder. A dimension folder *replaces* the base set rather than layering
+  over it - the full rule, including what an empty folder means, is in
+  [translation.md](translation.md).
 - **A pack need not ship the program a family asks for.** Sildur's ships no terrain, lit-textured,
   entity or hand program; those reach its textured program through the fallback tree, several
   levels deep. BSL ships no lit-textured, particle, item, line or lightning program.
-- **Target zero is not special to every pack.** Sildur's allocates none at all, and Bliss seeds the
-  game's image into a different target. Anything that assumes target zero is wrong for them.
+- **Target zero is not special to every pack.** The target the game's image is seeded into is the
+  first draw buffer of whatever program ends up drawing the terrain, and for Sildur's that is the
+  textured gbuffers program, whose draw buffers start at the fifth target. Anything that assumes
+  target zero is wrong for it.
 - **A pack can supply its own textures**, including a three-dimensional volume as a raw blob, as
   Mellow does. Since the backend refuses a declared three-dimensional sampler, the volume is laid
   flat onto a two-dimensional atlas and reads are rewritten to interpolate two slices.
 - **A pack can ask for an unusual shadow buffer format.** Mellow asks for a single-channel one,
   which is why the shadow pipeline's colour state is built from the attachment rather than
   hardcoded.
-- **A pack can ask the engine not to draw the sun and the moon** because it draws them itself.
-  Mellow does. That request is honoured. A related request to switch clouds off is deliberately not
-  honoured, because no program here draws clouds yet - obeying it would take the game's clouds away
-  and put nothing in their place.
+- **A pack can ask the engine not to draw a piece of the sky** because it draws that piece itself,
+  inside one of its own programs. Four such requests are honoured - the sun, the moon, the stars and
+  the sky disc - and honouring the last two is a **deviation from both references**, which take out
+  only the sun and the moon. It costs two packs of the corpus the stars the references leave them,
+  and the NOTICE says so. The fifth request in that family, the one about clouds, is deliberately not
+  honoured: no program here draws clouds yet, so obeying it would take the game's clouds away and put
+  nothing in their place.
 - **Settings are declared in the GLSL, not in a manifest**, and packs disable whole programs from
   their properties file using preprocessor conditions on their own settings. Both Complementary
   packs do this, which is why a flat read of that file reports passes as active that the pack

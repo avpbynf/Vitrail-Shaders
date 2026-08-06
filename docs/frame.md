@@ -18,6 +18,14 @@ The world render is one sequence, and the points a pack cares about are the gaps
 7. outlines
 8. the translucent chunk group
 9. **after translucent blocks**
+10. translucent features drawn after the terrain, then **after translucent particles**
+
+Then the world render ends, and one more seam comes after all of them: **after level**, which fires
+once the level renderer is done and before anything else touches the main target.
+
+Two of those names read the wrong way round, which is worth fixing in your head once: the features
+are drawn *before* the water, so the event named after the features fires before the one named after
+the blocks.
 
 The terrain renderer does not move any of this. Every decision below is anchored to one of those
 points, and a pass placed at the wrong one produces an image that is plausible and wrong rather
@@ -25,11 +33,13 @@ than an error.
 
 ## The chain is cut in two around the translucent world
 
-A pack's passes are not all run at the same moment. The chain is split:
+A pack's passes are not all run at the same moment. The chain is split, and each half hangs off one
+of the seams above:
 
-- the setup, begin and prepare stages, the seed, and the deferred stages run **before** the world's
-  translucent geometry;
-- the composite stages and the final pass run **after** it.
+- the setup, begin and prepare stages, the seed, and the deferred stages run at **after opaque
+  features**, which is before the world's translucent geometry;
+- the composite stages and the final pass run at **after level**, once the whole world render is
+  done.
 
 That split is what lets the pack's own translucent geometry - water, glass - be drawn into the
 pack's targets on the halves that the deferred stages have already written, which is exactly what
@@ -94,9 +104,12 @@ accident to debug.
 
 ### A copy is not a conversion
 
-Targets are copied only where formats match exactly. The size and usage checks pass on any two
-textures of the same width, and the backend then reinterprets the bits - the game's colour target
-and a typical pack target are both thirty-two bits per pixel and hold completely different things.
+Targets are copied only between two halves of one doubled target, where the format is the same on
+both sides by construction. Copying between two *different* formats passes every check and hands
+back nonsense: the texture copy reinterprets bits rather than converting them, and the only thing
+checked on the way in is that both formats carry a colour aspect. The game's colour target is
+eight-bit RGBA and a typical pack target is a packed float triple; both are thirty-two bits per
+pixel and hold completely different things.
 
 This is why the game's image is brought into a pack target by a **full-screen draw** and never by a
 texture copy.
@@ -114,9 +127,11 @@ A pack reads scene depth under several names, and they are not interchangeable:
 Aliasing the pre-translucent copy onto the ordinary depth is a mistake with no visible signature:
 the effect still appears, still has the right shape, and reads the wrong distance.
 
-All of these are converted from the reversed-Z convention the game renders with into the legacy
-convention packs expect. The world itself keeps being drawn in reversed Z, so its depth precision
-is unaffected; only the copy handed to the pack is converted.
+The two scene copies are converted from the reversed-Z convention the game renders with into the
+legacy convention packs expect. The world itself keeps being drawn in reversed Z, so its depth
+precision is unaffected; only the copy handed to the pack is converted. The shadow map is not
+converted at all - it is *stored* in the convention the pack reads, which comes to the same thing by
+another road.
 
 ## The seed, and why anything not drawn through the pack looks flat
 
@@ -142,8 +157,9 @@ drew belongs to the pack and a pixel it did not belongs to the seed. Comparing a
 depth - one the game has since cleared - makes the mask wrong everywhere, and things the game drew
 in front of the terrain vanish.
 
-Which target is seeded is decided by following the fallback tree, not by naming target zero. Some
-packs allocate no target zero at all.
+Which target is seeded is the first draw buffer of the pass that draws the terrain, resolved through
+the fallback tree, and it is not always target zero: one pack of the corpus serves its terrain
+through the textured gbuffers program, whose draw buffers start at the fifth target.
 
 ## Where the seed does not reach
 

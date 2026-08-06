@@ -2,8 +2,9 @@
 
 ## Branches
 
-`main` is the only long-lived branch and it stays buildable. Work on a topic branch and
-merge back when it compiles and runs. There is no release branch.
+`main` is the only long-lived branch and it stays buildable. Work on a topic branch, then rebase it
+onto `main` and fast-forward. The history is linear and carries no merge commit at all. There is no
+release branch.
 
 Nothing has been released and there are no tags yet, so there is no naming convention to
 follow. The target Minecraft version is in the artifact name.
@@ -19,7 +20,7 @@ Add fullscreen pass hook for the Vulkan backend
 Fix binding allocation colliding on location 7
 ```
 
-No merge commits from `main` into a topic branch, rebase instead. No trailers.
+No trailers.
 
 ## Encoding and text
 
@@ -34,9 +35,8 @@ files with CRLF.
 Java: standard formatting, tabs for indentation to match Minecraft and Sodium sources,
 so that diffs against decompiled code stay readable.
 
-Comments in English, and there are a lot of them: about a quarter of the lines under
-`common/` are comment or javadoc, and that is the intended density rather than an
-accident. A class says what it is for and what goes wrong without it, a line says why it
+Comments in English, and there are a lot of them - the density is deliberate rather than
+accidental. A class says what it is for and what goes wrong without it, a line says why it
 is where it is and what would break if it moved, and a figure says what was measured to
 arrive at it. What is not wanted is the other kind, the comment that restates the line
 below it.
@@ -47,10 +47,13 @@ Where a change lands decides how it can be checked, and the split is worth knowi
 writing anything.
 
 `pack/`, `glsl/` and `uniform/` use no Minecraft class at all. That is deliberate: it lets
-them be compiled and run on their own, outside the game, against a corpus of real packs,
-which is how the translator is held to the 1863 translation units it is measured on and
-how a regression is caught in seconds instead of in a play session. Keep the property. A
+them be compiled and run on their own, outside the game, against a corpus of real packs, which is
+how a translation regression is caught in seconds instead of in a play session. Keep the property. A
 Minecraft import in one of those three packages costs more than it looks.
+
+There is exactly one exception, and it is worth knowing before you try the standalone compile: a
+single file reaches out of the three trees for the logger, and the out-of-game build drops that file
+rather than dragging the rest in behind it.
 
 `render/` has no equivalent and cannot have one: it exists only inside a frame. A change
 there is argued from the code and from the log it produces, and it is worth saying which
@@ -73,14 +76,16 @@ Requires JDK 25. Artifacts land in `build/libs`.
 ## What the build refuses
 
 `gradlew build` is also the check, and it fails on warnings rather than printing them. Not on
-all of them: deprecation is off, because Minecraft and NeoForge deprecate faster than a mod can
-follow and the noise would bury everything else, and so are the category that only ever reports
-annotations missing from a dependency's own jar and the one that asks for a serialVersionUID on
-exceptions nothing serialises.
+all of them: four categories are off. Deprecation, because Minecraft and NeoForge deprecate faster
+than a mod can follow and the noise would bury everything else; annotation processing, which reports
+which processor claimed what and is a property of how the build is wired; the category that only
+ever reports annotations missing from a dependency's own jar; and the one that asks for a
+serialVersionUID on exceptions nothing serialises.
 
-Javadoc is linted for broken references and malformed tags, which matters more here than it would
-elsewhere. The javadoc carries the design, so a reference that no longer resolves is a piece of
-the design lost, and nothing says so until someone goes looking.
+Javadoc is linted for everything but missing comments, so broken references, malformed tags,
+malformed HTML and accessibility all fail the build. That matters more here than it would elsewhere.
+The javadoc carries the design, so a reference that no longer resolves is a piece of the design lost,
+and nothing says so until someone goes looking.
 
 Error Prone runs alongside javac and contributes the checks it rates as errors, the part of its
 catalogue meant to be a bug rather than a preference. Its warnings are worth reading and not
@@ -92,8 +97,8 @@ and the build says so on the way past.
 
 `checkText` covers the two things no compiler sees: a byte order mark, which reaches a GLSL
 compiler as a stray character in front of the version directive and which PowerShell writes
-unless told not to, and typographic punctuation where a straight quote or a plain hyphen is
-meant.
+unless told not to, and typographic punctuation - the en and em dashes, the curly quotes, the
+single-glyph ellipsis and the non-breaking space.
 
 The vendored stareval sources under `uniform/expr/kroppeb/` are left out of the javadoc lint.
 Their javadoc is their author's, and bending borrowed code to this project's taste only makes the

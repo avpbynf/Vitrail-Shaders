@@ -16,6 +16,7 @@ The short version lives in the [README](../README.md) and the install steps in
 | Understand how legacy GLSL reaches a Vulkan GPU | [Translation](translation.md) |
 | Understand when each program runs during a frame | [The frame](frame.md) |
 | Understand the sky and the shadow map | [Sky and shadows](sky-and-shadows.md) |
+| Change a pack's own settings, and know where they are kept | [The settings screen](settings-screen.md) |
 | Work on the engine | [Developing](developing.md) |
 
 ### Going deeper
@@ -39,18 +40,24 @@ Shader packs are written in OpenGL-era GLSL, against an OpenGL-era pipeline. Min
 renders through Vulkan. Those two facts are not compatible, and every design decision here
 follows from how that gap is closed.
 
-Vitrail closes it **once, at load time**. Every GLSL unit a pack ships is rewritten into
-Vulkan GLSL when the pack is selected, then handed to the compiler the game already embeds,
-which turns it into SPIR-V. Nothing is translated while the game is running: by the time the
-first frame is drawn, there is no legacy GLSL left anywhere.
+Vitrail closes it **once per program, before that program draws**. Every GLSL unit a pack ships is
+rewritten into Vulkan GLSL, then handed to the compiler the game already embeds, which turns it into
+SPIR-V. Nothing is translated per frame and nothing is translated twice: once a program has been
+through it, there is no legacy GLSL left behind it.
+
+"Before it draws" rather than "at selection", because the chain is translated when the pack is
+chosen while the programs that draw the world and the sky are translated the first time the place
+they belong to is drawn. A pack is not read again for a dimension it has already been read for.
 
 That choice has consequences worth knowing about, because they explain most of what you will
 observe:
 
-- **Selecting a pack is slow, and drawing with it is not.** The cost is paid in one visible
-  pause instead of being spread across the first minutes of play.
-- **A pack that cannot be translated fails loudly at selection**, not as a corrupt image
-  twenty minutes later. When Vitrail refuses something, the log names it.
+- **The cost is paid up front, not per frame.** Some of it lands at selection, and the rest in the
+  handful of frames after it: pipelines are compiled one per frame on purpose, so that a load is a
+  short fade rather than a three-second freeze. While that lasts, the game's own image is what you
+  see - including for a moment after every resource reload.
+- **A pack that cannot be translated fails loudly**, not as a corrupt image twenty minutes later.
+  When Vitrail refuses something, the log names it.
 - **Uniform and sampler binding is decided up front**, so a pack that asks for something the
   engine does not have gets a documented stand-in rather than undefined memory.
 
