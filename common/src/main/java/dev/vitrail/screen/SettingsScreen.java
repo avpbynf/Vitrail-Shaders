@@ -383,7 +383,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 			// Iris's offers to read the pack again from the screen whose whole subject is which pack
 			// to read. Ours offered it by accident of layout, and it reloaded the pack to answer a
 			// question about a directory listing. The folder is watched instead, see watchFolder.
-			tools.addChild(button(ScreenText.FOLDER, WIDE_BUTTON, this::openFolder));
+			tools.addChild(button(ScreenText.FOLDER, fits(ScreenText.FOLDER), this::openFolder));
 			tools.addChild(settingsButton());
 		} else {
 			// The way out first, and only one of them. Back replaces the view switch rather than
@@ -441,8 +441,23 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	 * paying for it in blank space.
 	 */
 	private int switchWidth() {
-		int widest = Math.max(this.font.width(Component.translatable(ScreenText.TITLE)),
-				this.font.width(Component.translatable(ScreenText.PACKS)));
+		return fits(ScreenText.TITLE, ScreenText.PACKS);
+	}
+
+	/**
+	 * How wide a button has to be to hold the widest of the names it can take, and no wider.
+	 * <p>
+	 * Every label here is translated, so a width written down is one that was chosen by looking at
+	 * the English: right in that language and either cramped or padded out in every other. What the
+	 * button is worth is its text, and nothing else on this row cares how wide it comes out.
+	 * Several names because a button that changes its label must not change its size while it does,
+	 * which would move everything beside it under the hand that is clicking.
+	 */
+	private int fits(String... keys) {
+		int widest = 0;
+		for (String key : keys) {
+			widest = Math.max(widest, this.font.width(Component.translatable(key)));
+		}
 
 		return widest + SWITCH_PADDING;
 	}
