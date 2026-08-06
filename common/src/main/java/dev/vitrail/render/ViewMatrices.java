@@ -149,7 +149,13 @@ public final class ViewMatrices implements ViewSource {
 		// nobody owes them a clear afterwards. A geometry program that has locked broken never
 		// reaches its writeBlock, so the last matrix any pass set, which is the moon's on a frame
 		// that drew the sky, would stand in for the camera's in everything read after it, the
-		// decoded dump first of all. Cleared for the reason CameraBob is cleared, at the same point.
+		// decoded dump first of all.
+		//
+		// Here and not beside the two things FrameState clears at the same boundary, which are
+		// cleared on both its paths: a frame with no level returns before this is reached, and
+		// nothing draws in one, so there is nothing for a stale matrix to reach. The render stage is
+		// the third value of a pass and is deliberately NOT dropped: a full screen pass reads it
+		// too, and what it should read when no geometry has run is a question this does not answer.
 		this.passSet = false;
 		this.passColour.set(1.0F, 1.0F, 1.0F, 1.0F);
 

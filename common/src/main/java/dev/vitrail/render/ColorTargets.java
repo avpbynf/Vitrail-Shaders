@@ -306,10 +306,11 @@ final class ColorTargets {
 			this.brokenWidth = screenWidth;
 			this.brokenHeight = screenHeight;
 			// The notes are printed on their own, one line each and with nothing in front of them,
-			// so this one carries its subject and the size it failed at: the error below is written
-			// where it happened and this is read again much later, beside the notes of the plan.
-			note(this.plan.packName() + " could not allocate its colour targets at " + screenWidth
-					+ "x" + screenHeight + ": " + e.getMessage());
+			// so this one carries its subject: the error below is written where it happened and this
+			// is read again much later, beside the notes of the plan. The size stays out of it on
+			// purpose, note() being deduplicated on the exact text: a window dragged while the
+			// allocation keeps failing would otherwise add one line per size it passed through.
+			note(this.plan.packName() + " could not allocate its colour targets: " + e.getMessage());
 			Vitrail.logger().error("Vitrail could not allocate the colour targets of {} at {}x{}, so "
 					+ "nothing is drawn until the screen is another size", this.plan.packName(),
 					screenWidth, screenHeight, e);

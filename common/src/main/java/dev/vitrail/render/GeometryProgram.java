@@ -286,14 +286,18 @@ final class GeometryProgram {
 		// frame, and because what it costs is invisible: the pass then draws exactly as it did
 		// before the mask existed, and it is Bliss's albedo that pays for it.
 		if (owns && pass.covers() && !this.covers) {
-			// Split by cause, because they are not one defect and the numbers belong to only one of
-			// them: a stage the translation could not place the mask in has ranks to spare, and a
-			// line reading them out would send the next diagnosis at the draw buffers.
+			// Split by cause, and the split is not where the predicate above suggests. The
+			// translation refuses to place a mask at eight outputs, which is the same eight a
+			// pipeline carries, so a stage that is full and a stage that could not be given one are
+			// the same case and both belong below. What is left on this side is a pack writing more
+			// draw buffers than its fragment stage declares outputs, and the numbers describe that
+			// and nothing else.
 			if (notes.coverage() == 1) {
-				Vitrail.logger().warn("{} declares {} fragment outputs against {} draw buffers, so "
-						+ "there is no rank left for the coverage mask of the {} pass: draw buffer "
-						+ "nought stays on the game's target and the scene seed keeps painting the "
-						+ "whole of it", this.path, outputs, writes.size(), pass.name());
+				Vitrail.logger().warn("{} writes {} draw buffers where the {} pass declares {} "
+						+ "fragment outputs, so the coverage mask would land on a rank one of those "
+						+ "draw buffers already holds: draw buffer nought stays on the game's target "
+						+ "and the scene seed keeps painting the whole of it", this.path,
+						writes.size(), pass.name(), outputs);
 			} else {
 				Vitrail.logger().warn("{} could not be given a coverage mask by the translation, so "
 						+ "draw buffer nought of the {} pass stays on the game's target and the scene "

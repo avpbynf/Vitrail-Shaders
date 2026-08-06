@@ -48,6 +48,14 @@ final class PackDump {
 
 	/**
 	 * Takes this frame's dump, if a second has gone by and the line names something that is running.
+	 * <p>
+	 * <strong>Three of the values are not the named pass's, and cannot be.</strong> The model view,
+	 * the modulating colour and the render stage are set by whoever is about to write a block, and
+	 * this is taken as the frame opens, before any pass has written one: the first two read back as
+	 * the camera's matrix and white, which is what the frame boundary leaves, and the third as
+	 * whatever the last block of the frame before set. So the six pieces of the sky dump alike on
+	 * exactly the three numbers that tell them apart, and so do the three chunk passes. Everything
+	 * else is the named program's own.
 	 *
 	 * @param terrain the pack's terrain programs, empty until they are read, and first on purpose:
 	 *                they are answered from a different catalogue, their {@code of_ModelViewMatrix}

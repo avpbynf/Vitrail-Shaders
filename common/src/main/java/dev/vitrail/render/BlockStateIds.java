@@ -64,13 +64,18 @@ public final class BlockStateIds {
 	private static volatile Object2IntMap<BlockState> table = empty();
 
 	/**
-	 * How many tables have been built, which is how a reading taken once can be taken once per pack
-	 * rather than once per process.
+	 * How many tables have been built, which is how a reading taken once can be taken once per
+	 * TABLE rather than once for the whole run.
 	 * <p>
 	 * The two places that report on the mesh, the fluid ids and the light's own cull, are flags of
 	 * the run: a pack changed in a running game left them standing, so the only measurement of the
 	 * session was the first pack's, taken at exactly the moment a second one is what is being
 	 * judged. They compare this number instead of holding a boolean.
+	 * <p>
+	 * A table is built at every load, so the same pack passes through several: entering a world and
+	 * every portal after it go through {@code reloadIfTheWorldMoved}, and so does every Apply of the
+	 * settings screen. Those readings are therefore said again, identical, rather than once. That is
+	 * the price of never missing the one that counts, and it is the cheaper of the two mistakes.
 	 */
 	private static volatile int generation;
 
@@ -124,8 +129,11 @@ public final class BlockStateIds {
 		// more states than the pack wrote: the declaration paints the whole block where it meant to
 		// paint the half of it that is lit, or wet, or open.
 		if (!widened.isEmpty()) {
-			Vitrail.logger().warn("{} declarations filter on a property their block has not got, so "
-					+ "they bind more states than the pack named: {}", widened.size(), widened);
+			// Filters and not declarations: one declaration naming two absent properties is two
+			// lines here, and calling them declarations would make the count disagree with the file.
+			Vitrail.logger().warn("{} filters name a property their block has not got, so the "
+					+ "declarations that carry them bind more states than the pack named: {}",
+					widened.size(), widened);
 		}
 
 		ids.problems().forEach(problem -> Vitrail.logger().warn("{}", problem));

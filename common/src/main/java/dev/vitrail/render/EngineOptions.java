@@ -19,7 +19,7 @@ import java.util.Set;
  * <p>
  * They are kept together, and taken out of the pack's settings in one place, because a name left in
  * would be written into the head of every translated unit as {@code #define screen settings}, which
- * is a plausible identifier in somebody's GLSL. None of the seven collides with a setting any pack
+ * is a plausible identifier in somebody's GLSL. None of the eight collides with a setting any pack
  * of the corpus declares.
  * <p>
  * Every one of them answers a question the picture cannot: which passes ran, which half a target
@@ -58,8 +58,9 @@ final class EngineOptions {
 	 * usually served by the one file and could not otherwise be told apart. The sky answers the same
 	 * way, by element rather than by file: {@code disc}, {@code dark}, {@code stars},
 	 * {@code sunrise}, {@code sun} and {@code moon}, four of the six being one file. One program,
-	 * because the point is to read the file rather than to search it, and because two programs of one
-	 * frame are handed the same values anyway.
+	 * because the point is to read the file rather than to search it, and because what two programs
+	 * of one frame are handed differs in three values that the dump cannot show apart anyway, which
+	 * {@link PackDump#take} spells out.
 	 * <p>
 	 * It is the instrument the milestones are verified with: a value can be non zero, plausible and
 	 * wrong, and the only cheap way to tell is to read the number.
@@ -100,16 +101,16 @@ final class EngineOptions {
 	/**
 	 * Draws the game's sky with the pack's own program. On, like the rest.
 	 * <p>
-	 * A line of its own for the same reason { shadow} is one: it is the one thing that can be
+	 * A line of its own for the same reason {@code shadow} is one: it is the one thing that can be
 	 * turned off to tell a sky the pack drew from a sky the seed carried in, in one line and without
 	 * a rebuild.
 	 */
 	private static final String SKY_KEY = "sky";
 
 	/**
-	 * All eight, for the one place that has to tell them from a setting of the pack: the log that
+	 * All nine, for the one place that has to tell them from a setting of the pack: the log that
 	 * says what the file forces. {@code profile} is the settings layer's own, since that is the side
-	 * that writes it back; the other seven are read here and nowhere else.
+	 * that writes it back; the other eight are read here and nowhere else.
 	 */
 	private static final Set<String> RESERVED = Set.of(SettingsFile.PROFILE_KEY, SEED_KEY,
 			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY, SKY_KEY);
@@ -118,7 +119,7 @@ final class EngineOptions {
 	}
 
 	/**
-	 * What the seven lines this class reads were set to.
+	 * What the eight lines this class reads were set to.
 	 *
 	 * @param seed       whether the game's finished frame is painted where the world would be
 	 * @param passes     what the user asked to run on top of what the pack keeps
