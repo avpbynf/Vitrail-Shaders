@@ -1,0 +1,185 @@
+# Pack compatibility
+
+Start from what you are seeing. Each symptom below names its cause, and says how to confirm it
+rather than guess.
+
+| What you see | Go to |
+| --- | --- |
+| Nothing of the pack is drawn, the world looks vanilla | [The pack was refused](#the-pack-was-refused) |
+| An effect does nothing at all | [The effect never ran](#the-effect-never-ran) |
+| Water is missing, or looks like the game's | [The water](#the-water) |
+| A hard straight line across the sky near the horizon | [The horizon line](#the-horizon-line) |
+| Mobs, particles or the held item look flat and unlit | [Anything that moves](#anything-that-moves) |
+| The sun is in one place, the shadows point another way | [Sun and shadows disagree](#sun-and-shadows-disagree) |
+| The sky turns into a flat grey sheet at sunrise | [The sky goes flat](#the-sky-goes-flat) |
+| Blocks wave, glow or cast wrong shadows after switching packs | [You just changed packs](#you-just-changed-packs) |
+
+**Before anything else, read the log.** The engine announces what it refused, what it could not
+serve, and which program it chose for each pass. Most of what follows is already printed there in
+words at the moment it happened.
+
+## The pack was refused
+
+The engine refuses a pack rather than drawing something wrong with it, and it names the reason.
+
+**A pack can be refused for using a graphics feature this backend does not have.** Compute shaders,
+shader storage buffers, storage images, and one- or three-dimensional samplers are closed by the
+game's own compiler, not by missing effort here. A pack built around voxel lighting or GPU-side
+data structures will hit this.
+
+Of the packs used for testing, Reverie is the one in that position: its final program declares
+named storage blocks. A storage block compiles but never enters a bind group, so the draw would go
+against nothing - and because the final program is what puts the image on screen, the rest of that
+dimension's passes go with it. The client stays up and nothing of the pack is drawn.
+
+One known rough edge: a pack can declare the features it requires, and that declaration is not read
+yet. So the message names a technical symptom - the storage block - rather than the capability the
+pack asked for and did not get. The refusal is correct; the wording is worse than it needs to be.
+
+**A single pass can be refused without the pack being refused.** If a program's fragment stage
+declares an input its vertex stage does not provide, that one program fails to link and the engine
+falls back to the game's rendering for that surface. You get the game's version of that one thing,
+not a hole. Bliss's water and one of Mellow's full-screen passes are both in this case.
+
+## The effect never ran
+
+This is the most common false alarm, and it is worth checking before anything else.
+
+**Packs ship their showcase effects switched off.** Depth of field, motion blur, custom sun discs
+and auto exposure are routinely off in a pack's default settings. Judging "the blur is broken" at
+default settings is judging a pass that never executed.
+
+Two examples from the test packs: BSL gates both depth of field and motion blur off by default, and
+its own sun and moon disc and its exposure path are behind settings it ships commented out. So a
+full-screen darkening on BSL is not exposure, and the sun disc you see is the game's.
+
+**How to confirm:** turn the pack's own setting on, and check the pass appears in the chain listing
+the engine prints when the pack loads. If forcing a setting changes nothing in that listing,
+settings have stopped reaching the pack, which is a different and more serious problem.
+
+## The water
+
+Water has two distinct failure shapes, and they look nothing alike.
+
+**Water missing entirely - you see the lake bed through an empty surface.** Some packs sample a
+colour target before shading the water and discard the fragment when that sample fails a test. If
+the read lands on a buffer that still holds the clear, every water fragment is discarded. BSL does
+this, which is why the translucent chunk pass is run on the buffers the pack's own deferred stage
+wrote rather than on the ones it was given.
+
+**Water that looks like the game's.** That is the fallback working: the pack's water program was
+refused for a stage mismatch, so the game drew its own. The log names it.
+
+Water can also be the game's for a much simpler reason: some packs ship a water program in one
+dimension only. Sildur's has one at the root, so in other dimensions the water is the game's, drawn
+outside the chain entirely.
+
+## The horizon line
+
+**A straight edge across the sky, with a paler band under it, more visible the further you can
+see.** This is a property of the game rather than of your pack.
+
+The game builds its sky as two discs, one above the camera and one below, with a fixed radius. That
+leaves a wedge near the horizon covered by nothing, and above sea level the lower disc is not drawn
+at all, so *everything* below the upper disc's rim is uncovered. Whatever fills that wedge is what
+you see, and a straight rim makes a straight line.
+
+Vitrail fills it the way the reference implementation does, by drawing geometry the game does not
+have: an inverted octagonal cone between the two planes, drawn with the pack's own basic sky
+program. If you see the line, that geometry is not reaching your pack's shader.
+
+The full mechanism is in [Sky and shadows](sky-and-shadows.md#the-horizon-gap).
+
+## Anything that moves
+
+**Mobs, particles, weather and the held item look flat, unlit, and out of place against the
+terrain.** They are drawn by the game and composited in, already tone mapped, carrying the game's
+own lighting rather than the pack's.
+
+Two consequences follow, and both are worth recognising rather than reporting as separate bugs:
+
+- That geometry arrives with **no normal and no material id**, so passes that classify pixels by
+  material misread it. On packs whose water composites work that way, an entity can be treated as a
+  surface to fog.
+- A pack can allocate a colour target for a family that is not drawn through it. BSL allocates one
+  for glowing entities alone, and its deferred pass samples that target - so the chain reads a clear
+  across a whole target.
+
+The engine states at startup which families go through the pack and which still come from the game.
+That line is the authority; this page does not duplicate it.
+
+## Sun and shadows disagree
+
+**The visible sun is in one place and the shadows point somewhere else, by a constant angle.**
+
+Packs offer a setting that tilts the sun's path, and several ship it non-zero by default - BSL and
+Body Camera both do. The pack computes its own light direction from that setting immediately, so
+the lighting tilts. The game's celestial bodies know nothing about it, so they do not move.
+
+The disagreement closes when the sun and moon are drawn through the pack's own textured sky program
+rather than by the game. It affects the sun exactly as much as the moon; it just gets noticed at
+night.
+
+## The sky goes flat
+
+**A flat grey or white sheet across the sky, typically at sunrise or sunset.**
+
+Several packs recognise the game's stars by a vertex colour whose three channels are equal and
+non-zero. Hand such a pack a plain white vertex colour on a sky pass and it takes its star branch,
+painting the whole disc flat. Sildur's and Body Camera both do this.
+
+The engine multiplies the draw's colour modulator into the value the pack reads instead of
+substituting white - which matters because all of the sunrise band's colour lives in that modulator,
+its mesh being white fading to transparent.
+
+## You just changed packs
+
+**Blocks wave when they should not, glow, or cast a shadow that spills past them - and placing then
+breaking a block fixes that spot.**
+
+Block numbers travel on the vertex, and no two packs number blocks alike. Chunk sections meshed
+while the previous pack was loaded keep the numbers they were built with, so a stone wall can land
+inside the new pack's waving-foliage range. Breaking a block rebuilds that section, which is why it
+appears to fix it.
+
+The engine rebuilds the world when the table moves and says so in the log. **No image diagnosis
+after a hot pack change is worth anything until that rebuild has happened** - check for that line
+before investigating anything else.
+
+## Terrain that is too dark
+
+One open case worth naming, because it is easy to misattribute. Packs can set a directive asking
+that ambient occlusion be delivered separately from vertex colour. Where that directive is not
+read, ambient occlusion ends up inside the albedo, and is then reflected, exposed and moved by the
+whole chain - a plausible image that is uniformly too dark. Bliss is the pack where this shows.
+
+It is diagnosed by comparing two builds at the same camera and the same world time on a corner
+where occlusion is strong, not by toggling settings: switching shadows off makes it worse rather
+than better.
+
+## What packs ask for that is unusual
+
+A short reference, if you are writing a pack or wondering why yours is treated differently.
+
+- **Where a pack keeps its programs is not fixed.** Sildur's keeps them at the root of `shaders/`
+  rather than in a dimension folder. A dimension folder *replaces* the root rather than layering
+  over it, so a pack shipping two programs in one has exactly two programs there.
+- **A pack need not ship the program a family asks for.** Sildur's ships no terrain, lit-textured,
+  entity or hand program; those reach its textured program through the fallback tree, several
+  levels deep. BSL ships no lit-textured, particle, item, line or lightning program.
+- **Target zero is not special to every pack.** Sildur's allocates none at all, and Bliss seeds the
+  game's image into a different target. Anything that assumes target zero is wrong for them.
+- **A pack can supply its own textures**, including a three-dimensional volume as a raw blob, as
+  Mellow does. Since the backend refuses a declared three-dimensional sampler, the volume is laid
+  flat onto a two-dimensional atlas and reads are rewritten to interpolate two slices.
+- **A pack can ask for an unusual shadow buffer format.** Mellow asks for a single-channel one,
+  which is why the shadow pipeline's colour state is built from the attachment rather than
+  hardcoded.
+- **A pack can ask the engine not to draw the sun and the moon** because it draws them itself.
+  Mellow does. That request is honoured. A related request to switch clouds off is deliberately not
+  honoured, because no program here draws clouds yet - obeying it would take the game's clouds away
+  and put nothing in their place.
+- **Settings are declared in the GLSL, not in a manifest**, and packs disable whole programs from
+  their properties file using preprocessor conditions on their own settings. Both Complementary
+  packs do this, which is why a flat read of that file reports passes as active that the pack
+  switched off.
