@@ -64,11 +64,31 @@ public final class ShaderPackSource implements AutoCloseable {
 		this.ownedFileSystem = ownedFileSystem;
 	}
 
+	/**
+	 * What a pack is called: the folder's own name, or the archive's without the extension.
+	 * <p>
+	 * The one answer to that question, and it is answered from the path alone, without opening
+	 * anything: a refusal has to name the pack it refuses, and it is often refusing it precisely
+	 * because it could not be opened. Everything that names a pack in the log goes through here, so
+	 * that one startup cannot call the same pack two things two lines apart.
+	 */
+	public static String nameOf(Path packPath) {
+		Path name = packPath.getFileName();
+		if (name == null) {
+			return packPath.toString();
+		}
+
+		String text = name.toString();
+		if (Files.isDirectory(packPath) || !text.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+			return text;
+		}
+
+		return text.substring(0, text.length() - 4);
+	}
+
 	public static ShaderPackSource open(Path packPath) throws IOException {
 		if (Files.isDirectory(packPath)) {
-			Path name = packPath.getFileName();
-			return new ShaderPackSource(name == null ? packPath.toString() : name.toString(),
-					findShadersRoot(packPath), null);
+			return new ShaderPackSource(nameOf(packPath), findShadersRoot(packPath), null);
 		}
 
 		String fileName = packPath.getFileName() == null ? "" : packPath.getFileName().toString();
@@ -78,8 +98,7 @@ public final class ShaderPackSource implements AutoCloseable {
 
 		FileSystem zip = FileSystems.newFileSystem(packPath);
 		try {
-			return new ShaderPackSource(fileName.substring(0, fileName.length() - 4),
-					findShadersRoot(zip.getPath("/")), zip);
+			return new ShaderPackSource(nameOf(packPath), findShadersRoot(zip.getPath("/")), zip);
 		} catch (IOException | RuntimeException e) {
 			zip.close();
 			throw e;

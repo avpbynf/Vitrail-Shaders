@@ -6,6 +6,7 @@ import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.source.PackLoader;
 import dev.vitrail.pack.source.PackReport;
+import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
@@ -310,7 +311,7 @@ public final class PackChain {
 					// the end of this method is what will have the last word. What this line buys is
 					// the failure that belongs to the report alone, in a measurement or a count, and
 					// it is said by the report so that it keeps the report's own prefix.
-					PackReport.couldNotRead(String.valueOf(pack.getFileName()), e);
+					PackReport.couldNotRead(ShaderPackSource.nameOf(pack), e);
 				}
 			}
 
@@ -355,10 +356,11 @@ public final class PackChain {
 			if (!required.isEmpty()) {
 				disabled = true;
 				String names = String.join(", ", required);
-				lastError = pack.getFileName() + " requires " + names
+				String named = ShaderPackSource.nameOf(pack);
+				lastError = named + " requires " + names
 						+ ", and this engine serves no feature flag";
 				Vitrail.logger().error("{} requires {}, and this engine serves none of them, so "
-						+ "nothing is drawn", pack.getFileName(), names);
+						+ "nothing is drawn", named, names);
 				return;
 			}
 
@@ -377,9 +379,10 @@ public final class PackChain {
 					settings.profile(), engine.passes());
 			if (read.isEmpty()) {
 				String where = place.isEmpty() ? "at its root" : "in " + place + " or at its root";
-				lastError = pack.getFileName() + " serves no final with both stages " + where;
+				String named = ShaderPackSource.nameOf(pack);
+				lastError = named + " serves no final with both stages " + where;
 				Vitrail.logger().warn("{} serves no final with both stages {}, nothing to draw",
-						pack.getFileName(), where);
+						named, where);
 				return;
 			}
 
