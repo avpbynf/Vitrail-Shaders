@@ -56,16 +56,22 @@ public final class ChainPlan {
 			List.of("gbuffers_skybasic", "gbuffers_skytextured", "gbuffers_clouds");
 
 	/**
-	 * Every geometry program asked for by name rather than by a pass of the renderer, walked into the
-	 * shared table so that whoever holds a name from the game finds an answer under it.
+	 * Every geometry program asked for by the name the format gives it rather than by a pass of the
+	 * renderer, walked through the fallback tree and into the shared table.
 	 * <p>
-	 * <strong>A program left out of this list is not half served, it is silently unanswered.</strong>
-	 * The table is only ever filled by these walks, so {@link #geometryOf} answers empty for a name
-	 * nothing walked, and empty is indistinguishable from the ordinary case of a pack declaring no
-	 * draw buffer on its geometry. Measured on the corpus in August 2026 with the entities missing
-	 * from this list: seven packs of eight answered empty and their entity programs wrote one output
-	 * where the pack had asked for four, with nothing anywhere saying so. The eighth answered only
-	 * because its entities fall back on the very file that serves its terrain.
+	 * <strong>What lands in the table is the RESOLVED program and never the name walked for.</strong>
+	 * A caller asking under the name it wanted is answered empty wherever the tree led elsewhere,
+	 * which is five of the corpus's twenty-five places for the entities alone: it has to ask under
+	 * what {@code ProgramResolver} really served, as every family here does.
+	 * <p>
+	 * <strong>A name left out of this list is not half served, it is silently unanswered.</strong>
+	 * Nothing else fills the table, so {@link #geometryOf} answers empty for a program no walk
+	 * reached, and empty is indistinguishable from the ordinary case of a pack declaring no draw
+	 * buffer on its geometry. Measured on the corpus in August 2026 with the entities missing from
+	 * this list: seven packs of eight answered empty, and their entity programs wrote a single output
+	 * where four of them had asked for two, three and four draw buffers, with nothing anywhere saying
+	 * so. The eighth answered, and only because its entities fall back on the very program that
+	 * serves its terrain, which the walk above it had already put in.
 	 */
 	private static final List<String> NAMED_PROGRAMS = Stream
 			.concat(SKY_PROGRAMS.stream(), Stream.of("gbuffers_entities"))
@@ -87,15 +93,16 @@ public final class ChainPlan {
 	 * <p>
 	 * One table for every family rather than one per family, which is what lets a family that does
 	 * not exist yet ask the same question: the terrain asks it three times, the sky three times, and
-	 * the entities once per file that serves them, which is once, their ten pieces being one program
-	 * name. What differs between families is only how they
-	 * reach a key, and that is the two tables below plus {@link #geometryOf} for whoever needs
-	 * neither.
+	 * the entities once per program that serves them, which is once, their ten pieces being one name.
+	 * What differs between families is only how they reach a key, and that is the two tables below
+	 * plus {@link #geometryOf} for whoever needs neither.
 	 * <p>
-	 * <strong>Nothing is in it that a walk did not put there</strong>, and the walks are
-	 * {@code terrainKeysOf} and {@code namedKeysOf} and nothing else. A family whose program is in
-	 * neither list asks this table and is answered empty, which reads exactly like a pack that
-	 * declared no draw buffer.
+	 * <strong>Nothing is in it that a walk did not put there</strong>, and there are two walks,
+	 * {@code terrainKeysOf} and {@code namedKeysOf}. Which of the two put a key in does not matter to
+	 * whoever reads it, and it is not always the family's own: a pack whose entities fall back on the
+	 * program that serves its terrain is answered by the terrain's walk. What matters is that a
+	 * program neither walk reached is answered empty, which reads exactly like a pack that declared
+	 * no draw buffer.
 	 */
 	private final Map<Key, Pass> attachments;
 
@@ -259,9 +266,15 @@ public final class ChainPlan {
 
 		Seed seed = seedOf(plan, resolver, notes);
 
-		// The terrain alone, and leaving the sky out is deliberate rather than an oversight: a plan
-		// is built per place, and the sky is drawn in some of them and not others. The reason in
-		// full, with what counting it was measured to silence, is at the verdict that depends on it.
+		// The terrain alone, and leaving the sky AND the entities out is deliberate rather than an
+		// oversight: a plan is built per place, and neither is drawn in all of them. The sky's reason
+		// in full, with what counting it was measured to silence, is at the verdict that depends on
+		// it; the entities share it and add one of their own, being off unless somebody asks.
+		//
+		// The cost is named rather than hidden: the verdict below says no geometry of this engine
+		// reaches the pack's targets, and since the entities landed that is one word too wide. It is
+		// inert on the corpus, measured in August 2026, no target carrying that verdict being one an
+		// entity program writes; it stops being inert the day a pack writes both.
 		Map<Key, Pass> world = new LinkedHashMap<>();
 		terrainKeys.values().forEach(key -> world.put(key, attachments.get(key)));
 		verdicts(plan, seed, world, passes, last, notes);

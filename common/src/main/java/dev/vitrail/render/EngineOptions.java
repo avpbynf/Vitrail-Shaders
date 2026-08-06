@@ -205,7 +205,8 @@ final class EngineOptions {
 	 * line exists.
 	 * <p>
 	 * The five other lines that take a yes or a no are on unless somebody asks, so their line is a
-	 * knows about. This one is the opposite: the picture with it off is the picture without this mod
+	 * thing the reader wrote and knows about. This one is the opposite: the picture with it off is
+	 * the picture without this mod
 	 * having heard of entities at all, and a reader who never sees the name has no reason to look for
 	 * it.
 	 */

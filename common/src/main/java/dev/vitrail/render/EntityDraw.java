@@ -85,10 +85,17 @@ public final class EntityDraw {
 	 * <p>
 	 * Measured rather than reasoned about, and it cost a session: with this open all the time, every
 	 * item in the inventory was drawn with {@code gbuffers_entities} under the world's own camera
-	 * matrix, so an inventory came out empty and the item in hand swayed with the walk. What was
-	 * drawn as a block model came out untouched, and the reason is not the format, since a block item
-	 * on a hotbar is drawn with {@code ITEM_CUTOUT} like every other item and that is a row of the
-	 * table below.
+	 * matrix, so an inventory came out empty and the item in hand swayed with the walk.
+	 * <p>
+	 * <strong>One thing about that session is observed and NOT explained, and it is left standing
+	 * rather than given a reason it has not earned.</strong> What was drawn as a block model came out
+	 * untouched. Nothing in the source accounts for that: a block item takes
+	 * {@code Sheets.cutoutBlockItemSheet}, which is {@code ITEM_CUTOUT} and a row of the table below,
+	 * and {@code BlockModelFeatureRenderer} extends the very class this engine wraps, so those draws
+	 * came through this door like the others and should have broken with them. Either the
+	 * observation has a cause nobody has found or it was less complete than it looked. The window
+	 * below closes both cases and does not depend on which it was, which is why the answer was not
+	 * waited for.
 	 */
 	private static volatile boolean opaqueFeatures;
 
@@ -144,14 +151,17 @@ public final class EntityDraw {
 	 * All of them ask for {@code gbuffers_entities}, and <strong>that is a deviation from Iris on
 	 * eight of the ten</strong>, which is worth stating rather than glossing. Iris keys the same
 	 * table by the same pipelines, but eight of these rows reach a function of its own rather than a
-	 * constant, and that function answers {@code gbuffers_block} while a block entity is being drawn
-	 * and {@code gbuffers_hand} while the hand is; only the end crystal beam and the offset cutout
-	 * are {@code gbuffers_entities} whatever the phase. The hand half of it cannot arise here, the
-	 * window above being closed by then. The block entity half does, and it is served as an ordinary
-	 * entity:
+	 * constant, and that function answers {@code gbuffers_block} while a block entity is being drawn,
+	 * and {@code gbuffers_hand} or {@code gbuffers_hand_water} while the hand is, by its half. Only
+	 * the end crystal beam and the offset cutout are {@code gbuffers_entities} unconditionally, and
+	 * that holds of its MAIN table alone: its shadow table sends both to {@code shadow_entities}. The
+	 * hand half cannot arise here, the window above being closed by then. The block entity half does,
+	 * and it is served as an ordinary entity:
 	 * <p>
-	 * <strong>a conduit, a skull and every block entity that draws with an entity render type comes
-	 * through this door today.</strong> They submit into the same solid phase as a mob and carry the
+	 * <strong>a conduit, a skull and every block entity drawing with an entity render type that does
+	 * not blend comes through this door today.</strong> Not all of them do: a player head with a
+	 * resolved profile takes {@code entityTranslucent}, which blends and is no row of this table.
+	 * Those that do submit into the same solid phase as a mob and carry the
 	 * same pipelines, so nothing here can tell them apart; Iris can, because it poses a phase around
 	 * the dispatch that draws them, and this engine poses none yet. What that costs is the fallback
 	 * tree: {@code gbuffers_block} falls back on the TERRAIN and {@code gbuffers_entities} does not,
@@ -556,7 +566,12 @@ public final class EntityDraw {
 		// seed switched off would write every other draw buffer and no albedo at all. What that
 		// paints is a mob shaped hole of normals and specular over the terrain's own colours, which
 		// is exactly the plausible and wrong picture the switch exists to rule out.
-		if (!this.seeded) {
+		// Only where the chain runs, and the condition is not a refinement. With chain=off nothing
+		// of the pack reaches the screen through a final, so draw buffer nought stays on the game's
+		// own target and is the picture: the seed has nothing to carry and is never even drawn.
+		// Refusing the family there would take away the one configuration that tells a wrong
+		// gbuffer from a wrong composite, which is what these switches exist for.
+		if (this.chainRuns && !this.seeded) {
 			Vitrail.logger().info("The scene seed is off, and it is the only way the first output of "
 					+ "an entity reaches the pack's picture, so the game keeps its own shader for the "
 					+ "entities: served, they would write every other draw buffer and no colour");
