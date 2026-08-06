@@ -177,6 +177,12 @@ final class ColorTargets {
 	private boolean broken;
 
 	/**
+	 * The megabytes the last announcement carried, or -1 before there has been one. Held so that a
+	 * resize says something only when there is something new to say; see {@link #announceSize}.
+	 */
+	private long announcedMegabytes = -1L;
+
+	/**
 	 * The screen the allocation failed at, so that the refusal is about that screen rather than
 	 * about the pack.
 	 * <p>
@@ -299,7 +305,11 @@ final class ColorTargets {
 			this.broken = true;
 			this.brokenWidth = screenWidth;
 			this.brokenHeight = screenHeight;
-			note("the colour targets could not be allocated: " + e.getMessage());
+			// The notes are printed on their own, one line each and with nothing in front of them,
+			// so this one carries its subject and the size it failed at: the error below is written
+			// where it happened and this is read again much later, beside the notes of the plan.
+			note(this.plan.packName() + " could not allocate its colour targets at " + screenWidth
+					+ "x" + screenHeight + ": " + e.getMessage());
 			Vitrail.logger().error("Vitrail could not allocate the colour targets of {} at {}x{}, so "
 					+ "nothing is drawn until the screen is another size", this.plan.packName(),
 					screenWidth, screenHeight, e);
@@ -569,6 +579,10 @@ final class ColorTargets {
 		this.coverage = release(this.coverage);
 		this.shadowMap.release();
 		this.depth.release();
+
+		// Whatever is allocated next is a first allocation again, and it has to say what it costs
+		// even when it happens to cost the same as what was just let go.
+		this.announcedMegabytes = -1L;
 	}
 
 	private boolean ensureConstants() {
@@ -752,6 +766,18 @@ final class ColorTargets {
 		long bytes = bytes();
 		long base = baseBytes();
 		long single = this.plan.bytesAt(this.screenWidth, this.screenHeight, Set.of());
+
+		// Dragging a window edge reallocates at every step the game reports, and each of those used
+		// to copy this whole block out again, the memory warning with it, until a line that means
+		// "this pack is expensive" read as an alarm going off ten times a second. The screen moves
+		// by the pixel and the figure this block is about moves by the megabyte, so that figure is
+		// what decides whether any of it is worth saying twice.
+		long total = megabytes(bytes);
+		if (total == this.announcedMegabytes) {
+			return;
+		}
+
+		this.announcedMegabytes = total;
 		Vitrail.logger().info("Colour targets of {} sized for {}x{}: {} targets, {} MiB",
 				this.plan.packName(), this.screenWidth, this.screenHeight, this.mainSide.size(),
 				megabytes(bytes));
