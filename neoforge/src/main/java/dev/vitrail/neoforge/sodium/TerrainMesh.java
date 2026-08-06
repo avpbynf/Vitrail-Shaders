@@ -82,10 +82,9 @@ public final class TerrainMesh implements ChunkVertexType {
 			// restarted, and turning the terrain back on afterwards, from the screen or from the
 			// file, cannot put it there. Silence would read as the line having done nothing.
 			//
-			// Without naming a cause, because there are two and this cannot tell them apart: the
-			// answer is also no when no pack has been chosen yet, which is every first launch of a
-			// fresh instance. Blaming a terrain= line there would send a reader looking for one
-			// they never wrote.
+			// Without naming a cause, because there are two and this cannot tell them apart: a
+			// terrain= line, and no pack chosen yet, which is every first launch of a fresh
+			// instance. Blaming the line there would send a reader looking for one they never wrote.
 			Vitrail.logger().info("The pack's own terrain program is not wanted where the chunk mesh "
 					+ "format is settled, so the mesh keeps the format Sodium gave it for the rest "
 					+ "of this run and carries no block id");

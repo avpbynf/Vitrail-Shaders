@@ -2,6 +2,7 @@ package dev.vitrail.neoforge.mixin;
 
 import dev.vitrail.neoforge.sodium.TerrainVertex;
 import dev.vitrail.render.BlockStateIds;
+import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.Vitrail;
 
 import net.caffeinemc.mods.sodium.client.render.chunk.compile.pipeline.DefaultFluidRenderer;
@@ -78,8 +79,13 @@ public abstract class DefaultFluidRendererMixin {
 		// Said once for the first fluid meshed under each table, because every link after it is
 		// invisible: a number that never leaves this method looks exactly like a number that reached
 		// the shader and was ignored, and the two are a mixin apart.
+		//
+		// And not said at all when the mesh was never extended, which is exactly the case this line
+		// exists to tell apart: the id below is computed and then goes nowhere, and printing it
+		// beside a startup line saying the mesh carries no block id would be the engine
+		// contradicting itself inside one log.
 		int table = BlockStateIds.generation();
-		if (vitrail$said.getAndSet(table) != table) {
+		if (TerrainDraw.asked() && vitrail$said.getAndSet(table) != table) {
 			// The table is named, because this line is no longer the only one of the run: two loads
 			// of the same pack print it twice, word for word, and nothing else would say which
 			// reading belongs to which table.

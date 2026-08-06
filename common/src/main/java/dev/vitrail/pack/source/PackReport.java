@@ -41,6 +41,17 @@ public final class PackReport {
 		detail(pack);
 	}
 
+	/**
+	 * The block that is not there, said in its own terms. Written here rather than where the failure
+	 * is caught, so that it carries the same prefix as every line the report would have printed: a
+	 * reader, or a script, filtering on that prefix would otherwise find an absent block and no
+	 * marker at all.
+	 */
+	public static void couldNotRead(String name, Exception cause) {
+		Vitrail.logger().warn("{}{} could not be read, so there is no report of it", PREFIX, name,
+				cause);
+	}
+
 	private static void detail(LoadedPack pack) {
 		PackStats stats = pack.stats();
 		ProgramSet programs = pack.programs();

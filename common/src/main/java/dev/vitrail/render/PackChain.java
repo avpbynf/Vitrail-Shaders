@@ -308,12 +308,27 @@ public final class PackChain {
 					// No promise about what happens next, deliberately: an archive that cannot be
 					// opened at all will not be opened by the lines below either, and the catch at
 					// the end of this method is what will have the last word. What this line buys is
-					// the failure that belongs to the report alone, in a measurement or a count.
-					Vitrail.logger().warn("{} could not be read for its report", pack.getFileName(), e);
+					// the failure that belongs to the report alone, in a measurement or a count, and
+					// it is said by the report so that it keeps the report's own prefix.
+					PackReport.couldNotRead(String.valueOf(pack.getFileName()), e);
 				}
 			}
 
 			SettingsLayers.Resolved settings = open(gameDirectory, pack);
+
+			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());
+			// Reserved keys rather than options: no pack declares a setting under any of these
+			// names, and each names something this mod does rather than a value the pack has. The
+			// fourth, profile, never reaches here: the settings layer takes it out and carries it
+			// apart, because it is the side that writes it back into the pack's own file.
+			EngineOptions.Read engine = EngineOptions.take(chosen);
+			packsFirst = engine.packsFirst();
+			chainWanted = engine.chain();
+			TerrainDraw.wanted(engine.terrain());
+			TerrainDraw.shadowWanted(engine.shadow());
+			SkyDraw.wanted(engine.sky());
+			PackDump.configure(engine.dump(),
+					gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt"));
 
 			// Refused by name, and before a single program is TRANSLATED. This engine serves no
 			// feature flag at all and defines no IRIS_FEATURE_, which is the honest answer and the
@@ -322,9 +337,13 @@ public final class PackChain {
 			// whichever sampler the missing feature stood behind, which is a wrong diagnosis rather
 			// than an incomplete one.
 			//
-			// After open() and not before, so that the session is published and the settings screen
-			// shows the pack it is refusing rather than an empty list, which is where the two other
-			// refusals of this method already stand.
+			// **Here and not one line earlier**, and the six lines above are the reason. Two of them
+			// settle something for the WHOLE RUN rather than for this pack: TerrainDraw.wanted feeds
+			// the one decision no reload undoes, whether the chunk mesh carries a block id at all.
+			// Returning before them left that answer at its default, so a refused pack cost the id
+			// to every pack picked after it, for as long as the game stayed up. The session is
+			// published by then as well, so the settings screen shows the pack it is refusing rather
+			// than an empty list, which is where the two other refusals of this method stand.
 			//
 			// A deliberate divergence, and worth naming because it is one: Iris refuses a required
 			// flag only when the name is unknown to it or the hardware cannot serve it, so it draws
@@ -342,19 +361,6 @@ public final class PackChain {
 						+ "nothing is drawn", pack.getFileName(), names);
 				return;
 			}
-			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());
-			// Reserved keys rather than options: no pack declares a setting under any of these
-			// names, and each names something this mod does rather than a value the pack has. The
-			// fourth, profile, never reaches here: the settings layer takes it out and carries it
-			// apart, because it is the side that writes it back into the pack's own file.
-			EngineOptions.Read engine = EngineOptions.take(chosen);
-			packsFirst = engine.packsFirst();
-			chainWanted = engine.chain();
-			TerrainDraw.wanted(engine.terrain());
-			TerrainDraw.shadowWanted(engine.shadow());
-			SkyDraw.wanted(engine.sky());
-			PackDump.configure(engine.dump(),
-					gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt"));
 
 			// The world decides the directory, and the pack decides which world that is: a folder
 			// may be named anything and mapped in dimension.properties, so the name is read from

@@ -113,8 +113,12 @@ public final class BlockStateIds {
 		table = built;
 		generation++;
 		if (!ids.isEmpty()) {
-			Vitrail.logger().info("{} of this pack's {} block declarations reach {} block states",
-					ids.entries().size() - unknown.size(), ids.entries().size(), built.size());
+			// The table is numbered here as well as where it is read back, and for the same reason:
+			// a second load of the same pack prints this line again, word for word, and the number
+			// is what ties the two readings of the mesh below to the table they were taken against.
+			Vitrail.logger().info("{} of this pack's {} block declarations reach {} block states, in "
+					+ "block table {}", ids.entries().size() - unknown.size(), ids.entries().size(),
+					built.size(), generation);
 		}
 
 		// Named rather than counted. Every one of them is a block another mod was meant to add, or a
