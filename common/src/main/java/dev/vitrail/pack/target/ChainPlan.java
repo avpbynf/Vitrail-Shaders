@@ -57,31 +57,57 @@ public final class ChainPlan {
 	private final List<Pass> passes;
 	private final Pass last;
 	private final Seed seed;
-	private final Map<TerrainPass, Pass> geometry;
 
 	/**
-	 * Where each sky program's outputs belong, by the bare name the pack serves it under.
+	 * What a geometry program writes, keyed by the file that serves it and by the side of the
+	 * deferred stage it draws on.
 	 * <p>
-	 * Keyed by name and not by an enum of passes, unlike the terrain: the game draws the sky in
-	 * eight passes of its own but they share three programs between them, and what decides the
-	 * halves is the program rather than the pass. All of them draw before the deferred stage, so
-	 * all of them read the snapshot the prepares leave, which is the ordinary geometry walk.
+	 * <strong>Both halves of that key are load bearing, and neither can be dropped.</strong> The
+	 * file, because two names of the format are commonly served by one file and the answer belongs
+	 * to what was read; the side, because the schedule hands the same draw buffers different halves
+	 * before and after the deferreds, so one file serving the solid pass and the translucent pass
+	 * has two answers and they differ.
+	 * <p>
+	 * One table for every family rather than one per family, which is what lets a family that does
+	 * not exist yet ask the same question: the terrain asks it three times, the sky three times, and
+	 * the entities will ask it once per program the game hands them. What differs between families
+	 * is only how they reach a key, and that is the two tables below.
 	 */
-	private final Map<String, Pass> sky;
+	private final Map<Key, Pass> attachments;
+
+	/**
+	 * Which key each chunk pass reaches, or absent when this place serves none.
+	 * <p>
+	 * Kept apart from the answer because the question is the pass's and the answer is the file's:
+	 * the translucent pass draws after the deferred stage even when the very same file serves the
+	 * solid pass before them.
+	 */
+	private final Map<TerrainPass, Key> terrainKeys;
+
+	/**
+	 * Which key each sky program reaches, by the bare name the pack serves it under.
+	 * <p>
+	 * By name and not by an enum of passes, unlike the terrain: the game draws the sky in eight
+	 * passes of its own but they share three programs between them, and what decides the halves is
+	 * the program rather than the pass. All of them draw before the deferred stage, so all of them
+	 * read the snapshot the prepares leave, which is the ordinary geometry walk.
+	 */
+	private final Map<String, Key> skyKeys;
 
 	private final List<Integer> swapBack;
 	private final List<String> refusals;
 	private final List<String> notes;
 
 	private ChainPlan(String place, List<Pass> passes, Pass last, Seed seed,
-			Map<TerrainPass, Pass> geometry, Map<String, Pass> sky, List<Integer> swapBack,
-			List<String> refusals, List<String> notes) {
+			Map<Key, Pass> attachments, Map<TerrainPass, Key> terrainKeys, Map<String, Key> skyKeys,
+			List<Integer> swapBack, List<String> refusals, List<String> notes) {
 		this.place = place;
 		this.passes = List.copyOf(passes);
 		this.last = last;
 		this.seed = seed;
-		this.geometry = Map.copyOf(geometry);
-		this.sky = Map.copyOf(sky);
+		this.attachments = Map.copyOf(attachments);
+		this.terrainKeys = Map.copyOf(terrainKeys);
+		this.skyKeys = Map.copyOf(skyKeys);
 		this.swapBack = List.copyOf(swapBack);
 		this.refusals = List.copyOf(refusals);
 		this.notes = List.copyOf(notes);
@@ -128,6 +154,20 @@ public final class ChainPlan {
 		public boolean deferred() {
 			return frameRank() == ProgramNames.frameRank("deferred");
 		}
+	}
+
+	/**
+	 * What a geometry program's answer depends on: the file that ends up serving it, and whether it
+	 * draws after the deferred stage.
+	 *
+	 * @param servedBy      the bare name of the file the fallback tree landed on, never the name
+	 *                      that was asked for. Two names of the format commonly resolve to one file
+	 *                      and they then share every answer, which is what makes this the key
+	 * @param afterDeferred which snapshot of the flip counter the schedule gives it. The same file
+	 *                      answers twice when it serves geometry on both sides, and the two answers
+	 *                      differ by exactly the halves the deferred stage turned over
+	 */
+	public record Key(String servedBy, boolean afterDeferred) {
 	}
 
 	/**
@@ -178,17 +218,40 @@ public final class ChainPlan {
 		// Worked out before the verdicts rather than in the return, so that they are handed the
 		// answer instead of asking for it twice: what the chunk passes write is exactly what the
 		// verdicts must not blame the clear for.
-		Map<TerrainPass, Pass> geometry = geometryOf(plan, resolver, notes);
-		Map<String, Pass> sky = skyOf(plan, resolver, notes);
+		//
+		// One walk fills the three: the answers land in the shared table and each family keeps the
+		// keys it reaches. A file serving two families, which is the ordinary case for a pack whose
+		// sky falls back on gbuffers_basic, is therefore walked once and says whatever it has to say
+		// once.
+		Map<Key, Pass> attachments = new LinkedHashMap<>();
+		Map<TerrainPass, Key> terrainKeys = terrainKeysOf(plan, resolver, notes, attachments);
+		Map<String, Key> skyKeys = skyKeysOf(plan, resolver, notes, attachments);
 
 		Seed seed = seedOf(plan, resolver, notes);
-		verdicts(plan, seed, geometry, passes, last, notes);
+
+		// The terrain alone, and that is a deviation this engine takes knowingly: the sky is drawn
+		// with the pack's programs but SkyProgram hands the engine no writes, so a verdict counting
+		// it as drawn would silence five true notes on Bliss. It reopens with A15, in three lines.
+		Map<Key, Pass> world = new LinkedHashMap<>();
+		terrainKeys.values().forEach(key -> world.put(key, attachments.get(key)));
+		verdicts(plan, seed, world, passes, last, notes);
 
 		Set<Integer> back = new TreeSet<>(plan.schedule().flippedAtEnd());
 		back.retainAll(plan.persistent());
 
-		return new ChainPlan(plan.place(), passes, last, seed, geometry, sky, List.copyOf(back),
-				refusals, notes);
+		// The nulls are dropped on the way out, and they had to be there on the way in: a key that
+		// this place cannot answer is remembered as answered so that the three families reaching it
+		// say what there is to say once. Past this point nobody asks twice, and an absent key and a
+		// key mapped to nothing mean the same thing to every reader.
+		Map<Key, Pass> answered = new LinkedHashMap<>();
+		attachments.forEach((key, pass) -> {
+			if (pass != null) {
+				answered.put(key, pass);
+			}
+		});
+
+		return new ChainPlan(plan.place(), passes, last, seed, answered, terrainKeys, skyKeys,
+				List.copyOf(back), refusals, notes);
 	}
 
 	/**
@@ -201,10 +264,9 @@ public final class ChainPlan {
 	 * The walk before the deferreds is shared by the solid and the cutout pass, so its answer is
 	 * computed once per file, which is also what keeps a broken file from being reported twice.
 	 */
-	private static Map<TerrainPass, Pass> geometryOf(TargetPlan plan, ProgramResolver resolver,
-			List<String> notes) {
-		Map<TerrainPass, Pass> geometry = new EnumMap<>(TerrainPass.class);
-		Map<String, Pass> before = new LinkedHashMap<>();
+	private static Map<TerrainPass, Key> terrainKeysOf(TargetPlan plan, ProgramResolver resolver,
+			List<String> notes, Map<Key, Pass> into) {
+		Map<TerrainPass, Key> keys = new EnumMap<>(TerrainPass.class);
 		for (TerrainPass pass : TerrainPass.values()) {
 			// A shadow pass writes shadowcolor and never colortex, so this walk has no answer for
 			// it: its draw buffers index a set of targets this plan does not hold, and a number read
@@ -219,26 +281,28 @@ public final class ChainPlan {
 				continue;
 			}
 
-			String servedBy = served.get();
-			Pass attachments;
-			if (pass.afterDeferred()) {
-				attachments = geometryOf(plan, servedBy, notes, true);
-			} else {
-				// containsKey rather than computeIfAbsent, because null is an answer here and
-				// recomputing it would say the same note once per pass the file serves.
-				if (!before.containsKey(servedBy)) {
-					before.put(servedBy, geometryOf(plan, servedBy, notes, false));
-				}
-
-				attachments = before.get(servedBy);
-			}
-
-			if (attachments != null) {
-				geometry.put(pass, attachments);
+			Key key = new Key(served.get(), pass.afterDeferred());
+			if (answer(plan, key, notes, into) != null) {
+				keys.put(pass, key);
 			}
 		}
 
-		return geometry;
+		return keys;
+	}
+
+	/**
+	 * Walks one key into the shared table, once, and answers what it holds.
+	 * <p>
+	 * containsKey rather than computeIfAbsent, because null is an answer here: a file this place
+	 * cannot carry the targets of has to be remembered as answered, or every family reaching the
+	 * same key would say the same note about it again.
+	 */
+	private static Pass answer(TargetPlan plan, Key key, List<String> notes, Map<Key, Pass> into) {
+		if (!into.containsKey(key)) {
+			into.put(key, geometryOf(plan, key.servedBy(), notes, key.afterDeferred()));
+		}
+
+		return into.get(key);
 	}
 
 	/**
@@ -254,16 +318,15 @@ public final class ChainPlan {
 	 * the prepares and the terrain, so its halves are the ones the prepares leave; only the
 	 * translucent chunk pass is re-taken after the deferred stage, and that rule is its alone.
 	 */
-	private static Map<String, Pass> skyOf(TargetPlan plan, ProgramResolver resolver,
-			List<String> notes) {
-		Map<String, Pass> sky = new LinkedHashMap<>();
+	private static Map<String, Key> skyKeysOf(TargetPlan plan, ProgramResolver resolver,
+			List<String> notes, Map<Key, Pass> into) {
+		Map<String, Key> sky = new LinkedHashMap<>();
 
 		// Computed once per serving FILE and not once per program, the same reason the geometry walk
 		// gives above: the fallback tree sends skybasic to gbuffers_basic and both skytextured and
 		// clouds to gbuffers_textured, so one file commonly serves two or three of these names, and
-		// walking it again would say the same note about it twice. containsKey rather than
-		// computeIfAbsent, because null is an answer here.
-		Map<String, Pass> byFile = new LinkedHashMap<>();
+		// walking it again would say the same note about it twice, which the shared table is what
+		// now guarantees rather than a map of this method's own.
 		for (String program : SKY_PROGRAMS) {
 			Optional<String> served = resolver.lookup(plan.place(), program)
 					.map(ProgramResolver.Resolution::servedBy);
@@ -271,14 +334,9 @@ public final class ChainPlan {
 				continue;
 			}
 
-			String servedBy = served.get();
-			if (!byFile.containsKey(servedBy)) {
-				byFile.put(servedBy, geometryOf(plan, servedBy, notes, false));
-			}
-
-			Pass attachments = byFile.get(servedBy);
-			if (attachments != null) {
-				sky.put(program, attachments);
+			Key key = new Key(served.get(), false);
+			if (answer(plan, key, notes, into) != null) {
+				sky.put(program, key);
 			}
 		}
 
@@ -425,7 +483,7 @@ public final class ChainPlan {
 	 * the other snapshot. Reading the geometry off the schedule alone, as this did, blamed the clear
 	 * for a half {@code gbuffers_water} had just written.
 	 */
-	private static void verdicts(TargetPlan plan, Seed seed, Map<TerrainPass, Pass> world,
+	private static void verdicts(TargetPlan plan, Seed seed, Map<Key, Pass> world,
 			List<Pass> passes, Pass last, List<String> notes) {
 		List<Pass> ordered = new ArrayList<>(passes);
 		if (last != null) {
@@ -448,8 +506,8 @@ public final class ChainPlan {
 		// prepare of this engine reads what those passes wrote in THIS frame.
 		int afterDeferred = pastDeferred(ordered);
 		Map<Integer, Set<Pass>> drawn = new LinkedHashMap<>();
-		world.forEach((pass, drawing) -> {
-			drawn.computeIfAbsent(pass.afterDeferred() ? afterDeferred : 0, _ -> new LinkedHashSet<>())
+		world.forEach((key, drawing) -> {
+			drawn.computeIfAbsent(key.afterDeferred() ? afterDeferred : 0, _ -> new LinkedHashSet<>())
 					.add(drawing);
 			undrawn.removeAll(drawing.targets());
 		});
@@ -634,7 +692,21 @@ public final class ChainPlan {
 	 * render pass cannot carry. The last two are said in {@link #notes()}.
 	 */
 	public Optional<Pass> geometry(TerrainPass pass) {
-		return Optional.ofNullable(this.geometry.get(pass));
+		return Optional.ofNullable(this.terrainKeys.get(pass)).map(this.attachments::get);
+	}
+
+	/**
+	 * The same answer for any geometry program at all, asked by the file that serves it and by the
+	 * side of the deferred stage it draws on.
+	 * <p>
+	 * This is the question the three families share, and the two above are shorthands for it: the
+	 * terrain knows its pass, the sky knows its name, and a family that knows neither, which is
+	 * every family the game hands over as a render type, asks here. Empty covers the same normal
+	 * cases as {@link #geometry}, plus the one that matters most for a caller holding a name from
+	 * the game: this place was never asked about that file, so nothing was walked for it.
+	 */
+	public Optional<Pass> geometryOf(String servedBy, boolean afterDeferred) {
+		return Optional.ofNullable(this.attachments.get(new Key(servedBy, afterDeferred)));
 	}
 
 	/**
@@ -648,7 +720,7 @@ public final class ChainPlan {
 	 * @param program the bare name, {@code gbuffers_skybasic}, not the file that ends up serving it
 	 */
 	public Optional<Pass> sky(String program) {
-		return Optional.ofNullable(this.sky.get(program));
+		return Optional.ofNullable(this.skyKeys.get(program)).map(this.attachments::get);
 	}
 
 	public Optional<Seed> seed() {
