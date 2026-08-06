@@ -101,7 +101,10 @@ public final class SkyVertex {
 				? "#define of_Color (Color * of_PassColour)"
 				: "#define of_Color of_PassColour");
 
-		String texture = bound.contains("UV0") ? "vec4(UV0, 0.0, 1.0)" : "vec4(0.0, 0.0, 0.0, 1.0)";
+		// The middle of the sprite where the format has no texture coordinate, which is the four
+		// elements drawn from bare positions. The corner instead would send a pack that samples
+		// gtexture there to one texel of the atlas rather than to the one the name stands for.
+		String texture = bound.contains("UV0") ? "vec4(UV0, 0.0, 1.0)" : "vec4(0.5, 0.5, 0.0, 1.0)";
 		lines.add("#define of_MultiTexCoord0 " + texture);
 
 		// The light map, which no sky format carries. Both channels at the top of the range, in the
