@@ -5,8 +5,6 @@ import dev.vitrail.pack.program.ProgramSet;
 
 import dev.vitrail.Vitrail;
 
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -37,17 +35,10 @@ public final class PackReport {
 	 * stop the client from reaching its first frame. What the whole corpus says is measured out of
 	 * the game, against the same columns, which is what this report was shaped for in the first place.
 	 */
-	public static void log(Path candidate) {
+	public static void log(LoadedPack pack) {
 		Vitrail.logger().info("{}{}", PREFIX, PackStats.tsvHeader());
-
-		try {
-			LoadedPack pack = PackLoader.load(candidate);
-			Vitrail.logger().info("{}{}", PREFIX, pack.stats().tsvLine(pack.packName()));
-			detail(pack);
-		} catch (IOException | RuntimeException e) {
-			String name = candidate.getFileName() == null ? "?" : candidate.getFileName().toString();
-			Vitrail.logger().error("{}{} could not be read", PREFIX, name, e);
-		}
+		Vitrail.logger().info("{}{}", PREFIX, pack.stats().tsvLine(pack.packName()));
+		detail(pack);
 	}
 
 	private static void detail(LoadedPack pack) {

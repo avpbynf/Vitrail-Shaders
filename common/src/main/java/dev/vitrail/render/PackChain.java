@@ -4,6 +4,7 @@ import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
+import dev.vitrail.pack.source.LoadedPack;
 import dev.vitrail.pack.source.PackLoader;
 import dev.vitrail.pack.source.PackReport;
 import dev.vitrail.pack.target.ChainPlan;
@@ -288,8 +289,33 @@ public final class PackChain {
 				return;
 			}
 
-			// Where the pack is known, rather than over the whole folder before one was chosen.
-			PackReport.log(pack);
+			// Where the pack is known, rather than over the whole folder before one was chosen. The
+			// same reading answers both questions asked of a pack before anything is translated:
+			// what is in it, and what it says it cannot be drawn without.
+			LoadedPack opened = PackLoader.load(pack);
+			PackReport.log(opened);
+
+			// Refused by name, and before a single program is TRANSLATED: the reading above has
+			// already enumerated them and expanded their includes, which is the cheap half. This
+			// engine serves no feature flag at all and defines no IRIS_FEATURE_, which is the honest
+			// answer and the one that keeps a pack on its fallback path; a pack that says it
+			// REQUIRES one is asking for something that is not here. Left unread, the refusal came
+			// much later and named whichever sampler the missing feature stood behind, which is a
+			// wrong diagnosis rather than an incomplete one.
+			//
+			// A deliberate divergence, and worth naming because it is one: Iris refuses a required
+			// flag only when the name is unknown to it or the hardware cannot serve it, so it draws
+			// Reverie where this does not. It can afford to, having built all four.
+			List<String> required = opened.properties().requiredFeatures();
+			if (!required.isEmpty()) {
+				disabled = true;
+				String names = String.join(", ", required);
+				lastError = opened.packName() + " requires " + names
+						+ ", and this engine serves no feature flag";
+				Vitrail.logger().error("{} requires {}, and this engine serves none of them, so "
+						+ "nothing is drawn", opened.packName(), names);
+				return;
+			}
 
 			SettingsLayers.Resolved settings = open(gameDirectory, pack);
 			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());

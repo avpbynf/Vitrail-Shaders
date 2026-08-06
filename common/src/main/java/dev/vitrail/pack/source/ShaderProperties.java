@@ -61,6 +61,10 @@ public final class ShaderProperties {
 	private static final Pattern BLEND = Pattern.compile("^\\s*blend\\.([^=\\s.]+)(?:\\.(\\w+))?\\s*=\\s*(.*)$");
 	private static final Pattern ALPHA_TEST = Pattern.compile("^\\s*alphaTest\\.(\\S+)\\s*=\\s*(.*)$");
 	private static final Pattern SLIDERS = Pattern.compile("^\\s*sliders\\s*=\\s*(.*)$");
+	// Two lines that say what a pack cannot draw without, and what it would use if it were there.
+	// Whitespace separated lists, and the last line of each wins, which is how Iris reads them.
+	private static final Pattern IRIS_FEATURES =
+			Pattern.compile("^\\s*iris\\.features\\.(required|optional)\\s*=\\s*(.*)$");
 	private static final Pattern END_FLASH_SHADOWS = Pattern.compile("^\\s*endFlashShadows\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
@@ -96,6 +100,8 @@ public final class ShaderProperties {
 	private final Map<String, List<ScreenToken>> screenLayout;
 	private final Map<String, Integer> columns;
 	private final List<String> sliders;
+	private final List<String> requiredFeatures;
+	private final List<String> optionalFeatures;
 	private final List<BlendDirective> blend;
 	private final Map<String, String> sizeBuffers;
 	private final List<FlipDirective> flips;
@@ -123,6 +129,8 @@ public final class ShaderProperties {
 		this.screenLayout = Collections.unmodifiableMap(layout);
 		this.columns = Map.copyOf(builder.columns);
 		this.sliders = List.copyOf(builder.sliders);
+		this.requiredFeatures = List.copyOf(builder.requiredFeatures);
+		this.optionalFeatures = List.copyOf(builder.optionalFeatures);
 		this.blend = List.copyOf(builder.blend);
 		this.sizeBuffers = Map.copyOf(builder.sizeBuffers);
 		this.flips = List.copyOf(builder.flips);
@@ -236,6 +244,30 @@ public final class ShaderProperties {
 			AlphaTest.parse(value).ifPresentOrElse(
 					test -> builder.alphaTest.put(alpha.group(1), test),
 					() -> builder.malformedAlphaTests.put(alpha.group(1), value));
+			return;
+		}
+
+		// Replaced and not added to: a second line of the same name is the one that counts, which is
+		// how Iris reads both of them, and not how the sliders below are read, where the tokens of a
+		// second line join the first. Read even though this engine serves no feature at all, because that is
+		// exactly what makes the refusal say something: a pack that names what it cannot do without
+		// is answered with the names, instead of falling over later on whichever sampler its
+		// storage buffers happened to sit behind.
+		Matcher features = IRIS_FEATURES.matcher(line);
+		if (features.matches()) {
+			List<String> named = new ArrayList<>();
+			for (String token : features.group(2).trim().split("\\s+")) {
+				if (!token.isEmpty()) {
+					named.add(token);
+				}
+			}
+
+			if (features.group(1).equals("required")) {
+				builder.requiredFeatures = named;
+			} else {
+				builder.optionalFeatures = named;
+			}
+
 			return;
 		}
 
@@ -883,6 +915,27 @@ public final class ShaderProperties {
 		return this.sliders;
 	}
 
+	/**
+	 * What the pack says it cannot be drawn without, in the pack's own spelling and unfiltered.
+	 * <p>
+	 * Whoever compares this list decides what the names mean; this class only reads them. Iris
+	 * refuses a pack naming one it cannot serve, and the same answer is the honest one here: this
+	 * engine serves none of them, so any name at all is a name it cannot answer.
+	 */
+	public List<String> requiredFeatures() {
+		return this.requiredFeatures;
+	}
+
+	/**
+	 * What the pack would use if it were there, and takes another path without. Read so that the
+	 * count of keys nothing reads stops carrying it, and because it is the list Iris turns into
+	 * {@code IRIS_FEATURE_} defines: this engine defines none, which is what tells a pack to take
+	 * the other path.
+	 */
+	public List<String> optionalFeatures() {
+		return this.optionalFeatures;
+	}
+
 	public List<BlendDirective> blend() {
 		return this.blend;
 	}
@@ -1043,6 +1096,8 @@ public final class ShaderProperties {
 		private final Map<String, List<ScreenToken>> screenLayout = new LinkedHashMap<>();
 		private final Map<String, Integer> columns = new LinkedHashMap<>();
 		private final List<String> sliders = new ArrayList<>();
+		private List<String> requiredFeatures = List.of();
+		private List<String> optionalFeatures = List.of();
 		private final List<BlendDirective> blend = new ArrayList<>();
 		private final Map<String, String> sizeBuffers = new LinkedHashMap<>();
 		private final List<FlipDirective> flips = new ArrayList<>();

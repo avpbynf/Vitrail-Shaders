@@ -115,6 +115,14 @@ public final class EngineDefines {
 		// it is also a promise, and every one of those has to work before it can stay.
 		defines.put("IS_IRIS", "");
 
+		// And no IRIS_FEATURE_ beside it, deliberately. Iris poses one per flag it can serve, in two
+		// places and not one: among the defines that read shaders.properties, for every flag it
+		// holds usable, and among the GLSL ones for the names of the optional line alone. A pack
+		// reads them to pick a path, so claiming one here would send the five packs of the corpus
+		// that name one down a road this engine has not built. See
+		// ShaderProperties.optionalFeatures for the other half of the answer, and PackChain for
+		// what a pack requiring one is told.
+
 		// Straight off the enum the engine sets, so that the number a pack compares against and the
 		// number the block carries cannot part company. The value IS the ordinal.
 		for (RenderStage stage : RenderStage.values()) {
