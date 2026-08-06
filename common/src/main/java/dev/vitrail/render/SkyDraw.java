@@ -26,6 +26,7 @@ import org.joml.Vector4fc;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -513,6 +514,11 @@ public final class SkyDraw {
 		}
 
 		return pipeline;
+	}
+
+	/** The programs once the sky has been read, for the decoded dump. Empty until then. */
+	Collection<SkyProgram> programs() {
+		return this.programs.values();
 	}
 
 	/** Rotates the ring buffers. Called once the frame's sky draws have been recorded. */

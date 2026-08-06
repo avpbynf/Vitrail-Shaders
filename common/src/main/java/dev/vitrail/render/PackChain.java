@@ -682,7 +682,8 @@ public final class PackChain {
 			this.advanced = true;
 			this.values.advance();
 			PackDump.take(this.chain.place(), this.load, this.terrain.programs(),
-					this.programs == null ? List.of() : this.programs, this.values.world());
+					this.sky.programs(), this.programs == null ? List.of() : this.programs,
+					this.values.world());
 		}
 	}
 

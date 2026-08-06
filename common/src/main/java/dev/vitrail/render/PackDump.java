@@ -53,10 +53,14 @@ final class PackDump {
 	 *                they are answered from a different catalogue, their {@code of_ModelViewMatrix}
 	 *                being the world's where a composite's is the identity, which is exactly the pair
 	 *                a reading has to tell apart
+	 * @param sky     the pack's sky programs, empty until the sky has been read and empty for good
+	 *                for a pack that serves none. Named by element as the terrain is by pass: four
+	 *                of the six are one file, so a line that said gbuffers_skybasic four times would
+	 *                not say which piece was read
 	 * @param passes  the chain's own passes, empty for the frame or two before they are built
 	 */
-	static void take(String place, int load, Collection<TerrainProgram> terrain, List<PackPass> passes,
-			WorldState world) {
+	static void take(String place, int load, Collection<TerrainProgram> terrain,
+			Collection<SkyProgram> sky, List<PackPass> passes, WorldState world) {
 		if (wanted.isEmpty() || file == null) {
 			return;
 		}
@@ -76,6 +80,14 @@ final class PackDump {
 		// matched as well as the path, so dump=cutout names the pass and dump=gbuffers_terrain still
 		// names the file, taking the first pass drawn with it.
 		for (TerrainProgram program : terrain) {
+			running.add(program.label());
+			if (decoded == null && (names(program.path()) || names(program.label()))) {
+				path = program.label();
+				decoded = program.decoded(world);
+			}
+		}
+
+		for (SkyProgram program : sky) {
 			running.add(program.label());
 			if (decoded == null && (names(program.path()) || names(program.label()))) {
 				path = program.label();
