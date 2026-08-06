@@ -17,7 +17,9 @@ import java.util.Optional;
  * lookup table in the other.
  *
  * @param path  where the file sits, as the pack wrote it. A leading slash means relative to
- *              {@code shaders/} and is not part of the name
+ *              {@code shaders/} and is not part of the name. A colon in it means the pack named a
+ *              resource of the game instead, and then there is no file of the pack behind this at
+ *              all; see {@link #gameResource()}
  * @param raw   empty for an image the loader decodes, present for a blob uploaded as written
  * @param blur  whether the sampler filters linearly. A raw blob defaults to true and a PNG to
  *              false, which is OptiFine's rule and not a taste; a {@code .mcmeta} beside the file
@@ -55,6 +57,22 @@ public record PackTexture(String sampler, Optional<TextureStage> stage, String p
 	/** Whether the file is an image to decode rather than a blob to upload as written. */
 	public boolean png() {
 		return this.raw.isEmpty();
+	}
+
+	/**
+	 * Whether the pack named a texture the GAME owns rather than a file of its own, in which case
+	 * the path is an identifier the game's resource manager answers for and nothing here opens it.
+	 * <p>
+	 * The sign is a colon in the word, which is Iris's rule rather than a guess
+	 * ({@code ShaderPack.readTexture}): a path of the pack is written relative to {@code shaders/}
+	 * and never carries one.
+	 */
+	public boolean gameResource() {
+		return gameResource(this.path);
+	}
+
+	static boolean gameResource(String path) {
+		return path.indexOf(':') >= 0;
 	}
 
 	/** One line for the log, saying which name is being moved and where it now reads from. */

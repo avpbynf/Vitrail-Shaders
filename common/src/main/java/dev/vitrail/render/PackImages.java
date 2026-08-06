@@ -9,7 +9,12 @@ import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.pack.texture.VolumeAtlas;
 import dev.vitrail.uniform.NoiseTexture;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.Resource;
+
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -21,19 +26,23 @@ import java.util.Optional;
 /**
  * The textures a pack ships as files of its own, read and decoded once, ready to be uploaded.
  * <p>
- * Nothing here touches the device, and it names no API of the game either: it opens files, decodes
- * images and lays volumes out flat, all of which happens while the client is still starting up.
- * {@link ColorTargets} allocates and uploads what comes out of it, and answers for it at draw time.
- * Keeping the two apart is what lets the reading be measured against the eight packs without
- * starting a game, which is where the atlas was proved right texel by texel.
+ * Nothing here touches the device: it opens files, decodes images and lays volumes out flat, all of
+ * which happens while the client is still starting up. {@link ColorTargets} allocates and uploads
+ * what comes out of it, and answers for it at draw time. Keeping the two apart is what lets the
+ * reading be measured against the eight packs without starting a game, which is where the atlas was
+ * proved right texel by texel.
+ * <p>
+ * One API of the game is named, in {@link #gameResource}, because a pack may name a texture the
+ * game owns instead of shipping one; it is asked for defensively so that a measurement taken
+ * outside a client loses that texture rather than the whole reading.
  * <p>
  * A declaration that cannot be honoured is named and left with nothing behind it, which is not the
  * same as being dropped. {@link PackTextures#suppliedTo} still carries the name, so the sampler
  * reads one black pixel rather than falling back to the colour target it shares a name with. That
- * fall back is the failure worth a class of its own: Mellow points
- * {@code texture.deferred.colortex3} at a texture of the game, and letting the name go back to
- * colour target three would have its deferred read the scene as a cloud texture, which is a picture
- * nobody would question.
+ * fall back is the failure worth a class of its own: Complementary points
+ * {@code texture.deferred.colortex3} at a cloud and water lookup table, and letting the name go
+ * back to colour target three would have its deferred read the scene as that table, which is a
+ * picture nobody would question.
  */
 final class PackImages {
 
@@ -43,6 +52,14 @@ final class PackImages {
 	 * in memory. The ceiling on the file says nothing whatever about that.
 	 */
 	private static final long LOUD_BYTES = 32L * 1024L * 1024L;
+
+	/**
+	 * The most a resource of the game may hold before it is refused, which is the ceiling a file of
+	 * the pack gets as well: a pack naming a file the player's resource packs ship has chosen it as
+	 * directly as one it ships itself. What the decode costs past this is bounded by the dimensions
+	 * in the header rather than by the length, and {@link NoiseTexture} does that half.
+	 */
+	private static final int MAX_RESOURCE_BYTES = 8 * 1024 * 1024;
 
 	/**
 	 * One texture of the pack, decoded into the bytes that will be uploaded.
@@ -130,6 +147,10 @@ final class PackImages {
 	 */
 	private static Image decode(PackTexture texture, VolumeAtlas atlas, ShaderPackSource source,
 			List<String> notes) {
+		if (texture.gameResource()) {
+			return gameResource(texture, notes);
+		}
+
 		Optional<Path> file = source.file(texture.path());
 		if (file.isEmpty()) {
 			// Looked for once already when the directive was read, so reaching this means the pack
@@ -169,6 +190,67 @@ final class PackImages {
 		} catch (IOException | RuntimeException e) {
 			notes.add(texture.path() + " could not be read: " + e.getMessage() + ", so "
 					+ texture.sampler() + " reads one black pixel");
+
+			return null;
+		}
+	}
+
+	/**
+	 * A texture the GAME owns, named by the pack as {@code namespace:path} and read out of the
+	 * resource packs the client has loaded rather than out of the shader pack. Null when the client
+	 * has nothing under that name, with the reason in the notes.
+	 * <p>
+	 * The one place in this class that names an API of the game, and it is asked defensively for
+	 * the reason the rest of the class avoids it: outside a running client there is no client to
+	 * ask, and reading a pack has to keep working there.
+	 * <p>
+	 * Read once here, where Iris re-asks the texture manager at every bind, so a resource pack
+	 * swapped under a running client is not followed until the shader pack is read again. Two cases
+	 * Iris serves this cannot serve at all, and both are named rather than given something
+	 * plausible: an ATLAS, which is stitched at runtime and is no file of any resource pack, and a
+	 * normal or specular map, which Iris reaches through a PBR manager this engine has no equivalent
+	 * of.
+	 */
+	private static Image gameResource(PackTexture texture, List<String> notes) {
+		String path = texture.path();
+
+		// Split rather than cut at the first colon, and the parts past the second dropped, because
+		// that is what Iris makes of a name carrying more than one.
+		String[] parts = path.split(":");
+		Identifier location = parts.length < 2 ? null : Identifier.tryBuild(parts[0], parts[1]);
+		Minecraft client = Minecraft.getInstance();
+		if (location == null || client == null) {
+			notes.add(path + " is not a resource this client can be asked for, so "
+					+ texture.sampler() + " reads one black pixel");
+
+			return null;
+		}
+
+		Optional<Resource> resource = client.getResourceManager().getResource(location);
+		if (resource.isEmpty()) {
+			notes.add(path + " is not a file any loaded resource pack ships, so " + texture.sampler()
+					+ " reads one black pixel");
+
+			return null;
+		}
+
+		try (InputStream stream = resource.get().open()) {
+			byte[] bytes = stream.readNBytes(MAX_RESOURCE_BYTES + 1);
+			if (bytes.length > MAX_RESOURCE_BYTES) {
+				notes.add(path + " holds more than the " + MAX_RESOURCE_BYTES
+						+ " bytes a texture is read under, so " + texture.sampler()
+						+ " reads one black pixel");
+
+				return null;
+			}
+
+			NoiseTexture.Image decoded = NoiseTexture.decode(bytes);
+
+			return new Image(texture, decoded.width(), decoded.height(), decoded.rgba(),
+					decoded.width() + "x" + decoded.height());
+		} catch (IOException | RuntimeException e) {
+			notes.add(path + " could not be read: " + e.getMessage() + ", so " + texture.sampler()
+					+ " reads one black pixel");
 
 			return null;
 		}

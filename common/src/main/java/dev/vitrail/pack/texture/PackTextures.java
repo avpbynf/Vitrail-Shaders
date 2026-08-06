@@ -66,10 +66,11 @@ public final class PackTextures {
 	 * @param stage   which stage the name is taken over in, absent both for a {@code customTexture},
 	 *                which takes it over everywhere, and for a key too broken to name one
 	 * @param sampler the name being taken over, taken over ANYWAY and left with nothing behind it,
-	 *                which is not a nicety: Mellow points {@code texture.deferred.colortex3} at a
-	 *                texture of the game, and letting the name fall back to colour target three
-	 *                would have its deferred read the scene as a cloud texture. Empty only where the
-	 *                key itself named no sampler, and that line is as good as absent
+	 *                which is not a nicety: Complementary points {@code texture.deferred.colortex3}
+	 *                at a cloud and water lookup table, and letting one misspelled word later in
+	 *                that line hand the name back to colour target three would have its deferred
+	 *                read the scene as that table. Empty only where the key itself named no sampler,
+	 *                and that line is as good as absent
 	 */
 	public record Refused(String key, String value, String reason, Optional<TextureStage> stage,
 			String sampler) {
@@ -193,24 +194,31 @@ public final class PackTextures {
 			return;
 		}
 
+		String path = parts[0];
+
+		// A namespaced path names a resource the GAME owns and hands out through its own manager,
+		// and it deliberately does NOT go through the confinement in ShaderPackSource. That is not
+		// a hole in it: the confinement exists so that a path the pack wrote cannot leave the
+		// pack's directory once normalised, and there is no path here to normalise. What the pack
+		// wrote is an identifier the game resolves for itself, out of the resource packs already
+		// loaded, exactly as it resolves the identifiers of its own textures; nothing in this
+		// engine turns it into a name on disk. PackImages is where it is looked up.
+		//
+		// Everything the rest of the line declared goes with it, as it goes with Iris: a namespaced
+		// path is served as a plain image whatever shape and format the words after it announce, no
+		// .mcmeta of the pack is consulted for it, and the defaults left standing here are the
+		// nearest and repeating pair Iris binds such a texture with.
+		if (PackTexture.gameResource(path)) {
+			supplied.add(new PackTexture(sampler, stage, path, Optional.empty(), false, false));
+			return;
+		}
+
 		Optional<PackTexture.Raw> raw = parts.length == PNG_TOKENS
 				? Optional.empty()
 				: rawOf(parts);
 		if (parts.length != PNG_TOKENS && raw.isEmpty()) {
 			refused.add(new Refused(key, value, "declares a raw texture this cannot read", stage,
 					sampler));
-			return;
-		}
-
-		String path = parts[0];
-
-		//
-		// A namespaced path names a texture the game owns and hands out through its own manager,
-		// which is not something this engine reaches. Said before the file is looked for, because
-		// looking for it inside the pack would report the wrong reason.
-		if (path.indexOf(':') >= 0) {
-			refused.add(new Refused(key, value, "points at " + path
-					+ ", a resource of the game rather than a file of the pack", stage, sampler));
 			return;
 		}
 
