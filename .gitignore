@@ -37,6 +37,7 @@ replay_pid*.log
 
 # Working notes, planning and measurement work. Useful to have next to the code,
 # but none of it is part of what the project ships.
+CLAUDE.md
 NOTES.md
 ROADMAP.md
 notes/
