@@ -45,9 +45,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = DefaultFluidRenderer.class, remap = false)
 public abstract class DefaultFluidRendererMixin {
 
+	/**
+	 * The table this reading was last taken against, or -1 for none. A flag of the process would
+	 * report the first pack of the session and stay silent for every pack after it, which is the one
+	 * moment the reading is worth taking: the numbers are the pack's own and no two packs share them.
+	 */
 	@Unique
-	private static final java.util.concurrent.atomic.AtomicBoolean vitrail$said =
-			new java.util.concurrent.atomic.AtomicBoolean();
+	private static final java.util.concurrent.atomic.AtomicInteger vitrail$said =
+			new java.util.concurrent.atomic.AtomicInteger(-1);
 
 	@Unique
 	private int vitrail$id = BlockStateIds.NONE;
@@ -70,10 +75,11 @@ public abstract class DefaultFluidRendererMixin {
 				? BlockStateIds.NONE
 				: BlockStateIds.packed(fluidState.createLegacyBlock());
 
-		// Said once for the first fluid meshed, because every link after it is invisible: a number
-		// that never leaves this method looks exactly like a number that reached the shader and was
-		// ignored, and the two are a mixin apart.
-		if (vitrail$said.compareAndSet(false, true)) {
+		// Said once for the first fluid meshed under each table, because every link after it is
+		// invisible: a number that never leaves this method looks exactly like a number that reached
+		// the shader and was ignored, and the two are a mixin apart.
+		int table = BlockStateIds.generation();
+		if (vitrail$said.getAndSet(table) != table) {
 			Vitrail.logger().info("The first fluid meshed is {} and it carries the packed id {}",
 					fluidState == null ? "nothing" : fluidState.createLegacyBlock(), this.vitrail$id);
 		}

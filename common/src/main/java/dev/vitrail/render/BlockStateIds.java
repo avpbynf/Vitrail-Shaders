@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * What {@code block.properties} means once the registry is there to read it against: every block
@@ -61,6 +63,17 @@ public final class BlockStateIds {
 
 	private static volatile Object2IntMap<BlockState> table = empty();
 
+	/**
+	 * How many tables have been built, which is how a reading taken once can be taken once per pack
+	 * rather than once per process.
+	 * <p>
+	 * The two places that report on the mesh, the fluid ids and the light's own cull, are flags of
+	 * the run: a pack changed in a running game left them standing, so the only measurement of the
+	 * session was the first pack's, taken at exactly the moment a second one is what is being
+	 * judged. They compare this number instead of holding a boolean.
+	 */
+	private static volatile int generation;
+
 	private BlockStateIds() {
 	}
 
@@ -72,6 +85,9 @@ public final class BlockStateIds {
 	static void install(BlockIds ids) {
 		Object2IntMap<BlockState> built = empty();
 		List<String> unknown = new ArrayList<>();
+		// A set, because a declaration on a tag walks every block of it and would otherwise say the
+		// same thing forty times over.
+		Set<String> widened = new TreeSet<>();
 		for (BlockIds.Entry entry : ids.entries()) {
 			if (entry.id() > MAX_ID) {
 				// Refused rather than truncated. A number that does not fit would come back out of
@@ -82,14 +98,15 @@ public final class BlockStateIds {
 				// by digits, so there is no negative number to weigh.
 				unknown.add("block." + entry.id() + ", too large for the mesh to carry");
 			} else if (entry.tag()) {
-				addTag(entry, built, unknown);
+				addTag(entry, built, unknown, widened);
 			} else {
-				addBlock(entry, built, unknown);
+				addBlock(entry, built, unknown, widened);
 			}
 		}
 
 		Object2IntMap<BlockState> previous = table;
 		table = built;
+		generation++;
 		if (!ids.isEmpty()) {
 			Vitrail.logger().info("{} of this pack's {} block declarations reach {} block states",
 					ids.entries().size() - unknown.size(), ids.entries().size(), built.size());
@@ -100,6 +117,15 @@ public final class BlockStateIds {
 		if (!unknown.isEmpty()) {
 			Vitrail.logger().info("{} name nothing this game has and are dropped: {}", unknown.size(),
 					unknown);
+		}
+
+		// Said out loud, where this was a debug line nobody turns on. A filter naming a property the
+		// block has not got is not skipped, it is taken out of the test, and what is left matches
+		// more states than the pack wrote: the declaration paints the whole block where it meant to
+		// paint the half of it that is lit, or wet, or open.
+		if (!widened.isEmpty()) {
+			Vitrail.logger().warn("{} declarations filter on a property their block has not got, so "
+					+ "they bind more states than the pack named: {}", widened.size(), widened);
 		}
 
 		ids.problems().forEach(problem -> Vitrail.logger().warn("{}", problem));
@@ -150,12 +176,17 @@ public final class BlockStateIds {
 		return id < 0 ? NONE : packedFrom(id);
 	}
 
+	/** Which table the numbers on a mesh belong to, counted up at every load. See {@link #generation}. */
+	public static int generation() {
+		return generation;
+	}
+
 	private static int packedFrom(int id) {
 		return (id + 1) << 1;
 	}
 
 	private static void addBlock(BlockIds.Entry entry, Object2IntMap<BlockState> into,
-			List<String> unknown) {
+			List<String> unknown, Set<String> widened) {
 		Identifier identifier;
 		try {
 			identifier = Identifier.fromNamespaceAndPath(entry.namespace(), entry.path());
@@ -172,7 +203,7 @@ public final class BlockStateIds {
 			return;
 		}
 
-		add(block, entry, into);
+		add(block, entry, into, widened);
 	}
 
 	/**
@@ -181,7 +212,7 @@ public final class BlockStateIds {
 	 * {@code %Minecraft:Logs} would otherwise name nothing.
 	 */
 	private static void addTag(BlockIds.Entry entry, Object2IntMap<BlockState> into,
-			List<String> unknown) {
+			List<String> unknown, Set<String> widened) {
 		List<HolderSet.Named<Block>> found = BuiltInRegistries.BLOCK.getTags()
 				.filter(tag -> tag.key().location().getNamespace().equalsIgnoreCase(entry.namespace())
 						&& tag.key().location().getPath().equalsIgnoreCase(entry.path()))
@@ -192,10 +223,11 @@ public final class BlockStateIds {
 			return;
 		}
 
-		found.forEach(tag -> tag.forEach(block -> add(block.value(), entry, into)));
+		found.forEach(tag -> tag.forEach(block -> add(block.value(), entry, into, widened)));
 	}
 
-	private static void add(Block block, BlockIds.Entry entry, Object2IntMap<BlockState> into) {
+	private static void add(Block block, BlockIds.Entry entry, Object2IntMap<BlockState> into,
+			Set<String> widened) {
 		StateDefinition<Block, BlockState> states = block.getStateDefinition();
 		if (entry.predicates().isEmpty()) {
 			states.getPossibleStates().forEach(state -> into.putIfAbsent(state, entry.id()));
@@ -209,11 +241,11 @@ public final class BlockStateIds {
 		entry.predicates().forEach((key, value) -> {
 			Property<?> property = states.getProperty(key);
 			if (property == null) {
-				// Not a problem of ours and not worth a warning per state: a pack keeps declarations
-				// for blocks whose properties changed between versions, and dropping the filter would
-				// bind the whole block instead of some of it.
-				Vitrail.logger().debug("block.{} filters {} on {}, which has no such property",
-						entry.id(), entry.name(), key);
+				// Collected rather than said here: a pack keeps declarations for blocks whose
+				// properties changed between versions, and one line per block of a tag would bury
+				// the point. Dropping the filter is what widens the declaration, so the count and
+				// the names are what install() reports, once.
+				widened.add("block." + entry.id() + " " + entry.name() + " on " + key);
 
 				return;
 			}

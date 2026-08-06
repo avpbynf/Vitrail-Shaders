@@ -2,6 +2,7 @@ package dev.vitrail.neoforge.sodium;
 
 import dev.vitrail.neoforge.mixin.MixinSodiumWorldRenderer;
 import dev.vitrail.neoforge.mixin.RenderSectionManagerAccessor;
+import dev.vitrail.render.BlockStateIds;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.Vitrail;
 
@@ -71,7 +72,12 @@ public final class ShadowTerrain {
 
 	private static Vec3 camera;
 
-	private static boolean measured;
+	/**
+	 * The block table the cull was last measured against, or -1 for none. Counted rather than
+	 * latched: a flag of the process would report the first pack of the session and say nothing for
+	 * any pack loaded after it, which is where the reading is worth having.
+	 */
+	private static int measured = -1;
 
 	private ShadowTerrain() {
 	}
@@ -149,10 +155,10 @@ public final class ShadowTerrain {
 			manager.finalizeRenderLists(minecraft.gameRenderer.mainCamera(), viewport,
 					fog == null ? FogParameters.NONE : fog, true);
 
-			// Once, and never on a frame where the camera saw nothing. Two equal numbers mean the
-			// cull did not happen, and nothing on screen would say so.
-			if (!measured && seen > 0) {
-				measured = true;
+			// Once per pack, and never on a frame where the camera saw nothing. Two equal numbers
+			// mean the cull did not happen, and nothing on screen would say so.
+			if (measured != BlockStateIds.generation() && seen > 0) {
+				measured = BlockStateIds.generation();
 				Vitrail.logger().info("Shadow cull walked {} sections for the light against {} "
 						+ "for the camera", sections(manager.getRenderLists()), seen);
 			}
