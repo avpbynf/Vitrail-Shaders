@@ -9,6 +9,7 @@ import dev.vitrail.pack.source.PackReport;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
+import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.settings.PackSession;
@@ -245,7 +246,8 @@ public final class PackChain {
 				values.shadowColour());
 		this.seed = chain.chain().seed()
 				.filter(where -> this.targets.has(where.target()))
-				.map(where -> new SceneSeed(where, this.targets.format(where.target())))
+				.map(where -> new SceneSeed(where, this.targets.format(where.target()),
+						seedExtras(chain, where)))
 				.orElse(null);
 		// Composed where the world's own translucents are about to blend, so it needs that pass to
 		// exist: a pack serving no translucent geometry gets no layer, and the game's features stay
@@ -281,6 +283,55 @@ public final class PackChain {
 		this.entities = new EntityDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted,
 				seedEnabled && this.seed != null, this.targets);
+	}
+
+	/**
+	 * The draw buffers the seed has to empty besides the one the scene itself goes into, which are
+	 * the rest of the ones its geometry program declares.
+	 * <p>
+	 * A gbuffers program writes all of its targets at once and the seed stands in for one, so
+	 * leaving the rest alone is what left a pixel carrying the game's colour over the gbuffer of
+	 * whatever the pack had drawn behind it. The list is asked of the same walk that gave the seed
+	 * its target, so the two agree by construction; when it disagrees all the same, which is a place
+	 * where the terrain is served through a name the walk was never asked about, nothing is claimed
+	 * and the seed writes the one target it always did.
+	 * <p>
+	 * Three kinds of draw buffer are left out, because the seed empties a target by writing the
+	 * clear colour the pack declared for it and for these that value is not what an empty pixel
+	 * holds: colortex0 when the pack named no colour of its own, the renderer starting that one at
+	 * the fog of the frame; any target of an integer format, which a {@code vec4} output does not
+	 * write at all; and any target the pack keeps from one frame to the next, where an empty pixel
+	 * is last frame's pixel and {@code colortexNClear} says so.
+	 */
+	private List<SceneSeed.Extra> seedExtras(PackProgram.Chain chain, ChainPlan.Seed where) {
+		List<ChainPlan.Attachment> attachments = chain.chain()
+				.geometryOf(where.from(), false)
+				.map(ChainPlan.Pass::attachments)
+				.orElse(List.of());
+		if (attachments.size() < 2 || attachments.get(0).target() != where.target()
+				|| attachments.get(0).side() != where.side()) {
+			return List.of();
+		}
+
+		// The clear colours are read off the plan and not off ColorTargets, which reads them off the
+		// plan itself: the decision is the plan's, and asking it is asking the one place that holds
+		// it rather than adding a second.
+		TargetDirectives directives = chain.targets().directives();
+		List<SceneSeed.Extra> extras = new ArrayList<>();
+		for (ChainPlan.Attachment attachment : attachments.subList(1, attachments.size())) {
+			int index = attachment.target();
+			if (!this.targets.has(index) || !directives.clears(index)
+					|| directives.format(index).used().integer()
+					|| (index == 0 && !directives.declaresClearColour(index))) {
+				continue;
+			}
+
+			TargetDirectives.Colour empty = directives.clearColour(index);
+			extras.add(new SceneSeed.Extra(index, attachment.side(), this.targets.format(index),
+					new Vector4f(empty.r(), empty.g(), empty.b(), empty.a())));
+		}
+
+		return extras;
 	}
 
 	/**
@@ -1428,8 +1479,7 @@ public final class PackChain {
 		// terrain program drew in is served an empty one rather than the last one that was written.
 		GpuTextureView covered = this.targets.coverage();
 		this.seed.draw(encoder, this.quad, mainView,
-				covered == null ? this.targets.black() : covered, depthView,
-				this.targets.view(this.seed.target(), this.seed.side()));
+				covered == null ? this.targets.black() : covered, depthView, this.targets);
 	}
 
 	/**
@@ -1713,6 +1763,16 @@ public final class PackChain {
 			// leaves the mask empty and this covers the target whole, which is what it always did.
 			Vitrail.logger().info("It paints only what the pack's own terrain has not written, which "
 					+ "the coverage mask says pixel by pixel");
+			// Named because it is the difference between a gbuffer that agrees with itself and one
+			// that carries the game's colour over the pack's normals, and neither shows as itself.
+			List<Integer> emptied = this.seed.emptied();
+			if (!emptied.isEmpty()) {
+				Vitrail.logger().info("Where it paints over that terrain, which is where the game drew "
+						+ "in front of it, the rest of that program's draw buffers are emptied: {}. "
+						+ "They would otherwise keep the gbuffer of the block behind, and the deferred "
+						+ "stage would light the game's colour with it",
+						emptied.stream().map(TargetName::canonical).toList());
+			}
 		} else if (where.isEmpty()) {
 			Vitrail.logger().info("Nothing carries the game's frame in {}, so every program of the "
 					+ "chain starts from a clear colour", place());

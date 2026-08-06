@@ -17,13 +17,16 @@ import com.mojang.blaze3d.shaders.ShaderType;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.resources.Identifier;
+import org.joml.Vector4fc;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -55,6 +58,27 @@ import java.util.function.Supplier;
  * through {@code gbuffers_textured}, whose draw buffers start at colortex4. The whole class goes
  * away the day the gbuffers run, and the mask with it.
  * <p>
+ * <strong>The other draw buffers of that program are emptied wherever the scene lands on top of
+ * it, or the pixel carries half a gbuffer.</strong> A gbuffers program fills all of its targets in
+ * one draw, so a pixel it touched carries a set of targets that agree with one another. The seed
+ * used to write the first of them alone, and where the mask is set and the game drew in front - a
+ * mob standing against a wall - the colour became the mob's while the normal, the specular and the
+ * lightmap stayed the wall's, and the deferred stage lit the one with the other. Those are the only
+ * pixels emptied, and the reason for the narrowness is the same one: everywhere else the pack's own
+ * geometry wrote nothing at all into those targets, and whatever is there is a prepare's or the
+ * clear's and none of the seed's business.
+ * <p>
+ * It is a second draw and not a second output of the first, because those two sets of pixels are
+ * not the same set: the scene goes in wherever the pack did not answer, and the emptying only where
+ * it did and was covered. One pass can discard a fragment but it cannot write some of its
+ * attachments and not others.
+ * <p>
+ * <strong>What goes into them is the target's own clear colour, and only where that value is really
+ * what the pack means by an empty pixel.</strong> Three cases where it is not are left alone
+ * instead: colortex0 with no colour of its own, which the renderer starts at the fog of the frame;
+ * a target the pack keeps between frames, whose empty is last frame's picture; and an integer
+ * format, which a {@code vec4} output does not write at all.
+ * <p>
  * A draw and not a copy. {@code copyTextureToTexture} ends up on {@code vkCmdCopyImage}, which
  * reinterprets bits instead of converting them, and the Java side only checks that both formats
  * carry a colour aspect. The main target is RGBA8_UNORM and colortex0 is RG11B10_FLOAT on most
@@ -74,6 +98,8 @@ final class SceneSeed {
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/seed_fragment");
 	private static final Identifier KEEP_FRAGMENT_ID =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/seed_keep_fragment");
+	private static final Identifier EMPTY_FRAGMENT_ID =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/seed_empty_fragment");
 
 	private static final String SAMPLER = "InSampler";
 
@@ -87,6 +113,8 @@ final class SceneSeed {
 	private static final String KEPT = "KeptSampler";
 
 	private static final Supplier<String> LABEL = () -> "Vitrail scene seed";
+
+	private static final Supplier<String> EMPTY_LABEL = () -> "Vitrail scene seed gbuffer";
 
 	private static final Supplier<String> KEEP_LABEL = () -> "Vitrail depth before the features";
 
@@ -174,10 +202,37 @@ final class SceneSeed {
 			}
 			""";
 
+	/**
+	 * One draw buffer of the geometry program the seed stands in for, past the first, that the seed
+	 * can empty: where it goes, the format its target was really allocated as, and what the pack
+	 * means by nothing having been drawn there.
+	 *
+	 * @param empty the target's own clear colour, read off the plan. The draw buffers whose empty is
+	 *              not that value are not made into one of these at all; the class comment says
+	 *              which those are and why
+	 */
+	record Extra(int target, TargetSchedule.Side side, GpuFormat format, Vector4fc empty) {
+	}
+
 	private final ChainPlan.Seed seed;
+
+	/**
+	 * The draw buffers past the first that this can empty, in the order the program declared them
+	 * and with the ones it cannot answer for already left out. Empty is the ordinary answer for a
+	 * pack whose terrain writes one target, and then no second pass is built at all.
+	 */
+	private final List<Extra> extras;
+
 	private final RenderPipeline pipeline;
+
+	/** The pass that empties the rest of the gbuffer, or null when there is none to empty. */
+	private final RenderPipeline empties;
+
 	private final RenderPipeline keep;
 	private final ShaderSource source;
+
+	/** Built once with one output per target emptied, and handed back at every compile. */
+	private final String emptyFragment;
 
 	/** The depth the pack's own geometry left, or null until a frame has taken one. */
 	private TargetSurface kept;
@@ -203,7 +258,11 @@ final class SceneSeed {
 	/** Why this frame kept no depth, in the log's own words, or null when it kept one. */
 	private String refusal = NEVER_ASKED;
 
+	/** Whether {@link #empties} compiled, asked again every frame like the seed's own pipeline. */
+	private boolean emptying;
+
 	private boolean reported;
+	private boolean saidNoEmptying;
 
 	/**
 	 * @param seed        which target the scene goes into and on which half, both taken from the
@@ -211,13 +270,22 @@ final class SceneSeed {
 	 * @param destination that target's format as the pack declared it. The caller is the one that
 	 *                    checks the target exists: a place that has nowhere to put the scene draws
 	 *                    no seed and says so, it does not refuse the pack
+	 * @param extras      the draw buffers of that program past the first that this may empty, in the
+	 *                    program's own order and with the ones it may not already left out. Empty
+	 *                    where there is nothing to empty, and then the seed is the one pass it was
 	 */
-	SceneSeed(ChainPlan.Seed seed, GpuFormat destination) {
+	SceneSeed(ChainPlan.Seed seed, GpuFormat destination, List<Extra> extras) {
 		this.seed = seed;
+		this.extras = List.copyOf(extras);
+		this.emptyFragment = this.extras.isEmpty() ? null : emptyFragmentOf(this.extras);
 		this.source = (id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
 				if (FRAGMENT_ID.equals(id)) {
 					return FRAGMENT;
+				}
+
+				if (EMPTY_FRAGMENT_ID.equals(id)) {
+					return this.emptyFragment;
 				}
 
 				return KEEP_FRAGMENT_ID.equals(id) ? KEEP_FRAGMENT : null;
@@ -247,6 +315,8 @@ final class SceneSeed {
 				.withCull(false)
 				.build();
 
+		this.empties = this.extras.isEmpty() ? null : emptiesPipeline(this.extras);
+
 		this.keep = RenderPipeline.builder()
 				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/seed_keep"))
 				.withVertexShader(VERTEX_ID)
@@ -261,19 +331,85 @@ final class SceneSeed {
 				.build();
 	}
 
-	/** Where the scene goes, which is the first draw buffer of the terrain program. */
-	int target() {
-		return this.seed.target();
+	/**
+	 * The pass that empties the rest of the gbuffer: one attachment per target, in the order the
+	 * program declared them, and none of the pack's blending. A target either kept what the pack's
+	 * geometry left or it did not.
+	 */
+	private static RenderPipeline emptiesPipeline(List<Extra> extras) {
+		RenderPipeline.Builder builder = RenderPipeline.builder()
+				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/seed_empty"))
+				.withVertexShader(VERTEX_ID)
+				.withFragmentShader(EMPTY_FRAGMENT_ID)
+				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
+				.withBindGroupLayout(BindGroupLayout.builder()
+						.withSampler(COVERAGE)
+						.withSampler(DEPTH)
+						.withSampler(KEPT)
+						.build())
+				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
+				.withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+				.withCull(false);
+
+		// By slot and never by append: the builder holds the states in an array and the argumentless
+		// form writes slot nought every time, so three targets would leave one state and a pipeline
+		// the pass refuses to bind, by name and in the middle of the world.
+		for (int slot = 0; slot < extras.size(); slot++) {
+			builder.withColorTargetState(slot, new ColorTargetState(Optional.empty(),
+					extras.get(slot).format(), ColorTargetState.WRITE_ALL));
+		}
+
+		return builder.build();
 	}
 
-	/** The half that terrain program would have written, so that the chain reads what it wrote. */
-	TargetSchedule.Side side() {
-		return this.seed.side();
+	/**
+	 * Its fragment stage: the cut of the seed turned the other way round, so that what it writes is
+	 * exactly what the seed painted over, and one output an emptied target.
+	 */
+	private static String emptyFragmentOf(List<Extra> extras) {
+		StringBuilder outputs = new StringBuilder();
+		StringBuilder empties = new StringBuilder();
+		for (int slot = 0; slot < extras.size(); slot++) {
+			outputs.append("layout(location = ").append(slot).append(") out vec4 ofFragData")
+					.append(slot).append(";\n");
+			empties.append("\n\tofFragData").append(slot).append(" = ")
+					.append(literal(extras.get(slot).empty())).append(';');
+		}
+
+		return String.format(Locale.ROOT, """
+				#version 460 core
+
+				uniform sampler2D CoverageSampler;
+				uniform sampler2D DepthSampler;
+				uniform sampler2D KeptSampler;
+
+				in vec2 ofTexCoord;
+
+				%s
+				void main() {
+					bool mine = texture(CoverageSampler, ofTexCoord).r > 0.5;
+					bool infront = texture(DepthSampler, ofTexCoord).r
+							%s texture(KeptSampler, ofTexCoord).r;
+					if (!mine || !infront) {
+						discard;
+					}
+				%s
+				}
+				""", outputs, CLOSER, empties);
 	}
 
-	/** The geometry program this stands in for, for the log. */
-	String from() {
-		return this.seed.from();
+	/**
+	 * One clear colour as a GLSL literal, {@code vec4(0.0, 0.0, 0.0, 1.0)}, printed exactly rather
+	 * than rounded: it is the pack's own value and the target it goes into is often a float one.
+	 */
+	private static String literal(Vector4fc colour) {
+		return String.format(Locale.ROOT, "vec4(%s, %s, %s, %s)", colour.x(), colour.y(), colour.z(),
+				colour.w());
+	}
+
+	/** The draw buffers past the first that the seed really empties, for the log. In pack order. */
+	List<Integer> emptied() {
+		return this.extras.stream().map(Extra::target).toList();
 	}
 
 	/**
@@ -356,22 +492,39 @@ final class SceneSeed {
 
 	/** Called every frame: a resource reload empties the pipeline cache. */
 	boolean prepare(GpuDevice device) {
-		if (device.precompilePipeline(this.pipeline, this.source).isValid()) {
-			return true;
+		if (!device.precompilePipeline(this.pipeline, this.source).isValid()) {
+			if (!this.reported) {
+				this.reported = true;
+				Vitrail.logger().error("The scene seed did not compile, {} keeps its clear colour",
+						TargetName.canonical(this.seed.target()));
+			}
+
+			return false;
 		}
 
-		if (!this.reported) {
-			this.reported = true;
-			Vitrail.logger().error("The scene seed did not compile, {} keeps its clear colour",
-					TargetName.canonical(this.seed.target()));
+		this.emptying = this.empties != null
+				&& device.precompilePipeline(this.empties, this.source).isValid();
+
+		// The scene still goes in when the second pass will not compile: half a repair is what the
+		// seed did before that pass existed and it is worth more than no picture at all. Said all
+		// the same, because the gbuffer it leaves behind is what the pass is there for and nothing
+		// on screen says so.
+		if (this.empties != null && !this.emptying && !this.saidNoEmptying) {
+			this.saidNoEmptying = true;
+			Vitrail.logger().error("The scene seed's gbuffer pass did not compile, so {} keep what "
+					+ "the pack's own terrain wrote where the game drew in front of it, and the "
+					+ "deferred stage lights the game's colour with them",
+					emptied().stream().map(TargetName::canonical).toList());
 		}
 
-		return false;
+		return true;
 	}
 
 	/**
-	 * Draws the scene over {@code into}, everywhere {@code covered} says the pack's own geometry has
-	 * not already written. Only worth calling once {@link #prepare} has said the pipeline is usable.
+	 * Draws the scene over the first of the geometry program's draw buffers, everywhere
+	 * {@code covered} says the pack's own geometry has not already written, and empties the rest of
+	 * them where it landed on top of that geometry. Only worth calling once {@link #prepare} has
+	 * said the pipeline is usable.
 	 *
 	 * @param covered the mask, which is read and never judged: an image of nought everywhere is a
 	 *                mask that hides nothing and the seed then covers the target whole, which is
@@ -379,13 +532,18 @@ final class SceneSeed {
 	 * @param live    the world's depth as it stands, features included. Given the kept image as
 	 *                well when nothing kept one, so that the two compare equal everywhere and the
 	 *                cut is the mask alone, which is what it was before either existed
-	 * @return false when a side of the draw is missing, in which case the target keeps its clear
-	 *         colour rather than holding half an image
+	 * @param targets where the pack's colour targets are looked up, every frame and never held: a
+	 *                resize replaces the images and keeping one across it draws into a texture that
+	 *                has been closed
+	 * @return false when a side of either draw is missing. Nothing is half drawn either way: the
+	 *         scene's own target then keeps its clear colour, and the rest of the gbuffer keeps
+	 *         what it held
 	 */
 	boolean draw(CommandEncoder encoder, GpuBuffer quad, GpuTextureView scene,
-			GpuTextureView covered, GpuTextureView live, GpuTextureView into) {
+			GpuTextureView covered, GpuTextureView live, ColorTargets targets) {
 		boolean held = this.captured && this.kept != null;
 		GpuTextureView before = held ? this.kept.view() : live;
+		GpuTextureView into = targets.view(this.seed.target(), this.seed.side());
 		if (quad == null || scene == null || covered == null || live == null || before == null
 				|| into == null) {
 			return false;
@@ -409,6 +567,61 @@ final class SceneSeed {
 			// NEAREST for the same reason again, and it matters more here than anywhere: the two
 			// depths are compared for having moved, and a filtered read of either would move them
 			// both by a fraction of a texel along every silhouette in the picture.
+			pass.bindTexture(DEPTH, live,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			pass.bindTexture(KEPT, before,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			pass.draw(VERTICES, 1, 0, 0);
+		}
+
+		return !this.emptying || empty(encoder, quad, covered, live, before, targets);
+	}
+
+	/**
+	 * Empties the rest of the gbuffer over the pixels the draw above painted on top of the pack's
+	 * own geometry, which are the ones its cut let through with the mask set.
+	 * <p>
+	 * Nothing at all is written when the seed was cut against the mask alone: {@code infront} is
+	 * then false at every pixel, so this discards the whole screen. That is right rather than a gap.
+	 * The seed threw away every one of those pixels in that mode, the pack's terrain still shows
+	 * there, and its gbuffer is the one that belongs with it.
+	 *
+	 * @return false when a target is missing or is no longer the size of the first one, which is a
+	 *         frame in the middle of a resize. The gbuffer then keeps what it held for that frame,
+	 *         where dropping one attachment is not open to this: the pipeline carries a state per
+	 *         target and the pass refuses to bind against any other count
+	 */
+	private boolean empty(CommandEncoder encoder, GpuBuffer quad, GpuTextureView covered,
+			GpuTextureView live, GpuTextureView before, ColorTargets targets) {
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(EMPTY_LABEL);
+		int width = 0;
+		int height = 0;
+		for (Extra extra : this.extras) {
+			GpuTextureView view = targets.view(extra.target(), extra.side());
+			if (view == null) {
+				return false;
+			}
+
+			if (width == 0) {
+				width = view.getWidth(0);
+				height = view.getHeight(0);
+			} else if (view.getWidth(0) != width || view.getHeight(0) != height) {
+				return false;
+			}
+
+			descriptor.withColorAttachment(view);
+		}
+
+		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0, width, height));
+
+		try (RenderPass pass = encoder.createRenderPass(descriptor)) {
+			pass.setPipeline(this.empties);
+			RenderSystem.bindDefaultUniforms(pass);
+			pass.setVertexBuffer(0, quad.slice());
+			// NEAREST on all three, and for the reasons the draw above gives: a texel of the mask is
+			// a pixel, and the two depths are compared for having moved.
+			pass.bindTexture(COVERAGE, covered,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.bindTexture(DEPTH, live,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.bindTexture(KEPT, before,
