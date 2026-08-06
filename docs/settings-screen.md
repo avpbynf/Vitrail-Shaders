@@ -67,22 +67,22 @@ A pack can group its settings into profiles, and the screen shows one as if it w
 setting whose values are the profile names.
 
 What it shows is derived from the values currently in effect: the most constrained profile all of
-whose values match, and *Custom* when none does. The name is stored in the settings file, but the
-values are the authority - which is what makes the label survive a Reset, where the file is emptied
-and the pack's own values come back and still amount to a profile.
+whose values match, and *Custom* when none does. **No name is stored anywhere**, here or in the
+file, which is what makes the label survive a Reset: the file is emptied, the pack's own values come
+back, and they still amount to a profile.
 
-Choosing a profile puts its values in the pending set, so Apply is what makes it real. It is not
+Choosing a profile puts its values in the pending set, which is also what the reference does, so
+Apply is what makes it real and the file ends up carrying the values rather than the name. It is not
 quite like any other change though: a profile decides every setting it names, so it overrides a
 value already waiting on one of them, and leaves the settings it does not name exactly where they
 were.
 
 **Reset asks before it acts, and then empties this pack's settings file rather than deleting it.**
-The difference matters: a missing file falls back to the one the reference left for the same pack,
-so deleting ours would hand the pack the reference's settings instead of its own and land a Reset on
-values nobody chose here. A file holding nothing but its header is how this side says out loud that
-nothing was chosen. Reset also drops what is pending - a pending value is a change to the settings
-being discarded - and it does not touch `vitrail/options.txt`, so anything greyed out stays greyed
-out afterwards.
+The reference deletes its own, and the two read back the same: a file of comments carries no value
+at all, and the reference removes it itself the next time it loads the pack. Emptying is what keeps
+the confirmation naming the file true, and lets somebody watching the file see it go blank. Reset
+also drops what is pending - a pending value is a change to the settings being discarded - and it
+does not touch `vitrail/options.txt`, so anything greyed out stays greyed out afterwards.
 
 ## The pack list refreshes itself
 
@@ -111,14 +111,18 @@ NeoForge artefact is a launcher shim - a few dozen classes, none of them the ren
 is a jar nested inside it. Looking for a package in the outer jar finds nothing and proves nothing.
 This project's own build script unpacks the nested jar for exactly that reason.
 
-## Where settings live, and why one file per pack
+## Where settings live: one file per pack, shared with the reference
 
-Each pack gets its own file, `vitrail/settings/<pack file name>.txt`. That is not tidiness.
+Each pack gets its own file, `shaderpacks/<pack file name>.txt`. That is the path the reference
+resolves and the only one it reads, so **the two engines share one file per pack**: a setting changed
+under either is the setting the other reads next. It is written in ISO-8859-1, which is what the
+format specifies and what the reference does on both sides.
 
-A setting the player chose is written into the head of every GLSL unit of the pack, whether or not
-that pack declares it. Packs barely share names: on the corpus, the great majority of the names one
-pack knows are foreign to the next. So a single shared file would inject every identifier anybody
-had ever touched into every pack's GLSL, the day the screen started writing what it was given.
+Sharing it is what puts the constraints on how it is written. A boolean is written `true` or
+`false`, because the reference's reader takes literally nothing else and falls back to the pack's
+default on anything it does not recognise. A chosen profile is written as the values it names, one
+per line, because the reference has no key for a profile name at all: writing the name alone would
+hand it a file carrying none of the twenty one settings a profile like BSL's ULTRA decides.
 
 **A name a pack no longer declares is kept, not dropped.** It is reported once and left in the file.
 The reference deletes such names, which loses a player's settings for good the day they try a new
@@ -128,24 +132,21 @@ declared and simply no longer be on a page.
 
 `vitrail/options.txt` keeps its own job and is never written by this screen.
 
-## The layers, and why the screen's order is not the engine's
+## The layers
 
 **What the engine builds a pack with** stacks from the bottom: what the pack's own source declares,
-then the profile the pack names, then the pack's settings file, then `vitrail/options.txt` over
+then a profile `vitrail/options.txt` forces, then the pack's settings file, then that same file over
 everything.
 
-**What the screen shows you** resolves in a different order, and the difference is the profile.
-There, a profile you have chosen sits *above* the settings file rather than under it: picking a
-profile is meant to decide the settings it names, and it would decide nothing if the file you are
-editing outranked it. Read in the order the screen asks, first answer wins: whatever
-`vitrail/options.txt` forces, then what is pending, then a chosen profile, then the settings file,
-then the applied profile, then the pack's own default.
+**What the screen shows you** reads in the same order, first answer wins: whatever
+`vitrail/options.txt` forces, then what is pending, then the settings file, then the forced profile,
+then the pack's own default.
 
-The reference reaches the same *outcome* by a shorter road, and the difference is worth not
-glossing: it has no profile layer at all. Picking a profile there writes that profile's values
-straight into the pending queue, which is also why picking one overrides a value you had already
-queued and leaves the settings it does not name alone - the behaviour above is the same, the
-machinery is not.
+A profile you choose is not a layer in either order. Choosing one puts its values in the pending set
+and keeps nothing else about it, which is what the reference does too, and it is why choosing one
+overrides a value you had already queued and leaves the settings it does not name alone. Only a
+profile named in `vitrail/options.txt` is a layer, and it behaves like every other line of that
+file: it decides what is drawn and never what is written.
 
 The `options.txt` layer wins in both orders and is deliberately global. It is how a pass is proved
 to run, it may name a setting no pack declares at all, and it is edited by hand while the game is
@@ -165,13 +166,6 @@ Several different things, and only the first is about you being overruled.
 
 A slot naming a setting the pack does not declare is not in that list, because it is not greyed at
 all - it becomes a blank. See below.
-
-## Settings the reference wrote
-
-A settings file the reference wrote for the same pack is read when there is no file here yet, once,
-and never written back. The reference does not know the profile line this side writes, so rewriting
-one of its files would silently drop what the player chose there the next time they opened the pack
-under it.
 
 ## What a broken layout does
 

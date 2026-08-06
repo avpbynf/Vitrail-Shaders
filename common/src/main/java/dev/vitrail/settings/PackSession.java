@@ -31,18 +31,18 @@ public record PackSession(Path gameDirectory, Path packPath, String packFileName
 
 		return new PackSession(gameDirectory, packPath, packFileName,
 				PackMenu.read(packPath, languageCode),
-				SettingsFile.read(SettingsFile.source(gameDirectory, packFileName)),
+				SettingsFile.read(SettingsFile.of(gameDirectory, packFileName)),
 				SettingsLayers.forced(gameDirectory));
 	}
 
-	/** Where the screen writes. Never the file Iris left, even when that is what was read. */
+	/** Where the screen writes, which is where Iris reads: one file per pack, shared by both. */
 	public Path settingsFile() {
 		return SettingsFile.of(this.gameDirectory, this.packFileName);
 	}
 
-	/** What was read, which is {@link #settingsFile()} unless Iris's file stood in for it. */
+	/** What was read, which is {@link #settingsFile()}: there is one home and no fallback. */
 	public Path readFrom() {
-		return SettingsFile.source(this.gameDirectory, this.packFileName);
+		return settingsFile();
 	}
 
 	/** The pack's own file with {@code options.txt} over it, ready to build the pack with. */

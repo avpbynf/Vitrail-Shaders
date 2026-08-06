@@ -282,7 +282,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 			// everything again and the same file name is not the same pack: a directory pack is
 			// edited in place, and a zip is replaced under its own name often enough.
 			this.values = current.reread(loaded.menu(), loaded.saved().values(),
-					loaded.saved().profile(), loaded.forcedText());
+					loaded.forcedText());
 			dropMissingPage();
 		} else {
 			adopt(loaded);
@@ -615,13 +615,11 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		}
 
 		try {
-			// Read from where the session read, which is Iris's file until we have written one of
-			// our own; reading our own too early would drop everything it had imported. Written
-			// only ever to ours.
-			SettingsFile.Stored onDisk = SettingsFile.read(loaded.readFrom());
-			current.rebase(onDisk.values(), onDisk.profile(), loaded.forcedText());
-			SettingsFile.write(loaded.settingsFile(),
-					new SettingsFile.Stored(current.toSave(), current.chosenProfile()));
+			// Read again first: the file is shared with Iris and edited by hand, and laying the
+			// pending table over what is on disk is what keeps two edits from erasing each other.
+			SettingsFile.Stored onDisk = SettingsFile.read(loaded.settingsFile());
+			current.rebase(onDisk.values(), loaded.forcedText());
+			SettingsFile.write(loaded.settingsFile(), new SettingsFile.Stored(current.toSave()));
 			current.clearPending();
 			this.error = null;
 		} catch (IOException | RuntimeException e) {
@@ -681,18 +679,17 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	/**
 	 * Empties this pack's settings file, so that it goes back to what the pack itself declares.
 	 * <p>
-	 * Emptied and not deleted, and that is the whole of it: {@link SettingsFile#source} falls back
-	 * on the file Iris left in {@code shaderpacks/} the moment ours is not there, so deleting ours
-	 * would hand the pack Iris's settings rather than its own, and a Reset would land on values the
-	 * player never chose here. A file holding nothing but its header is how this side says out loud
-	 * that nothing was chosen.
+	 * Emptied and not deleted, where Iris deletes its own ({@code Iris.java:464-471}). The two read
+	 * back the same on both sides, a file of comments carrying no value at all, and Iris removes it
+	 * itself the next time it loads the pack; what emptying buys is that the confirmation naming the
+	 * file stays true, and that a player who has that file open sees it go blank.
 	 * <p>
-	 * Three things it deliberately does not do. It does not touch {@code vitrail/options.txt}, which
+	 * Two things it deliberately does not do. It does not touch {@code vitrail/options.txt}, which
 	 * is the file that forces settings from outside and is not the player's to lose here; the
-	 * greyed out widgets stay greyed out after a reset, which is the honest answer. It does not
-	 * touch the file Iris left, which is read but never written. And it drops what is pending rather
-	 * than keeping it, because a pending value is a change the player made to the settings this is
-	 * discarding, so keeping it would put back part of what was asked to be thrown away.
+	 * greyed out widgets stay greyed out after a reset, which is the honest answer. And it drops
+	 * what is pending rather than keeping it, because a pending value is a change the player made to
+	 * the settings this is discarding, so keeping it would put back part of what was asked to be
+	 * thrown away.
 	 */
 	private void reset() {
 		PackSession loaded = this.session;
@@ -864,7 +861,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	private void adopt(@Nullable PackSession loaded) {
 		this.session = loaded;
 		this.values = loaded == null ? null : MenuValues.of(loaded.menu(),
-				loaded.saved().values(), loaded.saved().profile(), loaded.forcedText());
+				loaded.saved().values(), loaded.forcedText());
 		// Out to the list when there is no pack left to configure, which is the view a pack is picked
 		// from and the one the constructor opens on for the same reason. Turning every pack off, or a
 		// pack failing to read, otherwise leaves an empty page under a row of buttons that all return

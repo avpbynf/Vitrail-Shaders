@@ -15,13 +15,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * One pack's settings file, {@code vitrail/settings/<pack file name>.txt}.
+ * One pack's settings file, {@code shaderpacks/<pack file name>.txt}.
  * <p>
- * One file per pack rather than one for all of them, and not for tidiness. A chosen name the pack
- * does not declare is written into the head of every one of its units by
- * {@code SettingSet.headerDefines}. Two thousand two hundred and twenty two of the corpus's names
- * are foreign to BSL, so a single shared file would inject that many bare identifiers into BSL's
- * GLSL the day a screen starts writing everything the player touched.
+ * That is the path Iris resolves and the only one it reads, so the two engines share one file per
+ * pack: a setting changed on either side is the setting the other reads next. A file of our own
+ * somewhere else was read once as a fallback and never written back, which meant nothing ever
+ * travelled from here to Iris and nothing travelled the other way after the first Apply.
+ * <p>
+ * Read and written in ISO-8859-1, which is what OptiFine specifies for these files and what Iris
+ * does on both sides. Strict UTF-8 threw on any byte past 0x7F, and the file is no longer ours
+ * alone to keep in ASCII.
  * <p>
  * A name the pack no longer declares is kept and reported once. Dropping it, which is what Iris
  * does, loses a player's settings for good when they try a new version of a pack and go back.
@@ -30,54 +33,28 @@ import java.util.Map;
  */
 public final class SettingsFile {
 
-	/**
-	 * The mod's own folder next to {@code mods/}. Spelled out rather than taken from
-	 * {@code Vitrail.MOD_ID}, which lives in the class a loader initialises: this package is read
-	 * by the out of game harness and one import of that class would end that.
-	 */
-	private static final String DIRECTORY = "vitrail";
-
-	private static final String SETTINGS = "settings";
-
 	private static final String SUFFIX = ".txt";
 
 	/**
-	 * The one line of either file that names a whole set of settings rather than one of them. No
-	 * pack in the corpus declares a setting under that name, and a profile is a different thing
-	 * from a value anyway: it is a whole set of them.
+	 * The one line of {@code vitrail/options.txt} that names a whole set of settings rather than one
+	 * of them. No pack in the corpus declares a setting under that name, and a profile is a different
+	 * thing from a value anyway: it is a whole set of them.
+	 * <p>
+	 * Nothing writes it. A pack's own file holds the values a profile chooses, one per line, the way
+	 * Iris holds them; forcing a profile from outside is what this key is left for.
 	 */
 	public static final String PROFILE_KEY = "profile";
 
 	private static final List<String> HEADER = List.of(
-			"# Written by Vitrail's settings screen, one NAME=value per line.",
-			"# Only what differs from the pack's own defaults and from the profile named below.",
+			"# Written by Vitrail's settings screen and by Iris, one NAME=value per line.",
+			"# Only what differs from the pack's own defaults.",
 			"# vitrail/options.txt is a different file, it is never written here, and it wins.");
 
 	private SettingsFile() {
 	}
 
 	public static Path of(Path gameDirectory, String packFileName) {
-		return gameDirectory.resolve(DIRECTORY).resolve(SETTINGS).resolve(packFileName + SUFFIX);
-	}
-
-	/**
-	 * Where a pack's settings are read from: ours, or the file Iris writes for the same pack when
-	 * we have none of our own yet.
-	 * <p>
-	 * Read once and never written back. Iris does not know the {@code profile} line, so rewriting
-	 * one of its files through {@link #write} would silently drop what the player chose there the
-	 * next time they open the pack under Iris. Four of these files already sit in the test
-	 * instance, so the case is not hypothetical.
-	 */
-	public static Path source(Path gameDirectory, String packFileName) {
-		Path ours = of(gameDirectory, packFileName);
-		if (Files.isRegularFile(ours)) {
-			return ours;
-		}
-
-		Path iris = PackLoader.directory(gameDirectory).resolve(packFileName + SUFFIX);
-
-		return Files.isRegularFile(iris) ? iris : ours;
+		return PackLoader.directory(gameDirectory).resolve(packFileName + SUFFIX);
 	}
 
 	/**
@@ -90,24 +67,17 @@ public final class SettingsFile {
 		}
 
 		Map<String, String> values = new LinkedHashMap<>();
-		String profile = "";
-		for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+		for (String line : Files.readAllLines(file, StandardCharsets.ISO_8859_1)) {
 			String trimmed = line.trim();
 			int equals = trimmed.indexOf('=');
 			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {
 				continue;
 			}
 
-			String name = trimmed.substring(0, equals).trim();
-			String value = trimmed.substring(equals + 1).trim();
-			if (PROFILE_KEY.equals(name)) {
-				profile = value;
-			} else {
-				values.put(name, value);
-			}
+			values.put(trimmed.substring(0, equals).trim(), trimmed.substring(equals + 1).trim());
 		}
 
-		return new Stored(values, profile);
+		return new Stored(values);
 	}
 
 	/**
@@ -121,14 +91,10 @@ public final class SettingsFile {
 		}
 
 		List<String> lines = new ArrayList<>(HEADER);
-		if (!stored.profile().isEmpty()) {
-			lines.add(PROFILE_KEY + "=" + stored.profile());
-		}
-
 		stored.values().forEach((name, value) -> lines.add(name + "=" + value));
 
 		Path temporary = file.resolveSibling(file.getFileName() + ".part");
-		Files.write(temporary, lines, StandardCharsets.UTF_8);
+		Files.write(temporary, lines, StandardCharsets.ISO_8859_1);
 		try {
 			Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING,
 					StandardCopyOption.ATOMIC_MOVE);
@@ -137,12 +103,7 @@ public final class SettingsFile {
 		}
 	}
 
-	/**
-	 * @param profile the reserved {@code profile} key, "" when the file names none. No pack
-	 *                declares a setting by that name, and a profile is a different thing from a
-	 *                value: it is a whole set of them.
-	 */
-	public record Stored(Map<String, String> values, String profile) {
+	public record Stored(Map<String, String> values) {
 
 		public Stored {
 			// Copied in the order they were read rather than through Map.copyOf, so that a file
@@ -151,7 +112,7 @@ public final class SettingsFile {
 		}
 
 		public static Stored empty() {
-			return new Stored(Map.of(), "");
+			return new Stored(Map.of());
 		}
 	}
 }

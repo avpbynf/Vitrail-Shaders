@@ -79,8 +79,12 @@ files in a `vitrail/` folder next to `mods/`:
 pack.txt       which pack of the folder to load, by whole or partial name,
                or none to load nothing at all
 options.txt    engine switches, one NAME=value per line; wins over the settings
-settings/      one file per pack, holding what differs from the pack's defaults
 ```
+
+What you change in a pack's own settings screen is not kept there. It goes beside
+the pack, in `shaderpacks/<pack file name>.txt`, which is the file Iris reads and
+writes for the same pack: one file per pack, shared, so settings follow you from
+one engine to the other.
 
 None of these files has to exist, and without them nothing is drawn: a pack is
 loaded once one is picked, in the screen or in `pack.txt`, and never before.

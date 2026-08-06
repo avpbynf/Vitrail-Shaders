@@ -12,8 +12,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The order settings are resolved in, from the bottom: what the pack declares, then the profile it
- * names, then the pack's own file, then {@code vitrail/options.txt} over everything.
+ * The order settings are resolved in, from the bottom: what the pack declares, then the profile
+ * {@code vitrail/options.txt} forces, then the pack's own file, then that same file over
+ * everything.
  * <p>
  * The last layer is deliberately last and deliberately global. It proves a pass runs, it may name
  * a setting no pack declares, and it is edited by hand while the game runs. What it holds is
@@ -26,7 +27,11 @@ import java.util.Set;
  */
 public final class SettingsLayers {
 
-	/** The mod's own folder, spelled out for the reason given in {@link SettingsFile}. */
+	/**
+	 * The mod's own folder next to {@code mods/}. Spelled out rather than taken from
+	 * {@code Vitrail.MOD_ID}, which lives in the class a loader initialises: this package is read
+	 * by the out of game harness and one import of that class would end that.
+	 */
 	private static final String DIRECTORY = "vitrail";
 
 	private static final String OPTIONS = "options.txt";
@@ -70,12 +75,18 @@ public final class SettingsLayers {
 		return Collections.unmodifiableMap(chosen);
 	}
 
-	/** The user layer, the only one this side owns: the pack's file with the forced one on top. */
+	/**
+	 * The user layer, the only one this side owns: the pack's file with the forced one on top.
+	 * <p>
+	 * A profile can only come from the forced file. A pack's own file holds the values a profile
+	 * chooses rather than its name, which is how Iris writes it and what lets a file written here
+	 * be read there.
+	 */
 	public static Resolved resolve(SettingsFile.Stored saved, Map<String, OptionValue> forced) {
 		Map<String, OptionValue> chosen = new LinkedHashMap<>();
 		saved.values().forEach((name, value) -> chosen.put(name, OptionValue.parse(value)));
 
-		String profile = saved.profile();
+		String profile = "";
 		Set<String> forcedNames = new LinkedHashSet<>(forced.keySet());
 		for (Map.Entry<String, OptionValue> entry : forced.entrySet()) {
 			if (SettingsFile.PROFILE_KEY.equals(entry.getKey())) {

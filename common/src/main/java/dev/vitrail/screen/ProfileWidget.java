@@ -16,11 +16,10 @@ import java.util.Optional;
  * one does not clear what the player set on a setting the profile never mentions.
  * <p>
  * <strong>What is shown is worked out from the values, not read from a name kept beside them</strong>,
- * which is what {@link #valueLabel()} and {@link #cycle(int)} both do and what the line below used
- * to deny. The name IS stored, in the settings file, and it is not the authority: after a Reset that
- * file holds nothing but its header, the pack's own values are back, and those values still amount
- * to a profile that this then names. Storing the answer instead would show Custom over a pack
- * sitting exactly on its own ULTRA.
+ * which is what {@link #valueLabel()} and {@link #cycle(int)} both do. No name is stored anywhere:
+ * picking a profile queues the values it names, exactly as Iris does, and the file then carries
+ * those values one per line. After a Reset that file holds nothing but its header, the pack's own
+ * values are back, and those values still amount to a profile that this then names.
  * <p>
  * A pack declaring no profile never reaches this class: the token disappears from the page rather
  * than becoming a blank.
@@ -84,16 +83,15 @@ public final class ProfileWidget extends OptionWidget {
 	}
 
 	/**
-	 * Amber for a profile chosen and not applied yet, and amber as well when a pending value
-	 * contradicts what that profile sets, which is the closest we get to Iris's guessed "Custom"
-	 * without guessing. Never amber while {@code options.txt} names the profile: nothing about a
-	 * selector that file decides is waiting on this screen.
+	 * Amber when the values on screen amount to a different profile from the ones the pack was built
+	 * with, Custom counting as one of the two: picking a profile and then contradicting one of its
+	 * settings reads as Custom over whatever was applied, which is a change and is marked as one.
+	 * Never amber while {@code options.txt} names the profile: nothing about a selector that file
+	 * decides is waiting on this screen.
 	 */
 	@Override
 	protected boolean modified() {
-		return !forced()
-				&& (!host().values().profile().equals(host().values().appliedProfile())
-						|| host().values().profileOverridden());
+		return !forced() && !host().values().profile().equals(host().values().appliedProfile());
 	}
 
 	@Override
