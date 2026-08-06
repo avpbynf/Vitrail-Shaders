@@ -71,7 +71,8 @@ confinement.
 gradlew.bat build
 ```
 
-Requires JDK 25. Artifacts land in `build/libs`.
+The JDK it wants is pinned in `gradle.properties`, along with the Minecraft and loader versions.
+Artifacts land in `build/libs`.
 
 ## What the build refuses
 
@@ -99,7 +100,7 @@ than warnings.
 `checkText` covers the two things no compiler sees: a byte order mark, which reaches a GLSL
 compiler as a stray character in front of the version directive and which PowerShell writes
 unless told not to, and typographic punctuation - the en and em dashes, the curly quotes, the
-single-glyph ellipsis and the non-breaking space.
+single-glyph ellipsis and the non-breaking space. The exact set is one line of `build.gradle`.
 
 The vendored stareval sources under `uniform/expr/kroppeb/` are left out of the javadoc lint.
 Their javadoc is their author's, and bending borrowed code to this project's taste only makes the

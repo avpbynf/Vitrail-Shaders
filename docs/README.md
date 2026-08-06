@@ -40,22 +40,24 @@ Shader packs are written in OpenGL-era GLSL, against an OpenGL-era pipeline. Min
 renders through Vulkan. Those two facts are not compatible, and every design decision here
 follows from how that gap is closed.
 
-Vitrail closes it **once per program, before that program draws**. Every GLSL unit a pack ships is
-rewritten into Vulkan GLSL, then handed to the compiler the game already embeds, which turns it into
-SPIR-V. Nothing is translated per frame and nothing is translated twice: once a program has been
-through it, there is no legacy GLSL left behind it.
+Vitrail closes it **at load time, not while a frame is being drawn**. Every GLSL unit a pack ships
+is rewritten into Vulkan GLSL, then handed to the compiler the game already embeds, which turns it
+into SPIR-V. No frame ever waits on a translation.
 
-"Before it draws" rather than "at selection", because the chain is translated when the pack is
-chosen while the programs that draw the world and the sky are translated the first time the place
-they belong to is drawn. A pack is not read again for a dimension it has already been read for.
+"A load" is more often than you might think, and it is worth knowing where the pauses come from. The
+chain is translated when the pack is chosen; the programs that draw the world and the sky are
+translated the first time the place they belong to is drawn. And **changing dimension is a full
+reload**, because a dimension directory replaces the root rather than layering over it - the whole
+pack is read, translated and its colour targets allocated again. That is the hitch at the portal,
+and the log names it as it happens.
 
 That choice has consequences worth knowing about, because they explain most of what you will
 observe:
 
-- **The cost is paid up front, not per frame.** Some of it lands at selection, and the rest in the
-  handful of frames after it: pipelines are compiled one per frame on purpose, so that a load is a
-  short fade rather than a three-second freeze. While that lasts, the game's own image is what you
-  see - including for a moment after every resource reload.
+- **The cost is paid at load, not per frame.** Some of it lands at selection and the rest in the
+  frames just after, because pipelines are compiled one per frame on purpose rather than all at
+  once. Until the last one is ready the chain draws nothing at all and the game's own image is what
+  you see - which is also what happens for a moment after every resource reload.
 - **A pack that cannot be translated fails loudly**, not as a corrupt image twenty minutes later.
   When Vitrail refuses something, the log names it.
 - **Uniform and sampler binding is decided up front**, so a pack that asks for something the

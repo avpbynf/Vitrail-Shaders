@@ -43,16 +43,18 @@ cannot serve it, and it has built all four of the ones Reverie asks for: two out
 the driver supports them.
 
 **A single pass can be refused without the pack being refused.** If a program's fragment stage
-declares an input its vertex stage does not provide, that one program fails to link and the engine
-falls back to the game's rendering for that surface. You get the game's version of that one thing,
-not a hole.
+genuinely *reads* an input its vertex stage does not provide, that one program fails to link and the
+engine falls back to the game's rendering for that surface. You get the game's version of that one
+thing, not a hole.
 
-This is common enough to be worth recognising, and it has a specific cause: several packs write one
-source file per program and hand it to both stages behind a stage guard, so every fragment varying
-also appears in the vertex expansion, in a branch nobody takes. The compiler here runs with
-optimisation off, so a varying nobody reads still reaches the compiled module and the mismatch is
-real. **The log names which program was refused and which inputs did not match** - that line, not
-this page, is what tells you whether a given pack is affected today.
+Declaring one is not enough to cost the pass. An input the fragment body never reads is struck from
+the stage before it is compiled, precisely so that a declaration alone does not refuse a program
+that would have worked. What is left after that is a real mismatch.
+
+The usual cause is a shared header of varyings that every fragment stage of the pack includes,
+full-screen passes among them, where only some of the geometry stages write them. **The log names
+which program was refused and which inputs did not match** - that line, not this page, is what tells
+you whether a given pack is affected today.
 
 ## The effect never ran
 

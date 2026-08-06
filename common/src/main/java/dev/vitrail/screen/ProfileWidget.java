@@ -17,10 +17,10 @@ import java.util.Optional;
  * <p>
  * <strong>What is shown is worked out from the values, not read from a name kept beside them</strong>,
  * which is what {@link #valueLabel()} and {@link #cycle(int)} both do and what the line below used
- * to deny. The name IS stored, in the settings file, and it is not the authority: after a Reset
- * that file is gone and the pack's own values are back, and those values still amount to a profile
- * that this then names. Storing the answer instead would show Custom over a pack sitting exactly on
- * its own ULTRA.
+ * to deny. The name IS stored, in the settings file, and it is not the authority: after a Reset that
+ * file holds nothing but its header, the pack's own values are back, and those values still amount
+ * to a profile that this then names. Storing the answer instead would show Custom over a pack
+ * sitting exactly on its own ULTRA.
  * <p>
  * A pack declaring no profile never reaches this class: the token disappears from the page rather
  * than becoming a blank.

@@ -64,10 +64,12 @@ A pack that ships a dimension folder holding two programs has **exactly two prog
 dimension. Everything else there resolves through the fallback tree *inside that folder*, not
 through the root. The reference implementation states this in as many words.
 
-Two corollaries follow. The condition is the **existence** of the directory, not its contents, so
-an empty dimension directory yields an empty program set rather than falling back to the root. And
-the base set is not necessarily the root: it is the directory bound to the catch-all entry of the
-dimension mapping, and in practice most packs keep no programs at the root at all.
+Two corollaries follow. The condition is the **existence** of the directory, not its contents, so an
+empty dimension directory yields an empty program set rather than falling back to the root - because
+emptying a folder is the only way a pack has of saying "nothing here", and reading the base set
+instead would overrule it. A directory that is named and *absent* does fall back. And the base set
+is not necessarily the root: it is the directory bound to the catch-all entry of the dimension
+mapping, and in practice most packs keep no programs at the root at all.
 
 ### The fallback tree
 

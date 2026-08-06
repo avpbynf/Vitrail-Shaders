@@ -60,11 +60,14 @@ import java.util.function.Supplier;
  * this class: two answers to "which half does this pass write" produce no error at all, only a
  * picture that is plausible and wrong.
  * <p>
- * What it cannot do yet has to be said rather than covered up. No geometry program runs, so
- * colortex0, or whichever target the pack's terrain program writes first, is painted with the
- * game's finished frame and every other buffer starts from its clear colour. A pass reading
- * normals or a material id out of one of those reads nothing of the sort, and the log names each
- * one before the first frame is drawn.
+ * What it cannot do yet has to be said rather than covered up, and this paragraph said something
+ * else for a while: it claimed no geometry program runs at all, which {@link TerrainDraw},
+ * {@link GeometryProgram} and {@link SkyDraw} have all contradicted since. What is true is
+ * narrower. The families that still come from the game - the entities, the particles, the weather -
+ * reach the pack's first target through {@link SceneSeed} carrying the game's finished frame, and
+ * every other buffer starts from its clear colour underneath them. A pass reading normals or a
+ * material id off one of those pixels reads nothing of the sort, and the log names the families
+ * concerned before the first frame is drawn.
  * <p>
  * Two lifecycle traps are paid for here rather than rediscovered. The device caches a compiled
  * module under an identifier, a stage and a set of defines, never under the source, so every load

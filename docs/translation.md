@@ -1,6 +1,6 @@
 # Translation
 
-Shader packs are written in OpenGL-era GLSL. Minecraft 26.2 renders through Vulkan. This page is
+Shader packs are written in OpenGL-era GLSL. The game renders through Vulkan. This page is
 about how the first becomes the second, and what does not survive the trip.
 
 ## Once, at load time
@@ -67,9 +67,14 @@ it complains about overload precision qualifiers. Renaming is triggered only on 
 actually defines, so lengthening the reserved list costs nothing.
 
 **Depth reads are converted, and not by the translator.** The game renders in reversed Z; packs
-expect the legacy convention. Nothing in the translated text is rewritten for it: the *image* the
-pack samples is converted instead, once, when the depth is taken. That is not a shortcut, it is the
-only thing that works. A lookup can only be rewritten if it can be found, and it can only be found
+expect the legacy convention. The translated text does carry depth conversion, but only where the
+site is a *fixed* one the translator cannot miss: the built-in fragment depth, a write to the
+built-in output depth, and the clip depth in the vertex epilogue. What it never rewrites is a
+**lookup through a sampler**. Those are served by converting the *image* instead, once, when the
+depth is taken.
+
+That is not a shortcut, it is the only thing that works. A lookup can only be rewritten if it can be
+found, and it can only be found
 by the name of its sampler - so a pack helper taking `sampler2D depth` as a parameter and called
 with a colour target on one line and a depth texture two lines below cannot be served both ways
 without writing the body twice. Converting the image makes every lookup right whatever name it was
@@ -170,17 +175,11 @@ Which programs a pack actually serves is resolved through a fallback tree, where
 a parent and resolution walks up recursively. The tree and its transitivity are established by
 reading the reference implementation, not from documentation.
 
-Three rules there are easy to get wrong:
-
-- **A dimension directory replaces the base set rather than merging with it.** A pack shipping two
-  programs in a dimension directory has exactly two programs in that dimension, and everything else
-  falls back *within* that directory.
-- **The condition is the existence of the directory, not its contents.** An empty dimension
-  directory yields an empty program set rather than falling back to the base set, because emptying
-  a folder is the only way a pack has of saying "nothing here" and reading the base set instead
-  would overrule it. A directory that is named and *absent* does fall back.
-- **The base set is not necessarily the root.** It is the directory bound to the catch-all entry of
-  the dimension mapping, and in practice most packs keep no programs at the root at all.
+Which directory a program is looked up in is decided before any of that, and the three rules there
+are easy to get wrong - a dimension directory replaces the base set rather than merging with it, the
+condition is the directory's existence and not its contents, and the base set is not necessarily the
+root. They belong to the format rather than to the translator, and they are in
+[the pack format](pack-format.md).
 
 ## Serving the uniforms a pack expects
 
@@ -201,10 +200,11 @@ happens to have.
 **Where the reference has a known bug that packs are tuned against, the bug is reproduced rather
 than fixed.** Two cases are worth knowing because they look like defects here and are not.
 
-A pack can declare separate half-lives for how fast wetness rises and how fast it dries. The
-declared **fall** does not take effect: the engine matches the reference, where it is not reachable.
-Correcting that in isolation would change the look of every pack tuned against the observed
-behaviour.
+The format appears to offer a pack two half-lives for wetness, one for how fast it rises and one for
+how fast it dries. There is only one setting behind both names, and it is the **rise**: whichever of
+the two directives is read last sets it, so a pack writing a drying time is quietly changing how
+fast wetness comes on. The engine matches the reference here. Correcting it in isolation would
+change the look of every pack tuned against the observed behaviour.
 
 Likewise, a time uniform keeps varying in the Nether and the End although the game gives them a
 fixed time, because that is what the reference does and packs derive angles from it. It is those two

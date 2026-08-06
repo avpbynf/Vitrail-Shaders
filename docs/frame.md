@@ -175,8 +175,14 @@ through the textured gbuffers program, whose draw buffers start at the fifth tar
 
 ## Where the seed does not reach
 
-The seed brings in what the game has drawn *by the time it runs*. Anything the game draws later,
-and anything drawn into a texture the pack's final pass then overwrites, is not covered by it.
+The seed brings in what the game has drawn *by the time it runs*. Anything the game draws later is
+not in it.
+
+That would have taken the game's translucent features with it - the player's own body among them,
+which is drawn there - since they land in the game's target and the pack's final pass overwrites it.
+They are not lost: the engine redirects the game's colour output for the length of that phase and
+composes what it catches onto the pack's target afterwards. It is a second full-screen layer,
+bracketing one phase rather than standing at one seam.
 
 ## Why a family cannot simply be switched over
 
@@ -188,18 +194,24 @@ routed into the pack's targets while the others stayed with the game, the chain 
 world missing everything that stayed behind - and the final pass would then erase what stayed
 behind as it wrote. Moving one family in isolation makes the image *worse*, not partially better.
 
-What holds instead is to keep **attachment zero on the game's colour target** while the further
-attachments go to the targets the pack's draw buffers name. The visible image does not move by a
-pixel, and that is exactly the invariant that verifies the step: nothing should change on screen,
-while the pack's later passes start receiving real normals and real material ids where they were
-reading clear values.
-
-It also means the verification is not visual. What proves the step is that those targets stop
-appearing in the load-time list of targets read before anything wrote them.
-
 That is the structural reason families move over one at a time, each with its own switch, rather
-than being patched in: each one enters the frame at a different seam, and a full-screen layer can
-only ever pick up what is already in the buffer when it runs.
+than being patched in: each one enters the frame at a different seam.
+
+### The first draw buffer moved, and the reason is worth keeping
+
+An intermediate arrangement kept **attachment zero on the game's colour target** while the further
+attachments went to the targets the pack's draw buffers named. It had a beautiful verification -
+nothing changes on screen, so the invariant is that the image does not move by a pixel - and it was
+right for the step it was taken at.
+
+It does not hold any more, and what killed it is worth knowing. What a terrain program puts in draw
+buffer zero is not a colour, it is whatever the pack packed there, and the game's colour target is
+eight bits a channel. One pack of the corpus packs two values into each channel of a sixteen-bit
+target; the trip through the game's target quantised its albedo away entirely, and what came back
+was the encoded normal being read as albedo. So the first draw buffer now goes to the pack on every
+half of the world, and keeping it on the game's target survives only as a **demotion**, for the
+cases where there is nowhere else to send it: no chain running, no answer in the plan, or an opaque
+half that could not be given a coverage mask.
 
 ## Reading the plan before running it
 

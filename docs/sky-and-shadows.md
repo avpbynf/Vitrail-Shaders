@@ -54,9 +54,10 @@ the game does and it is better conditioned in floating point. The shadow map is 
 legacy forward convention, cleared to one and tested less-or-equal.
 
 The reason is that nothing converts it on the way out. The *scene's* depth is turned round once, in
-the image, when the copies handed to the pack are taken; the shadow map is not copied and not turned
-round, so it has to be stored in the convention the pack expects. The two are the same rule -
-hand the pack the window it reads in - applied at different places.
+the image, when the copies handed to the pack are taken. The shadow map is copied too - that is how
+the pack gets a view without translucents - but it is never converted, so it has to be **stored** in
+the convention the pack expects. The two are the same rule, hand the pack the window it reads in,
+applied at different places.
 
 ### A shadow sampler implies a comparison this backend cannot express
 
@@ -194,7 +195,9 @@ as a debt, not as a guarantee: the sky needs it before it is believed, not after
 ### How a pack tells the elements apart
 
 The format splits them by which program they fall to: geometry carrying a texture goes to the
-textured sky program, bare geometry to the basic one, clouds to their own. The engine recognises
+textured sky program, everything untextured to the basic one, clouds to their own. Untextured is not
+the same as bare: the sunrise band carries a vertex colour and still falls to the basic program,
+because the split is on the texture and on nothing else. The engine recognises
 each element by the label the game gives its own render pass - an answer the game hands out at
 exactly the moment the answer is needed, costing no second table that could drift from the first -
 and carries the format, topology and blending of the game's pipeline alongside it.
@@ -247,16 +250,21 @@ sky program and none on the textured one - which the format allows - would other
 disc marks the whole frame and whose sun and moon are cut out of it.
 
 Because the sky is drawn before the world, the sky stage is more often than not what opens the
-frame. Not always: the Nether and the End open no sky pass, `sky=off` in the options stops one, and
-so does a pack that serves no sky program at all. In those cases the terrain opens it, as it always
-did.
+frame. Not always: `sky=off` in the options stops it, so does a pack that serves no sky program at
+all, and so does the Nether, whose skybox is none and which opens no sky pass whatever. In those
+cases the terrain opens the frame, as it always did.
+
+The End is the case to be careful with. It opens sky passes of its own - it has its own sky, its own
+flash, and a vertex format neither of the others uses - but it draws no **disc**, which is the piece
+the pieces above are keyed to and the one the horizon cone rides in.
 
 ### The sun's path is tilted for the bodies as well as for the light
 
-Packs offer a setting that rotates the sun's path. It inclines the pack's *lighting* immediately,
-because the pack computes its own light direction from it, and the game's celestial bodies know
-nothing about it - so left alone, the visible sun and the direction of the shadows would disagree by
-exactly that angle, for the sun as much as for the moon.
+Packs declare a setting that rotates the sun's path, in their properties file. The engine is what
+acts on it: the light direction it serves the pack is already turned by that angle, and so are the
+shadow matrices. The game's celestial bodies know nothing about it - so left alone, the visible sun
+and the direction of the shadows would disagree by exactly that angle, for the sun as much as for
+the moon.
 
 They do not, because the rotation is pushed onto the celestial pose itself. The place matters and is
 not interchangeable with any other: it goes in where the three bodies still share one matrix, after
@@ -295,7 +303,8 @@ pale band under it. The two images do not differ by colour. They differ by the p
 
 ### Only geometry repairs it
 
-This is the part that cost two work items to learn.
+This is the part that was learned the expensive way, by fixing two things that were each worth
+fixing and neither of which could close it.
 
 Clearing the colour target to the fog colour is correct. Removing the sky from the full-screen
 layer is correct. **Neither can repair the horizon**, because both act on pixels that some pass

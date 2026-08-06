@@ -152,17 +152,16 @@ so the compiler categories above stop failing too: a run under it is a listing a
 a green one says nothing about whether an ordinary build passes. The build prints that itself
 whenever the flag is on, rather than leaving it to be remembered from here.
 
-**The javadoc gate is the exception, and the reason generalises.** Doclint reports a broken
-reference as an *error*, and `-Werror` has nothing to say about errors, so that gate stays armed
-under the flag. Worth knowing in itself, and worth knowing as a shape: "this flag turns the checks
-off" is a claim about a build, and a build is the one thing that will answer the question if you
-plant a defect and ask it. The sentence above used to say the opposite, in this page and in the line
-the build prints about itself.
+**The javadoc gate is the exception.** Doclint reports a broken reference as an *error*, and
+`-Werror` has nothing to say about errors, so that gate stays armed under the flag. Worth knowing as
+a shape as well as a fact: "this flag turns the checks off" is a claim about a build, and a build is
+the one thing that answers it if you plant a defect and ask.
 
 **A text check**, for the two things no compiler sees: a byte order mark, which reaches a GLSL
 compiler as a stray character in front of the version directive; and typographic punctuation, which
-is four characters rather than two shapes - the en and em dashes, the curly quotes, the single-glyph
-ellipsis and the non-breaking space. The last two are the ones people are surprised by.
+is wider than the quotes and dashes people expect - it also takes the single-glyph ellipsis and the
+non-breaking space, and those are the two that surprise. The exact set is one line of the build
+script.
 
 **The rule behind all of it:** a gate blocks only if it is objective and mechanically fixable.
 Anything requiring taste stays in the editor. A check that cries wolf gets routinely bypassed, and
