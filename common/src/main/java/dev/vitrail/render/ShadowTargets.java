@@ -91,11 +91,14 @@ final class ShadowTargets {
 		this.asked = asked;
 		this.format = GpuFormats.of(asked.format().used());
 		TargetDirectives.Colour colour = asked.clearColour();
-		// The same correction the colour targets make: a format that gained an alpha channel on the
-		// way to the device starts opaque, because in GL the three component texture the pack wrote
-		// against always sampled as one and the promoted image returns what is really there.
+		// The same correction the colour targets make, and it stops where theirs stops: a format
+		// that gained an alpha channel on the way to the device starts opaque, because in GL the
+		// three component texture the pack wrote against always sampled as one and the promoted
+		// image returns what is really there - but a pack that named a clear colour itself wrote
+		// four components and is handed the four it wrote. Forcing the alpha over the pack's own
+		// value would be this engine overruling it on a channel it was explicit about.
 		this.clearColour = new Vector4f(colour.r(), colour.g(), colour.b(),
-				asked.format().alphaAdded() ? 1.0F : colour.a());
+				asked.format().alphaAdded() && !asked.declaresClearColour() ? 1.0F : colour.a());
 	}
 
 	/**

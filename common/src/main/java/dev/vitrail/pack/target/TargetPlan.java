@@ -161,18 +161,22 @@ public final class TargetPlan {
 		DimensionSet dimensions = DimensionSet.discover(source);
 		ProgramSet programs = ProgramSet.enumerate(source, dimensions);
 
-		// A dimension directory replaces the root rather than being layered over it, so a pack
-		// that ships nothing under world0 is read from the root and not from both.
-		List<ProgramSet.ProgramKey> here = fragmentsOf(programs, dimension);
+		// A dimension directory replaces the root rather than being layered over it, and what
+		// decides is that the directory EXISTS, never what it holds. Iris builds a program set for
+		// a folder it finds and hands back the base set only when the folder is named and absent,
+		// so a pack shipping an empty world0 draws nothing in the overworld rather than falling
+		// back to the root. Reproduced rather than improved on: emptying a dimension is the only
+		// way a pack has of saying "nothing here", and reading the root instead would overrule it.
+		boolean present = !dimension.equals(ProgramSet.ROOT)
+				&& source.topLevelDirectories().contains(dimension);
+
 		Draft draft = new Draft();
 		draft.packName = source.packName();
 		draft.dimension = dimension;
-		draft.place = here.isEmpty() ? ProgramSet.ROOT : dimension;
+		draft.place = present ? dimension : ProgramSet.ROOT;
 		draft.properties = properties;
 
-		List<ProgramSet.ProgramKey> entries = here.isEmpty()
-				? fragmentsOf(programs, ProgramSet.ROOT)
-				: here;
+		List<ProgramSet.ProgramKey> entries = fragmentsOf(programs, draft.place);
 
 		read(source, options, settings, properties, entries, draft);
 		walk(properties, options, settings.globalDefines(options), entries, filter, draft);

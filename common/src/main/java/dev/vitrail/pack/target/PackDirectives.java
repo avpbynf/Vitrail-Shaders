@@ -66,9 +66,14 @@ public final class PackDirectives {
 	 * <p>
 	 * The clear colour matters even when {@code clear} is false, as Iris says on the same line: it is
 	 * then what the buffer starts its life holding rather than what it returns to every frame.
+	 *
+	 * @param declaresClearColour whether the colour is the pack's own or the default above. Read for
+	 *                            the same reason {@link TargetDirectives#declaresClearColour(int)}
+	 *                            is: a promoted format has its default alpha corrected to one, and
+	 *                            that correction must not reach over a colour the pack wrote itself
 	 */
 	public record ShadowColour(TargetFormat.Resolution format, boolean clear,
-			TargetDirectives.Colour clearColour) {
+			TargetDirectives.Colour clearColour, boolean declaresClearColour) {
 	}
 
 	private PackDirectives(Builder builder) {
@@ -100,16 +105,17 @@ public final class PackDirectives {
 
 	/**
 	 * Reads every fragment entry point of one dimension. A dimension directory replaces the root
-	 * rather than being layered over it, exactly as {@link TargetPlan} reads it, so a pack that
-	 * ships nothing under world0 is read from the root and not from both.
+	 * rather than being layered over it, exactly as {@link TargetPlan} reads it, and on the same
+	 * condition: the directory has to EXIST, and an empty one is read as empty rather than sending
+	 * the read back to the root.
 	 */
 	public static PackDirectives read(ShaderPackSource source, OptionIndex options,
 			SettingSet settings, String dimension) throws IOException {
 		ProgramSet programs = ProgramSet.enumerate(source, DimensionSet.discover(source));
-		List<ProgramSet.ProgramKey> here = fragmentsOf(programs, dimension);
-		List<ProgramSet.ProgramKey> entries = here.isEmpty()
-				? fragmentsOf(programs, ProgramSet.ROOT)
-				: here;
+		boolean present = !dimension.equals(ProgramSet.ROOT)
+				&& source.topLevelDirectories().contains(dimension);
+		List<ProgramSet.ProgramKey> entries =
+				fragmentsOf(programs, present ? dimension : ProgramSet.ROOT);
 
 		IncludeExpander expander = new IncludeExpander(source, options, settings);
 		Builder builder = builder();
@@ -259,7 +265,8 @@ public final class PackDirectives {
 		private static final String SHADOW_COLOUR = "shadowcolor";
 
 		private static final ShadowColour SHADOW_COLOUR_DEFAULT = new ShadowColour(
-				TargetFormat.defaultFormat(), true, new TargetDirectives.Colour(1.0F, 1.0F, 1.0F, 1.0F));
+				TargetFormat.defaultFormat(), true, new TargetDirectives.Colour(1.0F, 1.0F, 1.0F, 1.0F),
+				false);
 
 		private final Map<Integer, ShadowSetting> shadowColours = new TreeMap<>();
 
@@ -412,7 +419,8 @@ public final class PackDirectives {
 				return new ShadowColour(
 						this.format == null ? SHADOW_COLOUR_DEFAULT.format() : this.format,
 						this.clear == null ? SHADOW_COLOUR_DEFAULT.clear() : this.clear,
-						this.clearColour == null ? SHADOW_COLOUR_DEFAULT.clearColour() : this.clearColour);
+						this.clearColour == null ? SHADOW_COLOUR_DEFAULT.clearColour() : this.clearColour,
+						this.clearColour != null);
 			}
 		}
 
