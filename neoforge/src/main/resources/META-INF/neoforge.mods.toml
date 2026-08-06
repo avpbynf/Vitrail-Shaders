@@ -24,6 +24,13 @@ the pack's own programs, with the pack's full pass chain and settings screen; th
 the particles and the clouds still come from the game.
 '''
 
+# Sodium reads this block out of every mod's own metadata and turns the named mixin off.
+# features.render.world.sky hides the whole sky pass whenever the camera is in a fluid, which with a
+# pack loaded means no sky at all: none of the six elements is drawn, so none of the pack's sky
+# programs runs. LevelRendererSkyMixin puts the same answer back where no pack draws the sky.
+[mods."sodium:options"]
+"mixin.features.render.world.sky" = false
+
 [[mixins]]
 config = "vitrail.mixins.json"
 

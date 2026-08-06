@@ -188,6 +188,18 @@ public final class SkyDraw {
 	}
 
 	/**
+	 * Whether the sky of this frame is a pack's to draw, asked outside the frame's own passes.
+	 * <p>
+	 * The head of {@link #element} without the pieces only a pass can answer, and the difference does
+	 * not matter to the one caller: a pack that turns out to serve no program for a piece leaves that
+	 * piece to the game, which still needs the pass the game opens for it. The flag alone would not do,
+	 * since it is written from the options of whichever pack loaded last and survives the pack going.
+	 */
+	public static boolean serves() {
+		return PackChain.sky() != null && wanted;
+	}
+
+	/**
 	 * How far the loaded pack tilts the path of the sun and the moon, in degrees, and nought when no
 	 * pack is loaded.
 	 * <p>
