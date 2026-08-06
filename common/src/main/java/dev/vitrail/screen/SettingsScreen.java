@@ -405,11 +405,18 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		// is clicking it. Apply deliberately does not close: a setting is judged by looking at the
 		// world it changed, and a screen that left as it applied would take the world with it.
 		//
-		// Never Apply on the list, even holding something waiting, and that is not tidiness. This
-		// slot is the only button on the list that leaves the screen at all, since Back is the root
-		// here and has nowhere to go; letting a click made on a pack's page take Done's place would
-		// shut the last door and leave Escape as the way out. What is waiting keeps waiting, and
-		// says so on the page that owns it.
+		// Never Apply on the list, and the reason to keep that term is not the one an earlier
+		// version of this comment gave. It claimed the list can be reached holding something
+		// waiting; it cannot. The two ways in both settle it on the way: openPacks drops what is
+		// pending outright, and adopt takes the values away with the session, after which pending()
+		// answers nought for want of anything to count.
+		//
+		// So this is belt and braces, and worth the two words. Without it the row's last button
+		// would depend on an invariant established in two other methods, and a third way onto the
+		// list that forgot to clear either one would put Apply where Done stands - on the only
+		// button that leaves the screen at all, Back being the root here with nowhere to go. That
+		// failure shuts the last door and leaves Escape as the way out, which is exactly the shape
+		// of thing nobody notices until somebody is stuck behind it.
 		tools.addChild(!this.listingPacks && pending() > 0
 				? button(ScreenText.APPLY, NARROW_BUTTON, () -> {
 					apply();
