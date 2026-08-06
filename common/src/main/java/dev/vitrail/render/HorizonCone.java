@@ -37,6 +37,28 @@ import java.util.function.Supplier;
  * no pass for it and no pack can ask for it, so it carries no element, no directive and no program
  * of its own: it is extra geometry drawn with the disc's, inside the pass the game opened for the
  * disc, and it lives or dies with it.
+ * <p>
+ * <strong>It claims the whole lower hemisphere against the scene seed, and that is the price.</strong>
+ * Seen from the eye the surface runs from the apex, straight down, up to atan(16/radius) over the
+ * horizontal, so every direction below the horizon is on it; and it shares the disc's pipeline, so
+ * it writes the disc's mask over all of them. {@link SceneSeed} throws away the game's own picture
+ * wherever that mask is set and the depth has not moved since the pack's geometry finished with it.
+ * <p>
+ * <strong>Nothing the game still draws there is lost by that, and it is worth saying why rather than
+ * hoping.</strong> The seed reads the game's target at {@code AfterOpaqueFeatures}, which
+ * {@code LevelRenderer.addMainPass} posts from inside the frame graph's main pass; the clouds and the
+ * weather are drawn in the two passes {@code addCloudsPass} and {@code addWeatherPass} add after it,
+ * so neither has been drawn yet when the seed reads and no mask can take either away. What the seed
+ * does read is the solid feature phase, and {@code SubmitNodeCollection} sends a render type there
+ * only when it does not blend: every one of the game's pipelines that does not blend writes depth,
+ * the armour decal excepted, and that one tests {@code EQUAL} so it lands only where something in
+ * the same phase has already written one. Every pixel the game's opaque features paint has therefore
+ * moved the depth since the seed's snapshot, and the seed keeps it, mask or no mask.
+ * <p>
+ * <strong>The one thing that would be lost is the world itself</strong>, and only where the world
+ * reaches the pack's colour target through that same seed rather than writing it. There the cone
+ * would cut the ground out from under the picture, which is why it is drawn only for
+ * {@link TerrainDraw.Mask#WRITTEN}.
  */
 final class HorizonCone {
 
@@ -67,6 +89,9 @@ final class HorizonCone {
 
 	/** Whether the first draw has been reported. */
 	private boolean drew;
+
+	/** And whether the refusal has been, which is the other thing worth saying exactly once. */
+	private boolean refused;
 
 	/**
 	 * Builds the cone, and rebuilds it when the render distance has moved the ring.
@@ -99,11 +124,30 @@ final class HorizonCone {
 	/**
 	 * Draws the cone in the pass the sky disc opened, with everything that pass already has bound:
 	 * the pack's program, its attachments, its block and its samplers.
+	 * <p>
+	 * Only where the world's own opaque geometry marks the pixels it wrote, for the reason the class
+	 * comment gives in full. An answer nobody has given yet counts as no, and costs the first frame
+	 * of a world its cone: the geometry is read where the chunk renderer picks its shader, which is
+	 * after the sky in the frame, so the first sky of a world is drawn before the world has said
+	 * anything. That frame then looks exactly as it looked before this class existed, which is the
+	 * one wrong answer that cannot make a picture worse.
 	 *
 	 * @param program what is drawing it, for the one line that says it happened
+	 * @param world   what the world's opaque geometry does about the mask
 	 */
-	void draw(RenderPass pass, String program) {
-		if (this.buffer == null) {
+	void draw(RenderPass pass, String program, TerrainDraw.Mask world) {
+		if (this.buffer == null || world != TerrainDraw.Mask.WRITTEN) {
+			// Said once, and only for the answer that is really an answer: a refusal while nothing
+			// has been read yet is the first frame and settles itself. The band staying bare is not
+			// a thing a reader can tell from a picture, so without this line the cone would be
+			// missing for a reason nothing anywhere says.
+			if (world == TerrainDraw.Mask.ABSENT && !this.refused) {
+				this.refused = true;
+				Vitrail.logger().info("The horizon cone is not drawn: the world's opaque geometry "
+						+ "does not mark the pixels it wrote, so its picture reaches the pack's "
+						+ "target through the scene seed, and a cone would cut it out of the seed");
+			}
+
 			return;
 		}
 
@@ -129,6 +173,7 @@ final class HorizonCone {
 
 		this.radius = 0;
 		this.drew = false;
+		this.refused = false;
 	}
 
 	/**

@@ -213,6 +213,11 @@ public final class TerrainProgram {
 		return this.body.servable();
 	}
 
+	/** @see GeometryProgram#covers */
+	boolean covers() {
+		return this.body.covers();
+	}
+
 	/** @see GeometryProgram#descriptor */
 	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
 		return this.body.descriptor(colour, depth);

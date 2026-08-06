@@ -325,11 +325,18 @@ public final class SkyDraw {
 	 * refuses the disc with {@code sky=false} has drawn its own, and the method the refusal cancels
 	 * is the one this rides in; a place where the game draws no disc at all, the End and the Nether,
 	 * never reaches this. Iris gates its own cone on the same directive.
+	 * <p>
+	 * <strong>And only where the world's own opaque geometry marks its pixels too</strong>, which is
+	 * the one condition the disc does not share and could not: the disc stands over the sky, the cone
+	 * stands over the whole of the ground. Marking a pixel cuts the scene seed there, so a cone drawn
+	 * while the world reaches the pack's colour target through that seed would cut the world out of
+	 * it, over the lower half of the screen, and leave the pack's sky in its place.
+	 * {@link TerrainDraw.Mask} is the answer, and it is the world's own.
 	 */
 	public static void horizon(RenderPass pass, RenderPipeline bound) {
 		SkyDraw draw = PackChain.sky();
 		if (draw != null && draw.drawing != null && draw.drawing.owns(bound)) {
-			draw.horizon.draw(pass, draw.drawing.path());
+			draw.horizon.draw(pass, draw.drawing.path(), TerrainDraw.opaqueMask());
 		}
 	}
 

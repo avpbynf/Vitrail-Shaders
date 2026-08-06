@@ -583,6 +583,19 @@ final class GeometryProgram {
 	}
 
 	/**
+	 * Whether this pass really marks the pixels it wrote, which for an opaque pass is the same
+	 * question as whether it writes the pack's own colour target at all: the constructor ties the
+	 * two together and says why they cannot be separated.
+	 * <p>
+	 * Asked from outside because a pass that claims a pixel against the scene seed takes it away
+	 * from every pass whose picture reaches the pack's target through that seed, and the only one
+	 * who can say whether a pass is in that position is the pass itself.
+	 */
+	boolean covers() {
+		return this.covers;
+	}
+
+	/**
 	 * The render pass this program wants opened, or null to leave the chunk renderer's own alone.
 	 * <p>
 	 * Null is the ordinary answer and not a failure: a pass that gained nothing over the one Sodium

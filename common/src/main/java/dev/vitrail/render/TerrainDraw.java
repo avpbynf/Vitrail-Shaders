@@ -19,6 +19,7 @@ import org.joml.Matrix4f;
 
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,6 +37,34 @@ import java.util.Map;
  * are compiled against is only known here.
  */
 public final class TerrainDraw {
+
+	/**
+	 * What the world's opaque geometry does about the mask the scene seed is cut with. Three answers
+	 * and not two, because the question is asked at the head of a frame and the world is drawn in the
+	 * middle of one.
+	 */
+	public enum Mask {
+
+		/**
+		 * No chunk pass has asked for a program yet, so nothing has been read and nobody has
+		 * answered. The first frame of a world is here, and so is every frame of a place with no
+		 * chunk in it at all.
+		 */
+		UNREAD,
+
+		/** Both opaque halves are the pack's and mark the pixels they wrote. */
+		WRITTEN,
+
+		/**
+		 * At least one opaque half does not, whether because the pack serves no program for it,
+		 * because the plan gave it no target of its own, or because the option is off. Its picture
+		 * then reaches the pack's colour target through the scene seed and nowhere else.
+		 */
+		ABSENT
+	}
+
+	/** The two halves of the world that write outright, which are the two the mask is about. */
+	private static final List<TerrainPass> OPAQUE = List.of(TerrainPass.SOLID, TerrainPass.CUTOUT);
 
 	/**
 	 * Off unless {@code options.txt} asks for it, and read again at every load. It is also what an
@@ -354,6 +383,35 @@ public final class TerrainDraw {
 	 */
 	public static boolean asked() {
 		return wanted;
+	}
+
+	/**
+	 * What the world's own opaque geometry does about the mask the scene seed is cut with, which
+	 * anything else meaning to claim a pixel against that seed has to know before it claims one.
+	 * <p>
+	 * Both opaque halves and not one: a half the pack serves nothing for keeps the renderer's own
+	 * shader, draws into the game's target and reaches the pack's colour target through the seed,
+	 * exactly like a half that has no mask. Either of them in that position is enough to make a
+	 * claim elsewhere on the screen take the world away.
+	 */
+	public static Mask opaqueMask() {
+		TerrainDraw draw = PackChain.terrain();
+		if (draw == null || !wanted) {
+			return Mask.ABSENT;
+		}
+
+		if (!draw.read) {
+			return Mask.UNREAD;
+		}
+
+		for (TerrainPass pass : OPAQUE) {
+			TerrainProgram program = draw.programs.get(pass);
+			if (program == null || !program.covers()) {
+				return Mask.ABSENT;
+			}
+		}
+
+		return Mask.WRITTEN;
 	}
 
 	/**
