@@ -78,7 +78,10 @@ public final class ViewMatrices implements ViewSource {
 
 	private final Vector4f convention = new Vector4f(ClipSpace.REVERSED);
 
-	/** The pass's own model view and its inverse, standing empty until a pass sets one. */
+	/**
+	 * The pass's own model view and its inverse, standing empty until a pass sets one and empty
+	 * again at every frame boundary, which {@link #advance} says why it has to be.
+	 */
 	private final Matrix4f passModelView = new Matrix4f();
 	private final Matrix4f passModelViewInverse = new Matrix4f();
 	private boolean passSet;
@@ -102,7 +105,8 @@ public final class ViewMatrices implements ViewSource {
 
 	/**
 	 * Takes this frame's view and projection, publishes them, and shifts the previous frame's
-	 * copies down.
+	 * copies down. It is also the boundary a pass's own matrix and colour are dropped at, for the
+	 * reason written on the two lines that drop them.
 	 *
 	 * @param view                 the level's model view, a pure rotation in the same handedness and
 	 *                             the same convention, so it needs no correction of its own
@@ -139,6 +143,15 @@ public final class ViewMatrices implements ViewSource {
 			this.previousProjection.set(this.projection);
 			this.seeded = true;
 		}
+
+		// The pass matrix and the pass colour go back to the camera's and to white here, and the
+		// boundary is the only place they can: they are set by whoever is about to write a block and
+		// nobody owes them a clear afterwards. A geometry program that has locked broken never
+		// reaches its writeBlock, so the last matrix any pass set, which is the moon's on a frame
+		// that drew the sky, would stand in for the camera's in everything read after it, the
+		// decoded dump first of all. Cleared for the reason CameraBob is cleared, at the same point.
+		this.passSet = false;
+		this.passColour.set(1.0F, 1.0F, 1.0F, 1.0F);
 
 		this.far = far;
 		this.renderDistanceChunks = renderDistanceChunks;
