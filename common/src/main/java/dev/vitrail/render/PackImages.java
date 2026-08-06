@@ -40,10 +40,9 @@ import java.util.Optional;
  * and left with nothing behind it rather than dropped. {@link PackTextures#suppliedTo} still
  * carries the name, so the sampler reads one black pixel rather than falling back to the colour
  * target it shares a name with. That fall back is the failure worth a class of its own:
- * Complementary points
- * {@code texture.deferred.colortex3} at a cloud and water lookup table, and letting the name go
- * back to colour target three would have its deferred read the scene as that table, which is a
- * picture nobody would question.
+ * Complementary points {@code texture.deferred.colortex3} at a cloud and water lookup table, and
+ * letting the name go back to colour target three would have its deferred read the scene as that
+ * table, which is a picture nobody would question.
  */
 final class PackImages {
 
@@ -215,8 +214,8 @@ final class PackImages {
 	private static Image gameResource(PackTexture texture, List<String> notes) {
 		String path = texture.path();
 
-		// Split rather than cut at the first colon, and the parts past the second dropped, because
-		// that is what Iris makes of a name carrying more than one.
+		// Split rather than cut at the first colon: a name carrying more than one keeps its first
+		// two parts and drops the rest, which is what Iris makes of such a name.
 		String[] parts = path.split(":");
 		Identifier location = parts.length < 2 ? null : Identifier.tryBuild(parts[0], parts[1]);
 		Minecraft client = Minecraft.getInstance();

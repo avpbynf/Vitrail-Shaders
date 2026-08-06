@@ -41,10 +41,12 @@ import java.util.Set;
  * colour target is that target. A declaration naming a file OUTSIDE the pack keeps its name and
  * reads black, because that path is not a mistake of the author's.
  * <p>
- * A blob SHORTER than the size it announces keeps its name too. That is a deliberate difference
- * with Iris, which logs and leaves the sampler on texture unit zero, so that the shader reads
- * whatever happens to be bound there. The image that comes out of it is perfectly plausible and
- * completely wrong, and this project would rather name the pack.
+ * A blob SHORTER than the size it announces keeps its name too, and that is a difference with Iris
+ * the other way round: Iris throws while reading such a file, nothing catches the throw, and the
+ * WHOLE pack is refused. One truncated lookup table is not worth a pack that would otherwise draw,
+ * so this refuses the line and names it. What neither engine does is upload the short blob, and for
+ * the same reason: it reads as noise, which is what most of these files hold anyway, so the picture
+ * that comes out is perfectly plausible and completely wrong.
  */
 public final class PackTextures {
 
@@ -127,7 +129,10 @@ public final class PackTextures {
 		this.named = Map.copyOf(named);
 	}
 
-	/** A pack that declares none, which is five of the eight, and what stands in before one is read. */
+	/**
+	 * A pack that declares none, which of the eight is Sildur's alone, and what stands in before one
+	 * is read.
+	 */
 	public static PackTextures empty() {
 		return new PackTextures(List.of(), List.of(), List.of());
 	}
