@@ -140,6 +140,13 @@ with upstream harder. A contributor working in that package is not caught by thi
 meant to be a bug rather than a preference. Its warnings are worth reading and not worth blocking
 on, so a build flag prints them and lets the build through.
 
+**Do not act on a dead-code finding without checking who calls it from outside the build.** Two
+whole families of method here are called by something the analyser cannot see. The loader calls into
+the mixins by reflection, and their parameters match the target whether the body reads them or not;
+the out-of-game tools are not a module of this build at all, so anything only they call reads as
+dead. Deleting one of those breaks something in silence, which is why the analyser is pointed away
+from the mixin package rather than argued with case by case.
+
 **That flag disarms every warning, not just the analyser's.** Asking for the report drops `-Werror`,
 so the compiler categories above stop failing too: a run under it is a listing and not a check, and
 a green one says nothing about whether an ordinary build passes. The build prints that itself
