@@ -28,15 +28,20 @@ shader storage buffers, storage images, and one- or three-dimensional samplers a
 game's own compiler, not by missing effort here. A pack built around voxel lighting or GPU-side
 data structures will hit this.
 
-Of the packs used for testing, Reverie is the one in that position. It says so itself: a pack can
-declare the features it cannot be drawn without, and Reverie names four of them. That line is read
+Of the packs used for testing, Reverie is the one in that position, and it says so itself. A pack
+can declare the features it cannot be drawn without, and Reverie names four. That line is read
 before any of its programs is translated, so the refusal names what the pack asked for and did not
 get, rather than the symptom that would have come later - a storage block, which compiles but never
 enters a bind group, so the draw would go against nothing.
 
-Iris draws that pack, and the difference is not an oversight on either side: it serves those four
-features and this engine serves none of them at all. Nothing here defines `IRIS_FEATURE_`, which is
-what keeps a pack on the path it wrote for a renderer without them.
+**Any such declaration is refused, whatever it names**, and that is wider than the paragraph above:
+this engine serves no feature flag at all, so it has nothing to check a name against. It also
+defines no `IRIS_FEATURE_`, which is what a pack reads to find out whether it should take the path
+it wrote for a renderer that has none - the declaration a pack marks optional rather than required.
+
+Iris draws Reverie. It refuses a required flag only when the name is unknown to it or the hardware
+cannot serve it, and it has built all four of the ones Reverie asks for: two outright, two wherever
+the driver supports them.
 
 **A single pass can be refused without the pack being refused.** If a program's fragment stage
 declares an input its vertex stage does not provide, that one program fails to link and the engine

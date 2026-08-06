@@ -36,8 +36,9 @@ public final class PackLoader {
 	 * anything is translated.
 	 * <p>
 	 * One file out of a pack rather than {@link #load}, which enumerates every program and expands
-	 * every include: those checks run again at each portal and at each Apply, on the render thread,
-	 * and none of them needs any of that.
+	 * every include. Those checks run again at every reload, and a reload happens at each portal and
+	 * at each Apply, on the render thread; none of them needs any of that. It is one archive opening
+	 * more, not one less: what it saves is the weight of that opening rather than their number.
 	 */
 	public static ShaderProperties properties(Path packPath) throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {

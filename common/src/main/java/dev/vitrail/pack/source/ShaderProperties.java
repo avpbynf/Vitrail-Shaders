@@ -931,9 +931,11 @@ public final class ShaderProperties {
 	 * turns into {@code IRIS_FEATURE_} defines for the GLSL; this engine defines none, which is what
 	 * tells a pack to take the other path.
 	 * <p>
-	 * Nothing in the engine reads this, and that is deliberate rather than an oversight: there is
-	 * nothing to decide from it here. What it exists for is the measurement out of the game, which
-	 * is where the corpus is counted, exactly as {@link #malformedAlphaTests} does.
+	 * Nothing in the engine reads this list, and that is deliberate rather than an oversight: there
+	 * is nothing here to decide from it. What taking the line out of the ignored keys buys is
+	 * already bought by reading it at all, since that is what stops it being counted; what the list
+	 * itself is for is the measurement made out of the game, which is where the corpus is counted,
+	 * exactly as {@link #malformedAlphaTests} is.
 	 */
 	public List<String> optionalFeatures() {
 		return this.optionalFeatures;
