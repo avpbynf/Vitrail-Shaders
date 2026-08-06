@@ -191,18 +191,26 @@ on the final text anyway.
 too much is recoverable, while a skipped include produces an avalanche of undeclared identifiers
 with no visible relation to its cause.
 
-One rule inside conditions looks wrong and is kept, because it is what the reference does: an
-unknown name is zero, a name defined without a value is one, a numeric value is that number, a bare
-identifier resolves recursively, and anything else is evaluated as a boolean - so a name defined to
-a parenthesised expression compares equal to one, not to its arithmetic value. Arithmetic is done in
-integers with C semantics, so the engine cannot disagree with the compiler that re-evaluates the
-same conditions on the emitted text.
+Name resolution inside conditions follows a ladder: an unknown name is zero, a name defined without
+a value is one, a numeric value is that number, a bare identifier resolves recursively, and an
+expression **keeps its value** rather than collapsing to one or zero.
 
-Each opened file is bracketed by provenance comments carrying its pack-relative path. They are
-comments rather than line directives, so the compiler numbers errors against the flattened unit,
-and a separate span map records which output range came from which source file. Every version
-directive is commented out in place rather than deleted, and the first one is hoisted, because the
-line map requires the line count not to change.
+That last rung is the one that matters, and getting it wrong is subtle. A pack that defines a
+shadow resolution as a quality setting multiplied by a base size, and then compares it against a
+threshold, is comparing sizes. Reduce it to a truth value and the comparison quietly takes the
+wrong branch - with no error anywhere, because both readings are valid conditions.
+
+Arithmetic is done in integers with C semantics, so the engine cannot disagree with the compiler
+that re-evaluates the same conditions on the emitted text.
+
+An include directive is replaced by the lines of the file it names, so the unit that reaches the
+compiler is one flat text and errors are numbered against that.
+
+Version and extension directives are **blanked in place rather than deleted**, which looks fussy
+and is not: later passes carry per-line information about which lines a branch actually took, and
+that information is indexed by line number. Remove a line and every index after it is wrong. The
+unit takes its version from the header the engine writes, and the directives that were blanked are
+counted, so an unexpected one shows up in the totals instead of vanishing.
 
 ## Textures a pack supplies itself
 

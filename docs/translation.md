@@ -119,12 +119,15 @@ The directive that names attachments is resolved by the reference implementation
 of the four are counter-intuitive:
 
 - **The last occurrence wins**, not the first.
-- **The search runs over text whose conditionals are not evaluated**, so a directive inside a dead
-  branch still counts.
 - **The directive must open a block comment.** A line-comment form, or prose before it on the same
   line, does not count.
 - There is **no fallback to an earlier occurrence**: if the last one fails that test, there is no
   directive at all.
+- **The search runs only over the lines a branch actually took.** The reference implementation is
+  handed a source its preprocessor has already been over, so a branch nobody takes is simply not
+  there. Here the text is still whole, so liveness has to be applied deliberately to get the same
+  answer - and the difference is not academic, because the idiom packs use is one directive per
+  branch. Read them all and you take the last one *written* rather than the one that *holds*.
 
 Two spellings exist, compared by position, the later one applying; they differ in form, and only
 one of them can name targets beyond the single-digit range.
@@ -136,10 +139,11 @@ error at all**, which makes this the first place to look when an image is wrong 
 logged.
 
 One deliberate asymmetry: the attachment list and the count of declared fragment outputs follow
-different rules. Attachments follow the reference (dead branches included, since the directive text
-is unevaluated), while the output count includes every branch and knowingly over-declares. That is
-because the two failure modes are not equal - over-declaring is free, under-declaring fails to
-compile.
+different rules. **Attachments are read on live lines only**, so a directive in a branch nobody
+takes decides nothing - while the **output count includes every branch** and knowingly
+over-declares. That looks inconsistent and is not, because the two failure modes are not equal: an
+attachment claimed from a dead branch sends writes to the wrong target and flips it afterwards,
+whereas an over-declared output costs nothing and an under-declared one fails to compile.
 
 ## Not everything in a pack is a program
 
@@ -178,10 +182,20 @@ passes of the same frame must receive identical numbers; otherwise a second pass
 itself, and any smoothing the pack does decays at a rate that depends on how many passes the pack
 happens to have.
 
-**Where the reference has a known bug that packs are tuned against, the bug is reproduced.** For the
-wetness half-lives it writes both directives into the same field, so rise and fall share one
-half-life. Correcting that would break packs written against the observed behaviour. The same
-applies to a time uniform that keeps varying in dimensions where the game gives a fixed time.
+**Where the reference has a known bug that packs are tuned against, the bug is reproduced rather
+than fixed.** Two cases are worth knowing because they look like defects here and are not.
+
+A pack can declare separate half-lives for how fast wetness rises and how fast it dries. The
+declared **fall** does not take effect: the engine matches the reference, where it is not reachable.
+Correcting that in isolation would change the look of every pack tuned against the observed
+behaviour.
+
+Likewise, a time uniform keeps varying in dimensions where the game gives a fixed time, because
+that is what the reference does and packs derive angles from it.
+
+The rule this illustrates is worth stating on its own: **compatibility is with the reference's
+behaviour, not with its documentation.** A divergence here is paid in packs that render wrongly,
+so a fix must be argued as a compatibility break, not slipped in as a correction.
 
 **A name the engine cannot supply is written as an explicit zero and named in the log**, one line
 per program. The member exists, its value is defined, and the shortfall is announced rather than
