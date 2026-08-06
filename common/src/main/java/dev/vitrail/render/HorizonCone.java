@@ -47,7 +47,7 @@ import java.util.function.Supplier;
  * <strong>Nothing the game still draws there is lost by that on any place of the corpus, and the
  * reason is worth writing out because it is conditional rather than structural.</strong>
  * <p>
- * It holds wherever the seed is painted in the half of the frame this engine records at
+ * It holds because the seed is painted in the half of the frame this engine records at
  * {@code AfterOpaqueFeatures}. There the clouds and the weather cannot have been taken away, because
  * {@code LevelRenderer} adds {@code addCloudsPass} and {@code addWeatherPass} after the main pass
  * that posts it. What the seed does read is the solid feature phase, and everything submitted to it
@@ -59,15 +59,16 @@ import java.util.function.Supplier;
  * armour decal is the single pipeline that does not blend and does not write depth, and it tests
  * {@code EQUAL}, so it lands only where something in its own phase already wrote one.
  * <p>
- * It does NOT hold where the seed falls outside that half. {@code PackChain.drawRange} walks a half
- * open interval ending at {@code deferredEnd()}, so a place whose seed sits exactly there is painted
- * at the head of the second half instead, at {@code AfterLevel}, by which time the clouds, the
- * weather and the particles are in the game's target and the mask would take them. Measured on the
- * corpus: one place in twenty five, Body Camera's overworld, whose pack ships no deferred at all.
- * The same state is reachable on any pack through {@code passes=}, which removes passes from the
- * running list exactly as {@code terrain=off} removes the terrain. Nobody has seen it; it is written
- * here so that the next reader knows it is a condition and not a law, and where to look first if a
- * cloud ever goes missing at the horizon.
+ * And the seed never falls outside that half. {@code PackChain.drawRange} paints a rank that lands
+ * on the boundary between the two at the tail of the first one, and the plan never puts the world
+ * past that boundary: the rank counts the begins and the prepares, and {@code deferredEnd()} counts
+ * those and the deferred stage after them. A place shipping no deferred at all has the two equal,
+ * and it is that equality the walk used to lose: on a half open interval alone the seed missed the
+ * first half and led the second, at {@code AfterLevel}, by which time the clouds, the weather and
+ * the particles are in the game's target and the mask would have taken them. Measured on the corpus
+ * before it was fixed: one place in twenty five, Body Camera's overworld. The same state is
+ * reachable on any pack through {@code passes=}, which removes passes from the running list exactly
+ * as {@code terrain=off} removes the terrain, and it is no longer a state that costs anything.
  * <p>
  * <strong>The one thing that would be lost is the world itself</strong>, and only where the world
  * reaches the pack's colour target through that same seed rather than writing it. There the cone

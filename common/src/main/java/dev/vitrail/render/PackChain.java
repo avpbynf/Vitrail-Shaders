@@ -154,6 +154,14 @@ public final class PackChain {
 	private boolean filled;
 
 	/**
+	 * Whether the game's own frame has already been painted in this one. The seed's rank falls on
+	 * the boundary between the two halves whenever a place ships no deferred, so both halves reach
+	 * it, and it is the earlier one that has it: this is what keeps the later one from painting the
+	 * world a second time, over everything drawn since.
+	 */
+	private boolean seeded;
+
+	/**
 	 * Whether this frame's whole scene depth has been kept yet.
 	 * <p>
 	 * <strong>There are two moments it can be kept at and they are not equivalent.</strong> The
@@ -861,6 +869,7 @@ public final class PackChain {
 		this.opened = false;
 		this.early = false;
 		this.filled = false;
+		this.seeded = false;
 		this.sceneDepth = false;
 
 		// The seed's kept depth is a per frame fact like the four above and belongs with them, the
@@ -1003,8 +1012,11 @@ public final class PackChain {
 	 *              the opaque world before the translucents and the whole scene after
 	 */
 	private void drawRange(GpuDevice device, Ready ready, int from, int to, GpuTextureView depth) {
+		// Clamped to the list, so that the rank of a chain whose every pass runs before the world is
+		// one the walk below can reach rather than one nothing ever equals.
 		int seedAt = ready.seeding()
-				? this.chain.chain().seed().map(ChainPlan.Seed::at).orElse(-1)
+				? Math.min(this.chain.chain().seed().map(ChainPlan.Seed::at).orElse(-1),
+						this.programs.size())
 				: -1;
 
 		// Each pass opens and closes its own render pass. Closing one is what makes the next able
@@ -1014,8 +1026,8 @@ public final class PackChain {
 		CommandEncoder encoder = device.createCommandEncoder();
 		GpuBuffer buffer = this.block.currentBuffer();
 		for (int at = from; at < to; at++) {
-			if (at == seedAt) {
-				drawSeed(encoder, ready.mainView(), ready.depthView());
+			if (!this.seeded && at == seedAt) {
+				paintSeed(encoder, ready);
 			}
 
 			PackPass pass = this.programs.get(at);
@@ -1038,9 +1050,17 @@ public final class PackChain {
 			}
 		}
 
-		// A place whose whole chain runs before the world still paints it, once everything has run.
-		if (to >= this.programs.size() && seedAt >= this.programs.size()) {
-			drawSeed(encoder, ready.mainView(), ready.depthView());
+		// A rank that falls exactly on the end of this half is painted here, at its tail, and never
+		// at the head of the next one. The world is drawn before the deferred stage and not after
+		// it: walked as a half open range alone, a seed whose rank equals deferredEnd() - which is
+		// every place that ships no deferred at all, Body Camera's overworld among them - missed the
+		// first half and led the second, and was painted at AfterLevel over the water, the terrain
+		// and the particles the pack had just written.
+		//
+		// The same line still covers the place whose whole chain runs before the world: its rank is
+		// the length of the list, so it equals the end of the last half.
+		if (!this.seeded && seedAt >= from && seedAt <= to) {
+			paintSeed(encoder, ready);
 		}
 	}
 
@@ -1385,6 +1405,16 @@ public final class PackChain {
 		// and that the chain left on the far half are copied: the next frame walks from an empty
 		// flipped set and would otherwise be handed what was written two frames ago.
 		this.targets.swapBack(device.createCommandEncoder(), this.chain.chain().swapBack());
+	}
+
+	/**
+	 * Paints the seed and remembers that this frame has had it, which is the whole of what
+	 * {@link #seeded} is for: the rank the plan gives it is reached by both halves whenever it falls
+	 * on their boundary, and the world belongs to the earlier one.
+	 */
+	private void paintSeed(CommandEncoder encoder, Ready ready) {
+		this.seeded = true;
+		drawSeed(encoder, ready.mainView(), ready.depthView());
 	}
 
 	/**
