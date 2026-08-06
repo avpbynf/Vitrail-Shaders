@@ -22,9 +22,9 @@ has to be triggered on entering a world, not merely on a file changing.
 
 ## A pack is downloaded content
 
-Every loop and every recursion whose trip count depends on pack content is bounded, and the bound
-is on **total work**, never on nesting depth. This is the single most important rule in the
-subsystem, and each part of it was learned the hard way.
+Every loop and every recursion whose trip count depends on pack content is bounded, and where there
+is a depth limit there is a bound on **total work** beside it. Depth alone bounds nothing, and that
+is the single most important rule in the subsystem. Each part of it was learned the hard way.
 
 **There is no include-once.** A pack's include graph is a graph, not a tree, and the same file is
 legitimately re-expanded from many sites. Only the packs' own guards limit it.
@@ -110,8 +110,13 @@ canonical order.
 
 **Varyings.** They are matched by name, and the two failure directions are not symmetric: a varying
 the fragment declares without the vertex emitting it is refused loudly, while the reverse is silent
-and shifts the locations of everything after it. Declaring a varying only when a unit happens to use
-it makes the two stages disagree, so the varying set is decided at program assembly too.
+and shifts the locations of everything after it.
+
+The two sides are reconciled in two different ways, and it is worth not confusing them. A varying
+the *engine* names - there is one, the fog coordinate - has to be declared by both stages or by
+neither, so it is decided at program assembly. The pack's own varyings are not unified that way:
+they are reconciled in the other direction, by striking from the later stage the inputs nothing
+upstream writes.
 
 A consequence for measurement: a per-unit check cannot see this class of defect at all, because it
 never pairs a vertex stage with its fragment stage.
@@ -119,8 +124,9 @@ never pairs a vertex stage with its fragment stage.
 Two more rules on lifting. A declaration sitting in a dead branch must **not** be lifted out of it,
 because lifting makes it unconditional and can collide with a same-named ordinary global in the
 live branch. And a scan for a statement boundary has to be bounded on both sides, or an
-unterminated declaration makes it sweep the rest of the file once per declaration; when the bound is
-hit it must report "no statement start" rather than guessing, since a guess would erase valid code.
+unterminated declaration makes it sweep the rest of the file once per declaration; running out of
+budget has to be told apart from reaching the start of the file, because the first means "give up on
+this declaration" and the second is a real answer. Guessing a boundary would erase valid code.
 
 ## Deciding where a fragment stage writes
 
@@ -200,18 +206,26 @@ declared **fall** does not take effect: the engine matches the reference, where 
 Correcting that in isolation would change the look of every pack tuned against the observed
 behaviour.
 
-Likewise, a time uniform keeps varying in dimensions where the game gives a fixed time, because
-that is what the reference does and packs derive angles from it.
+Likewise, a time uniform keeps varying in the Nether and the End although the game gives them a
+fixed time, because that is what the reference does and packs derive angles from it. It is those two
+worlds by name, not the class of fixed-time worlds: any other dimension declaring a fixed time gets
+one.
 
 The rule this illustrates is worth stating on its own: **compatibility is with the reference's
 behaviour, not with its documentation.** A divergence here is paid in packs that render wrongly,
 so a fix must be argued as a compatibility break, not slipped in as a correction.
 
-**A name the engine cannot supply is written as an explicit zero and named in the log**, one line
-per program. The member exists, its value is defined, and the shortfall is announced rather than
-left to whatever was in memory. The announcement is split into separate buckets, so an unanswered
-engine name, a pack declaration that could not be used, and a deliberate stop-gap are not confused
-with one another.
+**A name the engine cannot supply is written as an explicit zero and named in the log.** The member
+exists, its value is defined, and the shortfall is announced rather than left to whatever was in
+memory.
+
+The announcement is split into separate buckets rather than counted, because a program can be short
+in several different ways at once and each line says which. Three of them are names the block could
+not be given: one this engine owes, one the pack declared for itself and none of whose declarations
+survived, and one waiting on machinery that does not run yet. Underneath those sits the dangerous
+one, which is not a gap at all: a name the table answers with a **stand-in**, which counts as
+supplied everywhere else. A zero that arrived through a registered source looks exactly like a
+measured value, and no screenshot will ever show it.
 
 Packs can also define their own uniforms as expressions over others. Those form a dependency graph
 that is validated: a cycle is refused by naming the uniforms involved, a broken uniform withdraws
@@ -222,11 +236,22 @@ that shadows a builtin name is refused rather than resolved by precedence.
 
 Not every remaining failure is a translation gap, and the distinction is worth making.
 
-**Closed by the graphics API.** Compute shaders, shader storage buffers, storage images, and
-one- and three-dimensional samplers. The game's compiler takes a sampler as two-dimensional or as a
-cube, or as a texel buffer where the pipeline declared that name as a uniform rather than as a
-sampler, and rejects every other dimensionality by name. So these are hard refusals rather than
-effort. No amount of translation work makes them pass.
+**Closed by the game's own rendering API.** Compute shaders, shader storage buffers, storage images,
+and one- and three-dimensional samplers. Same conclusion, three different mechanisms, and it is
+worth knowing which:
+
+- **Samplers are refused by name.** The compiler takes one as two-dimensional or as a cube, or as a
+  texel buffer where the pipeline declared that name as a uniform rather than as a sampler, and
+  rejects every other dimensionality.
+- **Compute has nowhere to go.** The game's shader-type enumeration carries a vertex stage and a
+  fragment stage and nothing else, and the device exposes no way to precompile anything but a render
+  pipeline.
+- **Storage buffers and storage images are worse than refused: they are ignored.** Reflection asks
+  for uniform buffers, sampled images, outputs and inputs, and never enumerates them. They pass
+  compilation and are then bound to nothing.
+
+No amount of translation work makes any of the three pass. Vulkan itself supports all of them; it is
+the layer above that does not.
 
 **Defects in the pack itself.** A conditional directive with no name is a pack bug and stays a
 failure.

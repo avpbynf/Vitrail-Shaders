@@ -33,10 +33,19 @@ The engine's only obligation is to store the depth window the pack expects, term
 engine-side attempt to correct the distortion fights the pack and produces a wrong result that
 looks like a shadow bias problem.
 
-A consequence worth knowing: a pack's shadow vertex stage typically starts by multiplying the
-inverse shadow matrices by the fixed-function transform helper. That product only simplifies if the
-helper already carries the shadow matrix pair, which is why the shadow family binds its own
-catalogue of fixed-function matrices rather than the camera's.
+Two consequences worth knowing, and they are not the same one.
+
+The shadow family binds its own catalogue of fixed-function matrices rather than the camera's,
+because during the shadow pass the model view and the projection *are* the shadow pair - a pack's
+shadow vertex stage says `gl_ProjectionMatrix * gl_ModelViewMatrix * gl_Vertex` without ever naming
+a shadow. Handed the camera pair it would draw the map from the player's eye, which is a shadow map
+of the wrong thing and looks like a shadow map all the same.
+
+Separately, that stage typically multiplies the inverse shadow matrices by the fixed-function
+transform helper and counts on the product collapsing. It only collapses if the inverses and the
+pair under the helper are the *same frame's* - so the catalogue answers from the pair being drawn
+with, this frame's, while the published shadow matrices are the previous frame's. That is a
+consequence of drawing the map a frame ahead, described further down.
 
 ### Shadow depth uses the opposite convention from the scene
 
@@ -44,9 +53,10 @@ The scene is drawn in reversed Z - cleared to zero, tested greater-or-equal - be
 the game does and it is better conditioned in floating point. The shadow map is stored in the
 legacy forward convention, cleared to one and tested less-or-equal.
 
-The reason is that depth conversion is applied on the names a pack uses to read the *scene's*
-depth. Shadow depth is classified separately and reaches the pack raw, so it must already be in the
-convention the pack expects.
+The reason is that nothing converts it on the way out. The *scene's* depth is turned round once, in
+the image, when the copies handed to the pack are taken; the shadow map is not copied and not turned
+round, so it has to be stored in the convention the pack expects. The two are the same rule -
+hand the pack the window it reads in - applied at different places.
 
 ### A shadow sampler implies a comparison this backend cannot express
 
@@ -61,9 +71,14 @@ Bound naively, a shadow sampler becomes an ordinary sampler and the comparison m
 symptom is not a crash: the entire world comes back uniformly in shadow, which looks exactly like a
 badly drawn shadow map, and sends you looking in the wrong place.
 
-The engine instead strips the comparison from the declaration and rewrites each read into a
+The engine instead strips the comparison from the declaration and rewrites each *plain* read into a
 comparison emitted in the translated shader, in the sense the format specifies and every pack is
 written against. It agrees with the forward depth window, where nearer to the light is smaller.
+
+Only the plain lookups. A projective or gathered comparison divides or spreads before it compares,
+which needs a different expression and not a different name, so it is left as it stands and counted
+instead - a call that silently kept a hardware comparison is exactly what the rewrite exists to
+stop.
 
 Two ordering traps come with it. The comparison samplers have to be collected *before* the depth
 rewrite runs, because uniforms are only lifted afterwards and the set that decides would otherwise
@@ -77,8 +92,14 @@ A pack can read the shadow map with translucent geometry included or excluded. T
 a *copy* taken between the opaque and translucent halves of the shadow stage, not a second render.
 The translucent shadow pass is served through the fallback tree, unblended and without alpha test.
 
-Which name gets which image can be swapped by a pack declaring the water-shadow name, which is how
-coloured light through stained glass is expressed.
+Two of the three names are fixed: one always reads the map without translucents, the other never
+does. Only the bare `shadow` moves, and it moves when a program also declares the water-shadow name
+- then that name reads the map with the translucents in it and `shadow` falls back to the one
+without. No pack of the corpus writes it at all.
+
+Coloured light through stained glass does not rest on that swap. It rests on the pair plus the
+shadow colour buffer: a point occluded in one image and clear in the other has something translucent
+between it and the light, and the tint comes from the colour buffer.
 
 ### What goes into the map is decided in its own namespace
 
@@ -91,8 +112,9 @@ The clear colour matters even when clearing is switched off, because it is then 
 starts with. Depth always clears, regardless.
 
 One pipeline trap: under dynamic rendering, the shadow pipeline's colour state has to name the
-attachment's actual format. A hardcoded eight-bit colour state makes the pipeline refused outright
-for a pack that asks for a single-channel shadow colour buffer.
+attachment's actual format, and the axis that bites is the **channel count** rather than the bit
+depth. A state naming four channels against the single-channel buffer a pack asked for is the
+pipeline refused outright, by name and in the middle of the world.
 
 ### Culling for the light
 
@@ -105,8 +127,9 @@ mechanisms block it: the rebuild flag has already been consumed by the camera's 
 call returns the camera's list unchanged; setting the flag by hand routes to a path that reads an
 asynchronous occlusion structure which may hold nothing for that frame, handing the light an empty
 world; and forcing the synchronous walk overflows, because each region keeps a single render list
-reset once per frame under a guard that the second walk satisfies, so it appends on top of the
-camera's list until the list is full.
+that only resets itself on the *first* walk of a frame - the second walk carries the same frame
+number, so the reset does not happen and the light's sections pile on top of the camera's until the
+list is full.
 
 That last fact also kills the obvious workaround. Saving and restoring the list container hands
 back objects whose *contents* are the light's, because the lists are per-region singletons rather
@@ -148,9 +171,10 @@ The interception point that works for ordinary geometry does not work here, beca
 renderer opens its own render passes, with its own pipelines and vertex buffers built once. Clouds
 are outside that class again.
 
-Worse, the sky is not one vertex format. Each element binds a different subset of position, colour
-and texture coordinates - no normal, no lightmap, no overlay. So the vertex elements a translated
-program must declare are the answer of the *pass*, not of the family.
+Worse, the sky is not one vertex format. Three formats serve the six pieces, and between them they
+carry position, colour and texture coordinates and nothing else - no normal, no lightmap, no
+overlay. So the vertex elements a translated program must declare are the answer of the *pass*, not
+of the family.
 
 That is forced by how vertex inputs bind. The match is by name and asymmetric in both directions: a
 name the stage declares that the bound format does not carry makes the program refused, while a
@@ -158,20 +182,26 @@ format element the stage does not declare shifts every element after it, silentl
 bound format's elements have to be declared - no more, no less.
 
 There is a subtlety on top: a declared but unread input can be optimised out of the compiled
-module, and rebinding only counts survivors, so dropping one shifts locations. The only way to be
-sure is to compile each sky program once per format it can be drawn against and read the
-disassembly back, checking every element is still at the location its position gives it.
+module, and rebinding only counts survivors, so dropping one shifts locations. Position is safe,
+since a vertex stage cannot avoid computing one out of it; a sky program that ignores colour or
+texture coordinates would lose them.
+
+The only way to be sure is to compile each sky program once per format it can be drawn against and
+read the disassembly back, checking every element is still at the location its position gives it.
+**That check exists for the entity family and does not exist yet for the sky.** It is written here
+as a debt, not as a guarantee: the sky needs it before it is believed, not after.
 
 ### How a pack tells the elements apart
 
 The format splits them by which program they fall to: geometry carrying a texture goes to the
 textured sky program, bare geometry to the basic one, clouds to their own. The engine recognises
-each element by the label the game gives its own render pass, which is stable and self-describing,
+each element by the label the game gives its own render pass - an answer the game hands out at
+exactly the moment the answer is needed, costing no second table that could drift from the first -
 and carries the format, topology and blending of the game's pipeline alongside it.
 
 Beyond that, a uniform tells the shader which stage of rendering is running. That uniform is the
-only way a pack can distinguish the sky disc, the sunrise band, the stars, the sun and the moon,
-since two files serve all of them.
+only way a pack can distinguish the sky disc, the dark plane under the world, the sunrise band, the
+stars, the sun and the moon, since two files serve all six.
 
 ### The pass matrix is the body's position
 
@@ -202,11 +232,24 @@ terrain's pipeline namespace pushes constants the pass cannot satisfy.
 ### Where the sky's output goes
 
 Which buffers a sky program writes is keyed by program name, not by an enumeration of passes, since
-the game's sky passes share a small set of programs. Where a pack declares no draw buffers there is
-no answer, and the game keeps its own sky - a normal case, not a failure.
+the game's sky passes share a small set of programs.
 
-Because the sky is drawn before the world, the sky stage is what opens the frame once it starts
-drawing. The terrain no longer does.
+Two different things can leave a piece on the game's own target, and they are worth telling apart.
+Where a pack serves no program for a piece, the game's own shader draws it. Where the pack does
+serve one but declares no draw buffers on it, **the pack's shader still draws** - it is the target
+that stays the game's, the one attachment the game opened its own pass with. Either way that piece
+reaches the pack's colour target through the full-screen layer instead of writing it.
+
+It is then all six or none. If any piece the game still draws would stay behind, the whole sky keeps
+the game's target, because the layer is the only road left to a piece that stayed on it and the
+pieces that write outright cut the layer where they land. A pack declaring draw buffers on the basic
+sky program and none on the textured one - which the format allows - would otherwise get a sky whose
+disc marks the whole frame and whose sun and moon are cut out of it.
+
+Because the sky is drawn before the world, the sky stage is more often than not what opens the
+frame. Not always: the Nether and the End open no sky pass, `sky=off` in the options stops one, and
+so does a pack that serves no sky program at all. In those cases the terrain opens it, as it always
+did.
 
 ### The sun's path is tilted for the bodies as well as for the light
 
@@ -237,14 +280,14 @@ and both have a fixed radius. Those constants put the rim of the sky disc a litt
 degrees above horizontal - and that rim is a *straight line* across the image.
 
 Above sea level it is worse than a band. The dark disc is only drawn when the eye is below the
-world's horizon height, so above it nothing whatsoever covers the sky under that rim. This is also
-why the defect grows with render distance: the further the terrain, the smaller the share of the
-wedge it masks. It is visible well before the top of a mountain.
+world's horizon height, so above it nothing whatsoever covers the sky under that rim. What hides the
+rest is the terrain's own silhouette, which is why the wedge is only seen where the distant horizon
+is clear - and why it is visible well before the top of a mountain.
 
 ### What fills the gap is the actual defect
 
-The gap exists in the reference implementation too. There it carries the clear colour, and the
-pack's composite passes repaint it as sky and fog because its depth is that of the far plane.
+The gap is vanilla's, and vanilla leaves the clear colour in it. The reference implementation does
+not: it covers the wedge with geometry of its own, so nothing of the gap is ever seen there.
 
 In an engine where a full-screen layer paints the game's already tone-mapped image into that zone
 instead, no later pass reprocesses it. The pack's sky is then cut by a hard straight edge with a
@@ -261,11 +304,20 @@ run on.
 
 The reference implementation does not fill the zone differently - it *removes* it, by drawing
 geometry vanilla does not have: an inverted octagonal cone around the player, between exactly the
-two planes vanilla leaves empty. Its own documentation says so in its first sentence.
+two planes vanilla leaves empty. Its own documentation says as much, at the head of the class that
+draws it.
 
 Vitrail does the same, in `render/HorizonCone.java`: an octagonal cone between the two planes,
 drawn with the pack's basic sky program inside the pass the game opens for its disc, so it inherits
 that pass's pipeline state, topology and depth convention.
+
+Two conditions come with it, and neither is optional. The cone rides in the disc's pass, so it is
+drawn only where the disc is - a pack that refuses the disc has drawn its own, and the Nether and
+the End open no such pass at all. And it is drawn only where the world's opaque geometry marks the
+pixels it wrote: the cone stands over the whole of the ground rather than over the sky, and marking
+a pixel cuts the full-screen layer there, so a cone drawn while the world still reaches the pack's
+target through that layer would cut the ground out of the picture. On the first frame of a world
+nobody has answered that question yet, and the frame goes without its cone.
 
 ### The method lesson
 

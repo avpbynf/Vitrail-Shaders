@@ -30,8 +30,10 @@ Be aware of an asymmetry before you start.
 everyone, and they are described below.
 
 **The corpus suite does not.** It runs against real shader packs, and shader packs are not
-redistributable, so they are not in this repository and neither is the harness that drives them.
-There is no hosted job that can run it either. It is local by construction, not by neglect.
+redistributable, so they are not in this repository. The harness that drives them is absent for a
+separate reason: it lives outside the versioned tree, so a hosted job could neither run it nor even
+compile it, and wiring it in as a source set would break a fresh clone that has none of it. There is
+no hosted job that can run it either. It is local by construction, not by neglect.
 
 The practical consequence: a change under the pack, translation or uniform trees can be argued
 from the build and from reading, but the measurement that would settle it is one only a maintainer
@@ -55,9 +57,13 @@ By family, so you can tell whether a change is in scope:
   primary half if there was none.
 - **Vertex input contracts**, per geometry family, checked down to the location the element
   actually occupies in the compiled SPIR-V.
-- **The uniform block.** Layout, coercion, the depth conversion against an independent matrix
-  implementation, the expression grammar and its dependency graph.
-- **Path confinement.** What a path written by a pack can reach. This one needs no corpus at all.
+- **The uniform block.** Layout, coercion, and the depth conversion against an independent matrix
+  implementation - none of which needs a pack. The expression grammar and its dependency graph are
+  checked the same way, then run over the declarations the corpus really contains, which does.
+- **Path confinement.** What a path written by a pack can reach.
+
+Two of those run on a bare clone: the uniform block invariants and path confinement. Everything else
+wants the corpus.
 
 ## What makes a measurement trustworthy
 
@@ -84,10 +90,11 @@ of the corpus translates, or what each target resolves to - never fail at all by
 what they produce is a number to compare against the last one rather than a yes or a no. Running one
 of those and seeing no error means nothing was asserted, not that everything held.
 
-**Every invariant has a negative control, and the control ships with it.** Two exist as flags, each
-documented as *must exit non-zero*, with the packs they are expected to break on named. Run them:
-if a control reports nothing, the checker has stopped reading, and the green run beside it meant
-nothing.
+**Every invariant has a negative control, and the control ships with it.** Each is a flag on the
+tool it belongs to, documented as *must exit non-zero*, naming the packs it is expected to break on.
+Run them: if a control reports nothing, the checker has stopped reading, and the green run beside it
+meant nothing. What controls exist is in what the tools print, which cannot fall out of date the way
+a list here would.
 
 **A rule is confronted with a second, independent reading of itself.** The frame chain is rewritten
 from the specification without consulting the classes that implement it, then the two answers are
@@ -117,12 +124,17 @@ category is off because it asks for a serial id on exceptions nothing serialises
 those arguments: a category is excluded when its findings *cannot be about this code*. "There are a
 lot of them" is not an argument.
 
-**Javadoc reference and tag linting, as errors.** This matters more here than in most projects
+**Javadoc linting as errors, everything but the missing-comment category** - so references, tags,
+malformed HTML and accessibility all fail the build. This matters more here than in most projects
 because the documentation carries the design: a reference that stops resolving is a piece of the
 design lost, and nothing says so until someone goes looking. What it caught in practice was exactly
 that - a link pointing at a GLSL function name rather than the method that emits it, and orphaned
 comments stacked above the wrong member, one of which asserted the opposite of its neighbour in the
 same file. These are not cosmetic categories. They are rotten-documentation detectors.
+
+There is one exemption, and it is a package: the vendored expression evaluator keeps its author's
+javadoc. Bending borrowed code to this project's taste buys nothing and makes the next comparison
+with upstream harder. A contributor working in that package is not caught by this gate.
 
 **Static analysis, contributing only the checks it rates as errors** - the part of the catalogue
 meant to be a bug rather than a preference. Its warnings are worth reading and not worth blocking
@@ -135,8 +147,9 @@ build prints that itself whenever the flag is on, rather than leaving it to be r
 here.
 
 **A text check**, for the two things no compiler sees: a byte order mark, which reaches a GLSL
-compiler as a stray character in front of the version directive; and typographic punctuation where
-a straight quote or a plain hyphen is meant.
+compiler as a stray character in front of the version directive; and typographic punctuation, which
+is four characters rather than two shapes - the en and em dashes, the curly quotes, the single-glyph
+ellipsis and the non-breaking space. The last two are the ones people are surprised by.
 
 **The rule behind all of it:** a gate blocks only if it is objective and mechanically fixable.
 Anything requiring taste stays in the editor. A check that cries wolf gets routinely bypassed, and
@@ -207,13 +220,10 @@ only the out-of-game cross-check does.
 **Wrong-way depth does not look wrong either.** It looks like an effect that is switched off. One
 pack went a long time without blurring anything for exactly that reason.
 
-**Silent output reordering produces a frame that looks like a frame.** The game does not preserve
-the location a fragment stage declares: it asks SPIR-V reflection for the outputs and writes each
-one's rank over the declared decoration, and reflection answers in order of *first use*, not of
-declaration. A stage that writes its second output before its first ends up with them swapped, with
-nothing in the log. The fix is structural - declare all outputs in the header from zero with no
-gaps, and name each once in increasing order from a function called as the first statement of main,
-so rank equals location again and the game's rewrite becomes the identity.
+**Silent output reordering produces a frame that looks like a frame.** A fragment stage can end up
+with two of its outputs swapped and nothing in the log about it. The mechanism, and the structural
+fix for it, are in [translation.md](translation.md) - what belongs here is that this is a failure
+mode no image will report.
 
 **Read the session log before reading the code.** The engine already announces most of what goes
 wrong, and a defect in the image is usually explained by a line printed at the time.
