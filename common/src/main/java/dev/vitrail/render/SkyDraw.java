@@ -76,11 +76,10 @@ public final class SkyDraw {
 	 * @param stage    what a pack is told it is drawing. Iris sets one per method of the renderer and
 	 *                 these are its six, one for one: {@code renderSkyDisc} is {@code SKY},
 	 *                 {@code renderDarkDisc} is {@code VOID}, and the other four carry their own name
-	 * @param directive the line of {@code shaders.properties} a pack switches this piece off with,
-	 *                  spelled as the file spells it, or "" for the two pieces the format names
-	 *                  nothing for. One directive for one piece and no wider reading of any of them:
-	 *                  {@code sky} is the disc the game draws overhead, and the void plane under the
-	 *                  world is a piece of its own that no pack can ask for or refuse
+	 * @param directive the line of {@code shaders.properties} that takes this piece out of the frame
+	 *                  altogether, spelled as the file spells it, or "" for the four pieces nothing
+	 *                  takes out. Only the sun and the moon carry one, and {@link #draws} says why the
+	 *                  other two words of the family are not a refusal of a piece
 	 */
 	record Element(String label, String program, String element, VertexFormat format,
 			PrimitiveTopology topology, Optional<BlendFunction> blend, boolean rotated,
@@ -116,12 +115,12 @@ public final class SkyDraw {
 
 	static {
 		put(new Element(DISC, "gbuffers_skybasic", "disc", DefaultVertexFormat.POSITION,
-				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), false, RenderStage.SKY, "sky"));
+				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), false, RenderStage.SKY, ""));
 		put(new Element("Sky dark", "gbuffers_skybasic", "dark", DefaultVertexFormat.POSITION,
 				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true, RenderStage.VOID, ""));
 		put(new Element("Stars", "gbuffers_skybasic", "stars", DefaultVertexFormat.POSITION,
 				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true,
-				RenderStage.STARS, "stars"));
+				RenderStage.STARS, ""));
 		put(new Element("Sunrise sunset", "gbuffers_skybasic", "sunrise",
 				DefaultVertexFormat.POSITION_COLOR, PrimitiveTopology.TRIANGLE_FAN,
 				Optional.of(BlendFunction.TRANSLUCENT), true, RenderStage.SUNSET, ""));
@@ -252,11 +251,12 @@ public final class SkyDraw {
 	 * pack writing {@code sun=false} has drawn its own sun inside {@code gbuffers_skybasic} and
 	 * handing it the game's on top puts two suns in the sky.
 	 * <p>
-	 * <strong>Four pieces where the references take out two, and that is a deviation.</strong> Iris
-	 * cancels {@code renderSun} and {@code renderMoon} at their head for the reason above and takes
-	 * no notice of the {@code stars} and {@code sky} it reads, and OptiFine's own documented format
-	 * has a word for neither. Carrying the reason to all four is this engine's, it costs Bliss and
-	 * Reverie the stars both references leave them, and the NOTICE says so.
+	 * <strong>Two pieces and not four</strong>, which is where the references stand: Iris cancels
+	 * {@code renderSun} and {@code renderMoon} at their head for the reason above and takes no notice
+	 * of the {@code stars} it reads, while {@code sky} gates the horizon cone it draws itself rather
+	 * than the game's disc. Reading the other two as a refusal took the stars away from every pack
+	 * that writes {@code stars=false} to draw its own inside {@code gbuffers_skybasic}, since that is
+	 * the program this engine hands the game's star field to in the first place.
 	 * <p>
 	 * Tied to this engine drawing the sky, unlike {@link #sunPathRotation()}, and the two are not
 	 * inconsistent. The rotation is a property of the pack's light, which reaches every surface of
@@ -334,10 +334,13 @@ public final class SkyDraw {
 	 * attachments as the disc, so a pass of our own would be a second answer to every question this
 	 * class already answers once, and a second chance for the two to differ.
 	 * <p>
-	 * It follows from that that the cone is drawn where the disc is and nowhere else. A pack that
-	 * refuses the disc with {@code sky=false} has drawn its own, and the method the refusal cancels
-	 * is the one this rides in; a place where the game draws no disc at all, the End and the Nether,
-	 * never reaches this. Iris gates its own cone on the same directive.
+	 * It follows from that that the cone is drawn where the disc is and nowhere else, and a place
+	 * where the game draws no disc at all, the End and the Nether, never reaches this.
+	 * <p>
+	 * <strong>And not at all where the pack wrote {@code sky=false}</strong>, which is the one thing
+	 * that word decides in either engine: the disc itself is still drawn, with the pack's own program,
+	 * but a pack that says it draws the sky itself is not handed a piece of geometry the game has none
+	 * of. Iris gates its own cone on the same directive and on nothing else.
 	 * <p>
 	 * <strong>And only where the world's own opaque geometry marks its pixels too</strong>, which is
 	 * the one condition the disc does not share and could not: the disc stands over the sky, the cone
@@ -348,9 +351,14 @@ public final class SkyDraw {
 	 */
 	public static void horizon(RenderPass pass, RenderPipeline bound) {
 		SkyDraw draw = PackChain.sky();
-		if (draw != null && draw.drawing != null && draw.drawing.owns(bound)) {
+		if (draw != null && draw.drawing != null && draw.drawing.owns(bound) && draw.cone()) {
 			draw.horizon.draw(pass, draw.drawing.path(), TerrainDraw.opaqueMask());
 		}
+	}
+
+	/** Whether the pack left the band under the horizon to this engine to close. */
+	private boolean cone() {
+		return this.values.skyElements().sky();
 	}
 
 	/**
@@ -387,7 +395,15 @@ public final class SkyDraw {
 		// where the sky is really this engine's to draw, which is a place the game opens a sky pass
 		// in and a run with the option on: said at the load it would be said once per place and
 		// would say the opposite of the code with sky=off, the game drawing the piece after all.
-		List<String> off = this.values.skyElements().off();
+		//
+		// Off the elements and not off the four words the pack may write, because only two of them
+		// take a piece away: a pack that wrote stars=false still gets its stars drawn, and saying so
+		// here would be a line the picture contradicts.
+		List<String> off = ELEMENTS.values().stream()
+				.map(Element::directive)
+				.filter(directive -> !directive.isEmpty()
+						&& !this.values.skyElements().allows(directive))
+				.toList();
 		if (!off.isEmpty()) {
 			Vitrail.logger().info("{} draws its own {}, so the game draws neither that nor a shader "
 					+ "of the pack's in its place", this.packPath.getFileName(),
@@ -521,7 +537,7 @@ public final class SkyDraw {
 		// Here and not at the draw, because filling a vertex buffer is a copy the encoder refuses
 		// while a pass is open, and this is the last moment before the disc's pass exists. Only once
 		// the disc really has a pipeline: a place this engine does not draw the sky in pays nothing.
-		if (pipeline != null && DISC.equals(element.label())) {
+		if (pipeline != null && DISC.equals(element.label()) && cone()) {
 			this.horizon.update(device);
 		}
 
