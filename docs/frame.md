@@ -117,9 +117,9 @@ is unaffected; only the copy handed to the pack is converted.
 
 ## The seed, and why anything not drawn through the pack looks flat
 
-The pack's chain has to start from something. Whatever the game has already drawn - and, for
-families that do not yet go through the pack's own programs, that is a lot - is brought into the
-pack's targets by a full-screen pass, the seed.
+The pack's chain has to start from something. Whatever the game has drawn - which includes every
+family that does not go through the pack's own programs - is brought into the pack's targets by a
+full-screen pass, the seed.
 
 This is where the flatness comes from, and it is worth being precise about it, because it explains
 several symptoms that look unrelated:

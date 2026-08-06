@@ -11,7 +11,7 @@ The short version lives in the [README](../README.md) and the install steps in
 
 | If you want to | Read |
 | --- | --- |
-| Know whether your pack works, and why it does not | [Pack compatibility](compatibility.md) |
+| Work out why your pack looks wrong, starting from what you see | [Pack compatibility](compatibility.md) |
 | Understand what a shader pack is made of | [The pack format](pack-format.md) |
 | Understand how legacy GLSL reaches a Vulkan GPU | [Translation](translation.md) |
 | Understand when each program runs during a frame | [The frame](frame.md) |
@@ -51,7 +51,8 @@ The visible consequence of a family not going through the pack is always the sam
 worth recognising: that geometry is composited in flat, carrying the game's own lighting,
 with no normal and no material id for the pack's later passes to work from. So it does not
 receive the pack's lighting, and passes that classify pixels by material can misread it.
-[Pack compatibility](compatibility.md) explains where that bites, pack by pack.
+That symptom, and what to do about it, is
+[Anything that moves](compatibility.md#anything-that-moves).
 
 ## A note on sources
 

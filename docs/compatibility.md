@@ -13,6 +13,7 @@ rather than guess.
 | The sun is in one place, the shadows point another way | [Sun and shadows disagree](#sun-and-shadows-disagree) |
 | The sky turns into a flat grey sheet at sunrise | [The sky goes flat](#the-sky-goes-flat) |
 | Blocks wave, glow or cast wrong shadows after switching packs | [You just changed packs](#you-just-changed-packs) |
+| The terrain is uniformly too dark | [Terrain that is too dark](#terrain-that-is-too-dark) |
 
 **Before anything else, read the log.** The engine announces what it refused, what it could not
 serve, and which program it chose for each pass. Most of what follows is already printed there in
@@ -39,7 +40,14 @@ pack asked for and did not get. The refusal is correct; the wording is worse tha
 **A single pass can be refused without the pack being refused.** If a program's fragment stage
 declares an input its vertex stage does not provide, that one program fails to link and the engine
 falls back to the game's rendering for that surface. You get the game's version of that one thing,
-not a hole. Bliss's water and one of Mellow's full-screen passes are both in this case.
+not a hole.
+
+This is common enough to be worth recognising, and it has a specific cause: several packs write one
+source file per program and hand it to both stages behind a stage guard, so every fragment varying
+also appears in the vertex expansion, in a branch nobody takes. The compiler here runs with
+optimisation off, so a varying nobody reads still reaches the compiled module and the mismatch is
+real. **The log names which program was refused and which inputs did not match** - that line, not
+this page, is what tells you whether a given pack is affected today.
 
 ## The effect never ran
 
@@ -128,9 +136,13 @@ Several packs recognise the game's stars by a vertex colour whose three channels
 non-zero. Hand such a pack a plain white vertex colour on a sky pass and it takes its star branch,
 painting the whole disc flat. Sildur's and Body Camera both do this.
 
-The engine multiplies the draw's colour modulator into the value the pack reads instead of
-substituting white - which matters because all of the sunrise band's colour lives in that modulator,
-its mesh being white fading to transparent.
+The engine multiplies the draw's colour modulator into the value the pack reads rather than
+substituting white, precisely so that branch is not taken by accident. All of the sunrise band's
+colour lives in that modulator - its mesh is white fading to transparent - so substituting white
+would both flatten the band and trip the star test.
+
+**So if you do see this, the modulator is not reaching the pack.** That is the thing to check, and
+it is not something a pack setting can cause.
 
 ## You just changed packs
 
