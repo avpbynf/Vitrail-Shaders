@@ -76,10 +76,11 @@ public final class ChainPlan {
 	private final Map<Key, Pass> attachments;
 
 	/**
-	 * Which key each chunk pass reaches, or absent when this place serves none.
+	 * Which key each chunk pass reaches. A pass is absent when nothing here serves it, and also when
+	 * the key it reaches has no answer, which {@link #geometry} spells out.
 	 * <p>
-	 * Kept apart from the answer because the question is the pass's and the answer is the file's:
-	 * the translucent pass draws after the deferred stage even when the very same file serves the
+	 * Kept apart from the answer because the question is the pass's and the answer is the program's:
+	 * the translucent pass draws after the deferred stage even when the very same program serves the
 	 * solid pass before them.
 	 */
 	private final Map<TerrainPass, Key> terrainKeys;
@@ -160,9 +161,12 @@ public final class ChainPlan {
 	 * What a geometry program's answer depends on: the file that ends up serving it, and whether it
 	 * draws after the deferred stage.
 	 *
-	 * @param servedBy      the bare name of the file the fallback tree landed on, never the name
-	 *                      that was asked for. Two names of the format commonly resolve to one file
-	 *                      and they then share every answer, which is what makes this the key
+	 * @param servedBy      the bare name of the PROGRAM the fallback tree landed on, never the one
+	 *                      that was asked for and never a file name: it is what
+	 *                      {@code ProgramResolver.Resolution} calls servedBy, and asking with
+	 *                      anything else answers empty. Two names of the format commonly resolve to
+	 *                      the same one, and they then share every answer, which is what makes this
+	 *                      the key
 	 * @param afterDeferred which snapshot of the flip counter the schedule gives it. The same file
 	 *                      answers twice when it serves geometry on both sides, and the two answers
 	 *                      differ by exactly the halves the deferred stage turned over
@@ -220,18 +224,20 @@ public final class ChainPlan {
 		// verdicts must not blame the clear for.
 		//
 		// One walk fills the three: the answers land in the shared table and each family keeps the
-		// keys it reaches. A file serving two families, which is the ordinary case for a pack whose
-		// sky falls back on gbuffers_basic, is therefore walked once and says whatever it has to say
-		// once.
+		// keys it reaches. A program serving two families, which is the ordinary case for a pack
+		// whose sky falls back on gbuffers_basic, is therefore walked once where the two families
+		// used to memoise apart and walk it twice, saying anything it had to say twice with it. No
+		// pack of the corpus reaches that case, so nothing moved in the measurements; it is the
+		// shared table that now guarantees it rather than each family's own bookkeeping.
 		Map<Key, Pass> attachments = new LinkedHashMap<>();
 		Map<TerrainPass, Key> terrainKeys = terrainKeysOf(plan, resolver, notes, attachments);
 		Map<String, Key> skyKeys = skyKeysOf(plan, resolver, notes, attachments);
 
 		Seed seed = seedOf(plan, resolver, notes);
 
-		// The terrain alone, and that is a deviation this engine takes knowingly: the sky is drawn
-		// with the pack's programs but SkyProgram hands the engine no writes, so a verdict counting
-		// it as drawn would silence five true notes on Bliss. It reopens with A15, in three lines.
+		// The terrain alone, and leaving the sky out is deliberate rather than an oversight: a plan
+		// is built per place, and the sky is drawn in some of them and not others. The reason in
+		// full, with what counting it was measured to silence, is at the verdict that depends on it.
 		Map<Key, Pass> world = new LinkedHashMap<>();
 		terrainKeys.values().forEach(key -> world.put(key, attachments.get(key)));
 		verdicts(plan, seed, world, passes, last, notes);
@@ -255,14 +261,16 @@ public final class ChainPlan {
 	}
 
 	/**
-	 * The attachments of every chunk pass this engine can draw, keyed by the pass and never by the
-	 * file that serves it. One file usually serves two of the three, and the file is still not the
-	 * key: the passes it serves stand on either side of the deferred stage, so the same draw
-	 * buffers land on different halves depending on which pass is asking. Iris keys the same
-	 * answer the same way, one flip snapshot per {@code Pass}.
+	 * Which key each chunk pass this engine can draw reaches, walking every answer it needs into the
+	 * shared table on the way.
 	 * <p>
-	 * The walk before the deferreds is shared by the solid and the cutout pass, so its answer is
-	 * computed once per file, which is also what keeps a broken file from being reported twice.
+	 * The pass is the question and the key is where the answer lives, and the two are not the same:
+	 * one program usually serves two of the three passes, and those two stand on either side of the
+	 * deferred stage, so the same draw buffers land on different halves depending on which pass is
+	 * asking. Iris keys the same answer the same way, one flip snapshot per {@code Pass}.
+	 * <p>
+	 * The solid and the cutout pass therefore share one key and one walk, which is also what keeps a
+	 * program this place cannot carry from being reported twice.
 	 */
 	private static Map<TerrainPass, Key> terrainKeysOf(TargetPlan plan, ProgramResolver resolver,
 			List<String> notes, Map<Key, Pass> into) {
@@ -699,11 +707,15 @@ public final class ChainPlan {
 	 * The same answer for any geometry program at all, asked by the file that serves it and by the
 	 * side of the deferred stage it draws on.
 	 * <p>
-	 * This is the question the three families share, and the two above are shorthands for it: the
-	 * terrain knows its pass, the sky knows its name, and a family that knows neither, which is
-	 * every family the game hands over as a render type, asks here. Empty covers the same normal
-	 * cases as {@link #geometry}, plus the one that matters most for a caller holding a name from
-	 * the game: this place was never asked about that file, so nothing was walked for it.
+	 * This is the question the three families share, and {@link #geometry} and {@link #sky} are
+	 * shorthands for it: the terrain knows its pass, the sky knows its name, and a family that knows
+	 * neither, which is every family the game hands over as a render type, asks here. Empty covers
+	 * the same normal cases as {@link #geometry}, plus the one that matters most for a caller holding
+	 * a name from the game: this place was never asked about that program, so nothing was walked for
+	 * it.
+	 * <p>
+	 * Nothing calls this yet, and that is what it is for: it is the half of the entities that can be
+	 * put in place and proved before any of them is drawn.
 	 */
 	public Optional<Pass> geometryOf(String servedBy, boolean afterDeferred) {
 		return Optional.ofNullable(this.attachments.get(new Key(servedBy, afterDeferred)));
