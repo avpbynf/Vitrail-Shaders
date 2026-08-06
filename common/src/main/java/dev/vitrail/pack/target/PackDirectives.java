@@ -155,8 +155,9 @@ public final class PackDirectives {
 	 * Iris holds it in a final field that neither directive reaches: both {@code wetnessHalflife}
 	 * and {@code drynessHalflife} are registered against the rise, so no pack can change the fall,
 	 * and packs are written against that. Reading the pack's own {@code drynessHalflife} here
-	 * instead would be more sensible and would make the ground dry several times too fast on the
-	 * three packs of the corpus that declare both.
+	 * instead would be more sensible and would change the look of the three packs of the corpus that
+	 * declare one, in OPPOSITE directions: BSL asks for 5 against this 200, both Complementary for
+	 * 300. See {@link dev.vitrail.uniform.WorldState#drynessHalfLife()}, which carries the measure.
 	 */
 	public float drynessHalflife() {
 		return Builder.DRYNESS_HALFLIFE;

@@ -8,7 +8,9 @@ about how the first becomes the second, and what does not survive the trip.
 Every GLSL unit a pack ships is rewritten before it can draw, then handed to the compiler the game
 already embeds, which produces SPIR-V and performs reflection and binding remapping itself. The
 chain's own units go at selection; the programs that draw the world and the sky are translated on
-demand, at the first frame of a place that needs them. Nothing is ever translated a second time.
+demand, at the first frame of a place that needs them. What is translated is never *patched*
+afterwards - a setting that moves rebuilds its units from the pack's source, and so does a change of
+dimension, which rebuilds the lot.
 
 Two properties follow, and both are load-bearing:
 
@@ -208,8 +210,12 @@ The format appears to offer a pack two half-lives for wetness, one for how fast 
 how fast it dries. Both directives land on the **rise**, and whichever is read last sets it - so a
 pack writing a drying time is quietly changing how fast wetness comes *on*. The fall is real and is
 a constant no pack can reach, so the two are not the same rate; they are simply not both settings.
-The engine matches the reference here, and correcting it in isolation would dry the ground several
-times too fast on the packs that declare both.
+
+The engine matches the reference here, and the corpus says why that is not just deference. The packs
+that declare a drying time disagree with the constant in **both directions** and by wildly different
+amounts - one asks for a fall many times faster, two ask for one half again slower. Honouring the
+declaration would change how all three look, in opposite directions, and every one of them was tuned
+against the behaviour they actually get.
 
 Likewise, a time uniform keeps varying in the Nether and the End although the game gives them a
 fixed time, because that is what the reference does and packs derive angles from it. It is those two

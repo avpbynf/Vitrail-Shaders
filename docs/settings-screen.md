@@ -100,10 +100,11 @@ answer there is yes. Sodium publishes a configuration entry point, and the refer
 registers through it: an entry point class named in its mod metadata, implementing Sodium's own
 interface, so a page appears in Sodium's options and opens the reference's own screen.
 
-The published interface gets you the entry and not much more, though - do not read the paragraph
-above as "no internals needed". The reference's own entry class reaches into Sodium's non-published
-packages to describe the page, and ships mixin accessors onto the implementation classes of the
-config builder. Anything past a plain entry is against internals that can move under it.
+The published interface covers more than the entry: there is a builder for a page, for a group, for
+each shape of option and for the colour theme, and the reference describes its whole page through
+them. It reaches outside that once, for the formatter that labels a slider. So the answer is neither
+"no internals" nor "internals everywhere" - it is a published surface with one edge sticking out,
+which is worth knowing before planning around either extreme.
 
 **A trap worth knowing before measuring any of this yourself**: what Maven serves as Sodium's
 NeoForge artefact is a launcher shim - a few dozen classes, none of them the renderer - and the mod
@@ -162,9 +163,8 @@ Several different things, and only the first is about you being overruled.
 - On the pack list, the pack already being drawn, and the *None* entry when nothing is loaded. Both
   are the same idea: the button that would put you where you already are.
 
-A slot naming a setting the pack does not declare is the odd one out. It leaves either a blank or a
-greyed entry, and the engine says which at load time, naming the slot and the setting it wanted -
-some packs do ship one.
+A slot naming a setting the pack does not declare is not in that list, because it is not greyed at
+all - it becomes a blank. See below.
 
 ## Settings the reference wrote
 
@@ -175,10 +175,14 @@ under it.
 
 ## What a broken layout does
 
-A slot naming an option the pack does not declare does not throw. It leaves a dead entry - blank or
-greyed, as the section above says - and a line in the log naming the slot and the setting it wanted.
-Packs in the test corpus do ship such slots, and a pack with one broken name is still a working
-pack.
+A slot naming an option the pack does not declare does not throw. It becomes a **blank**, and a line
+in the log names the slot and the setting it wanted. Packs in the test corpus do ship such slots,
+and a pack with one broken name is still a working pack.
+
+The log reports those together with the links that lead nowhere, in one line that says the entries
+concerned are shown "blank or greyed". Both kinds are in it, and which you get depends on which kind
+it was: a missing setting is the blank, a missing page is the grey. The line is a count of things
+for the pack's author to fix, not a description of one symptom.
 
 Blanks matter as much as options do. Packs align their columns by hand using empty slots, and there
 are a great many of them; dropping blanks would collapse every column a pack laid out.

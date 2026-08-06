@@ -128,7 +128,7 @@ Two consequences follow, and both are worth recognising rather than reporting as
   for glowing entities alone, and its deferred pass samples that target - so the chain reads a clear
   across a whole target.
 
-The engine states at startup which families go through the pack and which still come from the game.
+The engine names the families that still come from the game, in the log, when a place first draws.
 That line is the authority; this page does not duplicate it.
 
 ## The sky goes flat

@@ -262,10 +262,11 @@ the pieces above are keyed to and the one the horizon cone rides in.
 
 Packs declare a setting that rotates the sun's path, as a constant in their own GLSL, and it works
 on both sides at once: the pack computes its own light direction from that constant, and the engine
-turns by the same angle everything it serves - the light direction, the celestial positions and the
-shadow matrices. The game's celestial bodies know nothing about it, so left alone the visible sun
-and the direction of the shadows would disagree by exactly that angle, for the sun as much as for
-the moon.
+turns the sun, the moon, the light direction and the shadow matrices by the same angle. Not
+everything it serves - where *up* is does not move with the sun's path, and neither does the flash
+in the End, which is a fact about a place rather than a property of the light. The game's celestial
+bodies know nothing about any of it, so left alone the visible sun and the direction of the shadows
+would disagree by exactly that angle, for the sun as much as for the moon.
 
 They do not, because the rotation is pushed onto the celestial pose itself. The place matters and is
 not interchangeable with any other: it goes in where the three bodies still share one matrix, after

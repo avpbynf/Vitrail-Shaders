@@ -40,10 +40,10 @@ Shader packs are written in OpenGL-era GLSL, against an OpenGL-era pipeline. The
 renders through Vulkan. Those two facts are not compatible, and every design decision here
 follows from how that gap is closed.
 
-Vitrail closes it **once per program, and never again**. Every GLSL unit a pack ships is rewritten
-into Vulkan GLSL, then handed to the compiler the game already embeds, which turns it into SPIR-V.
-Nothing is retranslated per frame, and by the time a program has drawn once there is no legacy GLSL
-behind it.
+Vitrail closes it **before a program draws, never while it is drawing**. Every GLSL unit a pack ships
+is rewritten into Vulkan GLSL, then handed to the compiler the game already embeds, which turns it
+into SPIR-V. No frame is ever spent translating something that is already on screen, and by the time
+a program has drawn once there is no legacy GLSL behind it.
 
 Where the pauses come from is worth knowing, because "once" is not the same as "at selection". The
 chain is translated when the pack is chosen. The programs that draw the world and the sky are
@@ -67,10 +67,16 @@ observe:
 ## How to know what the engine currently draws
 
 Not every family of geometry goes through the pack yet. Rather than repeat a list here that
-would quietly go stale, the engine states it itself: at startup it logs which families it
-draws with the pack's own programs and which ones still come from the game already tone
-mapped. **That line is the authority.** Anything a page here says about scope is written to
-agree with it, never to replace it.
+would quietly go stale, the engine states it itself: when a place first draws, it logs which
+families still come from the game, already tone mapped, and are carried across by the full-screen
+layer. **That line is the authority.** Anything a page here says about scope is written to agree
+with it, never to replace it.
+
+Two things about that line rather than one, since a reader who does not find it should know why.
+It names what still comes from the *game*, so the families that do go through the pack are the ones
+it does not name. And it does not always appear: a place whose plan has no layer in it, or a run
+with the layer switched off, says something else instead, because there the targets simply keep
+their clear colour.
 
 The visible consequence of a family not going through the pack is always the same, and it is
 worth recognising: that geometry is composited in flat, carrying the game's own lighting,
