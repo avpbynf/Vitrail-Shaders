@@ -25,11 +25,13 @@ subprojects {
 	}
 
 	// A warning nobody is required to fix is a warning nobody reads, so what is kept here is what
-	// is wrong rather than what is merely unfashionable, and it fails the build. Left out on
-	// purpose: deprecation, because Minecraft and NeoForge deprecate faster than a mod can follow
-	// and the noise would bury everything else; classfile, which only ever reports annotations
-	// missing from a dependency's own jar; and serial, which asks for a serialVersionUID on
-	// exceptions nothing serialises.
+	// is wrong rather than what is merely unfashionable, and it fails the build. Four are left out
+	// on purpose, and the test each one passes is the same: its findings cannot be about this code.
+	// Deprecation, because Minecraft and NeoForge deprecate faster than a mod can follow and the
+	// noise would bury everything else; processing, which reports which annotation processor
+	// claimed what and is about this build's wiring rather than about anything written here;
+	// classfile, which only ever reports annotations missing from a dependency's own jar; and
+	// serial, which asks for a serialVersionUID on exceptions nothing serialises.
 	//
 	// Error Prone contributes the checks it rates as errors, which is the part of its catalogue
 	// meant to be a bug rather than a preference. Its warnings are worth reading and not worth
@@ -52,6 +54,16 @@ subprojects {
 
 		if (!lintReport) {
 			options.compilerArgs << "-Werror"
+		} else {
+			// Said by the build itself, because a sentence in a document rots and this cannot. The
+			// flag drops -Werror, so it disarms EVERY javac gate and not just the static analyser:
+			// the doclint and the lint categories above stop failing with it. A green run under
+			// this flag is a listing and proves nothing.
+			doFirst {
+				logger.lifecycle("lintReport: -Werror is off, so no javac warning, no doclint "
+						+ "failure and no Error Prone finding can fail this build. This run is a "
+						+ "listing, not a check - green here does not mean 'gradlew build' is green.")
+			}
 		}
 
 		options.errorprone.disableAllWarnings = !lintReport

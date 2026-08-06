@@ -86,6 +86,10 @@ Error Prone runs alongside javac and contributes the checks it rates as errors, 
 catalogue meant to be a bug rather than a preference. Its warnings are worth reading and not
 worth blocking on, so `gradlew build -PlintReport` prints them and lets the build through.
 
+That flag lets everything else through with them: it drops `-Werror`, so the compiler warnings
+and the javadoc linting stop failing the build as well. A run under it is a listing, not a check,
+and the build says so on the way past.
+
 `checkText` covers the two things no compiler sees: a byte order mark, which reaches a GLSL
 compiler as a stray character in front of the version directive and which PowerShell writes
 unless told not to, and typographic punctuation where a straight quote or a plain hyphen is
