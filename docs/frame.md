@@ -139,6 +139,18 @@ The pack's chain has to start from something. Whatever the game has drawn - whic
 family that does not go through the pack's own programs - is brought into the pack's targets by a
 full-screen pass, the seed.
 
+**It is worth knowing exactly what the seed stands in for, because it is not the ordinary
+arrangement.** In the reference implementation the world is never written into the game's colour
+texture at all: that texture stays untouched until the final pass writes it, and the first colour
+target starts from a fog-colour clear that everything then accumulates onto. What is shared with the
+game there is the **depth** texture and only that - the pack's targets are built around the main
+target's own depth, which is what keeps depth testing coherent between the game's passes and the
+pack's without a single copy.
+
+So the seed is not a general-purpose way of moving an image about. It is the stand-in for the
+families that do not yet draw through the pack, and every one of its costs below is the cost of
+standing in for them. It goes away as they arrive.
+
 This is where the flatness comes from, and it is worth being precise about it, because it explains
 several symptoms that look unrelated:
 
