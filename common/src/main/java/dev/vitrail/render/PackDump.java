@@ -82,9 +82,9 @@ final class PackDump {
 	 *                of the six are one file, so a line that said gbuffers_skybasic four times would
 	 *                not say which piece was read
 	 * @param entities the pack's entity programs, empty until the first entity is drawn. Named by
-	 *                element for the same reason and more strongly: the mob pieces are one file
-	 *                between them and the block entity pieces another, and the two are sometimes the
-	 *                same file, which no line naming the file could tell apart
+	 *                element for the same reason and more strongly: the pieces share their files
+	 *                between them rather than having one each, and the two halves sometimes share
+	 *                the same one, which no line naming the file could tell apart
 	 * @param passes  the chain's own passes, empty for the frame or two before they are built
 	 */
 	static void take(String place, int load, Collection<TerrainProgram> terrain,

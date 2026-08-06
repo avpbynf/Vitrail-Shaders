@@ -37,7 +37,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
@@ -230,13 +229,13 @@ public final class EntityDraw {
 	 * <p>
 	 * All of them ask for {@code gbuffers_entities}, and that is only half the answer:
 	 * <strong>a conduit, a skull, a chest and every other block entity drawing with an entity render
-	 * type that does not blend comes through this very door</strong>, and Iris sends those eight to
-	 * {@code gbuffers_block} instead. {@link #BLOCK_ELEMENTS} is that half, and
-	 * {@link BlockEntityGeometry} is how a draw is known to belong to it. Not every block entity is
-	 * concerned: a player head with a resolved profile takes {@code entityTranslucent}, which blends
-	 * and is no row of this table.
+	 * type that does not blend comes through this very door</strong>, and most of them are Iris's
+	 * {@code gbuffers_block} rather than this name. {@link #BLOCK_ELEMENTS} is that half, row for row
+	 * against Iris's own table, and {@link BlockEntityGeometry} is how a draw is known to belong to
+	 * it. Not every block entity is concerned: a head that carries an owner profile takes
+	 * {@code entityTranslucent}, which blends and is no row of this table.
 	 * <p>
-	 * Iris keys the same table by the same pipelines, and eight of these rows reach a function of its
+	 * Iris keys the same table by the same pipelines, and most of these rows reach a function of its
 	 * own rather than a constant: that function answers {@code gbuffers_block} while a block entity is
 	 * being drawn, and {@code gbuffers_hand} or {@code gbuffers_hand_water} while the hand is, by its
 	 * half. The hand half cannot arise here, the window above being closed by then. Only the end
@@ -276,15 +275,18 @@ public final class EntityDraw {
 	 * the offset cutout are given {@code ENTITIES_CUTOUT} outright and every other row of ours goes
 	 * through {@code getSolid} or {@code getCutout} to {@code BLOCK_ENTITY} or
 	 * {@code BLOCK_ENTITY_DIFFUSE}, both {@code ProgramId.Block}
-	 * ({@code pipeline/IrisPipelines.java:25-83}). The phase comes from nowhere in that table: it is
-	 * posed around the SUBMISSION, so a pipeline that answers with the entity program can still be
-	 * drawn under the block entity phase.
+	 * ({@code pipeline/IrisPipelines.java:25-83}). The phase comes from nowhere in that table: what is
+	 * raised around the submission is a flag, and the phase itself goes up at the DRAW, in the
+	 * wrapper the flag made Iris put on the render type
+	 * ({@code layer/BlockEntityRenderStateShard.java:10-12} into {@code layer/GbufferPrograms.java:59}).
+	 * Either way it does not consult the pipeline, so a pipeline that answers with the entity program
+	 * can still be drawn under the block entity phase.
 	 * <p>
 	 * <strong>A skull is where those two answers really part company</strong>, and it is not a corner
 	 * case: it is a block entity, it draws with {@code ENTITY_CUTOUT_Z_OFFSET}, and so it takes the
-	 * entity program and the block entity phase at once. Every profile-less head does, which is every
-	 * skeleton, wither, zombie and creeper head in the world; a player head whose profile has
-	 * resolved takes {@code entityTranslucent} instead and is no row of this table at all.
+	 * entity program and the block entity phase at once. Every head with no owner profile does, which
+	 * is every skeleton, wither, zombie, creeper, dragon and piglin head in the world; a head that
+	 * carries one takes {@code entityTranslucent} instead and is no row of this table at all.
 	 * <p>
 	 * <strong>The threshold follows the program and not the phase.</strong> Whatever asks for the
 	 * block program discards at a tenth, the solid rows included, because Iris's {@code getSolid}
@@ -297,10 +299,15 @@ public final class EntityDraw {
 	 * difference is a known gap rather than a subtlety.</strong> Iris raises it on the render types
 	 * of {@code submitModel}, {@code submitCustomGeometry}, {@code submitModelPart} and the glyphs
 	 * ({@code mixin/entity_render_context/MixinModelStorageTrigger.java:39,48,57} and
-	 * {@code MixinGlyphRenderType.java:19}), and on nothing else: an item on a shelf and a block model
-	 * a block entity submits stay at {@code NONE} there, and so they do here. The glyphs are the one
-	 * place the two really differ, a sign's text drawing under the block entity phase there and under
-	 * none here, and that is a family this engine does not serve at all yet.
+	 * {@code MixinGlyphRenderType.java:19}), and on nothing else. What that leaves out is narrower
+	 * than it sounds: an item on a shelf reaches those same wrapped calls whenever it has a model of
+	 * its own, a chest or a shield among them, and only the plain quad road stays at {@code NONE}.
+	 * Both engines answer alike there.
+	 * <p>
+	 * <strong>The glyphs are where they really differ, and it is a gap rather than a divergence.</strong>
+	 * Iris draws a sign's text under the block entity phase and with a program of its own; this engine
+	 * draws no text at all, so the sign's text is the game's, unshaded, and no stage of ours is wrong
+	 * because none is supplied. It is a family of its own and it is named as one above.
 	 * <p>
 	 * A piece here is a compiled module of its own, like every row above, so it carries a name of its
 	 * own. The name is the entity one with a word in front, because it lands in an identifier the
@@ -349,9 +356,11 @@ public final class EntityDraw {
 	 * engine does not serve at all, which is most of them.
 	 */
 	private static Element element(RenderPipeline pipeline) {
-		Element block = BlockEntityGeometry.drawing() ? BLOCK_ELEMENTS.get(pipeline) : null;
-
-		return block == null ? ELEMENTS.get(pipeline) : block;
+		// One table or the other and no falling between them: the block table is built from every row
+		// of the mob one, so a pipeline either has both halves or neither.
+		return BlockEntityGeometry.drawing()
+				? BLOCK_ELEMENTS.get(pipeline)
+				: ELEMENTS.get(pipeline);
 	}
 
 	private final PackChain owner;
@@ -522,13 +531,17 @@ public final class EntityDraw {
 		if (program == null) {
 			end();
 
-			// The fifth reason a draw goes back to the game, and it was the silent one. It stopped
-			// being harmless when the family grew a second name: a pack whose gbuffers_block file
-			// ships one stage, or whose block name walks somewhere this place serves nothing for,
-			// keeps its chests on the game's shader and its mobs on the pack's, frame after frame.
-			// That is not a flicker, it is worse, because it looks deliberate.
-			return refuse("the pack serves no program for the " + element.element() + " piece, which "
-					+ "is what the load said about it above");
+			// The reason that was silent, and the only one settled by the LOAD rather than by the
+			// frame. It stopped being harmless when the family grew a second name: a piece can now be
+			// missing while its neighbour is served, which paints every chest with the game's shader
+			// and every mob beside it with the pack's, for as long as the pack is loaded.
+			//
+			// What it does NOT say is why, and that is deliberate rather than lazy: the map is empty
+			// both where the pack serves nothing for the piece and where the family was refused its
+			// targets, and those two are told apart by their own lines at load, not by this one. It
+			// names the piece so that a reader can find which.
+			return refuse("missing:" + element.element(), true,
+					"the load left no program for the " + element.element() + " piece");
 		}
 
 		if (this.drawing != program && !begin(device, element, program, prepared)) {
@@ -566,11 +579,11 @@ public final class EntityDraw {
 		end();
 		this.owner.beginFrame();
 		if (!this.owner.openTargets(device)) {
-			return refuse("the colour targets could not be opened this frame");
+			return refuse("targets", "the colour targets could not be opened this frame");
 		}
 
 		if (!shown()) {
-			return refuse("the chain is still compiling, so nothing written to the pack's targets "
+			return refuse("warming", "the chain is still compiling, so nothing written to the pack's targets "
 					+ "would reach the screen yet");
 		}
 
@@ -579,7 +592,7 @@ public final class EntityDraw {
 		// the whole run shares the one the piece carries. Written into the block a few lines down.
 		RenderPipeline pipeline = program.prepare(device, element.modelView());
 		if (pipeline == null) {
-			return refuse("the program refused to prepare, which it says on its own line above");
+			return refuse("prepare", "the program refused to prepare, which it says on its own line above");
 		}
 
 		// The two images the game would have drawn into, worked out as PreparedRenderType works them
@@ -599,7 +612,7 @@ public final class EntityDraw {
 			// The colour targets are not there yet, which is the first frame or two and the frames
 			// after a resize. A plain pass would carry one attachment against a pipeline holding a
 			// state per target the pack asked for, and setPipeline refuses that by name.
-			return refuse("one of the pack's colour targets has no image yet");
+			return refuse("unallocated", "one of the pack's colour targets has no image yet");
 		}
 
 		CommandEncoder encoder = device.createCommandEncoder();
@@ -617,26 +630,44 @@ public final class EntityDraw {
 	 * Hands one draw back to the game and says why, once per reason and per load.
 	 * <p>
 	 * <strong>Every one of these used to be silent, and that is what made the defect they cause
-	 * undiagnosable.</strong> A draw handed back is drawn by the game's own shader for that frame
-	 * alone, so a reason that comes and goes is an entity lit by the pack on one frame and by the
-	 * game on the next: a flicker, with nothing anywhere to say which of the four causes it was.
-	 * That is the exact shape of failure this engine exists to refuse, and it was found by a player
-	 * looking at a chest rather than by any instrument of ours.
+	 * undiagnosable.</strong> A draw handed back is drawn by the game's own shader, so an entity is
+	 * lit by the game where everything around it is lit by the pack, with nothing anywhere to say
+	 * which reason it was. That is the exact shape of failure this engine exists to refuse, and it
+	 * was found by somebody looking at a chest rather than by any instrument of ours.
 	 * <p>
-	 * Once per reason, because the alternative is a line a frame at sixty frames a second. The count
-	 * is not kept: what a reader needs is which of the four happened at all, and how often is a
-	 * question the picture answers better than a log.
+	 * <strong>How long it lasts is not the same for all of them, and the line says which.</strong>
+	 * The reasons that answer a question about this FRAME come and go, so the same entity is the
+	 * pack's on one frame and the game's on the next, and that reads as a flicker. The one that
+	 * answers a question about the LOAD cannot come back: it is settled when the pack is read and it
+	 * holds until the pack is read again, so what it paints is not a flicker but a permanent split,
+	 * every chest lit by the game while every mob beside it is lit by the pack. The second is the
+	 * worse picture of the two, because it looks deliberate.
+	 * <p>
+	 * Once per reason, keyed on the reason and never on the sentence: the alternative is a line a
+	 * frame at sixty frames a second, and a key built out of the message would also build that
+	 * message on every draw before finding out it had nothing to say.
 	 *
+	 * @param reason  what this is, for the dedup and for nothing else
+	 * @param lasting whether it holds for the whole load rather than for this frame
 	 * @return false always, so that a caller can hand this straight back
 	 */
-	private boolean refuse(String why) {
-		if (this.refused.add(why)) {
-			Vitrail.logger().warn("An entity draw went back to the game's own shader because {}. It is "
-					+ "then lit by the game for that frame and by the pack on the frames it is served, "
-					+ "which reads on screen as a flicker", why);
+	private boolean refuse(String reason, boolean lasting, String why) {
+		if (this.refused.add(reason)) {
+			Vitrail.logger().warn("An entity draw went back to the game's own shader because {}. {}",
+					why, lasting
+							? "It is settled for as long as this pack is loaded, so what it paints is "
+									+ "not a flicker: this geometry is lit by the game and everything "
+									+ "beside it by the pack, every frame"
+							: "It is then lit by the game for that frame and by the pack on the frames "
+									+ "it is served, which reads on screen as a flicker");
 		}
 
 		return false;
+	}
+
+	/** The ordinary kind, which answers a question about this frame alone. */
+	private boolean refuse(String reason, String why) {
+		return refuse(reason, false, why);
 	}
 
 	/**
@@ -718,9 +749,7 @@ public final class EntityDraw {
 		// share a pipeline, so a format this engine cannot decode has already been reported once and
 		// saying it twice would read as two defects.
 		List<Element> asked = Stream.concat(served.stream(),
-						served.stream()
-								.map(element -> BLOCK_ELEMENTS.get(element.pipeline()))
-								.filter(Objects::nonNull))
+						served.stream().map(element -> BLOCK_ELEMENTS.get(element.pipeline())))
 				.toList();
 
 		try {
@@ -867,6 +896,10 @@ public final class EntityDraw {
 		end();
 		this.programs.values().forEach(EntityProgram::release);
 		this.programs.clear();
+		// With the programs, or "once per load" would mean once per session: what is read again after
+		// this can refuse again, for the same reason or for another, and a reader watching a portal
+		// would see the first reading's lines and nothing after them.
+		this.refused.clear();
 		this.read = false;
 	}
 }

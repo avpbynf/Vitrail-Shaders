@@ -137,8 +137,9 @@ Two consequences follow, and both are worth recognising rather than reporting as
 
 The engine names the families that still come from the game, in the log, when a place first draws.
 That line is the authority; this page does not duplicate it. It is printed beside the seed it
-describes, so a place drawn without one does not print it at all, and then the families are whatever
-the switches say.
+describes, so a place drawn without one prints nothing - and that is also a place where the mobs
+stay with the game whatever the switch says, the seed being the only road their colour has into the
+pack's picture.
 
 ## The sky goes flat
 

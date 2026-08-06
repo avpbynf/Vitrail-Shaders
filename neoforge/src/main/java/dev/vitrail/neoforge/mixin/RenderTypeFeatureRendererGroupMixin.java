@@ -50,12 +50,11 @@ import java.util.List;
  * once. Nothing that does not alternate pays anything.
  * <p>
  * <strong>No pair of the vanilla game is known to reach it, and that is not a reason to leave it
- * open.</strong> The pair this class used to name, a player head against the player, is not one: a
- * head with a resolved profile takes {@code entityTranslucent} and so does the whole
- * {@code PlayerModel}, and neither blending type is a row of the ten. What makes the guard worth its
- * two injections is that the cost of being wrong is silent and the cost of the guard is one draw:
- * the table is keyed by pipeline, a texture is all that separates two of its rows, and nothing
- * anywhere promises that no mob will ever share a sheet with a block entity.
+ * open.</strong> Which pieces of the game are and are not rows of the table is {@code EntityDraw}'s
+ * to say and is not repeated here; what matters at this end is that the cost of being wrong is
+ * silent and the cost of the guard is one draw. The table is keyed by pipeline, a texture is all
+ * that separates two of its rows, and nothing anywhere promises that no mob will ever share a sheet
+ * with a block entity.
  * <p>
  * Both are guarded by {@link EntityDraw#wanted()}: this is a change to how the game groups its own
  * geometry, and it has no business happening when nothing is going to read it.

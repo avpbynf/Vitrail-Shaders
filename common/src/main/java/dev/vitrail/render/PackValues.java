@@ -167,9 +167,10 @@ public final class PackValues {
 	 * sky is the loud one: the game puts the sun, the moon and the stars where they belong by
 	 * pushing a rotation onto its own stack, so a sky pass hands that matrix in here; see
 	 * {@link dev.vitrail.uniform.ViewSource#passModelView} for what answering it with the camera's
-	 * would do. The entities are the quiet one: four of the ten pieces are drawn a hair towards the
-	 * viewer so that an armour piece does not fight the skin it covers, and that hair is a
-	 * modification of this matrix and of nothing else.
+	 * would do. The entities are the quiet one: the pieces the game gives a layering transform are
+	 * moved a hair along the view axis so that an armour piece does not fight the skin it covers,
+	 * most towards the viewer and one away from it, and that hair is a modification of this matrix
+	 * and of nothing else.
 	 */
 	public void modelView(Matrix4fc matrix) {
 		this.state.passModelView(matrix);
