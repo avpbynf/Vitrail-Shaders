@@ -61,6 +61,18 @@ it real.
 There is no reload button, in either reference. The folder is looked at about once a second while
 the list is on screen, so a pack dropped in appears on its own.
 
+## Why this is a screen of its own and not a page in Sodium's
+
+Sodium ships a configuration API - in its Fabric artefact. **The NeoForge artefact of the same
+version ships none of it**, not one class of that package, and this project targets NeoForge. The
+version being built against is pinned in the build properties; the asymmetry is worth re-checking
+whenever that pin moves, since it is a fact about somebody else's packaging rather than a design.
+
+So an entry inside Sodium's own options would have to be made by reaching into its internals. The
+reference implementation does exactly that, and has a screen of its own anyway, reached from a
+placeholder entry. Aiming straight at a page integrated into Sodium would be aiming at something
+that does not exist there to be integrated with.
+
 ## Where settings live, and why one file per pack
 
 Each pack gets its own file, `vitrail/settings/<pack file name>.txt`. That is not tidiness.
