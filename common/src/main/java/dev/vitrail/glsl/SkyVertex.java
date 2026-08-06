@@ -29,11 +29,11 @@ import java.util.Set;
  * reads is answered with a constant here.
  * <p>
  * <strong>What is approximated, said out loud.</strong> {@code of_MultiTexCoord1} is the light map,
- * and no sky format carries one. It is answered at full sky light rather than at nought, because
- * nought is the value that reads as "underground" to a pack that folds it into its own sky colour.
- * No program of the corpus was seen reading it in a sky stage, so this constant is a guard rather
- * than a value anything is known to depend on. {@code of_Normal} is answered facing the camera for
- * the same reason: the sky has no surface, and a normalise of a zero vector is a NaN that spreads.
+ * and no sky format carries one. It is answered at the top of both channels rather than at nought,
+ * because nought is the value that reads as "underground" to a pack that folds it into its own sky
+ * colour, and a pack does read it here: Body Camera writes the coordinate itself into a colour
+ * target over the whole sky. {@code of_Normal} is answered facing the camera for a related reason:
+ * the sky has no surface, and a normalise of a zero vector is a NaN that spreads.
  * <p>
  * <strong>One risk this class cannot close on its own, and that whoever draws the sky has to
  * measure.</strong> An input a stage declares and never reads may be dropped from the SPIR-V, and
@@ -104,10 +104,13 @@ public final class SkyVertex {
 		String texture = bound.contains("UV0") ? "vec4(UV0, 0.0, 1.0)" : "vec4(0.0, 0.0, 0.0, 1.0)";
 		lines.add("#define of_MultiTexCoord0 " + texture);
 
-		// The light map, which no sky format carries. Full sky light and no block light, in the raw
-		// coordinates a pack expects to divide down itself.
+		// The light map, which no sky format carries. Both channels at the top of the range, in the
+		// raw coordinates a pack expects to divide down itself, which is the pair the references hand
+		// every format without a light map. Block light at nought instead reads as a place no lamp
+		// reaches, and a pack that writes the coordinate straight into a colour target, as Body Camera
+		// does over the whole sky, puts the bottom of the range there rather than the top.
 		for (int unit = 1; unit <= 2; unit++) {
-			lines.add("#define of_MultiTexCoord" + unit + " vec4(0.0, 240.0, 0.0, 1.0)");
+			lines.add("#define of_MultiTexCoord" + unit + " vec4(240.0, 240.0, 0.0, 1.0)");
 		}
 
 		lines.addAll(VertexPrologue.blankTexCoords());
