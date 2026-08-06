@@ -18,6 +18,21 @@ The short version lives in the [README](../README.md) and the install steps in
 | Understand the sky and the shadow map | [Sky and shadows](sky-and-shadows.md) |
 | Work on the engine | [Developing](developing.md) |
 
+### Going deeper
+
+The pages above explain the engine to someone using it. `internals/` is the level below, for
+someone changing it: the same subjects, with the mechanisms, the constraints they come from, and
+the traps that were paid for once already.
+
+| Subject | Page |
+| --- | --- |
+| Reading a pack: paths, includes, conditions, settings | [Pack loading](internals/pack-loading.md) |
+| Colour targets: formats, the flip, what the backend refuses | [Render targets](internals/render-targets.md) |
+| Drawing terrain on a mesh the engine does not own | [Terrain](internals/terrain.md) |
+| Serving uniforms, and how a value is proved correct | [Uniforms](internals/uniforms.md) |
+| Textures a pack supplies, and treating its paths as untrusted | [Pack textures](internals/pack-textures.md) |
+| What the game's graphics API offers and closes | [The game's graphics API](internals/game-graphics-api.md) |
+
 ## The one idea the whole project rests on
 
 Shader packs are written in OpenGL-era GLSL, against an OpenGL-era pipeline. Minecraft 26.2
