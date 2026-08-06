@@ -35,11 +35,16 @@ import java.util.Set;
  * reading the scene as a lookup table. Only a key this cannot read that far takes nothing, because
  * there is no name in it to take.
  * <p>
- * Every declaration is checked against its file, and a declaration whose file is missing,
- * unreadable, or SHORTER than the size it announces is refused rather than bound to black. That is
- * a deliberate difference with Iris, which logs and leaves the sampler on texture unit zero, so
- * that the shader reads whatever happens to be bound there. The image that comes out of it is
- * perfectly plausible and completely wrong, and this project would rather name the pack.
+ * One case is the exception, and it is Iris's rule rather than a softening of that one. A
+ * declaration naming a file the pack DOES NOT SHIP is dropped whole, its name with it: Iris never
+ * puts such a sampler in the stage's map, so the name goes on meaning what it meant, which for a
+ * colour target is that target. A declaration naming a file OUTSIDE the pack keeps its name and
+ * reads black, because that path is not a mistake of the author's.
+ * <p>
+ * A blob SHORTER than the size it announces keeps its name too. That is a deliberate difference
+ * with Iris, which logs and leaves the sampler on texture unit zero, so that the shader reads
+ * whatever happens to be bound there. The image that comes out of it is perfectly plausible and
+ * completely wrong, and this project would rather name the pack.
  */
 public final class PackTextures {
 
@@ -69,8 +74,9 @@ public final class PackTextures {
 	 *                which is not a nicety: Complementary points {@code texture.deferred.colortex3}
 	 *                at a cloud and water lookup table, and letting one misspelled word later in
 	 *                that line hand the name back to colour target three would have its deferred
-	 *                read the scene as that table. Empty only where the key itself named no sampler,
-	 *                and that line is as good as absent
+	 *                read the scene as that table. Empty on the two lines that claim nothing: a key
+	 *                that named no sampler, and a path the pack does not ship, which Iris drops as
+	 *                well
 	 */
 	public record Refused(String key, String value, String reason, Optional<TextureStage> stage,
 			String sampler) {
@@ -181,12 +187,13 @@ public final class PackTextures {
 			return;
 		}
 
-		// The name is settled by the key alone, so from here on every refusal carries it and leaves
-		// it with nothing behind it. What the value says about the file cannot put the name back:
-		// the pack has said which sampler it is taking over, and a word it misspelled in the rest of
-		// the line does not unsay it. Letting one typo hand colortex3 back to colour target three
-		// would have a deferred read the scene as a lookup table, which is the picture nobody
-		// questions, where black is a question.
+		// The name is settled by the key alone, so from here on a refusal carries it and leaves it
+		// with nothing behind it. What the value SAYS about the file cannot put the name back: the
+		// pack has said which sampler it is taking over, and a word it misspelled in the rest of the
+		// line does not unsay it. Letting one typo hand colortex3 back to colour target three would
+		// have a deferred read the scene as a lookup table, which is the picture nobody questions,
+		// where black is a question. The file itself is the one thing that can, and only by not
+		// being there at all; that case is at the bottom of this method.
 		String[] parts = value.trim().split("\\s+");
 		if (parts.length != PNG_TOKENS && (parts.length < RAW_1D_TOKENS || parts.length > RAW_3D_TOKENS)) {
 			refused.add(new Refused(key, value, "holds " + parts.length
@@ -224,8 +231,20 @@ public final class PackTextures {
 
 		Optional<Path> file = source.file(path);
 		if (file.isEmpty()) {
-			refused.add(new Refused(key, value, "points at " + path + ", which the pack does not ship",
-					stage, sampler));
+			// The one refusal that hands the name back, and insidePack is what tells the two apart.
+			// A path the pack does not ship is a file the author forgot, and Iris drops the whole
+			// declaration on it: the sampler never enters the stage's map, so the name goes on
+			// meaning what it meant, which for a colour target is that target. Claiming it here
+			// instead would leave the pack reading black where Iris reads the frame, and that is a
+			// difference the pack's own author never saw.
+			//
+			// A path that leaves the pack once normalised is the other thing entirely, and it stays
+			// claimed with the rest: that one is not a mistake this engine should smooth over.
+			refused.add(source.insidePack(path)
+					? Refused.of(key, value, "points at " + path + ", which the pack does not ship, "
+							+ "so " + sampler + " reads what it read before")
+					: new Refused(key, value, "points at " + path + ", which is outside the pack",
+							stage, sampler));
 			return;
 		}
 
@@ -445,8 +464,9 @@ public final class PackTextures {
 	 * What a name reads from in a program of that stage, if the pack supplies anything for it.
 	 * <p>
 	 * Empty is two different answers and the caller has to keep them apart: a name
-	 * {@link #suppliedTo} does not carry is one the pack never touched, and a name it carries with
-	 * nothing behind it is an override this engine could not honour, which reads black.
+	 * {@link #suppliedTo} does not carry means nothing was taken from it, whether the pack never
+	 * wrote it or wrote it against a file it does not ship; a name it carries with nothing behind it
+	 * is an override this engine could not honour, which reads black.
 	 * <p>
 	 * A stage override is asked first. Nothing in the corpus writes both forms for one name, and if
 	 * one ever does, the form that names a stage is the more precise of the two.
@@ -464,14 +484,15 @@ public final class PackTextures {
 	}
 
 	/**
-	 * Every name the pack takes over in a program of that stage, whether or not a file was found
-	 * behind it, both spellings of a colour target included.
+	 * Every name the pack takes over in a program of that stage, whether or not anything could be
+	 * put behind it, both spellings of a colour target included.
 	 * <p>
 	 * Whether or not, because the two failures are not the same. A name the pack takes over and
 	 * this engine cannot serve reads black and is named in the log; letting it fall back to the
 	 * colour target it shares a name with would put the scene where the pack asked for a lookup
 	 * table, and that is a picture nobody would question. {@link #resolve} is what tells the two
-	 * apart.
+	 * apart. The one line that is not here at all is the one naming a file the pack does not ship,
+	 * which is dropped where it is read, name included, as Iris drops it.
 	 * <p>
 	 * Both spellings because a colour target answers to two names and the override is written under
 	 * one of them: Complementary writes {@code texture.gbuffers.gaux4} and its gbuffers may sample

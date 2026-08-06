@@ -36,10 +36,11 @@ import java.util.Optional;
  * game owns instead of shipping one; it is asked for defensively so that a measurement taken
  * outside a client loses that texture rather than the whole reading.
  * <p>
- * A declaration that cannot be honoured is named and left with nothing behind it, which is not the
- * same as being dropped. {@link PackTextures#suppliedTo} still carries the name, so the sampler
- * reads one black pixel rather than falling back to the colour target it shares a name with. That
- * fall back is the failure worth a class of its own: Complementary points
+ * A declaration that cannot be honoured is, with one exception named in {@link PackTextures}, kept
+ * and left with nothing behind it rather than dropped. {@link PackTextures#suppliedTo} still
+ * carries the name, so the sampler reads one black pixel rather than falling back to the colour
+ * target it shares a name with. That fall back is the failure worth a class of its own:
+ * Complementary points
  * {@code texture.deferred.colortex3} at a cloud and water lookup table, and letting the name go
  * back to colour target three would have its deferred read the scene as that table, which is a
  * picture nobody would question.

@@ -208,7 +208,11 @@ public final class ShaderPackSource implements AutoCloseable {
 
 	/** Resolves a path written with a leading slash, which means relative to {@code shaders/}. */
 	public Optional<Path> resolveInsideShaders(String spec) {
-		return resolveAgainst(this.shadersRoot, spec.replaceAll("^/+", ""));
+		return resolveAgainst(this.shadersRoot, withoutLeadingSlash(spec));
+	}
+
+	private static String withoutLeadingSlash(String spec) {
+		return spec.replaceAll("^/+", "");
 	}
 
 	/** Resolves a path written without a leading slash, which means next to the including file. */
@@ -219,6 +223,27 @@ public final class ShaderPackSource implements AutoCloseable {
 	}
 
 	private Optional<Path> resolveAgainst(Path base, String spec) {
+		Optional<Path> target = confine(base, spec);
+		if (target.isEmpty()) {
+			return Optional.empty();
+		}
+
+		if (Files.isRegularFile(target.get())) {
+			return target;
+		}
+
+		return resolveIgnoringCase(target.get());
+	}
+
+	/**
+	 * Where a path a pack wrote lands once normalised, or nothing when that is outside the pack.
+	 * Says nothing about whether anything is there.
+	 * <p>
+	 * A pack is downloaded content. Without this check a crafted include could walk out of the pack
+	 * with ".." and have the engine read any file the game can reach. It is the one place the
+	 * shader root is compared against, so that every road into the pack passes it exactly once.
+	 */
+	private Optional<Path> confine(Path base, String spec) {
 		Path target;
 		try {
 			target = base.resolve(spec).normalize();
@@ -226,17 +251,22 @@ public final class ShaderPackSource implements AutoCloseable {
 			return Optional.empty();
 		}
 
-		// A pack is downloaded content. Without this check a crafted include could walk out of
-		// the pack with ".." and have the engine read any file the game can reach.
-		if (!target.startsWith(this.shadersRoot)) {
-			return Optional.empty();
-		}
+		return target.startsWith(this.shadersRoot) ? Optional.of(target) : Optional.empty();
+	}
 
-		if (Files.isRegularFile(target)) {
-			return Optional.of(target);
-		}
-
-		return resolveIgnoringCase(target);
+	/**
+	 * Whether a path a pack wrote still lands inside the pack once normalised, WITHOUT asking
+	 * whether the pack ships anything there.
+	 * <p>
+	 * The two questions are one for every caller but one, and that caller needs them apart. A
+	 * directive naming a file the pack simply forgot to ship is a mistake of the pack's, and the
+	 * name it claimed goes back to whatever it meant before, which is what Iris does with it. A
+	 * directive naming a file OUTSIDE the pack is the refusal this class exists for, and the name
+	 * stays claimed and reads black, so that a path crafted to leave the pack cannot also come out
+	 * looking like a pass that drew normally.
+	 */
+	public boolean insidePack(String relative) {
+		return confine(this.shadersRoot, withoutLeadingSlash(relative)).isPresent();
 	}
 
 	/**
