@@ -145,6 +145,14 @@ exactly as an honoured one would.
 This backend binds two-dimensional and cube samplers and nothing else, and the refusal is on the
 **declared type**. That distinction is what makes the mechanism both necessary and possible.
 
+To be exact about what "two-dimensional" means here: the check is on *dimensionality*, so the
+shadow, array and multisample spellings all carry the same two dimensions and pass it - the
+rectangle spelling does not, whatever it reads like. **That is wider than what the device can build
+a view for**, which is a plain two-dimensional view or a cube one and nothing else. A pack declaring
+an array or multisample sampler would therefore get past the declaration check and find nothing
+behind the name. No pack of the corpus declares one, so this is written down as a hole rather than
+as a symptom.
+
 Necessary, because the compiler's reflection lists a module's whole resource list: a
 three-dimensional sampler declared in a shared include and never sampled costs the program its
 pipeline exactly as one read on every pixel does. Supplying a genuine volume would not help either,

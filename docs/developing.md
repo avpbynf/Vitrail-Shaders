@@ -140,11 +140,17 @@ with upstream harder. A contributor working in that package is not caught by thi
 meant to be a bug rather than a preference. Its warnings are worth reading and not worth blocking
 on, so a build flag prints them and lets the build through.
 
-**That flag disarms everything, not just the analyser.** Asking for the report drops `-Werror`, so
-the compiler categories above and the javadoc linting below stop failing too: a run under it is a
-listing and not a check, and a green one says nothing about whether an ordinary build passes. The
-build prints that itself whenever the flag is on, rather than leaving it to be remembered from
-here.
+**That flag disarms every warning, not just the analyser's.** Asking for the report drops `-Werror`,
+so the compiler categories above stop failing too: a run under it is a listing and not a check, and
+a green one says nothing about whether an ordinary build passes. The build prints that itself
+whenever the flag is on, rather than leaving it to be remembered from here.
+
+**The javadoc gate is the exception, and the reason generalises.** Doclint reports a broken
+reference as an *error*, and `-Werror` has nothing to say about errors, so that gate stays armed
+under the flag. Worth knowing in itself, and worth knowing as a shape: "this flag turns the checks
+off" is a claim about a build, and a build is the one thing that will answer the question if you
+plant a defect and ask it. The sentence above used to say the opposite, in this page and in the line
+the build prints about itself.
 
 **A text check**, for the two things no compiler sees: a byte order mark, which reaches a GLSL
 compiler as a stray character in front of the version directive; and typographic punctuation, which

@@ -55,14 +55,18 @@ subprojects {
 		if (!lintReport) {
 			options.compilerArgs << "-Werror"
 		} else {
-			// Said by the build itself, because a sentence in a document rots and this cannot. The
-			// flag drops -Werror, so it disarms EVERY javac gate and not just the static analyser:
-			// the doclint and the lint categories above stop failing with it. A green run under
-			// this flag is a listing and proves nothing.
+			// Said by the build itself, because a sentence in a document rots and this cannot.
+			//
+			// What the flag really disarms is everything that is a WARNING: the lint categories
+			// above and the Error Prone findings. Doclint is not one of them. A broken reference
+			// is reported by javac as an error, and -Werror has nothing to say about errors, so
+			// the javadoc gate stays armed under this flag. Measured with a planted reference, not
+			// reasoned about: an earlier version of this very line claimed the opposite.
 			doFirst {
-				logger.lifecycle("lintReport: -Werror is off, so no javac warning, no doclint "
-						+ "failure and no Error Prone finding can fail this build. This run is a "
-						+ "listing, not a check - green here does not mean 'gradlew build' is green.")
+				logger.lifecycle("lintReport: -Werror is off, so no javac warning and no Error "
+						+ "Prone finding can fail this build. Doclint still can, its findings "
+						+ "being errors. This run is a listing, not a check - green here does not "
+						+ "mean 'gradlew build' is green.")
 			}
 		}
 
