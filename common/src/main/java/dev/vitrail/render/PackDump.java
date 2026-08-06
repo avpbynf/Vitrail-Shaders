@@ -70,8 +70,8 @@ final class PackDump {
 	 * {@code NONE}, whatever the order of a frame suggests: the shadow stage draws at the end of a
 	 * frame for the next one, after the chain has run, so a dump of the sky's disc comes out at
 	 * stage 17, measured in game. So the six pieces of the sky dump alike on exactly what tells them
-	 * apart, and so do the three chunk passes and the nineteen pieces of the entities. Everything
-	 * else is the named program's own.
+	 * apart, and so do the three chunk passes and every piece of the entities. Everything else is the
+	 * named program's own.
 	 *
 	 * @param terrain the pack's terrain programs, empty until they are read, and first on purpose:
 	 *                they are answered from a different catalogue, their {@code of_ModelViewMatrix}
@@ -82,9 +82,9 @@ final class PackDump {
 	 *                of the six are one file, so a line that said gbuffers_skybasic four times would
 	 *                not say which piece was read
 	 * @param entities the pack's entity programs, empty until the first entity is drawn. Named by
-	 *                element for the same reason and more strongly: the ten mob pieces are one file
-	 *                between them, and the eight block entity pieces another, which on a pack that
-	 *                ships no {@code gbuffers_block} is the same file again
+	 *                element for the same reason and more strongly: the mob pieces are one file
+	 *                between them and the block entity pieces another, and the two are sometimes the
+	 *                same file, which no line naming the file could tell apart
 	 * @param passes  the chain's own passes, empty for the frame or two before they are built
 	 */
 	static void take(String place, int load, Collection<TerrainProgram> terrain,

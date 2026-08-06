@@ -178,7 +178,7 @@ is where a pack keeps the normal and the material it lights an entity by.
 
 So a flat, unlit mob is not a mask bug, and before reading it as one, check which of two things you
 are looking at. The commoner by far is that the family is **off by default**: it is turned on with
-`entities=on` in the engine's own options file, and with it off every entity comes straight from the
+`entities=on` in `vitrail/options.txt`, and with it off every entity comes straight from the
 game's shader. With it on, an entity that still looks flat is one the pack's own program did not
 reach - the log names the reason at the moment it happens. Neither case is the coverage mask.
 

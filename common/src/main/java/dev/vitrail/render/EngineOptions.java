@@ -62,9 +62,8 @@ final class EngineOptions {
 	 * block entity half carrying those same names under a {@code block_} in front. A whole half is
 	 * reached by the name it asks the pack for, {@code dump=gbuffers_entities} or
 	 * {@code dump=gbuffers_block}, <strong>only where the pack really ships that file</strong>: the
-	 * line is matched against the file that ends up SERVING, so on a pack whose entities fall back
-	 * elsewhere neither name matches anything at all and the element names are the only way in.
-	 * That is nine places of the corpus's twenty five for the block name and five for the entity one.
+	 * line is matched against the file that ends up SERVING, so wherever the fallback tree leads
+	 * elsewhere the name matches nothing at all and the element names are the only way in.
 	 * <strong>Two of their element names cannot be reached at
 	 * all</strong>, and it is a property of the matching rather than a fault: the line is matched on
 	 * the TAIL of a label, the terrain is walked first, and its own passes are called {@code solid}

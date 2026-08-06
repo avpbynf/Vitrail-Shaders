@@ -120,11 +120,11 @@ terrain.** They are drawn by the game and composited in, already tone mapped, ca
 own lighting rather than the pack's.
 
 **The mobs and the block entities are the first of those to have another answer, and it is off until
-you ask for it.** With `entities=on` in the engine's options file, the opaque half of them - the body
+you ask for it.** With `entities=on` in `vitrail/options.txt`, the opaque half of them - the body
 of a mob, a chest, a conduit, an armour piece - is drawn with the pack's own program and picks up its
 lighting and its shadows. What stays behind is everything that blends, and the player's own body is
-in that half, so third person still shows the symptom this section describes. The startup log names
-what is left rather than this page: it is the one list that cannot fall out of step with the code.
+in that half, so third person still shows the symptom this section describes. What is left is named
+in the log rather than on this page, by the line the close of this section points at.
 
 Two consequences follow, and both are worth recognising rather than reporting as separate bugs:
 
@@ -136,7 +136,9 @@ Two consequences follow, and both are worth recognising rather than reporting as
   across a whole target.
 
 The engine names the families that still come from the game, in the log, when a place first draws.
-That line is the authority; this page does not duplicate it.
+That line is the authority; this page does not duplicate it. It is printed beside the seed it
+describes, so a place drawn without one does not print it at all, and then the families are whatever
+the switches say.
 
 ## The sky goes flat
 

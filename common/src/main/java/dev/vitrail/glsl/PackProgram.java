@@ -541,9 +541,9 @@ public final class PackProgram {
 				// a mob with the silhouette of whichever piece was translated first.
 				//
 				// The FILE and not the name asked for, which is the whole point of sharing: the two
-				// names of this family fall back on one file on five of the corpus's twenty five
-				// places, and keying by name would expand, translate and compile that file twice
-				// there, which is the one thing reading them all at once exists to avoid.
+				// names of this family walk to one file wherever the fallback tree lands them on the
+				// same program, and keying by name would expand, translate and compile that file
+				// twice there, which is the one thing reading them all at once exists to avoid.
 				//
 				// Nothing of the name is lost by that, and it is worth writing down which name rather
 				// than adding it to the key: the only thing a program name reaches the translation

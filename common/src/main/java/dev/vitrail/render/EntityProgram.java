@@ -141,10 +141,10 @@ final class EntityProgram {
 
 	/**
 	 * @param modelView the matrix the game would have drawn this piece with, which is the frame's
-	 *                  camera for most of them and null for those. The pieces that carry a layering
-	 *                  transform, four of the ten mob rows and three of the nine block ones, hand in
-	 *                  the camera with the transform applied, so that a piece the game moves along
-	 *                  the view axis is moved here too
+	 *                  camera for most of them and null for those. A piece that carries a layering
+	 *                  transform hands in the camera with the transform applied instead, so that what
+	 *                  the game moves along the view axis is moved here too. The two halves carry the
+	 *                  same ones: a twin is made from its mob row and keeps its transform
 	 * @see GeometryProgram#prepare
 	 */
 	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView) {
