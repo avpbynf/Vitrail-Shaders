@@ -2369,19 +2369,39 @@ public final class GlslTranslator {
 			}
 		}
 
-		// One tap and a step, which is what a comparison sampler filtered NEAREST does. The softness
-		// of a hardware compare filtered LINEAR, four taps averaged after comparing, is not
-		// reproduced here and would need four of these: a pack that asked for it gets a harder edge
-		// than it drew against, which is a difference of filtering and not of geometry.
+		// The four taps a hardware comparison blends, made here because 26.2 has no comparison to
+		// bind: GpuSampler carries two address modes, two filters, an anisotropy and a maximum level
+		// of detail, and neither GlSampler nor VulkanGpuSampler ever writes a compare mode. What the
+		// hardware does is compare each of the four texels a bilinear filter would
+		// have taken and blend the four RESULTS, so that is what this does: textureGather brings the
+		// four back whatever filter is bound, the comparison is made on each, and the blend uses the
+		// weights of the filter. Comparing an already filtered depth is the one thing it must not
+		// do, and that is the difference: the average of four depths is a surface standing nowhere,
+		// while the average of four comparisons is a fraction of the light, which is the whole point
+		// of the thing. Iris binds GL_LINEAR plus GL_COMPARE_REF_TO_TEXTURE for it, in
+		// ShadowRenderTargets.getSamplerFor.
+		//
+		// Not conditioned on shadowHardwareFiltering, and nothing here could condition it: the
+		// header is written per stage, before any of the pack's directives are folded. It costs
+		// nothing on this corpus. Without that directive Iris leaves the comparison mode off and
+		// what a sampler2DShadow reads is undefined, so the declaration this translation found is
+		// the only live meaning the directive has; and the harder shape the pair can ask for,
+		// NEAREST_HW, needs shadowtexNearest, which no pack of the corpus writes.
 		//
 		// The sense is LEQUAL, which is what OptiFine sets on a shadow texture and therefore what
 		// every pack is written against: one where the fragment is no further from the light than
 		// what the map holds, and the map holds the forward window where nearer is smaller.
+		//
+		// The level of detail is dropped, which is what a comparison sampler with no mipmaps would
+		// have done with it anyway: nothing ever fills a chain on the shadow map.
 		if (this.shadowCompares > 0) {
 			lines.add("float " + SHADOW_COMPARE + "(sampler2D ofMap, vec3 ofAt) {"
-					+ " return step(ofAt.z, texture(ofMap, ofAt.xy).x); }");
+					+ " vec4 ofTests = step(vec4(ofAt.z), textureGather(ofMap, ofAt.xy, 0));"
+					+ " vec2 ofPart = fract(ofAt.xy * vec2(textureSize(ofMap, 0)) - 0.5);"
+					+ " return mix(mix(ofTests.w, ofTests.z, ofPart.x),"
+					+ " mix(ofTests.x, ofTests.y, ofPart.x), ofPart.y); }");
 			lines.add("float " + SHADOW_COMPARE + "(sampler2D ofMap, vec3 ofAt, float ofLod) {"
-					+ " return step(ofAt.z, textureLod(ofMap, ofAt.xy, ofLod).x); }");
+					+ " return " + SHADOW_COMPARE + "(ofMap, ofAt); }");
 		}
 
 		// Only where a lookup was moved. A stage carrying the declaration and never reading it, which
