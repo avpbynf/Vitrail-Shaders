@@ -598,8 +598,12 @@ public final class EntityDraw {
 			// Lasting, and it took a review to see it: a program that would not compile, or that
 			// declares a storage block, latches broken in GeometryProgram and never unlatches, so
 			// this answers null for the rest of the load rather than for this frame.
-			return refuse("prepare", true,
-					"the program refused to prepare, which it says on its own line above");
+			// Keyed by piece and not by reason alone, unlike the frame's three: the two halves of the
+			// family are usually two files, so one key would name whichever failed first and leave
+			// the other silent.
+			return refuse("prepare:" + element.element(), true,
+					"the " + element.element() + " program refused to prepare, which it says on its "
+							+ "own line above");
 		}
 
 		// The two images the game would have drawn into, worked out as PreparedRenderType works them

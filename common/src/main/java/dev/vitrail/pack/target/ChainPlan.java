@@ -61,8 +61,8 @@ public final class ChainPlan {
 	 * <p>
 	 * <strong>What lands in the table is the RESOLVED program and never the name walked for.</strong>
 	 * A caller asking under the name it wanted is answered empty wherever the tree led elsewhere,
-	 * which on the corpus is a fifth of the places for the entities alone: it has to ask under what
-	 * {@code ProgramResolver} really served, as every family here does.
+	 * which on the corpus is over a third of the places once both entity names are counted: it has
+	 * to ask under what {@code ProgramResolver} really served, as every family here does.
 	 * <p>
 	 * <strong>A name left out of this list is not half served, it is silently unanswered.</strong>
 	 * Nothing else fills the table, so {@link #geometryOf} answers empty for a program no walk
