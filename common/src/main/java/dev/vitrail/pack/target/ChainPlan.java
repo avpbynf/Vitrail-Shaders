@@ -71,8 +71,8 @@ public final class ChainPlan {
 	 * this list: seven packs of eight answered empty, and their entity programs wrote a single output
 	 * where SIX of them had asked for two, three and four draw buffers, with nothing anywhere saying
 	 * so. The eighth answered, and only because its entities fall back on the very program that
-	 * serves its terrain, which the walk above it had already put in. Removing both entity names
-	 * again is the negative control and it costs thirty six keys.
+	 * serves its terrain, which the walk above it had already put in. Taking both entity names back
+	 * out is the negative control, and the harness prints what it costs rather than this comment.
 	 */
 	private static final List<String> NAMED_PROGRAMS = Stream
 			.concat(SKY_PROGRAMS.stream(), Stream.of("gbuffers_entities", "gbuffers_block"))
@@ -94,8 +94,8 @@ public final class ChainPlan {
 	 * <p>
 	 * One table for every family rather than one per family, which is what lets a family that does
 	 * not exist yet ask the same question: the terrain asks it three times, the sky three times, and
-	 * the entities once per program that serves them, which is twice, their eighteen pieces asking
-	 * under two names.
+	 * the entities once per FILE that serves them, which is one or two: their nineteen pieces ask
+	 * under two names, and on a pack that ships no block program both names walk to the same file.
 	 * What differs between families is only how they reach a key, and that is the two tables below
 	 * plus {@link #geometryOf} for whoever needs neither.
 	 * <p>

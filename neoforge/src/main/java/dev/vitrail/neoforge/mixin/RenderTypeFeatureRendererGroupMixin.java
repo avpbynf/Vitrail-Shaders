@@ -27,9 +27,11 @@ import java.util.List;
  * draw.
  * <p>
  * <strong>The second half is the one that is easy to miss, and there are TWO ways into it, not
- * one.</strong> The obvious one is the reuse inside {@code getOrAddDraw}: a group takes an existing
- * draw whenever the prepared render type it would make compares equal to one it already holds. The
- * one that costs a review is above it. {@code getVertexBuilder} hands back {@code lastDraw} without
+ * one.</strong> The obvious one is the reuse inside {@code getOrAddDraw}, and it is narrower than it
+ * looks: a group takes an existing draw when the prepared render type it would make compares equal
+ * to one it already holds, AND the group may reorder, which a strictly ordered one may not, AND the
+ * type consolidates consecutive geometry. The one that costs a review is above it.
+ * {@code getVertexBuilder} hands back {@code lastDraw} without
  * calling {@code getOrAddDraw} at all whenever the previous submission carried the SAME
  * {@code RenderType} instance and that type consolidates, which every quad type does; render types
  * are memoized per texture, and the storages batch by them, so a run of submissions of one type is
@@ -40,7 +42,12 @@ import java.util.List;
  * Both are answered the same way, by refusing the reuse rather than by trying to describe it: the
  * head of {@code getVertexBuilder} drops {@code lastDraw} when the origin has changed, which sends
  * the call into {@code getOrAddDraw}, and {@code indexOf} there refuses a match of the other origin.
- * It costs one draw wherever the two really alternate and nothing anywhere else.
+ * <p>
+ * <strong>What it costs is one draw per alternation and not one draw in all</strong>, and the reason
+ * is worth knowing before anybody prices it lower: {@code indexOf} answers with the FIRST match, so
+ * a refusal appends a second entry equal to it, and the next lookup finds the first one again and
+ * refuses again. Geometry that really alternates therefore pays a draw each time it comes back, not
+ * once. Nothing that does not alternate pays anything.
  * <p>
  * <strong>No pair of the vanilla game is known to reach it, and that is not a reason to leave it
  * open.</strong> The pair this class used to name, a player head against the player, is not one: a

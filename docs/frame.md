@@ -174,8 +174,13 @@ their pixels are seeded over on purpose: the seed is cut against a depth taken b
 a single feature, and an entity is by definition in front of that depth, so a mask claiming those
 pixels would take them from the very image that carries the entity's colour. What that costs is one
 trip through eight bits a channel for the albedo, and what it buys is every other draw buffer, which
-is where a pack keeps the normal and the material it lights an entity by. So a flat entity is not a
-mask bug: it is what happens when the seed is switched off, not when the mask is.
+is where a pack keeps the normal and the material it lights an entity by.
+
+So a flat, unlit mob is not a mask bug, and before reading it as one, check which of two things you
+are looking at. The commoner by far is that the family is **off by default**: it is turned on with
+`entities=on` in the engine's own options file, and with it off every entity comes straight from the
+game's shader. With it on, an entity that still looks flat is one the pack's own program did not
+reach - the log names the reason at the moment it happens. Neither case is the coverage mask.
 
 Which target is seeded is the first draw buffer of the pass that draws the terrain, resolved through
 the fallback tree, and it is not always target zero: one pack of the corpus serves its terrain

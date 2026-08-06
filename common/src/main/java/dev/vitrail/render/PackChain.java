@@ -1657,10 +1657,16 @@ public final class PackChain {
 	private void announceSeed(boolean seeding) {
 		Optional<ChainPlan.Seed> where = this.chain.chain().seed();
 		if (seeding && where.isPresent()) {
-			// What the seed still carries is not a constant any more, and this line is the one place
-			// a reader is sent for it: the two pages of docs/ that name the scope both decline to
-			// list it themselves and point here. Said from the switch rather than written out, or it
-			// goes stale the day the next family lands, silently and in the one place that must not.
+			// What the seed still carries is not a constant any more, and this line is where docs/
+			// sends a reader for it. Said from the switch rather than written out, or it goes stale
+			// the day the next family lands, in the one place that must not.
+			//
+			// The switch and NOT what the pack turned out to serve, which is a real limit and not a
+			// shortcut: this runs when the chain is built and the entity programs are read at the
+			// first entity drawn, so on a pack that serves none, or whose targets the family refuses,
+			// this line has already spoken. Those refusals each say so on a line of their own, which
+			// is where a reader finds out; making this one wait for them would mean not printing the
+			// scope at load at all.
 			Vitrail.logger().info("{} carries the game's opaque frame, drawn in for {}: {} still come "
 					+ "from the game, already tone mapped, and the translucent chunk pass blends onto "
 					+ "this seed afterwards",

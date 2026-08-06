@@ -70,8 +70,8 @@ final class PackDump {
 	 * {@code NONE}, whatever the order of a frame suggests: the shadow stage draws at the end of a
 	 * frame for the next one, after the chain has run, so a dump of the sky's disc comes out at
 	 * stage 17, measured in game. So the six pieces of the sky dump alike on exactly what tells them
-	 * apart, and so do the three chunk passes and the ten pieces of the entities. Everything else is
-	 * the named program's own.
+	 * apart, and so do the three chunk passes and the nineteen pieces of the entities. Everything
+	 * else is the named program's own.
 	 *
 	 * @param terrain the pack's terrain programs, empty until they are read, and first on purpose:
 	 *                they are answered from a different catalogue, their {@code of_ModelViewMatrix}

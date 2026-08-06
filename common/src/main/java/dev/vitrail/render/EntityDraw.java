@@ -269,23 +269,30 @@ public final class EntityDraw {
 	 * The same pieces asked of {@code gbuffers_block}, for the draws a block entity renderer put
 	 * there.
 	 * <p>
-	 * <strong>Eight of the ten and not all ten</strong>, read in Iris's own main table
-	 * ({@code pipeline/IrisPipelines.java:25-83}) rather than reasoned about: the end crystal beam
-	 * and the offset cutout are given {@code ENTITIES_CUTOUT} outright there, while the other eight
-	 * go through {@code getSolid} or {@code getCutout}, which answer {@code BLOCK_ENTITY} and
-	 * {@code BLOCK_ENTITY_DIFFUSE} while the block entity phase is up, both of them
-	 * {@code ProgramId.Block}. A pipeline missing from this table is therefore not an oversight and
-	 * is not half served: {@link #element} falls back on the entity row for it, which is the answer
-	 * Iris gives.
+	 * <strong>The program changes on eight of them and the STAGE changes on all of them, and keeping
+	 * those two questions apart is the whole of this table.</strong> Iris answers them in two
+	 * different places: the program comes from its per pipeline table, where the end crystal beam and
+	 * the offset cutout are given {@code ENTITIES_CUTOUT} outright and the other eight go through
+	 * {@code getSolid} or {@code getCutout} to {@code BLOCK_ENTITY} and {@code BLOCK_ENTITY_DIFFUSE},
+	 * both {@code ProgramId.Block} ({@code pipeline/IrisPipelines.java:25-83}). The phase does not
+	 * come from that table at all: it is posed around the SUBMISSION, so it is up for every draw a
+	 * block entity made, whichever pipeline the draw uses. A skull is the case that proves it, and it
+	 * is not a rare one: it is a block entity and it draws with {@code ENTITY_CUTOUT_Z_OFFSET}, so it
+	 * takes the entity program AND the block entity phase at once, and every player, skeleton, zombie
+	 * and creeper head in the world is one.
 	 * <p>
-	 * <strong>Two things change with the name and neither of them is cosmetic.</strong> The
-	 * threshold: every one of these discards at a tenth, the solid rows included, because Iris's
+	 * <strong>The threshold changes with the program and not with the phase.</strong> The eight that
+	 * ask for the block program discard at a tenth, the solid rows included, because Iris's
 	 * {@code getSolid} under that phase answers {@code BLOCK_ENTITY} and not a solid key, and
 	 * {@code BLOCK_ENTITY} carries {@code ONE_TENTH_ALPHA} ({@code pipeline/programs/ShaderKey.java:66})
-	 * where {@code ENTITIES_SOLID} carries {@code OFF} ({@code :38}). Copying the entity row's
-	 * threshold would keep fragments Iris throws away, on a pack that overrides neither. And the
-	 * stage: a block entity really is drawn under a posed phase, which is the one thing the mobs are
-	 * not, so these read {@code BLOCK_ENTITIES} where the rows above read {@code NONE}.
+	 * where {@code ENTITIES_SOLID} carries {@code OFF} ({@code :38}). The two that keep the entity
+	 * program keep the entity row's threshold with it, which is what its own key carries.
+	 * <p>
+	 * <strong>The item row has no twin, and that is the one deliberate hole.</strong> Nothing can mark
+	 * an item submission, because Iris does not mark one either: it wraps {@code submitModel},
+	 * {@code submitCustomGeometry} and {@code submitModelPart} and leaves {@code submitItem} alone, so
+	 * the item on a shelf is drawn with the entity program there as it is here. A row for it would be
+	 * a key nothing can ever turn.
 	 * <p>
 	 * A piece here is a compiled module of its own, like every row above, so it carries a name of its
 	 * own. The name is the entity one with a word in front, because it lands in an identifier the
@@ -295,12 +302,32 @@ public final class EntityDraw {
 	private static final Map<RenderPipeline, Element> BLOCK_ELEMENTS = new LinkedHashMap<>();
 
 	static {
+		// Derived from the table above, so it is empty unless that block has already run. Java runs
+		// static initialisers in source order, which is a guarantee and not a coincidence, but an
+		// empty table here would put every block entity back on the mob row in silence, and nothing
+		// anywhere would say so. Said out loud rather than trusted.
+		if (ELEMENTS.isEmpty()) {
+			throw new IllegalStateException("the entity table has to be filled before the block one");
+		}
+
 		ELEMENTS.values().stream()
-				.filter(element -> element.pipeline() != RenderPipelines.END_CRYSTAL_BEAM
-						&& element.pipeline() != RenderPipelines.ENTITY_CUTOUT_Z_OFFSET)
-				.map(element -> new Element(element.pipeline(), "block_" + element.element(), BLOCK,
-						CUTOUT, element.layering(), RenderStage.BLOCK_ENTITIES))
+				// The one pipeline no block entity can reach, for the reason the comment above gives.
+				.filter(element -> element.pipeline() != RenderPipelines.ITEM_CUTOUT)
+				.map(EntityDraw::blockTwin)
 				.forEach(element -> BLOCK_ELEMENTS.put(element.pipeline(), element));
+	}
+
+	/**
+	 * The block entity half of one mob piece: the same pipeline under the phase Iris poses, asking
+	 * for whichever program Iris's own table gives that pipeline while the phase is up.
+	 */
+	private static Element blockTwin(Element mob) {
+		boolean ownProgram = mob.pipeline() != RenderPipelines.END_CRYSTAL_BEAM
+				&& mob.pipeline() != RenderPipelines.ENTITY_CUTOUT_Z_OFFSET;
+
+		return new Element(mob.pipeline(), "block_" + mob.element(),
+				ownProgram ? BLOCK : mob.program(), ownProgram ? CUTOUT : mob.alphaTest(),
+				mob.layering(), RenderStage.BLOCK_ENTITIES);
 	}
 
 	private static void put(Element element) {

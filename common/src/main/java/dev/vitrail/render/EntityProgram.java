@@ -61,15 +61,19 @@ import java.util.Set;
  * which this engine does not draw entities into yet. So a pack branching on
  * {@code MC_RENDER_STAGE_ENTITIES} never takes that branch under Iris.
  * <p>
- * The BLOCK ENTITY phase is the opposite case and the asymmetry between the two is the whole
- * evidence. {@code BlockEntityRenderStateShard} ({@code layer/BlockEntityRenderStateShard.java:11}
- * to {@code layer/GbufferPrograms.java:59}) is installed at four sites,
- * {@code mixin/entity_render_context/MixinModelStorageTrigger.java:39,48,57} and
- * {@code MixinGlyphRenderType.java:19}, where the entity one is installed at none. And that phase is
- * the SOLE condition under which Iris's own table reaches its block programs
- * ({@code pipeline/programs/ShaderOverrides.java:42-44}, read by
- * {@code pipeline/IrisPipelines.java:193,205}), so a phase that were never posed would leave the
- * whole of {@code ProgramId.Block} dead in its main pass. It is posed, and these pieces say so.
+ * The BLOCK ENTITY phase is the opposite case, and <strong>the asymmetry between the two is the
+ * whole of the evidence</strong>. {@code BlockEntityRenderStateShard}
+ * ({@code layer/BlockEntityRenderStateShard.java:11} to {@code layer/GbufferPrograms.java:59}) is
+ * installed at four sites, {@code mixin/entity_render_context/MixinModelStorageTrigger.java:39,48,57}
+ * and {@code MixinGlyphRenderType.java:19}, where the entity one is installed at none. That is what
+ * settles it, and it is worth saying what does NOT: it is tempting to add that the phase is the only
+ * road to Iris's block programs, and it is not. Three rows of its own table reach
+ * {@code ProgramId.Block} with no phase test at all, the moving block at
+ * {@code pipeline/IrisPipelines.java:30} and the end gateway and end portal at {@code :59} and
+ * {@code :68}. The phase is what the entity pipelines branch on
+ * ({@code pipeline/programs/ShaderOverrides.java:42-44}, read at
+ * {@code pipeline/IrisPipelines.java:150,160,193,205,217}), which is a narrower claim and the true
+ * one.
  */
 final class EntityProgram {
 
@@ -137,9 +141,10 @@ final class EntityProgram {
 
 	/**
 	 * @param modelView the matrix the game would have drawn this piece with, which is the frame's
-	 *                  camera for six of the ten pieces and null for them. The four that carry a
-	 *                  layering transform hand in the camera with the transform applied, so that a
-	 *                  piece the game nudges towards the viewer is nudged here too
+	 *                  camera for most of them and null for those. The pieces that carry a layering
+	 *                  transform, four of the ten mob rows and three of the nine block ones, hand in
+	 *                  the camera with the transform applied, so that a piece the game moves along
+	 *                  the view axis is moved here too
 	 * @see GeometryProgram#prepare
 	 */
 	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView) {

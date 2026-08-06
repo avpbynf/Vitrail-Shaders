@@ -541,12 +541,16 @@ public final class PackProgram {
 				// a mob with the silhouette of whichever piece was translated first.
 				//
 				// The FILE and not the name asked for, which is the whole point of sharing: the two
-				// names of this family fall back on one file on half the corpus, and keying by name
-				// would then expand, translate and compile that file twice per place, which is the one
-				// thing reading them all at once exists to avoid. What the name still decides is in
-				// the key beside it and nothing else: it reaches the translation only through
-				// LegacyGlsl.drawsEntities, which says whether the entity uniforms are declared.
-				String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program());
+				// names of this family fall back on one file on five of the corpus's twenty five
+				// places, and keying by name would expand, translate and compile that file twice
+				// there, which is the one thing reading them all at once exists to avoid.
+				//
+				// Nothing of the name is lost by that, and it is worth writing down which name rather
+				// than adding it to the key: the only thing a program name reaches the translation
+				// through is LegacyGlsl.drawsEntities, which decides whether the entity uniforms are
+				// declared, and both names this family asks for are entity roots. A third name that
+				// was not one would need this key widened, and would be the only reason to.
+				String key = path + "|" + alphaTest;
 				translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
 						ProgramTranslator.translate(units, VertexInputs.ENTITY,
 								VertexInputs.ENTITY.elements(), alphaTest, false, element.program(),

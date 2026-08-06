@@ -10,7 +10,7 @@ package dev.vitrail.neoforge;
  * <p>
  * <strong>Reading only, and the write side is {@link BlockEntityMark}.</strong> A submission takes
  * its answer in its own constructor and never changes it, so a setter offered here would be a key
- * nothing turns on three of the four implementors, which is the shape of a method somebody later
+ * nothing turns on two of the three implementors, which is the shape of a method somebody later
  * calls expecting it to do something.
  * <p>
  * Outside the mixin package on purpose. A class in there is read as a mixin, and this is a plain

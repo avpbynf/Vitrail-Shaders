@@ -59,10 +59,13 @@ final class EngineOptions {
 	 * way, by element rather than by file: {@code disc}, {@code dark}, {@code stars},
 	 * {@code sunrise}, {@code sun} and {@code moon}, four of the six being one file. The entities
 	 * answer the same way, {@code cutout_cull}, {@code armor}, {@code item} and the rest, with the
-	 * block entity half carrying those same names under a {@code block_} in front. Each half is
-	 * reached whole by the name it asks the pack for, {@code dump=gbuffers_entities} and
-	 * {@code dump=gbuffers_block}; on a pack that ships no block program the second falls back on
-	 * the terrain's file and the name reaches that instead. <strong>Two of their element names cannot be reached at
+	 * block entity half carrying those same names under a {@code block_} in front. A whole half is
+	 * reached by the name it asks the pack for, {@code dump=gbuffers_entities} or
+	 * {@code dump=gbuffers_block}, <strong>only where the pack really ships that file</strong>: the
+	 * line is matched against the file that ends up SERVING, so on a pack whose entities fall back
+	 * elsewhere neither name matches anything at all and the element names are the only way in.
+	 * That is nine places of the corpus's twenty five for the block name and five for the entity one.
+	 * <strong>Two of their element names cannot be reached at
 	 * all</strong>, and it is a property of the matching rather than a fault: the line is matched on
 	 * the TAIL of a label, the terrain is walked first, and its own passes are called {@code solid}
 	 * and {@code cutout}. Whichever is named, the file the dump writes says in its first line which

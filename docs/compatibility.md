@@ -115,9 +115,16 @@ The full mechanism is in [Sky and shadows](sky-and-shadows.md#the-horizon-gap).
 
 ## Anything that moves
 
-**Mobs, particles, weather and the held item look flat, unlit, and out of place against the
+**Particles, weather, the held item and every mob look flat, unlit, and out of place against the
 terrain.** They are drawn by the game and composited in, already tone mapped, carrying the game's
 own lighting rather than the pack's.
+
+**The mobs and the block entities are the first of those to have another answer, and it is off until
+you ask for it.** With `entities=on` in the engine's options file, the opaque half of them - the body
+of a mob, a chest, a conduit, an armour piece - is drawn with the pack's own program and picks up its
+lighting and its shadows. What stays behind is everything that blends, and the player's own body is
+in that half, so third person still shows the symptom this section describes. The startup log names
+what is left rather than this page: it is the one list that cannot fall out of step with the code.
 
 Two consequences follow, and both are worth recognising rather than reporting as separate bugs:
 

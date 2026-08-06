@@ -28,6 +28,14 @@ package dev.vitrail.render;
  * lit as a chest for the rest of the frame rather than a crash. That is why every injection that
  * touches them is required rather than optional, and why the door drops all three at the frame
  * boundary whatever happened in between.
+ * <p>
+ * <strong>A plain boolean and not a count, which is a bet on the pairs never nesting.</strong> Iris
+ * treats the same case as impossible by contract and throws on it
+ * ({@code layer/GbufferPrograms.java:20-24}). The bet is that the two writers of {@code building}
+ * cannot be inside one another, being two different feature renderers walked one after the other,
+ * and that a block entity renderer does not dispatch another one inside its own submit. Neither is
+ * enforced here, and if either turns out false the symptom is the rest of that block entity drawn as
+ * a mob, which no instrument outside the screen would show.
  */
 public final class BlockEntityGeometry {
 
