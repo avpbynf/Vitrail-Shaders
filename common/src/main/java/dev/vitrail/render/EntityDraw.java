@@ -29,10 +29,12 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -214,6 +216,9 @@ public final class EntityDraw {
 	/** Whether the pack has been read for its entities. A reading that served nothing is still one. */
 	private boolean read;
 
+	/** The reasons a draw has already been handed back to the game. One line each, not one a frame. */
+	private final Set<String> refused = new LinkedHashSet<>();
+
 	/** The pass a run of draws is being recorded into, or null between runs. */
 	private RenderPass open;
 
@@ -378,13 +383,18 @@ public final class EntityDraw {
 	private boolean begin(GpuDevice device, EntityProgram program, PreparedRenderType prepared) {
 		end();
 		this.owner.beginFrame();
-		if (!this.owner.openTargets(device) || !shown()) {
-			return false;
+		if (!this.owner.openTargets(device)) {
+			return refuse("the colour targets could not be opened this frame");
+		}
+
+		if (!shown()) {
+			return refuse("the chain is still compiling, so nothing written to the pack's targets "
+					+ "would reach the screen yet");
 		}
 
 		RenderPipeline pipeline = program.prepare(device);
 		if (pipeline == null) {
-			return false;
+			return refuse("the program refused to prepare, which it says on its own line above");
 		}
 
 		// The two images the game would have drawn into, worked out as PreparedRenderType works them
@@ -404,7 +414,7 @@ public final class EntityDraw {
 			// The colour targets are not there yet, which is the first frame or two and the frames
 			// after a resize. A plain pass would carry one attachment against a pipeline holding a
 			// state per target the pack asked for, and setPipeline refuses that by name.
-			return false;
+			return refuse("one of the pack's colour targets has no image yet");
 		}
 
 		CommandEncoder encoder = device.createCommandEncoder();
@@ -416,6 +426,32 @@ public final class EntityDraw {
 		this.bound = pipeline;
 
 		return true;
+	}
+
+	/**
+	 * Hands one draw back to the game and says why, once per reason and per load.
+	 * <p>
+	 * <strong>Every one of these used to be silent, and that is what made the defect they cause
+	 * undiagnosable.</strong> A draw handed back is drawn by the game's own shader for that frame
+	 * alone, so a reason that comes and goes is an entity lit by the pack on one frame and by the
+	 * game on the next: a flicker, with nothing anywhere to say which of the four causes it was.
+	 * That is the exact shape of failure this engine exists to refuse, and it was found by a player
+	 * looking at a chest rather than by any instrument of ours.
+	 * <p>
+	 * Once per reason, because the alternative is a line a frame at sixty frames a second. The count
+	 * is not kept: what a reader needs is which of the four happened at all, and how often is a
+	 * question the picture answers better than a log.
+	 *
+	 * @return false always, so that a caller can hand this straight back
+	 */
+	private boolean refuse(String why) {
+		if (this.refused.add(why)) {
+			Vitrail.logger().warn("An entity draw went back to the game's own shader because {}. It is "
+					+ "then lit by the game for that frame and by the pack on the frames it is served, "
+					+ "which reads on screen as a flicker", why);
+		}
+
+		return false;
 	}
 
 	/**
