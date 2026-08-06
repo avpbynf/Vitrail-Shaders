@@ -506,12 +506,25 @@ final class PackPass {
 			// OptiFine filters shadowcolor linearly unless the pack writes shadowcolorNNearest, and
 			// Iris binds it LINEAR outright (IrisSamplers.addShadowSamplers). It carries the light
 			// that came through stained glass and water, which a pack blurs across a penumbra; read
-			// NEAREST it steps in blocks the size of a shadow texel. The DEPTH beside it stays
-			// NEAREST, and that is not an oversight: it is compared, not interpolated, and an
-			// averaged depth is a comparison against a surface that exists nowhere.
+			// NEAREST it steps in blocks the size of a shadow texel.
+			//
+			// The shadow DEPTH is LINEAR for a reason of its own, and the reason it used to be
+			// NEAREST was wrong. An averaged depth would indeed be a comparison against a surface
+			// standing nowhere, but that is true of an ordinary sampler and not of a comparison one,
+			// where the hardware compares first and averages the RESULTS; and the comparison this
+			// engine makes for itself takes its four texels with textureGather, which no bound
+			// filter reaches either way. What the filter really decides is the other read, the one
+			// every pack of the corpus makes: a PCF loop that samples shadowtex as a plain
+			// sampler2D and expects each of its taps to be smoothed over a texel. Iris filters both
+			// depth images LINEAR unless the pack asks otherwise, since SamplingSettings.nearest
+			// starts false (ShadowRenderer.configureDepthSampler), so read NEAREST every edge of
+			// such a loop walks in texels of the map however many taps it pays for.
+			//
+			// The three names that would ask for NEAREST back - shadowtexNearest, shadowtexNNearest
+			// and shadowNMinMagNearest - are not read: no pack of the corpus writes one.
 			FilterMode filter = supplied != null ? supplied.filter() : switch (binding.kind()) {
 				case COLORTEX -> targets.filter(binding.index());
-				case NOISE, SHADOW_COLOUR -> FilterMode.LINEAR;
+				case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
 				default -> FilterMode.NEAREST;
 			};
 
