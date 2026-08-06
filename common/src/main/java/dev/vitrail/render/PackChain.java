@@ -634,9 +634,14 @@ public final class PackChain {
 					+ "them");
 		}
 
-		// Through the door that keeps the report, and this is the one reload where that is right:
-		// nothing about the pack has changed, only the world under it.
-		reloadKeepingReport(gameDirectory);
+		// Straight to the reading, without forgetting the report first, and this is the one road
+		// where that is right: nobody asked for this reload, the world moved under the pack.
+		//
+		// What it costs is worth knowing: the archive IS read again, and an archive edited on the
+		// disk under the same name is drawn with its new content and still carries the report of the
+		// old one, until somebody asks for a reload. Comparing content rather than a path would cost
+		// more than the report it saves.
+		readAgain(gameDirectory);
 	}
 
 	/**
@@ -645,9 +650,10 @@ public final class PackChain {
 	 * <p>
 	 * Render thread only: {@link #release()} closes GPU buffers and hands back the colour targets,
 	 * which has to happen where {@code draw} runs and outside any render pass. The settings screen
-	 * calls this from Apply, from Reload and from a pack being picked; the step above calls it when
-	 * the world moves under the pack. All of them go through here rather than each having a path of
-	 * its own, so that what the screen applies and what a hand edit applies cannot drift apart.
+	 * calls this from Apply, from Reload, from Reset and from a pack being picked, and all four go
+	 * through here rather than each having a path of its own, so that what the screen applies and
+	 * what a hand edit applies cannot drift apart. The world moving under the pack reads again too,
+	 * and it is the one caller that does not come through here: see {@link #readAgain}.
 	 */
 	public static void reload(Path gameDirectory) {
 		// Forgotten before the reading and not restored after it, which is the only order that
@@ -656,15 +662,14 @@ public final class PackChain {
 		// caller of this method is somebody asking for the pack to be read again, and a pack edited
 		// on the disk under the same name would otherwise be reported once for the whole session.
 		reported = null;
-		reloadKeepingReport(gameDirectory);
+		readAgain(gameDirectory);
 	}
 
 	/**
-	 * The same reading, for the one caller that is not asking for it: the world moved under the
-	 * pack, nothing of the pack itself changed, and its report would say word for word what it said
-	 * at the last portal.
+	 * The reading itself, which knows nothing of the report: what each of its two callers has
+	 * already forgotten is what decides whether one is printed.
 	 */
-	private static void reloadKeepingReport(Path gameDirectory) {
+	private static void readAgain(Path gameDirectory) {
 		PackChain previous = active;
 		if (previous != null) {
 			previous.release();
