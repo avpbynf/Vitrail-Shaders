@@ -74,7 +74,7 @@ public final class ChainPlan {
 	 * serves its terrain, which the walk above it had already put in.
 	 */
 	private static final List<String> NAMED_PROGRAMS = Stream
-			.concat(SKY_PROGRAMS.stream(), Stream.of("gbuffers_entities"))
+			.concat(SKY_PROGRAMS.stream(), Stream.of("gbuffers_entities", "gbuffers_block"))
 			.toList();
 
 	private final List<Pass> passes;

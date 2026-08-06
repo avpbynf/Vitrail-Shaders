@@ -1,5 +1,7 @@
 package dev.vitrail.neoforge.mixin;
 
+import dev.vitrail.neoforge.BlockEntityOrigin;
+import dev.vitrail.render.BlockEntityGeometry;
 import dev.vitrail.render.EntityDraw;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -34,15 +36,38 @@ import java.util.List;
  * left a pass open, deliberately: the next draw of the group usually wants the same one, and it is
  * closed by the first draw this engine does not serve or by the handler below.
  * <p>
- * <strong>Both handlers are required, which the rest of this package is not.</strong> The mixin
+ * <strong>All three handlers are required, which the rest of this package is not.</strong> The mixin
  * configuration sets {@code defaultRequire} to nought, so an injection that stops matching is
- * normally dropped in silence; these two are a pair and the second is what closes what the first
- * opens, so half of them applying is a render pass left standing over whatever the game draws next.
- * Refusing to start is the better half of that bargain, and it is the only failure of the two that
- * names itself.
+ * normally dropped in silence. The two that open and close are a pair, and half of them applying is
+ * a render pass left standing over whatever the game draws next. The third, which says where a draw
+ * came from, fails more quietly and worse: every chest in the world would be lit as a mob, and
+ * nothing on screen or in the log would say why. Refusing to start is the better half of both
+ * bargains, and it is the only failure of the three that names itself.
  */
 @Mixin(RenderTypeFeatureRenderer.class)
 public abstract class RenderTypeFeatureRendererMixin {
+
+	/**
+	 * Publishes the origin of the draw about to be executed, one line before it is.
+	 * <p>
+	 * Here and not beside the draw itself, because this is the only call of the loop that is handed
+	 * the {@code Draw}, which is what carries the mark: the handler below sees a prepared render type
+	 * and an execute info, and neither of them knows a chest from a mob. The two calls are
+	 * consecutive and in the same turn of the same loop, so nothing can come between them.
+	 * <p>
+	 * A group whose execute info comes back null leaves the mark standing, which costs nothing: the
+	 * next turn sets it again and the door is not reached at all in between.
+	 */
+	@WrapOperation(method = "executeGroup", require = 1,
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/StagedVertexBuffer;"
+					+ "getExecuteInfo(Lnet/minecraft/client/renderer/StagedVertexBuffer$Draw;)"
+					+ "Lnet/minecraft/client/renderer/StagedVertexBuffer$ExecuteInfo;"))
+	private StagedVertexBuffer.ExecuteInfo vitrail$origin(StagedVertexBuffer buffer,
+			StagedVertexBuffer.Draw draw, Operation<StagedVertexBuffer.ExecuteInfo> original) {
+		BlockEntityGeometry.drawing(((BlockEntityOrigin) draw).vitrail$fromBlockEntity());
+
+		return original.call(buffer, draw);
+	}
 
 	@WrapOperation(method = "executeGroup", require = 1,
 			at = @At(value = "INVOKE",

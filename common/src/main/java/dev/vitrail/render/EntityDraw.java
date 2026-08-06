@@ -36,11 +36,13 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * The door the game's entity geometry comes in by, and the one place a pack's entity programs are
@@ -72,8 +74,14 @@ import java.util.function.Supplier;
  * {@code openFeatures} and {@code closeFeatures}, where {@link FeatureLayer} is already carrying the
  * game's own translucent features into the pack's picture: that is a second road into the same
  * target, and answering the same question twice in one frame is how two answers start to differ.
- * The eyes, the beacon beam, the glint, the block entities, the hand and the shadow map are each a
- * family of their own and none of them is here yet.
+ * The eyes, the beacon beam, the glint, the hand and the shadow map are each a family of their own
+ * and none of them is here yet.
+ * <p>
+ * <strong>The block entities are not one of those and come in by this same door</strong>, because
+ * that is where the game brings them: a chest and a mob are submitted into one phase and drawn with
+ * one set of pipelines. What tells them apart is carried rather than read,
+ * {@link BlockEntityGeometry} saying how, and what it buys is the program name, {@code gbuffers_block}
+ * instead of {@code gbuffers_entities}, which is the answer Iris gives on eight of the ten pieces.
  */
 public final class EntityDraw {
 
@@ -181,6 +189,13 @@ public final class EntityDraw {
 	private static final String ENTITIES = "gbuffers_entities";
 
 	/**
+	 * What a block entity asks for instead, and the reason it is a name and not a flag: it falls back
+	 * on the TERRAIN where {@code gbuffers_entities} does not, so a chest is lit as the block it is
+	 * rather than as a mob even on a pack that ships no such file.
+	 */
+	private static final String BLOCK = "gbuffers_block";
+
+	/**
 	 * What a cutout entity discards at, which is a tenth and not the half the terrain uses. Named
 	 * here so that the table below reads as a table.
 	 */
@@ -195,25 +210,20 @@ public final class EntityDraw {
 	 * six pieces out of three files: they differ in what {@link Element} reads off them, and a piece
 	 * is one compiled module.
 	 * <p>
-	 * All of them ask for {@code gbuffers_entities}, and <strong>that is a deviation from Iris on
-	 * eight of the ten</strong>, which is worth stating rather than glossing. Iris keys the same
-	 * table by the same pipelines, but eight of these rows reach a function of its own rather than a
-	 * constant, and that function answers {@code gbuffers_block} while a block entity is being drawn,
-	 * and {@code gbuffers_hand} or {@code gbuffers_hand_water} while the hand is, by its half. Only
-	 * the end crystal beam and the offset cutout are {@code gbuffers_entities} unconditionally, and
-	 * that holds of its MAIN table alone: its shadow table sends both to {@code shadow_entities}. The
-	 * hand half cannot arise here, the window above being closed by then. The block entity half does,
-	 * and it is served as an ordinary entity:
+	 * All of them ask for {@code gbuffers_entities}, and eight of the ten are only half the answer:
+	 * <strong>a conduit, a skull, a chest and every other block entity drawing with an entity render
+	 * type that does not blend comes through this very door</strong>, and Iris sends those eight to
+	 * {@code gbuffers_block} instead. {@link #BLOCK_ELEMENTS} is that half, and
+	 * {@link BlockEntityGeometry} is how a draw is known to belong to it. Not every block entity is
+	 * concerned: a player head with a resolved profile takes {@code entityTranslucent}, which blends
+	 * and is no row of this table.
 	 * <p>
-	 * <strong>a conduit, a skull and every block entity drawing with an entity render type that does
-	 * not blend comes through this door today.</strong> Not all of them do: a player head with a
-	 * resolved profile takes {@code entityTranslucent}, which blends and is no row of this table.
-	 * Those that do submit into the same solid phase as a mob and carry the
-	 * same pipelines, so nothing here can tell them apart; Iris can, because it poses a phase around
-	 * the dispatch that draws them, and this engine poses none yet. What that costs is the fallback
-	 * tree: {@code gbuffers_block} falls back on the TERRAIN and {@code gbuffers_entities} does not,
-	 * so a chest is lit as a mob rather than as a block. It is a family of its own and it is named in
-	 * the milestone as one.
+	 * Iris keys the same table by the same pipelines, and eight of these rows reach a function of its
+	 * own rather than a constant: that function answers {@code gbuffers_block} while a block entity is
+	 * being drawn, and {@code gbuffers_hand} or {@code gbuffers_hand_water} while the hand is, by its
+	 * half. The hand half cannot arise here, the window above being closed by then. Only the end
+	 * crystal beam and the offset cutout are {@code gbuffers_entities} unconditionally, and that holds
+	 * of its MAIN table alone: its shadow table sends both to {@code shadow_entities}.
 	 * <p>
 	 * Three families are arguably somebody else's and are served here all the same: the armour pieces
 	 * are the entity wearing them, the end crystal beam is drawn with the entity format and the
@@ -238,8 +248,47 @@ public final class EntityDraw {
 		put(new Element(RenderPipelines.ITEM_CUTOUT, "item", ENTITIES, CUTOUT));
 	}
 
+	/**
+	 * The same pieces asked of {@code gbuffers_block}, for the draws a block entity renderer put
+	 * there.
+	 * <p>
+	 * <strong>Eight of the ten and not all ten</strong>, read in Iris's own table
+	 * ({@code pipeline/IrisPipelines.java:30-85}) rather than reasoned about: the end crystal beam
+	 * and the offset cutout are given {@code ENTITIES_CUTOUT} outright there, while the other eight
+	 * go through {@code getSolid} or {@code getCutout}, which answer {@code BLOCK_ENTITY} while the
+	 * block entity phase is up. A pipeline missing from this table is therefore not an oversight and
+	 * is not half served: {@link #element} falls back on the entity row for it, which is the answer
+	 * Iris gives.
+	 * <p>
+	 * A piece here is a compiled module of its own, like every row above, so it carries a name of its
+	 * own. The name is the entity one with a word in front, because it lands in an identifier the
+	 * device caches a shader under and two pieces sharing one name would hand the second whatever the
+	 * first compiled to.
+	 */
+	private static final Map<RenderPipeline, Element> BLOCK_ELEMENTS = new LinkedHashMap<>();
+
+	static {
+		ELEMENTS.values().stream()
+				.filter(element -> element.pipeline() != RenderPipelines.END_CRYSTAL_BEAM
+						&& element.pipeline() != RenderPipelines.ENTITY_CUTOUT_Z_OFFSET)
+				.map(element -> new Element(element.pipeline(), "block_" + element.element(), BLOCK,
+						element.alphaTest(), element.layering()))
+				.forEach(element -> BLOCK_ELEMENTS.put(element.pipeline(), element));
+	}
+
 	private static void put(Element element) {
 		ELEMENTS.put(element.pipeline(), element);
+	}
+
+	/**
+	 * Which piece answers for a draw of this pipeline, which is the block entity one only where the
+	 * draw came from a block entity renderer AND that pipeline has one. Null for a pipeline this
+	 * engine does not serve at all, which is most of them.
+	 */
+	private static Element element(RenderPipeline pipeline) {
+		Element block = BlockEntityGeometry.drawing() ? BLOCK_ELEMENTS.get(pipeline) : null;
+
+		return block == null ? ELEMENTS.get(pipeline) : block;
 	}
 
 	private final PackChain owner;
@@ -297,6 +346,16 @@ public final class EntityDraw {
 	}
 
 	/**
+	 * The same answer, for the one thing outside this class that has to know it before the window
+	 * opens: the draws of a frame are grouped while the features are prepared, which is earlier than
+	 * anything here runs, and keeping a block entity's geometry out of a mob's draw is a change to
+	 * what the game itself does. With this off nothing of ours may touch that grouping.
+	 */
+	public static boolean wanted() {
+		return wanted;
+	}
+
+	/**
 	 * Opens and closes the one window of the frame this family is served in, which the caller brackets
 	 * with the game's own two events: the opaque chunks are finished at the first and the opaque
 	 * features are finished at the second.
@@ -312,6 +371,11 @@ public final class EntityDraw {
 	public static void opaqueFeatures(boolean drawing) {
 		opaqueFeatures = drawing;
 		if (!drawing) {
+			// The three marks of the block entities go with it, and this is their frame boundary.
+			// They are raised and lowered around calls rather than switched, so an unbalanced one is
+			// a mob lit as a chest, and it would otherwise last the rest of the session.
+			BlockEntityGeometry.clear();
+
 			// Closing the window closes the pass, and that is not the same safety net as the one at
 			// the end of a group. The next thing the game does after this is called is to copy a
 			// depth between targets, which the encoder refuses while a pass is open, so a pass that
@@ -338,7 +402,7 @@ public final class EntityDraw {
 		}
 
 		GpuDevice device = RenderSystem.tryGetDevice();
-		Element element = ELEMENTS.get(prepared.pipeline());
+		Element element = element(prepared.pipeline());
 		if (!wanted || !opaqueFeatures || device == null || element == null
 				|| prepared.outputTarget() != OutputTarget.MAIN_TARGET) {
 			draw.end();
@@ -581,9 +645,18 @@ public final class EntityDraw {
 				})
 				.toList();
 
+		// The block entity half of each served piece, added here rather than filtered again: the two
+		// share a pipeline, so a format this engine cannot decode has already been reported once and
+		// saying it twice would read as two defects.
+		List<Element> asked = Stream.concat(served.stream(),
+						served.stream()
+								.map(element -> BLOCK_ELEMENTS.get(element.pipeline()))
+								.filter(Objects::nonNull))
+				.toList();
+
 		try {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadEntities(this.packPath, this.place,
-					served.stream().map(Element::asked).toList(), this.chosen, this.profile);
+					asked.stream().map(Element::asked).toList(), this.chosen, this.profile);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the entities, so the game keeps its "
 						+ "own shader for them", this.packPath.getFileName(),
@@ -592,13 +665,15 @@ public final class EntityDraw {
 				return;
 			}
 
-			// Asked once per serving FILE and not once per piece: all ten pieces are one program name
-			// and therefore one file, and the plan would answer for it ten times over.
+			// Asked once per serving FILE and not once per piece: the pieces are two program names at
+			// most, so they are one or two files, and the plan would answer for each of them ten
+			// times over.
 			//
-			// All of them or none of them, which is what the return in the middle is. These programs
-			// write the pack's targets and reach its colour target through the scene seed, so a piece
-			// whose answer could not be settled would be drawn by the game into the same picture, and
-			// two entities on one screen would disagree about what lights them.
+			// All of them or none of them, which is what the return in the middle is, and it holds
+			// across the two names rather than per name. These programs write the pack's targets and
+			// reach its colour target through the scene seed, so a piece whose answer could not be
+			// settled would be drawn by the game into the same picture, and a chest and the mob beside
+			// it would disagree about what lights them.
 			Map<String, List<ChainPlan.Attachment>> byFile = new LinkedHashMap<>();
 			for (PackProgram.Loaded one : loaded.values()) {
 				String servedBy = servedBy(one);
@@ -614,7 +689,7 @@ public final class EntityDraw {
 				byFile.put(servedBy, writes);
 			}
 
-			served.stream()
+			asked.stream()
 					.filter(element -> loaded.containsKey(element.element()))
 					.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
 							loaded.get(element.element()), element, this.values, this.load,
@@ -627,8 +702,8 @@ public final class EntityDraw {
 	}
 
 	/**
-	 * Where the outputs of the file that serves the entities belong, in draw buffer order and each on
-	 * the half the schedule gives it, or null when this place cannot answer for it.
+	 * Where the outputs of one file that serves a piece belong, in draw buffer order and each on the
+	 * half the schedule gives it, or null when this place cannot answer for it.
 	 * <p>
 	 * Empty is not a refusal and is the ordinary case: a pack that declares no draw buffer on its
 	 * entity program writes one output, which goes to the game's target and reaches the pack's

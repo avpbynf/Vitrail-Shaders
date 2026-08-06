@@ -7,19 +7,28 @@
 		"defaultRequire": 0
 	},
 	"client": [
+		"BlockEntityRenderDispatcherMixin",
 		"BlockRendererMixin",
 		"ChunkMeshFormatsMixin",
 		"ChunkVertexMixin",
+		"CustomFeatureRendererMixin",
+		"CustomSubmitMixin",
 		"MixinDefaultChunkRenderer",
 		"DefaultFluidRendererMixin",
 		"GameRendererMixin",
+		"ItemFeatureRendererMixin",
+		"ItemSubmitMixin",
 		"LevelRendererMixin",
+		"ModelFeatureRendererMixin",
+		"ModelSubmitMixin",
 		"ProjectionMatrixBufferMixin",
 		"RenderSectionManagerAccessor",
+		"RenderTypeFeatureRendererGroupMixin",
 		"RenderTypeFeatureRendererMixin",
 		"MixinShaderChunkRenderer",
 		"SkyRendererMixin",
 		"MixinSodiumWorldRenderer",
+		"StagedVertexBufferDrawMixin",
 		"VKDrawContextMixin"
 	]
 }
