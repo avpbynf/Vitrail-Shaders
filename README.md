@@ -19,7 +19,7 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshot-cave.jpg" alt="A cave lit through its opening, rendered by BSL Shaders on the Vulkan backend" width="830">
+  <img src="docs/images/screenshot-cave.jpg" alt="A cave lit through its opening, rendered by BSL Shaders on the Vulkan backend" width="830">
 </p>
 <p align="center">
   <sub>BSL Shaders by Capt Tatsu, running unmodified on the Vulkan backend.</sub>
@@ -29,10 +29,10 @@
 <summary>More screenshots</summary>
 <br>
 <p align="center">
-  <img src="docs/screenshot-cherry.jpg" alt="A cherry grove over a valley with waterfalls, rendered by BSL Shaders on the Vulkan backend" width="830">
+  <img src="docs/images/screenshot-cherry.jpg" alt="A cherry grove over a valley with waterfalls, rendered by BSL Shaders on the Vulkan backend" width="830">
 </p>
 <p align="center">
-  <img src="docs/screenshot-river.jpg" alt="A river gorge at dawn, lava glowing against the cliff, rendered by BSL Shaders on the Vulkan backend" width="830">
+  <img src="docs/images/screenshot-river.jpg" alt="A river gorge at dawn, lava glowing against the cliff, rendered by BSL Shaders on the Vulkan backend" width="830">
 </p>
 </details>
 
