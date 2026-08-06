@@ -89,6 +89,9 @@ tasks.register("checkText") {
 	def texts = fileTree(rootDir) {
 		include "*.md", "*.gradle", "*.properties", ".gitattributes", ".gitignore"
 		include "common/src/**", "neoforge/src/**", "fabric/src/**", ".github/**"
+		// docs/ is prose rather than code, which is exactly why it needs this: a curly quote
+		// pasted from a browser is invisible in a diff and reaches the published page.
+		include "docs/**"
 		exclude "**/*.png", "**/*.jpg", "**/*.jar", "**/*.zip"
 	}
 	def root = rootDir.toPath()
