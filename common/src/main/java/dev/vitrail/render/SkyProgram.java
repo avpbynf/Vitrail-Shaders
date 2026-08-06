@@ -82,7 +82,10 @@ final class SkyProgram {
 		// same way, and the translucent one answers it no.
 		return new SkyProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY, element.element(),
 				NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, element.blend(),
-				element.blend().isEmpty(), false, element.topology(), null, element.stage()),
+				element.blend().isEmpty(), false, element.topology(),
+				// None of the six sky pipelines names a culling of its own, so all six take the
+				// builder's default, which is to cull.
+				true, null, element.stage()),
 				bound, values, load, element.format(), writes, targets, chainRuns));
 	}
 

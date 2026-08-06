@@ -79,7 +79,11 @@ public final class TerrainProgram {
 				// Sodium's own, taken from ShaderChunkRenderer.createShader: the pass this is bound
 				// into was opened for that pipeline and a difference of topology would be a
 				// difference nobody declared.
-				PrimitiveTopology.QUADS, depthState(pass), pass.stage()),
+				PrimitiveTopology.QUADS,
+				// Nothing is culled in the shadow map. What matters there is which surface is nearest
+				// the light and not which way it faces, and a wall drawn on one side only leaks light
+				// through its back. Iris cuts it for the same reason.
+				!pass.shadow(), depthState(pass), pass.stage()),
 				loaded, values, load, format, writes, targets, chainRuns);
 	}
 

@@ -112,6 +112,11 @@ final class GeometryProgram {
 	 * @param topology     how the mesh is assembled, which is the game's answer and not a choice:
 	 *                     the pass this is bound into was opened for the pipeline the game built,
 	 *                     and a difference of topology would be a difference nobody declared
+	 * @param cull         whether a back face is thrown away, which is the game's answer too and
+	 *                     differs inside one family: the entity pipelines split almost evenly on it,
+	 *                     and a cape drawn with the wrong one is either a cape with no inside or a
+	 *                     cape drawn twice. The shadow map is the one place the answer is this
+	 *                     engine's, and {@link TerrainProgram} says why it is no
 	 * @param depth        the depth test and write, or null for none at all. Null is not an
 	 *                     oversight and the sky is why: the game's own sky pipeline declares no
 	 *                     depth state, so the disc neither tests nor writes, and a pack's program
@@ -124,7 +129,7 @@ final class GeometryProgram {
 	 */
 	record Pass(String family, String name, String namespace, Set<String> answered, boolean shadow,
 			Optional<BlendFunction> blend, boolean covers, boolean afterDeferred,
-			PrimitiveTopology topology, DepthStencilState depth, RenderStage stage) {
+			PrimitiveTopology topology, boolean cull, DepthStencilState depth, RenderStage stage) {
 
 		/** Whether the pass blends at all, which is the same question as having something to blend with. */
 		boolean blended() {
@@ -352,10 +357,7 @@ final class GeometryProgram {
 				.withBindGroupLayout(bindings.build())
 				.withVertexBinding(0, format)
 				.withPrimitiveTopology(pass.topology())
-				// Nothing is culled in the shadow map. What matters there is which surface is nearest
-				// the light and not which way it faces, and a wall drawn on one side only leaks light
-				// through its back. Iris cuts it for the same reason.
-				.withCull(!pass.shadow());
+				.withCull(pass.cull());
 
 		// Left unset where the family answers null, which is not the same as setting the default one:
 		// the builder hands a null state through to the pipeline, and that is a pass which neither
@@ -638,9 +640,7 @@ final class GeometryProgram {
 			return shadowDescriptor();
 		}
 
-		// Nothing gained over the pass the renderer was going to open: one attachment, its own
-		// target, at its own format.
-		if (this.slots.size() == 1 && this.slots.get(0).bound() == Bound.GAME) {
+		if (plain()) {
 			return null;
 		}
 
@@ -669,6 +669,21 @@ final class GeometryProgram {
 				this.targets.screenWidth(), this.targets.screenHeight()));
 
 		return depth == null ? descriptor : descriptor.withDepthAttachment(depth);
+	}
+
+	/**
+	 * Whether this pass gains nothing over the one the game was going to open: one attachment, the
+	 * game's own target, at its own format.
+	 * <p>
+	 * Asked from outside by whoever opens the pass itself rather than steering one the game opened,
+	 * and it is the question that tells the two nulls of {@link #descriptor} apart. One of them means
+	 * this, and the pass to open is the plain one; the other means the colour targets are not there
+	 * yet, and then there is no pass to open at all, because the pipeline carries a state per
+	 * attachment the descriptor would have named and binding it into a single attachment pass throws
+	 * by name in the middle of the world.
+	 */
+	boolean plain() {
+		return this.slots.size() == 1 && this.slots.get(0).bound() == Bound.GAME;
 	}
 
 	/**
