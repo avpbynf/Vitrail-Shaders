@@ -85,9 +85,10 @@ public final class EntityDraw {
 	 * <p>
 	 * Measured rather than reasoned about, and it cost a session: with this open all the time, every
 	 * item in the inventory was drawn with {@code gbuffers_entities} under the world's own camera
-	 * matrix, so an inventory came out empty and the item in hand swayed with the walk. Blocks were
-	 * untouched, which is the tell: a block model in a menu is not the entity format and no pipeline
-	 * of the table below draws it.
+	 * matrix, so an inventory came out empty and the item in hand swayed with the walk. What was
+	 * drawn as a block model came out untouched, and the reason is not the format, since a block item
+	 * on a hotbar is drawn with {@code ITEM_CUTOUT} like every other item and that is a row of the
+	 * table below.
 	 */
 	private static volatile boolean opaqueFeatures;
 
@@ -140,13 +141,26 @@ public final class EntityDraw {
 	 * six pieces out of three files: they differ in what {@link Element} reads off them, and a piece
 	 * is one compiled module.
 	 * <p>
-	 * All of them ask for {@code gbuffers_entities}, which is Iris's answer for every one of them as
-	 * well. Three of them are arguably somebody else's family and are served here all the same, and
-	 * it is worth saying which: the armour pieces are the entity wearing them, the end crystal beam
-	 * is drawn with the entity format and the entity snippet, and an item entity lying on the ground
-	 * is an entity. What is NOT here is the block entity, which Iris sends to
-	 * {@code gbuffers_block}: telling one from an ordinary entity needs a flag posed around the
-	 * dispatch that draws it, and until that exists a chest is drawn by the game as it always was.
+	 * All of them ask for {@code gbuffers_entities}, and <strong>that is a deviation from Iris on
+	 * eight of the ten</strong>, which is worth stating rather than glossing. Iris keys the same
+	 * table by the same pipelines, but eight of these rows reach a function of its own rather than a
+	 * constant, and that function answers {@code gbuffers_block} while a block entity is being drawn
+	 * and {@code gbuffers_hand} while the hand is; only the end crystal beam and the offset cutout
+	 * are {@code gbuffers_entities} whatever the phase. The hand half of it cannot arise here, the
+	 * window above being closed by then. The block entity half does, and it is served as an ordinary
+	 * entity:
+	 * <p>
+	 * <strong>a conduit, a skull and every block entity that draws with an entity render type comes
+	 * through this door today.</strong> They submit into the same solid phase as a mob and carry the
+	 * same pipelines, so nothing here can tell them apart; Iris can, because it poses a phase around
+	 * the dispatch that draws them, and this engine poses none yet. What that costs is the fallback
+	 * tree: {@code gbuffers_block} falls back on the TERRAIN and {@code gbuffers_entities} does not,
+	 * so a chest is lit as a mob rather than as a block. It is a family of its own and it is named in
+	 * the milestone as one.
+	 * <p>
+	 * Three families are arguably somebody else's and are served here all the same: the armour pieces
+	 * are the entity wearing them, the end crystal beam is drawn with the entity format and the
+	 * entity snippet, and an item entity lying on the ground is an entity.
 	 */
 	private static final Map<RenderPipeline, Element> ELEMENTS = new LinkedHashMap<>();
 
@@ -178,6 +192,9 @@ public final class EntityDraw {
 	private final ChainPlan plan;
 	private final TargetPlan chainTargets;
 	private final boolean chainRuns;
+
+	/** Whether the game's finished frame is painted in under the chain, which this family rides on. */
+	private final boolean seeded;
 	private final ColorTargets targets;
 
 	/** One program per piece the pack serves. Empty until the pack has been read, and it stays empty
@@ -196,7 +213,7 @@ public final class EntityDraw {
 
 	EntityDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
 			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, ColorTargets targets) {
+			boolean chainRuns, boolean seeded, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
@@ -207,6 +224,7 @@ public final class EntityDraw {
 		this.plan = plan;
 		this.chainTargets = chainTargets;
 		this.chainRuns = chainRuns;
+		this.seeded = seeded;
 		this.targets = targets;
 	}
 
@@ -230,6 +248,13 @@ public final class EntityDraw {
 	 */
 	public static void opaqueFeatures(boolean drawing) {
 		opaqueFeatures = drawing;
+		if (!drawing) {
+			// Closing the window closes the pass, and that is not the same safety net as the one at
+			// the end of a group. The next thing the game does after this is called is to copy a
+			// depth between targets, which the encoder refuses while a pass is open, so a pass that
+			// only the frame boundary closed would already have cost the frame by then.
+			endGroup();
+		}
 	}
 
 	/**
@@ -509,9 +534,14 @@ public final class EntityDraw {
 	 * <p>
 	 * Empty is not a refusal and is the ordinary case: a pack that declares no draw buffer on its
 	 * entity program writes one output, which goes to the game's target and reaches the pack's
-	 * picture through the scene seed exactly as OptiFine's undeclared default does.
+	 * picture through the scene seed. <strong>Where it lands is the seed's answer and not
+	 * OptiFine's</strong>, and the two differ: OptiFine infers colortex0 for a program that declares
+	 * nothing, while the seed paints the first draw buffer of the TERRAIN, which is colortex1 on two
+	 * packs of the corpus and colortex4 on a third. No pack of the corpus leaves its entities
+	 * undeclared, so nothing rides on it today.
 	 * <p>
-	 * Null is a refusal, and there are two of them. A place whose entity targets are not the size of
+	 * Null is a refusal, and there are three of them. The scene seed switched off, which takes the
+	 * only road the first output has. A place whose entity targets are not the size of
 	 * the screen cannot share a pass with the game's own target, one render pass having one render
 	 * area. And a first draw buffer that is not the one the scene seed paints is the one refusal
 	 * particular to this family: what the first output writes goes to the game's target and the seed
@@ -521,6 +551,19 @@ public final class EntityDraw {
 	 * read as its normals.
 	 */
 	private List<ChainPlan.Attachment> writes(String servedBy) {
+		// Before the plan is even asked, because it is not the plan's to answer: the scene seed is
+		// the ONLY road this family's first output has into the pack's picture, so a run with the
+		// seed switched off would write every other draw buffer and no albedo at all. What that
+		// paints is a mob shaped hole of normals and specular over the terrain's own colours, which
+		// is exactly the plausible and wrong picture the switch exists to rule out.
+		if (!this.seeded) {
+			Vitrail.logger().info("The scene seed is off, and it is the only way the first output of "
+					+ "an entity reaches the pack's picture, so the game keeps its own shader for the "
+					+ "entities: served, they would write every other draw buffer and no colour");
+
+			return null;
+		}
+
 		Optional<ChainPlan.Pass> geometry = this.plan.geometryOf(servedBy, false);
 		if (geometry.isEmpty()) {
 			return List.of();

@@ -268,8 +268,11 @@ public final class PackChain {
 				chain.chain(), chain.targets(), chainWanted, this.targets);
 		// And again, for the same reason, and read on demand for a third one: a place the player
 		// crosses without an entity in it should not pay for ten programs it never draws.
+		// Handed the seed's own switch as well, which neither of the other two needs: it is the one
+		// family whose first output has no road of its own into the pack's picture.
 		this.entities = new EntityDraw(this, packPath, chain.place(), chosen, profile, values,
-				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
+				this.load, chain.chain(), chain.targets(), chainWanted,
+				seedEnabled && this.seed != null, this.targets);
 	}
 
 	/**
@@ -893,8 +896,9 @@ public final class PackChain {
 	 * exactly what a reload frees, and everything of it is made again by the first frame of the next
 	 * world; nothing about which pack is loaded moves, so the settings screen still has one to show.
 	 * <p>
-	 * The first frame of that next world pays for it twice, and it is worth knowing where. The sky
-	 * and the terrain open the frame while the world is being drawn, so they allocate everything back
+	 * The first frame of that next world pays for it twice, and it is worth knowing where. The sky,
+	 * the terrain and the entities all open the frame while the world is being drawn, whichever of
+	 * the three comes first, so they allocate everything back
 	 * before {@code draw} reaches {@link #reloadIfTheWorldMoved} at the end of it; a world joined
 	 * with symbols this engine has not seen then reloads and makes the same work again. One extra
 	 * allocation and one extra translation, on the frame the world appears, which is the frame
@@ -1573,8 +1577,8 @@ public final class PackChain {
 		this.values.convention(ClipSpace.REVERSED);
 
 		// The same, and for a sharper reason: renderStage is in the table a full screen pass shares
-		// with a geometry one, and the sky and the terrain have both written theirs by the time this
-		// runs. Left standing, every composite of the frame would be told it was drawing the moon.
+		// with a geometry one, and the sky, the terrain and the entities have all written theirs by the time
+		// this runs. Left standing, every composite of the frame would be told it was drawing the moon.
 		this.values.renderStage(RenderStage.NONE);
 
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {

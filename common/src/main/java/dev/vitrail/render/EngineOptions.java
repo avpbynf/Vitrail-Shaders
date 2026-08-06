@@ -58,11 +58,17 @@ final class EngineOptions {
 	 * usually served by the one file and could not otherwise be told apart. The sky answers the same
 	 * way, by element rather than by file: {@code disc}, {@code dark}, {@code stars},
 	 * {@code sunrise}, {@code sun} and {@code moon}, four of the six being one file. The entities
-	 * answer the same way and all of them are one file, {@code solid}, {@code cutout},
-	 * {@code cutout_cull}, {@code armor} and the rest. One program,
-	 * because the point is to read the file rather than to search it, and because what two programs
-	 * of one frame are handed differs in three values that the dump cannot show apart anyway, which
-	 * {@link PackDump#take} spells out.
+	 * answer the same way and all of them are one file, {@code cutout_cull}, {@code armor},
+	 * {@code item} and the rest; the whole family is reached at once with
+	 * {@code dump=gbuffers_entities}. <strong>Two of their element names cannot be reached at
+	 * all</strong>, and it is a property of the matching rather than a fault: the line is matched on
+	 * the TAIL of a label, the terrain is walked first, and its own passes are called {@code solid}
+	 * and {@code cutout}. Whichever is named, the file the dump writes says in its first line which
+	 * program was really read.
+	 * <p>
+	 * One program and not several, because the point is to read the file rather than to search it,
+	 * and because what two programs of one frame are handed differs in three values that the dump
+	 * cannot show apart anyway, which {@link PackDump#take} spells out.
 	 * <p>
 	 * It is the instrument the milestones are verified with: a value can be non zero, plausible and
 	 * wrong, and the only cheap way to tell is to read the number.
@@ -144,6 +150,7 @@ final class EngineOptions {
 	 * @param shadow     whether the world is drawn a second time from the light
 	 * @param sky        whether the game's sky is drawn with the pack's own program
 	 * @param entities   whether the game's opaque entity geometry is drawn with the pack's own
+	 *                   program rather than the game's
 	 */
 	record Read(boolean seed, ChainFilter passes, boolean packsFirst, String dump, boolean terrain,
 			boolean chain, boolean shadow, boolean sky, boolean entities) {
@@ -197,7 +204,7 @@ final class EngineOptions {
 	 * Said once when the entities are off, which is the default, because nothing else would say the
 	 * line exists.
 	 * <p>
-	 * The other eight are on unless somebody asks, so their line is a thing the reader wrote and
+	 * The five other lines that take a yes or a no are on unless somebody asks, so their line is a
 	 * knows about. This one is the opposite: the picture with it off is the picture without this mod
 	 * having heard of entities at all, and a reader who never sees the name has no reason to look for
 	 * it.
@@ -285,7 +292,7 @@ final class EngineOptions {
 		}
 
 		// Named, like the two readings above do it: six lines share this one, so the value on its
-		// own leaves whoever fixes the typo looking for which of the five carries it.
+		// own leaves whoever fixes the typo looking for which of the six carries it.
 		Vitrail.logger().warn("'{}={}' is neither on nor off, so this line is ignored and {} stays "
 				+ "{}", key, value.asText(), key, byDefault ? "on" : "off");
 

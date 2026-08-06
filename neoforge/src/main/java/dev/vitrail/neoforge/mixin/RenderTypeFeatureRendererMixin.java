@@ -24,9 +24,10 @@ import java.util.List;
  * writes up to eight and none of them could be attached from in there. Its only caller in the whole
  * game is {@code executeGroup}, which holds every draw of a group and has no pass open at all, so
  * that is where a pass covering several draws can be opened. The method is public and not final, and
- * the twelve feature renderers that draw with a render type all inherit it without redefining it;
- * the particles are the exception and override it, which is why they are a family of their own and
- * not served here.
+ * the twelve feature renderers that draw with a render type all inherit it without redefining it.
+ * The particles are not among the twelve and are not reached at all: their renderer implements the
+ * interface directly rather than extending this class, so it has an {@code executeGroup} of its own
+ * that this mixin never sees, and they are a family of their own for that reason.
  * <p>
  * <strong>The wrap replaces the draw rather than adding to it.</strong> {@link EntityDraw} answers
  * whether it recorded the draw itself, and only a no lets the game's own call through. A yes has

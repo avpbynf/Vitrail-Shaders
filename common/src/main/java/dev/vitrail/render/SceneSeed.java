@@ -427,7 +427,11 @@ final class SceneSeed {
 	 * Cut against the kept depth, everything the game drew in front of the pack's terrain comes back
 	 * around it; cut against the mask alone, every villager, every item frame and every block entity
 	 * standing in front of a block is thrown away with the block, and what the player sees is not a
-	 * cut but an empty village. The fallback was silent, so a frame that took it read exactly like a
+	 * cut but an empty village. <strong>Worse, and differently, once an entity is drawn with the
+	 * pack's own program</strong>: that entity has written the pack's other targets already, so what
+	 * the fallback throws away is its colour alone, and the normals and the material it left behind
+	 * are lit over the wall it stood in front of.
+	 * The fallback was silent, so a frame that took it read exactly like a
 	 * frame that never had the depth in the first place, and there was no way to tell the two apart
 	 * from the picture. This is the line that tells them apart.
 	 * <p>

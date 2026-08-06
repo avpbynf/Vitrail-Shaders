@@ -37,8 +37,16 @@ final class PackDump {
 	private static volatile Path file;
 	private static long lastNanos;
 
-	/** Whether the line has already been told that nothing running answers to it. Once a load. */
-	private static boolean said;
+	/**
+	 * Whether the line has already been told that nothing running answers to it. Once a load.
+	 * <p>
+	 * Volatile like the two above and for the same reason, which is a reason about where the writes
+	 * come from and not about what the field means: {@link #configure} is reached from the client
+	 * setup event, which the loader dispatches on a pool of its own, while {@link #take} only ever
+	 * runs on the render thread. Whether the join between the two already publishes it is an argument
+	 * this keyword ends.
+	 */
+	private static volatile boolean said;
 
 	private PackDump() {
 	}
@@ -62,7 +70,8 @@ final class PackDump {
 	 * {@code NONE}, whatever the order of a frame suggests: the shadow stage draws at the end of a
 	 * frame for the next one, after the chain has run, so a dump of the sky's disc comes out at
 	 * stage 17, measured in game. So the six pieces of the sky dump alike on exactly what tells them
-	 * apart, and so do the three chunk passes. Everything else is the named program's own.
+	 * apart, and so do the three chunk passes and the ten pieces of the entities. Everything else is
+	 * the named program's own.
 	 *
 	 * @param terrain the pack's terrain programs, empty until they are read, and first on purpose:
 	 *                they are answered from a different catalogue, their {@code of_ModelViewMatrix}

@@ -57,8 +57,10 @@ public final class VitrailNeoForge {
 		// AfterOpaqueFeatures fires once the opaque terrain, the entities, the block entities
 		// and the opaque particles are drawn, and before anything translucent is. That is
 		// where the OptiFine model puts the deferred stage, and it is where Iris puts it too.
-		// No render pass is open there, and the game itself relies on that: it clears the
-		// entity outline target four lines later, which refuses outright inside a pass.
+		// No render pass is open there, and the game itself relies on that: three lines later
+		// it copies a depth between two targets, which refuses outright inside a pass. The
+		// clear of the entity outline target is the same argument at the OTHER event, four
+		// lines after AfterOpaqueBlocks.
 		NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterOpaqueFeatures.class,
 				this::onAfterOpaqueFeatures);
 
