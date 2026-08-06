@@ -205,10 +205,11 @@ happens to have.
 than fixed.** Two cases are worth knowing because they look like defects here and are not.
 
 The format appears to offer a pack two half-lives for wetness, one for how fast it rises and one for
-how fast it dries. There is only one setting behind both names, and it is the **rise**: whichever of
-the two directives is read last sets it, so a pack writing a drying time is quietly changing how
-fast wetness comes on. The engine matches the reference here. Correcting it in isolation would
-change the look of every pack tuned against the observed behaviour.
+how fast it dries. Both directives land on the **rise**, and whichever is read last sets it - so a
+pack writing a drying time is quietly changing how fast wetness comes *on*. The fall is real and is
+a constant no pack can reach, so the two are not the same rate; they are simply not both settings.
+The engine matches the reference here, and correcting it in isolation would dry the ground several
+times too fast on the packs that declare both.
 
 Likewise, a time uniform keeps varying in the Nether and the End although the game gives them a
 fixed time, because that is what the reference does and packs derive angles from it. It is those two

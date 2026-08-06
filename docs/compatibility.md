@@ -51,11 +51,12 @@ Declaring one is not enough to cost the pass. An input the fragment body never r
 the stage before it is compiled, precisely so that a declaration alone does not refuse a program
 that would have worked. What is left after that is a real mismatch.
 
-The usual cause is a shared header of varyings that every fragment stage of the pack includes. Where
-that lands on a full-screen pass the cut above handles it, since a quad reads none of them; where it
-lands on a geometry program that really does read one its own vertex stage never wrote, the pass is
-refused. **The log names which program was refused and which inputs did not match** - that line, not
-this page, is what tells you whether a given pack is affected today.
+It usually comes from a body shared between programs, so that a fragment stage ends up reading a
+varying the vertex stage it was actually paired with never wrote. Where that lands on a full-screen
+pass the cut above handles it, since a quad reads none of them; where it lands on a geometry program
+that really does read one, the pass is refused. **The log names which program was refused and which
+inputs did not match** - that line, not this page, is what tells you whether a given pack is
+affected today, and it is the only thing that will.
 
 ## The effect never ran
 

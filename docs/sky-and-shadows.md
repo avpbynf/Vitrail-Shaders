@@ -260,9 +260,10 @@ the pieces above are keyed to and the one the horizon cone rides in.
 
 ### The sun's path is tilted for the bodies as well as for the light
 
-Packs declare a setting that rotates the sun's path, in their properties file. The engine is what
-acts on it: the light direction it serves the pack is already turned by that angle, and so are the
-shadow matrices. The game's celestial bodies know nothing about it - so left alone, the visible sun
+Packs declare a setting that rotates the sun's path, as a constant in their own GLSL, and it works
+on both sides at once: the pack computes its own light direction from that constant, and the engine
+turns by the same angle everything it serves - the light direction, the celestial positions and the
+shadow matrices. The game's celestial bodies know nothing about it, so left alone the visible sun
 and the direction of the shadows would disagree by exactly that angle, for the sun as much as for
 the moon.
 

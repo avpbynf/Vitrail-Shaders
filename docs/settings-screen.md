@@ -97,14 +97,18 @@ somewhere else.
 
 That is a different question from whether it can also be *reached* from Sodium's options, and the
 answer there is yes. Sodium publishes a configuration entry point, and the reference implementation
-registers through it - declaring an entry point class in its mod metadata and implementing Sodium's
-own interface, so that a page appears in Sodium's options and opens the reference's own screen. No
-reaching into internals is needed for the entry itself.
+registers through it: an entry point class named in its mod metadata, implementing Sodium's own
+interface, so a page appears in Sodium's options and opens the reference's own screen.
+
+The published interface gets you the entry and not much more, though - do not read the paragraph
+above as "no internals needed". The reference's own entry class reaches into Sodium's non-published
+packages to describe the page, and ships mixin accessors onto the implementation classes of the
+config builder. Anything past a plain entry is against internals that can move under it.
 
 **A trap worth knowing before measuring any of this yourself**: what Maven serves as Sodium's
-NeoForge artefact is a launcher shim of a few dozen classes, and the mod is a jar nested inside it.
-Looking for a package in the outer jar finds nothing and proves nothing. This project's own build
-script unpacks the nested jar for exactly that reason.
+NeoForge artefact is a launcher shim - a few dozen classes, none of them the renderer - and the mod
+is a jar nested inside it. Looking for a package in the outer jar finds nothing and proves nothing.
+This project's own build script unpacks the nested jar for exactly that reason.
 
 ## Where settings live, and why one file per pack
 
@@ -134,7 +138,13 @@ There, a profile you have chosen sits *above* the settings file rather than unde
 profile is meant to decide the settings it names, and it would decide nothing if the file you are
 editing outranked it. Read in the order the screen asks, first answer wins: whatever
 `vitrail/options.txt` forces, then what is pending, then a chosen profile, then the settings file,
-then the applied profile, then the pack's own default. That is how the reference behaves too.
+then the applied profile, then the pack's own default.
+
+The reference reaches the same *outcome* by a shorter road, and the difference is worth not
+glossing: it has no profile layer at all. Picking a profile there writes that profile's values
+straight into the pending queue, which is also why picking one overrides a value you had already
+queued and leaves the settings it does not name alone - the behaviour above is the same, the
+machinery is not.
 
 The `options.txt` layer wins in both orders and is deliberately global. It is how a pass is proved
 to run, it may name a setting no pack declares at all, and it is edited by hand while the game is
