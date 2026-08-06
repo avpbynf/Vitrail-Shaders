@@ -63,9 +63,13 @@ public final class ProfileWidget extends OptionWidget {
 	}
 
 	/**
-	 * Walks from whichever profile the values match, so that a click always lands on the next one in
-	 * the pack's own order. From Custom it starts at the first, since there is no next to a set of
-	 * values that is not a profile.
+	 * Walks from whichever profile the values match, in the order
+	 * {@link dev.vitrail.pack.menu.PackMenu#profileNames()} hands them over: most constrained first,
+	 * which is the list Iris cycles in.
+	 * <p>
+	 * From Custom there is no profile to step away from, so a click forwards gives the first of that
+	 * list and a click backwards the last, which is what {@code ProfileSet.scan} returns when nothing
+	 * matched.
 	 */
 	@Override
 	protected void cycle(int direction) {
@@ -74,7 +78,9 @@ public final class ProfileWidget extends OptionWidget {
 		}
 
 		int index = this.profiles.indexOf(host().values().matchedProfile());
-		int next = index < 0 ? 0 : Math.floorMod(index + direction, this.profiles.size());
+		int next = index < 0
+				? (direction < 0 ? this.profiles.size() - 1 : 0)
+				: Math.floorMod(index + direction, this.profiles.size());
 		host().values().queueProfile(this.profiles.get(next));
 	}
 

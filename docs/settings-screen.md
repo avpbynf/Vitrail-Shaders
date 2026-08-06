@@ -77,6 +77,11 @@ quite like any other change though: a profile decides every setting it names, so
 value already waiting on one of them, and leaves the settings it does not name exactly where they
 were.
 
+Clicking walks the profiles **from the one that decides the most settings to the one that decides
+the fewest**, which is the reference's order and not the order the pack declares them in. On most
+packs the two are the same, every profile naming the same count; where they differ, a click from
+*Custom* lands somewhere else than the pack's first profile.
+
 **Reset asks before it acts, and then empties this pack's settings file rather than deleting it.**
 The reference deletes its own, and the two read back the same: a file of comments carries no value
 at all, and the reference removes it itself the next time it loads the pack. Emptying is what keeps

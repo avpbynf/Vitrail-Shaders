@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,19 +43,41 @@ public final class PackMenu {
 	private final Map<String, MenuPage> pages;
 	private final Map<String, MenuOption> options;
 	private final Map<String, Map<String, String>> profiles;
+	private final List<String> profileOrder;
 	private final PackLang lang;
 	private final List<String> warnings;
 
 	private PackMenu(String packName, Map<String, MenuPage> pages, Map<String, MenuOption> options,
 			Map<String, Map<String, String>> profiles, PackLang lang, List<String> warnings) {
-		// Ordered rather than Map.copyOf: pages are walked in the order the pack writes them and
-		// the profile selector cycles in the order the pack declares its profiles.
+		// Ordered rather than Map.copyOf: pages are walked in the order the pack writes them.
 		this.packName = packName;
 		this.pages = Collections.unmodifiableMap(new LinkedHashMap<>(pages));
 		this.options = Collections.unmodifiableMap(new LinkedHashMap<>(options));
 		this.profiles = Collections.unmodifiableMap(new LinkedHashMap<>(profiles));
+		this.profileOrder = order(this.profiles);
 		this.lang = lang;
 		this.warnings = List.copyOf(warnings);
+	}
+
+	/**
+	 * From the most constrained profile to the least, which is the order Iris both scans and cycles
+	 * in: {@code Profile.java:21} makes a profile's precedence the number of settings it names and
+	 * {@code ProfileSet.java:29} sorts on it, then {@code ProfileSet.java:101-102} takes the next and
+	 * the previous from that sorted list rather than from the declared one.
+	 * <p>
+	 * The sort is stable, so a pack whose profiles all name the same count keeps the order it wrote
+	 * them in, which is five of the eight in the corpus and BSL among them. Body Camera is the one
+	 * that moves: its three night vision profiles name twenty eight settings against the twenty five
+	 * of the other three, so they come first there and last here.
+	 * <p>
+	 * Iris's own {@code ProfileSet.java:17} calls the declared order "the order that profiles should
+	 * cycle through", and its code does not: only {@code forEach} reads that map.
+	 */
+	private static List<String> order(Map<String, Map<String, String>> profiles) {
+		List<String> names = new ArrayList<>(profiles.keySet());
+		names.sort(Comparator.comparingInt((String name) -> profiles.get(name).size()).reversed());
+
+		return List.copyOf(names);
 	}
 
 	public static PackMenu build(String packName, OptionIndex index, ShaderProperties properties,
@@ -179,9 +202,9 @@ public final class PackMenu {
 		return this.options.size();
 	}
 
-	/** In declaration order, which is the order the selector walks through. */
+	/** From the most constrained to the least, which is the order the selector walks through. */
 	public List<String> profileNames() {
-		return List.copyOf(this.profiles.keySet());
+		return this.profileOrder;
 	}
 
 	/** One profile's settings, chain already resolved, as text. */
