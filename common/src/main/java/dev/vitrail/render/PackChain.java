@@ -634,13 +634,9 @@ public final class PackChain {
 					+ "them");
 		}
 
-		// The report is not owed again here, and this is the one reload where that is true: nothing
-		// about the pack has changed, only the world under it. Every other road into reload is a
-		// player asking for one, and a pack edited by hand between two of those has to be reported
-		// again, so reload itself forgets what it reported and this one road remembers.
-		Path was = reported;
-		reload(gameDirectory);
-		reported = was;
+		// Through the door that keeps the report, and this is the one reload where that is right:
+		// nothing about the pack has changed, only the world under it.
+		reloadKeepingReport(gameDirectory);
 	}
 
 	/**
@@ -654,6 +650,21 @@ public final class PackChain {
 	 * its own, so that what the screen applies and what a hand edit applies cannot drift apart.
 	 */
 	public static void reload(Path gameDirectory) {
+		// Forgotten before the reading and not restored after it, which is the only order that
+		// works: the decision to print is taken inside load, so anything put back once load has
+		// returned changes nothing but the name of a pack that has already been reported. Every
+		// caller of this method is somebody asking for the pack to be read again, and a pack edited
+		// on the disk under the same name would otherwise be reported once for the whole session.
+		reported = null;
+		reloadKeepingReport(gameDirectory);
+	}
+
+	/**
+	 * The same reading, for the one caller that is not asking for it: the world moved under the
+	 * pack, nothing of the pack itself changed, and its report would say word for word what it said
+	 * at the last portal.
+	 */
+	private static void reloadKeepingReport(Path gameDirectory) {
 		PackChain previous = active;
 		if (previous != null) {
 			previous.release();
@@ -663,10 +674,6 @@ public final class PackChain {
 		// Cleared as well, so that a pack that failed to compile can be fixed and tried again
 		// without leaving the game.
 		disabled = false;
-		// And the report with it, for the same reason: every road into this method is somebody
-		// asking for the pack to be read again, and a pack edited on the disk under the same name
-		// would otherwise be reported once and never again for the rest of the session.
-		reported = null;
 		load(gameDirectory);
 		// Taken whatever the load did with them. A pack that cannot be read at all settled nothing,
 		// and without these it would be read again on the very next frame, and every frame after
