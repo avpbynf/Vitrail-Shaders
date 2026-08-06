@@ -37,6 +37,9 @@ final class PackDump {
 	private static volatile Path file;
 	private static long lastNanos;
 
+	/** Whether the line has already been told that nothing running answers to it. Once a load. */
+	private static boolean said;
+
 	private PackDump() {
 	}
 
@@ -44,6 +47,7 @@ final class PackDump {
 	static void configure(String program, Path into) {
 		wanted = program;
 		file = into;
+		said = false;
 	}
 
 	/**
@@ -129,13 +133,19 @@ final class PackDump {
 			// Nothing is built yet, which is the first frame or two rather than a wrong name. The
 			// line has to survive that or a dump asked for in the file would be turned off before
 			// the thing it names exists.
-			if (running.isEmpty()) {
+			if (running.isEmpty() || said) {
 				return;
 			}
 
-			Vitrail.logger().warn("{}={} names no program of this chain, so nothing is dumped. This "
-					+ "chain runs: {}", EngineOptions.DUMP_KEY, wanted, running);
-			wanted = "";
+			// Said once and the line left armed, which is not what this did: it used to turn the
+			// dump off outright, and that was right only while everything a place draws with was read
+			// on its first frame. Three families are read at the moment the world first draws one, so
+			// naming a piece of the sky or an entity was refused before the thing existed and stayed
+			// refused for the rest of the session. What is listed is therefore what has been read SO
+			// FAR and the line says as much, since another family reading later still answers.
+			said = true;
+			Vitrail.logger().warn("{}={} names nothing read so far, so nothing is dumped yet. Read so "
+					+ "far: {}", EngineOptions.DUMP_KEY, wanted, running);
 
 			return;
 		}
