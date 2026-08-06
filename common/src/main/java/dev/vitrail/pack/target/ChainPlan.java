@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Stream;
 
 /**
  * The chain of one place, unfolded into what a render pass needs: which attachments, in which
@@ -54,6 +55,22 @@ public final class ChainPlan {
 	private static final List<String> SKY_PROGRAMS =
 			List.of("gbuffers_skybasic", "gbuffers_skytextured", "gbuffers_clouds");
 
+	/**
+	 * Every geometry program asked for by name rather than by a pass of the renderer, walked into the
+	 * shared table so that whoever holds a name from the game finds an answer under it.
+	 * <p>
+	 * <strong>A program left out of this list is not half served, it is silently unanswered.</strong>
+	 * The table is only ever filled by these walks, so {@link #geometryOf} answers empty for a name
+	 * nothing walked, and empty is indistinguishable from the ordinary case of a pack declaring no
+	 * draw buffer on its geometry. Measured on the corpus in August 2026 with the entities missing
+	 * from this list: seven packs of eight answered empty and their entity programs wrote one output
+	 * where the pack had asked for four, with nothing anywhere saying so. The eighth answered only
+	 * because its entities fall back on the very file that serves its terrain.
+	 */
+	private static final List<String> NAMED_PROGRAMS = Stream
+			.concat(SKY_PROGRAMS.stream(), Stream.of("gbuffers_entities"))
+			.toList();
+
 	private final List<Pass> passes;
 	private final Pass last;
 	private final Seed seed;
@@ -70,8 +87,15 @@ public final class ChainPlan {
 	 * <p>
 	 * One table for every family rather than one per family, which is what lets a family that does
 	 * not exist yet ask the same question: the terrain asks it three times, the sky three times, and
-	 * the entities will ask it once per program the game hands them. What differs between families
-	 * is only how they reach a key, and that is the two tables below.
+	 * the entities once per file that serves them, which is once, their ten pieces being one program
+	 * name. What differs between families is only how they
+	 * reach a key, and that is the two tables below plus {@link #geometryOf} for whoever needs
+	 * neither.
+	 * <p>
+	 * <strong>Nothing is in it that a walk did not put there</strong>, and the walks are
+	 * {@code terrainKeysOf} and {@code namedKeysOf} and nothing else. A family whose program is in
+	 * neither list asks this table and is answered empty, which reads exactly like a pack that
+	 * declared no draw buffer.
 	 */
 	private final Map<Key, Pass> attachments;
 
@@ -231,7 +255,7 @@ public final class ChainPlan {
 		// shared table that now guarantees it rather than each family's own bookkeeping.
 		Map<Key, Pass> attachments = new LinkedHashMap<>();
 		Map<TerrainPass, Key> terrainKeys = terrainKeysOf(plan, resolver, notes, attachments);
-		Map<String, Key> skyKeys = skyKeysOf(plan, resolver, notes, attachments);
+		Map<String, Key> skyKeys = namedKeysOf(plan, resolver, notes, attachments);
 
 		Seed seed = seedOf(plan, resolver, notes);
 
@@ -314,19 +338,25 @@ public final class ChainPlan {
 	}
 
 	/**
-	 * The same walk for the sky, asked once per program the game may draw it with.
+	 * The same walk for every geometry program asked for by name, which is the sky's three and the
+	 * entities.
 	 * <p>
-	 * The three names are the OptiFine split and they are not ours to choose: untextured geometry
-	 * goes to {@code gbuffers_skybasic}, the sun and the moon to {@code gbuffers_skytextured}, the
-	 * clouds to {@code gbuffers_clouds}. Each is looked up through the fallback tree, so a pack that
-	 * ships none of them still answers here through {@code gbuffers_basic} or
-	 * {@code gbuffers_textured} if it has those.
+	 * The names are the OptiFine split and they are not ours to choose: untextured sky geometry goes
+	 * to {@code gbuffers_skybasic}, the sun and the moon to {@code gbuffers_skytextured}, the clouds
+	 * to {@code gbuffers_clouds}, and the game's own entity meshes to {@code gbuffers_entities}. Each
+	 * is looked up through the fallback tree, so a pack that ships none of them still answers here
+	 * through {@code gbuffers_basic} or {@code gbuffers_textured} if it has those.
 	 * <p>
-	 * Always the walk BEFORE the deferreds. The sky is drawn at the third rank of the frame, between
-	 * the prepares and the terrain, so its halves are the ones the prepares leave; only the
-	 * translucent chunk pass is re-taken after the deferred stage, and that rule is its alone.
+	 * Always the walk BEFORE the deferreds. The sky is drawn at the third rank of the frame and the
+	 * game's opaque features between the opaque chunks and the deferred stage, so both read the
+	 * halves the prepares leave; only the translucent chunk pass is re-taken after the deferred
+	 * stage, and that rule is its alone.
+	 * <p>
+	 * The map it answers is the sky's, because the sky is the one family that asks by the name it
+	 * wanted rather than by the program it got. Every other name here is reached through
+	 * {@link #geometryOf}, and what this walk owes them is the entry in the shared table.
 	 */
-	private static Map<String, Key> skyKeysOf(TargetPlan plan, ProgramResolver resolver,
+	private static Map<String, Key> namedKeysOf(TargetPlan plan, ProgramResolver resolver,
 			List<String> notes, Map<Key, Pass> into) {
 		Map<String, Key> sky = new LinkedHashMap<>();
 
@@ -335,7 +365,7 @@ public final class ChainPlan {
 		// clouds to gbuffers_textured, so one file commonly serves two or three of these names, and
 		// walking it again would say the same note about it twice, which the shared table is what
 		// now guarantees rather than a map of this method's own.
-		for (String program : SKY_PROGRAMS) {
+		for (String program : NAMED_PROGRAMS) {
 			Optional<String> served = resolver.lookup(plan.place(), program)
 					.map(ProgramResolver.Resolution::servedBy);
 			if (served.isEmpty()) {
@@ -343,7 +373,7 @@ public final class ChainPlan {
 			}
 
 			Key key = new Key(served.get(), false);
-			if (answer(plan, key, notes, into) != null) {
+			if (answer(plan, key, notes, into) != null && SKY_PROGRAMS.contains(program)) {
 				sky.put(program, key);
 			}
 		}
