@@ -5,9 +5,10 @@ about how the first becomes the second, and what does not survive the trip.
 
 ## Once, at load time
 
-Every GLSL unit a pack ships is rewritten when the pack is selected, then handed to the compiler
-the game already embeds, which produces SPIR-V and performs reflection and binding remapping
-itself. Nothing is translated while the game runs.
+Every GLSL unit a pack ships is rewritten before it can draw, then handed to the compiler the game
+already embeds, which produces SPIR-V and performs reflection and binding remapping itself. The
+chain's own units go at selection; the programs that draw the world and the sky are translated on
+demand, at the first frame of a place that needs them. Nothing is ever translated a second time.
 
 Two properties follow, and both are load-bearing:
 
@@ -69,11 +70,12 @@ it complains about overload precision qualifiers. Renaming is triggered only on 
 actually defines, so lengthening the reserved list costs nothing.
 
 **Depth reads are converted, and not by the translator.** The game renders in reversed Z; packs
-expect the legacy convention. The translated text does carry depth conversion, but only where the
-site is a *fixed* one the translator cannot miss: the built-in fragment depth, a write to the
-built-in output depth, and the clip depth in the vertex epilogue. What it never rewrites is a
-**lookup through a sampler**. Those are served by converting the *image* instead, once, when the
-depth is taken.
+expect the legacy convention. The translated text does carry depth conversion, at three fixed sites:
+the built-in fragment depth, a write to the built-in output depth, and the clip depth in the vertex
+epilogue. Even there it is not exhaustive - a built-in reached through a subscript, or handed whole
+to a function, or written with a compound assignment, cannot be rewritten where it stands, and those
+are counted rather than guessed at. What the translator never rewrites at all is a **lookup through
+a sampler**. Those are served by converting the *image* instead, once, when the depth is taken.
 
 That is not a shortcut, it is the only thing that works. A lookup can only be rewritten if it can be
 found, and it can only be found

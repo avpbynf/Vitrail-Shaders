@@ -62,12 +62,14 @@ import java.util.function.Supplier;
  * <p>
  * What it cannot do yet has to be said rather than covered up, and this paragraph said something
  * else for a while: it claimed no geometry program runs at all, which {@link TerrainDraw},
- * {@link GeometryProgram} and {@link SkyDraw} have all contradicted since. What is true is
- * narrower. The families that still come from the game - the entities, the particles, the weather -
- * reach the pack's first target through {@link SceneSeed} carrying the game's finished frame, and
- * every other buffer starts from its clear colour underneath them. A pass reading normals or a
- * material id off one of those pixels reads nothing of the sort, and the log names the families
- * concerned before the first frame is drawn.
+ * {@link GeometryProgram} and {@link SkyDraw} have all contradicted since. What is true is narrower.
+ * The families that still come from the game reach the pack's first target through
+ * {@link SceneSeed}, carrying the game's finished frame, and every other buffer starts from its
+ * clear colour underneath them. A pass reading normals or a material id off one of those pixels
+ * reads nothing of the sort. Which families those are is {@link #announceSeed}'s to say and not
+ * this comment's, a list written twice being a list that drifts; and that line does not always
+ * appear, since a place with no seed in its plan and a run with the seed switched off both leave
+ * the target on its clear colour instead, and both say so in their own words.
  * <p>
  * Two lifecycle traps are paid for here rather than rediscovered. The device caches a compiled
  * module under an identifier, a stage and a set of defines, never under the source, so every load

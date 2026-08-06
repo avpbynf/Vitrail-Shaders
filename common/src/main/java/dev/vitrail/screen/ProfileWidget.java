@@ -52,8 +52,8 @@ public final class ProfileWidget extends OptionWidget {
 	/**
 	 * The profile the values on screen amount to, and {@code Custom} when they amount to none. Read
 	 * from the values rather than from a name held beside them, which is what Iris shows and what
-	 * makes this label survive a Reset: the file is gone, the pack's own values are back, and those
-	 * values are a profile.
+	 * makes this label survive a Reset: the file holds nothing but its header, the pack's own values
+	 * are back, and those values are a profile.
 	 */
 	@Override
 	protected Component valueLabel() {

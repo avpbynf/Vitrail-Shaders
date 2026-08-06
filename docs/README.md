@@ -36,20 +36,21 @@ the traps that were paid for once already.
 
 ## The one idea the whole project rests on
 
-Shader packs are written in OpenGL-era GLSL, against an OpenGL-era pipeline. Minecraft 26.2
+Shader packs are written in OpenGL-era GLSL, against an OpenGL-era pipeline. The game
 renders through Vulkan. Those two facts are not compatible, and every design decision here
 follows from how that gap is closed.
 
-Vitrail closes it **at load time, not while a frame is being drawn**. Every GLSL unit a pack ships
-is rewritten into Vulkan GLSL, then handed to the compiler the game already embeds, which turns it
-into SPIR-V. No frame ever waits on a translation.
+Vitrail closes it **once per program, and never again**. Every GLSL unit a pack ships is rewritten
+into Vulkan GLSL, then handed to the compiler the game already embeds, which turns it into SPIR-V.
+Nothing is retranslated per frame, and by the time a program has drawn once there is no legacy GLSL
+behind it.
 
-"A load" is more often than you might think, and it is worth knowing where the pauses come from. The
-chain is translated when the pack is chosen; the programs that draw the world and the sky are
-translated the first time the place they belong to is drawn. And **changing dimension is a full
-reload**, because a dimension directory replaces the root rather than layering over it - the whole
-pack is read, translated and its colour targets allocated again. That is the hitch at the portal,
-and the log names it as it happens.
+Where the pauses come from is worth knowing, because "once" is not the same as "at selection". The
+chain is translated when the pack is chosen. The programs that draw the world and the sky are
+translated on demand, at the first frame that needs them - so the first frame of a place does wait
+on one. And **changing dimension is a full reload**, because a dimension directory replaces the root
+rather than layering over it: the whole pack is read, translated and its colour targets allocated
+again. That is the hitch at the portal, and the log names it as it happens.
 
 That choice has consequences worth knowing about, because they explain most of what you will
 observe:

@@ -28,8 +28,9 @@ recompiled, and leaving never writes - a pack read again for somebody who was on
 second of hitch nobody asked for. This is the one convention of the reference's screen deliberately
 not kept: it applies on the way out.
 
-The screen itself does redraw. One click can move ten widgets, because a setting can be the
-condition of others, and the status line and the last button change with it.
+The screen itself does redraw, and every widget is re-read rather than only the one clicked. One
+click really can move ten of them, since choosing a profile queues every value that profile names at
+once; the status line and the last button move with them.
 
 What keeps that from being a trap is that **Done is not offered while anything is waiting** on a
 pack's pages. The last button of the row is Apply until there is nothing left to apply, and only
@@ -51,9 +52,14 @@ it is a load**: it writes the pack file and reloads there and then.
 
 ## The gestures, which are the reference's
 
-A left click walks a setting's values forwards and a **right click walks them back**. Shift and a
-click hand back the value the pack ships; from the keyboard, control does that and shift walks
-backwards instead, a keyboard having no second button to walk back with.
+On an ordinary setting, a left click walks its values forwards and a **right click walks them
+back**. Shift and a click hand back the value the pack ships; from the keyboard, control does that
+and shift walks backwards instead, a keyboard having no second button to walk back with.
+
+Two things on a page do not answer to that. A **slider** is the game's own widget and takes its
+drag, its arrow keys and nothing else. And the **profile selector** ignores shift and a click, on
+purpose: a profile is a whole set of values rather than one of them, so there is no single value to
+hand back.
 
 ## The profile is worked out, not remembered
 
@@ -70,12 +76,13 @@ quite like any other change though: a profile decides every setting it names, so
 value already waiting on one of them, and leaves the settings it does not name exactly where they
 were.
 
-**Reset empties this pack's settings file rather than deleting it**, and the difference matters. A
-missing file falls back to the one the reference left for the same pack, so deleting ours would hand
-the pack the reference's settings instead of its own and land a Reset on values nobody chose here. A
-file holding nothing but its header is how this side says out loud that nothing was chosen. Reset
-also drops what is pending - a pending value is a change to the settings being discarded - and it
-does not touch `vitrail/options.txt`, so anything greyed out stays greyed out afterwards.
+**Reset asks before it acts, and then empties this pack's settings file rather than deleting it.**
+The difference matters: a missing file falls back to the one the reference left for the same pack,
+so deleting ours would hand the pack the reference's settings instead of its own and land a Reset on
+values nobody chose here. A file holding nothing but its header is how this side says out loud that
+nothing was chosen. Reset also drops what is pending - a pending value is a change to the settings
+being discarded - and it does not touch `vitrail/options.txt`, so anything greyed out stays greyed
+out afterwards.
 
 ## The pack list refreshes itself
 
@@ -84,7 +91,7 @@ the list is on screen, so a pack dropped in appears on its own.
 
 ## Why this is a screen of its own, and what it does not rule out
 
-It is its own screen because this is where the value is: the layout, the four layers, the pending
+It is its own screen because this is where the value is: the layout, the layers, the pending
 set and what Apply writes are all this project's problem, and none of them get easier by living
 somewhere else.
 
@@ -125,22 +132,29 @@ everything.
 **What the screen shows you** resolves in a different order, and the difference is the profile.
 There, a profile you have chosen sits *above* the settings file rather than under it: picking a
 profile is meant to decide the settings it names, and it would decide nothing if the file you are
-editing outranked it. Read from the top: what is pending, then a chosen profile, then the settings
-file, then the applied profile, then the pack's own default. That is how the reference behaves too.
+editing outranked it. Read in the order the screen asks, first answer wins: whatever
+`vitrail/options.txt` forces, then what is pending, then a chosen profile, then the settings file,
+then the applied profile, then the pack's own default. That is how the reference behaves too.
 
-The `options.txt` layer is deliberately last in both orders and deliberately global. It is how a
-pass is proved to run, it may name a setting no pack declares at all, and it is edited by hand while
-the game is running. It decides what is drawn and never what is written.
+The `options.txt` layer wins in both orders and is deliberately global. It is how a pass is proved
+to run, it may name a setting no pack declares at all, and it is edited by hand while the game is
+running. It decides what is drawn and never what is written.
 
 ## What is greyed out, and why
 
-Three different things, and only one of them is about you being overruled.
+Several different things, and only the first is about you being overruled.
 
 - A setting `vitrail/options.txt` forces. Its value is reported to the screen so the widget can be
   greyed rather than letting a click lose to it in silence.
 - A **heading**, which a pack writes as a setting with no values to walk through. There is nothing
   to click.
 - A **link to a page the pack never wrote**. It would lead nowhere, so it does not lead.
+- On the pack list, the pack already being drawn, and the *None* entry when nothing is loaded. Both
+  are the same idea: the button that would put you where you already are.
+
+A slot naming a setting the pack does not declare is the odd one out. It leaves either a blank or a
+greyed entry, and the engine says which at load time, naming the slot and the setting it wanted -
+some packs do ship one.
 
 ## Settings the reference wrote
 
@@ -151,9 +165,10 @@ under it.
 
 ## What a broken layout does
 
-A slot naming an option the pack does not declare leaves a blank and a warning line rather than
-throwing. A handful of slots in the test corpus do exactly that - a pack that ships one broken name
-is still a working pack.
+A slot naming an option the pack does not declare does not throw. It leaves a dead entry - blank or
+greyed, as the section above says - and a line in the log naming the slot and the setting it wanted.
+Packs in the test corpus do ship such slots, and a pack with one broken name is still a working
+pack.
 
 Blanks matter as much as options do. Packs align their columns by hand using empty slots, and there
 are a great many of them; dropping blanks would collapse every column a pack laid out.

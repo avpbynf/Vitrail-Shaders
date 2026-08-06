@@ -2,7 +2,7 @@
 
 A shader pack does not describe one image. It describes a **chain of passes**, each reading what
 earlier passes wrote, and each expecting to run at a particular moment relative to the world being
-drawn. This page is about where those moments are in Minecraft 26.2, and how the buffers behind
+drawn. This page is about where those moments are in the game's own frame, and how the buffers behind
 them work.
 
 ## Where the game's own frame has its seams

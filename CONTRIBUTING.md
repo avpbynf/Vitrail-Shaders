@@ -97,10 +97,9 @@ stop failing the build as well. A run under it is a listing, not a check, and th
 the way past. The javadoc lint is the exception and stays armed, its findings being errors rather
 than warnings.
 
-`checkText` covers the two things no compiler sees: a byte order mark, which reaches a GLSL
-compiler as a stray character in front of the version directive and which PowerShell writes
-unless told not to, and typographic punctuation - the en and em dashes, the curly quotes, the
-single-glyph ellipsis and the non-breaking space. The exact set is one line of `build.gradle`.
+`checkText` covers the two things no compiler sees: a byte order mark, which PowerShell writes
+unless told not to, and typographic punctuation. Why each of those is a gate, and what the second
+one really catches, is in [developing](docs/developing.md).
 
 The vendored stareval sources under `uniform/expr/kroppeb/` are left out of the javadoc lint.
 Their javadoc is their author's, and bending borrowed code to this project's taste only makes the

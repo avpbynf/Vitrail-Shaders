@@ -51,10 +51,11 @@ Declaring one is not enough to cost the pass. An input the fragment body never r
 the stage before it is compiled, precisely so that a declaration alone does not refuse a program
 that would have worked. What is left after that is a real mismatch.
 
-The usual cause is a shared header of varyings that every fragment stage of the pack includes,
-full-screen passes among them, where only some of the geometry stages write them. **The log names
-which program was refused and which inputs did not match** - that line, not this page, is what tells
-you whether a given pack is affected today.
+The usual cause is a shared header of varyings that every fragment stage of the pack includes. Where
+that lands on a full-screen pass the cut above handles it, since a quad reads none of them; where it
+lands on a geometry program that really does read one its own vertex stage never wrote, the pass is
+refused. **The log names which program was refused and which inputs did not match** - that line, not
+this page, is what tells you whether a given pack is affected today.
 
 ## The effect never ran
 
@@ -177,7 +178,7 @@ A short reference, if you are writing a pack or wondering why yours is treated d
 - **Where a pack keeps its programs is not fixed.** Sildur's keeps them at the root of `shaders/`
   rather than in a dimension folder. A dimension folder *replaces* the base set rather than layering
   over it - the full rule, including what an empty folder means, is in
-  [translation.md](translation.md).
+  [the pack format](pack-format.md).
 - **A pack need not ship the program a family asks for.** Sildur's ships no terrain, lit-textured,
   entity or hand program; those reach its textured program through the fallback tree, several
   levels deep. BSL ships no lit-textured, particle, item, line or lightning program.
@@ -194,7 +195,7 @@ A short reference, if you are writing a pack or wondering why yours is treated d
 - **A pack can ask the engine not to draw a piece of the sky** because it draws that piece itself,
   inside one of its own programs. Four such requests are honoured - the sun, the moon, the stars and
   the sky disc - and honouring the last two is a **deviation from both references**, which take out
-  only the sun and the moon. It costs two packs of the corpus the stars the references leave them,
+  only the sun and the moon. It costs some packs the stars the references leave them,
   and the NOTICE says so. The fifth request in that family, the one about clouds, is deliberately not
   honoured: no program here draws clouds yet, so obeying it would take the game's clouds away and put
   nothing in their place.
