@@ -1,6 +1,7 @@
 package dev.vitrail.neoforge;
 
 import dev.vitrail.neoforge.sodium.ShadowTerrain;
+import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
@@ -108,6 +109,12 @@ public final class VitrailNeoForge {
 	 */
 	private void onAfterOpaqueBlocks(RenderLevelStageEvent.AfterOpaqueBlocks event) {
 		PackChain.markGeometryDepth();
+
+		// And opens the one window the entities are served in. It has to be a window, because the
+		// hand and the screen are drawn by the same feature renderers, with the same pipelines and
+		// into the same target, out of a submit storage GameRenderer hands them after the level:
+		// nothing about one of those draws says it is not an entity, and only the moment does.
+		EntityDraw.opaqueFeatures(true);
 	}
 
 	/**
@@ -121,6 +128,9 @@ public final class VitrailNeoForge {
 	 * thrown away in its entirety.
 	 */
 	private void onAfterOpaqueFeatures(RenderLevelStageEvent.AfterOpaqueFeatures event) {
+		// First, and before anything of this engine draws: everything after this point is either the
+		// world's translucents or, once the level returns, the hand and the screen.
+		EntityDraw.opaqueFeatures(false);
 		PackChain.drawBeforeTranslucents();
 		PackChain.openFeatures();
 	}

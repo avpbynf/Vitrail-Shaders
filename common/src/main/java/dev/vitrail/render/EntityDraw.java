@@ -1,0 +1,580 @@
+package dev.vitrail.render;
+
+import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.program.AlphaTest;
+import dev.vitrail.pack.target.ChainPlan;
+import dev.vitrail.pack.target.TargetName;
+import dev.vitrail.pack.target.TargetPlan;
+import dev.vitrail.pack.target.TargetSize;
+import dev.vitrail.Vitrail;
+
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.GpuDevice;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.systems.ScissorState;
+import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.StagedVertexBuffer;
+import net.minecraft.client.renderer.rendertype.OutputTarget;
+import net.minecraft.client.renderer.rendertype.PreparedRenderType;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.function.Supplier;
+
+/**
+ * The door the game's entity geometry comes in by, and the one place a pack's entity programs are
+ * read.
+ * <p>
+ * <strong>The door is a group of draws and not a draw.</strong> The game hands its immediate
+ * geometry to {@code RenderTypeFeatureRenderer.executeGroup}, which walks the draws of one group and
+ * asks {@code PreparedRenderType.drawFromBuffer} for each. That call is not the door and cannot be:
+ * it opens a render pass per draw, in a try-with-resources, with one colour attachment, so nothing
+ * multi-target can be written from inside it. Its caller has no pass open at all and holds the whole
+ * group, which is what lets this open one pass over a run of draws and hand the pack every draw
+ * buffer it asked for.
+ * <p>
+ * <strong>A run and not the group</strong>, and the difference is the whole of what is recorded
+ * here. One pass carries one set of attachments and one pipeline's worth of state, so the pass lasts
+ * exactly as long as consecutive draws keep asking for the same program of ours; anything else -
+ * another program, geometry this engine does not serve, the end of the group - closes it, because
+ * the game opens its own pass for what it draws itself and two passes may not be open at once.
+ * Nothing is reordered to make runs longer: the order the game walks its draws in is the order
+ * things overlap in.
+ * <p>
+ * <strong>What decides which program serves a draw is the {@code RenderPipeline}</strong>, not the
+ * render type and not the texture. That is Iris's answer too, keyed the same way in
+ * {@code IrisPipelines}: a render type is made per texture, so there are as many of them as there
+ * are mobs on screen, while the pipelines are a fixed table the game builds once.
+ * <p>
+ * <strong>Only the geometry that writes outright is served</strong>, which is the game's opaque
+ * feature phase and the half of the table below. The blending half is drawn between
+ * {@code openFeatures} and {@code closeFeatures}, where {@link FeatureLayer} is already carrying the
+ * game's own translucent features into the pack's picture: that is a second road into the same
+ * target, and answering the same question twice in one frame is how two answers start to differ.
+ * The eyes, the beacon beam, the glint, the block entities, the hand and the shadow map are each a
+ * family of their own and none of them is here yet.
+ */
+public final class EntityDraw {
+
+	/** Off unless {@code options.txt} asks otherwise, and read again at every load. */
+	private static volatile boolean wanted;
+
+	/**
+	 * Whether the game is drawing the level's own opaque features at this instant, which is the only
+	 * moment anything here may be served.
+	 * <p>
+	 * <strong>The feature renderers are not the level's.</strong> One dispatcher draws three things
+	 * through the same {@code executeGroup}: the level's features, the hand, and the screen, the last
+	 * two out of a submit storage of their own that {@code GameRenderer} hands it after the level is
+	 * finished. Every one of them reaches this class with the same pipelines and the same main
+	 * target, so nothing about a draw says which of the three it belongs to; only the moment does.
+	 * <p>
+	 * Measured rather than reasoned about, and it cost a session: with this open all the time, every
+	 * item in the inventory was drawn with {@code gbuffers_entities} under the world's own camera
+	 * matrix, so an inventory came out empty and the item in hand swayed with the walk. Blocks were
+	 * untouched, which is the tell: a block model in a menu is not the entity format and no pipeline
+	 * of the table below draws it.
+	 */
+	private static volatile boolean opaqueFeatures;
+
+	/** The pass this engine opens for a run of draws, when the pack has nothing more to say. */
+	private static final Supplier<String> LABEL = () -> "Vitrail entity";
+
+	/** What the game binds its own entity image under, and what a pack reads as {@code gtexture}. */
+	private static final String TEXTURE = "Sampler0";
+
+	/**
+	 * One piece of the game's entity geometry: which pipeline it is drawn with, which program of the
+	 * pack answers for it, and what it discards at.
+	 *
+	 * @param pipeline  the game's own pipeline, which is both how a draw is recognised and where the
+	 *                  blend, the depth window, the culling and the topology are read from. Held
+	 *                  rather than copied for exactly that reason: everything the pack does not
+	 *                  decide is the game's, and a table of our own would be a second copy of it
+	 * @param element   one word for the log and for the shader identifier, which has to tell two
+	 *                  pieces served by one file apart. It lands in an {@code Identifier} path, so it
+	 *                  is lowercase and has no space in it
+	 * @param program   the bare name the pack is asked for
+	 * @param alphaTest what this piece discards at when the pack says nothing. It is the game's own
+	 *                  {@code ALPHA_CUTOUT} define for that pipeline, a tenth where there is one and
+	 *                  no test at all where there is none, and Iris gives the entity programs the
+	 *                  same tenth
+	 */
+	record Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest) {
+
+		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
+		private PackProgram.EntityElement asked() {
+			return new PackProgram.EntityElement(this.element, this.program, this.alphaTest);
+		}
+	}
+
+	/** The bare name every piece below asks the pack for. Its fallback tree is walked like any other. */
+	private static final String ENTITIES = "gbuffers_entities";
+
+	/**
+	 * What a cutout entity discards at, which is a tenth and not the half the terrain uses. Named
+	 * here so that the table below reads as a table.
+	 */
+	private static final AlphaTest CUTOUT = AlphaTest.ONE_TENTH;
+
+	/**
+	 * Every pipeline the game draws opaque entity geometry with, and nothing else.
+	 * <p>
+	 * The list is the pipelines of {@code RenderPipelines} that bind
+	 * {@code DefaultVertexFormat.ENTITY} and declare no blend function. Each of them is a piece of
+	 * its own even where two ask for the same program at the same threshold, which is how the sky is
+	 * six pieces out of three files: they differ in what {@link Element} reads off them, and a piece
+	 * is one compiled module.
+	 * <p>
+	 * All of them ask for {@code gbuffers_entities}, which is Iris's answer for every one of them as
+	 * well. Three of them are arguably somebody else's family and are served here all the same, and
+	 * it is worth saying which: the armour pieces are the entity wearing them, the end crystal beam
+	 * is drawn with the entity format and the entity snippet, and an item entity lying on the ground
+	 * is an entity. What is NOT here is the block entity, which Iris sends to
+	 * {@code gbuffers_block}: telling one from an ordinary entity needs a flag posed around the
+	 * dispatch that draws it, and until that exists a chest is drawn by the game as it always was.
+	 */
+	private static final Map<RenderPipeline, Element> ELEMENTS = new LinkedHashMap<>();
+
+	static {
+		put(new Element(RenderPipelines.ENTITY_SOLID, "solid", ENTITIES, AlphaTest.OFF));
+		put(new Element(RenderPipelines.ENTITY_SOLID_Z_OFFSET_FORWARD, "solid_offset", ENTITIES,
+				AlphaTest.OFF));
+		put(new Element(RenderPipelines.ENTITY_CUTOUT, "cutout", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.ENTITY_CUTOUT_CULL, "cutout_cull", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.ENTITY_CUTOUT_Z_OFFSET, "cutout_offset", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.ENTITY_CUTOUT_DISSOLVE, "cutout_dissolve", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.ARMOR_CUTOUT_NO_CULL, "armor", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.ARMOR_DECAL_CUTOUT_NO_CULL, "armor_decal", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.END_CRYSTAL_BEAM, "crystal_beam", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.ITEM_CUTOUT, "item", ENTITIES, CUTOUT));
+	}
+
+	private static void put(Element element) {
+		ELEMENTS.put(element.pipeline(), element);
+	}
+
+	private final PackChain owner;
+	private final Path packPath;
+	private final String place;
+	private final Map<String, OptionValue> chosen;
+	private final String profile;
+	private final PackValues values;
+	private final int load;
+	private final ChainPlan plan;
+	private final TargetPlan chainTargets;
+	private final boolean chainRuns;
+	private final ColorTargets targets;
+
+	/** One program per piece the pack serves. Empty until the pack has been read, and it stays empty
+	 * for a pack this place can serve no entity with at all. */
+	private final Map<String, EntityProgram> programs = new LinkedHashMap<>();
+
+	/** Whether the pack has been read for its entities. A reading that served nothing is still one. */
+	private boolean read;
+
+	/** The pass a run of draws is being recorded into, or null between runs. */
+	private RenderPass open;
+
+	/** The program that pass was opened for, and the pipeline it was prepared with. */
+	private EntityProgram drawing;
+	private RenderPipeline bound;
+
+	EntityDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
+			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
+			boolean chainRuns, ColorTargets targets) {
+		this.owner = owner;
+		this.packPath = packPath;
+		this.place = place;
+		this.chosen = Map.copyOf(chosen);
+		this.profile = profile;
+		this.values = values;
+		this.load = load;
+		this.plan = plan;
+		this.chainTargets = chainTargets;
+		this.chainRuns = chainRuns;
+		this.targets = targets;
+	}
+
+	/** Whether a pack's own entity programs take over the game's, from the loaded options. */
+	static void wanted(boolean asked) {
+		wanted = asked;
+	}
+
+	/**
+	 * Opens and closes the one window of the frame this family is served in, which the caller brackets
+	 * with the game's own two events: the opaque chunks are finished at the first and the opaque
+	 * features are finished at the second.
+	 * <p>
+	 * A window and not a test on what is being drawn, because there is nothing to test: the hand and
+	 * the screen are drawn by the same renderers with the same pipelines, out of a submit storage of
+	 * the game's own choosing, and the draw carries no word about which it came from.
+	 * <p>
+	 * Closed again at the frame boundary whatever happens, so that a frame that threw between the two
+	 * events cannot leave the hand and the inventory being drawn as entities for the rest of the
+	 * session.
+	 */
+	public static void opaqueFeatures(boolean drawing) {
+		opaqueFeatures = drawing;
+	}
+
+	/**
+	 * Records one draw of a feature group with the pack's own program, or answers no and leaves it to
+	 * the game.
+	 * <p>
+	 * No is the ordinary answer and covers everything from text to particles: the table holds ten
+	 * pipelines and the game has a hundred. What matters about a no is that it closes the pass this
+	 * was recording into, since the caller is about to open one of its own for the same draw and the
+	 * two would overlap.
+	 *
+	 * @return whether this engine drew it, in which case the caller must not
+	 */
+	public static boolean draw(PreparedRenderType prepared, StagedVertexBuffer.ExecuteInfo info) {
+		EntityDraw draw = PackChain.entities();
+		if (draw == null) {
+			return false;
+		}
+
+		GpuDevice device = RenderSystem.tryGetDevice();
+		Element element = ELEMENTS.get(prepared.pipeline());
+		if (!wanted || !opaqueFeatures || device == null || element == null
+				|| prepared.outputTarget() != OutputTarget.MAIN_TARGET) {
+			draw.end();
+
+			return false;
+		}
+
+		try {
+			return draw.record(device, element, prepared, info);
+		} catch (RuntimeException e) {
+			// Said before the pass is closed and not after: closing one the failure left in a bad
+			// state can throw in its turn, and the second throw would carry away the only line that
+			// says what went wrong first.
+			wanted = false;
+			Vitrail.logger().error("Vitrail stopped drawing the entities after an error", e);
+			draw.end();
+
+			return false;
+		}
+	}
+
+	/**
+	 * Closes the pass a group left open, at the end of that group.
+	 * <p>
+	 * Owed even though every no already closes one: a group whose last draw was ours ends without
+	 * another draw ever being offered, and the pass would then stay open across whatever the game
+	 * does next. What that costs is not a leak but a refusal, the encoder allowing one pass at a
+	 * time, so the next thing the game draws would throw rather than be drawn.
+	 */
+	public static void endGroup() {
+		EntityDraw draw = PackChain.entities();
+		if (draw != null) {
+			draw.end();
+		}
+	}
+
+	/**
+	 * Whether what this family writes still reaches the screen this frame, which is the question
+	 * {@code TerrainDraw.shown} and {@code SkyDraw.shown} both ask and the same answer: the chain
+	 * draws nothing at all while it is still compiling, so a frame that wrote the pack's targets then
+	 * would be a frame with no entity in it.
+	 */
+	private boolean shown() {
+		return !this.chainRuns || this.owner.drawable();
+	}
+
+	private boolean record(GpuDevice device, Element element, PreparedRenderType prepared,
+			StagedVertexBuffer.ExecuteInfo info) {
+		if (!this.read) {
+			read();
+		}
+
+		EntityProgram program = this.programs.get(element.element());
+		if (program == null) {
+			end();
+
+			return false;
+		}
+
+		if (this.drawing != program && !begin(device, program, prepared)) {
+			return false;
+		}
+
+		// The image belongs to the DRAW and not to the pass: one pipeline draws every mob on screen
+		// and each of them brings its own skin, so this is set again for every draw recorded.
+		PreparedRenderType.Texture texture = image(prepared);
+		program.texture(texture == null ? null : texture.textureView(),
+				texture == null ? null : texture.sampler());
+
+		this.open.setPipeline(this.bound);
+		scissor(prepared.scissorState());
+		program.bind(this.open);
+		this.open.setVertexBuffer(0, info.vertexBuffer().slice());
+		this.open.setIndexBuffer(info.indexBuffer(), info.indexType());
+		this.open.drawIndexed(info.indexCount(), 1, info.firstIndex(), info.baseVertex(), 0);
+
+		return true;
+	}
+
+	/**
+	 * Opens the pass a run of draws is recorded into, having closed whatever came before it.
+	 * <p>
+	 * Everything that cannot happen inside a render pass happens here and in this order: the previous
+	 * pass closed, the frame opened, the colour targets allocated and cleared, the pipeline compiled
+	 * and this frame's uniform block written. All of them allocate or copy, and the encoder refuses
+	 * both while a pass is open.
+	 *
+	 * @return whether the pass was opened, and false leaves the draw to the game
+	 */
+	private boolean begin(GpuDevice device, EntityProgram program, PreparedRenderType prepared) {
+		end();
+		this.owner.beginFrame();
+		if (!this.owner.openTargets(device) || !shown()) {
+			return false;
+		}
+
+		RenderPipeline pipeline = program.prepare(device);
+		if (pipeline == null) {
+			return false;
+		}
+
+		// The two images the game would have drawn into, worked out as PreparedRenderType works them
+		// out: the overrides are the game's own way of sending a phase somewhere else, and the layer
+		// that carries its translucent features is one of them.
+		RenderTarget target = prepared.outputTarget().getRenderTarget();
+		GpuTextureView colour = RenderSystem.outputColorTextureOverride != null
+				? RenderSystem.outputColorTextureOverride
+				: target.getColorTextureView();
+		GpuTextureView depth = !target.useDepth ? null
+				: RenderSystem.outputDepthTextureOverride != null
+						? RenderSystem.outputDepthTextureOverride
+						: target.getDepthTextureView();
+
+		RenderPassDescriptor descriptor = program.descriptor(colour, depth);
+		if (descriptor == null && !program.plain()) {
+			// The colour targets are not there yet, which is the first frame or two and the frames
+			// after a resize. A plain pass would carry one attachment against a pipeline holding a
+			// state per target the pack asked for, and setPipeline refuses that by name.
+			return false;
+		}
+
+		CommandEncoder encoder = device.createCommandEncoder();
+		this.open = descriptor == null
+				? encoder.createRenderPass(LABEL, colour, Optional.empty(), depth,
+						OptionalDouble.empty())
+				: encoder.createRenderPass(descriptor);
+		this.drawing = program;
+		this.bound = pipeline;
+
+		return true;
+	}
+
+	/**
+	 * Closes the pass a run was being recorded into, if there is one.
+	 * <p>
+	 * The fields are cleared before the close and not after: a close that throws must not leave this
+	 * holding a pass nobody can record into and nobody will ever close again, which would turn one
+	 * failed draw into a frame that cannot be finished.
+	 */
+	private void end() {
+		RenderPass pass = this.open;
+		this.open = null;
+		this.drawing = null;
+		this.bound = null;
+		if (pass != null) {
+			pass.close();
+		}
+	}
+
+	/**
+	 * The scissor the game set for this draw, said again for every draw of a run.
+	 * <p>
+	 * Both ways round and not only the enabling one: the state belongs to the draw and the pass
+	 * outlives it, so a rectangle left standing from the draw before would cut whatever comes next
+	 * down to it.
+	 */
+	private void scissor(ScissorState state) {
+		if (state.enabled()) {
+			this.open.enableScissor(state.x(), state.y(), state.width(), state.height());
+		} else {
+			this.open.disableScissor();
+		}
+	}
+
+	/** The image the game was going to draw this piece with, or null where it binds none. */
+	private static PreparedRenderType.Texture image(PreparedRenderType prepared) {
+		for (PreparedRenderType.Texture texture : prepared.textures()) {
+			if (TEXTURE.equals(texture.name())) {
+				return texture;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Reads the pack for every piece at once, at the first entity the game draws, and settles where
+	 * the outputs of each of them go.
+	 * <p>
+	 * All of them and not the one being asked for, for the reason the sky reads all six: the moment
+	 * a piece is first drawn is the world's to choose, and some of them wait a long time. Nothing
+	 * asks for the armour decal until somebody wears armour that carries one, and read one at a time
+	 * the pack would be opened, expanded and translated inside that frame, on the render thread and
+	 * in the middle of the world.
+	 */
+	private void read() {
+		this.read = true;
+
+		// Measured rather than assumed, and it is the one assumption of this family that would fail
+		// in silence. The prologue declares the six elements of DefaultVertexFormat.ENTITY by name,
+		// and an element the stage does not declare shifts the location of every one after it without
+		// a word: the picture stays a picture and reads its texture coordinates out of the light map.
+		List<Element> served = ELEMENTS.values().stream()
+				.filter(element -> {
+					VertexFormat format = element.pipeline().getVertexFormatBinding(0);
+					if (DefaultVertexFormat.ENTITY.equals(format)) {
+						return true;
+					}
+
+					Vitrail.logger().warn("The game draws the {} of an entity with {} and this engine "
+							+ "decodes the entity format, so the game keeps its own shader for it",
+							element.element(), format);
+
+					return false;
+				})
+				.toList();
+
+		try {
+			Map<String, PackProgram.Loaded> loaded = PackProgram.loadEntities(this.packPath, this.place,
+					served.stream().map(Element::asked).toList(), this.chosen, this.profile);
+			if (loaded.isEmpty()) {
+				Vitrail.logger().info("{} serves nothing in {} for the entities, so the game keeps its "
+						+ "own shader for them", this.packPath.getFileName(),
+						this.place.isEmpty() ? "its root" : this.place);
+
+				return;
+			}
+
+			// Asked once per serving FILE and not once per piece: all ten pieces are one program name
+			// and therefore one file, and the plan would answer for it ten times over.
+			//
+			// All of them or none of them, which is what the return in the middle is. These programs
+			// write the pack's targets and reach its colour target through the scene seed, so a piece
+			// whose answer could not be settled would be drawn by the game into the same picture, and
+			// two entities on one screen would disagree about what lights them.
+			Map<String, List<ChainPlan.Attachment>> byFile = new LinkedHashMap<>();
+			for (PackProgram.Loaded one : loaded.values()) {
+				String servedBy = servedBy(one);
+				if (byFile.containsKey(servedBy)) {
+					continue;
+				}
+
+				List<ChainPlan.Attachment> writes = writes(servedBy);
+				if (writes == null) {
+					return;
+				}
+
+				byFile.put(servedBy, writes);
+			}
+
+			served.stream()
+					.filter(element -> loaded.containsKey(element.element()))
+					.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
+							loaded.get(element.element()), element, this.values, this.load,
+							byFile.get(servedBy(loaded.get(element.element()))), this.chainTargets,
+							this.targets, this.chainRuns)));
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().error("Could not prepare the entity programs of "
+					+ this.packPath.getFileName() + ", so the game keeps its own shader for them", e);
+		}
+	}
+
+	/**
+	 * Where the outputs of the file that serves the entities belong, in draw buffer order and each on
+	 * the half the schedule gives it, or null when this place cannot answer for it.
+	 * <p>
+	 * Empty is not a refusal and is the ordinary case: a pack that declares no draw buffer on its
+	 * entity program writes one output, which goes to the game's target and reaches the pack's
+	 * picture through the scene seed exactly as OptiFine's undeclared default does.
+	 * <p>
+	 * Null is a refusal, and there are two of them. A place whose entity targets are not the size of
+	 * the screen cannot share a pass with the game's own target, one render pass having one render
+	 * area. And a first draw buffer that is not the one the scene seed paints is the one refusal
+	 * particular to this family: what the first output writes goes to the game's target and the seed
+	 * carries it into the target it was taken for, which is the terrain's first draw buffer. Where
+	 * the two agree, which is every pack of the corpus, the output lands where the pack asked for it;
+	 * where they do not, it would land in somebody else's, and the picture would be a pack's albedo
+	 * read as its normals.
+	 */
+	private List<ChainPlan.Attachment> writes(String servedBy) {
+		Optional<ChainPlan.Pass> geometry = this.plan.geometryOf(servedBy, false);
+		if (geometry.isEmpty()) {
+			return List.of();
+		}
+
+		ChainPlan.Pass pass = geometry.get();
+		if (!pass.size().equals(TargetSize.ofScreen())) {
+			Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so they cannot share "
+					+ "a pass with the game's own target and the game keeps its own shader for the "
+					+ "entities", servedBy);
+
+			return null;
+		}
+
+		ChainPlan.Attachment first = pass.attachments().get(0);
+		Optional<ChainPlan.Seed> seed = this.plan.seed();
+		if (seed.isEmpty() || seed.get().target() != first.target()
+				|| seed.get().side() != first.side()) {
+			Vitrail.logger().warn("{} writes {} first and the scene seed paints {}, so the first output "
+					+ "of an entity would be carried into a target the pack did not ask for: the game "
+					+ "keeps its own shader for the entities", servedBy,
+					TargetName.canonical(first.target()),
+					seed.map(where -> TargetName.canonical(where.target())).orElse("nothing"));
+
+			return null;
+		}
+
+		return pass.attachments();
+	}
+
+	/** The bare name of the file behind a loaded program, which is what the plan is keyed by. */
+	private static String servedBy(PackProgram.Loaded loaded) {
+		return loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
+	}
+
+	/** The programs once the entities have been read, for the decoded dump. Empty until then. */
+	Collection<EntityProgram> programs() {
+		return this.programs.values();
+	}
+
+	/**
+	 * Rotates the ring buffers, and closes a pass no group closed. Called once the frame's draws have
+	 * been recorded.
+	 */
+	void rotate() {
+		end();
+		opaqueFeatures(false);
+		this.programs.values().forEach(EntityProgram::rotate);
+	}
+
+	void release() {
+		end();
+		this.programs.values().forEach(EntityProgram::release);
+		this.programs.clear();
+		this.read = false;
+	}
+}

@@ -34,6 +34,16 @@ public record AlphaTest(Function function, float reference) {
 	public static final AlphaTest CUTOUT = new AlphaTest(Function.GREATER, 0.5F);
 
 	/**
+	 * The cutout default everywhere but the terrain, which is a tenth and not a half.
+	 * <p>
+	 * The game keeps the same pair of numbers under the same split: {@code RenderPipelines} declares
+	 * {@code ALPHA_CUTOUT_THRESHOLD_DEFAULT} at a tenth and
+	 * {@code ALPHA_CUTOUT_THRESHOLD_CUTOUT_TERRAIN} at a half, and every cutout entity pipeline it
+	 * builds takes the first. Iris gives its entity programs the same tenth.
+	 */
+	public static final AlphaTest ONE_TENTH = new AlphaTest(Function.GREATER, 0.1F);
+
+	/**
 	 * The translucent default. A ten thousandth, which is Iris's number; Sodium uses a hundredth for
 	 * its own shader, and a pack is written against Iris.
 	 */

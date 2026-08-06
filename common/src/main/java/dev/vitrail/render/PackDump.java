@@ -68,10 +68,13 @@ final class PackDump {
 	 *                for a pack that serves none. Named by element as the terrain is by pass: four
 	 *                of the six are one file, so a line that said gbuffers_skybasic four times would
 	 *                not say which piece was read
+	 * @param entities the pack's entity programs, empty until the first entity is drawn. Named by
+	 *                element for the same reason and more strongly: all ten of them are one file
 	 * @param passes  the chain's own passes, empty for the frame or two before they are built
 	 */
 	static void take(String place, int load, Collection<TerrainProgram> terrain,
-			Collection<SkyProgram> sky, List<PackPass> passes, WorldState world) {
+			Collection<SkyProgram> sky, Collection<EntityProgram> entities, List<PackPass> passes,
+			WorldState world) {
 		if (wanted.isEmpty() || file == null) {
 			return;
 		}
@@ -99,6 +102,14 @@ final class PackDump {
 		}
 
 		for (SkyProgram program : sky) {
+			running.add(program.label());
+			if (decoded == null && (names(program.path()) || names(program.label()))) {
+				path = program.label();
+				decoded = program.decoded(world);
+			}
+		}
+
+		for (EntityProgram program : entities) {
 			running.add(program.label());
 			if (decoded == null && (names(program.path()) || names(program.label()))) {
 				path = program.label();

@@ -714,8 +714,9 @@ public final class ChainPlan {
 	 * a name from the game: this place was never asked about that program, so nothing was walked for
 	 * it.
 	 * <p>
-	 * Nothing calls this yet, and that is what it is for: it is the half of the entities that can be
-	 * put in place and proved before any of them is drawn.
+	 * The entities are the family that asks it, once per program the game hands them, and they were
+	 * not there when it was written: it was put in place and proved on its own first, which is what
+	 * a question three families share is worth doing.
 	 */
 	public Optional<Pass> geometryOf(String servedBy, boolean afterDeferred) {
 		return Optional.ofNullable(this.attachments.get(new Key(servedBy, afterDeferred)));

@@ -454,6 +454,105 @@ public final class PackProgram {
 	}
 
 	/**
+	 * One piece of geometry the game hands over as a render pipeline, as a pack has to be read for it.
+	 * <p>
+	 * There is no list of bound elements here, unlike {@link SkyElement}, and that is the whole
+	 * difference between the two families: every entity pipeline of the game binds
+	 * {@code DefaultVertexFormat.ENTITY} and nothing else, so the elements to declare are
+	 * {@link VertexInputs#ENTITY}'s and are the same for all of them. The door is what checks that
+	 * claim against the pipeline in hand rather than trusting it.
+	 *
+	 * @param element   what the caller calls this piece, one word, and the key it gets its answer back
+	 *                  under. Several pieces are commonly one program under one format, and they are
+	 *                  still several programs here, each carrying its own uniform block and its own
+	 *                  compiled module
+	 * @param program   the bare name the pack is asked for, {@code gbuffers_entities}
+	 * @param alphaTest what this piece discards at when the pack says nothing, which is the threshold
+	 *                  the game's own pipeline was built with. A pack overrides it with
+	 *                  {@code alphaTest.<program>}, written under the file that really serves the
+	 *                  piece, exactly as the chunk passes read it
+	 */
+	public record EntityElement(String element, String program, AlphaTest alphaTest) {
+	}
+
+	/**
+	 * Reads and translates the programs the game's own entity geometry is drawn with, in one opening
+	 * of the pack, keyed by the piece each one serves.
+	 * <p>
+	 * All of them together and not one at a time, for the reason {@link #loadSky} gives: the plan
+	 * reads thirty odd files whatever is asked of it, and the moment one piece is first drawn is a
+	 * moment of the world's choosing. The sharpest of them is the armour decal, which nothing draws
+	 * until somebody wears armour that carries one.
+	 * <p>
+	 * Two pieces asking one program for one threshold share a translation, since the text would be
+	 * identical: the alpha test is written into the fragment stage and is the only thing that differs
+	 * between most of these. They are still two programs to the caller, each compiled on its own.
+	 * <p>
+	 * A piece the pack serves nothing for is simply absent from the answer, and the game then keeps
+	 * its own shader for it. The fallback tree is walked like everywhere else, so a pack shipping only
+	 * {@code gbuffers_basic} still serves every entity it has.
+	 */
+	public static Map<String, Loaded> loadEntities(Path packPath, String place,
+			List<EntityElement> elements, Map<String, OptionValue> chosen, String profile)
+			throws IOException {
+		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
+			OptionIndex options = OptionIndex.build(source);
+			ShaderProperties properties = ShaderProperties.parse(source);
+			Map<String, OptionValue> fromProfile = profile.isEmpty()
+					? Map.of()
+					: properties.expandProfile(profile);
+			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
+			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
+			PackTextures textures = textures(source, properties, options, settings);
+
+			DimensionSet dimensions = DimensionSet.discover(source);
+			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
+					dimensions);
+
+			Map<String, Map<ProgramStage, ExpandedUnit>> expanded = new LinkedHashMap<>();
+			Map<String, Loaded> translated = new LinkedHashMap<>();
+			Map<String, Loaded> loaded = new LinkedHashMap<>();
+			for (EntityElement element : elements) {
+				Optional<ProgramResolver.Resolution> resolution =
+						resolver.lookup(place, element.program());
+				if (resolution.isEmpty()) {
+					continue;
+				}
+
+				// The name the override is written under is the file that really serves the piece and
+				// not the one that was asked for, which is how Iris looks it up and how the chunk
+				// passes read the same line.
+				String servedBy = resolution.get().servedBy();
+				String path = pathOf(place, servedBy);
+				if (!expanded.containsKey(path)) {
+					expanded.put(path, read(source, expander, path));
+				}
+
+				Map<ProgramStage, ExpandedUnit> units = expanded.get(path);
+				if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+					continue;
+				}
+
+				AlphaTest alphaTest = properties.alphaTest(servedBy).orElse(element.alphaTest());
+				// What two pieces have to agree on to be one translation, and the element is not part
+				// of it. The threshold is, because it is written into the fragment stage: two pieces of
+				// one program discarding at different alphas are two texts, and sharing one would draw
+				// a mob with the silhouette of whichever piece was translated first.
+				String key = element.program() + "|" + alphaTest;
+				translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
+						ProgramTranslator.translate(units, VertexInputs.ENTITY,
+								VertexInputs.ENTITY.elements(), alphaTest, false, element.program(),
+								textures.volumes()),
+						targets, alphaTest, textures));
+				loaded.put(element.element(), translated.get(key));
+			}
+
+			return loaded;
+		}
+	}
+
+	/**
 	 * Reads one dimension's whole chain in one opening of the pack.
 	 * <p>
 	 * Calling {@link #load} once per program would open the pack and build a whole plan each time,

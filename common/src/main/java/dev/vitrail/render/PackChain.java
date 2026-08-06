@@ -198,6 +198,7 @@ public final class PackChain {
 	private final int load;
 	private final TerrainDraw terrain;
 	private final SkyDraw sky;
+	private final EntityDraw entities;
 
 	private List<PackPass> programs;
 	private PackPass last;
@@ -265,6 +266,10 @@ public final class PackChain {
 		// a sky should not pay for one.
 		this.sky = new SkyDraw(this, packPath, chain.place(), chosen, profile, values, this.load,
 				chain.chain(), chain.targets(), chainWanted, this.targets);
+		// And again, for the same reason, and read on demand for a third one: a place the player
+		// crosses without an entity in it should not pay for ten programs it never draws.
+		this.entities = new EntityDraw(this, packPath, chain.place(), chosen, profile, values,
+				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 	}
 
 	/**
@@ -333,6 +338,7 @@ public final class PackChain {
 			TerrainDraw.wanted(engine.terrain());
 			TerrainDraw.shadowWanted(engine.shadow());
 			SkyDraw.wanted(engine.sky());
+			EntityDraw.wanted(engine.entities());
 			PackDump.configure(engine.dump(),
 					gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt"));
 
@@ -414,6 +420,10 @@ public final class PackChain {
 					settings.profile());
 			if (!chainWanted) {
 				EngineOptions.announceChainOff();
+			}
+
+			if (!engine.entities()) {
+				EngineOptions.announceEntitiesOff(gameDirectory);
 			}
 		} catch (IOException | RuntimeException e) {
 			disabled = true;
@@ -763,6 +773,13 @@ public final class PackChain {
 		return disabled || chain == null ? null : chain.sky;
 	}
 
+	/** The same, for the entities. */
+	static EntityDraw entities() {
+		PackChain chain = active;
+
+		return disabled || chain == null ? null : chain.entities;
+	}
+
 	/**
 	 * Opens the frame if nothing has yet, and takes the dump with it. The one point the frame
 	 * boundary hangs off; see {@link #advanced} for what a second advance would cost.
@@ -772,8 +789,8 @@ public final class PackChain {
 			this.advanced = true;
 			this.values.advance();
 			PackDump.take(this.chain.place(), this.load, this.terrain.programs(),
-					this.sky.programs(), this.programs == null ? List.of() : this.programs,
-					this.values.world());
+					this.sky.programs(), this.entities.programs(),
+					this.programs == null ? List.of() : this.programs, this.values.world());
 		}
 	}
 
@@ -855,6 +872,7 @@ public final class PackChain {
 
 		this.terrain.rotate();
 		this.sky.rotate();
+		this.entities.rotate();
 	}
 
 	/** Called when the client shuts down, while the device is still alive. */
@@ -1721,6 +1739,7 @@ public final class PackChain {
 
 		this.terrain.release();
 		this.sky.release();
+		this.entities.release();
 
 		if (this.block != null) {
 			this.block.close();

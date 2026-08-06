@@ -19,7 +19,7 @@ import java.util.Set;
  * <p>
  * They are kept together, and taken out of the pack's settings in one place, because a name left in
  * would be written into the head of every translated unit as {@code #define screen settings}, which
- * is a plausible identifier in somebody's GLSL. None of the eight collides with a setting any pack
+ * is a plausible identifier in somebody's GLSL. None of the nine collides with a setting any pack
  * of the corpus declares.
  * <p>
  * Every one of them answers a question the picture cannot: which passes ran, which half a target
@@ -57,7 +57,9 @@ final class EngineOptions {
 	 * one of {@code solid}, {@code cutout} and {@code translucent} for a chunk pass, two of which are
 	 * usually served by the one file and could not otherwise be told apart. The sky answers the same
 	 * way, by element rather than by file: {@code disc}, {@code dark}, {@code stars},
-	 * {@code sunrise}, {@code sun} and {@code moon}, four of the six being one file. One program,
+	 * {@code sunrise}, {@code sun} and {@code moon}, four of the six being one file. The entities
+	 * answer the same way and all of them are one file, {@code solid}, {@code cutout},
+	 * {@code cutout_cull}, {@code armor} and the rest. One program,
 	 * because the point is to read the file rather than to search it, and because what two programs
 	 * of one frame are handed differs in three values that the dump cannot show apart anyway, which
 	 * {@link PackDump#take} spells out.
@@ -108,18 +110,30 @@ final class EngineOptions {
 	private static final String SKY_KEY = "sky";
 
 	/**
-	 * All nine, for the one place that has to tell them from a setting of the pack: the log that
+	 * Draws the game's own entity geometry with the pack's own program. <strong>Off</strong>, alone
+	 * among these, and it is the convention every family still to come lands under.
+	 * <p>
+	 * What being off buys is that the work lands without waiting to be judged: it is turned on to
+	 * look at it, turned off to compare, and a defect between the two is bisected in one line of a
+	 * text file instead of a rebuild. Every other line here is on because what it names has been
+	 * looked at in the game and kept.
+	 */
+	private static final String ENTITIES_KEY = "entities";
+
+	/**
+	 * All ten, for the one place that has to tell them from a setting of the pack: the log that
 	 * says what the file forces. {@code profile} is the settings layer's own, since that is the side
-	 * that writes it back; the other eight are read here and nowhere else.
+	 * that writes it back; the other nine are read here and nowhere else.
 	 */
 	private static final Set<String> RESERVED = Set.of(SettingsFile.PROFILE_KEY, SEED_KEY,
-			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY, SKY_KEY);
+			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY, SKY_KEY,
+			ENTITIES_KEY);
 
 	private EngineOptions() {
 	}
 
 	/**
-	 * What the eight lines this class reads were set to.
+	 * What the nine lines this class reads were set to.
 	 *
 	 * @param seed       whether the game's finished frame is painted where the world would be
 	 * @param passes     what the user asked to run on top of what the pack keeps
@@ -129,13 +143,14 @@ final class EngineOptions {
 	 * @param chain      whether the composite chain and the {@code final} draw at all
 	 * @param shadow     whether the world is drawn a second time from the light
 	 * @param sky        whether the game's sky is drawn with the pack's own program
+	 * @param entities   whether the game's opaque entity geometry is drawn with the pack's own
 	 */
 	record Read(boolean seed, ChainFilter passes, boolean packsFirst, String dump, boolean terrain,
-			boolean chain, boolean shadow, boolean sky) {
+			boolean chain, boolean shadow, boolean sky, boolean entities) {
 	}
 
 	/**
-	 * Reads the eight and <strong>removes them</strong> from what is handed to the pack, which is
+	 * Reads the nine and <strong>removes them</strong> from what is handed to the pack, which is
 	 * the point: what is left is settings the pack declared.
 	 */
 	static Read take(Map<String, OptionValue> chosen) {
@@ -150,7 +165,8 @@ final class EngineOptions {
 				asked(chosen.remove(TERRAIN_KEY), TERRAIN_KEY, true),
 				asked(chosen.remove(CHAIN_KEY), CHAIN_KEY, true),
 				asked(chosen.remove(SHADOW_KEY), SHADOW_KEY, true),
-				asked(chosen.remove(SKY_KEY), SKY_KEY, true));
+				asked(chosen.remove(SKY_KEY), SKY_KEY, true),
+				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, false));
 	}
 
 	/**
@@ -175,6 +191,22 @@ final class EngineOptions {
 			Vitrail.logger().info("{} lines of {} name this engine rather than a setting of the "
 					+ "pack: {}", reserved.size(), SettingsLayers.file(gameDirectory), reserved);
 		}
+	}
+
+	/**
+	 * Said once when the entities are off, which is the default, because nothing else would say the
+	 * line exists.
+	 * <p>
+	 * The other eight are on unless somebody asks, so their line is a thing the reader wrote and
+	 * knows about. This one is the opposite: the picture with it off is the picture without this mod
+	 * having heard of entities at all, and a reader who never sees the name has no reason to look for
+	 * it.
+	 */
+	static void announceEntitiesOff(Path gameDirectory) {
+		Vitrail.logger().info("{}=off, so the game draws its own entities and the scene seed carries "
+				+ "them in, already lit and already tone mapped. Write '{}=on' in {} to have the pack "
+				+ "draw the opaque ones", ENTITIES_KEY, ENTITIES_KEY,
+				SettingsLayers.file(gameDirectory));
 	}
 
 	/** Said once when the chain is off, since nothing else on screen would say why. */
@@ -252,7 +284,7 @@ final class EngineOptions {
 			return false;
 		}
 
-		// Named, like the two readings above do it: five lines share this one, so the value on its
+		// Named, like the two readings above do it: six lines share this one, so the value on its
 		// own leaves whoever fixes the typo looking for which of the five carries it.
 		Vitrail.logger().warn("'{}={}' is neither on nor off, so this line is ignored and {} stays "
 				+ "{}", key, value.asText(), key, byDefault ? "on" : "off");

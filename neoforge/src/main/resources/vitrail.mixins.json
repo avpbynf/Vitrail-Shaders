@@ -16,6 +16,7 @@
 		"LevelRendererMixin",
 		"ProjectionMatrixBufferMixin",
 		"RenderSectionManagerAccessor",
+		"RenderTypeFeatureRendererMixin",
 		"MixinShaderChunkRenderer",
 		"SkyRendererMixin",
 		"MixinSodiumWorldRenderer",
