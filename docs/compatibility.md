@@ -28,10 +28,10 @@ game's own compiler, not by missing effort here. A pack built around voxel light
 data structures will hit this.
 
 Of the packs used for testing, Reverie is the one in that position, and it says so itself. A pack
-can declare the features it cannot be drawn without, and Reverie names four. That line is read
+can declare the features it cannot be drawn without, and Reverie declares several. That line is read
 before any of its programs is translated, so the refusal names what the pack asked for and did not
-get, rather than the symptom that would have come later - a storage block, which compiles but never
-enters a bind group, so the draw would go against nothing.
+get - the log lists them - rather than the symptom that would have come later: a storage block,
+which compiles but never enters a bind group, so the draw would go against nothing.
 
 **Any such declaration is refused, whatever it names**, and that is wider than the paragraph above:
 this engine serves no feature flag at all, so it has nothing to check a name against. It also
@@ -39,8 +39,8 @@ defines no `IRIS_FEATURE_`, which is what a pack reads to find out whether it sh
 it wrote for a renderer that has none - the declaration a pack marks optional rather than required.
 
 Iris draws Reverie. It refuses a required flag only when the name is unknown to it or the hardware
-cannot serve it, and it has built all four of the ones Reverie asks for: two outright, two wherever
-the driver supports them.
+cannot serve it, and it has built every one of the ones Reverie asks for - some outright, some
+wherever the driver supports them.
 
 **A single pass can be refused without the pack being refused.** If a program's fragment stage
 genuinely *reads* an input its vertex stage does not provide, that one program fails to link and the

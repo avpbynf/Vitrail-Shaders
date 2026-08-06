@@ -226,8 +226,8 @@ instead of producing a unit with a hole in it at load time.
 
 Two sets are kept, and they are not the same set. One holds the files on the **current path** and
 detects a cycle; the other holds everything seen and only counts re-expansions. Merging them would
-amount to include-once, which changes the text a pack produces - packs guard themselves with their
-own sentinels, and taking that job away neutralises the guards.
+amount to include-once, which the format rules out - see
+[the pack format](../pack-format.md) for what that would do to a pack's own guards.
 
 Dead branches stay in the output verbatim, but the expander also records **which lines came from a
 branch that was taken**. That bit is what a later stage needs: a translator that lifts a declaration

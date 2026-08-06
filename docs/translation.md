@@ -26,8 +26,10 @@ Every loop and every recursion whose trip count depends on pack content is bound
 is a depth limit there is a bound on **total work** beside it. Depth alone bounds nothing, and that
 is the single most important rule in the subsystem. Each part of it was learned the hard way.
 
-**There is no include-once.** A pack's include graph is a graph, not a tree, and the same file is
-legitimately re-expanded from many sites. Only the packs' own guards limit it.
+**The include graph is a graph, not a tree.** There is no include-once - see
+[the pack format](pack-format.md) for why there must not be - so the same file is legitimately
+re-expanded from many sites, and only the packs' own guards limit it. Everything below follows from
+that.
 
 **A depth bound does not bound an expander.** The work is exponential in the graph, not linear in
 the depth: a small acyclic set of files can produce an enormous expansion. The bound has to be on
