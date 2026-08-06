@@ -66,17 +66,26 @@ a builtin introduced after the version the pack targets, and the error does not 
 it complains about overload precision qualifiers. Renaming is triggered only on names the pack
 actually defines, so lengthening the reserved list costs nothing.
 
-**Depth reads are converted.** The game renders in reversed Z; packs expect the legacy convention.
-The names a pack uses to read scene depth trigger the conversion. Note that publishing a
-legacy-convention matrix does not disable reversed Z for the game's own rasterisation - the world
-keeps its depth precision, and only the copy the pack reads is converted.
+**Depth reads are converted, and not by the translator.** The game renders in reversed Z; packs
+expect the legacy convention. Nothing in the translated text is rewritten for it: the *image* the
+pack samples is converted instead, once, when the depth is taken. That is not a shortcut, it is the
+only thing that works. A lookup can only be rewritten if it can be found, and it can only be found
+by the name of its sampler - so a pack helper taking `sampler2D depth` as a parameter and called
+with a colour target on one line and a depth texture two lines below cannot be served both ways
+without writing the body twice. Converting the image makes every lookup right whatever name it was
+reached through, including the ones through a macro or a local that no rewrite could ever see. The
+translator only *counts* those lookups, and the count is what turns the blind spot into a number.
+
+Note that publishing a legacy-convention matrix does not disable reversed Z for the game's own
+rasterisation - the world keeps its depth precision, and only the copy the pack reads is converted.
 
 ## Bindings and locations are not emitted
 
 The translator emits no explicit binding or location qualifier anywhere, with one exception, because
 the game assigns bindings by SPIR-V reflection and rewrites them afterwards. Emitting them produces
-mass overlapping-location errors. Compiler options that auto-map bindings and locations change
-nothing either way - there is nothing for them to do when the emitter places nothing.
+mass overlapping-location errors. The game's compiler switches on the options that auto-bind
+uniforms and auto-map locations, and that is exactly what makes emitting nothing work: they are not
+inert here, they are what assigns what the emitter deliberately leaves unassigned.
 
 The exception is fragment outputs, which keep their explicit location, because their **order** is
 the only thing that says which write lands on which attachment.
@@ -161,8 +170,9 @@ Three rules there are easy to get wrong:
   programs in a dimension directory has exactly two programs in that dimension, and everything else
   falls back *within* that directory.
 - **The condition is the existence of the directory, not its contents.** An empty dimension
-  directory yields an empty program set rather than falling back to the base set. This happens in
-  real packs.
+  directory yields an empty program set rather than falling back to the base set, because emptying
+  a folder is the only way a pack has of saying "nothing here" and reading the base set instead
+  would overrule it. A directory that is named and *absent* does fall back.
 - **The base set is not necessarily the root.** It is the directory bound to the catch-all entry of
   the dimension mapping, and in practice most packs keep no programs at the root at all.
 
@@ -213,8 +223,10 @@ that shadows a builtin name is refused rather than resolved by precedence.
 Not every remaining failure is a translation gap, and the distinction is worth making.
 
 **Closed by the graphics API.** Compute shaders, shader storage buffers, storage images, and
-one- and three-dimensional samplers. The game's compiler accepts only two sampler dimensionalities,
-so these are hard refusals rather than effort. No amount of translation work makes them pass.
+one- and three-dimensional samplers. The game's compiler takes a sampler as two-dimensional or as a
+cube, or as a texel buffer where the pipeline declared that name as a uniform rather than as a
+sampler, and rejects every other dimensionality by name. So these are hard refusals rather than
+effort. No amount of translation work makes them pass.
 
 **Defects in the pack itself.** A conditional directive with no name is a pack bug and stays a
 failure.

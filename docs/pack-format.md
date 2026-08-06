@@ -34,18 +34,24 @@ declared in `dimension.properties`, or a direct subdirectory matching the conven
 shape. Packs do declare arbitrary dimension names through that file, and those folders are simply
 lost if it is not read.
 
-Entry points are then filtered by three cumulative rules: directories named for shared code are
-excluded outright; the directory must be a dimension directory; and the base name must be a program
-name. Both of the later filters catch real cases - shared bodies parked in a subfolder carry
+What makes a file an entry point is its **extension** and nothing else: a shared body is a `.glsl`,
+and it never reaches the question of where it sits. No directory is excluded by name, here or in the
+reference - a folder called `lib` is not special, its contents are simply not entry points.
+
+What is left is then filtered twice: the directory has to be a dimension directory, and the base
+name has to be a program name. Both catch real cases - shared bodies parked in a subfolder carry
 perfectly valid program names, and shared bodies parked inside a dimension folder carry names
 outside the list. Whatever is rejected is named in the log rather than dropped silently.
 
 A program name is one of a closed list of geometry names, a numbered family where the unnumbered
-spelling means slot zero, or one of a small set of unnumbered names, plus an optional single-letter
-suffix. Two details bite implementers: **slot indices are sparse and reach well past the historical
-bound**, so anything that loops from zero to the first empty slot drops real programs; and compute
-programs sharing a slot are distinguished by that letter suffix and run in its alphabetical order,
-the unsuffixed one first.
+spelling means slot zero, or one of a small set of unnumbered names. One detail bites implementers:
+**slot indices are sparse and reach well past the historical bound**, so anything that loops from
+zero to the first empty slot drops real programs.
+
+A compute program hangs a single-letter suffix off a name that has to be valid without it, and the
+suffix is recognised on the numbered families and on two of the unnumbered names - not on the
+geometry names. Vitrail reads those files, names them in the log and runs none of them, so what
+their order would be is the reference's business and not this engine's yet.
 
 Stages are never paired or cross-checked. A compute program and a fragment program with the same
 slot name coexist as independent entries, which is a real case.
@@ -74,7 +80,9 @@ intermediate programs and get their terrain through several levels of it.
 The numbered families and the final pass have **no fallback at all**. A missing slot is empty, and
 nothing is drawn there.
 
-Resolution carries a visited set, so a mis-edited table fails rather than loops.
+Resolution stops at a name it has already walked, so a mis-edited table cannot loop. It does not
+report anything either: the chain simply ends, and the program comes out unserved exactly as if it
+had no parent.
 
 ## shaders.properties
 
@@ -82,13 +90,16 @@ Only `=` separates a key from its value, and **there is no end-of-line comment**
 the first `=` is the value.
 
 Backslash continuations are joined before the file is split into lines, and the joining rule
-swallows the following line's leading whitespace across blank lines - which a stock properties
-reader does not do. Real packs depend on it, so a stock reader produces a different screen
-definition from the same file.
+swallows the following line's indentation - but never a blank line. That boundary is the whole of
+the rule and it is not a detail: widening it to "any whitespace" makes a continued key absorb
+whatever block follows it, and packs do end continuations on a blank line. One pack's main screen
+swallowed the commented-out block underneath when the rule was written the other way.
 
-The recognised families cover profiles, per-program enable flags, custom uniform and variable
-declarations, the settings screen and its pages, blending, alpha test, and sliders. Patterns are
-anchored and tried in a fixed order, first match wins.
+The recognised families include profiles, per-program enable flags, custom uniform and variable
+declarations, the settings screen and its pages, blending, alpha test and sliders, and also the
+buffer sizes, the sky toggles, the noise and custom texture keys, the images and the per-program
+flip directives described further down. Patterns are anchored and tried in a fixed order, first
+match wins.
 
 Two rules are worth calling out:
 
@@ -97,10 +108,12 @@ same condition stack and evaluator as the GLSL, because packs disable whole prog
 conditionals in this file. Read it flat and you report programs as active that the pack switches
 off.
 
-**A program toggle is looked up first as dimension-qualified, then bare**, with the dimension key
-being the relative folder path exactly as written. Deriving that key by substituting characters in
-the folder name makes every dimension-qualified key of packs with unusual dimension names miss,
-silently.
+**A program toggle is looked up under one key and one only**: the relative folder path exactly as
+written, with no fallback to the bare name. The fallback would look harmless and is not - one pack
+conditions `world0/composite1` and `world-1/composite1` on two different expressions, so reading the
+bare key when the qualified one is absent would run in the Nether a pass the pack switched off
+there. Deriving that key by substituting characters in the folder name misses instead, silently, on
+every pack with an unusual dimension name.
 
 Both an empty value and a non-evaluable expression mean enabled: this file is read fail-open.
 
@@ -130,9 +143,12 @@ the result of any conditional that sits before the original declaration.
 
 Only names the pack declares nowhere are emitted as header defines. The rewrite rules are
 asymmetric on purpose - a true boolean uncomments the define, a false boolean comments it out, a
-value rewrites the define's value, a boolean on a constant leaves the line untouched, and a value on
-a constant rewrites only its right-hand side. Indentation and the trailing value-list comment are
-preserved.
+value rewrites the define's value, and a value on a constant rewrites only its right-hand side. A
+boolean lands on a constant in one of two ways: on a `const bool` it is written out as `true` or
+`false`, since a constant is read as an expression rather than tested for existence and commenting
+the line out would leave the name undeclared; on a constant holding a number it is ignored and the
+line is left exactly as it was, a switch having nothing to say about a number. Indentation and the
+trailing value-list comment are preserved.
 
 ### Two define tables, deliberately different
 
@@ -141,9 +157,11 @@ every non-constant uncommented setting, and the variant overrides. The per-unit 
 engine's defines and only those overrides the pack never declares - the pack's own defaults enter
 as expansion walks over its define lines, like a real preprocessor.
 
-Unifying them is a mistake, and there is a known consequence of the split: **configuration
-constants are never injected as defines**, so a condition in `shaders.properties` that tests a
-constant name - a shadow resolution, a sun path rotation - resolves that name to zero.
+Unifying them is a mistake, and the asymmetry is the whole point: the properties table has to be
+complete before its first line is read, because that file may test any setting, while a source file
+has to meet the pack's own defaults where the pack wrote them. Constants are settings like any
+other and are in both tables under their declared value - the split is about *when* a default
+arrives, never about which kind of setting it is.
 
 ### Profiles
 
@@ -153,15 +171,20 @@ one winning, and each profile is an independent variant - there is no running "c
 accumulating across them.
 
 The profile shown to the user is **deduced, not stored**: it is the first profile, from most
-constrained to least, whose values all match the ones in force, and Custom otherwise. That is what
-makes a reset land back on a named profile rather than an empty field, since the pack's own defaults
-do constitute a profile.
+constrained to least, whose values all match the ones in force, and Custom otherwise. No profile is
+synthesised from the pack's own defaults, here or in the reference, so a reset lands on a named
+profile only when the pack happens to declare one holding those defaults, and shows Custom the rest
+of the time.
 
 Selecting a profile stages its values rather than applying them, which is what gives the Apply
 button something to do.
 
-The screen itself is described by the pack: a root screen key and per-page keys, whose tokens are
-filtered down to plain identifiers. A name exposed on a screen may be declared nowhere in the pack,
+The screen itself is described by the pack: a root screen key and per-page keys, and a screen is
+built from **every** token those keys carry, not from the identifiers alone. A blank is layout and
+there are hundreds of them in the corpus; a link opens another page; one token selects a profile;
+and what is left over still has to land somewhere. Reading only the identifiers drops a third of
+what the pack wrote and takes the shape of the screen with it. A name exposed on a screen may be
+declared nowhere in the pack,
 so the screen has to tolerate an orphan name - neither crash on it nor fabricate a setting for it.
 
 ## Assembling a program's source
@@ -184,8 +207,10 @@ change the produced text. Cycle protection is therefore on the current inclusion
 a global set.
 
 **Dead branches are not eliminated.** Conditional evaluation only decides which files to open;
-inactive lines are re-emitted verbatim, because the compiler will re-evaluate the same conditions
-on the final text anyway.
+inactive lines are re-emitted as they stand, because the compiler will re-evaluate the same
+conditions on the final text anyway. One line is the exception and it has to be: an `#include` on a
+branch that is off becomes a comment naming what was not pulled in, since leaving it would open the
+file after all. The line count is preserved either way, which is what the numbering below rests on.
 
 **A non-evaluable condition is taken as true**, and counted. The asymmetry is deliberate: including
 too much is recoverable, while a skipped include produces an avalanche of undeclared identifiers

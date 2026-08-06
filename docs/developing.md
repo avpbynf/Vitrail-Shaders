@@ -77,8 +77,12 @@ pipeline: a name the pack declares, a builtin the pack never declares and the tr
 itself, and a legacy transform helper that expands into a matrix product and needs a position
 without ever naming one. Only the translated text has all three.
 
-**Every tool exits non-zero on the first broken invariant.** A tool that only prints is not a check
-yet.
+**A tool that asserts exits non-zero on the first broken invariant; a tool that only prints is not a
+check yet.** Both kinds live here, and telling them apart is the reader's job before quoting either:
+one is a gate, the other is a reading. Several of the measuring tools - the ones that report how much
+of the corpus translates, or what each target resolves to - never fail at all by design, because
+what they produce is a number to compare against the last one rather than a yes or a no. Running one
+of those and seeing no error means nothing was asserted, not that everything held.
 
 **Every invariant has a negative control, and the control ships with it.** Two exist as flags, each
 documented as *must exit non-zero*, with the packs they are expected to break on named. Run them:
@@ -104,12 +108,14 @@ while the check is still green.
 build script, so it is systematic for anyone who clones. See CONTRIBUTING for the list; what
 follows is why each gate exists.
 
-**Compiler warnings, minus three categories.** Deprecation is off because the game and the loader
-deprecate faster than a mod can follow, and the noise would bury everything else. The class-file
-category is off because every occurrence comes from an annotation missing from a dependency's own
-jar. The serialisation category is off because it asks for a serial id on exceptions nothing
-serialises. Note the shape of those arguments: a category is excluded when its findings *cannot be
-about this code*. "There are a lot of them" is not an argument.
+**Compiler warnings, minus four categories.** Deprecation is off because the game and the loader
+deprecate faster than a mod can follow, and the noise would bury everything else. The annotation
+processing category is off because it reports which processor claimed what, which is a property of
+how this build is wired and not of anything written here. The class-file category is off because
+every occurrence comes from an annotation missing from a dependency's own jar. The serialisation
+category is off because it asks for a serial id on exceptions nothing serialises. Note the shape of
+those arguments: a category is excluded when its findings *cannot be about this code*. "There are a
+lot of them" is not an argument.
 
 **Javadoc reference and tag linting, as errors.** This matters more here than in most projects
 because the documentation carries the design: a reference that stops resolving is a piece of the
@@ -121,6 +127,12 @@ same file. These are not cosmetic categories. They are rotten-documentation dete
 **Static analysis, contributing only the checks it rates as errors** - the part of the catalogue
 meant to be a bug rather than a preference. Its warnings are worth reading and not worth blocking
 on, so a build flag prints them and lets the build through.
+
+**That flag disarms everything, not just the analyser.** Asking for the report drops `-Werror`, so
+the compiler categories above and the javadoc linting below stop failing too: a run under it is a
+listing and not a check, and a green one says nothing about whether an ordinary build passes. The
+build prints that itself whenever the flag is on, rather than leaving it to be remembered from
+here.
 
 **A text check**, for the two things no compiler sees: a byte order mark, which reaches a GLSL
 compiler as a stray character in front of the version directive; and typographic punctuation where

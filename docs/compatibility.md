@@ -116,18 +116,6 @@ Two consequences follow, and both are worth recognising rather than reporting as
 The engine states at startup which families go through the pack and which still come from the game.
 That line is the authority; this page does not duplicate it.
 
-## Sun and shadows disagree
-
-**The visible sun is in one place and the shadows point somewhere else, by a constant angle.**
-
-Packs offer a setting that tilts the sun's path, and several ship it non-zero by default - BSL and
-Body Camera both do. The pack computes its own light direction from that setting immediately, so
-the lighting tilts. The game's celestial bodies know nothing about it, so they do not move.
-
-The disagreement closes when the sun and moon are drawn through the pack's own textured sky program
-rather than by the game. It affects the sun exactly as much as the moon; it just gets noticed at
-night.
-
 ## The sky goes flat
 
 **A flat grey or white sheet across the sky, typically at sunrise or sunset.**

@@ -83,7 +83,10 @@ case rather than an exotic one.
 
 They are not an implementation detail, because a pack can legitimately read a target nothing has
 written yet. The first colour target clears to the fog colour with alpha forced to one, the second
-clears to **opaque white**, and the rest to transparent black.
+clears to **opaque white**, and the rest to transparent black - except a target whose format gained
+an alpha channel on its way to the device, which clears to opaque black instead, since in OpenGL
+the three-channel texture the pack wrote against always sampled as an alpha of one. All of that is
+the default: a pack that names a clear colour of its own is handed exactly what it named.
 
 That second one is worth remembering: a pack whose final pass reads the second target renders a
 white screen when nothing has written it. That is a prediction you can make in advance, not an

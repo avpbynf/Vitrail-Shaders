@@ -208,17 +208,22 @@ no answer, and the game keeps its own sky - a normal case, not a failure.
 Because the sky is drawn before the world, the sky stage is what opens the frame once it starts
 drawing. The terrain no longer does.
 
-### Why celestial bodies and lighting can disagree
+### The sun's path is tilted for the bodies as well as for the light
 
 Packs offer a setting that rotates the sun's path. It inclines the pack's *lighting* immediately,
-because the pack computes its own light direction from it. It does not move the game's celestial
-bodies, because the game knows nothing about it.
+because the pack computes its own light direction from it, and the game's celestial bodies know
+nothing about it - so left alone, the visible sun and the direction of the shadows would disagree by
+exactly that angle, for the sun as much as for the moon.
 
-So until the bodies are drawn by the pack's own programs, the visible sun and the direction of the
-shadows disagree by exactly that angle. This affects the sun as much as the moon - it tends to get
-reported at night only. Sun and moon are the same pass to a buffer's difference: same pipeline,
-same vertex format, same sampler, so both follow the pack's rotation as soon as the textured sky
-program draws them.
+They do not, because the rotation is pushed onto the celestial pose itself. The place matters and is
+not interchangeable with any other: it goes in where the three bodies still share one matrix, after
+the game has turned the celestial space and before it turns for the hour, so it tilts the whole
+*path* rather than the body of a given moment. Drawing the bodies through a pack program would not
+have fixed this on its own - the tilt is not something a shader can put back, since it changes where
+the geometry goes.
+
+The shadow matrices carry the same angle, but on their own axis, in the light's space. The two
+rotations look alike written down and are not the same operation.
 
 ## The horizon gap
 
