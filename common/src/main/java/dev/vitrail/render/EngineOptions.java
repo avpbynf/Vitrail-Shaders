@@ -138,16 +138,18 @@ final class EngineOptions {
 	 * the point: what is left is settings the pack declared.
 	 */
 	static Read take(Map<String, OptionValue> chosen) {
-		OptionValue seed = chosen.remove(SEED_KEY);
-
-		return new Read(seed == null || !seed.isBoolean() || seed.asBoolean(),
+		// The seed goes through the same reading as the other four rather than keeping one of its
+		// own. It had one, and it was the only line here that took an unreadable word in silence:
+		// seed=0 left the seed drawing, and an experiment run to see the clears on their own would
+		// have concluded from a picture the seed had painted.
+		return new Read(asked(chosen.remove(SEED_KEY), SEED_KEY, true),
 				filterOf(chosen.remove(PASSES_KEY)),
 				packsFirst(chosen.remove(SCREEN_KEY)),
 				named(chosen.remove(DUMP_KEY)),
-				asked(chosen.remove(TERRAIN_KEY), true),
-				asked(chosen.remove(CHAIN_KEY), true),
-				asked(chosen.remove(SHADOW_KEY), true),
-				asked(chosen.remove(SKY_KEY), true));
+				asked(chosen.remove(TERRAIN_KEY), TERRAIN_KEY, true),
+				asked(chosen.remove(CHAIN_KEY), CHAIN_KEY, true),
+				asked(chosen.remove(SHADOW_KEY), SHADOW_KEY, true),
+				asked(chosen.remove(SKY_KEY), SKY_KEY, true));
 	}
 
 	/**
@@ -231,7 +233,7 @@ final class EngineOptions {
 	 * A reserved line read as a yes or a no. A word that is neither keeps the default and says so,
 	 * rather than being taken for the answer nobody wrote.
 	 */
-	private static boolean asked(OptionValue value, boolean byDefault) {
+	private static boolean asked(OptionValue value, String key, boolean byDefault) {
 		if (value == null) {
 			return byDefault;
 		}
@@ -249,7 +251,10 @@ final class EngineOptions {
 			return false;
 		}
 
-		Vitrail.logger().warn("'{}' is neither on nor off, so this line is ignored", value.asText());
+		// Named, like the two readings above do it: five lines share this one, so the value on its
+		// own leaves whoever fixes the typo looking for which of the five carries it.
+		Vitrail.logger().warn("'{}={}' is neither on nor off, so this line is ignored and {} stays "
+				+ "{}", key, value.asText(), key, byDefault ? "on" : "off");
 
 		return byDefault;
 	}
