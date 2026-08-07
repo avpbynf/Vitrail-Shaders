@@ -7,6 +7,7 @@ import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.source.PackLoader;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -32,7 +33,8 @@ import java.util.Map;
  * <p>
  * Read and written in ISO-8859-1, which is what OptiFine specifies for these files and what Iris
  * does on both sides. Strict UTF-8 threw on any byte past 0x7F, and the file is no longer ours
- * alone to keep in ASCII.
+ * alone to keep in ASCII. The one exception is the file {@link #migrate} carries over, read as the
+ * UTF-8 this engine wrote it in.
  * <p>
  * A name the pack no longer declares is kept and reported once. Dropping it, which is what Iris
  * does, loses a player's settings for good when they try a new version of a pack and go back.
@@ -110,12 +112,12 @@ public final class SettingsFile {
 	 *             one defaults to, and what a profile names, and all three are needed: the old file
 	 *             held a toggle as {@code on}, which Iris reads as no value at all
 	 */
-	public static Carry migrate(Path gameDirectory, String packFileName, PackMenu menu)
+	public static Carried migrate(Path gameDirectory, String packFileName, PackMenu menu)
 			throws IOException {
 		Path shared = of(gameDirectory, packFileName);
 		Path legacy = legacy(gameDirectory, packFileName);
 		if (Files.isRegularFile(shared) || !Files.isRegularFile(legacy)) {
-			return Carry.NOTHING;
+			return new Carried(Carry.NOTHING, "", null);
 		}
 
 		// In UTF-8 and not in the format's own encoding, because this file was written by this
@@ -137,7 +139,7 @@ public final class SettingsFile {
 		// of what the player chose and rename the only copy away, so nothing is touched at all and
 		// the caller says so.
 		if (!profile.isEmpty() && !menu.profileNames().contains(profile)) {
-			return Carry.UNKNOWN_PROFILE;
+			return new Carried(Carry.UNKNOWN_PROFILE, profile, legacy);
 		}
 
 		// The profile first and the file's own values over it, which is the order the old writer
@@ -149,7 +151,8 @@ public final class SettingsFile {
 		merged.forEach((name, value) -> {
 			// What a profile names is usually what the pack already defaults to, and this file is
 			// only ever the difference. Writing the whole profile out would be a fatter file than
-			// either engine writes and a count that says twenty settings moved when none did.
+			// either engine writes and a count that says eight settings moved when none did, BSL's HIGH
+			// being eight values that are all the pack's own defaults.
 			// Through asText on both sides, because the two spellings of a boolean have to compare
 			// equal here: the pack's default is held as the menu holds it and the old file wrote
 			// whichever of on and true the screen had at the time.
@@ -161,13 +164,35 @@ public final class SettingsFile {
 		});
 
 		write(shared, new Stored(written));
-		Files.move(legacy, legacy.resolveSibling(legacy.getFileName() + MIGRATED),
-				StandardCopyOption.REPLACE_EXISTING);
 
-		return Carry.MOVED;
+		// The rename comes second and its failure is NOT a failure of the carry-over, which is why
+		// it is caught here rather than left to the caller. The values are in the shared file by
+		// now, so the guard at the head of this method will never look at the old one again: what a
+		// refused rename leaves behind is a file nothing reads, and answering FAILED would say the
+		// opposite of what happened while the pack draws from the values it moved.
+		try {
+			Files.move(legacy, legacy.resolveSibling(legacy.getFileName() + MIGRATED),
+					StandardCopyOption.REPLACE_EXISTING);
+		} catch (IOException e) {
+			return new Carried(Carry.MOVED, profile, legacy);
+		}
+
+		return new Carried(Carry.MOVED, profile, null);
 	}
 
-	/** What {@link #migrate} did, which the caller reports and nothing else acts on. */
+	/**
+	 * What {@link #migrate} did, which the caller reports and nothing else acts on.
+	 *
+	 * @param profile the profile the old file named, for the one answer that has to name it. Empty
+	 *                where it named none
+	 * @param stranded the old file when it could not be renamed out of the way, and null otherwise.
+	 *                 It is then a file nothing reads any more, the shared one existing, but a
+	 *                 reader who finds it deserves to be told it was left rather than forgotten
+	 */
+	public record Carried(Carry carry, String profile, Path stranded) {
+	}
+
+	/** @see Carried */
 	public enum Carry {
 
 		/** No old file, or a shared one already there. The ordinary case, and silent. */
@@ -179,11 +204,11 @@ public final class SettingsFile {
 		/**
 		 * The old file names a profile this version of the pack does not declare, so what it holds
 		 * cannot be completed. Nothing was written and nothing was renamed; the player still has
-		 * their file, and the log says which profile is missing.
+		 * their file, and the caller names the missing profile out of {@link Carried#profile}.
 		 */
 		UNKNOWN_PROFILE,
 
-		/** The move could not be made at all. The old file is untouched and will be tried again. */
+		/** Nothing could be read or written at all. The old file is untouched and tried again. */
 		FAILED
 	}
 
@@ -206,15 +231,22 @@ public final class SettingsFile {
 		return new Stored(values);
 	}
 
-	/** Every {@code NAME=value} of a file, in order, with nothing taken out. */
-	private static Map<String, String> lines(Path file, java.nio.charset.Charset charset)
-			throws IOException {
+	/**
+	 * Every {@code NAME=value} of a file, in order, with nothing taken out.
+	 * <p>
+	 * Decoded through the {@code String} constructor rather than through {@code readAllLines},
+	 * because that one THROWS on a byte the charset cannot make sense of and this one replaces it.
+	 * A file the player edited in another editor must not be able to take a pack down, and neither
+	 * must one this engine wrote in another encoding years ago: what is unreadable is one value, and
+	 * a lost value is what pressing Apply fixes.
+	 */
+	private static Map<String, String> lines(Path file, Charset charset) throws IOException {
 		if (!Files.isRegularFile(file)) {
 			return Map.of();
 		}
 
 		Map<String, String> values = new LinkedHashMap<>();
-		for (String line : Files.readAllLines(file, charset)) {
+		for (String line : new String(Files.readAllBytes(file), charset).split("\\R")) {
 			String trimmed = line.trim();
 			int equals = trimmed.indexOf('=');
 			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {
@@ -230,6 +262,11 @@ public final class SettingsFile {
 	/**
 	 * Through a temporary and an {@code ATOMIC_MOVE} in the same folder, so a crash cannot
 	 * truncate it.
+	 * <p>
+	 * Encoded through {@code String.getBytes}, which REPLACES a character this charset has no byte
+	 * for, where {@code Files.write} of a list of lines throws on one. The carry-over reads the old
+	 * file as UTF-8 and writes here as the format wants, so the two charsets do not agree on
+	 * everything, and a value nobody can spell must not be able to fail a load for ever.
 	 */
 	public static void write(Path file, Stored stored) throws IOException {
 		Path directory = file.getParent();
@@ -241,7 +278,8 @@ public final class SettingsFile {
 		stored.values().forEach((name, value) -> lines.add(name + "=" + value));
 
 		Path temporary = file.resolveSibling(file.getFileName() + ".part");
-		Files.write(temporary, lines, StandardCharsets.ISO_8859_1);
+		Files.write(temporary,
+				String.join("\n", lines).concat("\n").getBytes(StandardCharsets.ISO_8859_1));
 		try {
 			Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING,
 					StandardCopyOption.ATOMIC_MOVE);

@@ -92,10 +92,12 @@ and renamed to `.txt.migrated` on the spot. Nothing is asked of you, and a profi
 you had chosen comes over too: the old file stored only what differed from it, so
 the profile is turned back into the values it names on the way.
 
-One shape of old file cannot be carried over: one naming a profile that the pack no
-longer declares, because what it stored is only the difference from a set of values
-nothing can rebuild. Nothing is moved or renamed in that case, the log says which
-profile is missing, and your file stays where it is.
+Two cases leave your old file exactly where it is, both named in the log. One is a
+file naming a profile the pack no longer declares, because what it stored is only
+the difference from a set of values nothing can rebuild; the log gives the profile
+name. The other is a file that could not be read or written at all, usually a folder
+this game cannot write to. Neither loses anything, and both are tried again at the
+next load.
 
 None of these files has to exist, and without them nothing is drawn: a pack is
 loaded once one is picked, in the screen or in `pack.txt`, and never before.

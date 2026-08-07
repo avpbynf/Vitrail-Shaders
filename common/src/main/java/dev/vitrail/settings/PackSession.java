@@ -27,7 +27,7 @@ import java.util.Map;
  *                screen were somewhere else a moment ago
  */
 public record PackSession(Path gameDirectory, Path packPath, String packFileName, PackMenu menu,
-		SettingsFile.Carry carried, SettingsFile.Stored saved, Map<String, OptionValue> forced) {
+		SettingsFile.Carried carried, SettingsFile.Stored saved, Map<String, OptionValue> forced) {
 
 	public static PackSession read(Path gameDirectory, Path packPath, String languageCode)
 			throws IOException {
@@ -44,13 +44,13 @@ public record PackSession(Path gameDirectory, Path packPath, String packFileName
 		// and the old file waits for the next load.
 		//
 		// Swallowed rather than reported, and the caller says it instead: nothing in this package
-		// nor in pack/ names a Minecraft API, which is what lets both be compiled and run against
+		// nor in pack/ IMPORTS a Minecraft API, which is what lets both be compiled and run against
 		// the corpus without starting the game. One logger would end that.
-		SettingsFile.Carry carried;
+		SettingsFile.Carried carried;
 		try {
 			carried = SettingsFile.migrate(gameDirectory, packFileName, menu);
 		} catch (IOException e) {
-			carried = SettingsFile.Carry.FAILED;
+			carried = new SettingsFile.Carried(SettingsFile.Carry.FAILED, "", SettingsFile.legacy(gameDirectory, packFileName));
 		}
 
 		return new PackSession(gameDirectory, packPath, packFileName, menu, carried,

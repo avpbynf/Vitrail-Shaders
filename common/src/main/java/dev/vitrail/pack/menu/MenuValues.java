@@ -371,9 +371,17 @@ public final class MenuValues {
 	 * widget wants, and writing them as they stand would lose every toggle it moved.
 	 */
 	public static String written(PackMenu menu, String name, String value) {
-		return menu.option(name).filter(option -> option.form() == MenuOption.Form.TOGGLE).isPresent()
-				? Boolean.toString(OptionValue.parse(value).asBoolean())
-				: value;
+		// A value that is not one of the four words is copied rather than turned into false, which
+		// is what asBoolean would silently make of it. It happens where a new version of a pack
+		// turns a cycle into a toggle: the old value means nothing to either engine, and both then
+		// fall back on the pack's own default, where writing false would be an explicit OFF nobody
+		// chose.
+		OptionValue parsed = OptionValue.parse(value);
+
+		return parsed.isBoolean()
+				&& menu.option(name).filter(option -> option.form() == MenuOption.Form.TOGGLE).isPresent()
+						? Boolean.toString(parsed.asBoolean())
+						: value;
 	}
 
 	private boolean toggle(String name) {
