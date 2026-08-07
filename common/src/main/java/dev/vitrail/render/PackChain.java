@@ -596,9 +596,11 @@ public final class PackChain {
 		// because a profile chosen before the move comes back as the values it named rather than as
 		// its name.
 		if (opened.migrated()) {
-			Vitrail.logger().info("Moved this pack's settings into {}, which is the file Iris reads"
-					+ " too. They were in {}, which this engine kept before, and that file is now"
-					+ " renamed aside", opened.settingsFile(),
+			Vitrail.logger().info("Moved {} of this pack's settings into {}, which is the file Iris"
+					+ " reads too. They were in {}, which this engine kept before, and that file is"
+					+ " now renamed aside. A profile chosen back then counts here as the values it"
+					+ " names, the old file having stored only what differed from it",
+					opened.saved().values().size(), opened.settingsFile(),
 					SettingsFile.legacy(gameDirectory, opened.packFileName()));
 		}
 
