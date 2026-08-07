@@ -21,28 +21,29 @@ import java.util.Map;
  * had pending back on top of it. That is why this is read again on every load and why it is
  * cheap to: twenty five to eighty eight milliseconds on the corpus, against the half second the
  * translation costs.
+ *
+ * @param readFrom where {@code saved} was really read, which is {@link #settingsFile()} except on
+ *                 the first load after the settings moved: a player who had applied anything before
+ *                 the move has it in the file this engine used to keep, and nowhere else. Captured
+ *                 at the reading rather than worked out again later, so that the answer cannot
+ *                 change under a caller once the shared file has been written
  */
 public record PackSession(Path gameDirectory, Path packPath, String packFileName, PackMenu menu,
-		SettingsFile.Stored saved, Map<String, OptionValue> forced) {
+		Path readFrom, SettingsFile.Stored saved, Map<String, OptionValue> forced) {
 
 	public static PackSession read(Path gameDirectory, Path packPath, String languageCode)
 			throws IOException {
 		String packFileName = packPath.getFileName().toString();
+		Path readFrom = SettingsFile.sourceOf(gameDirectory, packFileName);
 
 		return new PackSession(gameDirectory, packPath, packFileName,
-				PackMenu.read(packPath, languageCode),
-				SettingsFile.read(SettingsFile.of(gameDirectory, packFileName)),
+				PackMenu.read(packPath, languageCode), readFrom, SettingsFile.read(readFrom),
 				SettingsLayers.forced(gameDirectory));
 	}
 
 	/** Where the screen writes, which is where Iris reads: one file per pack, shared by both. */
 	public Path settingsFile() {
 		return SettingsFile.of(this.gameDirectory, this.packFileName);
-	}
-
-	/** What was read, which is {@link #settingsFile()}: there is one home and no fallback. */
-	public Path readFrom() {
-		return settingsFile();
 	}
 
 	/** The pack's own file with {@code options.txt} over it, ready to build the pack with. */

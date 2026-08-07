@@ -18,9 +18,12 @@ import java.util.Map;
  * One pack's settings file, {@code shaderpacks/<pack file name>.txt}.
  * <p>
  * That is the path Iris resolves and the only one it reads, so the two engines share one file per
- * pack: a setting changed on either side is the setting the other reads next. A file of our own
- * somewhere else was read once as a fallback and never written back, which meant nothing ever
- * travelled from here to Iris and nothing travelled the other way after the first Apply.
+ * pack: a setting changed on either side is the setting the other reads next. This engine kept a
+ * file of its own until then, which it read once as a fallback and never wrote back, so nothing
+ * ever travelled from here to Iris and nothing travelled the other way after the first Apply.
+ * <p>
+ * <strong>That old file is still read, and {@link #legacy} says why.</strong> It holds everything a
+ * player applied before the move, and it is the only place holding it.
  * <p>
  * Read and written in ISO-8859-1, which is what OptiFine specifies for these files and what Iris
  * does on both sides. Strict UTF-8 threw on any byte past 0x7F, and the file is no longer ours
@@ -34,6 +37,10 @@ import java.util.Map;
 public final class SettingsFile {
 
 	private static final String SUFFIX = ".txt";
+
+	/** The two folders this engine kept its own settings under, before the move. See {@link #legacy}. */
+	private static final String LEGACY_DIRECTORY = "vitrail";
+	private static final String LEGACY_SETTINGS = "settings";
 
 	/**
 	 * The one line of {@code vitrail/options.txt} that names a whole set of settings rather than one
@@ -58,8 +65,41 @@ public final class SettingsFile {
 	}
 
 	/**
+	 * Where this engine kept a pack's settings before they moved to the file Iris reads.
+	 * <p>
+	 * Still read, never written. A player who had applied anything through the screen has their
+	 * values here and nowhere else, and the move would otherwise hand every one of those packs back
+	 * its own defaults without a word.
+	 */
+	public static Path legacy(Path gameDirectory, String packFileName) {
+		return gameDirectory.resolve(LEGACY_DIRECTORY).resolve(LEGACY_SETTINGS)
+				.resolve(packFileName + SUFFIX);
+	}
+
+	/**
+	 * Which of the two files this pack's settings really come from: the shared one, or the one this
+	 * engine used to keep when the shared one does not exist yet.
+	 * <p>
+	 * The shared file wins whenever it exists, even empty: it is the one both engines write, so a
+	 * player who has applied anything since the move has said what they want there.
+	 */
+	public static Path sourceOf(Path gameDirectory, String packFileName) {
+		Path shared = of(gameDirectory, packFileName);
+		Path legacy = legacy(gameDirectory, packFileName);
+
+		return Files.isRegularFile(shared) || !Files.isRegularFile(legacy) ? shared : legacy;
+	}
+
+	/**
 	 * A missing file reads as an empty one. Comments and blank lines are skipped, which is what
 	 * lets a file written by Iris, whose first line is the date it wrote it, be read as is.
+	 * <p>
+	 * {@link #PROFILE_KEY} is dropped wherever it is found, and that is not tidiness. Nothing writes
+	 * it any more, but the files this engine wrote before the move carry it, and a hand copy into
+	 * the shared file is the obvious thing to do with them. Kept, it would stop being the name of a
+	 * set of values and become a value: {@code SettingSet.headerDefines} writes every name of this
+	 * file into the head of each compiled unit, so the pack would be built with
+	 * {@code #define profile ULTRA} and a name it never declared.
 	 */
 	public static Stored read(Path file) throws IOException {
 		if (!Files.isRegularFile(file)) {
@@ -74,7 +114,10 @@ public final class SettingsFile {
 				continue;
 			}
 
-			values.put(trimmed.substring(0, equals).trim(), trimmed.substring(equals + 1).trim());
+			String name = trimmed.substring(0, equals).trim();
+			if (!name.equals(PROFILE_KEY)) {
+				values.put(name, trimmed.substring(equals + 1).trim());
+			}
 		}
 
 		return new Stored(values);

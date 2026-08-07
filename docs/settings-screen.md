@@ -127,7 +127,12 @@ Sharing it is what puts the constraints on how it is written. A boolean is writt
 `false`, because the reference's reader takes literally nothing else and falls back to the pack's
 default on anything it does not recognise. A chosen profile is written as the values it names, one
 per line, because the reference has no key for a profile name at all: writing the name alone would
-hand it a file carrying none of the twenty one settings a profile like BSL's ULTRA decides.
+hand it a file carrying none of the eight settings a profile like BSL's ULTRA decides.
+
+A file this engine wrote before the settings moved is still read, once, from where it used to live.
+The values come back and the next Apply writes them to the shared file; the old one then stops being
+read. The line naming a profile that those files carry is dropped on the way, a profile being the
+name of a set of values rather than a value of its own.
 
 **A name a pack no longer declares is kept, not dropped.** It is reported once and left in the file.
 The reference deletes such names, which loses a player's settings for good the day they try a new

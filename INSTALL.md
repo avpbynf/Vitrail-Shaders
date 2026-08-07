@@ -86,6 +86,11 @@ the pack, in `shaderpacks/<pack file name>.txt`, which is the file Iris reads an
 writes for the same pack: one file per pack, shared, so settings follow you from
 one engine to the other.
 
+Earlier versions kept those settings in `vitrail/settings/` instead. That folder is
+still read, once per pack, when the shared file does not exist yet: your settings
+come back, the next Apply writes them beside the pack, and the old folder stops
+being read. You can delete it once every pack you use has been applied again.
+
 None of these files has to exist, and without them nothing is drawn: a pack is
 loaded once one is picked, in the screen or in `pack.txt`, and never before.
 What is picked is then drawn whole. `options.txt` is there to take a stage back

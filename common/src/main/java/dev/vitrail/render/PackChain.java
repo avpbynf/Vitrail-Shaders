@@ -557,8 +557,8 @@ public final class PackChain {
 	}
 
 	/**
-	 * Everything a pack is configured by, read in one go: its own file under
-	 * {@code vitrail/settings/}, then {@code vitrail/options.txt} forced over it.
+	 * Everything a pack is configured by, read in one go: its own file in {@code shaderpacks/},
+	 * which is the one Iris reads, then {@code vitrail/options.txt} forced over it.
 	 * <p>
 	 * The reading is published as a {@link PackSession} before anything is translated. A screen can
 	 * then be opened on a pack whose GLSL does not compile and used to repair it, and what that
@@ -590,9 +590,13 @@ public final class PackChain {
 					+ " blank or greyed: {}", unshown.size(), unshown);
 		}
 
+		// Only on the first load after the settings moved, and it is worth a line: what the player
+		// applied before the move lives in the old file alone, and nothing else would say that the
+		// values on screen come from somewhere the next Apply will stop reading.
 		if (!opened.readFrom().equals(opened.settingsFile())) {
-			Vitrail.logger().info("Reading the settings Iris left for this pack in {}, which is read"
-					+ " and never written back", opened.readFrom());
+			Vitrail.logger().info("Reading this pack's settings from {}, where this engine used to keep"
+					+ " them. The next Apply writes them to {}, which is the file Iris reads too, and"
+					+ " the old one stops being read", opened.readFrom(), opened.settingsFile());
 		}
 
 		List<String> stale = opened.stale();
