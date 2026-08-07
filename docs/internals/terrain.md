@@ -104,14 +104,14 @@ reaches the encoder whichever road the quad took. The block id, the block's own 
 light emission all travel that way, and the encoder turns the last two into the offset from a vertex
 to the middle of its block.
 
-**Two of the five are properties of the quad rather than of a corner**, and are computed in the
-encoder from the corners it already has: the middle of the sprite, which is their mean, and the
-normal, which is Newell's sum over the loop. Taking the normal from the geometry rather than from a
-face direction is what makes it right for a plant drawn as a cross, a sloped fluid surface and any
-model that is not a box - a face direction has six values and none of them describes those. The
-tangent of the texture mapping comes from the same corners and their texture coordinates, with a
-sign saying which way the third axis of that frame turns; every pack rebuilds its bitangent from
-those two, so the sign is not a detail.
+**Three of the five are properties of the quad rather than of a corner**, and are computed in the
+encoder from the corners it already has. The middle of the sprite is their mean. The normal is
+Newell's sum over the loop, which is what makes it right for a plant drawn as a cross, a sloped
+fluid surface and any model that is not a box: a face direction offers six axes and a seventh value
+meaning none, and not one of them describes those. The tangent of the texture mapping comes from the
+same corners and their texture coordinates, with a sign saying which way the third axis of that
+frame turns; every pack rebuilds its bitangent from the tangent and the normal together, so that
+sign decides whether a bump lights as a bump or as a dent.
 
 Those fields are written whether or not a pack is drawing. Meshes are cached, so writing them only
 while the terrain switch is on would leave every already-built section without them until something
