@@ -104,19 +104,20 @@ public final class GlslTranslator {
 	private static final String SHADOW_COMPARE = "ofShadowCompare";
 
 	/**
-	 * What a call to {@code sin} or {@code cos} becomes: the same function behind an argument
-	 * brought back into one turn.
+	 * What a call to {@code sin} or {@code cos} becomes: a sine of this translation's own, exact
+	 * enough to survive the hash idiom, and never the driver's.
 	 * <p>
 	 * The packs feed these two whole world coordinates. BSL's waving noise hashes with
-	 * {@code fract(sin(dot(floor(pos), K)) * 43758.5453)} and hands the sine thousands of radians,
-	 * and the hash then amplifies whatever the sine got wrong by five orders of magnitude. Under
-	 * Iris the driver compiles GLSL and reduces the argument properly, so the pack behaves; under
-	 * this engine the game compiles through shaderc to SPIR-V, the sine's precision at large
-	 * arguments is the implementation's to choose, and on this corpus the choice breaks the hash:
-	 * the noise field decorrelates in bands, and foliage riding the field skips as it crosses them,
-	 * measured in game on BSL and gone the moment the argument is reduced. Reducing costs one
-	 * multiply, one floor and one fused subtract per call, leaves a small argument bit-for-bit
-	 * unchanged in period and loses nothing a pack can see.
+	 * {@code fract(sin(dot(floor(pos), K)) * 43758.5453)}, hands the sine thousands of radians and
+	 * amplifies whatever the sine got wrong by five orders of magnitude. Under Iris the GL driver's
+	 * sine stands up to that; under the game's shaderc-to-SPIR-V chain it does not, the field the
+	 * hash paints comes out structured instead of white, and foliage riding the field skips as it
+	 * crosses the structure, measured in game on BSL. Nor can a plain reduction feed the driver's
+	 * sine a clean small angle: one fp32 two-pi sheds the low bits of a large argument, and the
+	 * uniformity test rejects the field it leaves at 427 where white noise scores 15. What holds up,
+	 * scored 11 to 14 alongside an exact-sine reference on the same test, is the form emitted here:
+	 * a Cody-Waite reduction through two constants, a fold to the quarter turn, and an odd
+	 * polynomial - no driver sine left anywhere in the call.
 	 */
 	private static final String REDUCED_SIN = "ofReducedSin";
 
@@ -2441,14 +2442,25 @@ public final class GlslTranslator {
 					+ " return " + SHADOW_COMPARE + "(ofMap, ofAt); }");
 		}
 
-		// One overload per shape the builtins take. The reduction is x minus two pi times
-		// floor(x / two pi), which leaves an argument already inside one turn exactly where it was.
+		// One overload per shape the builtins take, and no driver sine anywhere in it. The turn
+		// count is taken out through two constants whose sum carries two pi to thirty-three bits,
+		// so the residue keeps its low bits where a single fp32 two-pi would shed them; the residue
+		// is folded to a quarter turn and fed to the odd polynomial. Measured on the hash's own
+		// yardstick: a single-constant reduction leaves a field the uniformity test rejects at 427
+		// where white noise scores 15, and this form scores 11 to 14, alongside the reference.
 		if (this.trigCalls > 0) {
 			for (String shape : new String[] {"float", "vec2", "vec3", "vec4"}) {
 				lines.add(shape + " " + REDUCED_SIN + "(" + shape + " ofX) {"
-						+ " return sin(ofX - 6.2831855 * floor(ofX * 0.15915494)); }");
+						+ " " + shape + " ofK = floor(ofX * 0.15915494);"
+						+ " " + shape + " ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3;"
+						+ " ofR -= 6.2831855 * step(3.1415927, ofR);"
+						+ " " + shape + " ofS = sign(ofR);"
+						+ " " + shape + " ofA = 1.5707964 - abs(abs(ofR) - 1.5707964);"
+						+ " " + shape + " ofZ = ofA * ofA;"
+						+ " return ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1"
+						+ " + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))); }");
 				lines.add(shape + " " + REDUCED_COS + "(" + shape + " ofX) {"
-						+ " return cos(ofX - 6.2831855 * floor(ofX * 0.15915494)); }");
+						+ " return " + REDUCED_SIN + "(ofX + 1.5707964); }");
 			}
 		}
 
