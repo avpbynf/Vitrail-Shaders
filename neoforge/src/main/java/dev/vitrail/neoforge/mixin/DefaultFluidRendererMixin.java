@@ -76,17 +76,16 @@ public abstract class DefaultFluidRendererMixin {
 			BlockPos pos, BlockPos origin, TranslucentGeometryCollector collector,
 			ChunkModelBuilder builder, Material material, ColorProvider<FluidState> colours,
 			FluidModel model, CallbackInfo callback) {
-		this.vitrail$id = fluidState == null
-				? BlockStateIds.NONE
-				: BlockStateIds.packed(fluidState.createLegacyBlock());
+		BlockState fluidBlock = fluidState == null ? null : fluidState.createLegacyBlock();
+		this.vitrail$id = fluidBlock == null ? BlockStateIds.NONE : BlockStateIds.packed(fluidBlock);
 
 		// The fluid's own light and not that of the block sharing its position, for the reason the
 		// class comment gives about the id: a waterlogged stair is two things to draw, and these
 		// quads are the water's.
-		this.vitrail$origin = pos == null || fluidState == null
+		this.vitrail$origin = pos == null
 				? 0
 				: TerrainVertex.pack(pos.getX(), pos.getY(), pos.getZ(),
-						fluidState.createLegacyBlock().getLightEmission());
+						fluidBlock == null ? 0 : fluidBlock.getLightEmission());
 
 		// Said once for the first fluid meshed under each table, because every link after it is
 		// invisible: a number that never leaves this method looks exactly like a number that reached
@@ -103,7 +102,7 @@ public abstract class DefaultFluidRendererMixin {
 			// reading belongs to which table.
 			Vitrail.logger().info("The first fluid meshed against block table {} is {} and it "
 					+ "carries the packed id {}", table,
-					fluidState == null ? "nothing" : fluidState.createLegacyBlock(), this.vitrail$id);
+					fluidBlock == null ? "nothing" : fluidBlock, this.vitrail$id);
 		}
 	}
 

@@ -18,18 +18,18 @@ import java.util.Set;
  * multiplied by the ambient occlusion. {@code a_TexCoord} keeps fifteen bits of texture coordinate
  * per axis and spends its top bit on which side of the sprite the corner lies. {@code a_LightAndData}
  * holds the block light, the sky light, a byte of material bits and the index of the draw command,
- * one per byte. The twenty-first to twenty-fourth are this engine's own and hold the block id.
+ * one per byte. Everything past the twentieth is this engine's own, five elements of four bytes.
  * <p>
  * <strong>Sodium is under the PolyForm Shield licence, which this project cannot take code
  * from.</strong> So what is written below is this engine's own reading of that layout and not a
  * transcription of Sodium's shader: the layout is a fact about the bytes, the way of undoing it is
  * ours. Nothing here is copied, and nothing here may be replaced by something copied.
  * <p>
- * <strong>One of the names a pack reads is still not in the mesh.</strong> There is no tangent, so it
- * is given a constant and named in the log. The normal is not among them: the facing rides in the
- * spare bits of the material byte, which costs the mesh nothing. Neither are the block id, the mid
- * texture coordinate and the offset to the middle of the block, which are elements of their own and
- * the three things here that do cost bytes.
+ * <strong>Every name a pack reads of this geometry is now in the mesh.</strong> The block id, the
+ * middle of the sprite, the offset to the middle of the block, the normal and the tangent are five
+ * elements of this engine's own, and they are what doubles the mesh: twenty bytes of Sodium's and
+ * twenty of ours. The facing that used to stand in for a normal, in the spare bits of the material
+ * byte, is gone with the last thing that read it.
  * <p>
  * The region offset arrives through push constants, which is the one thing here that has to be got
  * right or nothing else matters. blaze3d never declares a push constant range; Sodium adds one, and
@@ -69,14 +69,14 @@ public final class SodiumVertex {
 	 * A pack divides it by 64 itself, which is why nothing here does: four packs of the corpus write
 	 * {@code at_midBlock.xyz / 64.0} word for word, and Bliss reads the fourth component as a block
 	 * light index. It is what places a block in a voxel grid from inside a vertex stage, which is how
-	 * the three packs that voxelise their lighting find out where a light actually stands.
+	 * the five packs that voxelise their lighting find out where a light actually stands.
 	 */
 	public static final String MID_BLOCK = "a_MidBlock";
 
 	/**
 	 * The quad's own normal, taken from its corners rather than from the axis its facing names.
 	 * <p>
-	 * The facing this engine read before is one of seven axes plus a value meaning none, so anything
+	 * The facing this engine read before is one of six axes plus a value meaning none, so anything
 	 * that is not a box face got one of six wrong answers: a plant drawn as a cross, a sloped fluid
 	 * surface, every custom model. And the facing never reached a translucent quad or a fluid at all,
 	 * so glass and water were lit as if they faced up.
@@ -110,8 +110,7 @@ public final class SodiumVertex {
 	 * Every texture unit above the light map. Declared whether the pack mentions them or not costs
 	 * nothing; not declaring one the pack does mention costs the program.
 	 * <p>
-	 * {@code of_Normal} used to be here and is not any more: the facing arrives in the mesh, so the
-	 * prologue works it out instead of standing one in.
+	 * {@code of_Normal} used to be here and is not any more: the mesh carries a normal of its own.
 	 */
 	private static final Map<String, String> FIXED = fixed();
 
@@ -119,8 +118,8 @@ public final class SodiumVertex {
 	}
 
 	/**
-	 * The head of a terrain vertex stage: the four attributes, the region push constants, the four
-	 * names the mesh answers, and whatever the pack reads that it does not.
+	 * The head of a terrain vertex stage: every element of the format, the region push constants, the
+	 * names the mesh answers out of them, and whatever the pack reads that no element carries.
 	 *
 	 * @param used        every name the rewritten body mentions, so that nothing is declared for a
 	 *                    pack that never asks
@@ -243,10 +242,16 @@ public final class SodiumVertex {
 	 */
 	private static String tangent(String type) {
 		return switch (type) {
+			case "float" -> "float(" + TANGENT + ".x)";
 			case "vec2" -> "vec2(" + TANGENT + ".xy)";
 			case "vec3" -> "vec3(" + TANGENT + ".xyz)";
 			case "vec4" -> TANGENT;
-			default -> VertexPrologue.zero(type);
+			// An axis and not a zero, which is the rule VertexPrologue.BETTER_DEFAULTS holds for this
+			// same name: a pack normalises what it reads here, and normalize(vec3(0)) puts a NaN in
+			// the colour. Reached only by a type the corpus has never declared this under.
+			default -> type.startsWith("vec") || type.startsWith("mat")
+					? type + "(1.0)"
+					: VertexPrologue.zero(type);
 		};
 	}
 

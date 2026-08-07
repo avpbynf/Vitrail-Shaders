@@ -83,9 +83,9 @@ public interface TerrainVertex {
 	 * reducing it to the section it is meshed in.
 	 * <p>
 	 * <strong>Masked to sixteen and not to a byte.</strong> A mesh is written in its section's own
-	 * frame, so that is the frame the middle of a block has to be measured in; the world coordinate
-	 * would be the same number modulo 256 and would put the middle of the block up to fifteen blocks
-	 * away.
+	 * frame, so that is the frame the middle of a block has to be measured in. Masked to a byte the
+	 * value would keep four bits that name the section rather than the block, and put the middle of
+	 * the block up to fifteen SECTIONS away.
 	 * <p>
 	 * One rule and one caller of it per path, rather than the same four shifts written twice: the
 	 * block renderer and the fluid renderer both feed this, and a disagreement between them would be

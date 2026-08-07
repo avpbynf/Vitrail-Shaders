@@ -213,9 +213,9 @@ public final class TerrainMesh implements ChunkVertexType {
 	}
 
 	/**
-	 * @param materialBits Sodium's own bits in the low byte and the quad's facing above them. The
-	 *                     block id is NOT here: it rides on the vertices, because a translucent quad
-	 *                     reaches this encoder from the sorter, under a material Sodium chose itself
+	 * @param materialBits Sodium's own, untouched. Nothing of this engine rides there any more:
+	 *                     everything it adds is on the vertices, because a translucent quad reaches
+	 *                     this encoder from the sorter, under a material Sodium chose itself
 	 */
 	private long encode(long pointer, int materialBits, ChunkVertexEncoder.Vertex[] vertices,
 			int sectionIndex) {
@@ -261,7 +261,7 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * then the handedness.
 	 * <p>
 	 * <strong>The normal comes from the geometry and not from the facing.</strong> The facing this
-	 * engine used before is one of seven axes, so a plant drawn as a cross, a sloped fluid surface
+	 * engine used before is one of six axes, so a plant drawn as a cross, a sloped fluid surface
 	 * and every model that is not a box got one of six wrong answers or the eighth value, which had
 	 * no answer at all. Newell's sum over the corners is right for a quad that is not planar either,
 	 * and it costs the same.
@@ -299,18 +299,29 @@ public final class TerrainMesh implements ChunkVertexType {
 
 		normalise(frame, 0);
 
-		ChunkVertexEncoder.Vertex a = vertices[0];
-		ChunkVertexEncoder.Vertex b = vertices[1];
-		ChunkVertexEncoder.Vertex c = vertices[2];
-		float du1 = b.u - a.u;
-		float dv1 = b.v - a.v;
-		float du2 = c.u - a.u;
-		float dv2 = c.v - a.v;
-		float area = du1 * dv2 - du2 * dv1;
-		if (Math.abs(area) < 1.0E-9F) {
+		// The second triangle when the first has nothing to say, which is Iris's own retry in
+		// computeTangentForQuad: three corners of a quad can share a texture coordinate while the
+		// fourth does not, and taking the perpendicular there would throw away a tangent the other
+		// half of the same quad holds.
+		if (!tangent(frame, vertices[0], vertices[1], vertices[2])
+				&& (vertices.length < 4 || !tangent(frame, vertices[2], vertices[3], vertices[0]))) {
 			perpendicular(frame);
+		}
 
-			return frame;
+		return frame;
+	}
+
+	/**
+	 * The tangent of one triangle into the frame, or false when its texture coordinates are
+	 * degenerate and there is none to find.
+	 */
+	private static boolean tangent(float[] frame, ChunkVertexEncoder.Vertex a,
+			ChunkVertexEncoder.Vertex b, ChunkVertexEncoder.Vertex c) {
+		float dv1 = b.v - a.v;
+		float dv2 = c.v - a.v;
+		float area = (b.u - a.u) * dv2 - (c.u - a.u) * dv1;
+		if (Math.abs(area) < 1.0E-9F) {
+			return false;
 		}
 
 		float scale = 1.0F / area;
@@ -319,12 +330,16 @@ public final class TerrainMesh implements ChunkVertexType {
 		frame[5] = ((b.z - a.z) * dv2 - (c.z - a.z) * dv1) * scale;
 		normalise(frame, 3);
 
-		// Which way the third axis of the frame turns, taken from the sign of the texture area: it
-		// flips wherever a face is mirrored, and a normal map read through the wrong one lights a
-		// bump as a dent.
-		frame[6] = area < 0.0F ? -1.0F : 1.0F;
+		// Which way the third axis of the frame turns. MINUS the sign of the texture area, and the
+		// minus is the whole of it: every pack builds its bitangent as
+		// cross(at_tangent.xyz, gl_Normal.xyz) * at_tangent.w, which is Iris's convention, and that
+		// cross product is the true bitangent NEGATED. Iris arrives at the same place from the other
+		// end, sign(dot(bitangent, tangent x normal)) in NormalHelper.computeTangent. Written the
+		// other way round it is not a subtle error: every normal map on the terrain has its green
+		// channel inverted and lights a bump as a dent.
+		frame[6] = area < 0.0F ? 1.0F : -1.0F;
 
-		return frame;
+		return true;
 	}
 
 	/** Three of those floats to unit length, or to the up axis when there is no length to speak of. */

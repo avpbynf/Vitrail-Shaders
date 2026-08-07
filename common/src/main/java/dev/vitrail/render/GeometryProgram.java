@@ -1035,8 +1035,8 @@ final class GeometryProgram {
 					alphaTest.function(), alphaTest.reference());
 		}
 
-		// Split by what the mesh really answers: mc_Entity comes out of the fifth element and is not
-		// a gap, where a tangent and a mid texture coordinate still are and change what is drawn.
+		// Split by what the mesh really answers. Only names the mesh has no element for are a gap;
+		// the chunk mesh now answers four of them and the entity mesh answers none.
 		List<String> constants = this.loaded.program().synthesized().keySet().stream()
 				.filter(name -> !this.pass.answered().contains(name))
 				.toList();

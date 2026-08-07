@@ -82,13 +82,16 @@ public abstract class BlockRendererMixin extends AbstractBlockRenderContext {
 	 */
 	@Unique
 	private ChunkVertexEncoder.Vertex[] vitrail$stamp(ChunkVertexEncoder.Vertex[] vertices) {
-		if (this.state == null || this.pos == null) {
-			return TerrainVertex.stamp(vertices, BlockStateIds.NONE);
-		}
+		// Both are written on EVERY quad, including the one that knows neither. The array is
+		// Sodium's own, one instance reused for every face of every block, so a field left alone
+		// keeps what the block before wrote: an offset measured against another block, which wraps
+		// into its byte without a word. A quad that knows one of the two still gets that one.
+		TerrainVertex.stampOrigin(vertices, this.pos == null
+				? 0
+				: TerrainVertex.pack(this.pos.getX(), this.pos.getY(), this.pos.getZ(),
+						this.state == null ? 0 : this.state.getLightEmission()));
 
-		TerrainVertex.stampOrigin(vertices, TerrainVertex.pack(this.pos.getX(), this.pos.getY(),
-				this.pos.getZ(), this.state.getLightEmission()));
-
-		return TerrainVertex.stamp(vertices, BlockStateIds.packed(this.state));
+		return TerrainVertex.stamp(vertices,
+				this.state == null ? BlockStateIds.NONE : BlockStateIds.packed(this.state));
 	}
 }
