@@ -107,20 +107,6 @@ public final class SodiumVertex {
 	public static final Set<String> ANSWERED = Set.of("mc_Entity", "mc_midTexCoord", "at_midBlock", "at_tangent");
 
 	/**
-	 * Where the quad's facing sits in the material byte, and why there is room for it.
-	 * <p>
-	 * {@code packLightAndData} gives the material a whole byte, of which three bits are spoken for by
-	 * Sodium's own {@code chunk_material.glsl}: one for the mipmap and two for an alpha cutoff its
-	 * shader no longer calls. The facing needs three more, {@code ModelQuadFacing} having seven
-	 * values, so it goes in the five that were spare and the mesh does not grow by one byte. What is
-	 * stored is the ordinal PLUS ONE, so that nought keeps its meaning: nobody wrote a facing here.
-	 * Fluids take another push site, and a translucent quad is written out later by the sorter under
-	 * a constant material, so neither carries a facing and nought really happens.
-	 */
-	public static final int FACING_SHIFT = 3;
-	public static final int FACING_MASK = 7;
-
-	/**
 	 * Every texture unit above the light map. Declared whether the pack mentions them or not costs
 	 * nothing; not declaring one the pack does mention costs the program.
 	 * <p>
