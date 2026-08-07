@@ -146,8 +146,9 @@ public final class MenuValues {
 	 * Picks a profile by queueing every value it names, and keeping nothing else about it.
 	 * <p>
 	 * A profile is a set of values and nothing else. Iris queues them one by one and writes them out
-	 * one by one, so a file written here carries the twenty one values BSL's ULTRA constrains rather
-	 * than its name, and reads back as ULTRA under either engine.
+	 * one by one, so a file written here carries the eight values BSL's ULTRA constrains rather than
+	 * its name, and reads back as ULTRA under either engine. Fewer lines than that reach the file:
+	 * only what differs from the pack's own defaults is written.
 	 * <p>
 	 * A value the player queued by hand before picking a profile is overwritten by it. That is the
 	 * way round a player expects, the profile being the broader gesture of the two, and it stays
@@ -168,9 +169,9 @@ public final class MenuValues {
 	 * pressing Reset used to look like.
 	 * <p>
 	 * The most constrained profile wins, as it does there, because one profile is usually another
-	 * plus a setting or two and the looser of the pair would otherwise answer for both. Worked out
-	 * rather than taken from the head of a sorted list, so that this answer does not depend on the
-	 * order the selector happens to walk in.
+	 * plus a setting or two and the looser of the pair would otherwise answer for both. Two profiles
+	 * that name the same count and both match are settled by the order the pack declared them, which
+	 * is what the sort behind {@code PackMenu.order} keeps; no pack of the corpus has such a pair.
 	 */
 	public String matchedProfile() {
 		return match(this::pending);

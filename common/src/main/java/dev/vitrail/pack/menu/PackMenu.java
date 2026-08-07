@@ -66,9 +66,10 @@ public final class PackMenu {
 	 * the previous from that sorted list rather than from the declared one.
 	 * <p>
 	 * The sort is stable, so a pack whose profiles all name the same count keeps the order it wrote
-	 * them in, which is five of the eight in the corpus and BSL among them. Body Camera is the one
-	 * that moves: its three night vision profiles name twenty eight settings against the twenty five
-	 * of the other three, so they come first there and last here.
+	 * them in, which is six of the eight in the corpus and BSL among them, BSL's five profiles all
+	 * naming eight settings. Sildur's declares none. Body Camera is the one pack that moves: its
+	 * three night vision profiles name twenty eight settings against the twenty five of the other
+	 * three, so the cycle reaches them first here and reached them last before this.
 	 * <p>
 	 * Iris's own {@code ProfileSet.java:17} calls the declared order "the order that profiles should
 	 * cycle through", and its code does not: only {@code forEach} reads that map.
