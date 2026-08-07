@@ -10,6 +10,7 @@ import net.caffeinemc.mods.sodium.client.render.chunk.compile.pipeline.BlockRend
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexEncoder;
 import net.caffeinemc.mods.sodium.client.render.model.AbstractBlockRenderContext;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
@@ -76,7 +77,7 @@ public abstract class BlockRendererMixin extends AbstractBlockRenderContext {
 							+ "chunk/vertex/format/ChunkVertexEncoder$Vertex;I)V"),
 			index = 0, require = 1)
 	private ChunkVertexEncoder.Vertex[] vitrail$id(ChunkVertexEncoder.Vertex[] vertices) {
-		return TerrainVertex.stamp(vertices, this.state == null ? BlockStateIds.NONE : BlockStateIds.packed(this.state));
+		return vitrail$stamp(vertices);
 	}
 
 	/** The translucent path, where the sorter takes the quad and writes it out later. */
@@ -90,7 +91,26 @@ public abstract class BlockRendererMixin extends AbstractBlockRenderContext {
 							+ "ModelQuadFacing;I)Z"),
 			index = 0, require = 1)
 	private ChunkVertexEncoder.Vertex[] vitrail$sortedId(ChunkVertexEncoder.Vertex[] vertices) {
-		return TerrainVertex.stamp(vertices, this.state == null ? BlockStateIds.NONE : BlockStateIds.packed(this.state));
+		return vitrail$stamp(vertices);
 	}
 
+	/**
+	 * Everything this quad carries about the block it came from: the number the pack gave it, where
+	 * it stands in its section, and what it emits.
+	 * <p>
+	 * The position is masked to the section rather than kept whole. That is what the offset to the
+	 * middle of the block is measured against, the mesh being written in a section's own
+	 * coordinates, and it is also what makes it fit in a byte.
+	 */
+	@Unique
+	private ChunkVertexEncoder.Vertex[] vitrail$stamp(ChunkVertexEncoder.Vertex[] vertices) {
+		if (this.state == null || this.pos == null) {
+			return TerrainVertex.stamp(vertices, BlockStateIds.NONE);
+		}
+
+		TerrainVertex.stampOrigin(vertices, TerrainVertex.pack(this.pos.getX(), this.pos.getY(),
+				this.pos.getZ(), this.state.getLightEmission()));
+
+		return TerrainVertex.stamp(vertices, BlockStateIds.packed(this.state));
+	}
 }

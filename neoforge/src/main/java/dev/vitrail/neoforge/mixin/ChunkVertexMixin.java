@@ -28,6 +28,9 @@ public abstract class ChunkVertexMixin implements TerrainVertex {
 	@Unique
 	private int vitrail$blockId;
 
+	@Unique
+	private int vitrail$blockOrigin;
+
 	@Override
 	public int vitrailBlockId() {
 		return this.vitrail$blockId;
@@ -38,9 +41,20 @@ public abstract class ChunkVertexMixin implements TerrainVertex {
 		this.vitrail$blockId = id;
 	}
 
+	@Override
+	public int vitrailBlockOrigin() {
+		return this.vitrail$blockOrigin;
+	}
+
+	@Override
+	public void vitrailBlockOrigin(int packed) {
+		this.vitrail$blockOrigin = packed;
+	}
+
 	@Inject(method = "copyVertexTo", at = @At("TAIL"), require = 1)
 	private static void vitrail$copyId(ChunkVertexEncoder.Vertex from, ChunkVertexEncoder.Vertex to,
 			CallbackInfo callback) {
 		((TerrainVertex) to).vitrailBlockId(((TerrainVertex) from).vitrailBlockId());
+		((TerrainVertex) to).vitrailBlockOrigin(((TerrainVertex) from).vitrailBlockOrigin());
 	}
 }

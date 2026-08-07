@@ -27,8 +27,9 @@ import java.util.Set;
  * <p>
  * <strong>One of the names a pack reads is still not in the mesh.</strong> There is no tangent, so it
  * is given a constant and named in the log. The normal is not among them: the facing rides in the
- * spare bits of the material byte, which costs the mesh nothing. Neither are the block id and the mid
- * texture coordinate, which are elements of their own and the two things here that do cost bytes.
+ * spare bits of the material byte, which costs the mesh nothing. Neither are the block id, the mid
+ * texture coordinate and the offset to the middle of the block, which are elements of their own and
+ * the three things here that do cost bytes.
  * <p>
  * The region offset arrives through push constants, which is the one thing here that has to be got
  * right or nothing else matters. blaze3d never declares a push constant range; Sodium adds one, and
@@ -62,17 +63,29 @@ public final class SodiumVertex {
 	public static final String MID_TEX_COORD = "a_MidTexCoord";
 
 	/**
+	 * How far a vertex is from the middle of its own block, per axis and in sixty-fourths, with the
+	 * light that block gives off in the fourth component.
+	 * <p>
+	 * A pack divides it by 64 itself, which is why nothing here does: four packs of the corpus write
+	 * {@code at_midBlock.xyz / 64.0} word for word, and Bliss reads the fourth component as a block
+	 * light index. It is what places a block in a voxel grid from inside a vertex stage, which is how
+	 * the three packs that voxelise their lighting find out where a light actually stands.
+	 */
+	public static final String MID_BLOCK = "a_MidBlock";
+
+	/**
 	 * The elements of the chunk mesh, in order. The format must carry these and no more, and the
 	 * order after {@code a_LightAndData} is the one {@code TerrainMesh.Extra} lays out.
 	 */
 	public static final List<String> ATTRIBUTES =
-			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID, MID_TEX_COORD);
+			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID, MID_TEX_COORD,
+					MID_BLOCK);
 
 	/**
 	 * The ones of {@link VertexPrologue#SYNTHESIZED} this mesh answers for real, out of an element
 	 * under another name. What is left of that set is what the log has to call a constant.
 	 */
-	public static final Set<String> ANSWERED = Set.of("mc_Entity", "mc_midTexCoord");
+	public static final Set<String> ANSWERED = Set.of("mc_Entity", "mc_midTexCoord", "at_midBlock");
 
 	/**
 	 * Where the quad's facing sits in the material byte, and why there is room for it.
@@ -195,7 +208,11 @@ public final class SodiumVertex {
 
 	/** One of the names the mesh answers, in the shape the pack declared it under. */
 	private static String answer(String name, String type) {
-		return name.equals("mc_midTexCoord") ? midTexCoord(type) : entity(type);
+		return switch (name) {
+			case "mc_midTexCoord" -> midTexCoord(type);
+			case "at_midBlock" -> midBlock(type);
+			default -> entity(type);
+		};
 	}
 
 	/**
@@ -218,6 +235,29 @@ public final class SodiumVertex {
 			case "vec2" -> pair;
 			case "vec3" -> "vec3(" + pair + ", 0.0)";
 			case "vec4" -> "vec4(" + pair + ", 0.0, 1.0)";
+			default -> VertexPrologue.zero(type);
+		};
+	}
+
+	/**
+	 * {@code at_midBlock} out of the element, in the shape the pack declared it under.
+	 * <p>
+	 * Nothing is scaled here. The element holds sixty-fourths of a block and every pack that reads
+	 * this divides by 64 itself, so a division on this side would be applied twice and put every
+	 * block a pack voxelises sixty-four times too close to its own corner.
+	 * <p>
+	 * A pack declaring three components gets the offset alone and one declaring four gets the block's
+	 * light with it, which is the shape Bliss reads as a light index.
+	 */
+	private static String midBlock(String type) {
+		return switch (type) {
+			case "float" -> "float(" + MID_BLOCK + ".x)";
+			case "vec2" -> "vec2(" + MID_BLOCK + ".xy)";
+			case "vec3" -> "vec3(" + MID_BLOCK + ".xyz)";
+			case "vec4" -> "vec4(" + MID_BLOCK + ")";
+			case "ivec2" -> MID_BLOCK + ".xy";
+			case "ivec3" -> MID_BLOCK + ".xyz";
+			case "ivec4" -> MID_BLOCK;
 			default -> VertexPrologue.zero(type);
 		};
 	}
@@ -255,6 +295,7 @@ public final class SodiumVertex {
 	private static String type(String attribute) {
 		return switch (attribute) {
 			case "a_Position", "a_TexCoord", MID_TEX_COORD -> "uvec2";
+			case MID_BLOCK -> "ivec4";
 			case "a_LightAndData" -> "uvec4";
 			case BLOCK_ID -> "uint";
 			default -> "vec4";

@@ -170,7 +170,17 @@ public final class TerrainMesh implements ChunkVertexType {
 		 * The middle of the sprite this quad is mapped to, quantised exactly as Sodium quantises the
 		 * corner coordinate, so that the two divide down by the same number in the prologue.
 		 */
-		MID_TEX_COORD(SodiumVertex.MID_TEX_COORD, GpuFormat.RG16_UINT);
+		MID_TEX_COORD(SodiumVertex.MID_TEX_COORD, GpuFormat.RG16_UINT),
+
+		/**
+		 * The offset from this vertex to the middle of its block in sixty-fourths, and the light the
+		 * block gives off in the fourth byte.
+		 * <p>
+		 * Signed bytes, unscaled, which is Iris's own shape: the packs divide by 64 themselves, four
+		 * of them writing {@code at_midBlock.xyz / 64.0} word for word, so handing them anything
+		 * already divided would move every block they voxelise by that factor again.
+		 */
+		MID_BLOCK(SodiumVertex.MID_BLOCK, GpuFormat.RGBA8_SINT);
 
 		private final String attribute;
 		private final GpuFormat format;
@@ -218,9 +228,36 @@ public final class TerrainMesh implements ChunkVertexType {
 			MemoryUtil.memPutInt(extra,
 					((TerrainVertex) vertices[at]).vitrailBlockId() & BlockStateIds.PACKED_MASK);
 			MemoryUtil.memPutInt(extra + Integer.BYTES, middle);
+			MemoryUtil.memPutInt(extra + 2L * Integer.BYTES, midBlock(vertices[at]));
 		}
 
 		return pointer + (long) vertices.length * this.stride;
+	}
+
+	/**
+	 * How far this vertex is from the middle of its own block, per axis, plus the light that block
+	 * gives off.
+	 * <p>
+	 * In sixty-fourths of a block and signed, which is the unit the packs divide by and the range a
+	 * byte holds: a vertex is at most one block from a middle in each axis, so the value stays inside
+	 * plus or minus sixty-four. Iris packs it the same way, {@code ExtendedDataHelper.packMidBlock},
+	 * and the emission goes in the fourth byte there too.
+	 * <p>
+	 * The position is the section's own, which is what the mesh is written in and what
+	 * {@link TerrainVertex#pack} reduced the block's world position to.
+	 */
+	private static int midBlock(ChunkVertexEncoder.Vertex vertex) {
+		int origin = ((TerrainVertex) vertex).vitrailBlockOrigin();
+
+		return (offset(TerrainVertex.origin(origin, 0), vertex.x) & 0xFF)
+				| ((offset(TerrainVertex.origin(origin, 1), vertex.y) & 0xFF) << 8)
+				| ((offset(TerrainVertex.origin(origin, 2), vertex.z) & 0xFF) << 16)
+				| (TerrainVertex.emission(origin) << 24);
+	}
+
+	/** One axis of that offset, from the corner of the block to the vertex, in sixty-fourths. */
+	private static int offset(int block, float vertex) {
+		return (int) ((block + 0.5F - vertex) * 64.0F);
 	}
 
 	/**

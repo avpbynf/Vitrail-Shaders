@@ -58,6 +58,10 @@ public abstract class DefaultFluidRendererMixin {
 	@Unique
 	private int vitrail$id = BlockStateIds.NONE;
 
+	/** Where the fluid stands in its section and what it emits, taken with the id. */
+	@Unique
+	private int vitrail$origin;
+
 	/**
 	 * <strong>Every parameter of the target, in order, and not a prefix of them.</strong> Mixin
 	 * refuses a truncated list outright, "Invalid descriptor", and the ten below are the price of
@@ -75,6 +79,14 @@ public abstract class DefaultFluidRendererMixin {
 		this.vitrail$id = fluidState == null
 				? BlockStateIds.NONE
 				: BlockStateIds.packed(fluidState.createLegacyBlock());
+
+		// The fluid's own light and not that of the block sharing its position, for the reason the
+		// class comment gives about the id: a waterlogged stair is two things to draw, and these
+		// quads are the water's.
+		this.vitrail$origin = pos == null || fluidState == null
+				? 0
+				: TerrainVertex.pack(pos.getX(), pos.getY(), pos.getZ(),
+						fluidState.createLegacyBlock().getLightEmission());
 
 		// Said once for the first fluid meshed under each table, because every link after it is
 		// invisible: a number that never leaves this method looks exactly like a number that reached
@@ -105,7 +117,7 @@ public abstract class DefaultFluidRendererMixin {
 							+ "sodium/client/render/chunk/terrain/material/Material;)V"),
 			index = 0, require = 1)
 	private ChunkVertexEncoder.Vertex[] vitrail$id(ChunkVertexEncoder.Vertex[] vertices) {
-		return TerrainVertex.stamp(vertices, this.vitrail$id);
+		return TerrainVertex.stamp(TerrainVertex.stampOrigin(vertices, this.vitrail$origin), this.vitrail$id);
 	}
 
 	/** The path every water surface really takes, the sorter's. */
@@ -119,6 +131,6 @@ public abstract class DefaultFluidRendererMixin {
 							+ "ModelQuadFacing;I)Z"),
 			index = 0, require = 1)
 	private ChunkVertexEncoder.Vertex[] vitrail$sortedId(ChunkVertexEncoder.Vertex[] vertices) {
-		return TerrainVertex.stamp(vertices, this.vitrail$id);
+		return TerrainVertex.stamp(TerrainVertex.stampOrigin(vertices, this.vitrail$origin), this.vitrail$id);
 	}
 }
