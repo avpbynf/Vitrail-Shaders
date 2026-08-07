@@ -987,10 +987,17 @@ final class GeometryProgram {
 		// and cloud shapes from it and counts on the interpolation. Iris binds it LINEAR_REPEAT,
 		// and reading it NEAREST shatters every one of those surfaces into facets. A shadow colour
 		// is continuous in the same way, carrying the light that came through glass and water
-		// across a penumbra, and both OptiFine and Iris filter it linearly. The shadow DEPTH beside
-		// it stays NEAREST because it is compared rather than interpolated.
+		// across a penumbra, and both OptiFine and Iris filter it linearly.
+		//
+		// The shadow DEPTH is LINEAR too, and the reason that used to be given here for keeping it
+		// NEAREST was wrong: a comparison sampler averages the RESULTS of the four tests and never
+		// the depths, so nothing is ever compared against a surface that exists nowhere. Iris binds
+		// GL_LINEAR with GL_COMPARE_REF_TO_TEXTURE, and the manual PCF loops packs write are the
+		// whole point, since every tap of such a loop rides on this filter. It has to match
+		// PackPass, which binds the same name for the full screen passes: the two halves of one
+		// frame reading one map through two filters is a difference nothing would ever explain.
 		return switch (binding.kind()) {
-			case NOISE, SHADOW_COLOUR -> FilterMode.LINEAR;
+			case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
 			default -> FilterMode.NEAREST;
 		};
 	}
@@ -1090,9 +1097,9 @@ final class GeometryProgram {
 
 		// Said because nothing on screen would. A pack declaring sampler2DShadow asks the hardware
 		// to compare and hand back a filtered fraction; blaze3d's GpuSampler carries no comparison
-		// at all, so the translation makes it instead, one tap and a step. What is lost is the
-		// softness of a compare filtered LINEAR, not the shadow: an edge one texel harder than the
-		// pack drew against.
+		// at all, so the translation makes it instead: four texels gathered, four steps, and the
+		// same bilinear blend the hardware would have applied. Nothing of the shape is lost. What
+		// it costs is the gather and the arithmetic, on a lookup a PCF loop makes many times.
 		//
 		// Asked of the notes and not of the samplers: by the time a sampler is one of those, its
 		// type has been rewritten to the ordinary one and there is nothing left to recognise.
@@ -1102,8 +1109,8 @@ final class GeometryProgram {
 				.toList();
 		if (!compared.isEmpty()) {
 			Vitrail.logger().info("{} asked the hardware to compare {}, which this backend cannot "
-					+ "bind, so the comparison is made in the shader with a single tap", this.path,
-					compared);
+					+ "bind, so the comparison is made in the shader over the four texels the "
+					+ "hardware would have blended", this.path, compared);
 		}
 
 		PackValues.Gaps gaps = this.values.classify(this.uniforms.unsupplied());
