@@ -1078,17 +1078,6 @@ public final class ShaderProperties {
 			};
 		}
 
-		/** The pieces the pack switched off, by the name it wrote, for the log. Usually empty. */
-		public List<String> off() {
-			List<String> off = new ArrayList<>();
-			for (String directive : List.of("sun", "moon", "stars", "sky")) {
-				if (!allows(directive)) {
-					off.add(directive);
-				}
-			}
-
-			return off;
-		}
 	}
 
 	private static final class Builder {
