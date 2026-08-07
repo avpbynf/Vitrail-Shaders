@@ -371,17 +371,15 @@ public final class MenuValues {
 	 * widget wants, and writing them as they stand would lose every toggle it moved.
 	 */
 	public static String written(PackMenu menu, String name, String value) {
-		// A value that is not one of the four words is copied rather than turned into false, which
-		// is what asBoolean would silently make of it. It happens where a new version of a pack
-		// turns a cycle into a toggle: the old value means nothing to either engine, and both then
-		// fall back on the pack's own default, where writing false would be an explicit OFF nobody
-		// chose.
-		OptionValue parsed = OptionValue.parse(value);
-
-		return parsed.isBoolean()
-				&& menu.option(name).filter(option -> option.form() == MenuOption.Form.TOGGLE).isPresent()
-						? Boolean.toString(parsed.asBoolean())
-						: value;
+		// Every value of a toggle goes through Boolean.toString, including one that is not one of
+		// the four words, which happens where a new version of a pack turns a cycle into a toggle.
+		// Copying such a value instead LOOKS kinder and is not: this engine would rewrite it as
+		// {@code #define NAME Medium}, which leaves the toggle DEFINED and therefore on, while Iris
+		// turns an unreadable spelling into the option's default. One shared file would then draw
+		// two different images. Written false, both engines read false and both draw off.
+		return menu.option(name).filter(option -> option.form() == MenuOption.Form.TOGGLE).isPresent()
+				? Boolean.toString(OptionValue.parse(value).asBoolean())
+				: value;
 	}
 
 	private boolean toggle(String name) {

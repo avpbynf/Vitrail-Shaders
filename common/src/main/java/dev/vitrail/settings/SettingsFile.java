@@ -163,18 +163,28 @@ public final class SettingsFile {
 			}
 		});
 
-		write(shared, new Stored(written));
+		// Written first, because it is the half that can be undone. A shared file this method wrote
+		// and then removes leaves the pack exactly as it found it; an old file renamed and then not
+		// written out would be settings nobody can reach.
+		try {
+			write(shared, new Stored(written));
+		} catch (IOException e) {
+			return new Carried(Carry.FAILED, profile, shared);
+		}
 
-		// The rename comes second and its failure is NOT a failure of the carry-over, which is why
-		// it is caught here rather than left to the caller. The values are in the shared file by
-		// now, so the guard at the head of this method will never look at the old one again: what a
-		// refused rename leaves behind is a file nothing reads, and answering FAILED would say the
-		// opposite of what happened while the pack draws from the values it moved.
+		// ALL OR NOTHING, and the rename is what makes it so. Leaving the old file readable would
+		// let this run a second time, which is not the harmless repeat it looks like: the guard
+		// above is the presence of the shared file, and Iris DELETES that file whenever nothing
+		// differs from the pack's defaults. A Reset performed there would be undone by the next
+		// load, silently, out of a file the player believed gone. So a refused rename undoes the
+		// write and answers a failure, which is what it is.
 		try {
 			Files.move(legacy, legacy.resolveSibling(legacy.getFileName() + MIGRATED),
 					StandardCopyOption.REPLACE_EXISTING);
 		} catch (IOException e) {
-			return new Carried(Carry.MOVED, profile, legacy);
+			Files.deleteIfExists(shared);
+
+			return new Carried(Carry.FAILED, profile, legacy);
 		}
 
 		return new Carried(Carry.MOVED, profile, null);
@@ -184,12 +194,13 @@ public final class SettingsFile {
 	 * What {@link #migrate} did, which the caller reports and nothing else acts on.
 	 *
 	 * @param profile the profile the old file named, for the one answer that has to name it. Empty
-	 *                where it named none
-	 * @param stranded the old file when it could not be renamed out of the way, and null otherwise.
-	 *                 It is then a file nothing reads any more, the shared one existing, but a
-	 *                 reader who finds it deserves to be told it was left rather than forgotten
+	 *                where it named none, and empty as well where nothing got as far as reading it
+	 * @param file    the path this answer is about, which is not the same one for each of them: the
+	 *                old file where it could not be read or could not be completed, and the shared
+	 *                one where that is what could not be written. Null where there is nothing to
+	 *                name, which is every ordinary load
 	 */
-	public record Carried(Carry carry, String profile, Path stranded) {
+	public record Carried(Carry carry, String profile, Path file) {
 	}
 
 	/** @see Carried */
@@ -246,7 +257,7 @@ public final class SettingsFile {
 		}
 
 		Map<String, String> values = new LinkedHashMap<>();
-		for (String line : new String(Files.readAllBytes(file), charset).split("\\R")) {
+		for (String line : new String(Files.readAllBytes(file), charset).split("\r?\n")) {
 			String trimmed = line.trim();
 			int equals = trimmed.indexOf('=');
 			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {

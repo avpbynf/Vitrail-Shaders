@@ -599,22 +599,12 @@ public final class PackChain {
 		// API, which is what lets them be run against the corpus without starting the game, and one
 		// logger down there would end that.
 		switch (opened.carried().carry()) {
-			case MOVED -> {
-				Vitrail.logger().info("Moved {} of this pack's settings into {}, which is the file"
-						+ " Iris reads too. They were in {}, which this engine kept before. A profile"
-						+ " chosen back then counts here as the values it named, the old file having"
-						+ " stored only what differed from it",
-						opened.saved().values().size(), opened.settingsFile(),
-						SettingsFile.legacy(gameDirectory, opened.packFileName()));
-
-				// The values are in the shared file, so the old one is never read again whatever
-				// happens to it. Said all the same: a file left where a reader will find it, under a
-				// name that says nothing, is a file they will wonder about.
-				if (opened.carried().stranded() != null) {
-					Vitrail.logger().warn("{} could not be renamed out of the way. Nothing reads it"
-							+ " any more and it can be deleted", opened.carried().stranded());
-				}
-			}
+			case MOVED -> Vitrail.logger().info("Moved {} of this pack's settings into {}, which is"
+					+ " the file Iris reads too. They were in {}, which this engine kept before, and"
+					+ " that file is now renamed aside. A profile chosen back then counts here as the"
+					+ " values it named, the old file having stored only what differed from it",
+					opened.saved().values().size(), opened.settingsFile(),
+					SettingsFile.legacy(gameDirectory, opened.packFileName()));
 			// Warn and not info: this is the one shape of old file that cannot be carried over, and
 			// nothing else will say so. It is left exactly where it is.
 			case UNKNOWN_PROFILE -> Vitrail.logger().warn("{} holds settings this engine kept before"
@@ -622,12 +612,14 @@ public final class PackChain {
 					+ " declares. What it stored is only the difference from that profile, so it"
 					+ " cannot be completed and nothing has been moved. Pick the settings again and"
 					+ " press Apply, or edit {} by hand",
-					opened.carried().stranded(), opened.carried().profile(), opened.settingsFile());
-			// The exception itself is lost to the rule above; the path is the half that says what to
-			// look at, a folder that cannot be written or a file another process is holding.
-			case FAILED -> Vitrail.logger().warn("Could not read this pack's settings out of {}, so"
-					+ " they stay there and the pack is drawn with its own defaults until this works",
-					opened.carried().stranded());
+					opened.carried().file(), opened.carried().profile(), opened.settingsFile());
+			// The exception itself is lost to the rule above, so the path carries the diagnosis: it
+			// is the file that could not be read where that is what failed, and the shared one where
+			// it is the folder that cannot be written.
+			case FAILED -> Vitrail.logger().warn("Could not move this pack's settings, and {} is what"
+					+ " could not be read or written. Nothing has been changed on disk, the pack is"
+					+ " drawn with its own defaults, and the next load tries again",
+					opened.carried().file());
 			case NOTHING -> { }
 		}
 
