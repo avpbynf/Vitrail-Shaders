@@ -38,8 +38,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * pass this would have cancelled to draw it: cancelling there would take the sky away from a pack
  * that never offered to replace it. What comes back in that case is Sodium's own reason for the
  * suppression, a sky drawn through culled chunks while the camera is submerged, and it is the lesser
- * of the two. No pack of the corpus reaches it, every one of them resolving {@code gbuffers_skybasic}
- * through the fallback tree. {@code SkyDraw.serves} carries the same reasoning from the other side.
+ * of the two. No pack of the corpus reaches it: of the twenty five pack and place pairs, twenty two
+ * ship {@code gbuffers_skybasic} outright and the other three reach it through the fallback tree.
+ * {@code SkyDraw.serves} carries the same reasoning from the other side.
  */
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererSkyMixin {

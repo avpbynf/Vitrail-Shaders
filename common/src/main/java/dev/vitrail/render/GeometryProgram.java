@@ -990,12 +990,14 @@ final class GeometryProgram {
 		// across a penumbra, and both OptiFine and Iris filter it linearly.
 		//
 		// The shadow DEPTH is LINEAR too, and the reason that used to be given here for keeping it
-		// NEAREST was wrong: a comparison sampler averages the RESULTS of the four tests and never
-		// the depths, so nothing is ever compared against a surface that exists nowhere. Iris binds
-		// GL_LINEAR with GL_COMPARE_REF_TO_TEXTURE, and the manual PCF loops packs write are the
-		// whole point, since every tap of such a loop rides on this filter. It has to match
-		// PackPass, which binds the same name for the full screen passes: the two halves of one
-		// frame reading one map through two filters is a difference nothing would ever explain.
+		// NEAREST was wrong: where the compare mode is on, a sampler averages the RESULTS of the
+		// four tests and never the depths, so nothing is ever compared against a surface that exists
+		// nowhere. Iris filters this LINEAR whatever the pack asks, its SamplingSettings starting at
+		// nearest=false, and adds GL_COMPARE_REF_TO_TEXTURE on top only where the pack writes
+		// shadowHardwareFiltering. The manual PCF loops packs write are the whole point either way,
+		// since every tap of such a loop rides on this filter. It has to match PackPass, which binds
+		// the same name for the full screen passes: the two halves of one frame reading one map
+		// through two filters is a difference nothing would ever explain.
 		return switch (binding.kind()) {
 			case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
 			default -> FilterMode.NEAREST;

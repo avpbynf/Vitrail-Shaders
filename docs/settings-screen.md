@@ -129,10 +129,19 @@ default on anything it does not recognise. A chosen profile is written as the va
 per line, because the reference has no key for a profile name at all: writing the name alone would
 hand it a file carrying none of the eight settings a profile like BSL's ULTRA decides.
 
-A file this engine wrote before the settings moved is still read, once, from where it used to live.
-The values come back and the next Apply writes them to the shared file; the old one then stops being
-read. The line naming a profile that those files carry is dropped on the way, a profile being the
-name of a set of values rather than a value of its own.
+A file this engine wrote before the settings moved is carried over at the first load of that pack,
+in one go: it is read, written out to the shared file, and renamed aside. It is not read for as long
+as the shared file happens to be missing, and the difference matters three times over. The screen's
+Apply rebases on the shared file, so a first Apply after a lazy carry-over would write the one
+setting just clicked and drop the rest. An Apply with nothing pending writes nothing, so a pack the
+player only looks at would never be carried over at all. And a missing shared file does not mean
+"not carried over yet": the reference deletes that file whenever nothing differs from the pack's
+defaults, so a Reset performed under it would bring the old values back.
+
+**The line naming a profile is expanded, not dropped.** The old writer stored a file relative to the
+chosen profile, leaving out every value the profile already named, so a player who had picked one has
+that line and nothing else. It becomes the values it names, which is what the shared file has to
+carry: neither engine has a key for a profile.
 
 **A name a pack no longer declares is kept, not dropped.** It is reported once and left in the file.
 The reference deletes such names, which loses a player's settings for good the day they try a new

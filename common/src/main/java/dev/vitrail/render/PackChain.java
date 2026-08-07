@@ -13,6 +13,7 @@ import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.settings.PackSession;
+import dev.vitrail.settings.SettingsFile;
 import dev.vitrail.settings.SettingsLayers;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
@@ -590,19 +591,21 @@ public final class PackChain {
 					+ " blank or greyed: {}", unshown.size(), unshown);
 		}
 
-		// Only on the first load after the settings moved, and it is worth a line: what the player
-		// applied before the move lives in the old file alone, and nothing else would say that the
-		// values on screen come from somewhere the next Apply will stop reading.
-		if (!opened.readFrom().equals(opened.settingsFile())) {
-			Vitrail.logger().info("Reading this pack's settings from {}, where this engine used to keep"
-					+ " them. The next Apply writes them to {}, which is the file Iris reads too, and"
-					+ " the old one stops being read", opened.readFrom(), opened.settingsFile());
+		// Once per pack and never again, the old file being renamed on the way. Worth a line because
+		// it is the only load where the values on screen were somewhere else a moment ago, and
+		// because a profile chosen before the move comes back as the values it named rather than as
+		// its name.
+		if (opened.migrated()) {
+			Vitrail.logger().info("Moved this pack's settings into {}, which is the file Iris reads"
+					+ " too. They were in {}, which this engine kept before, and that file is now"
+					+ " renamed aside", opened.settingsFile(),
+					SettingsFile.legacy(gameDirectory, opened.packFileName()));
 		}
 
 		List<String> stale = opened.stale();
 		if (!stale.isEmpty()) {
 			Vitrail.logger().info("{} settings in {} name nothing {} shows and are kept as they are:"
-					+ " {}", stale.size(), opened.readFrom(), opened.packFileName(), stale);
+					+ " {}", stale.size(), opened.settingsFile(), opened.packFileName(), stale);
 		}
 
 		EngineOptions.announceForced(gameDirectory, opened);

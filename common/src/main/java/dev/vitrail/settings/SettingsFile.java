@@ -22,8 +22,9 @@ import java.util.Map;
  * file of its own until then, which it read once as a fallback and never wrote back, so nothing
  * ever travelled from here to Iris and nothing travelled the other way after the first Apply.
  * <p>
- * <strong>That old file is still read, and {@link #legacy} says why.</strong> It holds everything a
- * player applied before the move, and it is the only place holding it.
+ * <strong>That old file is carried over at the first load of its pack, and {@link #migrate} says
+ * how.</strong> It holds everything a player applied before the move, and it is the only place
+ * holding it.
  * <p>
  * Read and written in ISO-8859-1, which is what OptiFine specifies for these files and what Iris
  * does on both sides. Strict UTF-8 threw on any byte past 0x7F, and the file is no longer ours
@@ -41,6 +42,9 @@ public final class SettingsFile {
 	/** The two folders this engine kept its own settings under, before the move. See {@link #legacy}. */
 	private static final String LEGACY_DIRECTORY = "vitrail";
 	private static final String LEGACY_SETTINGS = "settings";
+
+	/** What one of those files is renamed to once it has been moved into the shared one. */
+	private static final String MIGRATED = ".migrated";
 
 	/**
 	 * The one line of {@code vitrail/options.txt} that names a whole set of settings rather than one
@@ -67,9 +71,9 @@ public final class SettingsFile {
 	/**
 	 * Where this engine kept a pack's settings before they moved to the file Iris reads.
 	 * <p>
-	 * Still read, never written. A player who had applied anything through the screen has their
-	 * values here and nowhere else, and the move would otherwise hand every one of those packs back
-	 * its own defaults without a word.
+	 * Read once and then moved aside, which {@link #migrate} does in full. A player who had applied
+	 * anything through the screen has their values here and nowhere else, and the move would
+	 * otherwise hand every one of those packs back its own defaults without a word.
 	 */
 	public static Path legacy(Path gameDirectory, String packFileName) {
 		return gameDirectory.resolve(LEGACY_DIRECTORY).resolve(LEGACY_SETTINGS)
@@ -77,33 +81,84 @@ public final class SettingsFile {
 	}
 
 	/**
-	 * Which of the two files this pack's settings really come from: the shared one, or the one this
-	 * engine used to keep when the shared one does not exist yet.
+	 * Moves one pack's settings out of the file this engine used to keep and into the one both
+	 * engines read, and answers whether it did.
 	 * <p>
-	 * The shared file wins whenever it exists, even empty: it is the one both engines write, so a
-	 * player who has applied anything since the move has said what they want there.
+	 * <strong>At the load and in one go, rather than by reading the old file for as long as the new
+	 * one is absent.</strong> Three things make the lazy form wrong, and all three were measured:
+	 * the screen's Apply rebases on the shared file, so a first Apply after a lazy migration would
+	 * write the one setting just clicked and drop the rest; an Apply with nothing pending writes
+	 * nothing at all, so a pack the player only looks at would never migrate; and the absence of the
+	 * shared file does not mean "not migrated yet", Iris DELETING it whenever nothing differs from
+	 * the pack's defaults ({@code Iris.tryUpdateConfigPropertiesFile}). Under the lazy form a Reset
+	 * performed in Iris would bring the old values back.
+	 * <p>
+	 * <strong>The profile line is expanded and not dropped, and that is the whole of the danger.</strong>
+	 * The old writer stored a file RELATIVE to the chosen profile: every value the profile already
+	 * named was left out, so a player who had picked one has {@code profile=NAME} and nothing else.
+	 * Dropping that line drops their settings entirely. It is turned back into the values it names,
+	 * which is what the shared file has to carry since neither engine has a key for a profile.
+	 * <p>
+	 * The old file is renamed rather than deleted. It is the only copy, this runs once, and a rename
+	 * leaves a player something to look at if any of the above turns out to be wrong.
+	 *
+	 * @param profileValues what a profile of this pack names, by profile name, from the menu that
+	 *                      has just been read. Empty for a pack that declares none
 	 */
-	public static Path sourceOf(Path gameDirectory, String packFileName) {
+	public static boolean migrate(Path gameDirectory, String packFileName,
+			Map<String, Map<String, String>> profileValues) throws IOException {
 		Path shared = of(gameDirectory, packFileName);
 		Path legacy = legacy(gameDirectory, packFileName);
+		if (Files.isRegularFile(shared) || !Files.isRegularFile(legacy)) {
+			return false;
+		}
 
-		return Files.isRegularFile(shared) || !Files.isRegularFile(legacy) ? shared : legacy;
+		Map<String, String> values = new LinkedHashMap<>();
+		String profile = "";
+		for (Map.Entry<String, String> entry : lines(legacy).entrySet()) {
+			if (entry.getKey().equals(PROFILE_KEY)) {
+				profile = entry.getValue();
+			} else {
+				values.put(entry.getKey(), entry.getValue());
+			}
+		}
+
+		// The profile first and the file's own values over it, which is the order the old writer
+		// took them apart in: what it left out was exactly what the profile already said.
+		Map<String, String> merged = new LinkedHashMap<>(
+				profileValues.getOrDefault(profile, Map.of()));
+		merged.putAll(values);
+
+		write(shared, new Stored(merged));
+		Files.move(legacy, legacy.resolveSibling(legacy.getFileName() + MIGRATED),
+				StandardCopyOption.REPLACE_EXISTING);
+
+		return true;
 	}
 
 	/**
 	 * A missing file reads as an empty one. Comments and blank lines are skipped, which is what
 	 * lets a file written by Iris, whose first line is the date it wrote it, be read as is.
 	 * <p>
-	 * {@link #PROFILE_KEY} is dropped wherever it is found, and that is not tidiness. Nothing writes
-	 * it any more, but the files this engine wrote before the move carry it, and a hand copy into
-	 * the shared file is the obvious thing to do with them. Kept, it would stop being the name of a
-	 * set of values and become a value: {@code SettingSet.headerDefines} writes every name of this
-	 * file into the head of each compiled unit, so the pack would be built with
-	 * {@code #define profile ULTRA} and a name it never declared.
+	 * {@link #PROFILE_KEY} is dropped, and only {@link #migrate} ever does anything else with it.
+	 * Nothing writes it any more, and kept it would stop being the name of a set of values and
+	 * become a value: {@code SettingSet.headerDefines} writes every name of this file into the head
+	 * of each compiled unit, so the pack would be built with {@code #define profile ULTRA} and a
+	 * name it never declared. What that costs is a pack declaring an option literally called
+	 * {@code profile}, which would be silently dropped; no pack of the corpus does, and the name is
+	 * this format's own.
 	 */
 	public static Stored read(Path file) throws IOException {
+		Map<String, String> values = new LinkedHashMap<>(lines(file));
+		values.remove(PROFILE_KEY);
+
+		return new Stored(values);
+	}
+
+	/** Every {@code NAME=value} of a file, in order, with nothing taken out. */
+	private static Map<String, String> lines(Path file) throws IOException {
 		if (!Files.isRegularFile(file)) {
-			return Stored.empty();
+			return Map.of();
 		}
 
 		Map<String, String> values = new LinkedHashMap<>();
@@ -114,13 +169,10 @@ public final class SettingsFile {
 				continue;
 			}
 
-			String name = trimmed.substring(0, equals).trim();
-			if (!name.equals(PROFILE_KEY)) {
-				values.put(name, trimmed.substring(equals + 1).trim());
-			}
+			values.put(trimmed.substring(0, equals).trim(), trimmed.substring(equals + 1).trim());
 		}
 
-		return new Stored(values);
+		return values;
 	}
 
 	/**

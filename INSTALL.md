@@ -86,10 +86,11 @@ the pack, in `shaderpacks/<pack file name>.txt`, which is the file Iris reads an
 writes for the same pack: one file per pack, shared, so settings follow you from
 one engine to the other.
 
-Earlier versions kept those settings in `vitrail/settings/` instead. That folder is
-still read, once per pack, when the shared file does not exist yet: your settings
-come back, the next Apply writes them beside the pack, and the old folder stops
-being read. You can delete it once every pack you use has been applied again.
+Earlier versions kept those settings in `vitrail/settings/` instead. The first time
+a pack is loaded after the move its old file is read, written out beside the pack,
+and renamed to `.txt.migrated` on the spot. Nothing is asked of you and nothing is
+lost, a profile you had chosen included: the old file stored only what differed
+from it, so the profile is turned back into the values it names on the way.
 
 None of these files has to exist, and without them nothing is drawn: a pack is
 loaded once one is picked, in the screen or in `pack.txt`, and never before.

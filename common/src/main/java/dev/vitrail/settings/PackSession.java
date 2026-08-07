@@ -22,22 +22,29 @@ import java.util.Map;
  * cheap to: twenty five to eighty eight milliseconds on the corpus, against the half second the
  * translation costs.
  *
- * @param readFrom where {@code saved} was really read, which is {@link #settingsFile()} except on
- *                 the first load after the settings moved: a player who had applied anything before
- *                 the move has it in the file this engine used to keep, and nowhere else. Captured
- *                 at the reading rather than worked out again later, so that the answer cannot
- *                 change under a caller once the shared file has been written
+ * @param migrated whether this load is the one that moved the pack's settings out of the file this
+ *                 engine used to keep and into the shared one. True at most once per pack, the old
+ *                 file being renamed on the way, and worth one line in the log: it is the only load
+ *                 where the values on screen came from somewhere else a moment ago
  */
 public record PackSession(Path gameDirectory, Path packPath, String packFileName, PackMenu menu,
-		Path readFrom, SettingsFile.Stored saved, Map<String, OptionValue> forced) {
+		boolean migrated, SettingsFile.Stored saved, Map<String, OptionValue> forced) {
 
 	public static PackSession read(Path gameDirectory, Path packPath, String languageCode)
 			throws IOException {
 		String packFileName = packPath.getFileName().toString();
-		Path readFrom = SettingsFile.sourceOf(gameDirectory, packFileName);
+		PackMenu menu = PackMenu.read(packPath, languageCode);
 
-		return new PackSession(gameDirectory, packPath, packFileName,
-				PackMenu.read(packPath, languageCode), readFrom, SettingsFile.read(readFrom),
+		// Before the reading and never after it: what it writes is what the reading then finds, so
+		// there is one answer and not a first load that behaves unlike every later one. The menu is
+		// what it needs, a file written before the move carrying the NAME of a profile where the
+		// shared one has to carry the values that profile names.
+		Map<String, Map<String, String>> profiles = new LinkedHashMap<>();
+		menu.profileNames().forEach(name -> profiles.put(name, menu.profile(name)));
+		boolean migrated = SettingsFile.migrate(gameDirectory, packFileName, profiles);
+
+		return new PackSession(gameDirectory, packPath, packFileName, menu, migrated,
+				SettingsFile.read(SettingsFile.of(gameDirectory, packFileName)),
 				SettingsLayers.forced(gameDirectory));
 	}
 
