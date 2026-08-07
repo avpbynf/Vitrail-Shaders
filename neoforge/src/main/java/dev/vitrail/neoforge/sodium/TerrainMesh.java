@@ -57,6 +57,31 @@ public final class TerrainMesh implements ChunkVertexType {
 	 */
 	private static final float TEXTURE_SCALE = 32768.0F;
 
+	/**
+	 * The sign of the texture area of a face whose {@code uv} rectangle is written the usual way
+	 * round, which is what {@link #frame} starts from and keeps only when no triangle of the quad
+	 * has an area to measure at all.
+	 * <p>
+	 * A face lays its corners out as {@code (minU,minV)}, {@code (minU,maxV)}, {@code (maxU,maxV)},
+	 * {@code (maxU,minV)}, {@code CuboidFace.UVs.getVertexU} and {@code getVertexV}, and the area
+	 * comes out {@code -(maxU-minU)(maxV-minV)}. A face may also declare a rotation, which shifts
+	 * that order cyclically, {@code Quadrant.rotateVertexIndex}: it moves which corner is first and
+	 * leaves the area exactly where it was.
+	 * <p>
+	 * <strong>It is the usual way round and not the only one</strong>, so this is a majority and not
+	 * a law. {@code CuboidFace.UVs} keeps the JSON numbers unsorted and the corners are read from
+	 * them raw: of the 3696 {@code uv} rectangles in the block models 26.2 ships, 391 have one axis
+	 * reversed and therefore the opposite handedness. Sodium reflects the winding of some quads as
+	 * well, {@code DefaultFluidRenderer}, and a reflection turns the sign too. None of that reaches
+	 * {@link #handedness}, which measures the corners it is handed; it reaches this constant.
+	 * <p>
+	 * The handedness of a rectangle is the product of the signs of its two axes, so a degenerate one
+	 * leaves one factor with no value and this constant assumes it forward. The measurement backs
+	 * the assumption without making it a measurement: all 160 degenerate rectangles of those models
+	 * keep the axis that survives forward, and a model this engine has not seen may not.
+	 */
+	private static final float UNREVERSED_AREA = -1.0F;
+
 	private final ChunkVertexType inner = ChunkMeshFormats.COMPACT;
 	private final ChunkVertexEncoder innerEncoder = this.inner.getEncoder();
 	private final ChunkVertexEncoder encoder = this::encode;
@@ -262,10 +287,10 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * then the handedness.
 	 * <p>
 	 * <strong>The normal comes from the geometry and not from the facing.</strong> The facing this
-	 * engine used before is one of six axes, so a plant drawn as a cross, a sloped fluid surface
-	 * and every model that is not a box got one of six wrong answers or the eighth value, which had
-	 * no answer at all. Newell's sum over the corners is right for a quad that is not planar either,
-	 * and it costs the same.
+	 * engine used before is one of the six axes of {@code ModelQuadFacing}, so a plant drawn as a
+	 * cross, a sloped fluid surface and every model that is not a box got one of six wrong answers
+	 * or the seventh value, {@code UNASSIGNED}, which had no answer at all. Newell's sum over the
+	 * corners is right for a quad that is not planar either, and it costs the same.
 	 * <p>
 	 * The tangent is the direction the texture's own U axis points in, taken from the two edges and
 	 * their texture coordinates. It is what every normal map on the terrain is read through, and this
@@ -280,13 +305,10 @@ public final class TerrainMesh implements ChunkVertexType {
 	 */
 	private static float[] frame(ChunkVertexEncoder.Vertex[] vertices) {
 		float[] frame = new float[7];
-		if (vertices.length < 3) {
-			frame[1] = 1.0F;
-			frame[3] = 1.0F;
-			frame[6] = -1.0F;
 
-			return frame;
-		}
+		// The answer for a quad no triangle of which has an area to measure. A triangle that has one
+		// overwrites it below, whether or not it goes on to yield a direction.
+		frame[6] = handedness(UNREVERSED_AREA);
 
 		// Newell: every edge of the loop contributes, so a quad whose four corners are not in one
 		// plane still answers the plane they are closest to instead of the plane of its first three.
@@ -303,9 +325,11 @@ public final class TerrainMesh implements ChunkVertexType {
 		// The second triangle when the first has nothing to say, which is Iris's own retry in
 		// computeTangentForQuad: three corners of a quad can share a texture coordinate while the
 		// fourth does not, and taking the perpendicular there would throw away a tangent the other
-		// half of the same quad holds.
+		// half of the same quad holds. Four corners is a contract on both roads in: push refuses any
+		// other length before the encoder is called, and writeExternal, which checks nothing, is fed
+		// the sorter's own array, allocated by ChunkVertexEncoder.Vertex.uninitializedQuad.
 		if (!tangent(frame, vertices[0], vertices[1], vertices[2])
-				&& (vertices.length < 4 || !tangent(frame, vertices[2], vertices[3], vertices[0]))) {
+				&& !tangent(frame, vertices[2], vertices[3], vertices[0])) {
 			perpendicular(frame);
 		}
 
@@ -314,7 +338,29 @@ public final class TerrainMesh implements ChunkVertexType {
 
 	/**
 	 * The tangent of one triangle into the frame, or false when its texture coordinates are
-	 * degenerate and there is none to find.
+	 * degenerate and there is none to find. The handedness is written from the area whenever there
+	 * is one to measure, direction or no direction, so only a quad no triangle of which has an area
+	 * keeps the frame's starting sign.
+	 * <p>
+	 * <strong>The two refusals below both part from the reference, and differently.</strong> Iris
+	 * does not refuse on a texture area of nought at all: the copy of
+	 * {@code NormalHelper.computeTangent} that the terrain feeds substitutes {@code f = 1} for the
+	 * reciprocal and carries on with the direction the mapping still implies - and it does that on
+	 * an exact zero, where this refuses anything under a threshold, so a quad whose area is small
+	 * but real is refused here and served there. The second refusal, a tangent that comes out as
+	 * nothing, is one that copy does make, but not on the same terms: it tests an exact zero after
+	 * the normalise, this tests a sum of components before it.
+	 * <p>
+	 * A quad refused here is retried on its other triangle, and only when that refuses too does the
+	 * caller fall back on {@link #perpendicular}.
+	 * <p>
+	 * <strong>Neither refusal is a decision.</strong> Nothing in the API of 26.2 stands in the way of
+	 * answering as Iris answers, so both are divergences, and the terrain page says what they cost
+	 * and how little is known of how far they reach. The worst of it is not the rotated frame it
+	 * describes: when the first triangle has no area, Iris does not retry at all - it substitutes,
+	 * finds a direction, and its own handedness test lands on nothing, which it reads as {@code +1}
+	 * - where this refuses, retries, and takes the second triangle's sign, which can be the other
+	 * one. That is the handedness bit and not the direction.
 	 */
 	private static boolean tangent(float[] frame, ChunkVertexEncoder.Vertex a,
 			ChunkVertexEncoder.Vertex b, ChunkVertexEncoder.Vertex c) {
@@ -325,6 +371,10 @@ public final class TerrainMesh implements ChunkVertexType {
 			return false;
 		}
 
+		// Before the direction, because this triangle can fail to yield one and its area is measured
+		// all the same: the sign is the mapping's answer either way, and the fallback below has none.
+		frame[6] = handedness(area);
+
 		float scale = 1.0F / area;
 		frame[3] = ((b.x - a.x) * dv2 - (c.x - a.x) * dv1) * scale;
 		frame[4] = ((b.y - a.y) * dv2 - (c.y - a.y) * dv1) * scale;
@@ -332,22 +382,14 @@ public final class TerrainMesh implements ChunkVertexType {
 
 		// A determinant that is not zero does not promise a direction: three corners on one line
 		// with a mapping that is not affine give one, and the tangent still comes out as nothing.
-		// Iris guards the same case and it is what makes its retry fire at all.
+		// Iris refuses this case too, and it is what makes its retry fire at all. On what terms it
+		// refuses is not the same, and the javadoc above says how. The sum below is of absolute
+		// values, so two components cannot cancel each other into a false refusal.
 		if (Math.abs(frame[3]) + Math.abs(frame[4]) + Math.abs(frame[5]) < 1.0E-9F) {
 			return false;
 		}
 
 		normalise(frame, 3);
-
-		// Which way the third axis of the frame turns, which is MINUS the sign of the texture area.
-		// Every pack builds its bitangent as cross(at_tangent.xyz, gl_Normal.xyz) * at_tangent.w,
-		// which is Iris's convention: that cross product is the true bitangent for w = +1 and its
-		// opposite for w = -1, so w is what corrects the chirality rather than a fixed negation.
-		// Iris reaches the same value from the other end, sign(dot(bitangent, tangent x normal)) in
-		// NormalHelper.computeTangent, which reduces to this. Written the other way round it is not
-		// a subtle error: every normal map on the terrain has its green channel inverted and lights
-		// a bump as a dent.
-		frame[6] = area < 0.0F ? 1.0F : -1.0F;
 
 		return true;
 	}
@@ -369,7 +411,54 @@ public final class TerrainMesh implements ChunkVertexType {
 		frame[at + 2] /= length;
 	}
 
-	/** Any unit vector at a right angle to the normal already in the frame. */
+	/**
+	 * Which way the third axis of the frame turns, which is MINUS the sign of the texture area.
+	 * <p>
+	 * Seven of the corpus's eight packs read that sign, four of them written exactly as
+	 * {@code cross(at_tangent.xyz, gl_Normal.xyz) * at_tangent.w}, which is Iris's convention: that
+	 * cross product is the true bitangent for {@code w = +1} and its opposite for {@code w = -1}, so
+	 * {@code w} is what corrects the chirality rather than a fixed negation. Body Camera is the
+	 * eighth: it takes {@code .xyz} alone and crosses it with the normal unscaled, which is the
+	 * {@code +1} chirality applied to every quad whatever this answers.
+	 * <p>
+	 * Iris reaches the same value from the other end,
+	 * {@code sign(dot(bitangent, tangent x normal))} in {@code NormalHelper.computeTangent}, which
+	 * reduces to this for a quad whose corners are in one plane. Written the other way round it is
+	 * not a subtle error: every normal map on the terrain has its green channel inverted and lights
+	 * a bump as a dent.
+	 * <p>
+	 * <strong>Every place that writes the sign goes through here, and one lies outside this
+	 * file</strong>: the {@code at_tangent} entry of {@code VertexPrologue.BETTER_DEFAULTS}, which
+	 * answers the same question for a mesh carrying no tangent at all. Nothing checks that the two
+	 * agree, so a hand that turns one has to turn the other.
+	 */
+	private static float handedness(float textureArea) {
+		return textureArea < 0.0F ? 1.0F : -1.0F;
+	}
+
+	/**
+	 * Any unit vector at a right angle to the normal already in the frame. The direction only: the
+	 * sign is whatever a triangle of this quad measured, or the frame's starting value when none
+	 * could.
+	 * <p>
+	 * <strong>Iris answers this case with whatever tangent it last managed to compute.</strong> When
+	 * both triangles refuse, {@code NormalHelper.computeTangent} returns before it writes its output
+	 * vector, so {@code XHFPTerrainVertex} keeps the one it already held. That field belongs to the
+	 * encoder, and Sodium builds one per pass and facing and reuses it for every section a worker
+	 * meshes, so what is carried in is an earlier quad of the same bucket and need not belong to
+	 * this mesh at all. Before any tangent has been computed it holds {@code (0,1,0)} with a
+	 * handedness of {@code +1}, which is the one place the reference states the value this file
+	 * starts from. What the pack reads is not the carried direction either: {@code encodeNormalTangent}
+	 * takes the normal's component out of it - out of every tangent it packs, not only a carried one
+	 * - and when nothing is left it substitutes an axis of a basis built from that normal, which is
+	 * a case this reaches for every quad that gets here.
+	 * <p>
+	 * So the difference is narrower than a synthesized axis against a carried one, and it is real
+	 * twice over: this answer depends on the quad alone where that one depends on the order the
+	 * bucket was filled in, and the axis is not the same axis, Frisvad's basis against a cross with
+	 * whichever axis the normal is least aligned to. Nothing in 26.2 makes the carry-over
+	 * impossible, so it is a divergence rather than a choice.
+	 */
 	private static void perpendicular(float[] frame) {
 		// Crossed with whichever axis the normal is least aligned to, so the result is never a zero.
 		boolean upright = Math.abs(frame[1]) < Math.abs(frame[0]);
@@ -377,7 +466,6 @@ public final class TerrainMesh implements ChunkVertexType {
 		frame[4] = upright ? 0.0F : frame[2];
 		frame[5] = upright ? frame[0] : -frame[1];
 		normalise(frame, 3);
-		frame[6] = -1.0F;
 	}
 
 	/** Three components and a fourth into one word of signed bytes, as the format declares them. */
@@ -430,9 +518,10 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * Iris packs it identically, {@code XHFPModelVertexType.encodeOld}, and a pack divides it by
 	 * 32768 exactly as it divides its own texture coordinate.
 	 * <p>
-	 * The mean is taken over however many vertices the encoder was handed rather than over four. It
-	 * is always four today, the chunk renderer meshing quads and nothing else, but a hardcoded
-	 * quarter would answer a quarter of the truth rather than fail if that ever stopped being so.
+	 * The mean is taken over however many vertices the encoder was handed rather than over four,
+	 * which costs nothing and reads the same. Four is a contract all the same, and {@link #frame}
+	 * relies on it outright: both roads into this encoder hand over a quad and one of them refuses
+	 * anything else.
 	 */
 	private static int midTexCoord(ChunkVertexEncoder.Vertex[] vertices) {
 		if (vertices.length == 0) {

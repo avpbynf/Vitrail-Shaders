@@ -246,9 +246,18 @@ public final class SodiumVertex {
 			case "vec2" -> "vec2(" + TANGENT + ".xy)";
 			case "vec3" -> "vec3(" + TANGENT + ".xyz)";
 			case "vec4" -> TANGENT;
-			// An axis and not a zero, which is the rule VertexPrologue.BETTER_DEFAULTS holds for this
-			// same name: a pack normalises what it reads here, and normalize(vec3(0)) puts a NaN in
-			// the colour. Reached only by a type the corpus has never declared this under.
+			// A tangent is an axis and not a zero: a pack normalises what it reads here, and
+			// normalize(vec3(0)) puts a NaN in the colour. That rule is carried by the vec3 and vec4
+			// arms above, which hand back a whole direction, and by the at_tangent entry of
+			// VertexPrologue.BETTER_DEFAULTS, which answers for a vec4 declaration alone, each entry
+			// there being matched against the spelling the pack used.
+			//
+			// It is NOT carried by this arm, which answers zero for every type but a matrix, any
+			// more than by the float and vec2 arms, which take a component or two and so answer zero
+			// for a tangent along Z - nor, on the road that has no mesh element at all, by anything
+			// but that vec4 entry, a pack declaring three components getting the same zero there.
+			// Every at_tangent declaration of the corpus is a vec4, so no pack reaches the gap; it
+			// is a gap all the same.
 			default -> type.startsWith("mat") ? type + "(1.0)" : VertexPrologue.zero(type);
 		};
 	}

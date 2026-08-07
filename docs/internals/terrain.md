@@ -110,8 +110,30 @@ Newell's sum over the loop, which is what makes it right for a plant drawn as a 
 fluid surface and any model that is not a box: a face direction offers six axes and a seventh value
 meaning none, and not one of them describes those. The tangent of the texture mapping comes from the
 same corners and their texture coordinates, with a sign saying which way the third axis of that
-frame turns; every pack rebuilds its bitangent from the tangent and the normal together, so that
-sign decides whether a bump lights as a bump or as a dent.
+frame turns; a pack rebuilds its bitangent from the tangent and the normal together, and where it
+reads that sign, the sign decides whether a bump lights as a bump or as a dent. A pack is free not
+to read it, and Body Camera does not: it crosses the tangent with the normal and keeps the result
+unscaled, which is one of the two chiralities applied to every quad, so the frame it builds is
+inverted wherever the mapping runs the other way.
+
+**A mapping too flat to yield a direction is where this engine parts from Iris**, the reference it
+follows. Iris keeps a direction wherever it can: where the determinant is exactly nought it puts one
+in place of the reciprocal and carries on, and where the tangent still comes out as nothing it keeps
+whatever tangent it last computed, a value its encoder holds for every section a worker builds. This
+engine refuses in both cases, and on a wider test in each: it refuses a small area where Iris
+refuses none at all, and a sum of absolute components before normalising where Iris tests an exact
+zero after. The quad then gets an axis taken from its own face normal, and keeps whatever handedness
+one of its triangles managed to measure, or the majority answer when neither did. The gap is
+narrower than it sounds, because Iris strips the normal's component out of every tangent it packs
+and substitutes an axis of its own when nothing is left; but it is real, and it runs both ways,
+since this answer depends on the quad alone where that one depends on the order its bucket was
+filled in, and the two substituted axes are not the same axis. Nothing in the graphics API forces
+any of it.
+
+How far those refusals reach is not known. Every `uv` rectangle in the game's own block models with
+an axis of no extent belongs to a face that has no extent of its own, the edge-on side of a flat
+element, so it covers no pixel, and whether such a quad reaches the encoder at all was not measured;
+the threshold is in atlas coordinates besides, which a resource pack moves.
 
 Those fields are written whether or not a pack is drawing. Meshes are cached, so writing them only
 while the terrain switch is on would leave every already-built section without them until something
