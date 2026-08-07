@@ -103,6 +103,26 @@ public final class GlslTranslator {
 	/** The comparison a {@code sampler2DShadow} would have had the hardware make. */
 	private static final String SHADOW_COMPARE = "ofShadowCompare";
 
+	/**
+	 * What a call to {@code sin} or {@code cos} becomes: the same function behind an argument
+	 * brought back into one turn.
+	 * <p>
+	 * The packs feed these two whole world coordinates. BSL's waving noise hashes with
+	 * {@code fract(sin(dot(floor(pos), K)) * 43758.5453)} and hands the sine thousands of radians,
+	 * and the hash then amplifies whatever the sine got wrong by five orders of magnitude. Under
+	 * Iris the driver compiles GLSL and reduces the argument properly, so the pack behaves; under
+	 * this engine the game compiles through shaderc to SPIR-V, the sine's precision at large
+	 * arguments is the implementation's to choose, and on this corpus the choice breaks the hash:
+	 * the noise field decorrelates in bands, and foliage riding the field skips as it crosses them,
+	 * measured in game on BSL and gone the moment the argument is reduced. Reducing costs one
+	 * multiply, one floor and one fused subtract per call, leaves a small argument bit-for-bit
+	 * unchanged in period and loses nothing a pack can see.
+	 */
+	private static final String REDUCED_SIN = "ofReducedSin";
+
+	/** See {@link #REDUCED_SIN}. */
+	private static final String REDUCED_COS = "ofReducedCos";
+
 	/** What a lookup on a volume the pack ships is called once the volume has been laid out flat. */
 	private static final String VOLUME_LOOKUP = "ofTexture3D_";
 
@@ -225,6 +245,9 @@ public final class GlslTranslator {
 
 	/** Lookups this unit makes the comparison for itself, because the backend cannot. */
 	private int shadowCompares;
+
+	/** Calls to {@code sin} or {@code cos} sent through the reduced-argument helpers. */
+	private int trigCalls;
 	private int strippedExtensions;
 	private boolean depthEpilogue;
 	private boolean terrainPrologue;
@@ -713,6 +736,16 @@ public final class GlslTranslator {
 			String modern = LegacyGlsl.DEPRECATED_FUNCTIONS.get(name);
 			if (modern != null && callOpener(index) >= 0) {
 				replace(index, modern);
+				continue;
+			}
+
+			// Calls only, and never a name the pack declared for itself: a unit shipping its own
+			// sin has already said what it means by it. See REDUCED_SIN for why the builtin cannot
+			// be left to take the argument raw.
+			if ((name.equals("sin") || name.equals("cos")) && callOpener(index) >= 0
+					&& !this.declaredNames.contains(name)) {
+				replace(index, name.equals("sin") ? REDUCED_SIN : REDUCED_COS);
+				this.trigCalls++;
 				continue;
 			}
 
@@ -2406,6 +2439,17 @@ public final class GlslTranslator {
 					+ " mix(ofTests.x, ofTests.y, ofPart.x), ofPart.y); }");
 			lines.add("float " + SHADOW_COMPARE + "(sampler2D ofMap, vec3 ofAt, float ofLod) {"
 					+ " return " + SHADOW_COMPARE + "(ofMap, ofAt); }");
+		}
+
+		// One overload per shape the builtins take. The reduction is x minus two pi times
+		// floor(x / two pi), which leaves an argument already inside one turn exactly where it was.
+		if (this.trigCalls > 0) {
+			for (String shape : new String[] {"float", "vec2", "vec3", "vec4"}) {
+				lines.add(shape + " " + REDUCED_SIN + "(" + shape + " ofX) {"
+						+ " return sin(ofX - 6.2831855 * floor(ofX * 0.15915494)); }");
+				lines.add(shape + " " + REDUCED_COS + "(" + shape + " ofX) {"
+						+ " return cos(ofX - 6.2831855 * floor(ofX * 0.15915494)); }");
+			}
 		}
 
 		// Only where a lookup was moved. A stage carrying the declaration and never reading it, which
