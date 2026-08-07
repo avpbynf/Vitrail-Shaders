@@ -22,13 +22,12 @@ import java.util.Map;
  * cheap to: twenty five to eighty eight milliseconds on the corpus, against the half second the
  * translation costs.
  *
- * @param migrated whether this load is the one that moved the pack's settings out of the file this
- *                 engine used to keep and into the shared one. True at most once per pack, the old
- *                 file being renamed on the way, and worth one line in the log: it is the only load
- *                 where the values on screen came from somewhere else a moment ago
+ * @param carried what became of the file this engine kept before the settings moved, which the
+ *                caller reports and nothing else acts on. It is the only load where the values on
+ *                screen were somewhere else a moment ago
  */
 public record PackSession(Path gameDirectory, Path packPath, String packFileName, PackMenu menu,
-		boolean migrated, SettingsFile.Stored saved, Map<String, OptionValue> forced) {
+		SettingsFile.Carry carried, SettingsFile.Stored saved, Map<String, OptionValue> forced) {
 
 	public static PackSession read(Path gameDirectory, Path packPath, String languageCode)
 			throws IOException {
@@ -36,14 +35,25 @@ public record PackSession(Path gameDirectory, Path packPath, String packFileName
 		PackMenu menu = PackMenu.read(packPath, languageCode);
 
 		// Before the reading and never after it: what it writes is what the reading then finds, so
-		// there is one answer and not a first load that behaves unlike every later one. The menu is
-		// what it needs, a file written before the move carrying the NAME of a profile where the
-		// shared one has to carry the values that profile names.
-		Map<String, Map<String, String>> profiles = new LinkedHashMap<>();
-		menu.profileNames().forEach(name -> profiles.put(name, menu.profile(name)));
-		boolean migrated = SettingsFile.migrate(gameDirectory, packFileName, profiles);
+		// there is one answer and not a first load that behaves unlike every later one.
+		//
+		// Caught here rather than left to the loader, and that is the point of catching it at all:
+		// a shaderpacks folder the player cannot write to, or an old file another process is
+		// holding, would otherwise take the whole pack down through the loader's own catch. What is
+		// at stake is settings that are still on disk, so the pack draws with the pack's defaults
+		// and the old file waits for the next load.
+		//
+		// Swallowed rather than reported, and the caller says it instead: nothing in this package
+		// nor in pack/ names a Minecraft API, which is what lets both be compiled and run against
+		// the corpus without starting the game. One logger would end that.
+		SettingsFile.Carry carried;
+		try {
+			carried = SettingsFile.migrate(gameDirectory, packFileName, menu);
+		} catch (IOException e) {
+			carried = SettingsFile.Carry.FAILED;
+		}
 
-		return new PackSession(gameDirectory, packPath, packFileName, menu, migrated,
+		return new PackSession(gameDirectory, packPath, packFileName, menu, carried,
 				SettingsFile.read(SettingsFile.of(gameDirectory, packFileName)),
 				SettingsLayers.forced(gameDirectory));
 	}

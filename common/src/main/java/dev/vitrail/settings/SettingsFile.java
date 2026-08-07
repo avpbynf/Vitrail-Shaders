@@ -1,5 +1,9 @@
 package dev.vitrail.settings;
 
+import dev.vitrail.pack.menu.MenuOption;
+import dev.vitrail.pack.menu.MenuValues;
+import dev.vitrail.pack.menu.PackMenu;
+import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.source.PackLoader;
 
 import java.io.IOException;
@@ -102,20 +106,25 @@ public final class SettingsFile {
 	 * The old file is renamed rather than deleted. It is the only copy, this runs once, and a rename
 	 * leaves a player something to look at if any of the above turns out to be wrong.
 	 *
-	 * @param profileValues what a profile of this pack names, by profile name, from the menu that
-	 *                      has just been read. Empty for a pack that declares none
+	 * @param menu this pack's menu, just read. It is what says which names are toggles, what each
+	 *             one defaults to, and what a profile names, and all three are needed: the old file
+	 *             held a toggle as {@code on}, which Iris reads as no value at all
 	 */
-	public static boolean migrate(Path gameDirectory, String packFileName,
-			Map<String, Map<String, String>> profileValues) throws IOException {
+	public static Carry migrate(Path gameDirectory, String packFileName, PackMenu menu)
+			throws IOException {
 		Path shared = of(gameDirectory, packFileName);
 		Path legacy = legacy(gameDirectory, packFileName);
 		if (Files.isRegularFile(shared) || !Files.isRegularFile(legacy)) {
-			return false;
+			return Carry.NOTHING;
 		}
 
+		// In UTF-8 and not in the format's own encoding, because this file was written by this
+		// engine before the move and this engine wrote UTF-8. Reading it as the shared file is read
+		// would turn an accented value into mojibake, and now that the value is copied on it would
+		// be mojibake for good rather than for one load.
 		Map<String, String> values = new LinkedHashMap<>();
 		String profile = "";
-		for (Map.Entry<String, String> entry : lines(legacy).entrySet()) {
+		for (Map.Entry<String, String> entry : lines(legacy, StandardCharsets.UTF_8).entrySet()) {
 			if (entry.getKey().equals(PROFILE_KEY)) {
 				profile = entry.getValue();
 			} else {
@@ -123,17 +132,59 @@ public final class SettingsFile {
 			}
 		}
 
+		// A profile this version of the pack no longer declares cannot be turned into anything, and
+		// the old file holds only what DIFFERED from it. Moving what is left would move a fraction
+		// of what the player chose and rename the only copy away, so nothing is touched at all and
+		// the caller says so.
+		if (!profile.isEmpty() && !menu.profileNames().contains(profile)) {
+			return Carry.UNKNOWN_PROFILE;
+		}
+
 		// The profile first and the file's own values over it, which is the order the old writer
 		// took them apart in: what it left out was exactly what the profile already said.
-		Map<String, String> merged = new LinkedHashMap<>(
-				profileValues.getOrDefault(profile, Map.of()));
+		Map<String, String> merged = new LinkedHashMap<>(menu.profile(profile));
 		merged.putAll(values);
 
-		write(shared, new Stored(merged));
+		Map<String, String> written = new LinkedHashMap<>();
+		merged.forEach((name, value) -> {
+			// What a profile names is usually what the pack already defaults to, and this file is
+			// only ever the difference. Writing the whole profile out would be a fatter file than
+			// either engine writes and a count that says twenty settings moved when none did.
+			// Through asText on both sides, because the two spellings of a boolean have to compare
+			// equal here: the pack's default is held as the menu holds it and the old file wrote
+			// whichever of on and true the screen had at the time.
+			String fallback = menu.option(name).map(MenuOption::defaultValue).orElse(null);
+			if (fallback == null
+					|| !OptionValue.parse(fallback).asText().equals(OptionValue.parse(value).asText())) {
+				written.put(name, MenuValues.written(menu, name, value));
+			}
+		});
+
+		write(shared, new Stored(written));
 		Files.move(legacy, legacy.resolveSibling(legacy.getFileName() + MIGRATED),
 				StandardCopyOption.REPLACE_EXISTING);
 
-		return true;
+		return Carry.MOVED;
+	}
+
+	/** What {@link #migrate} did, which the caller reports and nothing else acts on. */
+	public enum Carry {
+
+		/** No old file, or a shared one already there. The ordinary case, and silent. */
+		NOTHING,
+
+		/** The old file was read, written out to the shared one, and renamed aside. */
+		MOVED,
+
+		/**
+		 * The old file names a profile this version of the pack does not declare, so what it holds
+		 * cannot be completed. Nothing was written and nothing was renamed; the player still has
+		 * their file, and the log says which profile is missing.
+		 */
+		UNKNOWN_PROFILE,
+
+		/** The move could not be made at all. The old file is untouched and will be tried again. */
+		FAILED
 	}
 
 	/**
@@ -149,20 +200,21 @@ public final class SettingsFile {
 	 * this format's own.
 	 */
 	public static Stored read(Path file) throws IOException {
-		Map<String, String> values = new LinkedHashMap<>(lines(file));
+		Map<String, String> values = new LinkedHashMap<>(lines(file, StandardCharsets.ISO_8859_1));
 		values.remove(PROFILE_KEY);
 
 		return new Stored(values);
 	}
 
 	/** Every {@code NAME=value} of a file, in order, with nothing taken out. */
-	private static Map<String, String> lines(Path file) throws IOException {
+	private static Map<String, String> lines(Path file, java.nio.charset.Charset charset)
+			throws IOException {
 		if (!Files.isRegularFile(file)) {
 			return Map.of();
 		}
 
 		Map<String, String> values = new LinkedHashMap<>();
-		for (String line : Files.readAllLines(file, StandardCharsets.ISO_8859_1)) {
+		for (String line : Files.readAllLines(file, charset)) {
 			String trimmed = line.trim();
 			int equals = trimmed.indexOf('=');
 			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {

@@ -362,7 +362,16 @@ public final class MenuValues {
 	 * the pack's own default, so a toggle written {@code on} is a toggle lost.
 	 */
 	private String written(String name, String value) {
-		return toggle(name)
+		return written(this.menu, name, value);
+	}
+
+	/**
+	 * The same, for a caller that has a menu and no values yet. The settings carry-over is the one
+	 * there is: it builds a file out of a profile's own values, which are held in the spelling a
+	 * widget wants, and writing them as they stand would lose every toggle it moved.
+	 */
+	public static String written(PackMenu menu, String name, String value) {
+		return menu.option(name).filter(option -> option.form() == MenuOption.Form.TOGGLE).isPresent()
 				? Boolean.toString(OptionValue.parse(value).asBoolean())
 				: value;
 	}

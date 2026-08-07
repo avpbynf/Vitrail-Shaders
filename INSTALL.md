@@ -88,9 +88,14 @@ one engine to the other.
 
 Earlier versions kept those settings in `vitrail/settings/` instead. The first time
 a pack is loaded after the move its old file is read, written out beside the pack,
-and renamed to `.txt.migrated` on the spot. Nothing is asked of you and nothing is
-lost, a profile you had chosen included: the old file stored only what differed
-from it, so the profile is turned back into the values it names on the way.
+and renamed to `.txt.migrated` on the spot. Nothing is asked of you, and a profile
+you had chosen comes over too: the old file stored only what differed from it, so
+the profile is turned back into the values it names on the way.
+
+One shape of old file cannot be carried over: one naming a profile that the pack no
+longer declares, because what it stored is only the difference from a set of values
+nothing can rebuild. Nothing is moved or renamed in that case, the log says which
+profile is missing, and your file stays where it is.
 
 None of these files has to exist, and without them nothing is drawn: a pack is
 loaded once one is picked, in the screen or in `pack.txt`, and never before.
