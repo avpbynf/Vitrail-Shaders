@@ -74,18 +74,37 @@ public final class SodiumVertex {
 	public static final String MID_BLOCK = "a_MidBlock";
 
 	/**
+	 * The quad's own normal, taken from its corners rather than from the axis its facing names.
+	 * <p>
+	 * The facing this engine read before is one of seven axes plus a value meaning none, so anything
+	 * that is not a box face got one of six wrong answers: a plant drawn as a cross, a sloped fluid
+	 * surface, every custom model. And the facing never reached a translucent quad or a fluid at all,
+	 * so glass and water were lit as if they faced up.
+	 */
+	public static final String NORMAL = "a_Normal";
+
+	/**
+	 * The direction the texture's own U axis runs in over this quad, with the handedness of the frame
+	 * in the fourth component.
+	 * <p>
+	 * Every normal map on the terrain is read through it, and this engine handed back a constant,
+	 * which tilts all of them the same wrong way. Eight packs of the corpus read {@code at_tangent}.
+	 */
+	public static final String TANGENT = "a_Tangent";
+
+	/**
 	 * The elements of the chunk mesh, in order. The format must carry these and no more, and the
 	 * order after {@code a_LightAndData} is the one {@code TerrainMesh.Extra} lays out.
 	 */
 	public static final List<String> ATTRIBUTES =
 			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID, MID_TEX_COORD,
-					MID_BLOCK);
+					MID_BLOCK, NORMAL, TANGENT);
 
 	/**
 	 * The ones of {@link VertexPrologue#SYNTHESIZED} this mesh answers for real, out of an element
 	 * under another name. What is left of that set is what the log has to call a constant.
 	 */
-	public static final Set<String> ANSWERED = Set.of("mc_Entity", "mc_midTexCoord", "at_midBlock");
+	public static final Set<String> ANSWERED = Set.of("mc_Entity", "mc_midTexCoord", "at_midBlock", "at_tangent");
 
 	/**
 	 * Where the quad's facing sits in the material byte, and why there is room for it.
@@ -145,16 +164,6 @@ public final class SodiumVertex {
 		lines.add("vec4 of_MultiTexCoord1;");
 		lines.add("vec3 of_Normal;");
 
-		// In ModelQuadFacing's own order, shifted up by one so that index nought is the quad nobody
-		// wrote a facing for. Index seven is UNASSIGNED, a quad aligned on no axis at all, which the
-		// mesh cannot describe with one normal; both fall back to up rather than to nought, because
-		// every pack normalises what it reads and normalize(vec3(0)) is a NaN in the colour.
-		lines.add("const vec3 ofFacingNormals[8] = vec3[8]("
-				+ "vec3(0.0, 1.0, 0.0), "
-				+ "vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0), "
-				+ "vec3(-1.0, 0.0, 0.0), vec3(0.0, -1.0, 0.0), vec3(0.0, 0.0, -1.0), "
-				+ "vec3(0.0, 1.0, 0.0));");
-
 		Map<String, String> globals = VertexPrologue.globals(used, synthesized, FIXED);
 
 		// A name the mesh answers is left uninitialised here and filled in the prologue below, like
@@ -193,8 +202,7 @@ public final class SodiumVertex {
 		lines.add("\tof_MultiTexCoord0 = vec4(vec2(a_TexCoord & 32767u) / 32768.0"
 				+ " + ofInward * of_TexShrink, 0.0, 1.0);");
 		lines.add("\tof_MultiTexCoord1 = vec4(vec2(a_LightAndData.xy) / 256.0, 0.0, 1.0);");
-		lines.add("\tof_Normal = ofFacingNormals[int((a_LightAndData.z >> " + FACING_SHIFT
-				+ "u) & " + FACING_MASK + "u)];");
+		lines.add("\tof_Normal = " + NORMAL + ".xyz;");
 		globals.forEach((name, type) -> {
 			if (ANSWERED.contains(name)) {
 				lines.add("\t" + name + " = " + answer(name, type) + ";");
@@ -211,6 +219,7 @@ public final class SodiumVertex {
 		return switch (name) {
 			case "mc_midTexCoord" -> midTexCoord(type);
 			case "at_midBlock" -> midBlock(type);
+			case "at_tangent" -> tangent(type);
 			default -> entity(type);
 		};
 	}
@@ -235,6 +244,22 @@ public final class SodiumVertex {
 			case "vec2" -> pair;
 			case "vec3" -> "vec3(" + pair + ", 0.0)";
 			case "vec4" -> "vec4(" + pair + ", 0.0, 1.0)";
+			default -> VertexPrologue.zero(type);
+		};
+	}
+
+	/**
+	 * {@code at_tangent} out of the element, in the shape the pack declared it under.
+	 * <p>
+	 * Four components is the shape every pack of the corpus declares, the fourth being the handedness
+	 * that says which way the third axis of the tangent frame turns. A pack declaring three loses it
+	 * and gets the direction alone, which is what asking for three means.
+	 */
+	private static String tangent(String type) {
+		return switch (type) {
+			case "vec2" -> "vec2(" + TANGENT + ".xy)";
+			case "vec3" -> "vec3(" + TANGENT + ".xyz)";
+			case "vec4" -> TANGENT;
 			default -> VertexPrologue.zero(type);
 		};
 	}
@@ -296,6 +321,7 @@ public final class SodiumVertex {
 		return switch (attribute) {
 			case "a_Position", "a_TexCoord", MID_TEX_COORD -> "uvec2";
 			case MID_BLOCK -> "ivec4";
+			case NORMAL, TANGENT -> "vec4";
 			case "a_LightAndData" -> "uvec4";
 			case BLOCK_ID -> "uint";
 			default -> "vec4";

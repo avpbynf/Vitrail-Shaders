@@ -180,7 +180,20 @@ public final class TerrainMesh implements ChunkVertexType {
 		 * of them writing {@code at_midBlock.xyz / 64.0} word for word, so handing them anything
 		 * already divided would move every block they voxelise by that factor again.
 		 */
-		MID_BLOCK(SodiumVertex.MID_BLOCK, GpuFormat.RGBA8_SINT);
+		MID_BLOCK(SodiumVertex.MID_BLOCK, GpuFormat.RGBA8_SINT),
+
+		/**
+		 * The quad's own normal, and the tangent of its texture mapping with the sign that says which
+		 * way the third axis of that frame points.
+		 * <p>
+		 * Signed and normalised, so the shader reads them as a {@code vec4} in minus one to one with
+		 * nothing to undo. Iris packs the pair into one word of its own and unpacks it in the patched
+		 * text; two elements cost four bytes more and no arithmetic, and this engine has no patched
+		 * text to unpack them in.
+		 */
+		NORMAL(SodiumVertex.NORMAL, GpuFormat.RGBA8_SNORM),
+
+		TANGENT(SodiumVertex.TANGENT, GpuFormat.RGBA8_SNORM);
 
 		private final String attribute;
 		private final GpuFormat format;
@@ -214,6 +227,13 @@ public final class TerrainMesh implements ChunkVertexType {
 		// already divides its own texture coordinate by.
 		int middle = midTexCoord(vertices);
 
+		// Both are properties of the QUAD and not of a corner, like the middle above: the four
+		// vertices carry the same pair, and a pack that reads a normal per vertex on chunk geometry
+		// is reading what the face is, not what the corner is.
+		float[] frame = frame(vertices);
+		int normal = packAxis(frame[0], frame[1], frame[2], 0.0F);
+		int tangent = packAxis(frame[3], frame[4], frame[5], frame[6]);
+
 		// Backwards: every vertex moves up, so the one that has not been moved yet is always the
 		// source of the next move. Word by word and from the top of each vertex for the same reason,
 		// the two ranges overlapping for all but the last vertex of a quad.
@@ -229,9 +249,126 @@ public final class TerrainMesh implements ChunkVertexType {
 					((TerrainVertex) vertices[at]).vitrailBlockId() & BlockStateIds.PACKED_MASK);
 			MemoryUtil.memPutInt(extra + Integer.BYTES, middle);
 			MemoryUtil.memPutInt(extra + 2L * Integer.BYTES, midBlock(vertices[at]));
+			MemoryUtil.memPutInt(extra + 3L * Integer.BYTES, normal);
+			MemoryUtil.memPutInt(extra + 4L * Integer.BYTES, tangent);
 		}
 
 		return pointer + (long) vertices.length * this.stride;
+	}
+
+	/**
+	 * The quad's normal and the tangent of its texture mapping, as seven floats: three, then three,
+	 * then the handedness.
+	 * <p>
+	 * <strong>The normal comes from the geometry and not from the facing.</strong> The facing this
+	 * engine used before is one of seven axes, so a plant drawn as a cross, a sloped fluid surface
+	 * and every model that is not a box got one of six wrong answers or the eighth value, which had
+	 * no answer at all. Newell's sum over the corners is right for a quad that is not planar either,
+	 * and it costs the same.
+	 * <p>
+	 * The tangent is the direction the texture's own U axis points in, taken from the two edges and
+	 * their texture coordinates. It is what every normal map on the terrain is read through, and this
+	 * engine used to hand back a constant, which tilts every one of them the same wrong way. Its
+	 * handedness says which way the third axis of that frame goes and is the difference between a
+	 * bump and a dent.
+	 * <p>
+	 * A quad whose texture coordinates are degenerate, the two edges mapping to the same direction,
+	 * has no tangent to find. It gets an axis perpendicular to the normal rather than a zero, for the
+	 * reason {@code VertexPrologue} gives about the constant it replaces: a pack normalises what it
+	 * reads, and normalising a zero puts a NaN in the colour.
+	 */
+	private static float[] frame(ChunkVertexEncoder.Vertex[] vertices) {
+		float[] frame = new float[7];
+		if (vertices.length < 3) {
+			frame[1] = 1.0F;
+			frame[3] = 1.0F;
+			frame[6] = 1.0F;
+
+			return frame;
+		}
+
+		// Newell: every edge of the loop contributes, so a quad whose four corners are not in one
+		// plane still answers the plane they are closest to instead of the plane of its first three.
+		for (int at = 0; at < vertices.length; at++) {
+			ChunkVertexEncoder.Vertex current = vertices[at];
+			ChunkVertexEncoder.Vertex next = vertices[(at + 1) % vertices.length];
+			frame[0] += (current.y - next.y) * (current.z + next.z);
+			frame[1] += (current.z - next.z) * (current.x + next.x);
+			frame[2] += (current.x - next.x) * (current.y + next.y);
+		}
+
+		normalise(frame, 0);
+
+		ChunkVertexEncoder.Vertex a = vertices[0];
+		ChunkVertexEncoder.Vertex b = vertices[1];
+		ChunkVertexEncoder.Vertex c = vertices[2];
+		float du1 = b.u - a.u;
+		float dv1 = b.v - a.v;
+		float du2 = c.u - a.u;
+		float dv2 = c.v - a.v;
+		float area = du1 * dv2 - du2 * dv1;
+		if (Math.abs(area) < 1.0E-9F) {
+			perpendicular(frame);
+
+			return frame;
+		}
+
+		float scale = 1.0F / area;
+		frame[3] = ((b.x - a.x) * dv2 - (c.x - a.x) * dv1) * scale;
+		frame[4] = ((b.y - a.y) * dv2 - (c.y - a.y) * dv1) * scale;
+		frame[5] = ((b.z - a.z) * dv2 - (c.z - a.z) * dv1) * scale;
+		normalise(frame, 3);
+
+		// Which way the third axis of the frame turns, taken from the sign of the texture area: it
+		// flips wherever a face is mirrored, and a normal map read through the wrong one lights a
+		// bump as a dent.
+		frame[6] = area < 0.0F ? -1.0F : 1.0F;
+
+		return frame;
+	}
+
+	/** Three of those floats to unit length, or to the up axis when there is no length to speak of. */
+	private static void normalise(float[] frame, int at) {
+		float length = (float) Math.sqrt(frame[at] * frame[at] + frame[at + 1] * frame[at + 1]
+				+ frame[at + 2] * frame[at + 2]);
+		if (length < 1.0E-9F) {
+			frame[at] = 0.0F;
+			frame[at + 1] = 1.0F;
+			frame[at + 2] = 0.0F;
+
+			return;
+		}
+
+		frame[at] /= length;
+		frame[at + 1] /= length;
+		frame[at + 2] /= length;
+	}
+
+	/** Any unit vector at a right angle to the normal already in the frame. */
+	private static void perpendicular(float[] frame) {
+		// Crossed with whichever axis the normal is least aligned to, so the result is never a zero.
+		boolean upright = Math.abs(frame[1]) < Math.abs(frame[0]);
+		frame[3] = upright ? -frame[2] : 0.0F;
+		frame[4] = upright ? 0.0F : frame[2];
+		frame[5] = upright ? frame[0] : -frame[1];
+		normalise(frame, 3);
+		frame[6] = 1.0F;
+	}
+
+	/** Three components and a fourth into one word of signed bytes, as the format declares them. */
+	private static int packAxis(float x, float y, float z, float w) {
+		return (byteOf(x) & 0xFF) | ((byteOf(y) & 0xFF) << 8) | ((byteOf(z) & 0xFF) << 16)
+				| ((byteOf(w) & 0xFF) << 24);
+	}
+
+	/**
+	 * One component of a unit vector as a signed byte.
+	 * <p>
+	 * Scaled by 127 and not by 128, so that one comes back as one: the backend divides a signed byte
+	 * by 127, and a value stored at 128 would have wrapped to the other end of the range anyway.
+	 */
+	private static int byteOf(float value) {
+		return Math.round(Math.clamp(value, -1.0F, 1.0F) * 127.0F);
 	}
 
 	/**
