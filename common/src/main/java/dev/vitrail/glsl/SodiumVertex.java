@@ -249,9 +249,7 @@ public final class SodiumVertex {
 			// An axis and not a zero, which is the rule VertexPrologue.BETTER_DEFAULTS holds for this
 			// same name: a pack normalises what it reads here, and normalize(vec3(0)) puts a NaN in
 			// the colour. Reached only by a type the corpus has never declared this under.
-			default -> type.startsWith("vec") || type.startsWith("mat")
-					? type + "(1.0)"
-					: VertexPrologue.zero(type);
+			default -> type.startsWith("mat") ? type + "(1.0)" : VertexPrologue.zero(type);
 		};
 	}
 

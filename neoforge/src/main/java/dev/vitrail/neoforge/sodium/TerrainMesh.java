@@ -95,7 +95,8 @@ public final class TerrainMesh implements ChunkVertexType {
 			// instance. Blaming the line there would send a reader looking for one they never wrote.
 			Vitrail.logger().info("The pack's own terrain program is not wanted where the chunk mesh "
 					+ "format is settled, so the mesh keeps the format Sodium gave it for the rest "
-					+ "of this run and carries no block id");
+					+ "of this run and carries none of {}",
+					Arrays.stream(Extra.values()).map(Extra::attribute).toList());
 
 			return null;
 		}
@@ -282,7 +283,7 @@ public final class TerrainMesh implements ChunkVertexType {
 		if (vertices.length < 3) {
 			frame[1] = 1.0F;
 			frame[3] = 1.0F;
-			frame[6] = 1.0F;
+			frame[6] = -1.0F;
 
 			return frame;
 		}
@@ -328,15 +329,24 @@ public final class TerrainMesh implements ChunkVertexType {
 		frame[3] = ((b.x - a.x) * dv2 - (c.x - a.x) * dv1) * scale;
 		frame[4] = ((b.y - a.y) * dv2 - (c.y - a.y) * dv1) * scale;
 		frame[5] = ((b.z - a.z) * dv2 - (c.z - a.z) * dv1) * scale;
+
+		// A determinant that is not zero does not promise a direction: three corners on one line
+		// with a mapping that is not affine give one, and the tangent still comes out as nothing.
+		// Iris guards the same case and it is what makes its retry fire at all.
+		if (Math.abs(frame[3]) + Math.abs(frame[4]) + Math.abs(frame[5]) < 1.0E-9F) {
+			return false;
+		}
+
 		normalise(frame, 3);
 
-		// Which way the third axis of the frame turns. MINUS the sign of the texture area, and the
-		// minus is the whole of it: every pack builds its bitangent as
-		// cross(at_tangent.xyz, gl_Normal.xyz) * at_tangent.w, which is Iris's convention, and that
-		// cross product is the true bitangent NEGATED. Iris arrives at the same place from the other
-		// end, sign(dot(bitangent, tangent x normal)) in NormalHelper.computeTangent. Written the
-		// other way round it is not a subtle error: every normal map on the terrain has its green
-		// channel inverted and lights a bump as a dent.
+		// Which way the third axis of the frame turns, which is MINUS the sign of the texture area.
+		// Every pack builds its bitangent as cross(at_tangent.xyz, gl_Normal.xyz) * at_tangent.w,
+		// which is Iris's convention: that cross product is the true bitangent for w = +1 and its
+		// opposite for w = -1, so w is what corrects the chirality rather than a fixed negation.
+		// Iris reaches the same value from the other end, sign(dot(bitangent, tangent x normal)) in
+		// NormalHelper.computeTangent, which reduces to this. Written the other way round it is not
+		// a subtle error: every normal map on the terrain has its green channel inverted and lights
+		// a bump as a dent.
 		frame[6] = area < 0.0F ? 1.0F : -1.0F;
 
 		return true;
@@ -367,7 +377,7 @@ public final class TerrainMesh implements ChunkVertexType {
 		frame[4] = upright ? 0.0F : frame[2];
 		frame[5] = upright ? frame[0] : -frame[1];
 		normalise(frame, 3);
-		frame[6] = 1.0F;
+		frame[6] = -1.0F;
 	}
 
 	/** Three components and a fourth into one word of signed bytes, as the format declares them. */

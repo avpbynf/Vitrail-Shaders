@@ -21,8 +21,8 @@ state of its own:
 - the draw context, where the program's uniform block and its samplers are bound into the pass the
   renderer has just opened;
 - the sites where a quad is written into a mesh - the block renderer and the fluid renderer - and
-  the vertex object the translucent sorter copies, which together are how the facing and the block
-  id reach the mesh at all;
+  the vertex object the translucent sorter copies, which together are how the block id, the block's
+  position and its light emission reach the mesh at all;
 - the two pieces of section state the shadow stage walks the world with.
 
 The first two are what lets a pack's program run at all, and they are the ones anybody would guess.
@@ -74,60 +74,65 @@ top of grass blocks. The engine hands that bias to the shader as a block member 
 for, alongside the depth-conversion constant.
 
 What the format does not carry is the interesting half: **no normal, no block id, no mid texture
-coordinate, no mid block, no tangent.** Packs declare a normal and a block id as a matter of course,
-so those two are not optional extras.
+coordinate, no mid block, no tangent.** Packs declare all five as a matter of course, so none of them
+is an optional extra, and the engine appends an element for each. The mesh therefore doubles: twenty
+bytes the renderer packs and twenty this engine adds after them.
 
 One further difference to keep in mind when comparing images: the chunk renderer samples the
 lightmap at the vertex, while a pack handed a lightmap coordinate samples it at the fragment. That
 is not a defect - it is finer - but it means two images can differ for a reason that has nothing to
 do with the change under test.
 
-## Two quantities to add, and only one of them fits in spare bits
+## Where the missing quantities travel, and why spare bits were not enough
 
 The instinct is to add fields to the vertex and fill them at mesh time. That means editing the
 innermost, most optimised code of another project, which is exactly the kind of coupling that breaks
-on every release. So what is tried first for each missing quantity is widening something already
-packed. One of the two takes it and the other does not, and which is which cannot be guessed from
-the shape of the problem - it depends on a path the quad may or may not take after the widening.
+on every release. So widening something already packed is what gets tried first - and the attempt is
+worth knowing, because it works for everything opaque and is quietly wrong for everything
+translucent.
 
-**The normal costs nothing at all.** The packing routine gives a whole byte to the material, of
-which only a few low bits are spoken for - one selecting mipmaps, two indexing a table of alpha
-thresholds. A face direction is one of a handful of values and fits in three bits above them. So the
-normal needs no new vertex field, no new format element and not one extra byte of mesh: it is
-written where the quad is pushed, at a point where the face direction is already in scope. It is
-stored as the ordinal plus one, so that zero keeps the meaning "nobody wrote one", and that case is
-real rather than defensive: a fluid goes through a renderer of its own and a translucent quad goes
-through the sorter, and neither reaches that push. So water and glass decode as having no facing at
-all rather than as a confident wrong direction. That is a known gap and not an oversight: riding on
-the material costs a wrong normal on water and glass, which is a price worth paying for a field that
-costs nothing, and it is exactly the price the block id could not pay.
+The packing routine gives a whole byte to the material and leaves bits free above it, both inside
+that byte and in the word the caller hands over. Anything written there survives as far as the
+encoder **only on the path where the caller reaches the encoder**. A translucent quad does not take
+that path: it is handed to the sorter and returns before the push, and the sorter writes it out
+later under a constant material. Whatever was in those bits is gone by then, and nothing says so. A
+fluid does not take it either, having a renderer of its own.
 
-Those bits are written whether or not a pack is drawing. Meshes are cached, so writing them only
-while the terrain switch is on would leave every already-built section without orientation until
-something forced a rebuild, which reads as a half-broken feature. The renderer ignores bits it does
-not read.
+So nothing rides on the material. What survives every path is **the vertices**, which the sorter
+copies field by field: a field put on the vertex object by mixin is carried through that copy and
+reaches the encoder whichever road the quad took. The block id, the block's own position and its
+light emission all travel that way, and the encoder turns the last two into the offset from a vertex
+to the middle of its block.
 
-**The block id could not ride in spare bits, and the attempt is the part worth knowing.** Its range
-is wider than a byte, so it becomes a fifth format element. It used to travel the normal's road, in
-the bits above the material byte, which the packing routine masks away and which are therefore free
-between the caller and the encoder - and that is right for everything opaque and quietly wrong for
-everything translucent. A translucent quad is handed to the sorter and returns before that push is
-ever reached, and the sorter writes it out later under a constant material: whatever was in those
-high bits is gone by then, and nothing says so. What does survive is the vertices, which the sorter
-copies field by field, so the id rides on a field put on the vertex object by mixin and carried
-through that copy. It then reaches the encoder whichever of the three paths the quad took. The
-encoder itself is still called as a black box rather than reimplemented.
+**Two of the five are properties of the quad rather than of a corner**, and are computed in the
+encoder from the corners it already has: the middle of the sprite, which is their mean, and the
+normal, which is Newell's sum over the loop. Taking the normal from the geometry rather than from a
+face direction is what makes it right for a plant drawn as a cross, a sloped fluid surface and any
+model that is not a box - a face direction has six values and none of them describes those. The
+tangent of the texture mapping comes from the same corners and their texture coordinates, with a
+sign saying which way the third axis of that frame turns; every pack rebuilds its bitangent from
+those two, so the sign is not a detail.
 
-The format layout follows two rules. A vertex size must be a multiple of four, so the new element
-costs a whole word even though the id needs less; that is arithmetic, not a choice. And the four
+Those fields are written whether or not a pack is drawing. Meshes are cached, so writing them only
+while the terrain switch is on would leave every already-built section without them until something
+forced a rebuild, which reads as a half-broken feature. The renderer ignores what it does not read.
+
+The format layout follows two rules. A vertex size must be a multiple of four, so each new element
+costs a whole word even where the value needs less; that is arithmetic, not a choice. And the four
 original elements are re-declared at the offsets they already occupied rather than repacked from
 zero, so any padding the renderer left between two of them survives untouched.
 
-**The new element is last, and that is structural rather than tidy.** The renderer's own shader
-declares the four elements it knows and ignores the fifth. By the rule in the next section, an
+**The new elements are last, and that is structural rather than tidy.** The renderer's own shader
+declares the four elements it knows and ignores the rest. By the rule in the next section, an
 element the stage does not declare shifts every element after it - and there is nothing after the
 last one. That single placement decision is what lets the renderer keep drawing through a format it
 was never told about.
+
+**They are all appended, never chosen per pack**, and that is the one place this engine cannot follow
+the reference. The reference builds its format out of the names a pack's compiled programs really
+reference, which it can do because it settles the format when a pack loads; here the format is
+settled before any pack is chosen, for the reason the next section gives, so the choice is between
+carrying them always and carrying them never.
 
 The encoding itself matches the reference implementation term for term: the id plus one, shifted up
 by one bit, with the low bit flagging a fluid, and a default of minus one so that an unmapped block
