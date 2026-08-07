@@ -535,9 +535,11 @@ final class SceneSeed {
 	 * @param targets where the pack's colour targets are looked up, every frame and never held: a
 	 *                resize replaces the images and keeping one across it draws into a texture that
 	 *                has been closed
-	 * @return false when a side of either draw is missing. Nothing is half drawn either way: the
-	 *         scene's own target then keeps its clear colour, and the rest of the gbuffer keeps
-	 *         what it held
+	 * @return false when a side of either draw is missing. The two are not the same refusal: the
+	 *         scene draw is settled before anything is recorded, so a false from it leaves the
+	 *         target on its clear colour, while the emptying runs after the scene has been recorded
+	 *         and a false from it means the scene is in and the rest of the gbuffer still holds what
+	 *         the block behind wrote. No caller reads this today
 	 */
 	boolean draw(CommandEncoder encoder, GpuBuffer quad, GpuTextureView scene,
 			GpuTextureView covered, GpuTextureView live, ColorTargets targets) {

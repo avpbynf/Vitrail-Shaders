@@ -32,6 +32,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * The condition is asked of this engine and not of the pack, unlike Iris, which has no such switch
  * to ask about: with the sky left to the game in {@code options.txt} there is no pack sky for the
  * suppression to be taking away, and the frame should look as Sodium alone draws it.
+ * <p>
+ * <strong>It is not asked of the programs either, and that is the answer rather than a gap.</strong>
+ * A pack that serves no program for a piece leaves that piece to the game, and the game needs the
+ * pass this would have cancelled to draw it: cancelling there would take the sky away from a pack
+ * that never offered to replace it. What comes back in that case is Sodium's own reason for the
+ * suppression, a sky drawn through culled chunks while the camera is submerged, and it is the lesser
+ * of the two. No pack of the corpus reaches it, every one of them resolving {@code gbuffers_skybasic}
+ * through the fallback tree. {@code SkyDraw.serves} carries the same reasoning from the other side.
  */
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererSkyMixin {

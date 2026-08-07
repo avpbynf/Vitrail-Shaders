@@ -492,10 +492,12 @@ final class PackPass {
 				// layout carries it either way and the draw throws on the first name it misses.
 				//
 				// A pack texture reaches this line only when the pack took the name over and
-				// nothing could be read for it. Black rather than the colour target of the same
-				// name, which is the whole point: Mellow's texture.deferred.colortex3 names a
-				// texture of the game, and falling back would have its deferred read the scene as
-				// a cloud texture and look entirely convincing.
+				// nothing could be read for it, which no longer covers a file the pack simply does
+				// not ship: that case hands the name back and the colour target keeps its ordinary
+				// binding, as it does under Iris. What is left here is a declaration that named
+				// something real and could not be turned into an image, and black is the honest
+				// answer for it: falling back to the colour target of the same name would have the
+				// pass read the scene as whatever the pack meant to sample and look convincing.
 				case UNSERVED, UNBINDABLE, PACK_TEXTURE -> targets.black();
 			};
 
