@@ -69,9 +69,16 @@ black rather than raising, so the mistake never announces itself - and packs do 
 paths in that shape.
 
 A path carrying a namespace is a different case: it names a resource the game owns and hands out
-through its own manager, not a file of the pack. It is refused on that ground before the pack is
-searched, because looking for it inside the pack first would report it as a missing file and send
-whoever reads the log to the wrong place.
+through its own manager, not a file of the pack. It is resolved through that manager rather than
+inside the pack, and never searched for as a file, because looking for it inside the pack first
+would report it as a missing file and send whoever reads the log to the wrong place. It therefore
+does not pass the confinement above, which guards paths into the pack and has nothing to say about a
+resource of the game.
+
+Two shapes of that case are not served. An **atlas** is stitched at runtime and is no file of any
+resource pack, and a **PBR** lookup asks for a sibling of a sprite under a suffix the atlas resolves;
+both need a live view of a game texture, bound where the colour targets are, and both read black with
+a line saying so.
 
 ## Matching without case, and where that fallback sits
 
@@ -109,11 +116,14 @@ named in the log, where a catch placed around the whole set let one texture a de
 down every colour target of the pack - a black screen instead of a missing lookup table. The same
 arbitration governs the shadow map: one feature is not worth the pack.
 
-A declaration whose file is missing, unreadable, or **shorter than the length its own declaration
-announces** is refused here as well, rather than bound to something. That is a deliberate divergence
-from Iris, which logs and leaves such a sampler on the default texture unit, so the shader reads
-whatever happens to be bound there. What comes out is a plausible image built on the wrong data.
-Black is a question a player asks; a plausible wrong image is not.
+A declaration whose file is **shorter than the length its own declaration announces** is refused,
+rather than bound to something. Iris refuses the whole pack there, its reader throwing out of the
+constructor; refusing the one declaration is narrower and keeps the rest of the pack drawable.
+
+A declaration whose file is **missing or unreadable** no longer claims the name at all: the target
+that name would otherwise have carried keeps its ordinary binding, which is what Iris does by leaving
+the sampler out of the stage's map. Claiming the name and binding black was this engine's own answer
+and it was worse than either: the pack lost a colour target it had said nothing wrong about.
 
 ## A refusal must still consume the name it claimed
 

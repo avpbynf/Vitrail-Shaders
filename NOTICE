@@ -45,16 +45,15 @@ GNU Lesser General Public License version 3
   sky directives with the four words of
   net.irisshaders.iris.shaderpack.properties.ShaderProperties, lines 199 to 202, and with the
   default of PackDirectives beside it, lines 77 to 82, under which a directive the pack does not
-  write leaves the piece drawn. Read on 5 August 2026. What is done with the answers is not Iris's
-  and goes further than it: there, net.irisshaders.iris.mixin.MixinSkyRenderer cancels renderSun and
-  renderMoon and nothing else, shouldRenderStars is stored and has no reader at all, and
-  shouldRenderSkyDisc gates the horizon cone Iris draws itself rather than the game's disc, in
-  IrisRenderingPipeline.onBeginClear. This engine takes all four pieces out, and the reason for that
-  is this project's own: Iris states none, neither at the mixin nor at the directives. The cost is
-  measured, and is that Bliss and Reverie lose the stars Iris leaves them. Both engines evaluate the
-  conditionals around these lines, Iris by running the whole file through PropertiesPreprocessor
-  before it reads a key and this one by its own stack of conditions, and on this corpus the two
-  agree. The clouds directive Iris also carries is not implemented, nothing here drawing a cloud.
+  write leaves the piece drawn. Read on 5 August 2026. What is done with the answers is Iris's, word
+  for word: net.irisshaders.iris.mixin.MixinSkyRenderer cancels renderSun and renderMoon and nothing
+  else, shouldRenderStars is stored and has no reader at all, and shouldRenderSkyDisc gates the
+  horizon cone Iris draws itself rather than the game's disc, in IrisRenderingPipeline.onBeginClear.
+  This engine does the same four things, so a pack writing stars=false keeps the stars its own
+  skybasic draws and sky=false loses the cone alone. Both engines evaluate the conditionals around
+  these lines, Iris by running the whole file through PropertiesPreprocessor before it reads a key
+  and this one by its own stack of conditions, and on this corpus the two agree. The clouds
+  directive Iris also carries is not implemented, nothing here drawing a cloud.
 
   common/src/main/java/dev/vitrail/render/HorizonCone.java takes the shape of the horizon geometry
   from net.irisshaders.iris.pathways.HorizonRenderer, read on 6 August 2026, whose own header, lines
