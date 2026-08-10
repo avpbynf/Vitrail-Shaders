@@ -694,6 +694,28 @@ public final class PackChain {
 	}
 
 	/**
+	 * Stops drawing this pack at all, for a reason found too late to refuse it at the load.
+	 * <p>
+	 * <strong>All of it and not the one family that cannot be served</strong>, because a pack drawing
+	 * half a world is worse than a pack drawing none of it: the game's own picture and the pack's own
+	 * are both credible on their own, and an image made of the two is credible and wrong. The one this
+	 * exists for puts the sky in front of the trees, and it is read as a broken sky rather than as a
+	 * family that never drew.
+	 *
+	 * @param why said in the words a player reads on the settings screen, since that is where it goes
+	 */
+	void putAway(String why) {
+		if (disabled) {
+			return;
+		}
+
+		disabled = true;
+		lastError = this.chain.packName() + " is not drawn at all: " + why;
+		Vitrail.logger().error("{} is put away rather than drawn by halves, because {}",
+				this.chain.packName(), why);
+	}
+
+	/**
 	 * Whether the settings screen opens on the pack list rather than on the loaded pack's settings.
 	 * <p>
 	 * True until a pack has been read, and true again whenever one is read without

@@ -184,10 +184,15 @@ public final class TerrainProgram {
 		// A silent failure otherwise, and the worst kind. An element the shader does not declare
 		// moves the location of every element after it without a word, so the picture stays a
 		// picture and the texture coordinates come out of the light map.
+		//
+		// The format follows the pack now, so reaching here is a defect of this engine and not
+		// something the player did. Refusing the terrain alone was worse than refusing everything:
+		// the world then came from the game while the sky came from the pack, which puts the sky in
+		// front of the trees and reads as a broken sky rather than as a terrain program that never
+		// ran. So the caller stops the whole pack.
 		Vitrail.logger().error("The chunk mesh carries {} and this engine decodes {}, so no terrain "
-				+ "program will be drawn. The mesh is decided once when the game starts, so this is "
-				+ "what turning the terrain on after that looks like: restart the game", elements,
-				SodiumVertex.ATTRIBUTES);
+				+ "program can be drawn and this pack is put away rather than drawn by halves",
+				elements, SodiumVertex.ATTRIBUTES);
 
 		return false;
 	}
