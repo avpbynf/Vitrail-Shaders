@@ -18,9 +18,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * renderer for the layout it binds. Iris does the same thing with two {@code ModifyArg}s on the two
  * calls, which only works while there are two.
  * <p>
- * The answer is the same for the whole run, and {@code TerrainMesh} says why: those three all keep
- * what they were handed, so a format that changed under them would leave meshes of one stride in an
- * arena laid out for another, which nothing reports and which draws a world out of garbage.
+ * <strong>The answer may change while the game runs</strong>, and all three read it from a
+ * constructor the reload rebuilds, so none of them is left holding the old one. What has to stay
+ * true is that nothing is meshed between the change and the reload; {@code TerrainDraw.wanted} asks
+ * for both in that order.
  */
 @Mixin(value = ChunkMeshFormats.class, remap = false)
 public abstract class ChunkMeshFormatsMixin {

@@ -39,17 +39,28 @@ import java.util.Arrays;
 public final class TerrainMesh implements ChunkVertexType {
 
 	/**
-	 * What the game will use for as long as it runs, decided the first time it is asked for, and null
-	 * for Sodium's own.
+	 * This format, built the first time one is wanted and kept because it holds no state of its own.
+	 * Null until then, and null for good once {@link #broken} is set.
 	 * <p>
-	 * It cannot be answered per call. Sodium sizes a region's geometry arena from the format, the
-	 * chunk builder writes meshes at the format's stride, and both are built once and kept: a format
-	 * that changed under them would put meshes of one stride into an arena of another, which is not
-	 * an error anywhere, only a world drawn out of garbage. So the answer is latched, and turning
-	 * the terrain on or off takes effect at the next start.
+	 * <strong>The answer itself is not latched, and it is the reason a pack picked in a running game
+	 * draws the world.</strong> The two that read it, the chunk builder for the stride it writes at
+	 * and the chunk renderer for the layout it binds, are both built by one constructor,
+	 * {@code RenderSectionManager}, and Sodium builds a new one whenever the game invalidates its
+	 * compiled geometry. So the way to change the answer is to change it and then ask for that, which
+	 * is what {@code TerrainDraw.wanted} does; anything meshed at the old stride is thrown out in the
+	 * same breath.
 	 */
-	private static TerrainMesh latched;
-	private static boolean decided;
+	private static TerrainMesh built;
+
+	/**
+	 * Set when this format cannot be built at all, so the failure is reported once rather than at
+	 * every reload. Nothing clears it: the reason is the shape of Sodium's own format and no reload
+	 * moves that.
+	 */
+	private static boolean broken;
+
+	/** What the last answer was, so that only a change is worth a line of log. */
+	private static boolean carrying;
 
 	/**
 	 * What a texture coordinate is multiplied by before it is stored, which is Sodium's own
@@ -97,50 +108,48 @@ public final class TerrainMesh implements ChunkVertexType {
 	}
 
 	/**
-	 * The format the game should use, or null to leave Sodium's own alone. Decided once; see
-	 * {@link #latched}.
+	 * The format the game should use as things stand, or null to leave Sodium's own alone. Asked
+	 * again every time Sodium builds itself a mesh maker, so a pack picked in a running game is
+	 * answered rather than made to wait for the next start.
 	 * <p>
 	 * Built here rather than in a static field so that a mesh this cannot extend leaves the game
 	 * running on Sodium's own instead of failing to load a class in the middle of a world.
 	 */
 	public static synchronized ChunkVertexType current() {
-		if (decided) {
-			return latched;
+		boolean asked = TerrainDraw.asked() && !broken;
+		if (asked && built == null) {
+			try {
+				built = new TerrainMesh();
+			} catch (RuntimeException e) {
+				broken = true;
+				asked = false;
+				Vitrail.logger().error("This engine cannot extend the chunk mesh, so the terrain keeps "
+						+ "Sodium's own and no pack will draw it", e);
+			}
 		}
 
-		decided = true;
-		if (!TerrainDraw.asked()) {
-			// Said out loud, and it is the one branch here that used to be silent. This decision is
-			// taken once for the whole run: the block id stays off the vertex until the game is
-			// restarted, and turning the terrain back on afterwards, from the screen or from the
-			// file, cannot put it there. Silence would read as the line having done nothing.
-			//
-			// Without naming a cause, because there are two and this cannot tell them apart: a
-			// terrain= line, and no pack chosen yet, which is every first launch of a fresh
-			// instance. Blaming the line there would send a reader looking for one they never wrote.
-			Vitrail.logger().info("The pack's own terrain program is not wanted where the chunk mesh "
-					+ "format is settled, so the mesh keeps the format Sodium gave it for the rest "
-					+ "of this run and carries none of {}",
+		if (asked == carrying) {
+			return asked ? built : null;
+		}
+
+		carrying = asked;
+		if (!asked) {
+			// Said out loud, and it used to be the silent branch. Without naming a cause, because
+			// there are three and this cannot tell them apart: a terrain= line, no pack chosen yet,
+			// which is every first launch of a fresh instance, and a pack just put away.
+			Vitrail.logger().info("The pack's own terrain program is not wanted, so the mesh goes back "
+					+ "to the format Sodium gave it and carries none of {}",
 					Arrays.stream(Extra.values()).map(Extra::attribute).toList());
 
 			return null;
 		}
 
-		try {
-			latched = new TerrainMesh();
-		} catch (RuntimeException e) {
-			Vitrail.logger().error("This engine cannot extend the chunk mesh, so the terrain keeps "
-					+ "Sodium's own and no pack will draw it", e);
-
-			return null;
-		}
-
-		Vitrail.logger().info("The chunk mesh carries {} bytes a vertex for the rest of this run "
-				+ "instead of {}, the difference being what a pack reads and Sodium does not carry: {}",
-				latched.stride, latched.innerStride,
+		Vitrail.logger().info("The chunk mesh carries {} bytes a vertex instead of {}, the difference "
+				+ "being what a pack reads and Sodium does not carry: {}",
+				built.stride, built.innerStride,
 				Arrays.stream(Extra.values()).map(Extra::attribute).toList());
 
-		return latched;
+		return built;
 	}
 
 	@Override
@@ -180,12 +189,12 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * The elements this engine adds after Sodium's own, in the order they are laid out.
 	 * <p>
 	 * Each is four bytes and each is named by {@link SodiumVertex}, which is the side that decodes
-	 * them. They are all appended rather than chosen per pack, and that is the one place this engine
-	 * cannot follow Iris: {@code FormatAnalyzer} builds a format out of the names a pack's compiled
-	 * programs really reference, which Iris can do because it settles the format when a pack loads.
-	 * Here the format is settled before any pack is chosen, {@link #latched} says why, so the choice
-	 * is between carrying them always and carrying them never. What a conditional would save is also
-	 * small: seven packs of the corpus read {@code mc_midTexCoord} and eight read {@code at_tangent}.
+	 * them. They are all appended rather than chosen per pack, where Iris keeps only the ones a pack's
+	 * compiled programs really reference, {@code FormatAnalyzer}. <strong>The reason this engine could
+	 * not do the same has just gone</strong>: it was that the format was settled before any pack was
+	 * chosen, and the format now follows the pack. What is left is a plain difference, and it is
+	 * written up as one rather than argued away here. What it would save is small either way: seven
+	 * packs of the corpus read {@code mc_midTexCoord} and eight read {@code at_tangent}.
 	 */
 	private enum Extra {
 

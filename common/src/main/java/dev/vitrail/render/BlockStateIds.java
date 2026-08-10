@@ -160,8 +160,9 @@ public final class BlockStateIds {
 	 * So the world is rebuilt, through the door F3+A itself uses: {@code LevelExtractor.allChanged}
 	 * raises a flag the next extract consumes, which is a frame boundary, rather than tearing the
 	 * sections down inside the frame this is called from. Iris rebuilds at the same moment, where it
-	 * installs its own ids. What stays decided once for the whole run is the mesh <em>format</em>,
-	 * whether the number is carried at all; that one no reload can move.
+	 * installs its own ids. The mesh <em>format</em>, whether the number is carried at all, goes
+	 * through this same door and for the same reason; {@code TerrainDraw.wanted} is the side that
+	 * asks.
 	 * <p>
 	 * Silent at startup, where the level is null and nothing has been meshed yet. That is also the
 	 * ordinary case: a settings file saved with no change to {@code block.properties} rebuilds an

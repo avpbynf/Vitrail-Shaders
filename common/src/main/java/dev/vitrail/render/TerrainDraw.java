@@ -15,6 +15,8 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 
+import net.minecraft.client.Minecraft;
+
 import org.joml.Matrix4f;
 
 import java.nio.file.Path;
@@ -121,9 +123,37 @@ public final class TerrainDraw {
 		this.targets = targets;
 	}
 
-	/** Whether a pack's terrain program takes over the opaque chunk pass, from the loaded options. */
+	/**
+	 * Whether a pack's terrain program takes over the opaque chunk pass, from the loaded options.
+	 * <p>
+	 * <strong>This answer decides what the chunk mesh carries</strong>, and the mesh only carries what
+	 * a pack reads while a pack wants it. So a change here is worth a rebuilt world: the sections
+	 * standing at this instant were meshed at the other stride, and the renderer would bind a layout
+	 * that does not describe them. What that costs when it is skipped is a world drawn by the game
+	 * while the sky is drawn by the pack, which reads as the sky being in front of the world rather
+	 * than as a terrain program that never ran.
+	 * <p>
+	 * The door is the one F3+A uses, {@code LevelExtractor.allChanged}, and it raises a flag the next
+	 * extract consumes rather than tearing sections down inside a frame. That extract calls
+	 * {@code LevelRenderer.invalidateCompiledGeometry}, where Sodium builds a new
+	 * {@code RenderSectionManager}, and it is that constructor which asks for the format again.
+	 * Silent before a world is joined, where nothing has been meshed and the first ask answers itself.
+	 */
 	static void wanted(boolean asked) {
+		if (wanted == asked) {
+			return;
+		}
+
 		wanted = asked;
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft == null || minecraft.level == null) {
+			return;
+		}
+
+		Vitrail.logger().info("The pack's own terrain program is {} now, and the chunk mesh carries "
+				+ "what it reads only while it does, so the sections are all built again",
+				asked ? "wanted" : "no longer wanted");
+		minecraft.levelExtractor.allChanged();
 	}
 
 	/** Whether the shadow map is drawn, from the loaded options. */
@@ -525,11 +555,15 @@ public final class TerrainDraw {
 	private RenderPipeline prepare(TerrainPass pass, VertexFormat format, GpuTextureView atlas) {
 		if (!this.read) {
 			this.read = true;
-			if (TerrainProgram.carries(format)) {
-				this.programs = TerrainProgram.read(this.packPath, this.place, this.chosen,
-						this.profile, this.values, this.load, format, this.plan, this.chainTargets,
-						this.chainRuns, this.targets);
+			if (!TerrainProgram.carries(format)) {
+				this.owner.putAway("the chunk mesh does not carry what a terrain program reads");
+
+				return null;
 			}
+
+			this.programs = TerrainProgram.read(this.packPath, this.place, this.chosen,
+					this.profile, this.values, this.load, format, this.plan, this.chainTargets,
+					this.chainRuns, this.targets);
 		}
 
 		TerrainProgram program = this.programs.get(pass);
