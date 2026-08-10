@@ -20,6 +20,14 @@ import java.util.Set;
  * outright, and an element the stage does not declare is stepped over and drops everything after it
  * one location without a word.
  * <p>
+ * <strong>Declaring one is not the same as keeping it, and that risk is measured rather than
+ * argued.</strong> An input a stage declares and never reads may be dropped from the compiled
+ * module, and {@code rebind} only counts the ones that survived. {@code Color} is third of the four
+ * here, so a pack whose particle stage never reads {@code gl_Color} would have {@code UV2}, which is
+ * the light map, read out of the colour's bytes. The off-game harness compiles every such program of
+ * the corpus and reads the disassembly back to check all four are still there, which is the same
+ * check the entity mesh has and the sky still owes.
+ * <p>
  * <strong>There is no normal and no overlay here.</strong> A particle is a quad turned to face the
  * camera, so {@code of_Normal} is answered facing the viewer rather than left at nought, which is
  * the value Iris hands every format that carries no normal
