@@ -412,13 +412,17 @@ public final class PackChain {
 			// whichever sampler the missing feature stood behind, which is a wrong diagnosis rather
 			// than an incomplete one.
 			//
-			// **Here and not one line earlier**, and the six lines above are the reason. Two of them
-			// settle something for the WHOLE RUN rather than for this pack: TerrainDraw.wanted feeds
-			// the one decision no reload undoes, whether the chunk mesh carries a block id at all.
-			// Returning before them left that answer at its default, so a refused pack cost the id
-			// to every pack picked after it, for as long as the game stayed up. The session is
-			// published by then as well, so the settings screen shows the pack it is refusing rather
-			// than an empty list, which is where the two other refusals of this method stand.
+			// **Here and not one line earlier**, and the six lines above are the reason. They settle
+			// what the chunk mesh carries, and returning before them left that answer at its
+			// default, so a refused pack decided the mesh for whichever pack was picked after it.
+			// That used to last the whole run; the mesh follows the pack now, so what it costs is a
+			// rebuilt world rather than a session. The session is published by then as well, so the
+			// settings screen shows the pack it is refusing rather than an empty list, which is
+			// where the two other refusals of this method stand.
+			//
+			// What this order does NOT do is take the terrain back from a pack refused below: the
+			// mesh then carries what a pack reads while none is drawn, which costs twenty bytes a
+			// vertex and one rebuild, and no picture. One pack of the corpus reaches it.
 			//
 			// A deliberate divergence, and worth naming because it is one: Iris refuses a required
 			// flag only when the name is unknown to it or the hardware cannot serve it, so it draws
