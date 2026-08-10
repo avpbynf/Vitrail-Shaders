@@ -36,6 +36,13 @@ public enum VertexInputs {
 	ENTITY,
 
 	/**
+	 * The game's own particle mesh: the four elements of {@code DefaultVertexFormat.PARTICLE}, out of
+	 * which the names a pack reads are made. Two families bind it, the quad particles and the
+	 * weather. {@link ParticleVertex} carries the renaming and says what a particle has not got.
+	 */
+	PARTICLE,
+
+	/**
 	 * The game's own sky meshes. Alone among these, it is not one format: {@code SkyRenderer} binds
 	 * four between its eight passes, so the elements to declare come from the pass rather than from
 	 * this constant. {@link SkyVertex} carries the renaming and says what the sky has not got.
@@ -93,6 +100,7 @@ public enum VertexInputs {
 			case FULLSCREEN -> LegacyGlsl.FULLSCREEN_ELEMENTS;
 			case TERRAIN -> SodiumVertex.ATTRIBUTES;
 			case ENTITY -> EntityVertex.ATTRIBUTES;
+			case PARTICLE -> ParticleVertex.ATTRIBUTES;
 			case SKY -> SkyVertex.ATTRIBUTES;
 			case CLOUDS -> CloudVertex.ATTRIBUTES;
 			case WORLD -> List.of();
