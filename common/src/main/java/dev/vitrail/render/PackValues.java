@@ -57,6 +57,8 @@ public final class PackValues {
 	private CustomUniforms customs;
 	private ShaderProperties.SkyElements skyElements = new ShaderProperties.SkyElements(true, true,
 			true, true, ShaderProperties.CloudSetting.DEFAULT);
+	private ShaderProperties.Weather weather = new ShaderProperties.Weather(true, true);
+	private boolean rainDepth;
 	private NoiseTexture.Image noiseImage;
 	private PackImages packImages = PackImages.none();
 	private UniformCatalog catalog = UniformCatalog.engine();
@@ -95,6 +97,8 @@ public final class PackValues {
 			values.state.directives(PackDirectives.read(source, options, settings, dimension));
 			values.state.endFlashShadows(properties.endFlashShadows());
 			values.skyElements = properties.skyElements(settings.globalDefines(options));
+			values.weather = properties.weather(settings.globalDefines(options));
+			values.rainDepth = properties.rainDepth();
 			values.declare(properties, settings.globalDefines(options));
 			values.readNoise(properties, source);
 			values.packImages =
@@ -244,6 +248,20 @@ public final class PackValues {
 	 */
 	public ShaderProperties.SkyElements skyElements() {
 		return this.skyElements;
+	}
+
+	/**
+	 * What this pack still wants of the game's own weather, both halves unless it says otherwise.
+	 * Read on the same walk and with the same settings as the sky's four words, being the same family
+	 * of directive.
+	 */
+	public ShaderProperties.Weather weather() {
+		return this.weather;
+	}
+
+	/** Whether this pack asked for the rain and the snow to write the world's depth. */
+	public boolean rainDepth() {
+		return this.rainDepth;
 	}
 
 	/** What a block is written from. The same object every frame, refilled by {@link #advance()}. */

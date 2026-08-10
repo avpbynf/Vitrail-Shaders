@@ -67,11 +67,19 @@ public final class ShaderProperties {
 	private static final Pattern IRIS_FEATURES =
 			Pattern.compile("^\\s*iris\\.features\\.(required|optional)\\s*=\\s*(.*)$");
 	private static final Pattern END_FLASH_SHADOWS = Pattern.compile("^\\s*endFlashShadows\\s*=\\s*(.*)$");
+	// Whether the rain and the snow write the world's depth. Flat like the line above and unlike the
+	// family below, because that is where Iris reads it: it is one of its plain boolean directives,
+	// ShaderProperties.java:208, and no pack of the corpus writes it under a condition.
+	private static final Pattern RAIN_DEPTH = Pattern.compile("^\\s*rain\\.depth\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
 	// The fifth word of that family, kept apart because it is the one that takes neither a yes nor a
 	// no: a pack writes off, fast or fancy, which are the game's own three cloud settings.
 	private static final Pattern CLOUDS = Pattern.compile("^\\s*clouds\\s*=\\s*(.*)$");
+	// And the one of that same family that carries two words rather than one, so it has a pattern
+	// of its own: the first says whether the rain and the snow are drawn at all, the second whether
+	// the splashes they leave on the ground are.
+	private static final Pattern WEATHER = Pattern.compile("^\\s*weather\\s*=\\s*(.*)$");
 	// The noise image is answered here because everything else about it is settled: one path, one
 	// sampler, every stage. The general family is not, and is read by customTextures instead.
 	private static final Pattern TEXTURE_NOISE = Pattern.compile("^\\s*texture\\.noise\\s*=\\s*(.*)$");
@@ -117,6 +125,7 @@ public final class ShaderProperties {
 	private final int continuationCount;
 	private final boolean present;
 	private final boolean endFlashShadows;
+	private final boolean rainDepth;
 
 	private ShaderProperties(Builder builder) {
 		this.lines = List.copyOf(builder.lines);
@@ -146,6 +155,7 @@ public final class ShaderProperties {
 		this.continuationCount = builder.continuationCount;
 		this.present = builder.present;
 		this.endFlashShadows = builder.endFlashShadows;
+		this.rainDepth = builder.rainDepth;
 	}
 
 	public static ShaderProperties parse(ShaderPackSource source) throws IOException {
@@ -295,6 +305,20 @@ public final class ShaderProperties {
 			return;
 		}
 
+		// Whether the rain and the snow are written into the world's depth, which the game only does
+		// when its own transparency chain is on. Off unless the pack says so, which is Iris's default
+		// for it as well. Three packs of the corpus write the line and all three ask for false, so
+		// what reading it buys today is the pack that will ask for true rather than a picture that
+		// changes now.
+		Matcher rainDepth = RAIN_DEPTH.matcher(line);
+		if (rainDepth.matches()) {
+			Boolean value = truth(rainDepth.group(1).trim());
+			if (value != null) {
+				builder.rainDepth = value;
+				return;
+			}
+		}
+
 		// The value is kept exactly as written. It is often not a number at all but the name of
 		// one of the pack's own settings, and substituting it needs those settings resolved,
 		// which this class deliberately knows nothing about.
@@ -320,6 +344,15 @@ public final class ShaderProperties {
 		if (clouds.matches() && CloudSetting.of(clouds.group(1).trim()) != null) {
 			return;
 		}
+
+		// The same rule for the two word member of that family: consumed only where the first word
+		// is one this engine reads, so that a "weather=on" falls through and is counted among the
+		// keys nothing reads rather than looking honoured.
+		Matcher weather = WEATHER.matcher(line);
+		if (weather.matches() && truth(weather.group(1).trim().split("\\s+", 0)[0]) != null) {
+			return;
+		}
+
 
 		Matcher flip = FLIP.matcher(line);
 		if (flip.matches()) {
@@ -749,7 +782,82 @@ public final class ShaderProperties {
 	 */
 	public SkyElements skyElements(Map<String, String> defines) {
 		Map<String, Boolean> drawn = new LinkedHashMap<>();
+
+		for (Matcher element : live(SKY_ELEMENT, defines)) {
+			Boolean value = truth(element.group(2).trim());
+			if (value != null) {
+				drawn.put(element.group(1), value);
+			}
+		}
+
+		// A walk of its own for the fifth word rather than a second test inside the first: what the
+		// four words answer is a boolean and what this one answers is not, and one loop reading both
+		// would carry the difference in the middle of it.
 		CloudSetting clouds = CloudSetting.DEFAULT;
+		for (Matcher asked : live(CLOUDS, defines)) {
+			CloudSetting setting = CloudSetting.of(asked.group(1).trim());
+			if (setting != null) {
+				clouds = setting;
+			}
+		}
+
+		return new SkyElements(drawn.getOrDefault("sun", true), drawn.getOrDefault("moon", true),
+				drawn.getOrDefault("stars", true), drawn.getOrDefault("sky", true), clouds);
+	}
+
+	/**
+	 * Whether the pack still wants the game's own rain and snow, and the splashes they leave on the
+	 * ground, live lines only.
+	 * <p>
+	 * The same family as {@link #skyElements} and read the same way, for the same measured reason:
+	 * the packs of the corpus that write one of these words write it under an {@code #if} on a
+	 * setting of their own, and read flat two of them come out backwards. Iris reads this one flat
+	 * ({@code shaderpack/properties/ShaderProperties.java:259-267}); no pack of the corpus writes it
+	 * at all, so what that difference decides today is nothing, and what it buys is one reader for
+	 * one family rather than two that can drift.
+	 * <p>
+	 * <strong>The second word is a word about particles and not about the rain.</strong> It leaves
+	 * the curtain of rain alone and takes away the splash particles the ground throws up under it,
+	 * which is a separate thing the game does on a tick rather than in the frame.
+	 */
+	public Weather weather(Map<String, String> defines) {
+		boolean drawn = true;
+		boolean particles = true;
+
+		for (Matcher line : live(WEATHER, defines)) {
+			// Split on whitespace, the first word being the rain and the second the splashes, and a
+			// second word left out leaves the splashes alone. Iris takes the words the same way and
+			// reads anything that is not "true" as false; this reads the four words the rest of the
+			// file takes and leaves the piece as it was on anything else, which is the rule every
+			// other boolean of this class already follows.
+			String[] words = line.group(1).trim().split("\\s+", 0);
+			Boolean rain = truth(words[0]);
+			if (rain != null) {
+				drawn = rain;
+			}
+
+			if (words.length > 1) {
+				Boolean splashes = truth(words[1]);
+				if (splashes != null) {
+					particles = splashes;
+				}
+			}
+		}
+
+		return new Weather(drawn, particles);
+	}
+
+	/**
+	 * Every line one pattern matches in the branches of this file that are really live, in file
+	 * order.
+	 * <p>
+	 * Shared by every reader of the sky and weather family rather than written once each: what counts
+	 * as live is the whole subtlety of them, and walks that agree today are walks that can be edited
+	 * on different days. Three lines read it, the sky's four words, the fifth about the clouds and
+	 * the weather's two.
+	 */
+	private List<Matcher> live(Pattern pattern, Map<String, String> defines) {
+		List<Matcher> matched = new ArrayList<>();
 		ConditionStack conditions = new ConditionStack();
 
 		for (String line : this.lines) {
@@ -759,31 +867,13 @@ public final class ShaderProperties {
 				continue;
 			}
 
-			if (!conditions.active()) {
-				continue;
-			}
-
-			Matcher element = SKY_ELEMENT.matcher(line);
-			if (element.matches()) {
-				Boolean value = truth(element.group(2).trim());
-				if (value != null) {
-					drawn.put(element.group(1), value);
-				}
-
-				continue;
-			}
-
-			Matcher asked = CLOUDS.matcher(line);
-			if (asked.matches()) {
-				CloudSetting setting = CloudSetting.of(asked.group(1).trim());
-				if (setting != null) {
-					clouds = setting;
-				}
+			Matcher match = pattern.matcher(line);
+			if (conditions.active() && match.matches()) {
+				matched.add(match);
 			}
 		}
 
-		return new SkyElements(drawn.getOrDefault("sun", true), drawn.getOrDefault("moon", true),
-				drawn.getOrDefault("stars", true), drawn.getOrDefault("sky", true), clouds);
+		return matched;
 	}
 
 	/**
@@ -890,6 +980,19 @@ public final class ShaderProperties {
 	 */
 	public boolean endFlashShadows() {
 		return this.endFlashShadows;
+	}
+
+	/**
+	 * Whether the pack asked for the rain and the snow to write the world's depth, off unless it
+	 * says otherwise.
+	 * <p>
+	 * The game writes it only where its own transparency chain is running, so a pack asking for this
+	 * is asking for the curtain to occlude whatever is drawn behind it afterwards, and what that
+	 * decides on our side is which of the game's two weather pipelines the pack's program inherits
+	 * its depth state from.
+	 */
+	public boolean rainDepth() {
+		return this.rainDepth;
 	}
 
 	/** Each profile's unexpanded body, in the order the pack declares them. */
@@ -1074,6 +1177,20 @@ public final class ShaderProperties {
 	}
 
 	/**
+	 * What a pack still wants of the game's own weather. A pack that says nothing wants both, which
+	 * is what every pack of the corpus is: none of the eight writes the line.
+	 *
+	 * @param drawn     whether the curtain of rain and snow is drawn at all. Like the sky's four
+	 *                  words this is a removal and not a choice of shader: a pack that says no draws
+	 *                  its own, and handing it the game's on top puts two curtains in the air
+	 * @param particles whether the splashes the ground throws up under the rain are drawn. A
+	 *                  different thing in a different place: they are ordinary particles, spawned on
+	 *                  a tick by the level rather than drawn by the weather renderer
+	 */
+	public record Weather(boolean drawn, boolean particles) {
+	}
+
+	/**
 	 * How the game's own three cloud settings are named in {@code shaders.properties}, plus the
 	 * absence of the line.
 	 * <p>
@@ -1158,5 +1275,6 @@ public final class ShaderProperties {
 		private int continuationCount;
 		private boolean present;
 		private boolean endFlashShadows;
+		private boolean rainDepth;
 	}
 }
