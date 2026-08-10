@@ -124,12 +124,23 @@ final class EngineOptions {
 
 	/**
 	 * Draws the game's own entity geometry with the pack's own program. <strong>Off</strong>, alone
-	 * among these, and it is the convention every family still to come lands under.
+	 * among these.
 	 * <p>
-	 * What being off buys is that the work lands without waiting to be judged: it is turned on to
-	 * look at it, turned off to compare, and a defect between the two is bisected in one line of a
-	 * text file instead of a rebuild. Every other line here is on because what it names has been
-	 * looked at in the game and kept.
+	 * <strong>It is not a convention and it is not a taste.</strong> It used to say it was the shape
+	 * every family still to come would land under, and the clouds landed on instead. What a line at
+	 * off really names is work not done, standing behind a setting: the file has to be able to stay
+	 * empty, because what a reader sees on cloning is what this engine gets judged on.
+	 * <p>
+	 * What holds this one is one thing and it is not incompleteness. Entity geometry arrives with no
+	 * normal and no material id, so a pack that classifies its pixels by material reads an entity as
+	 * something else and can fog it as though it were water. That is a family damaging its
+	 * neighbours rather than falling short, and it is the whole of the argument. The two other gaps -
+	 * a colour target BSL allocates for a family nothing draws through, and the blending half with
+	 * the player's own body in it - are visible and corrupt nothing.
+	 * <p>
+	 * The day the first of those lands, this line goes to on <em>and disappears</em>, along with
+	 * everything that documents it. Leaving it behind would turn the debt into a preference, which
+	 * is exactly how it got called a convention.
 	 */
 	private static final String ENTITIES_KEY = "entities";
 
