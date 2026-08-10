@@ -105,7 +105,7 @@ public final class PropertiesFile {
 			Map<String, String> defines) {
 		switch (keyword) {
 			case "ifdef", "ifndef" -> {
-				String name = line.replaceAll("^\\s*#\\s*\\w+\\s+", "").trim().split("\\s+")[0];
+				String name = line.replaceAll("^\\s*#\\s*\\w+\\s+", "").trim().split("\\s+", -1)[0];
 				conditions.ifDirective(keyword.equals("ifdef") == defines.containsKey(name));
 			}
 			case "if" -> conditions.ifDirective(

@@ -83,7 +83,7 @@ public final class BlockIds {
 		List<String> problems = new ArrayList<>();
 
 		file.walk(defines, line -> {
-			for (String statement : RUN_ON.split(line)) {
+			for (String statement : RUN_ON.split(line, -1)) {
 				readStatement(statement, entries, problems);
 			}
 		});
@@ -111,7 +111,7 @@ public final class BlockIds {
 			return;
 		}
 
-		for (String entry : statement.substring(equals + 1).trim().split("\\s+")) {
+		for (String entry : statement.substring(equals + 1).trim().split("\\s+", -1)) {
 			if (!entry.isEmpty()) {
 				parse(entry, id, entries, problems);
 			}
@@ -128,7 +128,19 @@ public final class BlockIds {
 	 */
 	private static void parse(String entry, int id, List<Entry> entries, List<String> problems) {
 		boolean tag = entry.startsWith("%");
-		String[] parts = (tag ? entry.substring(1) : entry).split(":");
+
+		// Limit 0, which is the reading the one-argument form has: the empty terms at the END of the
+		// entry go. That is what this depends on. 'stone:' has to arrive as the single term 'stone',
+		// so that the default namespace goes in front of it and the entry binds minecraft:stone;
+		// under a limit that kept the empty, 'stone' would be taken for the namespace instead and
+		// the declaration would light nothing. Iris splits at the default limit too, in
+		// BlockEntry.parse, and then parts company: it builds its identifier from the entry as
+		// written rather than from the split, so the colon travels into the path and the entry
+		// fails validation there. Same reading of the separator, different answer after it.
+		//
+		// The length is tested before the index below because this form answers ':' with an EMPTY
+		// array, which is the other half of the surprise and the half that throws.
+		String[] parts = (tag ? entry.substring(1) : entry).split(":", 0);
 		if (parts.length == 0 || parts[0].isEmpty()) {
 			problems.add("block." + id + " lists '" + entry + "', which names nothing");
 			return;

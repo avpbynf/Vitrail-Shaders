@@ -73,7 +73,7 @@ public final class DrawBuffers {
 			return List.copyOf(slots);
 		}
 
-		for (String part : value.split(",")) {
+		for (String part : value.split(",", -1)) {
 			addRenderTarget(slots, part.trim());
 		}
 

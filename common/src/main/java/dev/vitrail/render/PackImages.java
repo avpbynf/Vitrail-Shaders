@@ -216,7 +216,11 @@ final class PackImages {
 
 		// Split rather than cut at the first colon: a name carrying more than one keeps its first
 		// two parts and drops the rest, which is what Iris makes of such a name.
-		String[] parts = path.split(":");
+		// Limit 0, the one-argument reading. It matters which one: tryBuild accepts an empty path,
+		// so a name written 'minecraft:' would build an identifier under any limit that kept the
+		// empty term, and the black pixel below would be blamed on a file no resource pack ships
+		// rather than on a name this client cannot be asked for.
+		String[] parts = path.split(":", 0);
 		Identifier location = parts.length < 2 ? null : Identifier.tryBuild(parts[0], parts[1]);
 		Minecraft client = Minecraft.getInstance();
 		if (location == null || client == null) {

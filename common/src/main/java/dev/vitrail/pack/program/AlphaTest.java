@@ -84,7 +84,7 @@ public record AlphaTest(Function function, float reference) {
 
 		// A third token is ignored rather than refused, which is what Iris does with it: a trailing
 		// comment on the line would otherwise cost the pack its threshold.
-		String[] parts = value.split("\\s+");
+		String[] parts = value.split("\\s+", -1);
 		if (parts.length < 2) {
 			return Optional.empty();
 		}

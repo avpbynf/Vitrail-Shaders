@@ -69,7 +69,7 @@ public final class DimensionSet {
 					// One line carries as many worlds as the pack cares to group on that folder,
 					// separated by spaces. The first declaration of a world wins, so that a file
 					// naming one twice reads the same way twice rather than by map order.
-					for (String world : declaration.group(2).trim().split("\\s+")) {
+					for (String world : declaration.group(2).trim().split("\\s+", -1)) {
 						if (!world.isEmpty()) {
 							places.putIfAbsent(normalise(world), declaration.group(1));
 						}

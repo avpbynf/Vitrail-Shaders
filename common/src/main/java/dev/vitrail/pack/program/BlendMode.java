@@ -42,7 +42,7 @@ public record BlendMode(boolean off, String srcRgb, String dstRgb, String srcAlp
 			return Optional.of(OFF);
 		}
 
-		List<String> factors = List.of(trimmed.toUpperCase(Locale.ROOT).split("\\s+"));
+		List<String> factors = List.of(trimmed.toUpperCase(Locale.ROOT).split("\\s+", -1));
 		if (factors.size() == 4) {
 			return Optional.of(new BlendMode(false, factors.get(0), factors.get(1), factors.get(2),
 					factors.get(3)));

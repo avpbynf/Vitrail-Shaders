@@ -366,7 +366,16 @@ public final class TargetDirectives {
 			return Optional.empty();
 		}
 
-		String[] parts = arguments.substring(1, arguments.length() - 1).split(",");
+		// Limit 0, the one-argument reading: the empty field at the end of vec4(1,1,1,1,) goes, so
+		// the count below sees four and the colour applies. Iris reads it the same way, splitting
+		// at the default limit in DispatchingDirectiveHolder.processDirective.
+		//
+		// Refusing it instead would not leave the target with no clear at all. The engine default
+		// takes over, and which one depends on the target: the frame's fog colour on colortex0,
+		// opaque white on colortex1, and black elsewhere, transparent or not according to the
+		// format, as clearColour below spells out. A full screen of one of those, in place of the
+		// colour the pack wrote and Iris shows.
+		String[] parts = arguments.substring(1, arguments.length() - 1).split(",", 0);
 		if (parts.length != 4) {
 			return Optional.empty();
 		}

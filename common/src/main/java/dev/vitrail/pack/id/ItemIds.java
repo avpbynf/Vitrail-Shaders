@@ -73,7 +73,7 @@ public final class ItemIds {
 				return;
 			}
 
-			for (String token : Macros.expand(entry.group(2).trim(), defines).split("\\s+")) {
+			for (String token : Macros.expand(entry.group(2).trim(), defines).split("\\s+", -1)) {
 				if (token.isEmpty()) {
 					continue;
 				}

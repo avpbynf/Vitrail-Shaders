@@ -60,7 +60,11 @@ public record ChainFilter(List<String> only, List<String> without, int limit) {
 		}
 
 		List<String> names = new ArrayList<>();
-		for (String token : trimmed.split(",")) {
+		// Limit 0, the one-argument reading: a trailing empty field goes and a leading one stays,
+		// so "composite4," filters and ",composite4" falls back to the whole chain. Lopsided, and
+		// kept lopsided on purpose - the two answers are a filter and no filter, and moving a
+		// debugging knob's fallback is not something a build gate should be allowed to decide.
+		for (String token : trimmed.split(",", 0)) {
 			String name = token.trim();
 			if (!NAME.matcher(name).matches()) {
 				return ALL;

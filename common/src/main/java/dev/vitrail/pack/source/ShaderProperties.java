@@ -212,7 +212,7 @@ public final class ShaderProperties {
 			List<String> layout = builder.screens.computeIfAbsent(page, _ -> new ArrayList<>());
 			List<ScreenToken> slots = builder.screenLayout.computeIfAbsent(page, _ -> new ArrayList<>());
 
-			for (String token : screen.group(2).trim().split("\\s+")) {
+			for (String token : screen.group(2).trim().split("\\s+", -1)) {
 				if (token.isEmpty()) {
 					continue;
 				}
@@ -256,7 +256,7 @@ public final class ShaderProperties {
 		Matcher features = IRIS_FEATURES.matcher(line);
 		if (features.matches()) {
 			List<String> named = new ArrayList<>();
-			for (String token : features.group(2).trim().split("\\s+")) {
+			for (String token : features.group(2).trim().split("\\s+", -1)) {
 				if (!token.isEmpty()) {
 					named.add(token);
 				}
@@ -273,7 +273,7 @@ public final class ShaderProperties {
 
 		Matcher sliders = SLIDERS.matcher(line);
 		if (sliders.matches()) {
-			for (String token : sliders.group(1).trim().split("\\s+")) {
+			for (String token : sliders.group(1).trim().split("\\s+", -1)) {
 				if (SCREEN_TOKEN.matcher(token).matches()) {
 					builder.sliders.add(token);
 				}
@@ -502,7 +502,7 @@ public final class ShaderProperties {
 			boolean value = or();
 			skipSpace();
 
-			return this.failed || this.position < this.text.length() ? null : value;
+			return (this.failed || this.position < this.text.length()) ? null : value;
 		}
 
 		private boolean or() {
@@ -631,7 +631,7 @@ public final class ShaderProperties {
 			Map<String, String> defines) {
 		switch (keyword) {
 			case "ifdef", "ifndef" -> {
-				String name = line.replaceAll("^\\s*#\\s*\\w+\\s+", "").trim().split("\\s+")[0];
+				String name = line.replaceAll("^\\s*#\\s*\\w+\\s+", "").trim().split("\\s+", -1)[0];
 				conditions.ifDirective(keyword.equals("ifdef") == defines.containsKey(name));
 			}
 			case "if" -> conditions.ifDirective(
@@ -772,7 +772,7 @@ public final class ShaderProperties {
 			return Boolean.TRUE;
 		}
 
-		return value.equals("false") || value.equals("0") ? Boolean.FALSE : null;
+		return (value.equals("false") || value.equals("0")) ? Boolean.FALSE : null;
 	}
 
 	/**
@@ -799,8 +799,8 @@ public final class ShaderProperties {
 
 			Matcher image = IMAGE.matcher(line);
 			if (conditions.active() && image.matches()) {
-				String[] words = image.group(1).trim().split("\\s+");
-				if (words.length > 0 && !words[0].isEmpty() && !words[0].equalsIgnoreCase("none")) {
+				String[] words = image.group(1).trim().split("\\s+", -1);
+				if (!words[0].isEmpty() && !words[0].equalsIgnoreCase("none")) {
 					samplers.add(words[0]);
 				}
 			}
@@ -833,7 +833,7 @@ public final class ShaderProperties {
 			return;
 		}
 
-		for (String token : body.trim().split("\\s+")) {
+		for (String token : body.trim().split("\\s+", -1)) {
 			if (token.isEmpty()) {
 				continue;
 			}

@@ -93,7 +93,7 @@ public final class OptionIndex {
 			return List.of();
 		}
 
-		return List.of(list.group(1).trim().split("\\s+")).stream().filter(token -> !token.isEmpty()).toList();
+		return List.of(list.group(1).trim().split("\\s+", -1)).stream().filter(token -> !token.isEmpty()).toList();
 	}
 
 	public boolean contains(String name) {

@@ -257,7 +257,7 @@ public final class SettingsFile {
 		}
 
 		Map<String, String> values = new LinkedHashMap<>();
-		for (String line : new String(Files.readAllBytes(file), charset).split("\r?\n")) {
+		for (String line : new String(Files.readAllBytes(file), charset).split("\r?\n", -1)) {
 			String trimmed = line.trim();
 			int equals = trimmed.indexOf('=');
 			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {

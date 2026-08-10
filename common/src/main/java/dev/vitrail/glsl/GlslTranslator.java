@@ -1488,7 +1488,7 @@ public final class GlslTranslator {
 	private void synthesizeOne(int keyword, boolean known) {
 		FileScope declared = fileScopeDeclaration(keyword);
 		if (declared == null
-				|| known && declared.names().stream().noneMatch(VertexPrologue.SYNTHESIZED::contains)) {
+				|| (known && declared.names().stream().noneMatch(VertexPrologue.SYNTHESIZED::contains))) {
 			return;
 		}
 
@@ -1917,7 +1917,7 @@ public final class GlslTranslator {
 			int last = depth > 0 ? functionEnd(parameters) : this.tokens.size() - 1;
 			for (int scan = significantAfter(index); scan >= 0; scan = significantAfter(scan)) {
 				Token next = this.tokens.get(scan);
-				if (next.operator(";") || depth > 0 && (next.operator(",") || next.operator(")"))) {
+				if (next.operator(";") || (depth > 0 && (next.operator(",") || next.operator(")")))) {
 					break;
 				}
 

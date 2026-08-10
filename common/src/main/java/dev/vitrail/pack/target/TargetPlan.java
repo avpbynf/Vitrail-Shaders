@@ -369,7 +369,7 @@ public final class TargetPlan {
 				continue;
 			}
 
-			for (String declarator : matcher.group(2).split(",")) {
+			for (String declarator : matcher.group(2).split(",", -1)) {
 				String name = declarator.trim();
 				int bracket = name.indexOf('[');
 				if (bracket >= 0) {
