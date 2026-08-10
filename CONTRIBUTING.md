@@ -89,13 +89,19 @@ The javadoc carries the design, so a reference that no longer resolves is a piec
 and nothing says so until someone goes looking.
 
 Error Prone runs alongside javac and contributes the checks it rates as errors, the part of its
-catalogue meant to be a bug rather than a preference. Its warnings are worth reading and not
-worth blocking on, so `gradlew build -PlintReport` prints them and lets the build through.
+catalogue meant to be a bug rather than a preference. Two of its warnings are promoted to join them,
+`StringSplitter` and `OperatorPrecedence`; the rest are worth reading and not worth blocking on, so
+`gradlew build -PlintReport` prints them and lets the build through.
 
-That flag lets every other warning through with them: it drops `-Werror`, so the compiler warnings
-stop failing the build as well. A run under it is a listing, not a check, and the build says so on
-the way past. The javadoc lint is the exception and stays armed, its findings being errors rather
-than warnings.
+That flag lets those remaining warnings through and every compiler warning with them, since it drops
+`-Werror`. A run under it is a listing, not a check, and the build says so on the way past. What it
+cannot let through is anything javac calls an error, which is the javadoc lint and the two
+promotions.
+
+The first of the two is why every `split` here passes a limit: given a pattern and nothing else the
+call cannot say which of two readings of an empty field it wants. Which reading each of the two
+limits is, why either check was promoted, and what neither of them covers, are in
+[developing](docs/developing.md).
 
 `checkText` covers the two things no compiler sees: a byte order mark, which PowerShell writes
 unless told not to, and typographic punctuation. Why each of those is a gate, and what the second

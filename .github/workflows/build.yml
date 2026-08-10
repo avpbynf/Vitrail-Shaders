@@ -41,5 +41,6 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Compiles both modules, fails on the warnings build.gradle keeps, and runs checkText.
+      # What this refuses is whatever build.gradle refuses on the day it runs. Naming the gates here
+      # as well would only give them a third home to drift out of step with.
       - run: ./gradlew build

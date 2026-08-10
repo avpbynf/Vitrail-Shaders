@@ -136,9 +136,33 @@ There is one exemption, and it is a package: the vendored expression evaluator k
 javadoc. Bending borrowed code to this project's taste buys nothing and makes the next comparison
 with upstream harder. A contributor working in that package is not caught by this gate.
 
-**Static analysis, contributing only the checks it rates as errors** - the part of the catalogue
-meant to be a bug rather than a preference. Its warnings are worth reading and not worth blocking
-on, so a build flag prints them and lets the build through.
+**Static analysis, contributing the checks it rates as errors** - the part of the catalogue meant to
+be a bug rather than a preference - **and two of its warnings promoted to join them.** The rest are
+worth reading and not worth blocking on, so a build flag prints them and lets the build through.
+
+**A promotion is argued from the whole report, and by the same test a lint category has to pass:**
+the findings have to be about this code. Two passed it, and both for the same reason, which is not
+that they found a bug - neither of them did. It is that the line as written could not tell a reader
+which of two behaviours it wanted.
+
+`String.split` given a pattern and nothing else drops the empty fields at the *end* of a value and
+keeps the ones in the middle - and answers a value that is nothing but separators with an *empty
+array*, which is the half that throws. A handful of calls here depend on that drop and lose their
+meaning without it; most are indifferent; none of them said which, because the one-argument form
+cannot. `split(x, 0)` is the dropping reading and `split(x, -1)` the keeping one, so every call
+writes the one it means. Beware the tool's own advice here, which is to reach for Guava's
+`Splitter`: nothing in this tree uses Guava, and a limit is the smaller answer. The other check is
+about a line a person wrote. It reports two shapes, and the milder one is `&&` mixed into `||`,
+where the precedence is conventional and the parentheses only spare the reader a lookup. The one
+worth the gate is a condition in front of a ternary, which parses as `(a || b) ? x : y` and reads as
+`a || (b ? x : y)`. Nothing was wrong there either, and that was the point.
+
+**Know what a gate does not cover before quoting it as one.** Two holes here, and both were
+measured rather than reasoned about. The splitter check reports a call only where it can follow
+every use of the array, and goes quiet as soon as the array is handed to another method - calls
+written that way sat in this tree and in no report, and were found by grep. And the whole analyser
+is pointed away from the mixin package, so a split written under `neoforge/mixin/` compiles green
+whatever the severity says. What keeps those two shapes honest is reading, not the build.
 
 **Do not act on a dead-code finding without checking who calls it from outside the build.** Two
 whole families of method here are called by something the analyser cannot see. The loader calls into
@@ -152,10 +176,16 @@ so the compiler categories above stop failing too: a run under it is a listing a
 a green one says nothing about whether an ordinary build passes. The build prints that itself
 whenever the flag is on, rather than leaving it to be remembered from here.
 
-**The javadoc gate is the exception.** Doclint reports a broken reference as an *error*, and
-`-Werror` has nothing to say about errors, so that gate stays armed under the flag. Worth knowing as
-a shape as well as a fact: "this flag turns the checks off" is a claim about a build, and a build is
-the one thing that answers it if you plant a defect and ask.
+**What it cannot disarm is anything javac reports as an *error*,** since `-Werror` has nothing to
+say about those. Doclint is one, and so are the two promoted checks: a split written the short way
+fails the build under the report flag as readily as without it. Worth knowing as a shape as well as
+a fact: "this flag turns the checks off" is a claim about a build, and a build is the one thing that
+answers it if you plant a defect and ask.
+
+**Ask it of a compile that actually runs.** The listing and the warning the flag prints are produced
+by the compiler, so a tree Gradle finds up to date or restores from the cache prints neither and
+exits zero. That is a green run saying nothing whatever, which is the same trap as the empty report
+below with a friendlier face. Force the compile when the point is to read the report.
 
 **A text check**, for the two things no compiler sees: a byte order mark, which reaches a GLSL
 compiler as a stray character in front of the version directive; and typographic punctuation, which
@@ -175,6 +205,16 @@ its finding list attached.
 false: the redirection sent standard error to the terminal while the compiler writes diagnostics
 there. The result was only trusted after a planted defect - a self-assignment and a mistyped format
 string - came back flagged. A new gate is proven by a planted defect, not by a clean run.
+
+**Nor a report that ends on a round number.** javac prints a hundred warnings and stops, and the
+first reading of the report the two promotions came out of stopped there; the figure behind it was
+past twice as many, and it was read again in full before anything was armed. What makes this worth
+writing down is that javac is not at fault: it emits a note saying how many there really are and
+naming the flag that lifts the ceiling, and that note does not survive the trip through Gradle. What
+reaches the terminal is the bare line "100 warnings", which reads like a count. The build raises
+both ceilings now, warnings and errors alike. The shape outlives the fix, and the tell is the same
+every time: a total that lands exactly on a tool's own limit is the tool talking about itself, and
+the sentence that would have explained it is often being eaten by whatever sits in between.
 
 ## The in-game loop
 

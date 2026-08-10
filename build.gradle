@@ -34,8 +34,8 @@ subprojects {
 	// serial, which asks for a serialVersionUID on exceptions nothing serialises.
 	//
 	// Error Prone contributes the checks it rates as errors, which is the part of its catalogue
-	// meant to be a bug rather than a preference. Its warnings are worth reading and not worth
-	// blocking on, so they are off unless asked for.
+	// meant to be a bug rather than a preference, plus the two promoted further down. Its other
+	// warnings are worth reading and not worth blocking on, so they are off unless asked for.
 	//
 	// gradlew build -PlintReport prints what is there without failing, which is how both lists get
 	// read when the point is to look at them rather than to gate on them.
@@ -50,6 +50,13 @@ subprojects {
 				// stareval is vendored and its javadoc is its author's. Bending borrowed code to
 				// our taste buys nothing and makes the next comparison with upstream harder.
 				"-Xdoclint/package:-dev.vitrail.uniform.expr.kroppeb.*",
+				// javac prints a hundred of each and stops, and what reaches the reader through
+				// Gradle is the bare line "100 warnings" that reads like a count. Both are raised,
+				// and on every path rather than under the report flag alone, because a build that
+				// fails is a build somebody is about to read a list from. Why this is worth a line
+				// at all is in docs/developing.md.
+				"-Xmaxwarns", "100000",
+				"-Xmaxerrs", "100000",
 		]
 
 		if (!lintReport) {
@@ -58,19 +65,31 @@ subprojects {
 			// Said by the build itself, because a sentence in a document rots and this cannot.
 			//
 			// What the flag really disarms is everything that is a WARNING: the lint categories
-			// above and the Error Prone findings. Doclint is not one of them. A broken reference
-			// is reported by javac as an error, and -Werror has nothing to say about errors, so
-			// the javadoc gate stays armed under this flag. Measured with a planted reference, not
-			// reasoned about: an earlier version of this very line claimed the opposite.
+			// above and the Error Prone findings still rated as warnings. What it cannot disarm is
+			// anything javac reports as an ERROR, since -Werror has nothing to say about those.
+			// Doclint is one, and so are the two checks promoted below. Measured with a planted
+			// defect rather than reasoned about: an earlier version of this line claimed that the
+			// flag turned everything off, and it was wrong then for the doclint half of the same
+			// reason.
 			doFirst {
 				logger.lifecycle("lintReport: -Werror is off, so no javac warning and no Error "
-						+ "Prone finding can fail this build. Doclint still can, its findings "
-						+ "being errors. This run is a listing, not a check - green here does not "
-						+ "mean 'gradlew build' is green.")
+						+ "Prone warning can fail this build. What stays armed is what javac calls "
+						+ "an error: doclint, and the Error Prone checks this build promotes. This "
+						+ "run is a listing, not a check - green here does not mean 'gradlew build' "
+						+ "is green.")
 			}
 		}
 
 		options.errorprone.disableAllWarnings = !lintReport
+
+		// Two warnings promoted to errors. Why those two, and the two places where the promotion
+		// does not reach, are in docs/developing.md. What belongs here is the one thing about these
+		// lines that is not visible in them: the promotion outlives disableAllWarnings above,
+		// because that option rewrites only the checks still RATED a warning and an entry already
+		// at error is not one of them. Nothing about it depends on which of these two lines comes
+		// first. Settled by planting a single-argument split and watching the build fail on it,
+		// under the report flag as well as without it.
+		options.errorprone.error("StringSplitter", "OperatorPrecedence")
 
 		// Mixins are outside what this analyser can model, so it is pointed away from them rather
 		// than argued with. A handler is called by the mixin framework and never from our own code,
@@ -83,6 +102,10 @@ subprojects {
 		//
 		// Only this analyser steps back. The javac warnings still apply here and are still errors,
 		// and they are the ones that catch a real mistake in a mixin.
+		//
+		// It steps back whole, promotions included: a single-argument split planted in this package
+		// compiles green, measured rather than assumed. What the pattern names is a path and not a
+		// module, so it is this package that steps back and nothing else does.
 		options.errorprone.excludedPaths = ".*/neoforge/mixin/.*"
 	}
 
