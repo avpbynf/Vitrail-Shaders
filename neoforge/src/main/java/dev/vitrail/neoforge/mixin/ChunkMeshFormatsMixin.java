@@ -22,7 +22,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * of the three readers are the section manager's constructor and the third is a region's device
  * resources, built on demand at any point of a session, so an answer decided here would move
  * between two readers that must agree. {@code TerrainMesh.settle} moves it instead, at the one
- * instant none of the three is alive, and this method only ever repeats what it decided.
+ * instant no reader stands between the change and the next one, and this method only ever repeats
+ * what it decided.
  */
 @Mixin(value = ChunkMeshFormats.class, remap = false)
 public abstract class ChunkMeshFormatsMixin {

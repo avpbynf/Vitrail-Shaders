@@ -138,9 +138,10 @@ an axis of no extent belongs to a face that has no extent of its own, the edge-o
 element, so it covers no pixel, and whether such a quad reaches the encoder at all was not measured;
 the threshold is in atlas coordinates besides, which a resource pack moves.
 
-Those fields are written whether or not a pack is drawing. Meshes are cached, so writing them only
-while the terrain switch is on would leave every already-built section without them until something
-forced a rebuild, which reads as a half-broken feature. The renderer ignores what it does not read.
+Those fields are written whether or not a pack is drawing. The renderer ignores what it does not
+read, and they go nowhere at all when the format has no element for them, so writing them always
+costs nothing; making them conditional would buy nothing and add a second switch that has to agree
+with the first.
 
 The format layout follows two rules. A vertex size must be a multiple of four, so each new element
 costs a whole word even where the value needs less; that is arithmetic, not a choice. And the four

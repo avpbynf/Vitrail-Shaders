@@ -31,11 +31,10 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
  * declares that superclass: the field is the target's and not its own, and a shadow does not reach
  * through a class the mixin does not stand under.
  * <p>
- * The bits are written whether or not a pack is drawing the terrain, and that is deliberate. Chunk
- * meshes are cached, so writing them only when the feature is on would leave every already meshed
- * section without them until the player forced a reload, which reads as the feature being half
- * broken. Sodium ignores what it does not use, and the id goes nowhere at all when the format has no
- * element for it, so writing them always costs nothing.
+ * The bits are written whether or not a pack is drawing the terrain, and that is deliberate. Sodium
+ * ignores what it does not use, and the id goes nowhere at all when the format has no element for
+ * it, so writing them always costs nothing; making them conditional would buy nothing and add a
+ * second switch that has to agree with the one the format already follows.
  */
 @Mixin(value = BlockRenderer.class, remap = false)
 public abstract class BlockRendererMixin extends AbstractBlockRenderContext {

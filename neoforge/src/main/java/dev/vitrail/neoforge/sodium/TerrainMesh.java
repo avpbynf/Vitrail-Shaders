@@ -42,13 +42,10 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * This format, built the first time one is wanted and kept because it holds no state of its own.
 	 * Null until then, and null for good once {@link #broken} is set.
 	 * <p>
-	 * <strong>The answer itself is not latched, and it is the reason a pack picked in a running game
-	 * draws the world.</strong> The two that read it, the chunk builder for the stride it writes at
-	 * and the chunk renderer for the layout it binds, are both built by one constructor,
-	 * {@code RenderSectionManager}, and Sodium builds a new one whenever the game invalidates its
-	 * compiled geometry. So the way to change the answer is to change it and then ask for that, which
-	 * is what {@code TerrainDraw.wanted} does; anything meshed at the old stride is thrown out in the
-	 * same breath.
+	 * <strong>Which of the two answers is served is not settled for the run, and that is why a pack
+	 * picked in a running game draws the world.</strong> It moves only in {@link #settle()}, and
+	 * {@code TerrainDraw.wanted} is what asks for that to happen: it changes what the options say and
+	 * has the world rebuilt, and everything meshed at the old stride is thrown out on the way.
 	 */
 	private static TerrainMesh built;
 
@@ -135,11 +132,11 @@ public final class TerrainMesh implements ChunkVertexType {
 	/**
 	 * Takes the answer the options now ask for, at the one instant it is safe to change it.
 	 * <p>
-	 * That instant is the head of {@code RenderSectionManager}'s constructor: Sodium reaches it from
-	 * {@code initRenderer}, which has just deleted every region and the builder with them, and it is
-	 * about to ask {@link #current()} for the format both of its own new readers will keep. Nothing
-	 * that holds a stride is alive across this point, so nothing is left describing meshes that no
-	 * longer exist.
+	 * That instant is the head of Sodium's {@code initRenderer}, the only place its section manager is
+	 * built, and {@code MixinSodiumWorldRendererInit} is what calls this from there. What makes it
+	 * safe is measured and narrower than it looks: nothing between here and that constructor reads
+	 * the format, so no two readers can end up disagreeing. Everything that will read it is built
+	 * afterwards, and every section is meshed again after that.
 	 * <p>
 	 * Built here rather than in a static field so that a mesh this cannot extend leaves the game
 	 * running on Sodium's own instead of failing to load a class in the middle of a world.

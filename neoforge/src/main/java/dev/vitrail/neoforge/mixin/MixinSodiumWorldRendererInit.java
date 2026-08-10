@@ -21,15 +21,22 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * segment offsets by that stride, so uploads land in the wrong place, no side reports anything and
  * the world draws out of garbage.
  * <p>
- * <strong>Here nothing holding a stride is alive across the change.</strong> This method is the only
- * place the section manager is built, reached from {@code reload} and from {@code loadLevel}; it
- * deletes the previous manager and its regions, and every section is meshed again after it. So the
- * answer is taken once here and merely read everywhere else.
+ * <strong>What makes this instant the safe one is that nothing between it and the section manager's
+ * constructor reads the format.</strong> That is weaker than saying nothing holding a stride is
+ * alive here, and it is what was measured: this runs before {@code deleteRendererState}, so the
+ * previous manager and its regions are still standing, and an exhaustive pass over the 688 classes
+ * of the 0.9.1 jar finds no reader of {@code ChunkMeshFormats.getCurrent} on that road. Everything
+ * that will read the format afterwards is built after it, and every section is meshed again.
+ * <p>
+ * <strong>{@code require = 1} because this injection is now the only writer of the answer.</strong>
+ * A rename on Sodium's side would otherwise leave it silent rather than absent: the mesh would stay
+ * on Sodium's own for the whole run, no terrain program would ever draw, and nothing would be
+ * printed, since the line that announces the decision is on the other side of this call.
  */
 @Mixin(value = SodiumWorldRenderer.class, remap = false)
 public abstract class MixinSodiumWorldRendererInit {
 
-	@Inject(method = "initRenderer", at = @At("HEAD"))
+	@Inject(method = "initRenderer", at = @At("HEAD"), require = 1)
 	private void vitrail$settle(CallbackInfo callback) {
 		TerrainMesh.settle();
 	}

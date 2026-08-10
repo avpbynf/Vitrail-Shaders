@@ -346,10 +346,11 @@ public final class PackChain {
 		packsFirst = true;
 		packOff = false;
 		try {
-			// Both ways out of here end with no pack drawing anything, and the mesh only carries what
-			// a pack reads while one wants it: said here as well as on the road that loads a pack,
-			// or picking None after a terrain pack would leave the extra bytes on every vertex with
-			// nothing left to read them.
+			// Both ways out of the next two blocks end with no pack drawing anything, and the mesh
+			// only carries what a pack reads while one wants it: said here as well as on the road
+			// that loads a pack, or picking None after a terrain pack would leave the extra bytes on
+			// every vertex with nothing left to read them. The refusals further down do not say it,
+			// and the note on the one at the head of the load prices what that costs.
 			List<Path> packs = PackLoader.candidates(gameDirectory);
 			if (packs.isEmpty()) {
 				lastError = "No shader pack in " + PackLoader.directory(gameDirectory);
@@ -418,8 +419,8 @@ public final class PackChain {
 			// whichever sampler the missing feature stood behind, which is a wrong diagnosis rather
 			// than an incomplete one.
 			//
-			// **Here and not one line earlier**, and the six lines above are the reason. They settle
-			// what the chunk mesh carries, and returning before them left that answer at its
+			// **Here and not one line earlier**, and TerrainDraw.wanted above is the reason. It settles
+			// what the chunk mesh carries, and returning before it left that answer at its
 			// default, so a refused pack decided the mesh for whichever pack was picked after it.
 			// That used to last the whole run; the mesh follows the pack now, so what it costs is a
 			// rebuilt world rather than a session. The session is published by then as well, so the
