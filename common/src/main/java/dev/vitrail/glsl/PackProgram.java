@@ -518,10 +518,11 @@ public final class PackProgram {
 	 * One piece of geometry the game hands over as a render pipeline, as a pack has to be read for it.
 	 * <p>
 	 * There is no list of bound elements here, unlike {@link SkyElement}, and that is the whole
-	 * difference between the two families: every entity pipeline of the game binds
-	 * {@code DefaultVertexFormat.ENTITY} and nothing else, so the elements to declare are
-	 * {@link VertexInputs#ENTITY}'s and are the same for all of them. The door is what checks that
-	 * claim against the pipeline in hand rather than trusting it.
+	 * difference between the sky and every other family: the sky binds four formats between its
+	 * passes, while the entities all bind {@code DefaultVertexFormat.ENTITY} and the particles and
+	 * the weather all bind {@code DefaultVertexFormat.PARTICLE}, so one family is one format and the
+	 * elements to declare are the {@link VertexInputs} constant's. The door of each family is what
+	 * checks that claim against the pipeline in hand rather than trusting it.
 	 *
 	 * @param element   what the caller calls this piece, one word, and the key it gets its answer back
 	 *                  under. Several pieces are commonly one program under one format, and they are
@@ -533,17 +534,18 @@ public final class PackProgram {
 	 *                  {@code alphaTest.<program>}, written under the file that really serves the
 	 *                  piece, exactly as the chunk passes read it
 	 */
-	public record EntityElement(String element, String program, AlphaTest alphaTest) {
+	public record GeometryElement(String element, String program, AlphaTest alphaTest) {
 	}
 
 	/**
-	 * Reads and translates the programs the game's own entity geometry is drawn with, in one opening
-	 * of the pack, keyed by the piece each one serves.
+	 * Reads and translates the programs one family of the game's own geometry is drawn with, in one
+	 * opening of the pack, keyed by the piece each one serves.
 	 * <p>
 	 * All of them together and not one at a time, for the reason {@link #loadSky} gives: the plan
 	 * reads thirty odd files whatever is asked of it, and the moment one piece is first drawn is a
 	 * moment of the world's choosing. The sharpest of them is the armour decal, which nothing draws
-	 * until somebody wears armour that carries one.
+	 * until somebody wears armour that carries one; the weather is the same question asked of the
+	 * sky, since a pack may be loaded for an hour before it rains.
 	 * <p>
 	 * Two pieces asking one program for one threshold share a translation, since the text would be
 	 * identical: the alpha test is written into the fragment stage and is the only thing that differs
@@ -552,9 +554,14 @@ public final class PackProgram {
 	 * A piece the pack serves nothing for is simply absent from the answer, and the game then keeps
 	 * its own shader for it. The fallback tree is walked like everywhere else, so a pack shipping only
 	 * {@code gbuffers_basic} still serves every entity it has.
+	 *
+	 * @param inputs where the vertex stage takes its inputs from, which is the family's one format.
+	 *               Handed in rather than worked out from the names asked for: the caller is the door
+	 *               that read the format off the game's own pipeline, and a second answer here would
+	 *               be a second chance for the two to differ
 	 */
-	public static Map<String, Loaded> loadEntities(Path packPath, String place,
-			List<EntityElement> elements, Map<String, OptionValue> chosen, String profile)
+	public static Map<String, Loaded> loadGeometry(Path packPath, String place, VertexInputs inputs,
+			List<GeometryElement> elements, Map<String, OptionValue> chosen, String profile)
 			throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
@@ -574,7 +581,7 @@ public final class PackProgram {
 			Map<String, Map<ProgramStage, ExpandedUnit>> expanded = new LinkedHashMap<>();
 			Map<String, Loaded> translated = new LinkedHashMap<>();
 			Map<String, Loaded> loaded = new LinkedHashMap<>();
-			for (EntityElement element : elements) {
+			for (GeometryElement element : elements) {
 				Optional<ProgramResolver.Resolution> resolution =
 						resolver.lookup(place, element.program());
 				if (resolution.isEmpty()) {
@@ -606,16 +613,17 @@ public final class PackProgram {
 				// same program, and keying by name would expand, translate and compile that file
 				// twice there, which is the one thing reading them all at once exists to avoid.
 				//
-				// Nothing of the name is lost by that, and it is worth writing down which name rather
-				// than adding it to the key: the only thing a program name reaches the translation
-				// through is LegacyGlsl.drawsEntities, which decides whether the entity uniforms are
-				// declared, and both names this family asks for are entity roots. A third name that
-				// was not one would need this key widened, and would be the only reason to.
-				String key = path + "|" + alphaTest;
+				// The one thing a program NAME reaches the translation through is
+				// LegacyGlsl.drawsEntities, which decides whether the entity uniforms are declared, so
+				// that answer is in the key and the name itself is not. It was left out while the
+				// entities were the only caller, both of their names being entity roots; the weather
+				// and the particles are the third name that comment named, and neither is one. Left
+				// out now, it would hand a pack that ships no particle program the translation its
+				// entities got out of the same gbuffers_textured_lit, entity uniforms and all.
+				String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program());
 				translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
-						ProgramTranslator.translate(units, VertexInputs.ENTITY,
-								VertexInputs.ENTITY.elements(), alphaTest, false, element.program(),
-								textures.volumes()),
+						ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest, false,
+								element.program(), textures.volumes()),
 						targets, alphaTest, textures));
 				loaded.put(element.element(), translated.get(key));
 			}

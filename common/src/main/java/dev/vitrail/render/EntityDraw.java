@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.glsl.VertexInputs;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.RenderStage;
@@ -164,8 +165,8 @@ public final class EntityDraw {
 		}
 
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
-		private PackProgram.EntityElement asked() {
-			return new PackProgram.EntityElement(this.element, this.program, this.alphaTest);
+		private PackProgram.GeometryElement asked() {
+			return new PackProgram.GeometryElement(this.element, this.program, this.alphaTest);
 		}
 
 		/**
@@ -769,8 +770,9 @@ public final class EntityDraw {
 				.toList();
 
 		try {
-			Map<String, PackProgram.Loaded> loaded = PackProgram.loadEntities(this.packPath, this.place,
-					asked.stream().map(Element::asked).toList(), this.chosen, this.profile);
+			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(this.packPath, this.place,
+					VertexInputs.ENTITY, asked.stream().map(Element::asked).toList(), this.chosen,
+					this.profile);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the entities, so the game keeps its "
 						+ "own shader for them", this.packPath.getFileName(),
