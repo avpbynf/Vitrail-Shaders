@@ -73,26 +73,20 @@ final class PackDump {
 	 * apart, and so do the three chunk passes and every piece of the entities. Everything else is the
 	 * named program's own.
 	 *
-	 * @param terrain the pack's terrain programs, empty until they are read, and first on purpose:
-	 *                they are answered from a different catalogue, their {@code of_ModelViewMatrix}
-	 *                being the world's where a composite's is the identity, which is exactly the pair
-	 *                a reading has to tell apart
-	 * @param sky     the pack's sky programs, empty until the sky has been read and empty for good
-	 *                for a pack that serves none. Named by element as the terrain is by pass: four
-	 *                of the six are one file, so a line that said gbuffers_skybasic four times would
-	 *                not say which piece was read
-	 * @param entities the pack's entity programs, empty until the first entity is drawn. Named by
-	 *                element for the same reason and more strongly: the pieces share their files
-	 *                between them rather than having one each, and the two halves sometimes share
-	 *                the same one, which no line naming the file could tell apart
-	 * @param clouds  the pack's cloud programs, empty until a cloud is drawn. Two over one file, so
-	 *                they are named by the setting they answer, {@code fancy} and {@code flat}, and
-	 *                only the one the game is drawing with has ever been prepared
-	 * @param passes  the chain's own passes, empty for the frame or two before they are built
+	 * @param passes   the chain's own passes, empty for the frame or two before they are built
+	 * @param families the pack's geometry programs, one collection per family and each empty until
+	 *                 that family is read. <strong>The order is the order a line resolves in</strong>,
+	 *                 and the terrain goes first on purpose: it is answered from a different
+	 *                 catalogue, its {@code of_ModelViewMatrix} being the world's where a composite's
+	 *                 is the identity, which is exactly the pair a reading has to tell apart. Every
+	 *                 family is named by ELEMENT rather than by file, because in every one of them
+	 *                 several elements share a file: four of the six pieces of the sky are one, the
+	 *                 two halves of the entities sometimes are, and the clouds answer their two
+	 *                 settings, {@code fancy} and {@code flat}, out of one
 	 */
-	static void take(String place, int load, Collection<TerrainProgram> terrain,
-			Collection<SkyProgram> sky, Collection<EntityProgram> entities,
-			Collection<CloudProgram> clouds, List<PackPass> passes, WorldState world) {
+	@SafeVarargs
+	static void take(String place, int load, List<PackPass> passes, WorldState world,
+			Collection<? extends DumpedProgram>... families) {
 		if (wanted.isEmpty() || file == null) {
 			return;
 		}
@@ -107,39 +101,17 @@ final class PackDump {
 		String path = null;
 		String decoded = null;
 
-		// Named by pass and not only by path: two of the three are usually the same file, and a line
-		// that said gbuffers_terrain twice would not say which of the two was read. The label is
-		// matched as well as the path, so dump=cutout names the pass and dump=gbuffers_terrain still
-		// names the file, taking the first pass drawn with it.
-		for (TerrainProgram program : terrain) {
-			running.add(program.label());
-			if (decoded == null && (names(program.path()) || names(program.label()))) {
-				path = program.label();
-				decoded = program.decoded(world);
-			}
-		}
-
-		for (SkyProgram program : sky) {
-			running.add(program.label());
-			if (decoded == null && (names(program.path()) || names(program.label()))) {
-				path = program.label();
-				decoded = program.decoded(world);
-			}
-		}
-
-		for (EntityProgram program : entities) {
-			running.add(program.label());
-			if (decoded == null && (names(program.path()) || names(program.label()))) {
-				path = program.label();
-				decoded = program.decoded(world);
-			}
-		}
-
-		for (CloudProgram program : clouds) {
-			running.add(program.label());
-			if (decoded == null && (names(program.path()) || names(program.label()))) {
-				path = program.label();
-				decoded = program.decoded(world);
+		// Named by element and not only by path: several elements of a family are usually the same
+		// file, and a line that said gbuffers_terrain twice would not say which of the two was read.
+		// The label is matched as well as the path, so dump=cutout names the pass and
+		// dump=gbuffers_terrain still names the file, taking the first pass drawn with it.
+		for (Collection<? extends DumpedProgram> family : families) {
+			for (DumpedProgram program : family) {
+				running.add(program.label());
+				if (decoded == null && (names(program.path()) || names(program.label()))) {
+					path = program.label();
+					decoded = program.decoded(world);
+				}
 			}
 		}
 

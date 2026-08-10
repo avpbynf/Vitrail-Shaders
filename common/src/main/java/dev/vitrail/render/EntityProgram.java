@@ -75,7 +75,7 @@ import java.util.Set;
  * {@code pipeline/IrisPipelines.java:150,160,193,205,217}), which is a narrower claim and the true
  * one.
  */
-final class EntityProgram {
+final class EntityProgram implements DumpedProgram {
 
 	/** What the log calls this geometry, one word in the middle of a sentence. */
 	private static final String FAMILY = "entity";
@@ -184,17 +184,20 @@ final class EntityProgram {
 	}
 
 	/** @see GeometryProgram#decoded */
-	String decoded(WorldState world) {
+	@Override
+	public String decoded(WorldState world) {
 		return this.body.decoded(world);
 	}
 
 	/** @see GeometryProgram#path */
-	String path() {
+	@Override
+	public String path() {
 		return this.body.path();
 	}
 
 	/** @see GeometryProgram#label */
-	String label() {
+	@Override
+	public String label() {
 		return this.body.label();
 	}
 

@@ -41,7 +41,7 @@ import java.util.Set;
  * Sodium's mixin push twenty bytes of region offset into the layout, and the sky is the game's
  * geometry: it has no region and no push constants, and borrowing the word would push them anyway.
  */
-final class SkyProgram {
+final class SkyProgram implements DumpedProgram {
 
 	/** What the log calls this geometry, one word in the middle of a sentence. */
 	private static final String FAMILY = "sky";
@@ -126,17 +126,20 @@ final class SkyProgram {
 	}
 
 	/** @see GeometryProgram#decoded */
-	String decoded(WorldState world) {
+	@Override
+	public String decoded(WorldState world) {
 		return this.body.decoded(world);
 	}
 
 	/** @see GeometryProgram#path */
-	String path() {
+	@Override
+	public String path() {
 		return this.body.path();
 	}
 
 	/** @see GeometryProgram#label */
-	String label() {
+	@Override
+	public String label() {
 		return this.body.label();
 	}
 

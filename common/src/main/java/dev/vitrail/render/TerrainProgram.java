@@ -57,7 +57,7 @@ import java.util.Optional;
  * <strong>A family whose geometry is not Sodium's must not borrow it</strong>, or it takes the push
  * constants with it.
  */
-public final class TerrainProgram {
+public final class TerrainProgram implements DumpedProgram {
 
 	/** The one name that decides everything. See the class comment before shortening it. */
 	private static final String NAMESPACE = Vitrail.MOD_ID + "_sodium";
@@ -240,17 +240,20 @@ public final class TerrainProgram {
 	}
 
 	/** @see GeometryProgram#decoded */
-	String decoded(WorldState world) {
+	@Override
+	public String decoded(WorldState world) {
 		return this.body.decoded(world);
 	}
 
 	/** @see GeometryProgram#path */
-	String path() {
+	@Override
+	public String path() {
 		return this.body.path();
 	}
 
 	/** @see GeometryProgram#label */
-	String label() {
+	@Override
+	public String label() {
 		return this.body.label();
 	}
 
