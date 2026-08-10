@@ -1837,10 +1837,7 @@ public final class PackChain {
 					+ "from the game, already tone mapped, and the translucent chunk pass blends onto "
 					+ "this seed afterwards",
 					TargetName.canonical(where.get().target()), where.get().from(),
-					EntityDraw.wanted()
-							? "the clouds, the weather and the entities that blend, the player's own "
-									+ "body among them,"
-							: "the entities, the clouds and the weather");
+					carried());
 			// The number is worth printing on its own: it is the whole difference between a begin
 			// that reads the world of this frame and one that reads what the clear left.
 			Vitrail.logger().info("It is painted where the world would be drawn, after {} passes of "
@@ -1866,6 +1863,35 @@ public final class PackChain {
 			Vitrail.logger().info("The scene seed is off, {} holds its clear colour as well",
 					TargetName.canonical(where.get().target()));
 		}
+	}
+
+	/**
+	 * What the seed is still the only road in for, in the order a sentence takes them.
+	 * <p>
+	 * Built from the switches rather than written out, for the reason {@link #announceSeed} gives at
+	 * the line that reads it: a list spelled once per combination goes stale the day the next family
+	 * lands, in the one place that must not. Two families answer here today and a third would be one
+	 * more line rather than a fourth branch.
+	 */
+	private static String carried() {
+		List<String> still = new ArrayList<>();
+		if (!EntityDraw.wanted()) {
+			still.add("the entities");
+		}
+
+		if (!CloudDraw.wanted()) {
+			still.add("the clouds");
+		}
+
+		still.add("the weather");
+		if (EntityDraw.wanted()) {
+			// Named apart, because a reader who has just turned the entities on and still sees a flat
+			// player would otherwise have nothing to go on: the opaque ones go through the pack and
+			// the ones that blend do not.
+			still.add("the entities that blend, the player's own body among them");
+		}
+
+		return String.join(", ", still);
 	}
 
 	private void announceResting(boolean seeding) {

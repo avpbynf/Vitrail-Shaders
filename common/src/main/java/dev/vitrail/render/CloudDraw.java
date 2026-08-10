@@ -105,6 +105,15 @@ public final class CloudDraw {
 	}
 
 	/**
+	 * The same answer, for the line at the load that says what the scene seed is still the only road
+	 * in for. Asked there rather than settled once, because the clouds go through the pack or they
+	 * come across flat, and the sentence differs.
+	 */
+	static boolean wanted() {
+		return wanted;
+	}
+
+	/**
 	 * What the loaded pack asked the game's cloud setting to be, or empty to leave the user's own
 	 * alone.
 	 * <p>
