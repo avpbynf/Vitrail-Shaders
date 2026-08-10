@@ -27,6 +27,7 @@
 		"MixinShaderChunkRenderer",
 		"SkyRendererMixin",
 		"MixinSodiumWorldRenderer",
+		"MixinSodiumWorldRendererInit",
 		"StagedVertexBufferDrawMixin",
 		"VKDrawContextMixin"
 	]

@@ -135,9 +135,17 @@ public final class TerrainDraw {
 	 * <p>
 	 * The door is the one F3+A uses, {@code LevelExtractor.allChanged}, and it raises a flag the next
 	 * extract consumes rather than tearing sections down inside a frame. That extract calls
-	 * {@code LevelRenderer.invalidateCompiledGeometry}, where Sodium builds a new
-	 * {@code RenderSectionManager}, and it is that constructor which asks for the format again.
-	 * Silent before a world is joined, where nothing has been meshed and the first ask answers itself.
+	 * {@code LevelRenderer.invalidateCompiledGeometry}, where Sodium builds its chunk renderer again
+	 * from nothing, and that is where the format is taken.
+	 * <p>
+	 * <strong>Asking is all this does</strong>, and it is what makes the one place that writes the
+	 * field directly safe: a terrain program that threw stops being offered at once, without a
+	 * rebuilt world, and the mesh goes on carrying what it carried until something else rebuilds it.
+	 * The format cannot fall out of step with a living builder that way, because it is not this field
+	 * that the format follows but the reading taken at the rebuild.
+	 * <p>
+	 * Silent before a world is joined, where nothing has been meshed and the first reading answers
+	 * itself.
 	 */
 	static void wanted(boolean asked) {
 		if (wanted == asked) {
@@ -408,8 +416,9 @@ public final class TerrainDraw {
 	/**
 	 * The same, for the side that has to decide what the chunk mesh carries.
 	 * <p>
-	 * That decision is taken once for the whole run and never revisited, so this is read at a moment
-	 * of somebody else's choosing rather than per frame, and a pack loaded later cannot move it.
+	 * Read at one instant of that side's own choosing and not per frame: the format may only change
+	 * where nothing is left holding the old one, which is when the chunk renderer is being built
+	 * again from nothing. {@link #wanted(boolean)} is what asks for that to happen.
 	 */
 	public static boolean asked() {
 		return wanted;

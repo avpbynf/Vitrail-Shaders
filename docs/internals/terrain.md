@@ -31,11 +31,14 @@ is how a program that compiles ends up drawing the wrong picture.
 
 Two properties of the format substitution are constraints, not details.
 
-**The format is chosen once for the session.** Every caller of the accessor - the section manager,
-the mesh builder, the per-region device resources - keeps whatever it was handed when it was
-constructed. A format that changed mid-session would let meshes built at one stride land in arenas
-sized for another, and nothing in the renderer would notice. That is why toggling the terrain switch
-asks for a restart, and why the engine says so instead of quietly doing half the work.
+**The format may only change where nothing holds the old one.** Every caller of the accessor - the
+section manager, the mesh builder, the per-region device resources - keeps whatever it was handed
+when it was constructed, and the last of those three is built on demand at a region's first upload,
+so it goes on asking all through a session. A format that moved between two of those calls would let
+meshes built at one stride land in an arena sized for another, and nothing in the renderer would
+notice. So the engine takes the answer at the single instant the chunk renderer is being built again
+from nothing, and merely repeats it everywhere else. Turning the terrain switch on or off asks the
+game to rebuild the world, which is the same door F3+A uses; it does not ask for a restart.
 
 **Everything the pipeline declares must be bound.** Descriptor flushing walks the entries of the
 bound pipeline, so uniform and texture bindings the chunk renderer emits unconditionally for its own
@@ -150,11 +153,12 @@ element the stage does not declare shifts every element after it - and there is 
 last one. That single placement decision is what lets the renderer keep drawing through a format it
 was never told about.
 
-**They are all appended, never chosen per pack**, and that is the one place this engine cannot follow
-the reference. The reference builds its format out of the names a pack's compiled programs really
-reference, which it can do because it settles the format when a pack loads; here the format is
-settled before any pack is chosen, for the reason the next section gives, so the choice is between
-carrying them always and carrying them never.
+**They are all appended, never chosen per pack**, where the reference builds its format out of the
+names a pack's compiled programs really reference. The reason this engine could not do the same was
+that its format was settled before any pack was chosen, and that is no longer so: the format now
+follows the pack. What is left is a plain difference in what the vertex costs, and it has not been
+closed. Seven packs of the test corpus read the sprite middle and eight read the tangent, so what a
+conditional would save is small either way.
 
 The encoding itself matches the reference implementation term for term: the id plus one, shifted up
 by one bit, with the low bit flagging a fluid, and a default of minus one so that an unmapped block

@@ -346,9 +346,14 @@ public final class PackChain {
 		packsFirst = true;
 		packOff = false;
 		try {
+			// Both ways out of here end with no pack drawing anything, and the mesh only carries what
+			// a pack reads while one wants it: said here as well as on the road that loads a pack,
+			// or picking None after a terrain pack would leave the extra bytes on every vertex with
+			// nothing left to read them.
 			List<Path> packs = PackLoader.candidates(gameDirectory);
 			if (packs.isEmpty()) {
 				lastError = "No shader pack in " + PackLoader.directory(gameDirectory);
+				TerrainDraw.wanted(false);
 				Vitrail.logger().info("No shader pack in {}, nothing to draw",
 						PackLoader.directory(gameDirectory));
 				return;
@@ -359,6 +364,7 @@ public final class PackChain {
 			// an empty folder, taken because it was asked for rather than because nothing was found.
 			if (pack == null) {
 				packOff = true;
+				TerrainDraw.wanted(false);
 				Vitrail.logger().info("No pack asked for, so none of the {} in {} is read and the game "
 						+ "draws its own image. Pick one in the settings screen, or name it in {}",
 						packs.size(), PackLoader.directory(gameDirectory), packFile(gameDirectory));
@@ -705,6 +711,12 @@ public final class PackChain {
 	 * are both credible on their own, and an image made of the two is credible and wrong. The one this
 	 * exists for puts the sky in front of the trees, and it is read as a broken sky rather than as a
 	 * family that never drew.
+	 * <p>
+	 * <strong>What this does NOT do is hand the colour targets back</strong>, where the two other
+	 * places that stop a pack mid-session do. It cannot: it runs inside the chunk pass the renderer
+	 * opened, and releasing a target there tears down what that pass is drawing into. So whatever was
+	 * allocated stays held until the next load, and how much that is has not been measured, because
+	 * whether the chain had warmed by then depends on how many frames drew no section at all.
 	 *
 	 * @param why said in the words a player reads on the settings screen, since that is where it goes
 	 */

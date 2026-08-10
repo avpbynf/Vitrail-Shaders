@@ -18,10 +18,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * renderer for the layout it binds. Iris does the same thing with two {@code ModifyArg}s on the two
  * calls, which only works while there are two.
  * <p>
- * <strong>The answer may change while the game runs</strong>, and all three read it from a
- * constructor the reload rebuilds, so none of them is left holding the old one. What has to stay
- * true is that nothing is meshed between the change and the reload; {@code TerrainDraw.wanted} asks
- * for both in that order.
+ * <strong>The answer may change while the game runs, and this is not where it changes.</strong> Two
+ * of the three readers are the section manager's constructor and the third is a region's device
+ * resources, built on demand at any point of a session, so an answer decided here would move
+ * between two readers that must agree. {@code TerrainMesh.settle} moves it instead, at the one
+ * instant none of the three is alive, and this method only ever repeats what it decided.
  */
 @Mixin(value = ChunkMeshFormats.class, remap = false)
 public abstract class ChunkMeshFormatsMixin {

@@ -59,8 +59,15 @@ public final class TerrainMesh implements ChunkVertexType {
 	 */
 	private static boolean broken;
 
-	/** What the last answer was, so that only a change is worth a line of log. */
+	/** The answer in force, which only {@link #settle()} moves. */
 	private static boolean carrying;
+
+	/**
+	 * Whether the answer has ever been said out loud. Kept apart from {@link #carrying} because the
+	 * two share their initial value: without it, the first settle of a game nobody picked a pack in
+	 * would find nothing changed and stay silent, which is the case that most needs the line.
+	 */
+	private static boolean said;
 
 	/**
 	 * What a texture coordinate is multiplied by before it is stored, which is Sodium's own
@@ -108,14 +115,36 @@ public final class TerrainMesh implements ChunkVertexType {
 	}
 
 	/**
-	 * The format the game should use as things stand, or null to leave Sodium's own alone. Asked
-	 * again every time Sodium builds itself a mesh maker, so a pack picked in a running game is
-	 * answered rather than made to wait for the next start.
+	 * The format in force, or null to leave Sodium's own alone. <strong>Answers what
+	 * {@link #settle()} last decided and never decides anything itself</strong>, which is the whole
+	 * of the safety here.
+	 * <p>
+	 * The reason is that this is not read once per reload. Two of the three readers are in
+	 * {@code RenderSectionManager}'s constructor, but the third is
+	 * {@code RenderRegion$DeviceResources}, built by {@code RenderRegion.createResources} at a
+	 * region's first upload and again after {@code update} has dropped it, which is to say all
+	 * through an ordinary session as the player moves. An answer that moved on its own would size
+	 * one region's geometry arena at a stride the living chunk builder is not writing, and neither
+	 * side reports it: the arena multiplies segment offsets by its stride, so the uploads land in
+	 * the wrong place and the world draws out of garbage.
+	 */
+	public static synchronized ChunkVertexType current() {
+		return carrying ? built : null;
+	}
+
+	/**
+	 * Takes the answer the options now ask for, at the one instant it is safe to change it.
+	 * <p>
+	 * That instant is the head of {@code RenderSectionManager}'s constructor: Sodium reaches it from
+	 * {@code initRenderer}, which has just deleted every region and the builder with them, and it is
+	 * about to ask {@link #current()} for the format both of its own new readers will keep. Nothing
+	 * that holds a stride is alive across this point, so nothing is left describing meshes that no
+	 * longer exist.
 	 * <p>
 	 * Built here rather than in a static field so that a mesh this cannot extend leaves the game
 	 * running on Sodium's own instead of failing to load a class in the middle of a world.
 	 */
-	public static synchronized ChunkVertexType current() {
+	public static synchronized void settle() {
 		boolean asked = TerrainDraw.asked() && !broken;
 		if (asked && built == null) {
 			try {
@@ -128,28 +157,27 @@ public final class TerrainMesh implements ChunkVertexType {
 			}
 		}
 
-		if (asked == carrying) {
-			return asked ? built : null;
+		if (said && asked == carrying) {
+			return;
 		}
 
+		said = true;
 		carrying = asked;
 		if (!asked) {
 			// Said out loud, and it used to be the silent branch. Without naming a cause, because
 			// there are three and this cannot tell them apart: a terrain= line, no pack chosen yet,
-			// which is every first launch of a fresh instance, and a pack just put away.
-			Vitrail.logger().info("The pack's own terrain program is not wanted, so the mesh goes back "
-					+ "to the format Sodium gave it and carries none of {}",
+			// which is every first launch of a fresh instance, and a pack put away since.
+			Vitrail.logger().info("The pack's own terrain program is not wanted, so the mesh keeps the "
+					+ "format Sodium gave it and carries none of {}",
 					Arrays.stream(Extra.values()).map(Extra::attribute).toList());
 
-			return null;
+			return;
 		}
 
 		Vitrail.logger().info("The chunk mesh carries {} bytes a vertex instead of {}, the difference "
 				+ "being what a pack reads and Sodium does not carry: {}",
 				built.stride, built.innerStride,
 				Arrays.stream(Extra.values()).map(Extra::attribute).toList());
-
-		return built;
 	}
 
 	@Override
@@ -191,10 +219,10 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * Each is four bytes and each is named by {@link SodiumVertex}, which is the side that decodes
 	 * them. They are all appended rather than chosen per pack, where Iris keeps only the ones a pack's
 	 * compiled programs really reference, {@code FormatAnalyzer}. <strong>The reason this engine could
-	 * not do the same has just gone</strong>: it was that the format was settled before any pack was
-	 * chosen, and the format now follows the pack. What is left is a plain difference, and it is
-	 * written up as one rather than argued away here. What it would save is small either way: seven
-	 * packs of the corpus read {@code mc_midTexCoord} and eight read {@code at_tangent}.
+	 * not do the same has gone</strong>: it was that the format was settled before any pack was
+	 * chosen, and the format follows the pack now. What is left is a plain difference in what a vertex
+	 * costs, and it is not closed here. What it would save is small either way: seven packs of the
+	 * corpus read {@code mc_midTexCoord} and eight read {@code at_tangent}.
 	 */
 	private enum Extra {
 
