@@ -14,9 +14,12 @@ package dev.vitrail.pack.program;
  * {@code EngineDefines}, which is the shape of a failure nobody finds: two lists that agree today
  * and are edited on different days.
  * <p>
- * Most of these are not reachable yet. Nothing here draws particles, the hand or the world border,
- * and a stage nothing sets is simply never answered; the constants are defined all the same, since
- * a pack comparing against one it was not given is a wall of undeclared identifiers.
+ * <strong>Rather more of these are unreachable than reachable</strong>, and the list of which is not
+ * kept here: it is whatever the engine really poses, and a list written down would be one more pair
+ * that agrees today and is edited on different days. What is worth knowing is the rule. A stage
+ * nothing sets is simply never answered, so a pack branching on it takes the branch it takes under
+ * an engine that never poses it either; the constants are defined all the same, since a pack
+ * comparing against one it was not given is a wall of undeclared identifiers.
  *
  * @see <a href="https://github.com/IrisShaders/Iris">Iris, LGPL-3.0</a>
  */

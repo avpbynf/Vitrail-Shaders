@@ -37,9 +37,11 @@ import java.util.function.Supplier;
  * pass built for the other throws by name in the middle of a rainstorm.
  * <p>
  * <strong>The game picks its pipeline before it opens its pass</strong>, which is what lets the
- * preparation read every state it does not decide off the game's own: the local is captured where the
- * pass opens, one line after the choice was made. That is also the whole of what {@code rain.depth}
- * costs, the directive moving that choice rather than describing a depth state of ours.
+ * preparation read every state it does not decide off the game's own: the choice is a local of the
+ * same method, made before the pass and read where the pass opens, with the whole vertex buffer
+ * build and the dynamic transform write in between. That is also the whole of what
+ * {@code rain.depth} costs, the directive moving that choice rather than describing a depth state
+ * of ours.
  * <p>
  * <strong>The image belongs to the draw and not to the pass.</strong> One pass draws the rain and
  * then the snow out of one buffer with one pipeline, and the only thing that changes between the two
@@ -111,8 +113,8 @@ public abstract class WeatherEffectRendererMixin {
 	/**
 	 * Prepares the pack's program and hands back the pass it wants opened.
 	 *
-	 * @param game the pipeline the renderer picked three lines above, out of which the blend, the
-	 *             depth window, the culling and the topology of ours are read
+	 * @param game the pipeline the renderer picked earlier in this same method, out of which the
+	 *             blend, the depth window, the culling and the topology of ours are read
 	 */
 	@WrapOperation(method = "render(Lnet/minecraft/world/phys/Vec3;"
 			+ "Lnet/minecraft/client/renderer/state/level/WeatherRenderState;"

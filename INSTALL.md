@@ -103,7 +103,7 @@ None of these files has to exist, and without them nothing is drawn: a pack is
 loaded once one is picked, in the screen or in `pack.txt`, and never before.
 What is picked is then drawn whole. `options.txt` is there to take a stage back
 out again, which is how a wrong picture is bisected without a rebuild. It reads
-ten names:
+twelve names:
 
 ```
 terrain=off      hands the chunk passes back to the game's own shader
@@ -111,8 +111,10 @@ shadow=off       stops the second pass over the world from the light
 sky=off          hands the sky back to the game's own shaders
 clouds=off       hands the clouds back too, and with them the pack's own
                  clouds directive, which most packs use to remove them
-entities=on      draws the opaque entities with the pack's own program.
-                 The one line here that is OFF unless it is written
+entities=on      draws the opaque entities with the pack's own program
+weather=on       draws the rain and the snow with the pack's own program
+particles=on     draws the quad particles with the pack's own programs,
+                 both the opaque ones and the translucent ones
 chain=off        stops the composites and the final from drawing at all
 seed=off         stops the game's finished frame being painted in under the chain
 passes=N         cuts the chain to its first N passes, or to a list of names
@@ -120,14 +122,19 @@ dump=NAME        prints the values one program was handed, decoded
 screen=settings  opens the settings screen on the pack rather than on the list
 ```
 
+Nine of these twelve are a yes or a no. Six of the nine are on until they are
+taken out; the three families in the middle are the other way round and do
+nothing unless the line is written. The last three are values rather than
+switches and do nothing unless written either.
+
 One more name is held back rather than handed to the pack as a setting:
 `profile=NAME` picks a whole profile the pack declares, and the settings screen
 greys its own profile selector out for as long as that line is there. Everything
 else in the file is a setting of the pack, by its own name.
 
-Each of the first six is a stage that can be taken in or out on its own, which is
-what tells a wrong gbuffer from a wrong composite. `dump=` is the one that answers
-what no picture can, since a value can be non zero, plausible and wrong.
+Each of the first nine is a stage that can be taken in or out on its own, which
+is what tells a wrong gbuffer from a wrong composite. `dump=` is the one that
+answers what no picture can, since a value can be non zero, plausible and wrong.
 
 A settings screen covers all of it in game: the I key, the Config button in the
 mod list, or the icon in the pause menu. It opens on the pack list, reads each

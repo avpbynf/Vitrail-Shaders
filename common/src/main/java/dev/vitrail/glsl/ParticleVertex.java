@@ -25,8 +25,8 @@ import java.util.Set;
  * module, and {@code rebind} only counts the ones that survived. {@code Color} is third of the four
  * here, so a pack whose particle stage never reads {@code gl_Color} would have {@code UV2}, which is
  * the light map, read out of the colour's bytes. The off-game harness compiles every such program of
- * the corpus and reads the disassembly back to check all four are still there, which is the same
- * check the entity mesh has and the sky still owes.
+ * the corpus and reads the disassembly back to check all four are still there, which is the check
+ * the entity mesh already had.
  * <p>
  * <strong>There is no normal and no overlay here.</strong> A particle is a quad turned to face the
  * camera, so {@code of_Normal} is answered facing the viewer rather than left at nought, which is

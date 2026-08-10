@@ -380,8 +380,8 @@ public final class ChainPlan {
 	}
 
 	/**
-	 * The same walk for every geometry program asked for by name, which is the sky's three and the
-	 * entities.
+	 * The same walk for every geometry program asked for by name, which is the sky's three, the two
+	 * entity names, the weather and the two particle halves.
 	 * <p>
 	 * The names are the OptiFine split and they are not ours to choose: untextured sky geometry goes
 	 * to {@code gbuffers_skybasic}, the sun and the moon to {@code gbuffers_skytextured}, the clouds
@@ -392,7 +392,8 @@ public final class ChainPlan {
 	 * Which side of the deferred stage each is walked on is the list's to say, and it is not the same
 	 * for all of them. The sky is drawn at the third rank of the frame and the game's opaque features
 	 * between the opaque chunks and the deferred stage, so both read the halves the prepares leave;
-	 * the clouds, the weather and the translucent chunk pass are taken after the deferred stage.
+	 * the clouds, the weather, the translucent half of the particles and the translucent chunk pass
+	 * are taken after the deferred stage.
 	 * <p>
 	 * <strong>The clouds are the exception inside their own family</strong>: the game draws them
 	 * after the main pass, which is after this engine has run the first half of the chain, so their

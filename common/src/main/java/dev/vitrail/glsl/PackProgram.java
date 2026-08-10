@@ -615,11 +615,13 @@ public final class PackProgram {
 				//
 				// The one thing a program NAME reaches the translation through is
 				// LegacyGlsl.drawsEntities, which decides whether the entity uniforms are declared, so
-				// that answer is in the key and the name itself is not. It was left out while the
-				// entities were the only caller, both of their names being entity roots; the weather
-				// and the particles are the third name that comment named, and neither is one. Left
-				// out now, it would hand a pack that ships no particle program the translation its
-				// entities got out of the same gbuffers_textured_lit, entity uniforms and all.
+				// that answer is in the key and the name itself is not.
+				//
+				// It changes nothing today and is not there for today: the table is call-local, so no
+				// two families can share an entry, and inside any one call every element answers this
+				// alike - both entity names are roots of that tree and none of the other three is. It
+				// is there for the family that asks for two names that differ on it, which is the one
+				// shape that would silently hand a stage the wrong set of uniforms out of one file.
 				String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program());
 				translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
 						ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest, false,

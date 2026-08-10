@@ -19,12 +19,12 @@ import java.util.Set;
  * <p>
  * They are kept together, and taken out of the pack's settings in one place, because a name left in
  * would be written into the head of every translated unit as {@code #define screen settings}, which
- * is a plausible identifier in somebody's GLSL. None of the eleven collides with a setting any pack
- * of the corpus declares, and what keeps that true is thinner than it looks: four of these words
- * really are defined by packs of the corpus, {@code CLOUDS}, {@code WEATHER}, {@code ENTITIES} and
- * {@code SHADOW}, and every one of them in capitals. The names here are lowercase and the comparison
- * is not, so the two stay apart; a word added here in the spelling a pack uses would be swallowed
- * before the pack ever saw it.
+ * is a plausible identifier in somebody's GLSL. None of the twelve collides with a setting any pack
+ * of the corpus declares, and what keeps that true is thinner than it looks: five of these words
+ * really are defined by packs of the corpus, {@code CLOUDS}, {@code WEATHER}, {@code PARTICLES},
+ * {@code ENTITIES} and {@code SHADOW}, and every one of them in capitals. The names here are
+ * lowercase and the comparison is not, so the two stay apart; a word added here in the spelling a
+ * pack uses would be swallowed before the pack ever saw it.
  * <p>
  * Every one of them answers a question the picture cannot: which passes ran, which half a target
  * was read from, whether the values a program was handed were the right numbers. A word that is
@@ -63,7 +63,9 @@ final class EngineOptions {
 	 * way, by element rather than by file: {@code disc}, {@code dark}, {@code stars},
 	 * {@code sunrise}, {@code sun} and {@code moon}, four of the six being one file. The entities
 	 * answer the same way, {@code cutout_cull}, {@code armor}, {@code item} and the rest, with the
-	 * block entity half carrying those same names under a {@code block_} in front. A whole half is
+	 * block entity half carrying those same names under a {@code block_} in front. The weather is
+	 * {@code weather} and {@code weather_depth}, the particles {@code particles} and
+	 * {@code particles_translucent}. A whole half is
 	 * reached by the name it asks the pack for, {@code dump=gbuffers_entities} or
 	 * {@code dump=gbuffers_block}, <strong>only where the pack really ships that file</strong>: the
 	 * line is matched against the file that ends up SERVING, so wherever the fallback tree leads
@@ -124,8 +126,8 @@ final class EngineOptions {
 	private static final String SKY_KEY = "sky";
 
 	/**
-	 * Draws the game's own entity geometry with the pack's own program. <strong>Off</strong>, alone
-	 * among these.
+	 * Draws the game's own entity geometry with the pack's own program. <strong>Off</strong>, as the
+	 * weather and the particles are.
 	 * <p>
 	 * <strong>It is not a convention and it is not a taste.</strong> It used to say it was the shape
 	 * every family still to come would land under, and the clouds landed on instead. What a line at
@@ -163,7 +165,7 @@ final class EngineOptions {
 
 	/**
 	 * Draws the game's rain and snow with the pack's own program. <strong>Off</strong>, like the
-	 * entities and unlike everything else here.
+	 * entities above it and the particles below.
 	 * <p>
 	 * What being off buys is that the work lands without waiting to be judged: it is turned on to
 	 * look at it, turned off to compare, and a defect between the two is bisected in one line of a
@@ -227,7 +229,7 @@ final class EngineOptions {
 	 * the point: what is left is settings the pack declared.
 	 */
 	static Read take(Map<String, OptionValue> chosen) {
-		// The seed goes through the same reading as the other four rather than keeping one of its
+		// The seed goes through the same reading as the other eight rather than keeping one of its
 		// own. It had one, and it was the only line here that took an unreadable word in silence:
 		// seed=0 left the seed drawing, and an experiment run to see the clears on their own would
 		// have concluded from a picture the seed had painted.
@@ -273,11 +275,10 @@ final class EngineOptions {
 	 * Said once when the entities are off, which is the default, because nothing else would say the
 	 * line exists.
 	 * <p>
-	 * The five other lines that take a yes or a no are on unless somebody asks, so their line is a
-	 * thing the reader wrote and knows about. This one is the opposite: the picture with it off is
-	 * the picture without this mod
-	 * having heard of entities at all, and a reader who never sees the name has no reason to look for
-	 * it.
+	 * The six lines that take a yes or a no and are ON unless somebody asks are a thing the reader
+	 * wrote and knows about. The three that are off are the opposite: the picture with this one off
+	 * is the picture without this mod having heard of entities at all, and a reader who never sees
+	 * the name has no reason to look for it.
 	 */
 	static void announceEntitiesOff(Path gameDirectory) {
 		Vitrail.logger().info("{}=off, so the game draws its own entities and the scene seed carries "

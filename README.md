@@ -53,11 +53,13 @@ its frame on the Vulkan backend, in the order the format prescribes. The world's
 terrain and water are drawn through the pack's own programs, the shadow map is
 drawn and read, and a settings screen reads the pack's own menu layout.
 
-What is missing is what decides how close a pack looks to its OpenGL self: the
-entities and the particles are still drawn by the game rather than through the
-pack, and the sky only partly goes through it, the overworld's own elements and
-its clouds do, the End's do not. Until all of it goes through the pack, packs run
-but do not yet look entirely like themselves. Expect visible differences and
+What is missing is what decides how close a pack looks to its OpenGL self. Out of
+the box the entities, the particles and the weather are still drawn by the game
+rather than through the pack; each of the three has a program of the pack's
+behind a line of `vitrail/options.txt`, and none of them is on until it is
+written. The sky only partly goes through the pack, the overworld's own elements
+and its clouds do, the End's do not. Until all of it goes through the pack, packs
+run but do not yet look entirely like themselves. Expect visible differences and
 rough edges rather than a finished picture, and expect them to shrink release by
 release.
 

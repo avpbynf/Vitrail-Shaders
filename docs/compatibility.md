@@ -119,12 +119,27 @@ The full mechanism is in [Sky and shadows](sky-and-shadows.md#the-horizon-gap).
 terrain.** They are drawn by the game and composited in, already tone mapped, carrying the game's
 own lighting rather than the pack's.
 
-**The mobs and the block entities are the first of those to have another answer, and it is off until
-you ask for it.** With `entities=on` in `vitrail/options.txt`, the opaque half of them - the body
-of a mob, a chest, a conduit, an armour piece - is drawn with the pack's own program and picks up its
-lighting and its shadows. What stays behind is everything that blends, and the player's own body is
-in that half, so third person still shows the symptom this section describes. What is left is named
-in the log rather than on this page, by the line the close of this section points at.
+**Three of those have another answer, and each is off until you ask for it.** With `entities=on` in
+`vitrail/options.txt`, the opaque half of the mobs and the block entities - the body of a mob, a
+chest, a conduit, an armour piece - is drawn with the pack's own program: it is lit as the pack
+lights the world, and the shadows the terrain casts fall on it. What stays behind there is
+everything that blends, and the player's own body is in that half, so third person still shows the
+symptom this section describes. What is left is named in the log rather than on this page, by the
+line the close of this section points at.
+
+`weather=on` does the same for the rain and the snow, and `particles=on` for the quad particles,
+both halves of them.
+
+**None of the three CASTS a shadow**, whichever of them is on, because none of them is drawn into
+the shadow map. Receiving and casting are two different things here: a mob in the sun has the pack's
+light on it and no shadow under it.
+
+**Turn Fabulous graphics off if the rain or the translucent particles do not change.** With the
+game's improved transparency on, it draws both into targets of its own and composes them itself, and
+this engine hands them back rather than attach the pack's targets beside an image it does not read.
+It says so in the log, once, naming the setting. The entities are unaffected.
+
+**The held item has no answer at all yet.**
 
 Two consequences follow, and both are worth recognising rather than reporting as separate bugs:
 
