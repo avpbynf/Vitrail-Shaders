@@ -52,8 +52,22 @@ GNU Lesser General Public License version 3
   This engine does the same four things, so a pack writing stars=false keeps the stars its own
   skybasic draws and sky=false loses the cone alone. Both engines evaluate the conditionals around
   these lines, Iris by running the whole file through PropertiesPreprocessor before it reads a key
-  and this one by its own stack of conditions, and on this corpus the two agree. The clouds
-  directive Iris also carries is not implemented, nothing here drawing a cloud.
+  and this one by its own stack of conditions, and on this corpus the two agree. The clouds directive
+  is read the same way and applied where Iris applies it, at the head of Options.getCloudStatus:
+  net.irisshaders.iris.mixin.sky.MixinOptions_CloudsOverride, read on 10 August 2026, along with the
+  priority of 1010 its own comment explains, Sodium replacing that accessor outright. The one thing
+  not reproduced is the render distance gate that mixin carries, which guards a check 26.2 no longer
+  makes.
+
+  common/src/main/java/dev/vitrail/glsl/CloudVertex.java builds the cloud geometry in the pack's own
+  vertex stage, which is the approach of
+  net.irisshaders.iris.pipeline.transform.transformer.VanillaTransformer, lines 223 to 332, read on
+  10 August 2026: vanilla binds no vertex buffer for its clouds, so neither engine hands the pack a
+  mesh, and both rewrite gl_Vertex, gl_Normal and gl_Color into terms worked out from gl_VertexID
+  and the CloudFaces texel buffer. The tables of corners, normals and face shades are Minecraft's
+  own, from core/rendertype_clouds, and are read off it rather than off Iris, whose copy still
+  carries the alpha of an earlier version. The names and the shape of the generated code are this
+  engine's.
 
   common/src/main/java/dev/vitrail/render/HorizonCone.java takes the shape of the horizon geometry
   from net.irisshaders.iris.pathways.HorizonRenderer, read on 6 August 2026, whose own header, lines

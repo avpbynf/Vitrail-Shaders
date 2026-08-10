@@ -49,6 +49,9 @@ public final class PackProgram {
 
 	private static final String FINAL = "final";
 
+	/** The one name of the format the game's clouds are drawn under. */
+	private static final String CLOUD_PROGRAM = "gbuffers_clouds";
+
 	private PackProgram() {
 	}
 
@@ -450,6 +453,64 @@ public final class PackProgram {
 			}
 
 			return loaded;
+		}
+	}
+
+	/**
+	 * Reads and translates the program the game's clouds are drawn with, or empty where the pack
+	 * serves none and the game keeps its own.
+	 * <p>
+	 * One program and one reading, unlike {@link #loadSky}: {@code gbuffers_clouds} is a single name
+	 * of the format and the renderer draws every cloud with it. What the fancy and the flat cloud
+	 * differ by is a culling, which is a property of the pipeline and not of the text, so the two
+	 * share this one translation.
+	 * <p>
+	 * A reading of its own and not a sixth piece of {@link #loadSky}'s, which costs one plan build
+	 * and buys the only thing that matters here: the sky is read at the first piece of sky the game
+	 * draws, and there are places that draw clouds and no sky at all. Folded together, a pack would
+	 * be opened and translated for a sky nobody was going to see, or the clouds would wait for one.
+	 * <p>
+	 * The fallback tree is walked like everywhere else, so a pack shipping only
+	 * {@code gbuffers_textured} still serves its clouds through it.
+	 */
+	public static Optional<Loaded> loadClouds(Path packPath, String place,
+			Map<String, OptionValue> chosen, String profile) throws IOException {
+		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
+			OptionIndex options = OptionIndex.build(source);
+			ShaderProperties properties = ShaderProperties.parse(source);
+			Map<String, OptionValue> fromProfile = profile.isEmpty()
+					? Map.of()
+					: properties.expandProfile(profile);
+			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
+			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
+			PackTextures textures = textures(source, properties, options, settings);
+
+			DimensionSet dimensions = DimensionSet.discover(source);
+			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
+					dimensions);
+
+			Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, CLOUD_PROGRAM);
+			if (resolution.isEmpty()) {
+				return Optional.empty();
+			}
+
+			String path = pathOf(place, resolution.get().servedBy());
+			Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
+			if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+				return Optional.empty();
+			}
+
+			// No alpha test, as in the sky: the format has no line for one over this name and nothing
+			// the game draws here is cut out. No coverage mask either, the clouds being drawn long
+			// after the scene seed has run.
+			//
+			// No bound elements, and that is the whole difference from the sky: this pass binds no
+			// vertex format at all, so exactly nothing is declared as an input.
+			return Optional.of(bind(source.packName(), path,
+					ProgramTranslator.translate(units, VertexInputs.CLOUDS, List.of(), AlphaTest.OFF,
+							false, CLOUD_PROGRAM, textures.volumes()),
+					targets, AlphaTest.OFF, textures));
 		}
 	}
 

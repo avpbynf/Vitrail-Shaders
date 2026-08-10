@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -68,6 +69,9 @@ public final class ShaderProperties {
 	private static final Pattern END_FLASH_SHADOWS = Pattern.compile("^\\s*endFlashShadows\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
+	// The fifth word of that family, kept apart because it is the one that takes neither a yes nor a
+	// no: a pack writes off, fast or fancy, which are the game's own three cloud settings.
+	private static final Pattern CLOUDS = Pattern.compile("^\\s*clouds\\s*=\\s*(.*)$");
 	// The noise image is answered here because everything else about it is settled: one path, one
 	// sampler, every stage. The general family is not, and is read by customTextures instead.
 	private static final Pattern TEXTURE_NOISE = Pattern.compile("^\\s*texture\\.noise\\s*=\\s*(.*)$");
@@ -307,6 +311,13 @@ public final class ShaderProperties {
 		// nothing else would say why.
 		Matcher element = SKY_ELEMENT.matcher(line);
 		if (element.matches() && truth(element.group(2).trim()) != null) {
+			return;
+		}
+
+		// The same rule for the fifth word, on its own three values: a clouds= line naming something
+		// else is a line nothing here reads, and it belongs among the keys that say so.
+		Matcher clouds = CLOUDS.matcher(line);
+		if (clouds.matches() && CloudSetting.of(clouds.group(1).trim()) != null) {
 			return;
 		}
 
@@ -738,6 +749,7 @@ public final class ShaderProperties {
 	 */
 	public SkyElements skyElements(Map<String, String> defines) {
 		Map<String, Boolean> drawn = new LinkedHashMap<>();
+		CloudSetting clouds = CloudSetting.DEFAULT;
 		ConditionStack conditions = new ConditionStack();
 
 		for (String line : this.lines) {
@@ -747,17 +759,31 @@ public final class ShaderProperties {
 				continue;
 			}
 
+			if (!conditions.active()) {
+				continue;
+			}
+
 			Matcher element = SKY_ELEMENT.matcher(line);
-			if (conditions.active() && element.matches()) {
+			if (element.matches()) {
 				Boolean value = truth(element.group(2).trim());
 				if (value != null) {
 					drawn.put(element.group(1), value);
+				}
+
+				continue;
+			}
+
+			Matcher asked = CLOUDS.matcher(line);
+			if (asked.matches()) {
+				CloudSetting setting = CloudSetting.of(asked.group(1).trim());
+				if (setting != null) {
+					clouds = setting;
 				}
 			}
 		}
 
 		return new SkyElements(drawn.getOrDefault("sun", true), drawn.getOrDefault("moon", true),
-				drawn.getOrDefault("stars", true), drawn.getOrDefault("sky", true));
+				drawn.getOrDefault("stars", true), drawn.getOrDefault("sky", true), clouds);
 	}
 
 	/**
@@ -1048,19 +1074,48 @@ public final class ShaderProperties {
 	}
 
 	/**
-	 * Which pieces of the game's own sky a pack still wants drawn. A pack that says nothing wants
-	 * all four, which is what every one of them was written against.
+	 * How the game's own three cloud settings are named in {@code shaders.properties}, plus the
+	 * absence of the line.
 	 * <p>
-	 * They are a way of saying "I draw that myself", so the piece has to go rather than fall back to
-	 * the game's own shader: a pack drawing its own sun in {@code gbuffers_skybasic} and handed the
-	 * game's on top has two suns in the sky.
-	 * <p>
-	 * Four and not five. The fifth directive of the family, {@code clouds}, takes
-	 * {@code off}, {@code fast} or {@code fancy} rather than a boolean and names something no
-	 * program of this engine draws, so honouring it would take the game's clouds away and put
-	 * nothing back.
+	 * Not a boolean, alone in its family, and that is why it is an enum rather than a fifth flag: a
+	 * pack asking for {@code fast} is not refusing the clouds, it is asking for the flat ones, and
+	 * the game has a pipeline for each.
 	 */
-	public record SkyElements(boolean sun, boolean moon, boolean stars, boolean sky) {
+	public enum CloudSetting {
+
+		/** The line is missing or says something this cannot read. The user's own setting stands. */
+		DEFAULT,
+		OFF,
+		FAST,
+		FANCY;
+
+		/** The setting a value names, or null for anything else. */
+		static CloudSetting of(String value) {
+			return switch (value.toLowerCase(Locale.ROOT)) {
+				case "off" -> OFF;
+				case "fast" -> FAST;
+				case "fancy" -> FANCY;
+				default -> null;
+			};
+		}
+	}
+
+	/**
+	 * Which pieces of the game's own sky a pack still wants drawn, and how it wants the clouds. A
+	 * pack that says nothing wants all four and leaves the clouds to the user, which is what every
+	 * one of them was written against.
+	 * <p>
+	 * The four booleans are a way of saying "I draw that myself", so the piece has to go rather than
+	 * fall back to the game's own shader: a pack drawing its own sun in {@code gbuffers_skybasic} and
+	 * handed the game's on top has two suns in the sky.
+	 * <p>
+	 * The fifth is not one of those and reads the other way round: it overrules the user's cloud
+	 * setting so that the pack's own {@code gbuffers_clouds} is handed the geometry it was written
+	 * for. It was deliberately not honoured while nothing here drew a cloud, because {@code off}
+	 * would then have taken the game's clouds away and put nothing back.
+	 */
+	public record SkyElements(boolean sun, boolean moon, boolean stars, boolean sky,
+			CloudSetting clouds) {
 
 		/**
 		 * Whether the piece one directive names is still drawn.

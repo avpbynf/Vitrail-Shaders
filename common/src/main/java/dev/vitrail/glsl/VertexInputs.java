@@ -40,7 +40,14 @@ public enum VertexInputs {
 	 * four between its eight passes, so the elements to declare come from the pass rather than from
 	 * this constant. {@link SkyVertex} carries the renaming and says what the sky has not got.
 	 */
-	SKY;
+	SKY,
+
+	/**
+	 * The game's clouds, which are not a mesh at all: {@code CloudRenderer} binds no vertex buffer
+	 * and the stage works every corner out of {@code gl_VertexID} and a texel buffer.
+	 * {@link CloudVertex} carries the whole of it.
+	 */
+	CLOUDS;
 
 	/**
 	 * Whether a vertex input the pack declares that the bound format has not got has to be taken out
@@ -61,8 +68,8 @@ public enum VertexInputs {
 	}
 
 	/**
-	 * The names the head declares as vertex inputs, which the pack may therefore not use for
-	 * anything of its own.
+	 * The names the head declares for itself, which the pack may therefore not use for anything of
+	 * its own.
 	 * <p>
 	 * These names are not ours to choose. {@code GlslCompiler.compile} hands {@code rebind} the
 	 * element names of the format and {@code rebind} looks each one up in the SPIR-V under that
@@ -76,6 +83,10 @@ public enum VertexInputs {
 	 * are renamed out of the way, and renaming one the bound format happens not to carry costs
 	 * nothing. What gets DECLARED is the bound format alone, and that is
 	 * {@link SkyVertex#prologue}'s to know.
+	 * <p>
+	 * {@link #CLOUDS} names no attribute here because it binds no format, and the two names it does
+	 * give are a uniform block and a texel buffer. Nothing about the renaming cares which: a pack
+	 * declaring one of them for something of its own is a redefinition at file scope either way.
 	 */
 	public List<String> elements() {
 		return switch (this) {
@@ -83,6 +94,7 @@ public enum VertexInputs {
 			case TERRAIN -> SodiumVertex.ATTRIBUTES;
 			case ENTITY -> EntityVertex.ATTRIBUTES;
 			case SKY -> SkyVertex.ATTRIBUTES;
+			case CLOUDS -> CloudVertex.ATTRIBUTES;
 			case WORLD -> List.of();
 		};
 	}

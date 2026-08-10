@@ -126,10 +126,16 @@ final class GeometryProgram {
 	 *                     and branches on with {@code MC_RENDER_STAGE_*}. Both Complementary read it,
 	 *                     so a pass that answered {@code NONE} would take them down the branch meant
 	 *                     for a full screen quad
+	 * @param bindings     a bind group of the game's own that this stage reads besides ours, or null
+	 *                     for the families that read nothing but their mesh. Only the clouds have
+	 *                     one, and there it is the whole geometry: the pass fills {@code CloudInfo}
+	 *                     and {@code CloudFaces} by name against whatever pipeline is bound, so a
+	 *                     pipeline that did not declare them would be handed neither
 	 */
 	record Pass(String family, String name, String namespace, Set<String> answered, boolean shadow,
 			Optional<BlendFunction> blend, boolean covers, boolean afterDeferred,
-			PrimitiveTopology topology, boolean cull, DepthStencilState depth, RenderStage stage) {
+			PrimitiveTopology topology, boolean cull, DepthStencilState depth, RenderStage stage,
+			BindGroupLayout bindings) {
 
 		/** Whether the pass blends at all, which is the same question as having something to blend with. */
 		boolean blended() {
@@ -355,9 +361,21 @@ final class GeometryProgram {
 				.withVertexShader(vertexId)
 				.withFragmentShader(fragmentId)
 				.withBindGroupLayout(bindings.build())
-				.withVertexBinding(0, format)
 				.withPrimitiveTopology(pass.topology())
 				.withCull(pass.cull());
+
+		// A second group, and it is the game's own rather than one built here: the pass binds its
+		// contents by name, so the names have to be the ones it binds. Only the clouds have one.
+		if (pass.bindings() != null) {
+			builder.withBindGroupLayout(pass.bindings());
+		}
+
+		// No binding at all where the family binds no mesh, which is the clouds and only them: their
+		// geometry is three bytes a face in a texel buffer and a vertex identifier, so a binding of
+		// nought elements would name a buffer the pass never sets.
+		if (format != null) {
+			builder.withVertexBinding(0, format);
+		}
 
 		// Left unset where the family answers null, which is not the same as setting the default one:
 		// the builder hands a null state through to the pipeline, and that is a pass which neither
@@ -803,10 +821,16 @@ final class GeometryProgram {
 
 	private GpuTextureView view(String sampler) {
 		if (ATLAS.contains(sampler)) {
-			// One pixel where the pass has no atlas of its own, which is every pass of the sky: a
-			// name that is bound to nothing at all throws at the bind, and a program reading a black
-			// atlas draws something that can be looked at and explained.
-			return this.atlas == null ? this.black.getColorTextureView() : this.atlas;
+			// One pixel where the pass has no atlas of its own, which is every pass of the sky and
+			// every cloud: a name bound to nothing at all throws at the bind.
+			//
+			// WHITE and not black, which is Iris's answer for the same case and is the one that
+			// leaves a picture. A pack multiplies the atlas into its albedo, so white is the neutral
+			// of what it is about to do and black is the value that erases the geometry: three packs
+			// of the corpus sample this name from their cloud stage, and with a black pixel behind it
+			// their clouds come out invisible. Nothing of the sky reads it - Body Camera declares the
+			// name in its skybasic and never samples it - so the sky sees no difference either way.
+			return this.atlas == null ? this.white.getColorTextureView() : this.atlas;
 		}
 
 		if (LIGHTMAP.equals(sampler)) {

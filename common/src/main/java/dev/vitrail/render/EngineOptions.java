@@ -19,8 +19,11 @@ import java.util.Set;
  * <p>
  * They are kept together, and taken out of the pack's settings in one place, because a name left in
  * would be written into the head of every translated unit as {@code #define screen settings}, which
- * is a plausible identifier in somebody's GLSL. None of the nine collides with a setting any pack
- * of the corpus declares.
+ * is a plausible identifier in somebody's GLSL. None of the ten collides with a setting any pack
+ * of the corpus declares, and one of them very nearly does: BSL and Reverie both declare a
+ * {@code CLOUDS} of their own, which misses {@code clouds} by its case alone. The names here are
+ * lowercase and the comparison is not, so the two stay apart; a line of this file spelled in capitals
+ * would eat a setting of theirs.
  * <p>
  * Every one of them answers a question the picture cannot: which passes ran, which half a target
  * was read from, whether the values a program was handed were the right numbers. A word that is
@@ -131,19 +134,29 @@ final class EngineOptions {
 	private static final String ENTITIES_KEY = "entities";
 
 	/**
-	 * All ten, for the one place that has to tell them from a setting of the pack: the log that
+	 * Draws the game's clouds with the pack's own program. <strong>Off</strong>, under the same
+	 * convention {@code entities} lands under and for the same reason.
+	 * <p>
+	 * It carries one thing the others do not: with it off, the {@code clouds} line of the pack's own
+	 * {@code shaders.properties} is not honoured either, since that word only means anything where
+	 * there is a program of ours behind it.
+	 */
+	private static final String CLOUDS_KEY = "clouds";
+
+	/**
+	 * All eleven, for the one place that has to tell them from a setting of the pack: the log that
 	 * says what the file forces. {@code profile} is the settings layer's own, since that is the side
-	 * that writes it back; the other nine are read here and nowhere else.
+	 * that writes it back; the other ten are read here and nowhere else.
 	 */
 	private static final Set<String> RESERVED = Set.of(SettingsFile.PROFILE_KEY, SEED_KEY,
 			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY, SKY_KEY,
-			ENTITIES_KEY);
+			ENTITIES_KEY, CLOUDS_KEY);
 
 	private EngineOptions() {
 	}
 
 	/**
-	 * What the nine lines this class reads were set to.
+	 * What the ten lines this class reads were set to.
 	 *
 	 * @param seed       whether the game's finished frame is painted where the world would be
 	 * @param passes     what the user asked to run on top of what the pack keeps
@@ -155,13 +168,15 @@ final class EngineOptions {
 	 * @param sky        whether the game's sky is drawn with the pack's own program
 	 * @param entities   whether the game's opaque entity geometry is drawn with the pack's own
 	 *                   program rather than the game's
+	 * @param clouds     whether the game's clouds are drawn with the pack's own program, and with
+	 *                   that whether the pack's own {@code clouds} directive is honoured at all
 	 */
 	record Read(boolean seed, ChainFilter passes, boolean packsFirst, String dump, boolean terrain,
-			boolean chain, boolean shadow, boolean sky, boolean entities) {
+			boolean chain, boolean shadow, boolean sky, boolean entities, boolean clouds) {
 	}
 
 	/**
-	 * Reads the nine and <strong>removes them</strong> from what is handed to the pack, which is
+	 * Reads the ten and <strong>removes them</strong> from what is handed to the pack, which is
 	 * the point: what is left is settings the pack declared.
 	 */
 	static Read take(Map<String, OptionValue> chosen) {
@@ -177,7 +192,8 @@ final class EngineOptions {
 				asked(chosen.remove(CHAIN_KEY), CHAIN_KEY, true),
 				asked(chosen.remove(SHADOW_KEY), SHADOW_KEY, true),
 				asked(chosen.remove(SKY_KEY), SKY_KEY, true),
-				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, false));
+				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, false),
+				asked(chosen.remove(CLOUDS_KEY), CLOUDS_KEY, false));
 	}
 
 	/**
@@ -218,6 +234,18 @@ final class EngineOptions {
 		Vitrail.logger().info("{}=off, so the game draws its own entities and the scene seed carries "
 				+ "them in, already lit and already tone mapped. Write '{}=on' in {} to have the pack "
 				+ "draw the opaque ones", ENTITIES_KEY, ENTITIES_KEY,
+				SettingsLayers.file(gameDirectory));
+	}
+
+	/**
+	 * The same for the clouds, and it says one thing more than its neighbour: the pack's own
+	 * {@code clouds} directive hangs off this line, so a reader wondering why a pack that writes
+	 * {@code clouds=fancy} is drawing flat ones finds the answer here.
+	 */
+	static void announceCloudsOff(Path gameDirectory) {
+		Vitrail.logger().info("{}=off, so the game draws its own clouds and the full screen layer "
+				+ "carries them in flat, and the pack's own clouds directive is left unread with them. "
+				+ "Write '{}=on' in {} to have the pack draw them", CLOUDS_KEY, CLOUDS_KEY,
 				SettingsLayers.file(gameDirectory));
 	}
 
@@ -296,8 +324,8 @@ final class EngineOptions {
 			return false;
 		}
 
-		// Named, like the two readings above do it: six lines share this one, so the value on its
-		// own leaves whoever fixes the typo looking for which of the six carries it.
+		// Named, like the two readings above do it: seven lines share this one, so the value on its
+		// own leaves whoever fixes the typo looking for which of the seven carries it.
 		Vitrail.logger().warn("'{}={}' is neither on nor off, so this line is ignored and {} stays "
 				+ "{}", key, value.asText(), key, byDefault ? "on" : "off");
 

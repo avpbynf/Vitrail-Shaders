@@ -85,7 +85,10 @@ final class SkyProgram {
 				element.blend().isEmpty(), false, element.topology(),
 				// None of the six sky pipelines names a culling of its own, so all six take the
 				// builder's default, which is to cull.
-				true, null, element.stage()),
+				true, null, element.stage(),
+				// Nothing of the game's bound beside the mesh, unlike the clouds: every one of the
+				// six sky passes carries its whole geometry in the vertex buffer it binds.
+				null),
 				bound, values, load, element.format(), writes, targets, chainRuns));
 	}
 

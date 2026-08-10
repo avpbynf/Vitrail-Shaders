@@ -56,7 +56,7 @@ public final class PackValues {
 
 	private CustomUniforms customs;
 	private ShaderProperties.SkyElements skyElements = new ShaderProperties.SkyElements(true, true,
-			true, true);
+			true, true, ShaderProperties.CloudSetting.DEFAULT);
 	private NoiseTexture.Image noiseImage;
 	private PackImages packImages = PackImages.none();
 	private UniformCatalog catalog = UniformCatalog.engine();

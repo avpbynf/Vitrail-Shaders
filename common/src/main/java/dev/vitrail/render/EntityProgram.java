@@ -135,7 +135,10 @@ final class EntityProgram {
 				// The piece's own, and the two halves answer differently: NONE for a mob, which is
 				// Iris's answer rather than a reading of what the pass is, and BLOCK_ENTITIES for a
 				// block entity, which Iris really does pose. The class comment has the file:line.
-				game.getDepthStencilState(), element.stage()),
+				game.getDepthStencilState(), element.stage(),
+				// Nothing of the game's bound beside the mesh: an entity pipeline carries samplers
+				// and transforms, and this program declares none of their names.
+				null),
 				bound, values, load, DefaultVertexFormat.ENTITY, writes, targets, chainRuns));
 	}
 

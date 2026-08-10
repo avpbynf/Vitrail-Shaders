@@ -85,11 +85,14 @@ final class PackDump {
 	 *                element for the same reason and more strongly: the pieces share their files
 	 *                between them rather than having one each, and the two halves sometimes share
 	 *                the same one, which no line naming the file could tell apart
+	 * @param clouds  the pack's cloud programs, empty until a cloud is drawn. Two over one file, so
+	 *                they are named by the setting they answer, {@code fancy} and {@code flat}, and
+	 *                only the one the game is drawing with has ever been prepared
 	 * @param passes  the chain's own passes, empty for the frame or two before they are built
 	 */
 	static void take(String place, int load, Collection<TerrainProgram> terrain,
-			Collection<SkyProgram> sky, Collection<EntityProgram> entities, List<PackPass> passes,
-			WorldState world) {
+			Collection<SkyProgram> sky, Collection<EntityProgram> entities,
+			Collection<CloudProgram> clouds, List<PackPass> passes, WorldState world) {
 		if (wanted.isEmpty() || file == null) {
 			return;
 		}
@@ -125,6 +128,14 @@ final class PackDump {
 		}
 
 		for (EntityProgram program : entities) {
+			running.add(program.label());
+			if (decoded == null && (names(program.path()) || names(program.label()))) {
+				path = program.label();
+				decoded = program.decoded(world);
+			}
+		}
+
+		for (CloudProgram program : clouds) {
 			running.add(program.label());
 			if (decoded == null && (names(program.path()) || names(program.label()))) {
 				path = program.label();

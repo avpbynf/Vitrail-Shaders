@@ -2352,6 +2352,7 @@ public final class GlslTranslator {
 				case TERRAIN -> lines.addAll(SodiumVertex.prologue(this.used, this.synthesized));
 				case ENTITY -> lines.addAll(EntityVertex.prologue(this.used, this.synthesized));
 				case SKY -> lines.addAll(SkyVertex.prologue(this.bound, this.used, this.synthesized));
+				case CLOUDS -> lines.addAll(CloudVertex.prologue(this.used, this.synthesized));
 				case WORLD -> {
 					for (Map.Entry<String, String> attribute : LegacyGlsl.FIXED_ATTRIBUTES.entrySet()) {
 						if (this.used.contains(attribute.getKey())) {

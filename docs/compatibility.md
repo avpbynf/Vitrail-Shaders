@@ -207,9 +207,17 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   inside one of its own programs. Four such requests are honoured - the sun, the moon, the stars and
   the sky disc - and honouring the last two is a **deviation from both references**, which take out
   only the sun and the moon. It costs some packs the stars the references leave them,
-  and the NOTICE says so. The fifth request in that family, the one about clouds, is deliberately not
-  honoured: no program here draws clouds yet, so obeying it would take the game's clouds away and put
-  nothing in their place.
+  and the NOTICE says so. The fifth request in that family is not one of those four and reads the
+  other way round: `clouds` takes `off`, `fast` or `fancy` rather than a boolean, and it overrules
+  the user's own cloud setting so that the pack's cloud program is handed the geometry it was
+  written for. It is honoured only where this engine really draws the clouds, because with the
+  game's own shader behind it `off` would take the clouds away and put nothing in their place.
+- **Most packs write `clouds=off`**, six of the eight measured, and it is not a refusal of clouds
+  but a redirection: they draw their own, volumetric, inside a composite. Complementary goes further
+  and ships a `gbuffers_clouds` that discards outright unless its own cloud style is set to the
+  vanilla one. So a pack whose clouds visibly change when the engine starts drawing them is the
+  exception rather than the rule, and a pack whose vanilla clouds vanish is usually doing what it
+  meant to.
 - **Settings are declared in the GLSL, not in a manifest**, and packs disable whole programs from
   their properties file using preprocessor conditions on their own settings. Both Complementary
   packs do this, which is why a flat read of that file reports passes as active that the pack

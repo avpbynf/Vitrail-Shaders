@@ -170,7 +170,7 @@ with a test shader.
 
 The interception point that works for ordinary geometry does not work here, because the sky
 renderer opens its own render passes, with its own pipelines and vertex buffers built once. Clouds
-are outside that class again.
+are outside that class again, and the last section says how far outside.
 
 Worse, the sky is not one vertex format. Three formats serve the six pieces, and between them they
 carry position, colour and texture coordinates and nothing else - no normal, no lightmap, no
@@ -195,7 +195,8 @@ as a debt, not as a guarantee: the sky needs it before it is believed, not after
 ### How a pack tells the elements apart
 
 The format splits them by which program they fall to: geometry carrying a texture goes to the
-textured sky program, everything untextured to the basic one, clouds to their own. Untextured is not
+textured sky program, everything untextured to the basic one, and the clouds to a program of their
+own that the sky renderer never reaches. Untextured is not
 the same as bare: the sunrise band carries a vertex colour and still falls to the basic program,
 because the split is on the texture and on nothing else. The engine recognises
 each element by the label the game gives its own render pass - an answer the game hands out at
@@ -342,3 +343,72 @@ The acceptance criterion follows the same discipline: above the world's horizon 
 clear distant horizon, the sky must fade into the fog with no straight edge and no pale band, which
 is what the reference produces on the same pack at the same altitude. "The image is plausible" is
 not a criterion.
+
+## The clouds
+
+The clouds are grouped here because a pack reaches them through the same family of directives and
+the same corner of the format, and they are kept apart from the sky because almost nothing the sky
+section says is true of them.
+
+### There is no cloud mesh
+
+`CloudRenderer` never binds a vertex buffer. It fills a texel buffer with three bytes a face - a
+cell in x, a cell in z, and a word carrying the facing and four flags - draws six indices a face,
+and lets the vertex stage work out which corner of which face it is on from the vertex identifier.
+Everything else it needs, the cloud colour, the offset to the cell the camera stands in and the size
+of a cell, is one small uniform block beside it.
+
+So there is no format to declare, no element that could go missing from the SPIR-V, and no atlas
+going past on the way in. What replaces all of that is a head that reproduces the game's own
+geometry in the pack's stage: the twenty four corners in facing order, the six normals, the six
+shades, and `gl_Vertex`, `gl_Normal` and `gl_Color` defined in terms of them. That is also what the
+reference does, and for the same reason - neither engine can hand a pack a mesh that does not exist.
+
+Two consequences worth stating. **The pipeline has to declare the game's own two names**, spelled
+its way, because the pass fills them by name against whatever pipeline is bound; a pipeline that
+spelled either differently would be handed neither and the stage would read a buffer nothing filled.
+And **the vertex identifier is spelled `gl_VertexID` and not `gl_VertexIndex`**, which is not a
+preference: Vulkan has only the second and the game's OpenGL backend only the first, and the game's
+own compiler defines the first into the second before handing anything to shaderc. Only the first
+works on both sides.
+
+### Fancy and flat differ by a culling
+
+The game keeps two cloud pipelines. The fancy one draws a box a cell and culls back faces; the flat
+one draws a single downward face a cell with culling off. So there are two programs over one
+translation, and drawing the flat cloud with the fancy one's culling leaves the sky empty seen from
+underneath, which is where clouds are looked at.
+
+Which of the two is coming has to be known before the pass exists, since it decides which program
+is prepared. It is taken off the argument the renderer was called with, not read back from the
+user's settings, because a pack is allowed to overrule those.
+
+### The `clouds` directive points the other way from the rest of its family
+
+`sun`, `moon`, `stars` and `sky` are a pack saying "I draw that myself, do not draw it for me".
+`clouds` takes `off`, `fast` or `fancy`, and it overrules the user's setting so that the pack's
+cloud program is handed the geometry it was written for. It is applied at the head of the game's own
+accessor rather than at the renderer, and that placement is the whole point: the frame graph reads
+that accessor to decide whether to add a cloud pass at all, so a pack that switched them off has no
+pass opened, no buffer filled and no draw thrown away.
+
+It is honoured only where this engine really draws the clouds. With the game's own shader behind it,
+`off` would take the clouds away and put nothing in their place, which is exactly why it went unread
+for as long as nothing here drew one.
+
+**Six packs of the eight measured write `clouds=off`**, and none of them means "no clouds": they
+draw their own, volumetric, in a composite. Complementary goes further and ships a
+`gbuffers_clouds` that discards outright unless its own cloud style is set to the vanilla one. A
+pack whose vanilla clouds vanish when this is switched on is usually getting what it asked for, and
+the pack to judge the work on is one that asks for nothing.
+
+### Where the clouds land in the frame
+
+They are drawn after the main pass, which settles two things that the sky has to argue about. The
+scene seed has already run, so there is nothing left for a coverage mask to keep off them and they
+do not write one. And the pack's own colour target already holds the world, which is what a
+`gbuffers_clouds` expects to blend onto - the same position the translucent chunk pass is in, and
+the same answer.
+
+A pack that declares no draw buffer on the program leaves them on the game's target, where the
+full-screen layer brings them across flat, exactly as it did before any of this existed.

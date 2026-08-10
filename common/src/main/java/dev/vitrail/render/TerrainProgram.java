@@ -83,7 +83,9 @@ public final class TerrainProgram {
 				// Nothing is culled in the shadow map. What matters there is which surface is nearest
 				// the light and not which way it faces, and a wall drawn on one side only leaks light
 				// through its back. Iris cuts it for the same reason.
-				!pass.shadow(), depthState(pass), pass.stage()),
+				// Nothing of the game's bound beside the mesh: the chunk pass reads Sodium's own
+				// buffers and none of them is a name this program declares.
+				!pass.shadow(), depthState(pass), pass.stage(), null),
 				loaded, values, load, format, writes, targets, chainRuns);
 	}
 
