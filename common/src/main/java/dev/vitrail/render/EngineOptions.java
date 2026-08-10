@@ -134,12 +134,18 @@ final class EngineOptions {
 	private static final String ENTITIES_KEY = "entities";
 
 	/**
-	 * Draws the game's clouds with the pack's own program. <strong>Off</strong>, under the same
-	 * convention {@code entities} lands under and for the same reason.
+	 * Draws the game's clouds with the pack's own program. On, like most of these.
+	 * <p>
+	 * <strong>It was off for one evening and that was one evening too long.</strong> A line of this
+	 * file is a thing somebody wrote and knows about; a default is what everyone else gets. Off, the
+	 * picture a reader sees on cloning is not the picture this engine was judged on, and every
+	 * report about it is about a configuration nobody shipped.
 	 * <p>
 	 * It carries one thing the others do not: with it off, the {@code clouds} line of the pack's own
 	 * {@code shaders.properties} is not honoured either, since that word only means anything where
-	 * there is a program of ours behind it.
+	 * there is a program of ours behind it. So off costs more than a family: it costs six packs of
+	 * the corpus the removal they asked for, and puts the game's own clouds back over the ones they
+	 * draw themselves.
 	 */
 	private static final String CLOUDS_KEY = "clouds";
 
@@ -193,7 +199,7 @@ final class EngineOptions {
 				asked(chosen.remove(SHADOW_KEY), SHADOW_KEY, true),
 				asked(chosen.remove(SKY_KEY), SKY_KEY, true),
 				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, false),
-				asked(chosen.remove(CLOUDS_KEY), CLOUDS_KEY, false));
+				asked(chosen.remove(CLOUDS_KEY), CLOUDS_KEY, true));
 	}
 
 	/**
@@ -238,15 +244,20 @@ final class EngineOptions {
 	}
 
 	/**
-	 * The same for the clouds, and it says one thing more than its neighbour: the pack's own
-	 * {@code clouds} directive hangs off this line, so a reader wondering why a pack that writes
-	 * {@code clouds=fancy} is drawing flat ones finds the answer here.
+	 * The same for the clouds, and it is not the same case: this line is on by default, so reaching
+	 * here means somebody wrote {@code clouds=off} and knows they did.
+	 * <p>
+	 * It is said all the same, and it is the one line of its kind. The others that are on say nothing
+	 * when switched off, because what they cost is on the screen: turn the terrain off and the world
+	 * is the game's. This one costs something the screen does not show, the pack's own
+	 * {@code clouds} directive going unread, so a pack that draws its own clouds gets the game's back
+	 * over them and nothing else would say why.
 	 */
 	static void announceCloudsOff(Path gameDirectory) {
-		Vitrail.logger().info("{}=off, so the game draws its own clouds and the full screen layer "
-				+ "carries them in flat, and the pack's own clouds directive is left unread with them. "
-				+ "Write '{}=on' in {} to have the pack draw them", CLOUDS_KEY, CLOUDS_KEY,
-				SettingsLayers.file(gameDirectory));
+		Vitrail.logger().info("{}=off in {}, so the game draws its own clouds and the full screen "
+				+ "layer carries them in flat. The pack's own clouds directive goes unread with them, "
+				+ "which for most of the corpus means the game's clouds are drawn over the ones the "
+				+ "pack draws itself", CLOUDS_KEY, SettingsLayers.file(gameDirectory));
 	}
 
 	/** Said once when the chain is off, since nothing else on screen would say why. */

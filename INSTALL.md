@@ -103,12 +103,14 @@ None of these files has to exist, and without them nothing is drawn: a pack is
 loaded once one is picked, in the screen or in `pack.txt`, and never before.
 What is picked is then drawn whole. `options.txt` is there to take a stage back
 out again, which is how a wrong picture is bisected without a rebuild. It reads
-nine names:
+ten names:
 
 ```
 terrain=off      hands the chunk passes back to the game's own shader
 shadow=off       stops the second pass over the world from the light
 sky=off          hands the sky back to the game's own shaders
+clouds=off       hands the clouds back too, and with them the pack's own
+                 clouds directive, which most packs use to remove them
 entities=on      draws the opaque entities with the pack's own program.
                  The one line here that is OFF unless it is written
 chain=off        stops the composites and the final from drawing at all

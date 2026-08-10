@@ -55,8 +55,8 @@ drawn and read, and a settings screen reads the pack's own menu layout.
 
 What is missing is what decides how close a pack looks to its OpenGL self: the
 entities and the particles are still drawn by the game rather than through the
-pack, and the sky only partly goes through it, the overworld's own elements do,
-the clouds and the End's do not. Until all of it goes through the pack, packs run
+pack, and the sky only partly goes through it, the overworld's own elements and
+its clouds do, the End's do not. Until all of it goes through the pack, packs run
 but do not yet look entirely like themselves. Expect visible differences and
 rough edges rather than a finished picture, and expect them to shrink release by
 release.
