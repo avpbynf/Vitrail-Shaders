@@ -40,14 +40,19 @@ public abstract class OptionsCloudsMixin {
 	}
 
 	/**
-	 * The game's own word for what the pack asked for. {@code DEFAULT} never reaches here, being
-	 * exactly the answer {@code CloudDraw.setting} hands back as empty.
+	 * The game's own word for what the pack asked for.
+	 * <p>
+	 * Every constant named and no {@code default}, which is the difference between an arm a reader
+	 * can check and a catch-all. {@code DEFAULT} cannot reach here - it is exactly the answer
+	 * {@code CloudDraw.setting} hands back as empty - and it is written down beside the one it would
+	 * take rather than swept into a branch that would also swallow a constant added later. This
+	 * package is the one the static analysis is pointed away from, so nothing but reading holds it.
 	 */
 	private static CloudStatus vitrail$status(ShaderProperties.CloudSetting asked) {
 		return switch (asked) {
 			case OFF -> CloudStatus.OFF;
 			case FAST -> CloudStatus.FAST;
-			default -> CloudStatus.FANCY;
+			case FANCY, DEFAULT -> CloudStatus.FANCY;
 		};
 	}
 }
