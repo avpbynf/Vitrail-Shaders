@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -80,6 +81,9 @@ public final class CloudDraw {
 	/** Whether the pack has been read for its clouds. A reading that served nothing is still one. */
 	private boolean read;
 
+	/** Whether what the pack asks of the cloud setting has been said. Once a load, not once a frame. */
+	private volatile boolean announced;
+
 	/** The program of the pass being recorded, between the moment it is prepared and its bind. */
 	private CloudProgram drawing;
 
@@ -133,8 +137,41 @@ public final class CloudDraw {
 		}
 
 		ShaderProperties.CloudSetting asked = draw.values.skyElements().clouds();
+		draw.announce(asked);
 
 		return asked == ShaderProperties.CloudSetting.DEFAULT ? Optional.empty() : Optional.of(asked);
+	}
+
+	/**
+	 * Says once what the pack asked the cloud setting to be, and says it even when the answer is
+	 * nothing.
+	 * <p>
+	 * <strong>The one word of this family whose effect leaves no trace anywhere else.</strong> A pack
+	 * writing {@code clouds=off} has no cloud pass opened for it at all, so there is no program to
+	 * announce, no draw to record and no refusal to report: the log of a pack that removed its clouds
+	 * and the log of a pack this engine never reached are the same log. That was worth an evening of
+	 * reading a picture to tell two states apart that a line tells apart for good.
+	 * <p>
+	 * From here rather than from {@link #read}, because the two are not reached together: this is
+	 * asked at the head of the game's own accessor, every frame and from the first, while the reading
+	 * waits for a cloud to be drawn - which is precisely what {@code off} stops from ever happening.
+	 */
+	private void announce(ShaderProperties.CloudSetting asked) {
+		if (this.announced) {
+			return;
+		}
+
+		this.announced = true;
+		if (asked == ShaderProperties.CloudSetting.DEFAULT) {
+			Vitrail.logger().info("{} asks nothing of the cloud setting, so the player's own stands "
+					+ "and the game opens the pass this engine draws in",
+					this.packPath.getFileName());
+		} else {
+			Vitrail.logger().info("{} asks for clouds={}, so the player's own setting is overruled. "
+					+ "Off is a pack saying it draws its own elsewhere, and the game then opens no "
+					+ "cloud pass at all: nothing of this engine runs and nothing else would say so",
+					this.packPath.getFileName(), asked.name().toLowerCase(Locale.ROOT));
+		}
 	}
 
 	/**
