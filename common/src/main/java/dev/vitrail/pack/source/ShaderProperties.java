@@ -375,8 +375,11 @@ public final class ShaderProperties {
 			return;
 		}
 
+		// TRUE alone, and not any boolean: particleOrdering acts on the yes and does nothing at all
+		// with the no, Iris reading the same word the same way. A false left consumed here would be
+		// a line neither honoured nor counted.
 		Matcher before = PARTICLES_BEFORE_DEFERRED.matcher(line);
-		if (before.matches() && truth(before.group(1).trim()) != null) {
+		if (before.matches() && Boolean.TRUE.equals(truth(before.group(1).trim()))) {
 			return;
 		}
 

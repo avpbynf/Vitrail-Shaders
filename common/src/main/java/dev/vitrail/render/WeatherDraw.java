@@ -57,11 +57,15 @@ import java.util.Set;
  * belongs to a compiled pipeline rather than to a draw. A pack's file is still read and translated
  * once, the two elements sharing a translation.
  * <p>
- * <strong>The depth writing one is unreachable on the whole corpus today</strong>, and it is still
- * made. The game picks it under improved transparency, which this family then refuses outright, or
- * under a pack's {@code rain.depth}, which three packs of the eight write and all three write false.
- * What the second element costs is one compiled module at the first rainfall of a pack that asks;
- * what leaving it out would cost is the pack that asks getting the other one's depth state, silently.
+ * <strong>No pack of the corpus asks for the depth writing one</strong>, and it is still made. The
+ * game picks it under improved transparency or under a pack's {@code rain.depth}, and three packs of
+ * the eight write that directive with all three writing false. The first of those two routes is
+ * usually refused a few lines further down, but not always and not by the same question: the game
+ * reads {@code useShaderTransparency()} while the refusal reads whether the weather target was
+ * really allocated, and a run with no post chain behind it has one and not the other. So the element
+ * is reached rarely rather than never. What it costs is one compiled module at the first rainfall of
+ * a pack that asks; what leaving it out would cost is that pack silently getting the other one's
+ * depth state.
  */
 public final class WeatherDraw {
 
@@ -357,9 +361,10 @@ public final class WeatherDraw {
 		if (pipeline == null) {
 			this.drawing = null;
 
-			return refuse("prepare", "the weather program refused to prepare, which it says on its "
-					+ "own line above. That is settled for as long as this pack is loaded, so the "
-					+ "rain is the game's steadily rather than as a flicker");
+			return refuse("prepare:" + element.element(), "the " + element.element() + " program "
+					+ "refused to prepare, which it says on its own line above. That is settled for "
+					+ "as long as this pack is loaded, so the rain is the game's steadily rather "
+					+ "than as a flicker");
 		}
 
 		// Here and not at the door's second call, so that the two cannot answer differently. A null
@@ -372,9 +377,10 @@ public final class WeatherDraw {
 		if (this.descriptor == null && !program.plain()) {
 			this.drawing = null;
 
-			return refuse("unallocated", "one of the pack's colour targets had no image yet on some "
-					+ "frame, so the pass the curtain wanted could not be built then. That comes and "
-					+ "goes with the frame rather than lasting");
+			return refuse("unallocated:" + element.element(), "one of the pack's colour targets had "
+					+ "no image yet on some frame, so the pass the " + element.element() + " wanted "
+					+ "could not be built then. That comes and goes with the frame rather than "
+					+ "lasting");
 		}
 
 		return pipeline;

@@ -318,6 +318,12 @@ public final class PackChain {
 	 * <p>
 	 * The entities are the one family that is here in both states, their blending half never having
 	 * landed at all. Every other switch names its family only when it is off.
+	 * <p>
+	 * <strong>Every switch that decides a family, and the sky is one of them.</strong> It was left out
+	 * of the first version of this method, which is the same fault as the hand-written list in a newer
+	 * dress: with {@code sky=off} the game draws its own sky and the seed is what carries it, exactly
+	 * as it carries the other four, so a line composed from four switches out of five is stale by
+	 * construction rather than by editing.
 	 */
 	private static String stillTheGame() {
 		List<String> carried = new ArrayList<>();
@@ -325,9 +331,14 @@ public final class PackChain {
 			carried.add("the entities");
 		}
 
+		if (!SkyDraw.wanted()) {
+			carried.add("the sky");
+		}
+
 		if (!CloudDraw.wanted()) {
 			carried.add("the clouds");
 		}
+
 
 		if (!WeatherDraw.wanted()) {
 			carried.add("the weather");
@@ -344,13 +355,14 @@ public final class PackChain {
 			carried.add("the entities that blend, the player's own body among them,");
 		}
 
-		// The conjunction the hand-written sentence carried, kept: this is a line of prose in the
-		// log and a bare comma list reads as a truncated one. One name alone is reachable and is
-		// the ordinary answer with every switch on, the entities' blending half being the whole of
-		// what is left.
+		// The conjunction the hand-written sentence carried, kept: this is a line of prose in the log
+		// and a bare comma list reads as a truncated one. The branch for a shorter list is not dead
+		// and is in fact the ordinary answer with every switch on: the entities put one of their two
+		// strings in either way, and every other family here names itself only when it is off.
 		if (carried.size() < 2) {
 			return String.join("", carried);
 		}
+
 
 		return String.join(", ", carried.subList(0, carried.size() - 1)) + " and "
 				+ carried.get(carried.size() - 1);

@@ -134,10 +134,11 @@ both halves of them.
 the shadow map. Receiving and casting are two different things here: a mob in the sun has the pack's
 light on it and no shadow under it.
 
-**Turn Fabulous graphics off if the rain or the translucent particles do not change.** With the
-game's improved transparency on, it draws both into targets of its own and composes them itself, and
-this engine hands them back rather than attach the pack's targets beside an image it does not read.
-It says so in the log, once, naming the setting. The entities are unaffected.
+**Turn the game's improved transparency off if the rain or the translucent particles do not change.**
+It is the video setting Fabulous graphics turns on. With it on, the game draws both of those into
+targets of its own and composes them itself, and this engine hands them back rather than attach the
+pack's targets beside an image it does not read. The log says so once, in those words. The entities
+are unaffected.
 
 **The held item has no answer at all yet.**
 

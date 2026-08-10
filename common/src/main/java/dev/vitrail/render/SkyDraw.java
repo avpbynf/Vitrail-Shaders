@@ -187,6 +187,15 @@ public final class SkyDraw {
 	}
 
 	/**
+	 * The same answer, for the line of the log that names what the scene seed still carries across.
+	 * That line is composed from the switches rather than written out, so every family owes it one of
+	 * these.
+	 */
+	static boolean wanted() {
+		return wanted;
+	}
+
+	/**
 	 * Whether the sky of this frame is a pack's to draw, asked outside the frame's own passes.
 	 * <p>
 	 * The head of {@link #element} without the pieces only a pass can answer, and the difference does

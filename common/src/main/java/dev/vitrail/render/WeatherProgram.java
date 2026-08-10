@@ -84,7 +84,9 @@ final class WeatherProgram implements DumpedProgram {
 		// as the translucent chunk pass takes them. Asked through step, this program would write the
 		// half ChainPlan gave it, which is the after-deferred one, and read the half before it, and
 		// TargetSchedule.stepAfterDeferred says in its own words that nothing on either side would
-		// say a word about that.
+		// report that. Its "for the translucent chunk pass alone" is about Iris's Sodium wiring and
+		// not about the format: Iris's own core shader path hands every gbuffers key a snapshot that
+		// switches when the translucents begin, and its weather key is on the late side of that.
 		String servedBy = loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
 		PackProgram.Loaded bound =
 				loaded.rebind(chainTargets, chainTargets.schedule().stepAfterDeferred(servedBy));
