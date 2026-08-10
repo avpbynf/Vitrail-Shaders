@@ -184,7 +184,10 @@ public final class ParticleDraw {
 		wanted = asked;
 	}
 
-	/** The same answer, for the line of the log that names what the scene seed still carries across. */
+	/**
+	 * Whether this family is drawing, for the line of the log that names what the scene seed still
+	 * carries across. {@code SkyDraw.wanted} says why that is not quite the option.
+	 */
 	static boolean wanted() {
 		return wanted;
 	}

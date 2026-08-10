@@ -167,9 +167,8 @@ public final class WeatherDraw {
 	}
 
 	/**
-	 * The same answer, for the line of the log that names what the scene seed still carries across.
-	 * That line is composed from the switches rather than written out, so every family owes it one of
-	 * these.
+	 * Whether this family is drawing, for the line of the log that names what the scene seed still
+	 * carries across. {@code SkyDraw.wanted} says why that is not quite the option.
 	 */
 	static boolean wanted() {
 		return wanted;
@@ -362,9 +361,9 @@ public final class WeatherDraw {
 			this.drawing = null;
 
 			return refuse("prepare:" + element.element(), "the " + element.element() + " program "
-					+ "refused to prepare, which it says on its own line above. That is settled for "
-					+ "as long as this pack is loaded, so the rain is the game's steadily rather "
-					+ "than as a flicker");
+					+ "refused to prepare, which it says on its own line above. That is settled for as "
+					+ "long as this pack is loaded, so every frame the game picks that pipeline for "
+					+ "draws its own rain, steadily rather than as a flicker");
 		}
 
 		// Here and not at the door's second call, so that the two cannot answer differently. A null
@@ -377,10 +376,13 @@ public final class WeatherDraw {
 		if (this.descriptor == null && !program.plain()) {
 			this.drawing = null;
 
-			return refuse("unallocated:" + element.element(), "one of the pack's colour targets had "
-					+ "no image yet on some frame, so the pass the " + element.element() + " wanted "
-					+ "could not be built then. That comes and goes with the frame rather than "
-					+ "lasting");
+			// Keyed by the family and not by the element, unlike the refusal above and unlike the
+			// particles': the two elements are built from ONE writes list and one set of colour
+			// targets, so this condition is never true of one of them and false of the other, and a
+			// key per element would print the same sentence twice.
+			return refuse("unallocated", "one of the pack's colour targets had no image yet on some "
+					+ "frame, so the pass the curtain wanted could not be built then. That comes and "
+					+ "goes with the frame rather than lasting");
 		}
 
 		return pipeline;

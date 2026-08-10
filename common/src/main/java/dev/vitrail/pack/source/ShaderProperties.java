@@ -338,8 +338,9 @@ public final class ShaderProperties {
 
 		// Consumed only when the value is one of the four words that mean something, and read again
 		// conditionally by skyElements. A line that says anything else falls through to the ignored
-		// keys, which is where a reader has to be able to find it: two packs of the corpus write
-		// sun=off, which neither Iris nor OptiFine reads as false, so their sun keeps being drawn and
+		// keys, which is where a reader has to be able to find it: one pack of the corpus writes
+		// sun=off and moon=off, which neither Iris nor OptiFine reads as false, so its sun and its
+		// moon keep being drawn and
 		// nothing else would say why.
 		Matcher element = SKY_ELEMENT.matcher(line);
 		if (element.matches() && truth(element.group(2).trim()) != null) {

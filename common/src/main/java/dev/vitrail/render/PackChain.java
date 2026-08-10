@@ -319,11 +319,18 @@ public final class PackChain {
 	 * The entities are the one family that is here in both states, their blending half never having
 	 * landed at all. Every other switch names its family only when it is off.
 	 * <p>
-	 * <strong>Every switch that decides a family, and the sky is one of them.</strong> It was left out
-	 * of the first version of this method, which is the same fault as the hand-written list in a newer
-	 * dress: with {@code sky=off} the game draws its own sky and the seed is what carries it, exactly
-	 * as it carries the other four, so a line composed from four switches out of five is stale by
-	 * construction rather than by editing.
+	 * <strong>Every family the seed carries that has no line of its own, and the sky is one of
+	 * them.</strong> It was left out of the first version of this method, which is the same fault as
+	 * the hand-written list in a newer dress: with {@code sky=off} the game draws its own sky and the
+	 * seed is what carries it, exactly as it carries the entities, the clouds, the weather and the
+	 * particles, and a list that names four of those five is stale by construction rather than by
+	 * editing.
+	 * <p>
+	 * <strong>The terrain is the switch that is deliberately not here</strong>, and it is the one
+	 * exception the rule above needs. With {@code terrain=off} the seed does carry the world, but the
+	 * two lines printed straight after this one already say exactly that: the mask is what stops the
+	 * seed, a frame where no terrain program of the pack ran leaves it empty, and the second of those
+	 * lines says so in the pack's own terms. Naming it here as well would be the same fact twice.
 	 */
 	private static String stillTheGame() {
 		List<String> carried = new ArrayList<>();
@@ -338,7 +345,6 @@ public final class PackChain {
 		if (!CloudDraw.wanted()) {
 			carried.add("the clouds");
 		}
-
 
 		if (!WeatherDraw.wanted()) {
 			carried.add("the weather");
@@ -362,7 +368,6 @@ public final class PackChain {
 		if (carried.size() < 2) {
 			return String.join("", carried);
 		}
-
 
 		return String.join(", ", carried.subList(0, carried.size() - 1)) + " and "
 				+ carried.get(carried.size() - 1);

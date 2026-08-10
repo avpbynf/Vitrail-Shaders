@@ -187,9 +187,11 @@ public final class SkyDraw {
 	}
 
 	/**
-	 * The same answer, for the line of the log that names what the scene seed still carries across.
-	 * That line is composed from the switches rather than written out, so every family owes it one of
-	 * these.
+	 * Whether this family is drawing, for the line of the log that names what the scene seed still
+	 * carries across: that line is composed from the switches rather than written out, so every
+	 * family owes it one of these. Not quite the option, and the difference is worth a word: an error
+	 * inside a draw latches this false for the session, so what it really answers is whether the
+	 * family is still serving.
 	 */
 	static boolean wanted() {
 		return wanted;
