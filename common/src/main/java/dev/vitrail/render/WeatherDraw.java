@@ -123,6 +123,9 @@ public final class WeatherDraw {
 	/** The program of the pass being recorded, between the moment it is prepared and its draws. */
 	private WeatherProgram drawing;
 
+	/** The pass that program wants opened, worked out beside it. Null means the renderer's own. */
+	private RenderPassDescriptor descriptor;
+
 	WeatherDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
 			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
 			boolean chainRuns, ColorTargets targets) {
@@ -200,11 +203,15 @@ public final class WeatherDraw {
 	 * Everything that has to happen before the weather renderer opens its pass: the program read, the
 	 * pipeline compiled, the frame opened and this frame's block written.
 	 *
-	 * @param game the pipeline the renderer picked a line above, which is where every state this
-	 *             engine does not decide comes from
+	 * @param game   the pipeline the renderer picked a line above, which is where every state this
+	 *               engine does not decide comes from
+	 * @param colour the colour view the renderer was going to draw into, which stays attachment
+	 *               nought wherever the pack's own targets do not take it
+	 * @param depth  the depth view it was going to use, kept as it is
 	 * @return the pipeline to draw it with, or null to leave the game's own alone
 	 */
-	public static RenderPipeline element(RenderPipeline game) {
+	public static RenderPipeline element(RenderPipeline game, GpuTextureView colour,
+			GpuTextureView depth) {
 		WeatherDraw draw = PackChain.weather();
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Element element = ELEMENTS.get(game);
@@ -213,7 +220,7 @@ public final class WeatherDraw {
 		}
 
 		try {
-			return draw.prepare(device, element);
+			return draw.prepare(device, element, colour, depth);
 		} catch (RuntimeException e) {
 			wanted = false;
 			Vitrail.logger().error("Vitrail stopped drawing the weather after an error", e);
@@ -223,24 +230,20 @@ public final class WeatherDraw {
 	}
 
 	/**
-	 * The render pass the curtain wants opened, or null to leave the game's own alone.
+	 * The render pass the curtain wants opened, or null to open the plain one the renderer was going
+	 * to open.
 	 * <p>
-	 * Asked right after {@link #element} and about the piece that call prepared, so it takes no
-	 * pipeline of its own: the two answers have to be one, a pipeline carrying a colour state per
-	 * attachment this names and setting it against a pass built for anything else throwing by name in
-	 * the middle of a rainstorm.
-	 *
-	 * @param colour the colour view the renderer was going to draw into, which stays attachment
-	 *               nought wherever the pack's own targets do not take it
-	 * @param depth  the depth view it was going to use, kept as it is
+	 * Worked out by {@link #element} and only handed back here, which is the sky's rule made
+	 * mechanical: the two answers have to be ONE, a pipeline carrying a colour state per attachment
+	 * this names and setting it against a pass built for anything else throwing by name in the middle
+	 * of a rainstorm. Asked as a second question they could differ, and the case where they would is
+	 * real rather than theoretical - a pass this engine cannot build is not the same thing as a pass
+	 * it does not need.
 	 */
-	public static RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
+	public static RenderPassDescriptor descriptor() {
 		WeatherDraw draw = PackChain.weather();
-		if (draw == null || draw.drawing == null) {
-			return null;
-		}
 
-		return draw.drawing.descriptor(colour, depth);
+		return draw == null ? null : draw.descriptor;
 	}
 
 	/**
@@ -279,11 +282,13 @@ public final class WeatherDraw {
 		return !this.chainRuns || this.owner.drawable();
 	}
 
-	private RenderPipeline prepare(GpuDevice device, Element element) {
+	private RenderPipeline prepare(GpuDevice device, Element element, GpuTextureView colour,
+			GpuTextureView depth) {
 		if (!this.read) {
 			read();
 		}
 
+		this.descriptor = null;
 		WeatherProgram program = this.programs.get(element.element());
 		this.drawing = program;
 		if (program == null) {
@@ -322,6 +327,21 @@ public final class WeatherDraw {
 		RenderPipeline pipeline = program.prepare(device);
 		if (pipeline == null) {
 			this.drawing = null;
+
+			return null;
+		}
+
+		// Here and not at the door's second call, so that the two cannot answer differently. A null
+		// descriptor means one of two things and only one of them is safe: a pass that gains nothing
+		// over the renderer's own, which is a program writing the game's target alone, or a pass this
+		// engine could not build. The second one has to take the pipeline down with it, since binding
+		// a pipeline that carries a state per target the pack asked for into the renderer's single
+		// attachment pass is refused by name, in the middle of a rainstorm.
+		this.descriptor = program.descriptor(colour, depth);
+		if (this.descriptor == null && !program.plain()) {
+			this.drawing = null;
+
+			return null;
 		}
 
 		return pipeline;
@@ -415,6 +435,7 @@ public final class WeatherDraw {
 	/** Rotates the ring buffers. Called once the frame's weather draws have been recorded. */
 	void rotate() {
 		this.drawing = null;
+		this.descriptor = null;
 		this.programs.values().forEach(WeatherProgram::rotate);
 	}
 
@@ -422,6 +443,7 @@ public final class WeatherDraw {
 		this.programs.values().forEach(WeatherProgram::release);
 		this.programs.clear();
 		this.drawing = null;
+		this.descriptor = null;
 		this.read = false;
 	}
 }

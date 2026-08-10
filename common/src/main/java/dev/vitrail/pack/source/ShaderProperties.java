@@ -80,6 +80,14 @@ public final class ShaderProperties {
 	// of its own: the first says whether the rain and the snow are drawn at all, the second whether
 	// the splashes they leave on the ground are.
 	private static final Pattern WEATHER = Pattern.compile("^\\s*weather\\s*=\\s*(.*)$");
+	// Where the pack wants its particles drawn about the deferred stage. Two spellings, and the
+	// second is the older one: Iris reads particles.before.deferred=true as an ordering of BEFORE
+	// where nothing has already been said, so it is folded into the same answer here rather than
+	// being a directive of its own that a reader would have to know about separately.
+	private static final Pattern PARTICLE_ORDERING =
+			Pattern.compile("^\\s*particles\\.ordering\\s*=\\s*(.*)$");
+	private static final Pattern PARTICLES_BEFORE_DEFERRED =
+			Pattern.compile("^\\s*particles\\.before\\.deferred\\s*=\\s*(.*)$");
 	// The noise image is answered here because everything else about it is settled: one path, one
 	// sampler, every stage. The general family is not, and is read by customTextures instead.
 	private static final Pattern TEXTURE_NOISE = Pattern.compile("^\\s*texture\\.noise\\s*=\\s*(.*)$");
@@ -845,6 +853,40 @@ public final class ShaderProperties {
 		}
 
 		return new Weather(drawn, particles);
+	}
+
+	/**
+	 * Where the pack asked for its particles to be drawn about the deferred stage, lowercased, and
+	 * empty where it did not ask.
+	 * <p>
+	 * <strong>Empty means the pack wrote nothing, and no default is worked out here.</strong> Iris
+	 * computes one, {@code AFTER} for a pack that ships deferred programs and does not ask for
+	 * separate entity draws, and then reaches for the answer nowhere in its own rendering; a default
+	 * invented here would therefore be a word about a placement neither engine performs, said about
+	 * packs that never wrote it. Five packs of the corpus write the line and all five write
+	 * {@code mixed}.
+	 * <p>
+	 * The older spelling is folded in: {@code particles.before.deferred=true} is {@code before}, and
+	 * it loses to an explicit ordering wherever the pack writes both, which is the precedence Iris
+	 * gives them.
+	 */
+	public Optional<String> particleOrdering(Map<String, String> defines) {
+		String ordering = null;
+
+		for (Matcher before : live(PARTICLES_BEFORE_DEFERRED, defines)) {
+			if (Boolean.TRUE.equals(truth(before.group(1).trim()))) {
+				ordering = "before";
+			}
+		}
+
+		for (Matcher line : live(PARTICLE_ORDERING, defines)) {
+			String word = line.group(1).trim().toLowerCase(Locale.ROOT);
+			if (!word.isEmpty()) {
+				ordering = word;
+			}
+		}
+
+		return Optional.ofNullable(ordering);
 	}
 
 	/**

@@ -128,10 +128,9 @@ public abstract class WeatherEffectRendererMixin {
 	private RenderPass vitrail$open(CommandEncoder encoder, Supplier<String> label,
 			GpuTextureView colour, Optional<?> clearColour, GpuTextureView depth,
 			OptionalDouble clearDepth, Operation<RenderPass> original, @Local RenderPipeline game) {
-		this.vitrail$pipeline = WeatherDraw.element(game);
-		RenderPassDescriptor descriptor = this.vitrail$pipeline == null
-				? null
-				: WeatherDraw.descriptor(colour, depth);
+		this.vitrail$pipeline = WeatherDraw.element(game, colour, depth);
+		RenderPassDescriptor descriptor =
+				this.vitrail$pipeline == null ? null : WeatherDraw.descriptor();
 
 		return descriptor == null
 				? original.call(encoder, label, colour, clearColour, depth, clearDepth)

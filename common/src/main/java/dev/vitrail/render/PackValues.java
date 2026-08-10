@@ -59,6 +59,7 @@ public final class PackValues {
 			true, true, ShaderProperties.CloudSetting.DEFAULT);
 	private ShaderProperties.Weather weather = new ShaderProperties.Weather(true, true);
 	private boolean rainDepth;
+	private Optional<String> particleOrdering = Optional.empty();
 	private NoiseTexture.Image noiseImage;
 	private PackImages packImages = PackImages.none();
 	private UniformCatalog catalog = UniformCatalog.engine();
@@ -99,6 +100,7 @@ public final class PackValues {
 			values.skyElements = properties.skyElements(settings.globalDefines(options));
 			values.weather = properties.weather(settings.globalDefines(options));
 			values.rainDepth = properties.rainDepth();
+			values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
 			values.declare(properties, settings.globalDefines(options));
 			values.readNoise(properties, source);
 			values.packImages =
@@ -262,6 +264,14 @@ public final class PackValues {
 	/** Whether this pack asked for the rain and the snow to write the world's depth. */
 	public boolean rainDepth() {
 		return this.rainDepth;
+	}
+
+	/**
+	 * Where this pack asked for its particles to be drawn about the deferred stage, and empty where
+	 * it did not ask. No default is invented, and {@code ShaderProperties.particleOrdering} says why.
+	 */
+	public Optional<String> particleOrdering() {
+		return this.particleOrdering;
 	}
 
 	/** What a block is written from. The same object every frame, refilled by {@link #advance()}. */

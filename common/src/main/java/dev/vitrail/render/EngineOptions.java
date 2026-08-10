@@ -177,19 +177,30 @@ final class EngineOptions {
 	private static final String WEATHER_KEY = "weather";
 
 	/**
-	 * All twelve, for the one place that has to tell them from a setting of the pack: the log that
+	 * Draws the game's quad particles with the pack's own programs. <strong>Off</strong>, like the
+	 * weather it lands beside and for the same reason.
+	 * <p>
+	 * The one family whose two halves stand on opposite sides of the deferred stage, so what it turns
+	 * off is two things at once and deliberately: a smoke plume before the stage and the same plume's
+	 * translucent half after the world's water are one word to a player and would be two lines
+	 * nobody could keep straight.
+	 */
+	private static final String PARTICLES_KEY = "particles";
+
+	/**
+	 * All thirteen, for the one place that has to tell them from a setting of the pack: the log that
 	 * says what the file forces. {@code profile} is the settings layer's own, since that is the side
-	 * that writes it back; the other eleven are read here and nowhere else.
+	 * that writes it back; the other twelve are read here and nowhere else.
 	 */
 	private static final Set<String> RESERVED = Set.of(SettingsFile.PROFILE_KEY, SEED_KEY,
 			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY, SKY_KEY,
-			ENTITIES_KEY, CLOUDS_KEY, WEATHER_KEY);
+			ENTITIES_KEY, CLOUDS_KEY, WEATHER_KEY, PARTICLES_KEY);
 
 	private EngineOptions() {
 	}
 
 	/**
-	 * What the eleven lines this class reads were set to.
+	 * What the twelve lines this class reads were set to.
 	 *
 	 * @param seed       whether the game's finished frame is painted where the world would be
 	 * @param passes     what the user asked to run on top of what the pack keeps
@@ -204,14 +215,15 @@ final class EngineOptions {
 	 * @param clouds     whether the game's clouds are drawn with the pack's own program, and with
 	 *                   that whether the pack's own {@code clouds} directive is honoured at all
 	 * @param weather    whether the game's rain and snow are drawn with the pack's own program
+	 * @param particles  whether the game's quad particles are, both halves of them
 	 */
 	record Read(boolean seed, ChainFilter passes, boolean packsFirst, String dump, boolean terrain,
 			boolean chain, boolean shadow, boolean sky, boolean entities, boolean clouds,
-			boolean weather) {
+			boolean weather, boolean particles) {
 	}
 
 	/**
-	 * Reads the ten and <strong>removes them</strong> from what is handed to the pack, which is
+	 * Reads the twelve and <strong>removes them</strong> from what is handed to the pack, which is
 	 * the point: what is left is settings the pack declared.
 	 */
 	static Read take(Map<String, OptionValue> chosen) {
@@ -229,7 +241,8 @@ final class EngineOptions {
 				asked(chosen.remove(SKY_KEY), SKY_KEY, true),
 				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, false),
 				asked(chosen.remove(CLOUDS_KEY), CLOUDS_KEY, true),
-				asked(chosen.remove(WEATHER_KEY), WEATHER_KEY, false));
+				asked(chosen.remove(WEATHER_KEY), WEATHER_KEY, false),
+				asked(chosen.remove(PARTICLES_KEY), PARTICLES_KEY, false));
 	}
 
 	/**
@@ -299,6 +312,14 @@ final class EngineOptions {
 		Vitrail.logger().info("{}=off, so the game draws its own rain and snow with its own shader, "
 				+ "into its own target and lit as the game lights them. Write '{}=on' in {} to have "
 				+ "the pack draw them", WEATHER_KEY, WEATHER_KEY, SettingsLayers.file(gameDirectory));
+	}
+
+	/** The same, for the quad particles, and it says which two halves the one word covers. */
+	static void announceParticlesOff(Path gameDirectory) {
+		Vitrail.logger().info("{}=off, so the game draws its own quad particles with its own shader, "
+				+ "the opaque ones among its solid features and the translucent ones after the "
+				+ "world's water. Write '{}=on' in {} to have the pack draw both halves",
+				PARTICLES_KEY, PARTICLES_KEY, SettingsLayers.file(gameDirectory));
 	}
 
 	/** Said once when the chain is off, since nothing else on screen would say why. */
@@ -376,8 +397,8 @@ final class EngineOptions {
 			return false;
 		}
 
-		// Named, like the two readings above do it: eight lines share this one, so the value on its
-		// own leaves whoever fixes the typo looking for which of the eight carries it.
+		// Named, like the two readings above do it: nine lines share this one, so the value on its
+		// own leaves whoever fixes the typo looking for which of the nine carries it.
 		Vitrail.logger().warn("'{}={}' is neither on nor off, so this line is ignored and {} stays "
 				+ "{}", key, value.asText(), key, byDefault ? "on" : "off");
 

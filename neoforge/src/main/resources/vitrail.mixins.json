@@ -24,6 +24,7 @@
 		"ModelSubmitMixin",
 		"OptionsCloudsMixin",
 		"ProjectionMatrixBufferMixin",
+		"QuadParticleFeatureRendererMixin",
 		"RenderSectionManagerAccessor",
 		"RenderTypeFeatureRendererGroupMixin",
 		"RenderTypeFeatureRendererMixin",

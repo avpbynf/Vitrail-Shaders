@@ -93,7 +93,11 @@ public final class ChainPlan {
 					.map(program -> new NamedProgram(program, CLOUD_PROGRAM.equals(program))),
 			Stream.of(new NamedProgram("gbuffers_entities", false),
 					new NamedProgram("gbuffers_block", false),
-					new NamedProgram("gbuffers_weather", true)))
+					new NamedProgram("gbuffers_weather", true),
+					// The one family that straddles the stage: the game submits every particle group
+					// twice, and the two land on either side of it.
+					new NamedProgram("gbuffers_particles", false),
+					new NamedProgram("gbuffers_particles_translucent", true)))
 			.toList();
 
 	/** One name of that list, and the side of the deferred stage the family asking for it draws on. */

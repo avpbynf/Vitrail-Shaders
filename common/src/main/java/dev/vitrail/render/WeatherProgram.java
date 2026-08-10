@@ -130,6 +130,11 @@ final class WeatherProgram implements DumpedProgram {
 		return this.body.descriptor(colour, depth);
 	}
 
+	/** @see GeometryProgram#plain */
+	boolean plain() {
+		return this.body.plain();
+	}
+
 	/** @see GeometryProgram#owns */
 	boolean owns(RenderPipeline bound) {
 		return this.body.owns(bound);
