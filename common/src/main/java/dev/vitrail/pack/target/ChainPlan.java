@@ -52,8 +52,8 @@ public final class ChainPlan {
 
 	private final String place;
 	/**
-	 * The one name of that family drawn on the far side of the deferred stage, and the reason this
-	 * walk has a side at all. See {@link #namedKeysOf}.
+	 * The one name of the sky's three drawn on the far side of the deferred stage, and the reason
+	 * this walk has a side at all. See {@link #namedKeysOf}.
 	 */
 	private static final String CLOUD_PROGRAM = "gbuffers_clouds";
 
@@ -80,10 +80,25 @@ public final class ChainPlan {
 	 * serves its terrain, which the walk above it had already put in. Taking both entity names back
 	 * out is the negative control, and it is what proved the count above rather than a reading of
 	 * this list.
+	 * <p>
+	 * <strong>Each name carries the side of the deferred stage its family is drawn on</strong>, and
+	 * that is not a property of the program but of the moment the game draws it: the sky's first two
+	 * and the entities come before the deferreds and read the halves the prepares left, while the
+	 * clouds and the weather are drawn once the whole main pass is finished and read the halves the
+	 * deferreds left, exactly as the world's translucents do. A name walked on the wrong side answers
+	 * a real pass on the wrong half of every target, which is a picture nothing reports.
 	 */
-	private static final List<String> NAMED_PROGRAMS = Stream
-			.concat(SKY_PROGRAMS.stream(), Stream.of("gbuffers_entities", "gbuffers_block"))
+	private static final List<NamedProgram> NAMED_PROGRAMS = Stream.concat(
+			SKY_PROGRAMS.stream()
+					.map(program -> new NamedProgram(program, CLOUD_PROGRAM.equals(program))),
+			Stream.of(new NamedProgram("gbuffers_entities", false),
+					new NamedProgram("gbuffers_block", false),
+					new NamedProgram("gbuffers_weather", true)))
 			.toList();
+
+	/** One name of that list, and the side of the deferred stage the family asking for it draws on. */
+	private record NamedProgram(String program, boolean afterDeferred) {
+	}
 
 	private final List<Pass> passes;
 	private final Pass last;
@@ -370,14 +385,16 @@ public final class ChainPlan {
 	 * is looked up through the fallback tree, so a pack that ships none of them still answers here
 	 * through {@code gbuffers_basic} or {@code gbuffers_textured} if it has those.
 	 * <p>
-	 * The walk before the deferreds for all of them but one. The sky is drawn at the third rank of
-	 * the frame and the game's opaque features between the opaque chunks and the deferred stage, so
-	 * both read the halves the prepares leave. <strong>The clouds are the exception</strong>, and
-	 * they share it with the translucent chunk pass rather than with the rest of their own family:
-	 * the game draws them after the main pass, which is after this engine has run the first half of
-	 * the chain, so their halves are the ones the deferred stage turned over. Answered on the near
-	 * side they write the dead half of the ping pong, and nothing says so - the pass runs, the
-	 * program draws, the final composes from the other half and the sky comes back empty.
+	 * Which side of the deferred stage each is walked on is the list's to say, and it is not the same
+	 * for all of them. The sky is drawn at the third rank of the frame and the game's opaque features
+	 * between the opaque chunks and the deferred stage, so both read the halves the prepares leave;
+	 * the clouds, the weather and the translucent chunk pass are taken after the deferred stage.
+	 * <p>
+	 * <strong>The clouds are the exception inside their own family</strong>: the game draws them
+	 * after the main pass, which is after this engine has run the first half of the chain, so their
+	 * halves are the ones the deferred stage turned over. Answered on the near side they write the
+	 * dead half of the ping pong, and nothing says so - the pass runs, the program draws, the final
+	 * composes from the other half and the sky comes back empty.
 	 * <p>
 	 * The map it answers is the sky's, because the sky is the one family that asks by the name it
 	 * wanted rather than by the program it got. Every other name here is reached through
@@ -391,18 +408,18 @@ public final class ChainPlan {
 		// geometry walk gives above: the fallback tree sends skybasic to gbuffers_basic and both
 		// skytextured and clouds to gbuffers_textured, so one file commonly serves two or three of
 		// these names, and walking it again would say the same note about it twice. The side is part
-		// of it because the clouds ask on the far one, so a pack with no cloud program of its own
-		// really is one file answering twice here, which is what the key is for.
-		for (String program : NAMED_PROGRAMS) {
-			Optional<String> served = resolver.lookup(plan.place(), program)
+		// of it because the clouds and the weather ask on the far one, so a pack with no cloud
+		// program of its own really is one file answering twice here, which is what the key is for.
+		for (NamedProgram named : NAMED_PROGRAMS) {
+			Optional<String> served = resolver.lookup(plan.place(), named.program())
 					.map(ProgramResolver.Resolution::servedBy);
 			if (served.isEmpty()) {
 				continue;
 			}
 
-			Key key = new Key(served.get(), CLOUD_PROGRAM.equals(program));
-			if (answer(plan, key, notes, into) != null && SKY_PROGRAMS.contains(program)) {
-				sky.put(program, key);
+			Key key = new Key(served.get(), named.afterDeferred());
+			if (answer(plan, key, notes, into) != null && SKY_PROGRAMS.contains(named.program())) {
+				sky.put(named.program(), key);
 			}
 		}
 

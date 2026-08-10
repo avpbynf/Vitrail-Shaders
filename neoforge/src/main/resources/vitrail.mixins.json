@@ -11,6 +11,7 @@
 		"BlockRendererMixin",
 		"ChunkMeshFormatsMixin",
 		"ChunkVertexMixin",
+		"ClientLevelMixin",
 		"CloudRendererMixin",
 		"CustomFeatureRendererMixin",
 		"CustomSubmitMixin",
@@ -31,6 +32,7 @@
 		"MixinSodiumWorldRenderer",
 		"MixinSodiumWorldRendererInit",
 		"StagedVertexBufferDrawMixin",
-		"VKDrawContextMixin"
+		"VKDrawContextMixin",
+		"WeatherEffectRendererMixin"
 	]
 }

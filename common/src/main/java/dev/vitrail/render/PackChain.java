@@ -210,6 +210,7 @@ public final class PackChain {
 	private final SkyDraw sky;
 	private final EntityDraw entities;
 	private final CloudDraw clouds;
+	private final WeatherDraw weather;
 
 	private List<PackPass> programs;
 	private PackPass last;
@@ -289,6 +290,12 @@ public final class PackChain {
 		// which is every Nether and every player who turned them off, should not pay for a program
 		// nothing draws.
 		this.clouds = new CloudDraw(this, packPath, chain.place(), chosen, profile, values,
+				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
+		// And once more, read on demand for a fifth reason: a pack may be loaded for an hour before
+		// it rains. It needs no switch of the seed's, being the one family here drawn after the
+		// deferred stage: it blends onto what the chain has already put in the pack's target, which
+		// is the position the world's own translucents are in.
+		this.weather = new WeatherDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 	}
 
@@ -416,6 +423,7 @@ public final class PackChain {
 			SkyDraw.wanted(engine.sky());
 			EntityDraw.wanted(engine.entities());
 			CloudDraw.wanted(engine.clouds());
+			WeatherDraw.wanted(engine.weather());
 			PackDump.configure(engine.dump(),
 					gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt"));
 
@@ -509,6 +517,10 @@ public final class PackChain {
 
 			if (!engine.clouds()) {
 				EngineOptions.announceCloudsOff(gameDirectory);
+			}
+
+			if (!engine.weather()) {
+				EngineOptions.announceWeatherOff(gameDirectory);
 			}
 		} catch (IOException | RuntimeException e) {
 			disabled = true;
@@ -927,6 +939,14 @@ public final class PackChain {
 		return disabled || chain == null ? null : chain.clouds;
 	}
 
+	/** The same, for the rain and the snow. */
+	static WeatherDraw weather() {
+		PackChain chain = active;
+
+		return disabled || chain == null ? null : chain.weather;
+	}
+
+
 	/**
 	 * Opens the frame if nothing has yet, and takes the dump with it. The one point the frame
 	 * boundary hangs off; see {@link #advanced} for what a second advance would cost.
@@ -938,7 +958,7 @@ public final class PackChain {
 			PackDump.take(this.chain.place(), this.load,
 					this.programs == null ? List.of() : this.programs, this.values.world(),
 					this.terrain.programs(), this.sky.programs(), this.entities.programs(),
-					this.clouds.programs());
+					this.clouds.programs(), this.weather.programs());
 		}
 	}
 
@@ -1023,6 +1043,7 @@ public final class PackChain {
 		this.sky.rotate();
 		this.entities.rotate();
 		this.clouds.rotate();
+		this.weather.rotate();
 	}
 
 	/** Called when the client shuts down, while the device is still alive. */
@@ -1972,6 +1993,7 @@ public final class PackChain {
 		this.sky.release();
 		this.entities.release();
 		this.clouds.release();
+		this.weather.release();
 
 		if (this.block != null) {
 			this.block.close();

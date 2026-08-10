@@ -19,11 +19,12 @@ import java.util.Set;
  * <p>
  * They are kept together, and taken out of the pack's settings in one place, because a name left in
  * would be written into the head of every translated unit as {@code #define screen settings}, which
- * is a plausible identifier in somebody's GLSL. None of the ten collides with a setting any pack
- * of the corpus declares, and one of them very nearly does: BSL and Reverie both declare a
- * {@code CLOUDS} of their own, which misses {@code clouds} by its case alone. The names here are
- * lowercase and the comparison is not, so the two stay apart; a line of this file spelled in capitals
- * would eat a setting of theirs.
+ * is a plausible identifier in somebody's GLSL. None of the eleven collides with a setting any pack
+ * of the corpus declares, and what keeps that true is thinner than it looks: four of these words
+ * really are defined by packs of the corpus, {@code CLOUDS}, {@code WEATHER}, {@code ENTITIES} and
+ * {@code SHADOW}, and every one of them in capitals. The names here are lowercase and the comparison
+ * is not, so the two stay apart; a word added here in the spelling a pack uses would be swallowed
+ * before the pack ever saw it.
  * <p>
  * Every one of them answers a question the picture cannot: which passes ran, which half a target
  * was read from, whether the values a program was handed were the right numbers. A word that is
@@ -161,19 +162,34 @@ final class EngineOptions {
 	private static final String CLOUDS_KEY = "clouds";
 
 	/**
-	 * All eleven, for the one place that has to tell them from a setting of the pack: the log that
+	 * Draws the game's rain and snow with the pack's own program. <strong>Off</strong>, like the
+	 * entities and unlike everything else here.
+	 * <p>
+	 * What being off buys is that the work lands without waiting to be judged: it is turned on to
+	 * look at it, turned off to compare, and a defect between the two is bisected in one line of a
+	 * text file instead of a rebuild.
+	 * <p>
+	 * A line of its own and not part of the entities', though the two arrived together: the weather
+	 * is the one family drawn after the deferred stage, so it is the one that can be turned off to
+	 * tell a curtain the pack drew from a curtain the game drew, without touching anything the pack
+	 * does before the deferreds.
+	 */
+	private static final String WEATHER_KEY = "weather";
+
+	/**
+	 * All twelve, for the one place that has to tell them from a setting of the pack: the log that
 	 * says what the file forces. {@code profile} is the settings layer's own, since that is the side
-	 * that writes it back; the other ten are read here and nowhere else.
+	 * that writes it back; the other eleven are read here and nowhere else.
 	 */
 	private static final Set<String> RESERVED = Set.of(SettingsFile.PROFILE_KEY, SEED_KEY,
 			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY, SKY_KEY,
-			ENTITIES_KEY, CLOUDS_KEY);
+			ENTITIES_KEY, CLOUDS_KEY, WEATHER_KEY);
 
 	private EngineOptions() {
 	}
 
 	/**
-	 * What the ten lines this class reads were set to.
+	 * What the eleven lines this class reads were set to.
 	 *
 	 * @param seed       whether the game's finished frame is painted where the world would be
 	 * @param passes     what the user asked to run on top of what the pack keeps
@@ -187,9 +203,11 @@ final class EngineOptions {
 	 *                   program rather than the game's
 	 * @param clouds     whether the game's clouds are drawn with the pack's own program, and with
 	 *                   that whether the pack's own {@code clouds} directive is honoured at all
+	 * @param weather    whether the game's rain and snow are drawn with the pack's own program
 	 */
 	record Read(boolean seed, ChainFilter passes, boolean packsFirst, String dump, boolean terrain,
-			boolean chain, boolean shadow, boolean sky, boolean entities, boolean clouds) {
+			boolean chain, boolean shadow, boolean sky, boolean entities, boolean clouds,
+			boolean weather) {
 	}
 
 	/**
@@ -210,7 +228,8 @@ final class EngineOptions {
 				asked(chosen.remove(SHADOW_KEY), SHADOW_KEY, true),
 				asked(chosen.remove(SKY_KEY), SKY_KEY, true),
 				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, false),
-				asked(chosen.remove(CLOUDS_KEY), CLOUDS_KEY, true));
+				asked(chosen.remove(CLOUDS_KEY), CLOUDS_KEY, true),
+				asked(chosen.remove(WEATHER_KEY), WEATHER_KEY, false));
 	}
 
 	/**
@@ -269,6 +288,17 @@ final class EngineOptions {
 				+ "layer carries them in flat. The pack's own clouds directive goes unread with them, "
 				+ "which for most of the corpus means the game's clouds are drawn over the ones the "
 				+ "pack draws itself", CLOUDS_KEY, SettingsLayers.file(gameDirectory));
+	}
+
+	/**
+	 * The same, for the weather. A line of its own rather than a list with the entities, so that the
+	 * two can be turned on one at a time: they land in the same milestone and stand on opposite sides
+	 * of the deferred stage, which is exactly the pair a reader wants to bisect.
+	 */
+	static void announceWeatherOff(Path gameDirectory) {
+		Vitrail.logger().info("{}=off, so the game draws its own rain and snow with its own shader, "
+				+ "into its own target and lit as the game lights them. Write '{}=on' in {} to have "
+				+ "the pack draw them", WEATHER_KEY, WEATHER_KEY, SettingsLayers.file(gameDirectory));
 	}
 
 	/** Said once when the chain is off, since nothing else on screen would say why. */
@@ -346,8 +376,8 @@ final class EngineOptions {
 			return false;
 		}
 
-		// Named, like the two readings above do it: seven lines share this one, so the value on its
-		// own leaves whoever fixes the typo looking for which of the seven carries it.
+		// Named, like the two readings above do it: eight lines share this one, so the value on its
+		// own leaves whoever fixes the typo looking for which of the eight carries it.
 		Vitrail.logger().warn("'{}={}' is neither on nor off, so this line is ignored and {} stays "
 				+ "{}", key, value.asText(), key, byDefault ? "on" : "off");
 
