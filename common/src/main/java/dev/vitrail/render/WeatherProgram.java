@@ -25,9 +25,9 @@ import java.util.Set;
  * <p>
  * <strong>The pipeline states are read off the game's own pipeline</strong>, as the entities' are
  * and unlike the sky's, because there is one to read: the weather renderer picks between two
- * pipelines a line before it opens its pass, and the door is handed the one it picked. That is what
- * makes {@code rain.depth} cost nothing here, the directive being served where Iris serves it, by
- * moving the game's own choice rather than by describing a depth state of our own.
+ * pipelines earlier in the method that opens its pass, and the door is handed the one it picked. That
+ * is what makes {@code rain.depth} cost nothing here, the directive being served where Iris serves
+ * it, by moving the game's own choice rather than by describing a depth state of our own.
  * <p>
  * <strong>Draw buffer nought goes to the pack outright.</strong> The weather blends, and it is drawn
  * after the whole main pass: the deferred stage has run and the world's translucents are down, so the
@@ -76,13 +76,18 @@ final class WeatherProgram implements DumpedProgram {
 			int load, List<ChainPlan.Attachment> writes, TargetPlan chainTargets,
 			ColorTargets targets, boolean chainRuns) {
 		// Bound again against the chain's own plan, for the reason the terrain and the sky are: what
-		// the load bound them against is a plan without the user's pass filter. The step is the one
-		// AFTER the deferreds, which is what this family answers differently from the sky and the
-		// entities: the game draws its weather in a frame graph pass of its own, after the whole main
-		// pass, so the halves it reads and writes are the ones the deferred stage left.
+		// the load bound them against is a plan without the user's pass filter.
+		//
+		// And taken through stepAfterDeferred, which is what this family answers differently from the
+		// sky and the entities: the game draws its weather in a frame graph pass of its own, after the
+		// whole main pass, so the halves it READS have to be the ones the deferred stage left, exactly
+		// as the translucent chunk pass takes them. Asked through step, this program would write the
+		// half ChainPlan gave it, which is the after-deferred one, and read the half before it, and
+		// TargetSchedule.stepAfterDeferred says in its own words that nothing on either side would
+		// say a word about that.
 		String servedBy = loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
 		PackProgram.Loaded bound =
-				loaded.rebind(chainTargets, chainTargets.schedule().step(servedBy));
+				loaded.rebind(chainTargets, chainTargets.schedule().stepAfterDeferred(servedBy));
 
 		RenderPipeline game = element.pipeline();
 

@@ -361,6 +361,24 @@ public final class ShaderProperties {
 			return;
 		}
 
+		// Consumed and not kept: the two are read by particleOrdering, which walks the conditionals,
+		// and falling through here would leave them among the keys nothing reads. That is not
+		// cosmetic on this pair. Five packs of the corpus write particles.ordering, so the count
+		// would say the engine ignores the very directive it now reads and writes a line about.
+		//
+		// And consumed only where the value is one that is really read, which is the rule the three
+		// branches above follow and not the custom textures' rule: an ordering with no word after
+		// the equals sign, or a before.deferred that is not one of the four booleans, is honoured
+		// nowhere, so it has to stay visible among the keys nothing reads.
+		Matcher ordering = PARTICLE_ORDERING.matcher(line);
+		if (ordering.matches() && !ordering.group(1).trim().isEmpty()) {
+			return;
+		}
+
+		Matcher before = PARTICLES_BEFORE_DEFERRED.matcher(line);
+		if (before.matches() && truth(before.group(1).trim()) != null) {
+			return;
+		}
 
 		Matcher flip = FLIP.matcher(line);
 		if (flip.matches()) {
@@ -893,10 +911,11 @@ public final class ShaderProperties {
 	 * Every line one pattern matches in the branches of this file that are really live, in file
 	 * order.
 	 * <p>
-	 * Shared by every reader of the sky and weather family rather than written once each: what counts
-	 * as live is the whole subtlety of them, and walks that agree today are walks that can be edited
-	 * on different days. Three lines read it, the sky's four words, the fifth about the clouds and
-	 * the weather's two.
+	 * Shared rather than written once per caller: what counts as live is the whole subtlety of it,
+	 * and two walks that agree today are two walks that can be edited on different days. Three
+	 * methods read it, the sky's four words and the fifth about the clouds, the weather's two and
+	 * the particles' ordering; two of the three call it twice, the sky for that fifth word and the
+	 * particles for their two spellings.
 	 */
 	private List<Matcher> live(Pattern pattern, Map<String, String> defines) {
 		List<Matcher> matched = new ArrayList<>();

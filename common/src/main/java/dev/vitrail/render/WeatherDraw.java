@@ -24,9 +24,11 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The door the weather renderer comes in by, and the one place a pack's {@code gbuffers_weather} is
@@ -54,6 +56,12 @@ import java.util.Optional;
  * {@code WEATHER_NO_DEPTH_WRITE} at every frame, the two differ in a depth state, and a depth state
  * belongs to a compiled pipeline rather than to a draw. A pack's file is still read and translated
  * once, the two elements sharing a translation.
+ * <p>
+ * <strong>The depth writing one is unreachable on the whole corpus today</strong>, and it is still
+ * made. The game picks it under improved transparency, which this family then refuses outright, or
+ * under a pack's {@code rain.depth}, which three packs of the eight write and all three write false.
+ * What the second element costs is one compiled module at the first rainfall of a pack that asks;
+ * what leaving it out would cost is the pack that asks getting the other one's depth state, silently.
  */
 public final class WeatherDraw {
 
@@ -64,9 +72,11 @@ public final class WeatherDraw {
 	private static final String PROGRAM = "gbuffers_weather";
 
 	/**
-	 * What the curtain discards at when the pack says nothing, which is the tenth Iris gives both of
-	 * its weather keys ({@code pipeline/programs/ShaderKey.java:60}). The game's own weather pipeline
-	 * carries no cutout define at all, so there is nothing of its to inherit here.
+	 * What the curtain discards at when the pack says nothing, which is the tenth Iris gives its one
+	 * weather key ({@code pipeline/programs/ShaderKey.java:60}). One key and two pipelines: both of
+	 * the game's weather pipelines reach that single key ({@code pipeline/IrisPipelines.java:70-71}),
+	 * which is the same shape as the two elements below. The game's own weather pipeline carries no
+	 * cutout define at all, so there is nothing of its to inherit here.
 	 */
 	private static final AlphaTest CUTOUT = AlphaTest.ONE_TENTH;
 
@@ -120,6 +130,11 @@ public final class WeatherDraw {
 	/** Whether the pack has been read for its weather. A reading that served nothing is still one. */
 	private boolean read;
 
+	/** The reasons the curtain has already been handed back to the game. One line each, not one a
+	 * frame. The entities' rule, and this family owed it as much as they did: a curtain drawn by the
+	 * game inside a pack lit world is exactly the plausible and wrong picture nothing reports. */
+	private final Set<String> refused = new LinkedHashSet<>();
+
 	/** The program of the pass being recorded, between the moment it is prepared and its draws. */
 	private WeatherProgram drawing;
 
@@ -145,6 +160,15 @@ public final class WeatherDraw {
 	/** Whether a pack's own weather program takes over the game's, from the loaded options. */
 	static void wanted(boolean asked) {
 		wanted = asked;
+	}
+
+	/**
+	 * The same answer, for the line of the log that names what the scene seed still carries across.
+	 * That line is composed from the switches rather than written out, so every family owes it one of
+	 * these.
+	 */
+	static boolean wanted() {
+		return wanted;
 	}
 
 	/**
@@ -203,8 +227,8 @@ public final class WeatherDraw {
 	 * Everything that has to happen before the weather renderer opens its pass: the program read, the
 	 * pipeline compiled, the frame opened and this frame's block written.
 	 *
-	 * @param game   the pipeline the renderer picked a line above, which is where every state this
-	 *               engine does not decide comes from
+	 * @param game   the pipeline the renderer picked earlier in the same method, which is where
+	 *               every state this engine does not decide comes from
 	 * @param colour the colour view the renderer was going to draw into, which stays attachment
 	 *               nought wherever the pack's own targets do not take it
 	 * @param depth  the depth view it was going to use, kept as it is
@@ -305,7 +329,12 @@ public final class WeatherDraw {
 		if (minecraft.levelRenderer.weatherTarget() != null) {
 			this.drawing = null;
 
-			return null;
+			return refuse("fabulous", "the game's improved transparency is on, so it draws its "
+					+ "weather into a target of its own that it composes afterwards, and the pack's "
+					+ "colour targets cannot be attached beside it. Iris never meets this: it turns "
+					+ "improved transparency OFF as soon as shaders are enabled, which this engine "
+					+ "does not do, so the rain is the game's here where it would be the pack's "
+					+ "there. Turning improved transparency off gives the pack's rain back");
 		}
 
 		// The same two calls the sky and the terrain make, and for the same reasons. This is never the
@@ -328,7 +357,9 @@ public final class WeatherDraw {
 		if (pipeline == null) {
 			this.drawing = null;
 
-			return null;
+			return refuse("prepare", "the weather program refused to prepare, which it says on its "
+					+ "own line above. That is settled for as long as this pack is loaded, so the "
+					+ "rain is the game's steadily rather than as a flicker");
 		}
 
 		// Here and not at the door's second call, so that the two cannot answer differently. A null
@@ -341,10 +372,30 @@ public final class WeatherDraw {
 		if (this.descriptor == null && !program.plain()) {
 			this.drawing = null;
 
-			return null;
+			return refuse("unallocated", "one of the pack's colour targets had no image yet on some "
+					+ "frame, so the pass the curtain wanted could not be built then. That comes and "
+					+ "goes with the frame rather than lasting");
 		}
 
 		return pipeline;
+	}
+
+	/**
+	 * Hands the curtain back to the game and says why, once per reason and per load.
+	 * <p>
+	 * The entities' rule and the entities' reason: a curtain handed back is drawn by the game's own
+	 * shader inside a world the pack lit, and without a line there is nothing anywhere to say which
+	 * reason it was. How long each one lasts is written into the sentence rather than into a flag.
+	 *
+	 * @return null always, so that a caller can hand this straight back
+	 */
+	private RenderPipeline refuse(String reason, String why) {
+		if (this.refused.add(reason)) {
+			Vitrail.logger().warn("The rain and the snow went back to the game's own shader because "
+					+ "{}", why);
+		}
+
+		return null;
 	}
 
 	/**
@@ -444,6 +495,10 @@ public final class WeatherDraw {
 		this.programs.clear();
 		this.drawing = null;
 		this.descriptor = null;
+		// With the programs, or "once per load" would mean once per session: what is read again
+		// after this can refuse again, and a reader watching a storm would see the first reading's
+		// lines and nothing after them.
+		this.refused.clear();
 		this.read = false;
 	}
 }

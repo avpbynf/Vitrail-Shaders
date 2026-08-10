@@ -307,6 +307,56 @@ public final class PackChain {
 	}
 
 	/**
+	 * What the scene seed still has to carry across, named family by family, for the one line of the
+	 * log that publishes this engine's scope.
+	 * <p>
+	 * <strong>Built from the switches and never written out</strong>, which is the whole point: the
+	 * sentence this feeds is what {@code docs/} sends a reader to for what the engine draws, and a
+	 * hand-written list goes false the day a family lands. It did, once, in both directions at
+	 * once - it went on naming the weather after the weather had landed, and it never named the
+	 * particles at all.
+	 * <p>
+	 * The entities are the one family that is here in both states, their blending half never having
+	 * landed at all. Every other switch names its family only when it is off.
+	 */
+	private static String stillTheGame() {
+		List<String> carried = new ArrayList<>();
+		if (!EntityDraw.wanted()) {
+			carried.add("the entities");
+		}
+
+		if (!CloudDraw.wanted()) {
+			carried.add("the clouds");
+		}
+
+		if (!WeatherDraw.wanted()) {
+			carried.add("the weather");
+		}
+
+		if (!ParticleDraw.wanted()) {
+			carried.add("the particles");
+		}
+
+		if (EntityDraw.wanted()) {
+			// Named apart, because a reader who has just turned the entities on and still sees a flat
+			// player would otherwise have nothing to go on: the opaque ones go through the pack and
+			// the ones that blend do not.
+			carried.add("the entities that blend, the player's own body among them,");
+		}
+
+		// The conjunction the hand-written sentence carried, kept: this is a line of prose in the
+		// log and a bare comma list reads as a truncated one. One name alone is reachable and is
+		// the ordinary answer with every switch on, the entities' blending half being the whole of
+		// what is left.
+		if (carried.size() < 2) {
+			return String.join("", carried);
+		}
+
+		return String.join(", ", carried.subList(0, carried.size() - 1)) + " and "
+				+ carried.get(carried.size() - 1);
+	}
+
+	/**
 	 * The draw buffers the seed has to empty besides the one the scene itself goes into, which are
 	 * the rest of the ones its geometry program declares.
 	 * <p>
@@ -1865,8 +1915,10 @@ public final class PackChain {
 		Optional<ChainPlan.Seed> where = this.chain.chain().seed();
 		if (seeding && where.isPresent()) {
 			// What the seed still carries is not a constant any more, and this line is where docs/
-			// sends a reader for it. Said from the switch rather than written out, or it goes stale
-			// the day the next family lands, in the one place that must not.
+			// sends a reader for it. Composed from the switches rather than written out, or it goes
+			// stale the day the next family lands, in the one place that must not. It DID go stale
+			// exactly that way once, naming the weather after the weather had landed and never
+			// naming the particles at all, which is why the list is now built rather than branched.
 			//
 			// The switch and NOT what the pack turned out to serve, which is a real limit and not a
 			// shortcut: this runs when the chain is built and the entity programs are read at the
@@ -1877,8 +1929,7 @@ public final class PackChain {
 			Vitrail.logger().info("{} carries the game's opaque frame, drawn in for {}: {} still come "
 					+ "from the game, already tone mapped, and the translucent chunk pass blends onto "
 					+ "this seed afterwards",
-					TargetName.canonical(where.get().target()), where.get().from(),
-					carried());
+					TargetName.canonical(where.get().target()), where.get().from(), stillTheGame());
 			// The number is worth printing on its own: it is the whole difference between a begin
 			// that reads the world of this frame and one that reads what the clear left.
 			Vitrail.logger().info("It is painted where the world would be drawn, after {} passes of "
@@ -1904,35 +1955,6 @@ public final class PackChain {
 			Vitrail.logger().info("The scene seed is off, {} holds its clear colour as well",
 					TargetName.canonical(where.get().target()));
 		}
-	}
-
-	/**
-	 * What the seed is still the only road in for, in the order a sentence takes them.
-	 * <p>
-	 * Built from the switches rather than written out, for the reason {@link #announceSeed} gives at
-	 * the line that reads it: a list spelled once per combination goes stale the day the next family
-	 * lands, in the one place that must not. Two families answer here today and a third would be one
-	 * more line rather than a fourth branch.
-	 */
-	private static String carried() {
-		List<String> still = new ArrayList<>();
-		if (!EntityDraw.wanted()) {
-			still.add("the entities");
-		}
-
-		if (!CloudDraw.wanted()) {
-			still.add("the clouds");
-		}
-
-		still.add("the weather");
-		if (EntityDraw.wanted()) {
-			// Named apart, because a reader who has just turned the entities on and still sees a flat
-			// player would otherwise have nothing to go on: the opaque ones go through the pack and
-			// the ones that blend do not.
-			still.add("the entities that blend, the player's own body among them");
-		}
-
-		return String.join(", ", still);
 	}
 
 	private void announceResting(boolean seeding) {

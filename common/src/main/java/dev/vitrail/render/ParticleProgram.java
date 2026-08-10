@@ -74,11 +74,18 @@ final class ParticleProgram implements DumpedProgram {
 			PackValues values, int load, List<ChainPlan.Attachment> writes, TargetPlan chainTargets,
 			ColorTargets targets, boolean chainRuns) {
 		// Bound again against the chain's own plan, for the reason every other family is: what the
-		// load bound them against is a plan without the user's pass filter. The step is the element's
-		// own, the two halves of this family being the one family that straddles the deferred stage.
+		// load bound them against is a plan without the user's pass filter.
+		//
+		// And the step is the ELEMENT's, which is the one place this family needs both answers: it
+		// straddles the deferred stage, so the opaque half reads the halves the prepares left and the
+		// translucent one reads the halves the deferreds left. Handed one answer for both, the
+		// translucent half would write the half the plan gave it and read the half before it, which
+		// TargetSchedule.stepAfterDeferred says nothing on either side would report. The terrain
+		// branches on the same question and for the same reason.
 		String servedBy = loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
-		PackProgram.Loaded bound =
-				loaded.rebind(chainTargets, chainTargets.schedule().step(servedBy));
+		PackProgram.Loaded bound = loaded.rebind(chainTargets, element.afterDeferred()
+				? chainTargets.schedule().stepAfterDeferred(servedBy)
+				: chainTargets.schedule().step(servedBy));
 
 		RenderPipeline game = element.pipeline();
 

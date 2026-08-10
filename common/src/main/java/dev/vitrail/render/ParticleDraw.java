@@ -53,16 +53,22 @@ import java.util.Set;
  * from that one fact.
  * <p>
  * <strong>A half the pack serves nothing for is left to the game on its own</strong>, rather than
- * taking the other half down with it. The two names walk disjoint fallback chains,
- * {@code gbuffers_particles_translucent} through {@code gbuffers_particles} and that through
- * {@code gbuffers_textured_lit}, so a pack really can serve one and not the other, and the halves
- * share no target and no pass to be made inconsistent by it.
+ * taking the other half down with it: the halves share no target and no pass, so nothing is made
+ * inconsistent by serving one.
+ * <p>
+ * <strong>Only one of the two can ever be the missing one, and it is the opaque half.</strong> The
+ * chains are nested rather than separate, {@code gbuffers_particles_translucent} falling back through
+ * {@code gbuffers_particles} and that through {@code gbuffers_textured_lit}, so whatever answers for
+ * the opaque half answers for the translucent one as well. The reverse is reachable: a pack that
+ * ships the translucent file and nothing at all under it resolves that name and not the other.
  * <p>
  * <strong>{@code particles.ordering} is read and says nothing on the corpus.</strong> The five packs
  * of the eight that write it all write {@code mixed}, which names the placement above exactly. A pack
  * asking for either of the other two would be asking for its particles to be moved across the
  * deferred stage, which no engine does today, Iris parsing the word and reaching for it nowhere; the
- * difference is that here it is said in the log rather than left to be discovered.
+ * difference is that here it is said in the log. That line comes out of the reading, so it needs
+ * {@code particles=on} and a pack this place serves at least one half for, which is the same
+ * condition every other line of this family answers under.
  */
 public final class ParticleDraw {
 
@@ -141,7 +147,11 @@ public final class ParticleDraw {
 	/** Whether the pack has been read for its particles. A reading that served nothing is still one. */
 	private boolean read;
 
-	/** The reasons a group has already been handed back to the game. One line each, not one a frame. */
+	/**
+	 * The reasons this engine has already said something about a group, one line each and not one a
+	 * frame. Most of them are hand-backs; the {@code foreign:} one is the opposite, a group kept and
+	 * a layer inside it that lost its own pipeline to it.
+	 */
 	private final Set<String> refused = new LinkedHashSet<>();
 
 	/** The program of the group being recorded, and the game pipeline it stands in for. */
@@ -172,6 +182,11 @@ public final class ParticleDraw {
 	/** Whether a pack's own particle programs take over the game's, from the loaded options. */
 	static void wanted(boolean asked) {
 		wanted = asked;
+	}
+
+	/** The same answer, for the line of the log that names what the scene seed still carries across. */
+	static boolean wanted() {
+		return wanted;
 	}
 
 	/**
@@ -219,18 +234,53 @@ public final class ParticleDraw {
 	/**
 	 * The pipeline one layer of the group is really drawn with.
 	 * <p>
-	 * <strong>The game's own is checked and not assumed.</strong> The table above names the pipeline
-	 * it expects each half to be drawn with, and this is where that name is worth something: a layer
-	 * set with anything else is a layer the table has stopped describing, and it keeps the game's
-	 * shader rather than being drawn with a pipeline built from another pipeline's states.
+	 * <strong>A layer whose pipeline is neither of the two the table names keeps its own wherever it
+	 * can</strong>, which is what Iris does with it: an unassigned pipeline answers a null key
+	 * ({@code pipeline/IrisPipelines.java:224-231}) and its override then hands back nothing
+	 * ({@code mixin/MixinShaderManager_Overrides.java:97-101}), leaving the game's shader in place.
+	 * A layer like that is not a particle this engine was asked about, and drawing it with the pack's
+	 * program would take its blend, its depth, its culling and its topology as well as its shader,
+	 * every one of them read off the pipeline the table names rather than off the layer's own.
+	 * <p>
+	 * <strong>It cannot keep it once the pass is ours</strong>, and that is the one divergence here.
+	 * The pass was opened before any layer was seen, and where the pack took draw buffers it carries
+	 * a colour attachment for each; a pipeline declaring ONE colour state is refused by name in the
+	 * middle of it. So there the layer takes the pack's program, which draws rather than throws, and
+	 * the log says so. Where the pack took none, the pass is the renderer's own single attachment one
+	 * and the layer keeps everything.
+	 * <p>
+	 * <strong>The case is reachable and is not vanilla's.</strong> {@code SingleQuadParticle.Layer} is
+	 * a public record and {@code getLayer} is overridable, so a mod may put a layer carrying a
+	 * pipeline of its own into a group whose translucency matches. Every layer of the game pairs its
+	 * translucency with one of the two the table names, so nothing of the game reaches this.
 	 *
 	 * @param game the pipeline the layer asked for
 	 * @return the pipeline to bind instead, or the game's own
 	 */
 	public static RenderPipeline pipeline(RenderPipeline game) {
 		ParticleDraw draw = PackChain.particles();
-		if (draw == null || draw.drawing == null || draw.bound == null || draw.standsIn != game) {
+		if (draw == null || draw.drawing == null || draw.bound == null) {
 			return game;
+		}
+
+		if (draw.standsIn == game) {
+			return draw.bound;
+		}
+
+		// The pack took no draw buffer here, so the pass is the renderer's own and the layer's
+		// pipeline binds into it as it always did. Nothing is lost and nothing is said.
+		if (draw.descriptor == null) {
+			return game;
+		}
+
+		if (draw.refused.add("foreign:" + game.getLocation())) {
+			Vitrail.logger().warn("A particle layer asked for {}, which is neither of the two "
+					+ "pipelines the game draws its own quad particles with, inside a group whose "
+					+ "pass this engine had already opened over the pack's own colour targets. It "
+					+ "takes the pack's particle program, and with it that program's blend, depth, "
+					+ "culling and topology: a pipeline carrying one colour state is refused by name "
+					+ "in a pass carrying several, so its own could not be bound there. Iris leaves "
+					+ "the game's shader on a pipeline it was never assigned", game.getLocation());
 		}
 
 		return draw.bound;
@@ -302,7 +352,12 @@ public final class ParticleDraw {
 		// pack's colour targets would be attached to a picture this engine has not got.
 		Minecraft minecraft = Minecraft.getInstance();
 		if (element.afterDeferred() && minecraft.levelRenderer.particlesTarget() != null) {
-			return null;
+			return refuse("fabulous", "the game's improved transparency is on, so it draws its "
+					+ "translucent particles into a target of its own that it composes afterwards, "
+					+ "and the pack's colour targets cannot be attached beside it. Iris never meets "
+					+ "this: it turns improved transparency OFF as soon as shaders are enabled, which "
+					+ "this engine does not do, so that half is the game's here where it would be the "
+					+ "pack's there. Turning improved transparency off gives it back");
 		}
 
 		this.owner.beginFrame();
@@ -346,10 +401,11 @@ public final class ParticleDraw {
 	 * shader, so particles are lit by the game where everything around them is lit by the pack, with
 	 * nothing anywhere to say which reason it was.
 	 * <p>
-	 * How long each one lasts is written into the sentence rather than into a flag, there being two
-	 * of them: a program that would not compile latches broken and holds until the pack is read
-	 * again, which paints steadily, while a target that has no image yet is the first frame or two
-	 * and the frames after a resize, which reads as a flicker.
+	 * How long each one lasts is written into the sentence rather than into a flag, and they do not
+	 * last alike: a program that would not compile latches broken and holds until the pack is read
+	 * again, which paints steadily; a target that has no image yet is the first frame or two and the
+	 * frames after a resize, which reads as a flicker; and the game's improved transparency holds
+	 * until the player changes the setting.
 	 *
 	 * @return null always, so that a caller can hand this straight back
 	 */
@@ -387,9 +443,10 @@ public final class ParticleDraw {
 
 			announceOrdering();
 
-			// One half at a time, and it really is one at a time: they walk disjoint fallback chains
-			// and land on different sides of the deferred stage, so a place that cannot answer for one
-			// can answer for the other, and taking both down would be a choice nothing forced.
+			// One half at a time, and it really is one at a time: they land on different sides of the
+			// deferred stage and share no target, so a place that cannot answer for one can answer
+			// for the other, and taking both down would be a choice nothing forced. Which one may go
+			// missing is settled by the fallback tree and is written at the head of this class.
 			for (Element element : ELEMENTS.values()) {
 				PackProgram.Loaded one = loaded.get(element.element());
 				if (one == null) {
