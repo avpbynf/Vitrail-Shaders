@@ -51,9 +51,15 @@ public final class ChainPlan {
 	private static final String SEED_PROGRAM = "gbuffers_terrain";
 
 	private final String place;
+	/**
+	 * The one name of that family drawn on the far side of the deferred stage, and the reason this
+	 * walk has a side at all. See {@link #namedKeysOf}.
+	 */
+	private static final String CLOUD_PROGRAM = "gbuffers_clouds";
+
 	/** What the game may draw its sky with, in the OptiFine split. Not ours to choose. */
 	private static final List<String> SKY_PROGRAMS =
-			List.of("gbuffers_skybasic", "gbuffers_skytextured", "gbuffers_clouds");
+			List.of("gbuffers_skybasic", "gbuffers_skytextured", CLOUD_PROGRAM);
 
 	/**
 	 * Every geometry program asked for by the name the format gives it rather than by a pass of the
@@ -364,10 +370,14 @@ public final class ChainPlan {
 	 * is looked up through the fallback tree, so a pack that ships none of them still answers here
 	 * through {@code gbuffers_basic} or {@code gbuffers_textured} if it has those.
 	 * <p>
-	 * Always the walk BEFORE the deferreds. The sky is drawn at the third rank of the frame and the
-	 * game's opaque features between the opaque chunks and the deferred stage, so both read the
-	 * halves the prepares leave; only the translucent chunk pass is re-taken after the deferred
-	 * stage, and that rule is its alone.
+	 * The walk before the deferreds for all of them but one. The sky is drawn at the third rank of
+	 * the frame and the game's opaque features between the opaque chunks and the deferred stage, so
+	 * both read the halves the prepares leave. <strong>The clouds are the exception</strong>, and
+	 * they share it with the translucent chunk pass rather than with the rest of their own family:
+	 * the game draws them after the main pass, which is after this engine has run the first half of
+	 * the chain, so their halves are the ones the deferred stage turned over. Answered on the near
+	 * side they write the dead half of the ping pong, and nothing says so - the pass runs, the
+	 * program draws, the final composes from the other half and the sky comes back empty.
 	 * <p>
 	 * The map it answers is the sky's, because the sky is the one family that asks by the name it
 	 * wanted rather than by the program it got. Every other name here is reached through
@@ -377,11 +387,12 @@ public final class ChainPlan {
 			List<String> notes, Map<Key, Pass> into) {
 		Map<String, Key> sky = new LinkedHashMap<>();
 
-		// Computed once per serving FILE and not once per program, the same reason the geometry walk
-		// gives above: the fallback tree sends skybasic to gbuffers_basic and both skytextured and
-		// clouds to gbuffers_textured, so one file commonly serves two or three of these names, and
-		// walking it again would say the same note about it twice, which the shared table is what
-		// now guarantees rather than a map of this method's own.
+		// Computed once per serving FILE AND SIDE and not once per program, the same reason the
+		// geometry walk gives above: the fallback tree sends skybasic to gbuffers_basic and both
+		// skytextured and clouds to gbuffers_textured, so one file commonly serves two or three of
+		// these names, and walking it again would say the same note about it twice. The side is part
+		// of it because the clouds ask on the far one, so a pack with no cloud program of its own
+		// really is one file answering twice here, which is what the key is for.
 		for (String program : NAMED_PROGRAMS) {
 			Optional<String> served = resolver.lookup(plan.place(), program)
 					.map(ProgramResolver.Resolution::servedBy);
@@ -389,7 +400,7 @@ public final class ChainPlan {
 				continue;
 			}
 
-			Key key = new Key(served.get(), false);
+			Key key = new Key(served.get(), CLOUD_PROGRAM.equals(program));
 			if (answer(plan, key, notes, into) != null && SKY_PROGRAMS.contains(program)) {
 				sky.put(program, key);
 			}

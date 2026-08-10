@@ -73,9 +73,14 @@ final class CloudProgram {
 			boolean chainRuns) {
 		// Bound again against the chain's own plan, for the reason the terrain and the sky are: what
 		// the load bound them against is a plan without the user's pass filter.
+		//
+		// On the step AFTER the deferreds, which is where the clouds part company with the sky and
+		// join the translucent chunk pass. The game draws them once the main pass is over, so the
+		// halves they read are the ones the deferred stage turned over. Read on the near side, a
+		// cloud program sampling a target its own pack's deferred writes gets the frame before's.
 		String servedBy = loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
 		PackProgram.Loaded bound =
-				loaded.rebind(chainTargets, chainTargets.schedule().step(servedBy));
+				loaded.rebind(chainTargets, chainTargets.schedule().stepAfterDeferred(servedBy));
 
 		return new CloudProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				fancy ? "fancy" : "flat", NAMESPACE,
