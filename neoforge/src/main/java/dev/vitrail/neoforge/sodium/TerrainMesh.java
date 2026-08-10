@@ -134,8 +134,8 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * <p>
 	 * That instant is the head of Sodium's {@code initRenderer}, the only place its section manager is
 	 * built, and {@code MixinSodiumWorldRendererInit} is what calls this from there. What makes it
-	 * safe is measured and narrower than it looks: nothing between here and that constructor reads
-	 * the format, so no two readers can end up disagreeing. Everything that will read it is built
+	 * safe is measured and narrower than it looks: nothing between here and that constructor asks for
+	 * the format, so no two askers can end up disagreeing. Everything that will ask is built
 	 * afterwards, and every section is meshed again after that.
 	 * <p>
 	 * Built here rather than in a static field so that a mesh this cannot extend leaves the game
@@ -163,7 +163,7 @@ public final class TerrainMesh implements ChunkVertexType {
 		if (!asked) {
 			// Said out loud, and it used to be the silent branch. Without naming a cause, because
 			// there are three and this cannot tell them apart: a terrain= line, no pack chosen yet,
-			// which is every first launch of a fresh instance, and a pack put away since.
+			// which is every first launch of a fresh instance, and a terrain program that threw.
 			Vitrail.logger().info("The pack's own terrain program is not wanted, so the mesh keeps the "
 					+ "format Sodium gave it and carries none of {}",
 					Arrays.stream(Extra.values()).map(Extra::attribute).toList());

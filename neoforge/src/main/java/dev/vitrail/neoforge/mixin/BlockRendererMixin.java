@@ -32,9 +32,11 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
  * through a class the mixin does not stand under.
  * <p>
  * The bits are written whether or not a pack is drawing the terrain, and that is deliberate. Sodium
- * ignores what it does not use, and the id goes nowhere at all when the format has no element for
- * it, so writing them always costs nothing; making them conditional would buy nothing and add a
- * second switch that has to agree with the one the format already follows.
+ * ignores what it does not use and the id goes nowhere at all when the format has no element for it,
+ * so what is written is never read; what the writing itself costs on a section built with no pack
+ * drawing is a map lookup and eight stores a quad, and it has not been measured. What settles it is
+ * the other side: making them conditional adds a second switch that has to agree with the one the
+ * format already follows, and two switches that must agree are one more thing to get wrong.
  */
 @Mixin(value = BlockRenderer.class, remap = false)
 public abstract class BlockRendererMixin extends AbstractBlockRenderContext {

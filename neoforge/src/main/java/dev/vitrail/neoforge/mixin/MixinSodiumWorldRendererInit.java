@@ -22,16 +22,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * the world draws out of garbage.
  * <p>
  * <strong>What makes this instant the safe one is that nothing between it and the section manager's
- * constructor reads the format.</strong> That is weaker than saying nothing holding a stride is
- * alive here, and it is what was measured: this runs before {@code deleteRendererState}, so the
- * previous manager and its regions are still standing, and an exhaustive pass over the 688 classes
- * of the 0.9.1 jar finds no reader of {@code ChunkMeshFormats.getCurrent} on that road. Everything
- * that will read the format afterwards is built after it, and every section is meshed again.
+ * constructor asks {@code ChunkMeshFormats.getCurrent}.</strong> That is narrower than saying
+ * nothing holding a stride is alive here, and it is what was measured: this runs before
+ * {@code deleteRendererState}, so the previous manager and its regions are still standing, and an
+ * exhaustive pass over the 688 classes of the mod jar inside 0.9.1 finds no caller of that method on
+ * the road between. Everything that will ask for the format is built afterwards, and every section
+ * is meshed again after that.
  * <p>
- * <strong>{@code require = 1} because this injection is now the only writer of the answer.</strong>
- * A rename on Sodium's side would otherwise leave it silent rather than absent: the mesh would stay
- * on Sodium's own for the whole run, no terrain program would ever draw, and nothing would be
- * printed, since the line that announces the decision is on the other side of this call.
+ * <strong>{@code require = 1} because this injection is now the only writer of the answer</strong>,
+ * and the mixin config leaves injections optional by default. What a Sodium rename would otherwise
+ * cost is not silence: the mesh would stay on Sodium's own, the first chunk pass would find a format
+ * a terrain program cannot read, and the pack would be put away with two errors in the log. It is
+ * that the failure would land a world late and look like a defect of the pack, where refusing to
+ * load names the one thing that actually moved.
  */
 @Mixin(value = SodiumWorldRenderer.class, remap = false)
 public abstract class MixinSodiumWorldRendererInit {

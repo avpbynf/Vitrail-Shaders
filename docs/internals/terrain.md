@@ -139,9 +139,10 @@ element, so it covers no pixel, and whether such a quad reaches the encoder at a
 the threshold is in atlas coordinates besides, which a resource pack moves.
 
 Those fields are written whether or not a pack is drawing. The renderer ignores what it does not
-read, and they go nowhere at all when the format has no element for them, so writing them always
-costs nothing; making them conditional would buy nothing and add a second switch that has to agree
-with the first.
+read, and they go nowhere at all when the format has no element for them, so nothing written that
+way is ever read back; what the writing costs on a section built with no pack drawing has not been
+measured. What settles it is the other side: making them conditional adds a second switch that has
+to agree with the one the format already follows.
 
 The format layout follows two rules. A vertex size must be a multiple of four, so each new element
 costs a whole word even where the value needs less; that is arithmetic, not a choice. And the four
