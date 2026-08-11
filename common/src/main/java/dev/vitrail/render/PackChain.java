@@ -597,10 +597,6 @@ public final class PackChain {
 			if (!engine.weather()) {
 				EngineOptions.announceWeatherOff(gameDirectory);
 			}
-
-			if (!engine.particles()) {
-				EngineOptions.announceParticlesOff(gameDirectory);
-			}
 		} catch (IOException | RuntimeException e) {
 			disabled = true;
 			lastError = "Could not prepare this pack: " + e;

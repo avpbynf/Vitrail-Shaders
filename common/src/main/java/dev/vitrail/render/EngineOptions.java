@@ -126,8 +126,8 @@ final class EngineOptions {
 	private static final String SKY_KEY = "sky";
 
 	/**
-	 * Draws the game's own entity geometry with the pack's own program. <strong>Off</strong>, as the
-	 * weather and the particles are.
+	 * Draws the game's own entity geometry with the pack's own program. <strong>Off</strong>, alone
+	 * among these.
 	 * <p>
 	 * <strong>It is not a convention and it is not a taste.</strong> It used to say it was the shape
 	 * every family still to come would land under, and the clouds landed on instead. What a line at
@@ -164,12 +164,8 @@ final class EngineOptions {
 	private static final String CLOUDS_KEY = "clouds";
 
 	/**
-	 * Draws the game's rain and snow with the pack's own program. <strong>Off</strong>, like the
-	 * entities above it and the particles below.
-	 * <p>
-	 * What being off buys is that the work lands without waiting to be judged: it is turned on to
-	 * look at it, turned off to compare, and a defect between the two is bisected in one line of a
-	 * text file instead of a rebuild.
+	 * Draws the game's rain and snow with the pack's own program. On, like most of these: what this
+	 * engine can serve, it serves, and only taking a family back out is written down.
 	 * <p>
 	 * A line of its own and not part of the entities', though the two arrived together: the weather
 	 * is the one family drawn after the deferred stage, so it is the one that can be turned off to
@@ -179,8 +175,8 @@ final class EngineOptions {
 	private static final String WEATHER_KEY = "weather";
 
 	/**
-	 * Draws the game's quad particles with the pack's own programs. <strong>Off</strong>, like the
-	 * weather it lands beside and for the same reason.
+	 * Draws the game's quad particles with the pack's own programs. On, like the weather it lands
+	 * beside.
 	 * <p>
 	 * The one family whose two halves stand on opposite sides of the deferred stage, so what it turns
 	 * off is two things at once and deliberately: a smoke plume before the stage and the same plume's
@@ -243,8 +239,8 @@ final class EngineOptions {
 				asked(chosen.remove(SKY_KEY), SKY_KEY, true),
 				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, false),
 				asked(chosen.remove(CLOUDS_KEY), CLOUDS_KEY, true),
-				asked(chosen.remove(WEATHER_KEY), WEATHER_KEY, false),
-				asked(chosen.remove(PARTICLES_KEY), PARTICLES_KEY, false));
+				asked(chosen.remove(WEATHER_KEY), WEATHER_KEY, true),
+				asked(chosen.remove(PARTICLES_KEY), PARTICLES_KEY, true));
 	}
 
 	/**
@@ -275,10 +271,10 @@ final class EngineOptions {
 	 * Said once when the entities are off, which is the default, because nothing else would say the
 	 * line exists.
 	 * <p>
-	 * The six lines that take a yes or a no and are ON unless somebody asks are a thing the reader
-	 * wrote and knows about. The three that are off are the opposite: the picture with this one off
-	 * is the picture without this mod having heard of entities at all, and a reader who never sees
-	 * the name has no reason to look for it.
+	 * The eight other lines that take a yes or a no are on unless somebody asks, so their line is a
+	 * thing the reader wrote and knows about. This one is the opposite: the picture with it off is
+	 * the picture without this mod having heard of entities at all, and a reader who never sees the
+	 * name has no reason to look for it.
 	 */
 	static void announceEntitiesOff(Path gameDirectory) {
 		Vitrail.logger().info("{}=off, so the game draws its own entities and the scene seed carries "
@@ -305,22 +301,23 @@ final class EngineOptions {
 	}
 
 	/**
-	 * The same, for the weather. A line of its own rather than a list with the entities, so that the
-	 * two can be turned on one at a time: they land in the same milestone and stand on opposite sides
-	 * of the deferred stage, which is exactly the pair a reader wants to bisect.
+	 * The same for the weather, and it is the clouds' case rather than the entities': this line is on
+	 * by default too, so reaching here means somebody wrote {@code weather=off}.
+	 * <p>
+	 * Said all the same, and for the reason the clouds are. What it costs beyond the curtain's own
+	 * shader does not show on the screen: the {@code weather} directive of the pack's own
+	 * {@code shaders.properties} goes unread with it, since a pack refusing the game's curtain is
+	 * making room for one of its own that nothing would then draw.
+	 * <p>
+	 * The particles have no line of this kind, and that is the rule rather than an omission: what
+	 * {@code particles=off} costs is on the screen, and the one directive it silences,
+	 * {@code particles.ordering}, names the placement this engine already performs.
 	 */
 	static void announceWeatherOff(Path gameDirectory) {
-		Vitrail.logger().info("{}=off, so the game draws its own rain and snow with its own shader, "
-				+ "into its own target and lit as the game lights them. Write '{}=on' in {} to have "
-				+ "the pack draw them", WEATHER_KEY, WEATHER_KEY, SettingsLayers.file(gameDirectory));
-	}
-
-	/** The same, for the quad particles, and it says which two halves the one word covers. */
-	static void announceParticlesOff(Path gameDirectory) {
-		Vitrail.logger().info("{}=off, so the game draws its own quad particles with its own shader, "
-				+ "the opaque ones among its solid features and the translucent ones after the "
-				+ "world's water. Write '{}=on' in {} to have the pack draw both halves",
-				PARTICLES_KEY, PARTICLES_KEY, SettingsLayers.file(gameDirectory));
+		Vitrail.logger().info("{}=off in {}, so the game draws its own rain and snow with its own "
+				+ "shader, into its own target and lit as the game lights them. The pack's own "
+				+ "weather directive goes unread with them, so a pack that draws its own curtain gets "
+				+ "the game's back in front of it", WEATHER_KEY, SettingsLayers.file(gameDirectory));
 	}
 
 	/** Said once when the chain is off, since nothing else on screen would say why. */

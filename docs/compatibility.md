@@ -115,24 +115,25 @@ The full mechanism is in [Sky and shadows](sky-and-shadows.md#the-horizon-gap).
 
 ## Anything that moves
 
-**Particles, weather, the held item and every mob look flat, unlit, and out of place against the
-terrain.** They are drawn by the game and composited in, already tone mapped, carrying the game's
-own lighting rather than the pack's.
+**The held item and every mob look flat, unlit, and out of place against the terrain.** They are
+drawn by the game and composited in, already tone mapped, carrying the game's own lighting rather
+than the pack's.
 
-**Three of those have another answer, and each is off until you ask for it.** With `entities=on` in
-`vitrail/options.txt`, the opaque half of the mobs and the block entities - the body of a mob, a
-chest, a conduit, an armour piece - is drawn with the pack's own program: it is lit as the pack
-lights the world, and the shadows the terrain casts fall on it. What stays behind there is
-everything that blends, and the player's own body is in that half, so third person still shows the
-symptom this section describes. What is left is named in the log rather than on this page, by the
-line the close of this section points at.
+**The rain, the snow and the quad particles are no longer among them.** They go through the pack's
+own programs out of the box, both halves of the particles, and `weather=off` or `particles=off` in
+`vitrail/options.txt` hands either family back to the game if you need to compare.
 
-`weather=on` does the same for the rain and the snow, and `particles=on` for the quad particles,
-both halves of them.
+**The mobs and the block entities are the one family still waiting, and they are off until you ask
+for it.** With `entities=on`, the opaque half of them - the body of a mob, a chest, a conduit, an
+armour piece - is drawn with the pack's own program: it is lit as the pack lights the world, and the
+shadows the terrain casts fall on it. What stays behind there is everything that blends, and the
+player's own body is in that half, so third person still shows the symptom this section describes.
+What is left is named in the log rather than on this page, by the line the close of this section
+points at.
 
-**None of the three CASTS a shadow**, whichever of them is on, because none of them is drawn into
-the shadow map. Receiving and casting are two different things here: a mob in the sun has the pack's
-light on it and no shadow under it.
+**None of the three CASTS a shadow**, whichever of them is drawn through the pack, because none of
+them is drawn into the shadow map. Receiving and casting are two different things here: a mob in the
+sun has the pack's light on it and no shadow under it.
 
 **Turn the game's improved transparency off if the rain or the translucent particles do not change.**
 It is a video setting of its own, which the Fabulous preset turns on everywhere except macOS. With

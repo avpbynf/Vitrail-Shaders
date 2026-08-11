@@ -111,10 +111,11 @@ shadow=off       stops the second pass over the world from the light
 sky=off          hands the sky back to the game's own shaders
 clouds=off       hands the clouds back too, and with them the pack's own
                  clouds directive, which most packs use to remove them
-entities=on      draws the opaque entities with the pack's own program
-weather=on       draws the rain and the snow with the pack's own program
-particles=on     draws the quad particles with the pack's own programs,
-                 both the opaque ones and the translucent ones
+weather=off      hands the rain and the snow back to the game's own shader,
+                 and with them the pack's own weather directive
+particles=off    hands the quad particles back too, both halves of them
+entities=on      draws the opaque entities with the pack's own program.
+                 The one line here that is OFF unless it is written
 chain=off        stops the composites and the final from drawing at all
 seed=off         stops the game's finished frame being painted in under the chain
 passes=N         cuts the chain to its first N passes, or to a list of names
@@ -122,10 +123,10 @@ dump=NAME        prints the values one program was handed, decoded
 screen=settings  opens the settings screen on the pack rather than on the list
 ```
 
-Nine of these twelve are a yes or a no. Six of the nine are on until they are
-taken out; the three families in the middle are the other way round and do
-nothing unless the line is written. The last three are values rather than
-switches and do nothing unless written either.
+Nine of these twelve are a yes or a no, and eight of the nine are on until they
+are taken out: what this engine can serve, it serves. `entities` is the one that
+is the other way round and does nothing unless the line is written. The last
+three are values rather than switches and do nothing unless written either.
 
 One more name is held back rather than handed to the pack as a setting:
 `profile=NAME` picks a whole profile the pack declares, and the settings screen
