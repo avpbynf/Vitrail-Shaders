@@ -64,6 +64,7 @@ public final class BiomeClassifier {
 	 * Called on its own by whoever writes the {@code BIOME_*} defines, which happens once when a
 	 * pack is read and therefore before anything has asked for a number.
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	public void refresh(Level level) {
 		Registry<Biome> registry = level.registryAccess().lookupOrThrow(Registries.BIOME);
 		if (this.registrySeen != registry) {
@@ -99,6 +100,7 @@ public final class BiomeClassifier {
 	}
 
 	/** The ordinal of {@link BiomeCategory}, which is the number the pack actually compares. */
+	@SuppressWarnings("EnumOrdinal")
 	public static int categoryOf(Holder<Biome> holder) {
 		return category(holder).ordinal();
 	}

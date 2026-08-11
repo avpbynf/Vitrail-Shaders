@@ -68,6 +68,7 @@ final class PackImages {
 	 *              {@link NoiseTexture} already produces for the noise image
 	 * @param shape one clause for the log, saying what was read and how big it came out
 	 */
+	@SuppressWarnings("ArrayRecordComponent")
 	record Image(PackTexture texture, int width, int height, byte[] rgba, String shape) {
 
 		long bytes() {

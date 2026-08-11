@@ -267,6 +267,7 @@ public final class ParticleDraw {
 	 * @param game the pipeline the layer asked for
 	 * @return the pipeline to bind instead, or the game's own
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	public static RenderPipeline pipeline(RenderPipeline game) {
 		ParticleDraw draw = PackChain.particles();
 		if (draw == null || draw.drawing == null || draw.bound == null) {

@@ -1725,6 +1725,7 @@ public final class PackChain {
 	 *         What the screen holds for those frames is the terrain's answer and not this one, and
 	 *         {@link #drawable} is where the two are joined
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	private boolean warm(GpuDevice device) {
 		if (this.programs.isEmpty()) {
 			return false;

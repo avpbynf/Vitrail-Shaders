@@ -62,6 +62,9 @@ public final class TimeValues {
 	 * which is what keeps the three date values agreeing with each other and with themselves
 	 * across the passes of one frame.
 	 */
+	// The machine's own zone is the answer here rather than a default nobody chose: a pack asking
+	// for the date wants the clock on the wall behind the player.
+	@SuppressWarnings("JavaTimeDefaultTimeZone")
 	private static final class WallClock {
 
 		private int lastFrame = -1;

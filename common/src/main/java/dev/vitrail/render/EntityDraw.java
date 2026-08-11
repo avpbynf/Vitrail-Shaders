@@ -340,6 +340,7 @@ public final class EntityDraw {
 	 * program and the tenth that comes with it. The phase itself is not a row of any table and does
 	 * not vary: it is what the origin of the draw says.
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	private static Element blockTwin(Element mob) {
 		boolean ownProgram = mob.pipeline() != RenderPipelines.END_CRYSTAL_BEAM
 				&& mob.pipeline() != RenderPipelines.ENTITY_CUTOUT_Z_OFFSET;
@@ -470,6 +471,7 @@ public final class EntityDraw {
 	 *
 	 * @return whether this engine drew it, in which case the caller must not
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	public static boolean draw(PreparedRenderType prepared, StagedVertexBuffer.ExecuteInfo info) {
 		EntityDraw draw = PackChain.entities();
 		if (draw == null) {

@@ -614,6 +614,7 @@ final class GeometryProgram {
 	}
 
 	/** Whether the pipeline a pass has bound is this program's. */
+	@SuppressWarnings("ReferenceEquality")
 	boolean owns(RenderPipeline bound) {
 		return this.pipeline == bound;
 	}

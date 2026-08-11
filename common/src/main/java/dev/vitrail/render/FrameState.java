@@ -286,6 +286,7 @@ public final class FrameState implements WorldState {
 	 * Called once per frame, before anything reads the state. The named point the rest of the
 	 * engine's idea of a frame boundary hangs off.
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	public void advance() {
 		advanceClock();
 
@@ -383,6 +384,7 @@ public final class FrameState implements WorldState {
 	 * reading a wall clock, so it stops while the game is paused, which is what a pack driving
 	 * noise with it expects.
 	 */
+	@SuppressWarnings("NarrowCalculation")
 	private void advanceClock() {
 		long now = System.nanoTime();
 		long elapsed = this.timed ? now - this.lastFrameNanos : 0L;
@@ -498,6 +500,9 @@ public final class FrameState implements WorldState {
 		this.endFlashIntensity = flash == null ? 0.0F : flash.getIntensity(pt);
 	}
 
+	// A dimension key is interned by the game, so the three names below are the instances a level
+	// carries and not copies of them.
+	@SuppressWarnings("ReferenceEquality")
 	private static int dimensionOrdinal(ClientLevel level) {
 		if (level.dimension() == Level.OVERWORLD) {
 			return 0;
@@ -1501,7 +1506,9 @@ public final class FrameState implements WorldState {
 		return this.atlasHeight;
 	}
 
+	// The same number EngineDefines writes for the stage, and it is the ordinal on both sides.
 	@Override
+	@SuppressWarnings("EnumOrdinal")
 	public int renderStage() {
 		return this.stage.ordinal();
 	}

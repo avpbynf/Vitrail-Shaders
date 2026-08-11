@@ -58,6 +58,9 @@ public enum TerrainPass {
 	SHADOW_TRANSLUCENT("shadow_water", AlphaTest.OFF, false, true);
 
 	private final String program;
+	// A record over an enum and a float, so it is immutable in fact; the analyser wants an
+	// annotation to prove it, and that annotation is not on this compile classpath.
+	@SuppressWarnings("ImmutableEnumChecker")
 	private final AlphaTest fallback;
 	private final boolean blended;
 	private final boolean shadow;

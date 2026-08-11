@@ -234,11 +234,15 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 	public interface Builder {
 
 		/**
+		 * Takes one declaration as the properties file wrote it.
+		 *
 		 * @param exposed true for a {@code uniform.} line, false for a {@code variable.} one
 		 */
 		Builder declare(String name, String type, String expression, boolean exposed);
 
 		/**
+		 * Resolves what was declared into a graph, in the order the values depend on each other.
+		 *
 		 * @param problems receives one line per declaration dropped, naming it and saying why
 		 */
 		CustomUniforms build(UniformCatalog engine, List<String> problems);
@@ -460,7 +464,7 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 	 * functions hand back a buffer they own and overwrite on their next call. Anything that has to
 	 * outlive one call has to be copied out of it.
 	 */
-	private abstract class Node implements VariableExpression {
+	private abstract static class Node implements VariableExpression {
 
 		final String name;
 		final Type type;
@@ -476,6 +480,7 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 			this.object = carrier(type);
 		}
 
+		@SuppressWarnings("ReferenceEquality")
 		private static Object carrier(Type type) {
 			if (type == VectorType.VEC2) return new Vector2f();
 			if (type == VectorType.VEC3) return new Vector3f();
@@ -492,6 +497,7 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 		abstract void refresh();
 
 		@Override
+		@SuppressWarnings("ReferenceEquality")
 		public final void evaluateTo(FunctionContext context, FunctionReturn functionReturn) {
 			if (this.type == Type.Boolean) {
 				functionReturn.booleanReturn = this.booleanValue;
@@ -504,6 +510,7 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 			}
 		}
 
+		@SuppressWarnings("ReferenceEquality")
 		final void writeInto(Val out) {
 			if (this.type == Type.Boolean) {
 				out.set(this.booleanValue);
@@ -545,6 +552,7 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 		}
 
 		@Override
+		@SuppressWarnings("ReferenceEquality")
 		void refresh() {
 			this.source.read(CustomUniforms.this.world, this.value);
 
@@ -584,6 +592,7 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 		}
 
 		@Override
+		@SuppressWarnings("ReferenceEquality")
 		void refresh() {
 			this.expression.evaluateTo(CustomUniforms.this, this.held);
 

@@ -91,6 +91,14 @@ subprojects {
 		// under the report flag as well as without it.
 		options.errorprone.error("StringSplitter", "OperatorPrecedence")
 
+		// One check off, and it is a naming convention rather than a judgement about the check. Every
+		// finding it has ever raised here is the same line: a Supplier<String> constant holding a GPU
+		// debug label, because that is the shape the graphics API takes one in. The alternative it
+		// asks for is a method per label and a reference to it, which is the same label written twice
+		// under two names. A pack debugged in a capture is read by those labels, so they are kept
+		// where they are read: beside the resource they name.
+		options.errorprone.check("UnnecessaryLambda", net.ltgt.gradle.errorprone.CheckSeverity.OFF)
+
 		// Mixins are outside what this analyser can model, so it is pointed away from them rather
 		// than argued with. A handler is called by the mixin framework and never from our own code,
 		// and its parameters have to match the target method whether it reads them or not: every

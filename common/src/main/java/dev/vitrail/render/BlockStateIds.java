@@ -87,6 +87,9 @@ public final class BlockStateIds {
 	 * Called where the pack is read, which is also where it is read again once the world's own
 	 * registries exist: tags come from the data pack, so at startup there are none to resolve.
 	 */
+	// One writer, here, and the counter is volatile for the mesh readers rather than for a second
+	// writer: a pack is installed where the pack is read, and two loads never overlap.
+	@SuppressWarnings("NonAtomicVolatileUpdate")
 	static void install(BlockIds ids) {
 		Object2IntMap<BlockState> built = empty();
 		List<String> unknown = new ArrayList<>();

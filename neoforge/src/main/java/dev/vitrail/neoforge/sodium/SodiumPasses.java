@@ -19,6 +19,7 @@ public final class SodiumPasses {
 	}
 
 	/** Null for a pass this engine has no program for, which is every pass but the three. */
+	@SuppressWarnings("ReferenceEquality")
 	public static TerrainPass of(TerrainRenderPass pass) {
 		if (pass == DefaultTerrainRenderPasses.SOLID) {
 			return TerrainPass.SOLID;
