@@ -117,6 +117,13 @@ public final class ChainPlan {
 					// every place once it has: what decides them is the line and not the format.
 					new NamedProgram("gbuffers_entities", false, Families::entities),
 					new NamedProgram("gbuffers_block", false, Families::entities),
+					// The blending half of those same two, on the far side of the stage: the game
+					// draws them among its translucent features, which is after the deferreds have
+					// run. Four entries and not two because the side is half the key, and a name
+					// that never enters this list answers empty rather than answering wrongly,
+					// which reads exactly like a pack that declared no draw buffer at all.
+					new NamedProgram("gbuffers_entities_translucent", true, Families::entities),
+					new NamedProgram("gbuffers_block_translucent", true, Families::entities),
 					// Drawn, and still not counted: the game draws no rain and no snow where there is
 					// no weather, which is every place but the overworld.
 					new NamedProgram("gbuffers_weather", true, NOT_EVERYWHERE),
@@ -549,7 +556,7 @@ public final class ChainPlan {
 	}
 
 	/**
-	 * The same walk for every geometry program asked for by name, which is the sky's three, the two
+	 * The same walk for every geometry program asked for by name, which is the sky's three, the four
 	 * entity names, the weather and the two particle halves.
 	 * <p>
 	 * The names are the OptiFine split and they are not ours to choose: untextured sky geometry goes
