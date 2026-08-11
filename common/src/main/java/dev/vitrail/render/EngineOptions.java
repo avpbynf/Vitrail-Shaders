@@ -222,15 +222,17 @@ final class EngineOptions {
 			boolean weather, boolean particles) {
 
 		/**
-		 * The two of these the chain plan has to be handed, because its verdicts count a family's
-		 * targets as filled and would otherwise count them off a default nobody wrote.
+		 * The four of these the chain plan has to be handed, because its verdicts count a target as
+		 * already written and would otherwise count it off a default nobody wrote.
 		 * <p>
-		 * Two and not twelve: what the plan is asked is which families fill their targets in EVERY
-		 * place it is built for, and the three other families it knows are drawn in the overworld
-		 * alone, so their line cannot change that answer.
+		 * Four and not twelve: what the plan is asked is which targets are filled in EVERY place it is
+		 * built for, and the sky, the clouds and the weather are not drawn in every place however
+		 * their line reads, so their line cannot move that answer. {@code chain} and {@code passes}
+		 * cannot either, for the opposite reason: they take away the passes those lines are about, so
+		 * with them there is no frame left for a note to describe.
 		 */
 		ChainPlan.Families families() {
-			return new ChainPlan.Families(this.entities, this.particles);
+			return new ChainPlan.Families(this.terrain, this.entities, this.particles, this.seed);
 		}
 	}
 
