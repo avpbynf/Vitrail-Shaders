@@ -114,9 +114,11 @@ public final class VitrailNeoForge {
 		PackChain.markGeometryDepth();
 
 		// And opens the one window the entities are served in. It has to be a window, because the
-		// hand and the screen are drawn by the same feature renderers, with the same pipelines and
-		// into the same target, out of a submit storage GameRenderer hands them after the level:
-		// nothing about one of those draws says it is not an entity, and only the moment does.
+		// screen is drawn by the same feature renderers, with the same pipelines and into the same
+		// target, out of a submit storage GameRenderer hands them after the level: nothing about one
+		// of those draws says it is not an entity, and only the moment does. The hand used to be the
+		// other one this kept out and no longer is: HandDraw submits it inside the level with a mark
+		// of its own, so it is served rather than excluded.
 		EntityDraw.opaqueFeatures(true);
 	}
 
@@ -139,7 +141,7 @@ public final class VitrailNeoForge {
 		// belongs in the frame: after the game's own opaque features, which the window above has just
 		// closed, and BEFORE the deferred stage the next line runs. That is exactly where Iris puts
 		// it, between renderTranslucentFeatures and its own beginTranslucents
-		// (mixin/MixinLevelRenderer.java:278-283, pipeline/IrisRenderingPipeline.java:1060-1073).
+		// (mixin/MixinLevelRenderer.java:277-283, pipeline/IrisRenderingPipeline.java:1060-1073).
 		// Drawn after the deferreds instead, the hand would write gbuffers nothing would ever read.
 		HandDraw.drawSolid();
 		PackChain.drawBeforeTranslucents();

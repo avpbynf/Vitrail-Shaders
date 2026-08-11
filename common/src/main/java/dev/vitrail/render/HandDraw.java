@@ -193,7 +193,7 @@ public final class HandDraw {
 	 * Whether one arm belongs to the other half than the one running, in which case the game is
 	 * told to draw nothing for it.
 	 * <p>
-	 * Iris's rule and Iris's test, {@code mixin/MixinItemInHandRenderer.java:33-39}: a hand is
+	 * Iris's rule and Iris's test, {@code mixin/MixinItemInHandRenderer.java:32-39}: a hand is
 	 * translucent when it holds a block item whose model carries the translucent material flag, and
 	 * a hand that is translucent is drawn in the translucent half and nowhere else. Two hands are
 	 * asked separately, so a player holding a glass block and a sword has one arm in each half.
@@ -212,7 +212,7 @@ public final class HandDraw {
 	 * deferred stage.
 	 * <p>
 	 * The moment is Iris's: it calls {@code renderSolid} between the solid features and the
-	 * translucent ones ({@code mixin/MixinLevelRenderer.java:278-283}), which is after
+	 * translucent ones ({@code mixin/MixinLevelRenderer.java:277-283}), which is after
 	 * {@code executeSolid} and before its {@code beginTranslucents} runs the deferreds. The event
 	 * this hangs off sits in the same gap.
 	 */

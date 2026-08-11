@@ -575,10 +575,12 @@ public final class EntityDraw {
 	 * submission; {@code HandDraw.skip} carries it.
 	 * <p>
 	 * <strong>Every row discards at a tenth, the solid ones included</strong>, and that is Iris's
-	 * answer rather than an inheritance from the pipeline: all nine of its hand keys carry
-	 * {@code ONE_TENTH_ALPHA} ({@code pipeline/programs/ShaderKey.java:46-54}), where the entity solid
-	 * key carries none. A hand row therefore does not keep the threshold of the mob row it was made
-	 * from.
+	 * answer rather than an inheritance from the pipeline: its six hand keys over the entity format
+	 * all carry {@code ONE_TENTH_ALPHA} ({@code pipeline/programs/ShaderKey.java:46-48,52-54}), where
+	 * the entity solid key carries none. A hand row therefore does not keep the threshold of the mob
+	 * row it was made from. The three it has beyond those six are glyph keys and carry
+	 * {@code NON_ZERO_ALPHA} ({@code :49-51}); this engine draws no text at all, so no row here
+	 * corresponds to them.
 	 * <p>
 	 * <strong>The blending pass reaches the ARM and not what it is holding, and that is a gap rather
 	 * than a divergence.</strong> A translucent block held in hand is drawn with a blending pipeline,
