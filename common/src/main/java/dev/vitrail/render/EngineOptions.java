@@ -228,8 +228,8 @@ final class EngineOptions {
 	 * @param chain      whether the composite chain and the {@code final} draw at all
 	 * @param shadow     whether the world is drawn a second time from the light
 	 * @param sky        whether the game's sky is drawn with the pack's own program
-	 * @param entities   whether the game's opaque entity geometry is drawn with the pack's own
-	 *                   program rather than the game's
+	 * @param entities   whether the game's entity geometry is drawn with the pack's own program
+	 *                   rather than the game's, both halves of it
 	 * @param clouds     whether the game's clouds are drawn with the pack's own program, and with
 	 *                   that whether the pack's own {@code clouds} directive is honoured at all
 	 * @param weather    whether the game's rain and snow are drawn with the pack's own program
@@ -315,8 +315,7 @@ final class EngineOptions {
 	static void announceEntitiesOff(Path gameDirectory) {
 		Vitrail.logger().info("{}=off, so the game draws its own entities and the scene seed carries "
 				+ "them in, already lit and already tone mapped. Write '{}=on' in {} to have the pack "
-				+ "draw the opaque ones", ENTITIES_KEY, ENTITIES_KEY,
-				SettingsLayers.file(gameDirectory));
+				+ "draw them", ENTITIES_KEY, ENTITIES_KEY, SettingsLayers.file(gameDirectory));
 	}
 
 	/**

@@ -47,6 +47,15 @@ import java.util.Optional;
  * real milestone, entities through the pack's gbuffers, and it goes away with that milestone the
  * same day the seed does.
  * <p>
+ * <strong>It now catches less than the whole window, and what that costs is an ORDER.</strong>
+ * {@link EntityDraw} serves the blending half of the entities inside this same bracket, and those
+ * draws the game never makes: what is left here is the families nobody serves yet, the eyes, the
+ * glint, the beacon beam, the text and the lightning. No draw takes both roads. But this layer is
+ * composed ONCE, at the end of the window and over a full screen quad that tests no depth, so
+ * whatever is left in it is put in front of everything served, however far behind it stands. A name
+ * plate through a mob rather than behind it is the shape of that, and it shrinks as those families
+ * arrive rather than being fixable here.
+ * <p>
  * <strong>What it costs is worth naming, because it looks like something else entirely.</strong> The
  * redirected draws write the world's depth, and they write it after {@code depthtex1} has been taken
  * and before {@code depthtex0} is. A pack therefore reads, at every pixel of a body in third person,

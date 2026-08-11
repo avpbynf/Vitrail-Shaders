@@ -135,9 +135,16 @@ public final class VitrailNeoForge {
 		EntityDraw.opaqueFeatures(false);
 		PackChain.drawBeforeTranslucents();
 		PackChain.openFeatures();
+
+		// Last, and after the deferred stage above rather than beside it: what this window opens is
+		// the half of the entities that blends onto the target that stage has just composed.
+		EntityDraw.translucentFeatures(true);
 	}
 
 	private void onAfterTranslucentFeatures(RenderLevelStageEvent.AfterTranslucentFeatures event) {
+		// First, and before the layer is composed: closing the window closes any pass a group left
+		// open, and composing opens one of its own where the encoder allows only one at a time.
+		EntityDraw.translucentFeatures(false);
 		PackChain.closeFeatures();
 	}
 

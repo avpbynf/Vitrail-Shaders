@@ -35,14 +35,18 @@ import java.util.Set;
  * for the culling matters more than it looks: the entity pipelines split almost evenly on it, and a
  * cape drawn with the wrong answer is either a cape with no inside or a cape drawn twice.
  * <p>
- * <strong>Its first draw buffer stays on the game's target.</strong> This is the position the opaque
- * chunk passes were in before the coverage mask existed, and it is deliberate here: the scene seed
- * is cut against a depth taken before the game draws a single feature, so an entity is by definition
- * a pixel the seed repaints. Writing the pack's colour target outright would put the picture there
- * and have the seed paint over it a frame later in the same frame. What that costs is the albedo
- * making one trip through eight bits a channel; what it buys is every other draw buffer, which is
- * where a pack keeps the normal, the specular map and the material it lights an entity by, and which
- * is the whole of what {@code the entities still come from the game} meant.
+ * <strong>The writing half's first draw buffer stays on the game's target, and the blending half's
+ * does not.</strong> The writing half is the position the opaque chunk passes were in before the
+ * coverage mask existed, and it is deliberate: the scene seed is cut against a depth taken before
+ * the game draws a single feature, so an entity is by definition a pixel the seed repaints. Writing
+ * the pack's colour target outright would put the picture there and have the seed paint over it a
+ * frame later in the same frame. What that costs is the albedo making one trip through eight bits a
+ * channel; what it buys is every other draw buffer, which is where a pack keeps the normal, the
+ * specular map and the material it lights an entity by, and which is the whole of what
+ * {@code the entities still come from the game} meant. The blending half is drawn after the seed has
+ * run, onto a target that already holds the composed world, so it takes its first draw buffer
+ * outright and pays nothing: {@code GeometryProgram} ties that to the pass blending at all, and the
+ * blend it blends with is the game's own for the pipeline being served.
  * <p>
  * <strong>Its namespace is ours and has no {@code sodium} in it</strong>, for the reason
  * {@link SkyProgram} gives: the word is what makes Sodium's mixin push twenty bytes of region offset
@@ -106,32 +110,40 @@ final class EntityProgram implements DumpedProgram {
 	 *
 	 * @param loaded the pack's own program, read and translated for the threshold this piece discards
 	 *               at
-	 * @param writes where this piece's outputs belong, in draw buffer order and each on the half the
-	 *               schedule gives it, the first one INCLUDED and still going to the game's target.
-	 *               {@link EntityDraw} settles it and refuses the whole family where the first one
-	 *               could not reach the pack through the seed
+	 * @param writes where this piece's outputs belong, in draw buffer order and each on the side the
+	 *               schedule gives it, the first one INCLUDED whichever half this is.
+	 *               {@code GeometryProgram} is what decides where that first one really goes, off the
+	 *               blend: the game's target for a writing piece and the pack's for a blending one.
+	 *               {@link EntityDraw} settles the list and refuses a whole half where the first one
+	 *               could not reach the pack
 	 */
 	static EntityProgram of(PackProgram.Loaded loaded, EntityDraw.Element element, PackValues values,
 			int load, List<ChainPlan.Attachment> writes, TargetPlan chainTargets,
 			ColorTargets targets, boolean chainRuns) {
 		// Bound again against the chain's own plan, for the reason the terrain and the sky are: what
-		// the load bound them against is a plan without the user's pass filter. The step is the one
-		// before the deferreds, every piece served here being drawn in the game's opaque feature
-		// phase, which stands between the opaque chunks and the deferred stage.
+		// the load bound them against is a plan without the user's pass filter. The step is the
+		// PIECE's, which is where the two halves part company: the writing half is drawn in the
+		// game's opaque feature phase, which stands between the opaque chunks and the deferred stage,
+		// and the blending half after that stage has run. A half bound against the other one's step
+		// reads the side of every target the chain is about to write rather than the one it wrote,
+		// which is a frame of lag nothing anywhere would report.
 		String servedBy = loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
-		PackProgram.Loaded bound =
-				loaded.rebind(chainTargets, chainTargets.schedule().step(servedBy));
+		PackProgram.Loaded bound = loaded.rebind(chainTargets, element.blended()
+				? chainTargets.schedule().stepAfterDeferred(servedBy)
+				: chainTargets.schedule().step(servedBy));
 
 		RenderPipeline game = element.pipeline();
 
 		return new EntityProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				element.element(), NAMESPACE, ANSWERED, false,
 				game.getColorTargetState().blendFunction(),
-				// No coverage mask, which is the same decision as leaving draw buffer nought on the
-				// game's target and not a second one: the two are tied together in GeometryProgram,
-				// and marking a pixel the seed is going to repaint anyway would only take the game's
-				// own picture away from whatever is drawn there next.
-				false, false, game.getPrimitiveTopology(), game.isCull(),
+				// No coverage mask on either half. On the writing one that is the same decision as
+				// leaving draw buffer nought on the game's target and not a second one: the two are
+				// tied together in GeometryProgram, and marking a pixel the seed is going to repaint
+				// anyway would only take the game's own picture away from whatever is drawn there
+				// next. On the blending one the question does not arise, the mask being cut against
+				// the seed and the seed having run long before.
+				false, element.blended(), game.getPrimitiveTopology(), game.isCull(),
 				// The piece's own, and the two halves answer differently: NONE for a mob, which is
 				// Iris's answer rather than a reading of what the pass is, and BLOCK_ENTITIES for a
 				// block entity, which Iris really does pose. The class comment has the file:line.
