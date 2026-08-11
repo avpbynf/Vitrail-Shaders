@@ -26,7 +26,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Supplier;
 
 /**
  * Fills the mip chain of a colour target, one level at a time, by averaging each level into the
@@ -104,7 +103,7 @@ final class MipmapReduction {
 			}
 			""";
 
-	private static final Supplier<String> LABEL = () -> "Vitrail mipmap reduction";
+	private static final String LABEL = "Vitrail mipmap reduction";
 
 	private final ShaderSource source;
 	private final Map<GpuFormat, RenderPipeline> pipelines = new EnumMap<>(GpuFormat.class);
@@ -150,7 +149,7 @@ final class MipmapReduction {
 
 			// Loaded rather than cleared: the draw covers the level whole, so a clear would be one
 			// more write of the same texels.
-			try (RenderPass pass = encoder.createRenderPass(LABEL, into, Optional.empty())) {
+			try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into, Optional.empty())) {
 				pass.setPipeline(pipeline);
 				RenderSystem.bindDefaultUniforms(pass);
 				pass.setVertexBuffer(0, quad.slice());

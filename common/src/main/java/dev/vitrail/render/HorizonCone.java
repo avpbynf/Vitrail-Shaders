@@ -13,7 +13,6 @@ import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 
-import java.util.function.Supplier;
 
 /**
  * The wall of sky the game has no geometry for, so that the pack's own sky program has a surface to
@@ -95,7 +94,7 @@ final class HorizonCone {
 	 */
 	private static final int MAX_RADIUS = 256;
 
-	private static final Supplier<String> LABEL = () -> "Vitrail horizon cone";
+	private static final String LABEL = "Vitrail horizon cone";
 
 	private GpuBuffer buffer;
 
@@ -131,7 +130,7 @@ final class HorizonCone {
 			build(builder, wanted);
 
 			try (MeshData mesh = builder.buildOrThrow()) {
-				this.buffer = device.createBuffer(LABEL, GpuBuffer.USAGE_VERTEX, mesh.vertexBuffer());
+				this.buffer = device.createBuffer(() -> LABEL, GpuBuffer.USAGE_VERTEX, mesh.vertexBuffer());
 			}
 		}
 	}

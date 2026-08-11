@@ -50,7 +50,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 
 /**
  * Runs one pack's chain over the finished world: every full screen program the pack keeps on, in
@@ -103,8 +102,8 @@ public final class PackChain {
 			1.0F, 1.0F, 0.0F, 1.0F, 1.0F,
 			0.0F, 1.0F, 0.0F, 0.0F, 1.0F };
 
-	private static final Supplier<String> BLOCK_LABEL = () -> "Vitrail OfGlobals";
-	private static final Supplier<String> QUAD_LABEL = () -> "Vitrail quad";
+	private static final String BLOCK_LABEL = "Vitrail OfGlobals";
+	private static final String QUAD_LABEL = "Vitrail quad";
 
 	/**
 	 * The one line {@code pack.txt} takes that is not the name of a pack: draw none of them, and
@@ -1808,7 +1807,7 @@ public final class PackChain {
 			ByteBuffer vertices = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
 					.order(ByteOrder.nativeOrder());
 			vertices.asFloatBuffer().put(QUAD);
-			this.quad = device.createBuffer(QUAD_LABEL,
+			this.quad = device.createBuffer(() -> QUAD_LABEL,
 					GpuBuffer.USAGE_VERTEX | GpuBuffer.USAGE_COPY_DST, vertices);
 		}
 
@@ -1822,7 +1821,7 @@ public final class PackChain {
 		if (this.block == null) {
 			// Three buffers and a fence per turn, so a frame never writes over what the previous
 			// one is still being read for.
-			this.block = new MappableRingBuffer(BLOCK_LABEL,
+			this.block = new MappableRingBuffer(() -> BLOCK_LABEL,
 					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, this.blockBytes);
 		}
 

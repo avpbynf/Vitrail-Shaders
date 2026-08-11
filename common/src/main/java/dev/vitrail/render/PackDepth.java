@@ -23,7 +23,6 @@ import net.minecraft.resources.Identifier;
 
 import java.util.Locale;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 /**
  * The world's depth in the window the pack reads depth in: two images, the one taken before the
@@ -71,7 +70,7 @@ final class PackDepth {
 	/** One float a texel: a window depth is one number and nothing here needs the other three. */
 	private static final GpuFormat FORMAT = GpuFormat.R32_FLOAT;
 
-	private static final Supplier<String> LABEL = () -> "Vitrail depth window";
+	private static final String LABEL = "Vitrail depth window";
 
 	private static final String VERTEX = """
 			#version 460 core
@@ -276,7 +275,7 @@ final class PackDepth {
 
 		// Loaded rather than cleared: the draw covers the image whole, so a clear would be one more
 		// write of the same texels.
-		try (RenderPass pass = encoder.createRenderPass(LABEL, into.view(), Optional.empty())) {
+		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into.view(), Optional.empty())) {
 			pass.setPipeline(compiled);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());

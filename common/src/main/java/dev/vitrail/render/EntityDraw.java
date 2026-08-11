@@ -42,7 +42,6 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -116,7 +115,7 @@ public final class EntityDraw {
 	private static volatile boolean opaqueFeatures;
 
 	/** The pass this engine opens for a run of draws, when the pack has nothing more to say. */
-	private static final Supplier<String> LABEL = () -> "Vitrail entity";
+	private static final String LABEL = "Vitrail entity";
 
 	/** What the game binds its own entity image under, and what a pack reads as {@code gtexture}. */
 	private static final String TEXTURE = "Sampler0";
@@ -636,7 +635,7 @@ public final class EntityDraw {
 
 		CommandEncoder encoder = device.createCommandEncoder();
 		this.open = descriptor == null
-				? encoder.createRenderPass(LABEL, colour, Optional.empty(), depth,
+				? encoder.createRenderPass(() -> LABEL, colour, Optional.empty(), depth,
 						OptionalDouble.empty())
 				: encoder.createRenderPass(descriptor);
 		this.drawing = program;

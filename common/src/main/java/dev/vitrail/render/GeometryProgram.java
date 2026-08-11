@@ -158,7 +158,7 @@ final class GeometryProgram {
 	private static final Vector4f OPAQUE_WHITE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private static final Vector4f MID_GREY = new Vector4f(0.5F, 0.5F, 0.5F, 1.0F);
 
-	private static final Supplier<String> SHADOW_LABEL = () -> "Vitrail shadow";
+	private static final String SHADOW_LABEL = "Vitrail shadow";
 
 	/** Where one colour attachment of a world pass takes its image from. */
 	private enum Bound {
@@ -737,7 +737,7 @@ final class GeometryProgram {
 			return null;
 		}
 
-		return RenderPassDescriptor.create(SHADOW_LABEL)
+		return RenderPassDescriptor.create(() -> SHADOW_LABEL)
 				.withColorAttachment(colour)
 				.withDepthAttachment(depth)
 				.withRenderArea(new RenderPass.RenderArea(0, 0, this.shadow.resolution(),

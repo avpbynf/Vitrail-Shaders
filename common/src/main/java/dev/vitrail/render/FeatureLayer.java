@@ -28,7 +28,6 @@ import org.joml.Vector4f;
 import org.joml.Vector4fc;
 
 import java.util.Optional;
-import java.util.function.Supplier;
 
 /**
  * Catches the game's translucent features, the player's own body first among them, and hands them
@@ -72,7 +71,7 @@ final class FeatureLayer {
 
 	private static final String SAMPLER = "InSampler";
 
-	private static final Supplier<String> LABEL = () -> "Vitrail feature layer";
+	private static final String LABEL = "Vitrail feature layer";
 
 	private static final Vector4fc TRANSPARENT = new Vector4f(0.0F, 0.0F, 0.0F, 0.0F);
 
@@ -244,7 +243,7 @@ final class FeatureLayer {
 			return;
 		}
 
-		try (RenderPass pass = encoder.createRenderPass(LABEL, into, Optional.empty())) {
+		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into, Optional.empty())) {
 			pass.setPipeline(this.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());

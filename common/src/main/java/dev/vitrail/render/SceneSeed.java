@@ -29,7 +29,6 @@ import org.joml.Vector4fc;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 /**
  * Draws the game's opaque scene into the target the terrain would have written, standing in for
@@ -112,11 +111,11 @@ final class SceneSeed {
 	/** And as the pack's own geometry left it, before any of them was drawn. */
 	private static final String KEPT = "KeptSampler";
 
-	private static final Supplier<String> LABEL = () -> "Vitrail scene seed";
+	private static final String LABEL = "Vitrail scene seed";
 
-	private static final Supplier<String> EMPTY_LABEL = () -> "Vitrail scene seed gbuffer";
+	private static final String EMPTY_LABEL = "Vitrail scene seed gbuffer";
 
-	private static final Supplier<String> KEEP_LABEL = () -> "Vitrail depth before the features";
+	private static final String KEEP_LABEL = "Vitrail depth before the features";
 
 	/**
 	 * The reason a frame kept no depth when nothing else took the blame, which is the reason worth
@@ -460,7 +459,7 @@ final class SceneSeed {
 		}
 
 		// Loaded rather than cleared: the draw covers the image whole.
-		try (RenderPass pass = encoder.createRenderPass(KEEP_LABEL, this.kept.view(), Optional.empty())) {
+		try (RenderPass pass = encoder.createRenderPass(() -> KEEP_LABEL, this.kept.view(), Optional.empty())) {
 			pass.setPipeline(this.keep);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
@@ -555,7 +554,7 @@ final class SceneSeed {
 
 		// Loaded rather than cleared: the clears have already run, and the draw no longer covers the
 		// target whole in any case.
-		try (RenderPass pass = encoder.createRenderPass(LABEL, into, Optional.empty())) {
+		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into, Optional.empty())) {
 			pass.setPipeline(this.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
@@ -595,7 +594,7 @@ final class SceneSeed {
 	 */
 	private boolean empty(CommandEncoder encoder, GpuBuffer quad, GpuTextureView covered,
 			GpuTextureView live, GpuTextureView before, ColorTargets targets) {
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(EMPTY_LABEL);
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> EMPTY_LABEL);
 		int width = 0;
 		int height = 0;
 		for (Extra extra : this.extras) {
