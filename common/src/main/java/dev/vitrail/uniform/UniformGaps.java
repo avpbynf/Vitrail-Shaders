@@ -66,6 +66,18 @@ public final class UniformGaps {
 		reasons.put("currentColorSpace", "there is no settings screen to choose it from, which is "
 				+ "also what Iris answers outside the mode concerned");
 
+		// The three identifiers of the entity mesh, and they are here whatever the pass rather than
+		// once a gbuffers pass reads them: entityColor is a real answer under a full screen pass and
+		// these are a real answer nowhere, nothing in this engine writing one at any point. Which
+		// programs read them is not academic, the block entities being served since the day they got
+		// a program of their own: five packs of the corpus carry blockEntityId into their translated
+		// gbuffers_block, two of them reading it twenty nine times in the fragment stage alone.
+		String noIdentifier = "the entity mesh carries no identifier element, so nothing writes one "
+				+ "and every draw reads the same number";
+		reasons.put("entityId", noIdentifier);
+		reasons.put("blockEntityId", noIdentifier);
+		reasons.put("currentRenderedItemId", noIdentifier);
+
 		reasons.put("rainfall",
 				"vanilla has no accessor for it and this module compiles against vanilla alone");
 		reasons.put("constantMood", "Iris reads it through an interface it mixes into the player");

@@ -107,6 +107,22 @@ public final class DrawValues {
 
 		builder.add("entityColor", UniformShape.VEC4,
 				(_, out) -> out.set(0.0F, 0.0F, 0.0F, 0.0F));
+		// The three identifiers a pack tells one entity, block entity or held item apart by, and not
+		// one of them is a value: nothing in this engine ever writes one, so each is the same number
+		// on every draw and a pack branching on it takes one branch for the whole world. Iris reads
+		// them off a vertex element of its own, an unsigned short triple it adds to its entity
+		// format and hands the stages back as iris_entityInfo
+		// (pipeline/transform/transformer/EntityPatcher.java:125-160); the game's
+		// DefaultVertexFormat.ENTITY has no room for one and this engine decodes the game's format.
+		//
+		// The numbers are Iris's own uniform fallback, which is what it gives a program the element
+		// never reached, for two of the three (uniforms/CommonUniforms.java:164-165). entityId is
+		// zero where that fallback is -1 (uniforms/CommonUniforms.java:73), and which of the two a
+		// program should read is genuinely open: nothing in Iris ever sets that fallback either, so
+		// the answer a shader really takes there comes from the element, whose type cannot carry -1.
+		//
+		// UniformGaps names all three, so that the log says which of a program's values are these
+		// rather than leaving them to count as supplied.
 		builder.add("entityId", UniformShape.INT, (_, out) -> out.set(0));
 		builder.add("blockEntityId", UniformShape.INT, (_, out) -> out.set(-1));
 		builder.add("currentRenderedItemId", UniformShape.INT, (_, out) -> out.set(-1));
