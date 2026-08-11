@@ -73,8 +73,8 @@ public final class ChainPlan {
 	 * <p>
 	 * <strong>A name left out of this list is not half served, it is silently unanswered.</strong>
 	 * Nothing else fills the table, so {@link #geometryOf} answers empty for a program no walk
-	 * reached, and empty is indistinguishable from the ordinary case of a pack declaring no draw
-	 * buffer on its geometry. Measured on the corpus in August 2026 with the entities missing from
+	 * reached, and empty is what a family draws on when this place has no answer for it: one output,
+	 * on the game's own target. Measured on the corpus in August 2026 with the entities missing from
 	 * this list: seven packs of eight answered empty, and their entity programs wrote a single output
 	 * where SIX of them had asked for two, three and four draw buffers, with nothing anywhere saying
 	 * so. The eighth answered, and only because its entities fall back on the very program that
@@ -156,8 +156,8 @@ public final class ChainPlan {
 	 * {@code terrainKeysOf} and {@code namedKeysOf}. Which of the two put a key in does not matter to
 	 * whoever reads it, and it is not always the family's own: a pack whose entities fall back on the
 	 * program that serves its terrain is answered by the terrain's walk. What matters is that a
-	 * program neither walk reached is answered empty, which reads exactly like a pack that declared
-	 * no draw buffer.
+	 * program neither walk reached is answered empty, which reads exactly like a program this place
+	 * has no answer for.
 	 */
 	private final Map<Key, Pass> attachments;
 
@@ -512,9 +512,13 @@ public final class ChainPlan {
 	 * <p>
 	 * Every reason to answer nothing goes to the notes and none of them refuses anything: a geometry
 	 * program is not part of the chain, so a place that cannot carry its targets is a place where
-	 * the geometry writes one attachment instead of several, not a place that draws nothing. A pack
-	 * declaring no draw buffer on its geometry is the ordinary case rather than a fault, which is
-	 * why it is not even said here: {@link #notes()} already carries one line naming all of them.
+	 * the geometry writes one attachment instead of several, not a place that draws nothing.
+	 * <p>
+	 * The empty writes below are down to two cases since the inference took the geometry in, and both
+	 * are honest: a program drawn from the light, whose draw buffers name shadow targets this plan
+	 * does not hold, and a file the expander could not read at all. A pack that simply declares no
+	 * directive no longer arrives here - it arrives with colortex0, as it does under Iris, and its
+	 * name is in the one line {@link #notes()} carries for the lot.
 	 */
 	private static Pass geometryOf(TargetPlan plan, String program, List<String> notes,
 			boolean afterDeferred) {
@@ -857,10 +861,13 @@ public final class ChainPlan {
 	 * translucent pass draws after the deferred stage and its targets are on the sides the
 	 * deferreds leave them, even when the very same file serves the solid pass before them.
 	 * <p>
-	 * Empty is not a failure and covers three cases, all of them normal for a pack: it declares no
-	 * draw buffer on its geometry, which most of the corpus does on at least one place; it writes a
-	 * target this place does not allocate; or its targets are not all the same size, which one
-	 * render pass cannot carry. The last two are said in {@link #notes()}.
+	 * Empty is not a failure and covers three cases, all of them normal for a pack: the file serving
+	 * it could not be read at all; it writes a target this place does not allocate; or its targets are
+	 * not all the same size, which one render pass cannot carry. <strong>The last two are said in
+	 * {@link #notes()} and the first is not</strong> - it returns before anything is added, and the
+	 * line naming it belongs to {@code TargetPlan.notes()}, which is a different list. A pack that
+	 * declares no draw buffer used to be a fourth case and is not one any more: it is answered
+	 * colortex0, as Iris answers it.
 	 */
 	public Optional<Pass> geometry(TerrainPass pass) {
 		return Optional.ofNullable(this.terrainKeys.get(pass)).map(this.attachments::get);

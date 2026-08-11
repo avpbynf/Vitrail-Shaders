@@ -224,11 +224,11 @@ public final class TargetPlan {
 			}
 
 			boolean fullscreen = !ProgramNames.geometry(family);
-			List<Integer> writes = writesOf(name, fullscreen, draft);
+			List<Integer> writes = writesOf(name, ProgramNames.shadowGeometry(family), draft);
 			draft.effective.put(name, writes);
 
-			// A geometry pass writes the half it reads and flips nothing, so keeping it in the
-			// walk costs nothing and holds the side a gbuffers program will read the day one runs.
+			// A geometry pass writes the half it reads and flips nothing, so keeping it in the walk
+			// costs nothing and holds the side the gbuffers programs read, six families of which run.
 			if (!fullscreen) {
 				steps.add(new TargetSchedule.Step(name, writes, false));
 				continue;
@@ -271,20 +271,58 @@ public final class TargetPlan {
 
 	/**
 	 * What a program really writes, which is not always what it says. Iris infers a single
-	 * attachment zero when a fragment declares none and the packs are written against that, so a
-	 * full screen pass with no directive is sent to colortex0 and colortex0 is allocated for it.
-	 * Geometry is left out of the inference on purpose: none of it is drawn yet, and inferring
-	 * there would pay for a target on behalf of a program that does not run.
+	 * attachment zero when a fragment declares none, and the packs are written against that, so a
+	 * program with no directive is sent to colortex0 and colortex0 is allocated for it.
+	 * <p>
+	 * <strong>Geometry is inferred too, and it used to be left out.</strong> The reason it was left
+	 * out expired: nothing of it was drawn, so the inference would have paid for a target on behalf of
+	 * a program that never ran. The terrain, the sky, the clouds, the weather, the particles and the
+	 * entities are drawn now, and what the exemption really bought was a program of the pack drawing
+	 * into the GAME'S target instead of the pack's, where nothing of the chain reports it back. Body
+	 * Camera is the measured case and it is total rather than cosmetic: it
+	 * has no clouds at all, at either setting of the pack, because its {@code gbuffers_clouds}
+	 * declares no draw buffer and its image goes somewhere nothing collects. Iris reads the same file
+	 * as {@code /* DRAWBUFFERS:0 *}{@code /}, {@code shaderpack/properties/ProgramDirectives.java:55}.
+	 * <p>
+	 * What it costs, measured on the corpus in August 2026, is TWO colour targets over twenty five
+	 * places, and both are Sildur's: its Nether and its End allocate a colortex0 for the
+	 * {@code gbuffers_water} that now infers one. Its root does not, the only thing it ships without
+	 * a directive there being its shadow program. Everywhere else the target was already allocated,
+	 * and what those places gain is an answer rather than an allocation - Body Camera's two lower
+	 * dimensions had nowhere at all to paint the scene seed, and now have one. The comparison with
+	 * Iris is not that it pays the same cost: it offers a pack thirty two indices rather than the
+	 * sparse set this plan allocates ({@code gl/IrisLimits.java:11}) and creates the images behind
+	 * them on demand, so an inferred nought costs it nothing to name.
+	 *
+	 * @param shadowGeometry whether this is a program drawn from the light, which is the one family
+	 *                       held out. Its draw buffers index the shadow targets, which this plan does
+	 *                       not hold, so inferring here would allocate a colour target on behalf of a
+	 *                       program that never writes one and record it as written, which is the
+	 *                       reading {@code ChainPlan} refuses in as many words. What Iris does with a
+	 *                       shadow program that declares nothing is NOT to infer one target: it takes
+	 *                       the unknown as {@code {0, 1}} and binds both shadow colour buffers,
+	 *                       {@code pipeline/programs/ShaderCreator.java:331}. This engine binds
+	 *                       shadowcolor0 alone whatever the pack declares
+	 *                       ({@code render/GeometryProgram.java:392}), which is a divergence of its
+	 *                       own and older than this walk: a pack counting on shadowcolor1 loses it,
+	 *                       and nothing here would say so
 	 */
-	private static List<Integer> writesOf(String name, boolean fullscreen, Draft draft) {
+	private static List<Integer> writesOf(String name, boolean shadowGeometry, Draft draft) {
 		// The final writes the game's own target, never a colortex, so it flips nothing however
 		// its directive reads.
 		if (name.equals(FINAL)) {
 			return List.of();
 		}
 
+		// The geometry drawn from the light contributes NO colour writes, declared or inferred. Its
+		// indices are shadowcolor and they are remembered raw elsewhere; letting the declared ones
+		// through here would put them back in the schedule, and with them in every verdict.
+		if (shadowGeometry) {
+			return List.of();
+		}
+
 		List<Integer> declared = draft.writes.getOrDefault(name, List.of());
-		if (!declared.isEmpty() || !fullscreen || draft.unexpanded.contains(name)) {
+		if (!declared.isEmpty() || draft.unexpanded.contains(name)) {
 			return declared;
 		}
 
@@ -327,16 +365,39 @@ public final class TargetPlan {
 			// written for the whole place.
 			builder.accept(key.file(), unit);
 
-			// What it writes and samples does not. A shadow composite is bound to the shadow
-			// targets, so its indices name shadowcolor, and allocating colour targets for them
-			// would pay for images no program of this place ever touches.
-			if (ProgramNames.shadowComposite(key.name().family())) {
+			// What it writes does not, for anything bound to the shadow targets: those indices name
+			// shadowcolor, so allocating colour targets for them would pay for images no program of
+			// this place ever touches, and recording them as WRITTEN is how a verdict comes to tell a
+			// reader that geometry fills a colortex nothing fills. Both families that draw there are
+			// caught: the shadow composites, and the geometry drawn from the light.
+			//
+			// The second was missing and it was not inert. Both Complementary include a shadow
+			// program declaring DRAWBUFFERS:01, so colortex1 was allocated and reported written on
+			// their account in all three of their places, six notes, when no camera geometry of
+			// either pack writes index one at all.
+			String family = key.name().family();
+			if (ProgramNames.shadowComposite(family)) {
 				continue;
 			}
 
+			// A SAMPLER is not ambiguous the way a draw buffer is: colortexN means colortexN whichever
+			// end of the world the program is drawn from, so the scan below runs for the shadow
+			// geometry too. Skipping it with the writes, which is what the first shape of this guard
+			// did, leaves a colour target sampled only from the light unallocated and bound to the
+			// white stand-in.
+			boolean fromTheLight = ProgramNames.shadowGeometry(family);
 			List<Integer> writes = DrawBuffers.parse(unit);
+
+			// Remembered even for the shadow, and not folded into what is allocated. The raw
+			// declaration is what tells a program that declares nothing from one whose indices were
+			// dropped here, and a note that cannot tell them apart says "declaring no draw buffer"
+			// about a program declaring three.
 			draft.writes.put(key.name().baseName(), writes);
-			draft.written.addAll(writes);
+			if (fromTheLight) {
+				draft.fromTheLight.add(key.name().baseName());
+			} else {
+				draft.written.addAll(writes);
+			}
 
 			Set<Integer> indices = new TreeSet<>();
 			for (String sampler : samplers(unit)) {
@@ -469,8 +530,11 @@ public final class TargetPlan {
 	/**
 	 * Where the world is drawn among {@link #running()}: how many of those programs come before it.
 	 * <p>
-	 * Nothing draws the world yet and the scene seed stands in for it, so this is where that seed
-	 * goes. It is answered here rather than downstream because {@link #running()} holds no geometry
+	 * The scene seed carries in what this engine still leaves to the game - the entities above all,
+	 * already lit and already tone mapped - so this is where that seed goes. It is the point OptiFine
+	 * draws the world at, which is not where the families this engine does draw fill their targets:
+	 * the chunk renderer has finished with the opaque ones before the first pass of the chain runs.
+	 * It is answered here rather than downstream because {@link #running()} holds no geometry
 	 * to mark the spot, and a frame that painted the seed anywhere else would contradict the very
 	 * schedule that gave it its half: a begin or a prepare writing the same target would land on
 	 * the wrong side of it, and one sampling it would be handed this frame's world where the walk
@@ -586,19 +650,27 @@ public final class TargetPlan {
 							.collect(Collectors.joining(", ")));
 		}
 
+		// Geometry is in this line since the inference took it in, and the line it replaces is worth
+		// remembering: it named the same programs and ended "which Iris would send to colortex0 and
+		// this plan does not", which is a defect written out as a note and left there.
 		if (!draft.inferred.isEmpty()) {
-			notes.add("full screen programs declaring no draw buffer, sent to colortex0 as Iris "
-					+ "does: " + new TreeSet<>(draft.inferred));
+			notes.add("programs declaring no draw buffer, sent to colortex0 as Iris does: "
+					+ new TreeSet<>(draft.inferred));
 		}
 
-		List<String> silent = draft.effective.entrySet().stream()
-				.filter(entry -> entry.getValue().isEmpty() && !entry.getKey().equals(FINAL))
-				.map(Map.Entry::getKey)
-				.sorted()
-				.toList();
-		if (!silent.isEmpty()) {
-			notes.add("geometry programs declaring no draw buffer, which Iris would send to "
-					+ "colortex0 and this plan does not, nothing drawing them yet: " + silent);
+		// And the geometry drawn from the light, said rather than dropped: it is the one family whose
+		// draw buffers this plan reads and then does not use, so a reader who greps for a shadow
+		// program and finds it nowhere would conclude it was never read at all.
+		//
+		// The list is the programs THEMSELVES and carries no claim about what they declare. Building
+		// it from "writes nothing" instead, which is what the first shape of this note did, called
+		// every one of them undeclared: thirteen of the twenty five places gained a line saying
+		// "declaring no draw buffer" about a shadow program declaring one, Reverie's being
+		// RENDERTARGETS:0,2,1.
+		if (!draft.fromTheLight.isEmpty()) {
+			notes.add("programs drawn from the light, whose draw buffers would name shadowcolor and "
+					+ "are therefore read as no colour target of this place, declared or not: "
+					+ new TreeSet<>(draft.fromTheLight));
 		}
 
 		// The defect this closes: a target a pack declares a format for and nothing allocates
@@ -713,6 +785,10 @@ public final class TargetPlan {
 		private final Map<String, Set<Integer>> samples = new LinkedHashMap<>();
 		private final Set<String> inferred = new TreeSet<>();
 		private final Set<String> unexpanded = new TreeSet<>();
+
+		/** Geometry drawn from the light, whose draw buffers this plan reads and does not use. */
+		private final Set<String> fromTheLight = new TreeSet<>();
+
 		private final List<String> running = new ArrayList<>();
 		private final Map<String, String> disabled = new LinkedHashMap<>();
 		private final Set<String> shadowComposites = new TreeSet<>();

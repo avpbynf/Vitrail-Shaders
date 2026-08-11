@@ -238,16 +238,20 @@ terrain's pipeline namespace pushes constants the pass cannot satisfy.
 Which buffers a sky program writes is keyed by program name, not by an enumeration of passes, since
 the game's sky passes share a small set of programs.
 
-Two different things can leave a piece on the game's own target, and they are worth telling apart.
-Where a pack serves no program for a piece, the game's own shader draws it. Where the pack does
-serve one but declares no draw buffers on it, **the pack's shader still draws** - it is the target
-that stays the game's, the one attachment the game opened its own pass with. Either way that piece
-reaches the pack's colour target through the full-screen layer instead of writing it.
+One thing leaves a piece on the game's own target: a pack serving no program for it at all, in which
+case the game's own shader draws it and the piece reaches the pack's colour target through the
+full-screen layer instead of writing it.
+
+**A program that declares no draw buffers is not that case, and used to be.** It is read as writing
+colortex0, which is what Iris reads it as, so the pack's shader draws and its output lands in the
+pack's own target like any other. Before that, such a program drew onto the attachment the game had
+opened its own pass with, where nothing of the chain collected it: a pack whose cloud program says
+nothing had no clouds at all, at any setting, and nothing said why.
 
 It is then all six or none. If any piece the game still draws would stay behind, the whole sky keeps
 the game's target, because the layer is the only road left to a piece that stayed on it and the
-pieces that write outright cut the layer where they land. A pack declaring draw buffers on the basic
-sky program and none on the textured one - which the format allows - would otherwise get a sky whose
+pieces that write outright cut the layer where they land. A pack serving no program for the basic
+sky and one for the textured one - which the format allows - would otherwise get a sky whose
 disc marks the whole frame and whose sun and moon are cut out of it.
 
 Because the sky is drawn before the world, the sky stage is more often than not what opens the
@@ -410,5 +414,7 @@ do not write one. And the pack's own colour target already holds the world, whic
 `gbuffers_clouds` expects to blend onto - the same position the translucent chunk pass is in, and
 the same answer.
 
-A pack that declares no draw buffer on the program leaves them on the game's target, where the
-full-screen layer brings them across flat, exactly as it did before any of this existed.
+A pack that declares no draw buffer on the program is read as writing colortex0, as Iris reads it,
+so its clouds land in the pack's own target like everything else. That is worth saying because it
+was not always so: they used to stay on the game's target, where nothing of the chain collected
+them, and a pack whose cloud program declares nothing had no clouds on screen at any setting.

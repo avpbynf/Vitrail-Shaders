@@ -76,12 +76,30 @@ public final class ProgramNames {
 	/** A pass drawn over the world rather than over a quad, which never flips anything. */
 	public static boolean geometry(String family) {
 		return family.startsWith("gbuffers") || family.startsWith("dh_")
-				|| family.equals("shadow") || family.startsWith("shadow_");
+				|| shadowGeometry(family);
 	}
 
 	/** A full screen pass over the shadow targets, which are not the colour targets of a place. */
 	public static boolean shadowComposite(String family) {
 		return family.equals("shadowcomp");
+	}
+
+	/**
+	 * Geometry drawn from the light instead of from the camera, whose draw buffers name
+	 * {@code shadowcolor} and never {@code colortex}.
+	 * <p>
+	 * The whole of what it is for is that a number written there indexes another set of targets. A
+	 * shadow program read as a colour one allocates somebody's colortex, says it is written, and
+	 * sends the shadow map's albedo into whatever that index means to the chain.
+	 * <p>
+	 * <strong>{@code dh_shadow} is one of them and it does not begin with {@code shadow}.</strong>
+	 * It is the Distant Horizons geometry drawn from the light, Iris sends it to the shadow
+	 * framebuffer like the rest ({@code IrisRenderingPipeline.java:1366-1368}), and a list matching
+	 * the prefix alone lets it through. Bliss ships one, {@code world0/dh_shadow.fsh}, with no
+	 * directive on it: read as a colour program it allocates a colortex0 nothing writes.
+	 */
+	public static boolean shadowGeometry(String family) {
+		return family.equals("shadow") || family.startsWith("shadow_") || family.equals("dh_shadow");
 	}
 
 	/** The family a program belongs to, {@code composite} for {@code composite4}. */

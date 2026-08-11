@@ -431,10 +431,15 @@ public final class SkyDraw {
 			ELEMENTS.values()
 					.forEach(element -> byProgram.computeIfAbsent(element.program(), this::writes));
 
-			// All of them or none of them, for the reason the class comment gives. Body Camera is
-			// the pack this is decided for: it declares draw buffers on gbuffers_skybasic and none
-			// on gbuffers_skytextured, which the format allows, so the disc would mark the whole sky
-			// and its sun and its moon would be drawn on the game's target and cut out of the seed.
+			// All of them or none of them, for the reason the class comment gives.
+			//
+			// Body Camera is the pack this was decided for and it NO LONGER REACHES IT, which is
+			// worth knowing before reading a log that never says its name again: it declares
+			// DRAWBUFFERS:012 on gbuffers_skybasic and nothing on gbuffers_skytextured, and since a
+			// geometry program declaring nothing is read as writing colortex0, its sun and its moon
+			// have a target of their own. Its whole sky went from the game's target to the pack's
+			// with that reading, which is where Iris puts it. What still reaches this branch is a
+			// pack whose sky programs are not all served, or whose targets this place cannot carry.
 			List<String> behind = behind(loaded, byProgram);
 			if (!behind.isEmpty()) {
 				Vitrail.logger().info("{} has nowhere of its own for the {} of its sky, so the whole "
