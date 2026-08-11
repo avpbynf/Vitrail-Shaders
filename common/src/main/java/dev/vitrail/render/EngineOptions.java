@@ -146,6 +146,24 @@ final class EngineOptions {
 	 * The day the first of those lands, this line goes to on <em>and disappears</em>, along with
 	 * everything that documents it. Leaving it behind would turn the debt into a preference, which
 	 * is exactly how it got called a convention.
+	 * <p>
+	 * <strong>It is a divergence from Iris, and a CHOICE rather than a constraint</strong>, so it is
+	 * written out in full rather than left to be discovered.
+	 * <ul>
+	 * <li><em>What Iris does</em>: it routes the game's entities to the pack's program with nothing
+	 * to switch, {@code shaderpack/loading/ProgramId.java:40-41}, where {@code Entities} and
+	 * {@code EntitiesTrans} are declared like any other gbuffers program and fall back on
+	 * {@code TexturedLit}. There is no line of any file of its own that turns them off.</li>
+	 * <li><em>What stops this engine matching it</em>: nothing of the API, and it has to be said
+	 * plainly. {@code render/EntityDraw} draws them, and drawing them is one word in this file. What
+	 * holds the word at off is the gap above, and the rule this engine works to: a family's line goes
+	 * to on once it has been judged in game, and this one has not been. That is a decision about when
+	 * to ship a family, not an obstacle.</li>
+	 * <li><em>What it costs the image</em>: the game draws its entities with its own shader, already
+	 * lit and already tone mapped, and the scene seed carries them into the pack's picture flat. A
+	 * mob is then vanilla lit inside a pack lit world, it takes none of the pack's shading, and the
+	 * pack's own entity program never runs.</li>
+	 * </ul>
 	 */
 	private static final String ENTITIES_KEY = "entities";
 
