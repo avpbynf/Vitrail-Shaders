@@ -550,10 +550,13 @@ public final class ParticleDraw {
 			return pass.attachments();
 		}
 
+		// The plan answers it rather than this file working it out again, and the reason is not
+		// tidiness: the verdicts have to know the same thing, so that a half handed back here is not
+		// counted as filled there. Two readings of one condition would drift, and the drift shows up
+		// as a diagnostic saying a target holds the pack's particles when the game drew them.
 		ChainPlan.Attachment first = pass.attachments().get(0);
 		Optional<ChainPlan.Seed> seed = this.plan.seed();
-		if (seed.isEmpty() || seed.get().target() != first.target()
-				|| seed.get().side() != first.side()) {
+		if (!ChainPlan.leadsWithSeed(seed.orElse(null), pass)) {
 			Vitrail.logger().warn("{} writes {} first and the scene seed paints {}, so the first output "
 					+ "of an opaque particle would be carried into a target the pack did not ask for: "
 					+ "the game keeps its own shader for that half", servedBy,

@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -87,21 +88,46 @@ public final class ChainPlan {
 	 * clouds and the weather are drawn once the whole main pass is finished and read the halves the
 	 * deferreds left, exactly as the world's translucents do. A name walked on the wrong side answers
 	 * a real pass on the wrong half of every target, which is a picture nothing reports.
+	 * <p>
+	 * <strong>And each carries whether that family fills its targets in EVERY place</strong>, which is
+	 * a different question with a different answer and is what {@link #verdicts} counts. Being in this
+	 * list means a pack's program is resolved and its attachments worked out; being counted means a
+	 * verdict may take those targets for filled wherever this plan is built.
 	 */
 	private static final List<NamedProgram> NAMED_PROGRAMS = Stream.concat(
+			// None of the sky's three is counted, the clouds included, and the reason is the same for
+			// all three: the game opens no sky and no cloud pass below the overworld. It is spelled
+			// out, with what it was measured to cost, where the verdicts are handed their map.
 			SKY_PROGRAMS.stream()
-					.map(program -> new NamedProgram(program, CLOUD_PROGRAM.equals(program))),
-			Stream.of(new NamedProgram("gbuffers_entities", false),
-					new NamedProgram("gbuffers_block", false),
-					new NamedProgram("gbuffers_weather", true),
+					.map(program -> new NamedProgram(program, CLOUD_PROGRAM.equals(program), false)),
+			Stream.of(
+					// The entity halves are the two the file has to ask for: off unless somebody
+					// writes the line, so nothing of this engine draws them by default.
+					new NamedProgram("gbuffers_entities", false, false),
+					new NamedProgram("gbuffers_block", false, false),
+					// Drawn, and still not counted: the game draws no rain and no snow where there is
+					// no weather, which is every place but the overworld.
+					new NamedProgram("gbuffers_weather", true, false),
 					// The one family that straddles the stage: the game submits every particle group
-					// twice, and the two land on either side of it.
-					new NamedProgram("gbuffers_particles", false),
-					new NamedProgram("gbuffers_particles_translucent", true)))
+					// twice, and the two land on either side of it. The only one counted, and what
+					// earns it is that particles are drawn in every place there is.
+					new NamedProgram("gbuffers_particles", false, true),
+					new NamedProgram("gbuffers_particles_translucent", true, true)))
 			.toList();
 
-	/** One name of that list, and the side of the deferred stage the family asking for it draws on. */
-	private record NamedProgram(String program, boolean afterDeferred) {
+	/**
+	 * One name of that list, the side of the deferred stage the family asking for it draws on, and
+	 * whether a verdict may take its targets for filled.
+	 *
+	 * @param everywhere whether this engine draws that family, with an empty {@code options.txt}, in
+	 *                   EVERY place a plan is built for. Not simply whether it draws it: a plan is
+	 *                   per place, and a family drawn in the overworld alone would have a verdict
+	 *                   report the world as drawn in the two places the format reserves for the
+	 *                   Nether and the End. It decides nothing about the attachments and everything
+	 *                   about the verdicts, which are the one place that must not tell a reader a
+	 *                   target holds a clear colour when a family of ours has just written it
+	 */
+	private record NamedProgram(String program, boolean afterDeferred, boolean everywhere) {
 	}
 
 	private final List<Pass> passes;
@@ -291,21 +317,55 @@ public final class ChainPlan {
 		// shared table that now guarantees it rather than each family's own bookkeeping.
 		Map<Key, Pass> attachments = new LinkedHashMap<>();
 		Map<TerrainPass, Key> terrainKeys = terrainKeysOf(plan, resolver, notes, attachments);
-		Map<String, Key> skyKeys = namedKeysOf(plan, resolver, notes, attachments);
+		Map<String, Key> namedKeys = namedKeysOf(plan, resolver, notes, attachments);
+		Map<String, Key> skyKeys = new LinkedHashMap<>();
+		SKY_PROGRAMS.stream().filter(namedKeys::containsKey)
+				.forEach(program -> skyKeys.put(program, namedKeys.get(program)));
 
 		Seed seed = seedOf(plan, resolver, notes);
 
-		// The terrain alone, and leaving the sky AND the entities out is deliberate rather than an
-		// oversight: a plan is built per place, and neither is drawn in all of them. The sky's reason
-		// in full, with what counting it was measured to silence, is at the verdict that depends on
-		// it; the entities share it and add one of their own, being off unless somebody asks.
+		// The terrain and the two halves of the particles, and the rule that admits those and no
+		// others is ONE question: does this engine draw that family, with nothing written in
+		// options.txt, in every place a plan is built for? A plan is per PLACE, so a family drawn in
+		// the overworld alone cannot be counted at all - counting it reports the world as drawn in
+		// the two places the format reserves for the Nether and the End.
 		//
-		// The cost is named rather than hidden: the verdict below says no geometry of this engine
-		// reaches the pack's targets, and since the entities landed that is one word too wide. It is
-		// inert on the corpus, measured in August 2026, no target carrying that verdict being one an
-		// entity program writes; it stops being inert the day a pack writes both.
+		// Four families fail that question and each fails it differently. The entities are off unless
+		// somebody writes the line. The sky's two and the clouds are not drawn below the overworld:
+		// the game opens no sky pass there and the End's own sky is two methods nothing here hooks.
+		// The weather is drawn wherever there IS weather, which is the overworld and nowhere else.
+		//
+		// It is measured rather than argued, and the measurement is a trade rather than a clean win.
+		// Counting the sky silences Bliss's colortex0 note in all three of its places and two of the
+		// three are true. Counting the weather rewrites the colortex12 note of both Complementary in
+		// all three of theirs, which makes it true in world0 and makes it name, in the other two, a
+		// program that will never run there: four lines lost against two gained. Holding all four out
+		// keeps the true notes and pays one false one per family in the overworld, which is the
+		// cheaper half of both trades and the one this engine takes.
+		//
+		// WHAT IT LEAVES OPEN, said rather than hidden: those overworld notes stay wrong, and the
+		// only honest way to close them is a per place answer rather than a per name one, which this
+		// record cannot carry.
+		// AND, on the near side, only where the draw is really taken. A family drawn before the
+		// deferred stage takes over a pass the renderer opened with one attachment of its own, so it
+		// can only be redirected when its first output is the seed's target and half; where it is not,
+		// the game keeps its own shader and nothing of the pack's is written. That is
+		// leadsWithSeed, and ParticleDraw refuses on the same answer. Bliss is why it is here: its
+		// seed is colortex1 against a first output of colortex2, so its opaque particles are handed
+		// back in all three places, and counting them would silence three notes that are true.
+		// Nothing on the corpus moves for it - Bliss's colortex9 is silenced by the translucent half,
+		// which carries no such condition - and that is the point: it costs no note and it stops the
+		// map claiming a draw that never happened.
 		Map<Key, Pass> world = new LinkedHashMap<>();
 		terrainKeys.values().forEach(key -> world.put(key, attachments.get(key)));
+		for (NamedProgram named : NAMED_PROGRAMS) {
+			Key key = named.everywhere() ? namedKeys.get(named.program()) : null;
+			Pass drawing = key == null ? null : attachments.get(key);
+			if (drawing != null && (named.afterDeferred() || leadsWithSeed(seed, drawing))) {
+				world.put(key, drawing);
+			}
+		}
+
 		verdicts(plan, seed, world, passes, last, notes);
 
 		Set<Integer> back = new TreeSet<>(plan.schedule().flippedAtEnd());
@@ -401,13 +461,15 @@ public final class ChainPlan {
 	 * dead half of the ping pong, and nothing says so - the pass runs, the program draws, the final
 	 * composes from the other half and the sky comes back empty.
 	 * <p>
-	 * The map it answers is the sky's, because the sky is the one family that asks by the name it
-	 * wanted rather than by the program it got. Every other name here is reached through
-	 * {@link #geometryOf}, and what this walk owes them is the entry in the shared table.
+	 * The map it answers is by the name that was ASKED FOR and not by the program that answered, which
+	 * is what the two callers of it need: the sky asks by the name it wanted rather than by the
+	 * program it got, and the verdicts ask which of these families this engine really draws, which is
+	 * a property of the family and not of the file the tree landed on. Every other reader is served
+	 * through {@link #geometryOf}, and what this walk owes them is the entry in the shared table.
 	 */
 	private static Map<String, Key> namedKeysOf(TargetPlan plan, ProgramResolver resolver,
 			List<String> notes, Map<Key, Pass> into) {
-		Map<String, Key> sky = new LinkedHashMap<>();
+		Map<String, Key> keys = new LinkedHashMap<>();
 
 		// Computed once per serving FILE AND SIDE and not once per program, the same reason the
 		// geometry walk gives above: the fallback tree sends skybasic to gbuffers_basic and both
@@ -423,12 +485,12 @@ public final class ChainPlan {
 			}
 
 			Key key = new Key(served.get(), named.afterDeferred());
-			if (answer(plan, key, notes, into) != null && SKY_PROGRAMS.contains(named.program())) {
-				sky.put(named.program(), key);
+			if (answer(plan, key, notes, into) != null) {
+				keys.put(named.program(), key);
 			}
 		}
 
-		return sky;
+		return keys;
 	}
 
 	private static Pass passOf(TargetPlan plan, String program, List<String> refusals) {
@@ -564,12 +626,18 @@ public final class ChainPlan {
 	 * prepare runs before the world does, so it reads its target as the clear left it, and calling
 	 * the seed filled from the first pass onwards would drop exactly the notes those passes need.
 	 * <p>
-	 * The chunk passes count from where they are drawn for the same reason, and they are counted at
-	 * all because they really are drawn: the opaque ones before the whole chain, since the chunk
+	 * The world's own passes count from where they are drawn for the same reason, and they are counted
+	 * at all because they really are drawn: the opaque ones before the whole chain, since the chunk
 	 * renderer has finished with them by the time the first half of the frame runs, and the
-	 * translucent one after the last deferred, which is the whole reason its targets are taken on
+	 * translucent ones after the last deferred, which is the whole reason their targets are taken on
 	 * the other snapshot. Reading the geometry off the schedule alone, as this did, blamed the clear
 	 * for a half {@code gbuffers_water} had just written.
+	 *
+	 * @param world every family this engine really draws into the pack's targets, by the key its
+	 *              answer lives under. It is not the terrain alone and has not been since the weather
+	 *              and the particles landed: a map short of a family says a target holds a clear
+	 *              colour where that family has just written, which is the one thing these lines
+	 *              exist to rule out and the one failure that leaves no other trace
 	 */
 	private static void verdicts(TargetPlan plan, Seed seed, Map<Key, Pass> world,
 			List<Pass> passes, Pass last, List<String> notes) {
@@ -578,20 +646,24 @@ public final class ChainPlan {
 			ordered.add(last);
 		}
 
-		// Every target a gbuffers program declares, less the ones the chunk passes really fill. What
-		// is left is written by geometry alone and by nothing this engine puts in the pack's targets.
+		// Every target a gbuffers program declares, less the ones the world's own passes really fill.
+		// What is left is written by geometry alone and by nothing this engine puts in the pack's
+		// targets.
 		Set<Integer> undrawn = new TreeSet<>();
 		plan.schedule().steps().stream()
 				.filter(step -> !step.fullscreen())
 				.forEach(step -> undrawn.addAll(step.writes()));
 
-		// One entry per point of the frame the world goes in at, the solid and the cutout pass sharing
-		// theirs. A set rather than a list: those two are usually one file, hence one identical Pass.
+		// One entry per point of the frame the world goes in at, every family drawn on the same side
+		// sharing theirs. A set rather than a list, since several of them are commonly one file and
+		// hence one identical Pass: the solid and the cutout pass always, and a pack with no cloud
+		// program of its own has its clouds and its particles answered by the same one too.
 		//
-		// The opaque passes go in at nought and not where the seed goes. The seed is painted where
-		// OptiFine draws the world, in the middle of the chain, but the chunk renderer is not: it has
-		// drawn the opaque terrain before the first half of the chain is even asked to run, so a
-		// prepare of this engine reads what those passes wrote in THIS frame.
+		// The near side goes in at nought and not where the seed goes. The seed is painted where
+		// OptiFine draws the world, in the middle of the chain, but the game is not: it has drawn the
+		// opaque terrain, the opaque particles and everything else on that side before the first half
+		// of the chain is even asked to run, so a prepare of this engine reads what they wrote in THIS
+		// frame.
 		int afterDeferred = pastDeferred(ordered);
 		Map<Integer, Set<Pass>> drawn = new LinkedHashMap<>();
 		world.forEach((key, drawing) -> {
@@ -658,21 +730,13 @@ public final class ChainPlan {
 		String before = ", so " + reader + " reads the frame before, and the clear colour on the "
 				+ "first one";
 
-		if (undrawn.contains(half.target())) {
-			// Two families end up here and the wording covers both: the geometry nothing draws yet,
-			// which is the entities and the particles, and the sky.
-			//
-			// The sky is here even though this engine now draws it into the pack's own targets, and
-			// that is deliberate. A plan is built per place and the sky is drawn in some of them and
-			// not others: the game opens no sky pass at all in the Nether, and the End's own sky is
-			// two methods nothing here hooks, so counting the sky as drawn would say so in the two
-			// places the format reserves for exactly those. Measured on the corpus in August 2026,
-			// counting it silenced two notes, both of them Bliss's colortex0 in the Nether and in the
-			// End, both true, and changed nothing anywhere a sky is really drawn.
-			return name + " is written by geometry, none of which this engine draws into the pack's "
-					+ "targets" + clear;
-		}
-
+		// WHAT FILLS IT IS ASKED BEFORE WHY IT IS EMPTY, and the order is the whole of this method.
+		// These branches do not add lines to one another, they REPLACE one another, so putting the
+		// weakest first costs the reader the strongest. Bliss's colortex0 is the case that proved it:
+		// a composite of the pack writes it later in the same frame, and because the sky's programs
+		// had put it in undrawn the reader was told instead that no geometry of ours reaches the
+		// pack's targets - true about the sky, useless about the target, and it had displaced the one
+		// sentence that named the real writer.
 		String later = writtenLater(ordered, drawn, at, half);
 		if (later != null) {
 			// Which of the two the reader really gets is the clear directive's answer and never the
@@ -684,7 +748,26 @@ public final class ChainPlan {
 
 		String off = disabledWriter(plan, half.target());
 		if (off != null) {
-			return name + " is written only by " + off + ", which this place does not run" + clear;
+			return name + " is written by " + off + ", which this place does not run" + clear;
+		}
+
+		if (undrawn.contains(half.target())) {
+			// What ends up here is the geometry no pass of this engine fills in EVERY place: the
+			// entity halves, off unless somebody writes the line, and the sky's three and the weather,
+			// which the game draws in the overworld and nowhere below it. Why that is the question,
+			// and what holding each out was measured to cost, is where the verdicts are handed their
+			// map.
+			//
+			// The particles used to be here and no longer are. The sentence went on saying no geometry
+			// of ours reached the pack's targets while a particle program of the pack was writing them,
+			// which is a note that reads like a diagnosis and is a lie: Bliss's colortex9 carried it in
+			// all three of its places.
+			//
+			// The tail is flat, and it is flat because of where this branch now sits: nothing later in
+			// the frame writes this half, so the pack keeping the target between frames buys the
+			// reader nothing - the frame before had nothing written there either.
+			return name + " is written by geometry, none of which this engine draws into the pack's "
+					+ "targets" + clear;
 		}
 
 		// Nothing fills this half at any point of the frame. Whether that is a hole or a history
@@ -818,6 +901,32 @@ public final class ChainPlan {
 
 	public Optional<Seed> seed() {
 		return Optional.ofNullable(this.seed);
+	}
+
+	/**
+	 * Whether a pass's FIRST output lands exactly where the scene seed is painted, target and half.
+	 * <p>
+	 * It is the one condition under which a family drawn before the deferred stage may take over a
+	 * draw the game would otherwise make into its own target: the renderer opens that pass with one
+	 * attachment of its own, so an engine that redirects the draw can only redirect the first output,
+	 * and the only target where that is not a loss is the one already carrying the game's frame.
+	 * <p>
+	 * Answered here because two readers need the same answer and they are far apart. The one that
+	 * acts on it is {@code render/ParticleDraw}, which hands the opaque half back to the game when
+	 * this is false; the one that reports on it is {@link #verdicts}, which must not count a family's
+	 * targets as filled where the draw was handed back. Bliss is the pack that separates them: its
+	 * seed is colortex1 and its particle program writes colortex2 first, so the opaque half is
+	 * refused in all three of its places while the translucent half, which has no such condition,
+	 * draws.
+	 */
+	public static boolean leadsWithSeed(Seed seed, Pass pass) {
+		if (seed == null || pass == null || pass.attachments().isEmpty()) {
+			return false;
+		}
+
+		Attachment first = pass.attachments().get(0);
+
+		return seed.target() == first.target() && seed.side() == first.side();
 	}
 
 	/** ALT to MAIN at end of frame: still flipped, and kept between frames. */
