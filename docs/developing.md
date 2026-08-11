@@ -157,12 +157,14 @@ where the precedence is conventional and the parentheses only spare the reader a
 worth the gate is a condition in front of a ternary, which parses as `(a || b) ? x : y` and reads as
 `a || (b ? x : y)`. Nothing was wrong there either, and that was the point.
 
-**Know what a gate does not cover before quoting it as one.** Two holes here, and both were
+**Know what a gate does not cover before quoting it as one.** Three holes here, and each was
 measured rather than reasoned about. The splitter check reports a call only where it can follow
 every use of the array, and goes quiet as soon as the array is handed to another method - calls
 written that way sat in this tree and in no report, and were found by grep. And the whole analyser
-is pointed away from the mixin package, so a split written under `neoforge/mixin/` compiles green
-whatever the severity says. What keeps those two shapes honest is reading, not the build.
+is pointed away from two packages, so a split written under `neoforge/mixin/` or under the vendored
+`uniform/expr/kroppeb/` compiles green whatever the severity says. The second of those is the
+deliberate price of leaving borrowed code as its author wrote it, and it is the one that hides a
+parser. What keeps all three shapes honest is reading, not the build.
 
 **Do not act on a dead-code finding without checking who calls it from outside the build.** Two
 whole families of method here are called by something the analyser cannot see. The loader calls into

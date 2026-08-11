@@ -187,12 +187,14 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/uniform/expr/kroppeb/stareval/ is stareval, by Kroppeb,
   fifty-eight files taken from Iris at commit b0ae41c in August 2026 and relocated under this
   package so that nothing collides if Iris is installed alongside. The author's own package name
-  is kept inside the path. Four edits: Type.convert answers a UniformShape instead of Iris's GL
+  is kept inside the path. Five edits: Type.convert answers a UniformShape instead of Iris's GL
   uniform type enum and gained the reverse direction; FunctionResolver.logAllFunctions, which
   printed the table to standard output, became names(), which a test can compare against;
   fastutil's collections became the JDK's; and the two unreachable log overloads of
   ExpressionResolver are not carried, the one taking a Supplier, which nothing calls, and the one
-  taking a plain String, which that first one is the only caller of.
+  taking a plain String, which that first one is the only caller of. And StringReader is final
+  where Iris leaves it open, which this build's -Werror requires of a class that publishes this
+  from its constructor; nothing subclasses it on either side.
 
   common/src/main/java/dev/vitrail/uniform/expr/ExprFunctions.java,
   common/src/main/java/dev/vitrail/uniform/expr/ExprGrammar.java,

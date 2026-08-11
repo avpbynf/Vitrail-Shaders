@@ -113,8 +113,13 @@ subprojects {
 		// harder. Answering this analyser file by file is bending it - a cast rewritten as a pattern
 		// and a summary line added are both a diff against Iris that nothing asked for. Pointing the
 		// analyser away is the same answer the javadoc gate already gives, in one place instead of
-		// seven. It costs the two promotions inside that package, and a parser is a place where
-		// OperatorPrecedence would be worth having: that is the price of not owning the code.
+		// seven.
+		//
+		// The price is bigger than the warnings it silences and is worth naming in full: a path
+		// this option names steps back from EVERY check, so the half of the catalogue rated an
+		// error by default stops gating that package too, and so do the two promoted above. A
+		// hand-written parser is exactly where OperatorPrecedence would earn its keep. That is what
+		// not owning the code costs, and reading is what stands in its place.
 		options.errorprone.excludedPaths = ".*/neoforge/mixin/.*|.*/uniform/expr/kroppeb/.*"
 	}
 

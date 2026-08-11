@@ -480,10 +480,11 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 			this.object = carrier(type);
 		}
 
-		// The same identity ladder as Type.convert, and safe for the same narrow reason: a
-		// declaration's type comes from TYPES above, which names six constants and nothing else, so
-		// the value compared here is always one of them. A type equal but not identical would fall
-		// through to null and the uniform would carry nothing, silently.
+		// The same identity ladder as Type.convert, and safe for the same narrow reason: both kinds
+		// of node are built from a fixed set of constants. A Derived takes its type from TYPES
+		// above, which names six and no ivec or matrix among them; an Input takes Type.of(shape),
+		// and that is what makes the last five branches here reachable at all. A type equal but not
+		// identical would fall through to null and the uniform would carry nothing, silently.
 		@SuppressWarnings("ReferenceEquality")
 		private static Object carrier(Type type) {
 			if (type == VectorType.VEC2) return new Vector2f();

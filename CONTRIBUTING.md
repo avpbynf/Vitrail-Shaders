@@ -107,9 +107,10 @@ limits is, why either check was promoted, and what neither of them covers, are i
 unless told not to, and typographic punctuation. Why each of those is a gate, and what the second
 one really catches, is in [developing](docs/developing.md).
 
-The vendored stareval sources under `uniform/expr/kroppeb/` are left out of the javadoc lint.
-Their javadoc is their author's, and bending borrowed code to this project's taste only makes the
-next comparison with upstream harder to read.
+The vendored stareval sources under `uniform/expr/kroppeb/` are left out of the javadoc lint and
+out of the static analyser, promotions included. The code is its author's, and bending borrowed
+code to this project's taste only makes the next comparison with upstream harder to read. Nothing
+guards that package, so a change made there is worth reading twice.
 
 Run it before pushing rather than after. `main` staying buildable is a promise kept by whoever
 pushes.
