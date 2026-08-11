@@ -203,12 +203,14 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/uniform/expr/BooleanVectorizedFunction.java come from
   net.irisshaders.iris.parsing, same commit and same date, renamed where the old name said Iris.
   The OptiFine documentation in the header of IrisFunctions is kept word for word: it is the only
-  statement of the contract these packs were written against. Two changes of substance. The six
+  statement of the contract these packs were written against. Three changes of substance. The six
   overloads of smooth are built by one method rather than written out, and they take the frame
   duration from the evaluation context instead of a global timer, so that the smoothing itself is
   the one in dev.vitrail.uniform.Smoothed rather than a second copy of it. And an implicit cast
   from int to bool is registered, which Iris does not need: it types a boolean uniform as a
-  boolean, where our catalogue has no boolean shape and hands one over as an integer.
+  boolean, where our catalogue has no boolean shape and hands one over as an integer. And the four
+  constants of VectorType that Iris declares and never reads, the three boolean vectors and the
+  table of every array vector type, are not carried, nothing here reading them either.
 
   common/src/main/java/dev/vitrail/uniform/expr/CustomUniforms.java follows the dependency graph of
   net.irisshaders.iris.uniforms.custom.CustomUniforms, adapted in August 2026: the topological

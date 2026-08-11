@@ -106,7 +106,7 @@ final class ParticleProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pipeline this program is drawn with, compiled where the renderer asks for its shader.
+	 * The pipeline the particles are drawn with, compiled before the renderer opens its pass.
 	 *
 	 * @see GeometryProgram#prepare
 	 */
@@ -130,7 +130,7 @@ final class ParticleProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pass this program is drawn into, pointed at the pack's targets rather than the game's.
+	 * The pass this program is drawn into, or null to leave the renderer the one it meant to open.
 	 *
 	 * @see GeometryProgram#descriptor
 	 */

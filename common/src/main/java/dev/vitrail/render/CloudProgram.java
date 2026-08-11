@@ -108,7 +108,7 @@ final class CloudProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pipeline the clouds are drawn with, compiled where the renderer asks for its shader.
+	 * The pipeline the clouds are drawn with, compiled before the renderer opens its pass.
 	 *
 	 * @see GeometryProgram#prepare
 	 */
@@ -117,7 +117,7 @@ final class CloudProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pass the clouds are drawn into, pointed at the pack's targets rather than the game's.
+	 * The pass the clouds are drawn into, or null to leave the renderer the one it meant to open.
 	 *
 	 * @see GeometryProgram#descriptor
 	 */

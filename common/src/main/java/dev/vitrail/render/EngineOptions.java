@@ -341,9 +341,10 @@ final class EngineOptions {
 		// list of names go through untouched.
 		String text = value.isBoolean() ? (value.asBoolean() ? "" : "0") : value.text();
 		ChainFilter filter = ChainFilter.parse(text);
-		// By value: ChainFilter is a record, and parse returns the ALL constant itself only on the
-		// paths that happen to fall back to it today. Identity here would answer a question about
-		// which object came back rather than about which chain was asked for.
+		// By value, because the question is which chain was asked for and not which object came
+		// back. No filter parse can build today is equal to ALL without being ALL, so this changes
+		// nothing on screen; it stops depending on that. SettingsScreen answers the other way on
+		// its own record, and says there why identity is what it needs.
 		if (filter.equals(ChainFilter.ALL) && !text.isBlank()) {
 			Vitrail.logger().warn("'{}={}' is neither a count nor a list of program names, so the "
 					+ "whole chain runs", PASSES_KEY, text);

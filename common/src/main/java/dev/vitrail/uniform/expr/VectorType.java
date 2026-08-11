@@ -14,10 +14,10 @@ import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
-// Each name below is the sole instance of its class and is read as such, so the holder is this
-// class and not a separate table: a subclass instance in a superclass field can only deadlock if
-// two threads initialise the pair at once, and the whole type system is built on the render thread
-// before the first expression is parsed.
+// The names below are the instances everything else compares against, so the holder is this class
+// and not a table beside it. A subclass instance in a superclass field can only deadlock if two
+// threads initialise the pair at once, and nothing does: a pack is read on one thread, and the
+// off-game harness runs on its own.
 @SuppressWarnings("ClassInitializationDeadlock")
 abstract public class VectorType extends Type.ObjectType {
 	public static final JOMLVector<Vector2f> VEC2 = new JOMLVector<>("vec2", Vector2f::new);

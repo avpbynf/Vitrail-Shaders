@@ -194,7 +194,7 @@ public final class PackProgram {
 	}
 
 	/**
-	 * Every program of one place, in the order they run, with what could not be built.
+	 * The full screen chain of one place, in the order it runs, with what could not be built.
 	 *
 	 * @param place    where the entry points were read from, {@code ""} at the root
 	 * @param programs by bare name, {@code composite4}, in the order they run, the final last

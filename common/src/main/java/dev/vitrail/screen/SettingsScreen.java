@@ -266,6 +266,11 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	 * file: a line added to {@code options.txt} greys a setting without losing the click made under
 	 * it. Another pack drops it, a value set on one pack having no meaning in the next one's file.
 	 */
+	// By identity, and here that is the opposite answer to the one EngineOptions gives on its own
+	// record, on purpose. The question is whether the render layer has handed over a new reading,
+	// not whether the reading says the same thing: a reload of an unchanged pack builds a session
+	// equal to the held one, and by value this method would then return early and leave the screen
+	// on the menu it read before. That is the promise the paragraph below makes and would break.
 	@SuppressWarnings("ReferenceEquality")
 	private void syncWithLoadedPack() {
 		PackSession loaded = PackChain.session().orElse(null);

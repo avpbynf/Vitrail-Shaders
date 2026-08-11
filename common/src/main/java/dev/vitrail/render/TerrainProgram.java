@@ -254,7 +254,7 @@ public final class TerrainProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pass this program is drawn into, pointed at the pack's targets rather than the game's.
+	 * The pass this program is drawn into, or null to leave the chunk renderer its own.
 	 *
 	 * @see GeometryProgram#descriptor
 	 */

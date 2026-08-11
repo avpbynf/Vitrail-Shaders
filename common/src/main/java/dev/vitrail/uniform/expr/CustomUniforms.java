@@ -480,6 +480,10 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 			this.object = carrier(type);
 		}
 
+		// The same identity ladder as Type.convert, and safe for the same narrow reason: a
+		// declaration's type comes from TYPES above, which names six constants and nothing else, so
+		// the value compared here is always one of them. A type equal but not identical would fall
+		// through to null and the uniform would carry nothing, silently.
 		@SuppressWarnings("ReferenceEquality")
 		private static Object carrier(Type type) {
 			if (type == VectorType.VEC2) return new Vector2f();

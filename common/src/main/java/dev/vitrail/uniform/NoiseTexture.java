@@ -56,8 +56,8 @@ public final class NoiseTexture {
 	 * A decoded pack image, in the same byte order {@link #rgba(int)} writes.
 	 * <p>
 	 * The payload is handed on rather than copied. It is megabytes of texels on its way to the GPU,
-	 * read once by the upload and by nothing else, and a record that copied it on every accessor
-	 * would double the cost of every pack load to protect a buffer nobody writes to.
+	 * read by the upload and by whoever rewraps it, written by nobody, and a record that copied it
+	 * on every accessor would pay for every pack load to protect a buffer nothing modifies.
 	 */
 	@SuppressWarnings("ArrayRecordComponent")
 	public record Image(int width, int height, byte[] rgba) {

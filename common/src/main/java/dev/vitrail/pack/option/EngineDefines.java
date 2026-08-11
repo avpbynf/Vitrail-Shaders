@@ -73,9 +73,9 @@ public final class EngineDefines {
 	 *
 	 * @param vendorName      the device's vendor as the driver reports it, classified here
 	 * @param rendererName    the driver's own description, classified here
-	 * @param biomes          registered biome path to id, in the order the ids were handed out. The
-	 *                        id is the one the biome uniform carries, so the two have to come from
-	 *                        the same place
+	 * @param biomes          registered biome path to id, in the order the ids were handed out. It
+	 *                        is the id a pack's biome comparison is written against, so the two
+	 *                        have to come from the same place
 	 * @param biomeCategories the category names, in ordinal order, which is what makes
 	 *                        {@code CAT_DESERT} the number the biome value carries
 	 */

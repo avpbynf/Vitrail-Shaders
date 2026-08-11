@@ -93,7 +93,7 @@ final class SkyProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pipeline this sky element is drawn with, compiled where the renderer asks for its shader.
+	 * The pipeline this sky element is drawn with, compiled before the renderer opens its pass.
 	 *
 	 * @param modelView the matrix the game pushed for this element, which is where the sun is
 	 * @see GeometryProgram#prepare
@@ -113,7 +113,7 @@ final class SkyProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pass this program is drawn into, pointed at the pack's targets rather than the game's.
+	 * The pass this program is drawn into, or null to leave the renderer the one it meant to open.
 	 *
 	 * @see GeometryProgram#descriptor
 	 */

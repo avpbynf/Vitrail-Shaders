@@ -143,7 +143,7 @@ final class EntityProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pipeline this entity piece is drawn with, compiled where the renderer asks for its shader.
+	 * The pipeline this entity piece is drawn with, compiled inside the pass this engine opens.
 	 *
 	 * @param modelView the matrix the game would have drawn this piece with, which is the frame's
 	 *                  camera for most of them and null for those. A piece that carries a layering
@@ -171,7 +171,7 @@ final class EntityProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pass this program is drawn into, pointed at the pack's targets rather than the game's.
+	 * The pass this program is drawn into, or null to leave the renderer the one it meant to open.
 	 *
 	 * @see GeometryProgram#descriptor
 	 */

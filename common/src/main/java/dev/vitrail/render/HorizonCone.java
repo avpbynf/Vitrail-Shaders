@@ -13,7 +13,6 @@ import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 
-
 /**
  * The wall of sky the game has no geometry for, so that the pack's own sky program has a surface to
  * run on all the way down to the terrain.

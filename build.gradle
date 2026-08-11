@@ -106,7 +106,16 @@ subprojects {
 		// It steps back whole, promotions included: a single-argument split planted in this package
 		// compiles green, measured rather than assumed. What the pattern names is a path and not a
 		// module, so it is this package that steps back and nothing else does.
-		options.errorprone.excludedPaths = ".*/neoforge/mixin/.*"
+		//
+		// The vendored evaluator steps back for the reason already written three times about its
+		// javadoc, above at -Xdoclint/package, in CONTRIBUTING and in developing: the code is its
+		// author's, and bending it to this project's taste makes the next comparison with upstream
+		// harder. Answering this analyser file by file is bending it - a cast rewritten as a pattern
+		// and a summary line added are both a diff against Iris that nothing asked for. Pointing the
+		// analyser away is the same answer the javadoc gate already gives, in one place instead of
+		// seven. It costs the two promotions inside that package, and a parser is a place where
+		// OperatorPrecedence would be worth having: that is the price of not owning the code.
+		options.errorprone.excludedPaths = ".*/neoforge/mixin/.*|.*/uniform/expr/kroppeb/.*"
 	}
 
 	tasks.withType(AbstractArchiveTask).configureEach {

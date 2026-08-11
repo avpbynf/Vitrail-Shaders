@@ -157,7 +157,6 @@ public class ExpressionResolver {
 		this.logs = new ArrayList<>();
 	}
 
-	@SuppressWarnings("AnnotateFormatMethod")
 	private void log(String str, Object... args) {
 		if (this.enableDebugging)
 			this.logs.add(String.format(str, args));
@@ -270,11 +269,20 @@ public class ExpressionResolver {
 			try {
 				final int val;
 				if (str.length() >= 2 && str.charAt(0) == '0') {
-					val = switch (str.charAt(1)) {
-						case 'b' -> Integer.parseInt(str.substring(2), 2);
-						case 'x' -> Integer.parseInt(str.substring(2), 16);
-						default -> Integer.parseInt(str.substring(1), 8);
-					};
+					switch (str.charAt(1)) {
+						case 'b': {
+							val = Integer.parseInt(str.substring(2), 2);
+							break;
+						}
+						case 'x': {
+							val = Integer.parseInt(str.substring(2), 16);
+							break;
+						}
+						default: {
+							val = Integer.parseInt(str.substring(1), 8);
+							break;
+						}
+					}
 				} else
 					val = Integer.parseInt(str);
 

@@ -70,7 +70,7 @@ public final class TargetSchedule {
 	public enum Side { MAIN, ALT }
 
 	/**
-	 * One pass of the walk, with the targets it writes.
+	 * One pass of the frame, with the targets it writes.
 	 *
 	 * @param fullscreen a gbuffers pass writes the half it reads and takes no part in the walk
 	 */

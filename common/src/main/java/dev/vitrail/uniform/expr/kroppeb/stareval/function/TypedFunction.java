@@ -58,14 +58,14 @@ public interface TypedFunction {
 		@Override
 		public boolean equals(Object obj) {
 			if (obj instanceof Parameter p) {
-				return Objects.equals(type, p.type) && isConstant == p.isConstant;
+				return Objects.equals(type, p.type) && Objects.equals(isConstant, p.isConstant);
 			}
 			return false;
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hashCode(type) + 3192 + Boolean.hashCode(isConstant);
+			return Objects.hashCode(type) + 3192 + Objects.hashCode(isConstant);
 		}
 	}
 }
