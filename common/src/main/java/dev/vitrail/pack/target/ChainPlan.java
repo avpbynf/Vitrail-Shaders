@@ -204,6 +204,8 @@ public final class ChainPlan {
 	}
 
 	/**
+	 * One full screen pass of the chain, with what it draws into.
+	 *
 	 * @param attachments in draw buffer order, at most eight, no index named twice. Empty on the
 	 *                    final alone, which writes the game's own target and no colortex; on
 	 *                    everything in {@link #passes()} there is at least one, so nothing has to
@@ -277,6 +279,8 @@ public final class ChainPlan {
 	}
 
 	/**
+	 * Builds the chain of one place from the programs that could be resolved.
+	 *
 	 * @param refused why programs of this place can have no pipeline built for them at all, in
 	 *                whole sentences. They are put first because the caller shows one of them and
 	 *                the one worth showing is the one nothing downstream could have worked around

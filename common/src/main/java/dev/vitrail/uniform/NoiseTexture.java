@@ -52,7 +52,14 @@ public final class NoiseTexture {
 	private NoiseTexture() {
 	}
 
-	/** A decoded pack image, in the same byte order {@link #rgba(int)} writes. */
+	/**
+	 * A decoded pack image, in the same byte order {@link #rgba(int)} writes.
+	 * <p>
+	 * The payload is handed on rather than copied. It is megabytes of texels on its way to the GPU,
+	 * read once by the upload and by nothing else, and a record that copied it on every accessor
+	 * would double the cost of every pack load to protect a buffer nobody writes to.
+	 */
+	@SuppressWarnings("ArrayRecordComponent")
 	public record Image(int width, int height, byte[] rgba) {
 	}
 
@@ -115,7 +122,11 @@ public final class NoiseTexture {
 		return new Image(width, height, pixels);
 	}
 
-	/** @param resolution the width and the height, from the pack's {@code noiseTextureResolution} */
+	/**
+	 * Generates the noise image the engine falls back on when the pack ships none.
+	 *
+	 * @param resolution the width and the height, from the pack's {@code noiseTextureResolution}
+	 */
 	public static byte[] rgba(int resolution) {
 		byte[] pixels = new byte[resolution * resolution * 4];
 		Random random = new Random(0);

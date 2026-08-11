@@ -69,7 +69,11 @@ public final class TargetSchedule {
 
 	public enum Side { MAIN, ALT }
 
-	/** @param fullscreen a gbuffers pass writes the half it reads and takes no part in the walk */
+	/**
+	 * One pass of the walk, with the targets it writes.
+	 *
+	 * @param fullscreen a gbuffers pass writes the half it reads and takes no part in the walk
+	 */
 	public record Step(String program, List<Integer> writes, boolean fullscreen) {
 	}
 
@@ -86,7 +90,11 @@ public final class TargetSchedule {
 		}
 	}
 
-	/** @param steps in render order, not in directive order */
+	/**
+	 * Chooses which half every pass reads and writes, by walking the passes in order.
+	 *
+	 * @param steps in render order, not in directive order
+	 */
 	public static TargetSchedule of(List<Step> steps, List<ShaderProperties.FlipDirective> explicit) {
 		Map<String, Map<Integer, Boolean>> forced = byProgram(explicit);
 		Set<Integer> flipped = new LinkedHashSet<>();

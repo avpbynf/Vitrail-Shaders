@@ -77,6 +77,8 @@ public final class SamplerPlan {
 	}
 
 	/**
+	 * What one sampler name of the program is bound to.
+	 *
 	 * @param index the colour target for {@link Kind#COLORTEX}, the shadow colour target for
 	 *              {@link Kind#SHADOW_COLOUR}, -1 otherwise. The two families are numbered apart and
 	 *              never share a texture, so the kind has to be read before the index means anything
@@ -159,6 +161,8 @@ public final class SamplerPlan {
 	}
 
 	/**
+	 * Works out what each sampler the program declares will be bound to.
+	 *
 	 * @param declared the sampler names the translated program declares, in that order
 	 * @param program  the program the plan is for, so the flip snapshot is the right one
 	 */
@@ -167,6 +171,8 @@ public final class SamplerPlan {
 	}
 
 	/**
+	 * The same, with the types the reader managed to put on those names.
+	 *
 	 * @param types the declared type of each name. A name missing from it is one the reader could
 	 *              not type, and is taken at its word rather than refused on a guess
 	 */
@@ -176,6 +182,8 @@ public final class SamplerPlan {
 	}
 
 	/**
+	 * The same, told which names the pack supplies a file for.
+	 *
 	 * @param supplied every name the pack supplies a file for at this program's stage. What is
 	 *                 still standing by the time this program draws is worked out here rather than
 	 *                 handed in, because it is the plan that knows
@@ -201,6 +209,8 @@ public final class SamplerPlan {
 	}
 
 	/**
+	 * The same, with the program's step in the schedule and its overrides already worked out.
+	 *
 	 * @param supplied the names the pack supplies a file for, already narrowed to this program's
 	 *                 stage and to the overrides that still stand
 	 */

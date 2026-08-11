@@ -75,6 +75,8 @@ public final class VertexPrologue {
 	}
 
 	/**
+	 * The globals the vertex prologue has to declare, and the text each is given.
+	 *
 	 * @param ahead names to answer between the pack's own and {@link #SYNTHESIZED}. Only the chunk
 	 *              mesh has any: its head hands back the texture units above the light map as
 	 *              globals rather than as macros, and where they sit decides the text

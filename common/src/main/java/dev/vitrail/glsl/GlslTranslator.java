@@ -283,6 +283,8 @@ public final class GlslTranslator {
 	}
 
 	/**
+	 * Translates one expanded file into the unit a pipeline is built from.
+	 *
 	 * @param program the bare name of the program this file is the entry point of, or empty where
 	 *                the file is an include and serves no pass of its own
 	 */

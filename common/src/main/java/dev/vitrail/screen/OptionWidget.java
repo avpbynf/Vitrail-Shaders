@@ -48,7 +48,11 @@ public abstract class OptionWidget extends AbstractButton {
 	/** The value as the pack names it, prefix and suffix applied. */
 	protected abstract Component valueLabel();
 
-	/** @param direction {@code +1} for the next value, {@code -1} for the previous one */
+	/**
+	 * Moves this option one value along.
+	 *
+	 * @param direction {@code +1} for the next value, {@code -1} for the previous one
+	 */
 	protected abstract void cycle(int direction);
 
 	protected Component nameLabel() {

@@ -40,6 +40,8 @@ public record TargetSize(boolean relative, float width, float height) {
 	}
 
 	/**
+	 * Reads a size directive, which is two tokens and may be written through the pack's settings.
+	 *
 	 * @param value   the two tokens as written in shaders.properties
 	 * @param defines the settings already resolved, because a pack writes
 	 *                {@code size.buffer.colortex1 = REFLECTION_RES REFLECTION_RES}

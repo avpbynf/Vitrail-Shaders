@@ -105,7 +105,11 @@ final class ParticleProgram implements DumpedProgram {
 				bound, values, load, DefaultVertexFormat.PARTICLE, writes, targets, chainRuns));
 	}
 
-	/** @see GeometryProgram#prepare */
+	/**
+	 * The pipeline this program is drawn with, compiled where the renderer asks for its shader.
+	 *
+	 * @see GeometryProgram#prepare
+	 */
 	RenderPipeline prepare(GpuDevice device) {
 		// No model view of its own and no colour: the renderer writes its transform from
 		// RenderSystem.getModelViewMatrixCopy(), which is the frame's camera, and through the one
@@ -125,17 +129,29 @@ final class ParticleProgram implements DumpedProgram {
 		this.body.sampler(sampler);
 	}
 
-	/** @see GeometryProgram#descriptor */
+	/**
+	 * The pass this program is drawn into, pointed at the pack's targets rather than the game's.
+	 *
+	 * @see GeometryProgram#descriptor
+	 */
 	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
 		return this.body.descriptor(colour, depth);
 	}
 
-	/** @see GeometryProgram#plain */
+	/**
+	 * Whether the pass to open is the plain one, with none of the pack's own targets named.
+	 *
+	 * @see GeometryProgram#plain
+	 */
 	boolean plain() {
 		return this.body.plain();
 	}
 
-	/** @see GeometryProgram#bind */
+	/**
+	 * Binds this program's block and every sampler it declares, inside the pass just opened.
+	 *
+	 * @see GeometryProgram#bind
+	 */
 	void bind(RenderPass pass) {
 		this.body.bind(pass);
 	}
@@ -158,12 +174,20 @@ final class ParticleProgram implements DumpedProgram {
 		return this.body.label();
 	}
 
-	/** @see GeometryProgram#rotate */
+	/**
+	 * Rotates the ring buffer, once the frame's draw has been recorded.
+	 *
+	 * @see GeometryProgram#rotate
+	 */
 	void rotate() {
 		this.body.rotate();
 	}
 
-	/** @see GeometryProgram#release */
+	/**
+	 * Closes this program's block and the placeholder textures it made.
+	 *
+	 * @see GeometryProgram#release
+	 */
 	void release() {
 		this.body.release();
 	}

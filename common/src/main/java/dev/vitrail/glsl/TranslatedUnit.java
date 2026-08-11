@@ -43,6 +43,8 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	}
 
 	/**
+	 * What the translation did to one file, counted, so a run over a corpus can be read.
+	 *
 	 * @param fragmentOutputs    how many fragment outputs the header declares, counting both the
 	 *                           {@code ofFragData} slots and the outputs the pack names itself and
 	 *                           the translator lifts. An upper bound: writes from branches nobody

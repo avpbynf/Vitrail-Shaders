@@ -57,6 +57,8 @@ public final class ProgramTranslator {
 	}
 
 	/**
+	 * Every stage of one program, translated, with what the pipeline will have to declare.
+	 *
 	 * @param uniforms    the block every stage declares, in the order a std140 buffer is filled in
 	 * @param samplers    every opaque uniform any stage binds, which is what the pipeline declares
 	 * @param synthesized vertex inputs the mesh has not got, answered with a constant, by name and
@@ -69,6 +71,8 @@ public final class ProgramTranslator {
 	}
 
 	/**
+	 * Translates every stage of one program, drawn over the world.
+	 *
 	 * @param program the bare name of the program the pass wants, {@code gbuffers_entities}, or
 	 *                empty where the caller is measuring and no pass is named
 	 */
@@ -77,6 +81,8 @@ public final class ProgramTranslator {
 	}
 
 	/**
+	 * The same, told whether the program is drawn over a quad rather than over the world.
+	 *
 	 * @param fullscreen whether this program is drawn over a quad, which changes where the vertex
 	 *                   stage takes its inputs from
 	 */
@@ -85,6 +91,8 @@ public final class ProgramTranslator {
 	}
 
 	/**
+	 * The same, with the vertex stage's inputs named outright rather than read off a flag.
+	 *
 	 * @param inputs where this program's vertex stage takes its inputs from
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
@@ -93,6 +101,8 @@ public final class ProgramTranslator {
 	}
 
 	/**
+	 * The same, under the alpha test the pass carries rather than the program.
+	 *
 	 * @param alphaTest what the fragment stage discards at, which belongs to the pass the program is
 	 *                  drawn in rather than to the program: one {@code gbuffers_terrain} serves both
 	 *                  the solid half of the chunk pass, with no test, and the cutout half, at a half
@@ -103,6 +113,8 @@ public final class ProgramTranslator {
 	}
 
 	/**
+	 * The same, told whether the pass also writes the mask saying where it drew.
+	 *
 	 * @param coverage whether the fragment stage also writes the mask saying where this pass drew.
 	 *                 A property of the pass, like the alpha test: the two opaque halves of the chunk
 	 *                 pass write it and no other pass of the engine does

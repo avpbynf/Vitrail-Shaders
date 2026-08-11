@@ -187,6 +187,8 @@ public final class UniformCatalog {
 		}
 
 		/**
+		 * Adds one name the catalogue can answer, and where its value comes from.
+		 *
 		 * @param natural the shape the engine holds the value in, which is not necessarily the one
 		 *                a program declares it under. The declaration decides what is written; this
 		 *                only says what there is to write.

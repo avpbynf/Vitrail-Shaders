@@ -138,6 +138,8 @@ public final class PackTextures {
 	}
 
 	/**
+	 * Reads every custom texture the pack declares, and the files behind them.
+	 *
 	 * @param defines the settings as they stand, because the lines are read through the pack's own
 	 *                conditionals and two packs put custom textures behind one
 	 */

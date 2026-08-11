@@ -101,6 +101,8 @@ public record ChainFilter(List<String> only, List<String> without, int limit) {
 	}
 
 	/**
+	 * Whether this filter keeps the program standing at that rank.
+	 *
 	 * @param bareName the program without its place, for instance {@code composite4}
 	 * @param rank     its position among the full screen programs the pack itself keeps, from 0.
 	 *                 The final is never offered here and is never filtered.

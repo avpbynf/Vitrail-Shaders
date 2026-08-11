@@ -107,22 +107,38 @@ final class CloudProgram implements DumpedProgram {
 				null, writes, targets, chainRuns));
 	}
 
-	/** @see GeometryProgram#prepare */
+	/**
+	 * The pipeline the clouds are drawn with, compiled where the renderer asks for its shader.
+	 *
+	 * @see GeometryProgram#prepare
+	 */
 	RenderPipeline prepare(GpuDevice device) {
 		return this.body.prepare(device, null);
 	}
 
-	/** @see GeometryProgram#descriptor */
+	/**
+	 * The pass the clouds are drawn into, pointed at the pack's targets rather than the game's.
+	 *
+	 * @see GeometryProgram#descriptor
+	 */
 	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
 		return this.body.descriptor(colour, depth);
 	}
 
-	/** @see GeometryProgram#bind */
+	/**
+	 * Binds this program's block and every sampler it declares, inside the pass just opened.
+	 *
+	 * @see GeometryProgram#bind
+	 */
 	void bind(RenderPass pass) {
 		this.body.bind(pass);
 	}
 
-	/** @see GeometryProgram#owns */
+	/**
+	 * Whether the pipeline a pass has bound is this program's.
+	 *
+	 * @see GeometryProgram#owns
+	 */
 	boolean owns(RenderPipeline bound) {
 		return this.body.owns(bound);
 	}
@@ -145,12 +161,20 @@ final class CloudProgram implements DumpedProgram {
 		return this.body.label();
 	}
 
-	/** @see GeometryProgram#rotate */
+	/**
+	 * Rotates the ring buffer, once the frame's draw has been recorded.
+	 *
+	 * @see GeometryProgram#rotate
+	 */
 	void rotate() {
 		this.body.rotate();
 	}
 
-	/** @see GeometryProgram#release */
+	/**
+	 * Closes this program's block and the placeholder textures it made.
+	 *
+	 * @see GeometryProgram#release
+	 */
 	void release() {
 		this.body.release();
 	}

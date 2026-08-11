@@ -101,6 +101,8 @@ public final class SettingsLayers {
 	}
 
 	/**
+	 * Everything a pack is built with, once the layers underneath it have been folded together.
+	 *
 	 * @param chosen      everything a pack is built with, the reserved key taken out of it
 	 * @param profile     the profile to expand underneath, "" for none
 	 * @param forcedNames what {@code options.txt} holds, the reserved key included, so that a

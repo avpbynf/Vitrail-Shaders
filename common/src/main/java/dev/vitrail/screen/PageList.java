@@ -44,6 +44,8 @@ public final class PageList extends ContainerObjectSelectionList<PageList.Row> {
 	}
 
 	/**
+	 * Lays one page of the pack's own menu out over the list.
+	 *
 	 * @param profileNames in declaration order, for the profile selector a page may ask for. A
 	 *                     pack with none never gets that slot, {@code PackMenu} having dropped it.
 	 */

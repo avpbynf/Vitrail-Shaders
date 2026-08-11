@@ -144,6 +144,8 @@ public final class TargetPlan {
 	}
 
 	/**
+	 * Reads what a place declares about its colour targets, and schedules the chain over them.
+	 *
 	 * @param dimension the directory the running programs come from, for instance {@code world0}
 	 */
 	public static TargetPlan build(ShaderPackSource source, OptionIndex options, SettingSet settings,
@@ -152,6 +154,8 @@ public final class TargetPlan {
 	}
 
 	/**
+	 * The same, over the part of the chain the user asked to keep.
+	 *
 	 * @param filter what the user asked to run on top of what the pack keeps. The schedule is
 	 *               rebuilt on what it leaves rather than trimmed afterwards, because a pass
 	 *               taken out moves the half every later pass reads.

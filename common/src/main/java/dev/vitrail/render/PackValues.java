@@ -396,6 +396,8 @@ public final class PackValues {
 	}
 
 	/**
+	 * The names nothing answers, sorted by what is missing behind each.
+	 *
 	 * @param engine  names the engine owes and does not answer
 	 * @param pack    names the pack declares itself, whose declaration did not survive
 	 * @param awaited names that wait on machinery that does not run, each with the reason

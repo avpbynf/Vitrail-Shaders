@@ -34,6 +34,8 @@ public final class GlslLexer {
 	}
 
 	/**
+	 * One token of the source, with the preprocessor line it sits on.
+	 *
 	 * @param directive the preprocessor keyword of the line this token sits on, {@code null} when
 	 *                  the token is ordinary code. A {@code #} on its own gives an empty string.
 	 */

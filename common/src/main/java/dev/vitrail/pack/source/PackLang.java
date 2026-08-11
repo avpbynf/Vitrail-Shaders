@@ -36,6 +36,8 @@ public final class PackLang {
 	}
 
 	/**
+	 * Reads the pack's own labels for the player's language.
+	 *
 	 * @param languageCode the player's language, lower case, for instance {@code fr_fr}. Falls back
 	 *                     to {@code en_us}, then to nothing. Resolved through
 	 *                     {@link ShaderPackSource#resolveInsideShaders(String)} and never through

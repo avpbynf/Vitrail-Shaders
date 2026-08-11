@@ -91,6 +91,8 @@ public enum TargetFormat {
 	public enum Reason { EXACT, PROMOTED, REPLACED, UNKNOWN }
 
 	/**
+	 * What a declared format was resolved to, and what made the difference.
+	 *
 	 * @param declared    the name the pack wrote, as written
 	 * @param alphaAdded  the declared format had no alpha channel and the allocated one does, so
 	 *                    a GL sampler would have read 1.0 where a Vulkan one reads the clear value

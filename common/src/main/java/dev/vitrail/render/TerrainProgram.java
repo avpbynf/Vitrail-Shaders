@@ -199,42 +199,74 @@ public final class TerrainProgram implements DumpedProgram {
 		return false;
 	}
 
-	/** @see GeometryProgram#prepare */
+	/**
+	 * The pipeline this program is drawn with, compiled where the renderer asks for its shader.
+	 *
+	 * @see GeometryProgram#prepare
+	 */
 	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas) {
 		return this.body.prepare(device, atlas);
 	}
 
-	/** @see GeometryProgram#bind */
+	/**
+	 * Binds this program's block and every sampler it declares, inside the pass just opened.
+	 *
+	 * @see GeometryProgram#bind
+	 */
 	void bind(RenderPass pass) {
 		this.body.bind(pass);
 	}
 
-	/** @see GeometryProgram#sampler(GpuSampler) */
+	/**
+	 * Takes the sampler the game configured for the block atlas, mipmaps and filtering included.
+	 *
+	 * @see GeometryProgram#sampler(GpuSampler)
+	 */
 	void sampler(GpuSampler sampler) {
 		this.body.sampler(sampler);
 	}
 
-	/** @see GeometryProgram#owns */
+	/**
+	 * Whether the pipeline a pass has bound is this program's.
+	 *
+	 * @see GeometryProgram#owns
+	 */
 	boolean owns(RenderPipeline bound) {
 		return this.body.owns(bound);
 	}
 
-	/** @see GeometryProgram#servable */
+	/**
+	 * Whether this program can still be served, which everything built on it has to agree with.
+	 *
+	 * @see GeometryProgram#servable
+	 */
 	boolean servable() {
 		return this.body.servable();
 	}
 
-	/** @see GeometryProgram#covers */
+	/**
+	 * Whether this pass really marks the pixels it wrote.
+	 *
+	 * @see GeometryProgram#covers
+	 */
 	boolean covers() {
 		return this.body.covers();
 	}
 
-	/** @see GeometryProgram#descriptor */
+	/**
+	 * The pass this program is drawn into, pointed at the pack's targets rather than the game's.
+	 *
+	 * @see GeometryProgram#descriptor
+	 */
 	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
 		return this.body.descriptor(colour, depth);
 	}
 
-	/** @see GeometryProgram#rotate */
+	/**
+	 * Rotates the ring buffer, once the frame's draw has been recorded.
+	 *
+	 * @see GeometryProgram#rotate
+	 */
 	void rotate() {
 		this.body.rotate();
 	}
@@ -257,7 +289,11 @@ public final class TerrainProgram implements DumpedProgram {
 		return this.body.label();
 	}
 
-	/** @see GeometryProgram#release */
+	/**
+	 * Closes this program's block and the placeholder textures it made.
+	 *
+	 * @see GeometryProgram#release
+	 */
 	void release() {
 		this.body.release();
 	}

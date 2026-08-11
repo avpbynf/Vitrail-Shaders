@@ -203,7 +203,11 @@ public final class SettingsFile {
 	public record Carried(Carry carry, String profile, Path file) {
 	}
 
-	/** @see Carried */
+	/**
+	 * What became of a settings file left behind by an older layout.
+	 *
+	 * @see Carried
+	 */
 	public enum Carry {
 
 		/** No old file, or a shared one already there. The ordinary case, and silent. */

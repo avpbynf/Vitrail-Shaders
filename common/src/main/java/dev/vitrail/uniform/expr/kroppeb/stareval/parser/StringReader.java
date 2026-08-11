@@ -56,9 +56,7 @@ public final class StringReader {
 		}
 	}
 
-	/**
-	 * @return The character that would be returned by the next call to {@link #read}
-	 */
+	/** The character that would be returned by the next call to {@link #read}. */
 	public char peek() {
 		return this.string.charAt(this.nextIndex);
 	}
@@ -119,15 +117,13 @@ public final class StringReader {
 	}
 
 	/**
-	 * @return a string, starting at the last call to {@link #mark()}, up to and including the last read character
+	 * The text from the last call to {@link #mark()} up to and including the last character read.
 	 */
 	public String substring() {
 		return this.string.substring(this.mark, this.lastIndex + 1);
 	}
 
-	/**
-	 * @return whether there is more text to read.
-	 */
+	/** Whether there is more text to read. */
 	public boolean canRead() {
 		return this.nextIndex < this.string.length();
 	}

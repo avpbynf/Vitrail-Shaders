@@ -26,6 +26,8 @@ public final class Smoothed {
 	private boolean started;
 
 	/**
+	 * Folds one frame's value into the smoothed one and hands the result back.
+	 *
 	 * @param halfLifeUp   half life in deciseconds while the value rises
 	 * @param halfLifeDown half life in deciseconds while it falls
 	 * @param dt           the previous frame's duration in seconds, quantised the way the frame

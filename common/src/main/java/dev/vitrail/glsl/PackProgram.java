@@ -56,6 +56,8 @@ public final class PackProgram {
 	}
 
 	/**
+	 * One program of the pack, translated, with everything the draw will need to bind it.
+	 *
 	 * @param targets   what the whole dimension declares about its colour targets, which is read
 	 *                  from thirty odd programs while only one of them is translated
 	 * @param samplers  what each sampler of the translated program is bound to, answered here
@@ -192,6 +194,8 @@ public final class PackProgram {
 	}
 
 	/**
+	 * Every program of one place, in the order they run, with what could not be built.
+	 *
 	 * @param place    where the entry points were read from, {@code ""} at the root
 	 * @param programs by bare name, {@code composite4}, in the order they run, the final last
 	 * @param removed  the full screen programs no pipeline can be built for, by bare name, each with
@@ -211,6 +215,8 @@ public final class PackProgram {
 	}
 
 	/**
+	 * Reads and translates one program of the pack, with nothing of the pack's own overridden.
+	 *
 	 * @param path       where the program sits inside {@code shaders/}, without an extension,
 	 *                   for instance {@code world0/final}
 	 * @param fullscreen whether it is drawn over a quad rather than over the world
@@ -221,6 +227,8 @@ public final class PackProgram {
 	}
 
 	/**
+	 * The same, with some of the pack's settings answered from outside it.
+	 *
 	 * @param chosen settings to override, by the name the pack declares them under. Milestone 3
 	 *               already resolves these; handing them in here is what lets a pack's own
 	 *               features be turned on without touching the pack.
@@ -231,6 +239,8 @@ public final class PackProgram {
 	}
 
 	/**
+	 * The same, read under one of the profiles the pack declares.
+	 *
 	 * @param profile a profile the pack declares, applied underneath {@code chosen} so that a
 	 *                single setting can still be overridden on top of it. Profiles chain, and
 	 *                milestone 3 already follows the chain: BSL's ULTRA is HIGH is MEDIUM is LOW.
@@ -242,6 +252,8 @@ public final class PackProgram {
 	}
 
 	/**
+	 * The same, with the vertex stage's inputs named outright rather than read off a flag.
+	 *
 	 * @param inputs where the vertex stage takes its inputs from. {@link VertexInputs#TERRAIN} is
 	 *               what a chunk mesh of Sodium's is drawn under, and the only mode that answers
 	 *               for the names the mesh has not got
@@ -252,6 +264,8 @@ public final class PackProgram {
 	}
 
 	/**
+	 * The same, told which elements of that format the pass really binds.
+	 *
 	 * @param boundElements the elements of the vertex format the pass this program is drawn in
 	 *                      actually binds. Only {@link VertexInputs#SKY} needs it: the sky binds
 	 *                      four formats between its passes, so one program is loaded once per

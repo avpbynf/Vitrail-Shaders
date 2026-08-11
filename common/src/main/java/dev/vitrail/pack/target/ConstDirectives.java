@@ -34,7 +34,11 @@ public final class ConstDirectives {
 	private ConstDirectives() {
 	}
 
-	/** @param line index into {@link IncludeExpander.ExpandedUnit#lines()}, or -1 for a loose line */
+	/**
+	 * One {@code const} directive as the file wrote it.
+	 *
+	 * @param line index into {@link IncludeExpander.ExpandedUnit#lines()}, or -1 for a loose line
+	 */
 	public record Directive(String type, String name, String value, int line) {
 	}
 

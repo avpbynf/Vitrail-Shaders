@@ -99,7 +99,11 @@ public final class TargetDirectives {
 		private Builder() {
 		}
 
-		/** @param program the entry point path, for the source string a log will print */
+		/**
+		 * Takes the const directives one entry point declares.
+		 *
+		 * @param program the entry point path, for the source string a log will print
+		 */
 		public Builder accept(String program, IncludeExpander.ExpandedUnit fragment) {
 			List<String> lines = fragment.lines();
 
