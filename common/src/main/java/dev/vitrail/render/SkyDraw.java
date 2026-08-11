@@ -500,9 +500,12 @@ public final class SkyDraw {
 	 * draws. Empty is the answer that lets the sky move into the pack's targets at all.
 	 * <p>
 	 * A piece is one of these for either of two reasons, and they weigh the same: the pack serves no
-	 * program for it, so the game's own shader draws it, or the pack does serve one and declared no
-	 * draw buffer on it, so the plan has nowhere to send what it writes. Both leave that piece
-	 * reaching the pack's colour target through the scene seed alone.
+	 * program for it, so the game's own shader draws it, or it serves one the plan has no answer for.
+	 * The second is no longer the pack's silence, a program that declares no draw buffer being
+	 * answered colortex0 as Iris answers it: what is left of it is a file the expander could not
+	 * read, draw buffers this place cannot carry in one pass, and targets the pack asked to be
+	 * scaled, which {@link #writes} turns down above. Both leave that piece reaching the pack's
+	 * colour target through the scene seed alone.
 	 * <p>
 	 * A piece the pack switched off is not counted at all. Nothing draws it, so there is nothing
 	 * about it for the seed to carry and nothing for it to hold the rest back over.

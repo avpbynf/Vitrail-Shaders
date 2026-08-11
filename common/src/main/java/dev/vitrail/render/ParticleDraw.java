@@ -513,8 +513,10 @@ public final class ParticleDraw {
 	 * Where the outputs of one half belong, in draw buffer order and each on the half of the schedule
 	 * its side of the deferred stage gives it, or null when this place cannot answer for it.
 	 * <p>
-	 * Empty is not a refusal and is the ordinary case: a pack that declares no draw buffer on its
-	 * particle program writes one output, which goes to the game's target.
+	 * Empty is not a refusal, and it is no longer the pack's silence: a program that declares no draw
+	 * buffer is answered colortex0, as Iris answers it. What is left is a plan with no answer at all
+	 * for the file that serves this half, which is a file the expander could not read or draw buffers
+	 * this place cannot carry in one pass, and no place of the corpus is in that case.
 	 * <p>
 	 * Null is a refusal, and the reasons are not the same for the two halves. Both refuse a place
 	 * whose targets are not the size of the screen, one render pass having one render area. The

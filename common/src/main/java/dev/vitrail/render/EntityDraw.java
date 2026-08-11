@@ -822,15 +822,13 @@ public final class EntityDraw {
 	 * Where the outputs of one file that serves a piece belong, in draw buffer order and each on the
 	 * half the schedule gives it, or null when this place cannot answer for it.
 	 * <p>
-	 * Empty is not a refusal and is the ordinary case: a pack that declares no draw buffer on its
-	 * entity program writes one output, which goes to the game's target and reaches the pack's
-	 * picture through the scene seed. <strong>Where it lands is the seed's answer and not
-	 * OptiFine's</strong>, and the two differ: OptiFine infers colortex0 for a program that declares
-	 * nothing, while the seed paints the first draw buffer of the TERRAIN, which is colortex1 on two
-	 * packs of the corpus and colortex4 on a third. Two places of the corpus really are in that
-	 * case, Body Camera's {@code world1} and {@code world-1}, whose entities fall back on a
-	 * {@code gbuffers_textured} that declares no draw buffer at all; what keeps it from mattering
-	 * there is not this branch but the one above it, those same two places having no seed either.
+	 * Empty is not a refusal, and it is no longer the pack's silence: a program that declares no draw
+	 * buffer is answered colortex0, as Iris answers it. What is left is a plan with no answer at all
+	 * for the file that serves the piece, which is a file the expander could not read or draw buffers
+	 * this place cannot carry in one pass. Every place of the corpus answers, Body Camera's
+	 * {@code world1} and {@code world-1} among them: their entities fall back on a
+	 * {@code gbuffers_textured} that declares nothing, and the colortex0 inferred for it is the very
+	 * target their scene seed is painted into, so the last refusal below does not fire there either.
 	 * <p>
 	 * Null is a refusal, and there are three of them. The scene seed switched off, which takes the
 	 * only road the first output has. A place whose entity targets are not the size of

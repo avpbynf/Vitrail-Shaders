@@ -47,9 +47,10 @@ import java.util.Optional;
  * <strong>Where the clouds sit in the frame decides the rest.</strong> They are drawn after the main
  * pass, so the scene seed has already run and there is nothing for a coverage mask to keep off them;
  * and the pack's own colour target already holds the world, which is what a {@code gbuffers_clouds}
- * expects to blend onto. A pack that declares no draw buffer on the program leaves them on the
- * game's target, where the full screen layer brings them across flat, exactly as it did before this
- * class existed.
+ * expects to blend onto. A pack that declares no draw buffer on the program is answered colortex0,
+ * as Iris answers it, so the clouds land in a target of the pack's like any other piece; what leaves
+ * them on the game's target, where the full screen layer brings them across flat exactly as it did
+ * before this class existed, is a plan with no answer for the program at all.
  */
 public final class CloudDraw {
 
