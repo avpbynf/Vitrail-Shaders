@@ -263,6 +263,14 @@ public final class FrameState implements WorldState {
 		this.view.passModelView(matrix);
 	}
 
+	/**
+	 * The projection the pass about to write its block draws under, or null for the frame's. Set
+	 * beside the model view above and answering the same kind of question.
+	 */
+	public void passProjection(Matrix4fc matrix) {
+		this.view.passProjection(matrix);
+	}
+
 	/** The colour the pass modulates its draw by, or null for white. Set beside the two above. */
 	public void passColour(Vector4fc colour) {
 		this.view.passColour(colour);
@@ -1607,6 +1615,16 @@ public final class FrameState implements WorldState {
 	@Override
 	public Matrix4fc passModelViewInverse() {
 		return this.view.passModelViewInverse();
+	}
+
+	@Override
+	public Matrix4fc passProjection() {
+		return this.view.passProjection();
+	}
+
+	@Override
+	public Matrix4fc passProjectionInverse() {
+		return this.view.passProjectionInverse();
 	}
 
 	@Override

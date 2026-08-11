@@ -252,6 +252,9 @@ final class GeometryProgram {
 	/** The matrix the game pushed for this pass, or null for the frame's camera. */
 	private Matrix4fc modelView;
 
+	/** The volume this pass is drawn in, or null for the frame's. Only the hand sets one. */
+	private Matrix4fc projection;
+
 	/** The colour the game modulates this pass by, or null for white. */
 	private Vector4fc passColour;
 	private GpuSampler atlasSampler;
@@ -499,20 +502,24 @@ final class GeometryProgram {
 	 * @return the pipeline to draw with, or null to leave the game's own shader alone
 	 */
 	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas) {
-		return prepare(device, atlas, null, null);
+		return prepare(device, atlas, null, null, null);
 	}
 
 	/**
-	 * The same, for a pass the game draws with a model view of its own.
+	 * The same, for a pass the game draws with a model view, a colour or a volume of its own.
 	 *
-	 * @param modelView the matrix the game pushed for this pass, or null for the frame's camera.
-	 *                  Kept until the block is written rather than applied here: it is one value of
-	 *                  the block among the rest, and the block is written a few lines below
+	 * @param modelView  the matrix the game pushed for this pass, or null for the frame's camera.
+	 *                   Kept until the block is written rather than applied here: it is one value of
+	 *                   the block among the rest, and the block is written a few lines below
+	 * @param projection the volume this pass is drawn in, or null for the frame's. The hand is the
+	 *                   one family that sets it, and it is not a nudge of the frame's but a matrix
+	 *                   of its own; {@link dev.vitrail.uniform.ViewSource#passProjection} says why
 	 */
 	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas, Matrix4fc modelView,
-			Vector4fc passColour) {
+			Vector4fc passColour, Matrix4fc projection) {
 		this.modelView = modelView;
 		this.passColour = passColour;
+		this.projection = projection;
 		if (this.broken) {
 			return null;
 		}
@@ -810,6 +817,7 @@ final class GeometryProgram {
 		// stage does with its clip depth on the way out comes from this pair.
 		this.values.convention(this.pass.shadow() ? ClipSpace.FORWARD : ClipSpace.REVERSED);
 		this.values.modelView(this.modelView);
+		this.values.projection(this.projection);
 		this.values.passColour(this.passColour);
 		this.values.renderStage(this.pass.stage());
 

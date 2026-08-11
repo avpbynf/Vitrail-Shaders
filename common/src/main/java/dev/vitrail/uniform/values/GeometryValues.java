@@ -138,17 +138,23 @@ public final class GeometryValues {
 				(world, out) -> out.set(world.passModelView()));
 		builder.add("of_ModelViewMatrixInverse", UniformShape.MAT4,
 				(world, out) -> out.set(world.passModelViewInverse()));
+		// The PASS's projection and not the frame's, on the same argument as the model view above and
+		// with one family behind it rather than two: the hand is drawn under a head-up field of view
+		// and a clip depth squeezed to an eighth, and a pack reads that squeeze here while reading the
+		// camera's volume under gbufferProjection. ViewSource.passProjection has the two ways round it
+		// breaks. Every other pass sets none and is answered with the frame's, as it always was.
 		builder.add("of_ProjectionMatrix", UniformShape.MAT4,
-				(world, out) -> out.set(world.gbufferProjection()));
+				(world, out) -> out.set(world.passProjection()));
 		builder.add("of_ProjectionMatrixInverse", UniformShape.MAT4,
-				(world, out) -> out.set(world.gbufferProjectionInverse()));
+				(world, out) -> out.set(world.passProjectionInverse()));
 
 		// Composed here rather than published, because nothing else in the engine reads it: a full
 		// screen pass is handed the quad projection for it and a pack calling ftransform() is the
 		// only reader. Left to right, so that the pack's own gl_ProjectionMatrix * gl_ModelViewMatrix
-		// and its ftransform() are the same matrix.
+		// and its ftransform() are the same matrix, which is why this reads the pass's projection and
+		// not the frame's: the two factors have to be the two the pack would have multiplied.
 		builder.add("of_ModelViewProjectionMatrix", UniformShape.MAT4, (world, out) ->
-				out.set(new Matrix4f(world.gbufferProjection()).mul(world.passModelView())));
+				out.set(new Matrix4f(world.passProjection()).mul(world.passModelView())));
 
 		// The inverse transpose of the model view's rotation. The level's model view is a pure
 		// rotation, so this is its transpose, but it is computed rather than assumed: a shadow pass

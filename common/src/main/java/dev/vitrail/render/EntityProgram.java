@@ -171,7 +171,7 @@ final class EntityProgram implements DumpedProgram {
 	 * @see GeometryProgram#prepare
 	 */
 	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView) {
-		return this.body.prepare(device, null, modelView, null);
+		return this.body.prepare(device, null, modelView, null, null);
 	}
 
 	/**

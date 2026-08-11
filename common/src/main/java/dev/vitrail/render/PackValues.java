@@ -185,6 +185,19 @@ public final class PackValues {
 	}
 
 	/**
+	 * Which projection the next block is written for: the pass's own, or null for the frame's. Set
+	 * beside the model view and answering the same kind of question.
+	 * <p>
+	 * The hand is the only family that sets one, and it is not a nudge like the entities' but a
+	 * volume of its own: a head-up field of view and a clip depth squeezed to an eighth. See
+	 * {@link dev.vitrail.uniform.ViewSource#passProjection} for what answering it with the frame's
+	 * would do.
+	 */
+	public void projection(Matrix4fc matrix) {
+		this.state.passProjection(matrix);
+	}
+
+	/**
 	 * The colour the next block is written for, or null for white. The game modulates a whole draw
 	 * by one, and for the sky that is where the colour of the disc is: see
 	 * {@link dev.vitrail.uniform.ViewSource#passColour}.

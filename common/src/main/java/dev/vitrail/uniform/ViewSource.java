@@ -48,6 +48,33 @@ public interface ViewSource {
 	Matrix4fc passModelViewInverse();
 
 	/**
+	 * The projection of the pass being drawn, which is the frame's for almost all of them and is not
+	 * the same question as {@link #gbufferProjection()}.
+	 * <p>
+	 * <strong>The hand is why the two are apart.</strong> It is drawn under a projection of its own:
+	 * the head-up field of view rather than the camera's, and a clip depth squeezed to an eighth so
+	 * that an arm held in front of a wall is not cut in half by it. A pack reads that squeeze as
+	 * {@code gl_ProjectionMatrix} and undoes it with {@code MC_HAND_DEPTH}, which is the same eighth
+	 * written as a macro, while everything it reprojects against the world reads
+	 * {@code gbufferProjection}. Answer the two with one matrix and one of the two families breaks:
+	 * the frame's, and the hand lands somewhere in the world at the camera's field of view; the
+	 * hand's, and every composite rebuilds the world through a volume nothing was drawn in.
+	 * <p>
+	 * That is Iris's split as well and not a shape of ours. Its transformer sends
+	 * {@code gl_ProjectionMatrix} to {@code iris_ProjMat}
+	 * ({@code pipeline/transform/transformer/VanillaTransformer.java:368}), which is the projection
+	 * really bound at the draw and therefore the hand's while the hand is being drawn, and keeps
+	 * {@code gbufferProjection} on the level's.
+	 * <p>
+	 * Set by the pass before it writes its block, like the model view and the depth convention beside
+	 * it, and answered with the frame's whenever a pass has set nothing. What a pass hands in is in
+	 * the volume the game draws in, so it goes through the same conversion the frame's does.
+	 */
+	Matrix4fc passProjection();
+
+	Matrix4fc passProjectionInverse();
+
+	/**
 	 * The colour the game modulates the pass being drawn by, which enters what a pack reads as its
 	 * vertex colour. White for every pass that has not set one.
 	 * <p>

@@ -87,6 +87,15 @@ public final class ViewMatrices implements ViewSource {
 	private boolean passSet;
 
 	/**
+	 * The pass's own projection and its inverse, kept and dropped exactly as the pair above is. The
+	 * hand is the one family that sets one; {@link dev.vitrail.uniform.ViewSource#passProjection()}
+	 * says why it has to be a matrix of its own rather than the frame's.
+	 */
+	private final Matrix4f passProjection = new Matrix4f();
+	private final Matrix4f passProjectionInverse = new Matrix4f();
+	private boolean passProjectionSet;
+
+	/**
 	 * What was pre-multiplied into {@link #modelView} this frame, kept so that a pass handing in a
 	 * matrix of its own is given the same treatment.
 	 * <p>
@@ -161,6 +170,7 @@ public final class ViewMatrices implements ViewSource {
 		// the only reader left holding a stale one being the decoded dump, and that is said where
 		// the dump is taken.
 		this.passSet = false;
+		this.passProjectionSet = false;
 		this.passColour.set(1.0F, 1.0F, 1.0F, 1.0F);
 
 		this.far = far;
@@ -268,6 +278,27 @@ public final class ViewMatrices implements ViewSource {
 		}
 	}
 
+	/**
+	 * The projection the pass about to write its block is drawn under, or null for the frame's.
+	 * <p>
+	 * Through the same conversion the frame's goes through, and that is the whole of what this method
+	 * does beyond storing: what a pass hands in is the volume the game draws in, reversed over 0..1,
+	 * and what a pack reads is the legacy one. Converted here rather than by the caller, so that the
+	 * two projections a pack can read cannot end up in two different volumes.
+	 * <p>
+	 * <strong>The bob is deliberately NOT put on the front, where {@link #passModelView} puts
+	 * it.</strong> The two are one decision: this engine publishes the bob in the model view, so a
+	 * pass that sets both hands in a projection without it and a model view the bob is multiplied
+	 * into. A bob in both would apply it twice, and the hand would swing at double the walk.
+	 */
+	void passProjection(Matrix4fc matrix) {
+		this.passProjectionSet = matrix != null;
+		if (this.passProjectionSet) {
+			ClipSpace.toLegacyDepth(matrix, this.passProjection);
+			this.passProjection.invert(this.passProjectionInverse);
+		}
+	}
+
 	/** The colour the pass modulates its draw by, or null for white. */
 	void passColour(Vector4fc colour) {
 		this.passColour.set(colour == null ? new Vector4f(1.0F, 1.0F, 1.0F, 1.0F) : colour);
@@ -320,6 +351,16 @@ public final class ViewMatrices implements ViewSource {
 	@Override
 	public Matrix4fc passModelViewInverse() {
 		return this.passSet ? this.passModelViewInverse : this.modelViewInverse;
+	}
+
+	@Override
+	public Matrix4fc passProjection() {
+		return this.passProjectionSet ? this.passProjection : this.projection;
+	}
+
+	@Override
+	public Matrix4fc passProjectionInverse() {
+		return this.passProjectionSet ? this.passProjectionInverse : this.projectionInverse;
 	}
 
 	@Override
