@@ -294,9 +294,12 @@ public final class ChainPlan {
 	 * Four lines and not twelve, and the eight others are not missing: what a verdict has to know is
 	 * which targets are filled in EVERY place a plan is built for, and the sky, the clouds and the
 	 * weather are not drawn in every place however their line reads, so their line cannot move that
-	 * answer. These four can. Measured on the corpus in August 2026, each line moved on its own and
-	 * everything else left at its default: read as defaults instead, {@code terrain=off} leaves
-	 * twenty five true notes unsaid, {@code particles=off} nine and {@code seed=off} six, and
+	 * answer; {@code chain} and {@code passes} take the frame away entirely, {@code shadow} draws
+	 * into the shadow map's own targets, which this plan does not hold, and {@code screen} and
+	 * {@code dump} draw nothing. These four can. Measured on the corpus in August 2026, each line
+	 * moved on its own and everything else left at its default: read as defaults instead,
+	 * {@code terrain=off} leaves
+	 * twenty-five true notes unsaid, {@code particles=off} nine and {@code seed=off} six, and
 	 * {@code entities=on} holds out of the map a family that really draws, which no pack of the
 	 * corpus is caught by and which is therefore the same failure waiting rather than a second one.
 	 *
@@ -399,14 +402,19 @@ public final class ChainPlan {
 		// differently. The sky's two and the clouds are the branch of the game's own sky pass this
 		// engine hooks, and it is not taken below the overworld: a place whose skybox is NONE opens no
 		// sky pass at all and the End takes the other branch, two methods nothing here hooks
-		// (LevelRenderer:337 and :344-348). The weather is drawn only where the level has weather,
+		// (LevelRenderer.addSkyPass: the Skybox.NONE gate at :337, the End branch at :344-348). Iris
+		// hooks that branch and serves it with the pack's own program, RenderPipelines.END_SKY being
+		// assigned gbuffers_skytextured (IrisPipelines.java:69), and nothing makes that impossible
+		// here, SkyVertex already carrying the END_SKY format: it is a gap and not a choice, and
+		// until it lands the End's sky is drawn by the game's shader and carried in flat.
+		// The weather is drawn only where the level has weather,
 		// which the weather renderer decides on its own; what is certain here is that it is not every
 		// place.
 		//
 		// The terrain, the entities, the particles and the seed pass it or fail it on their line
 		// alone, and asking the line rather than its default is why this method is handed the
 		// switches at all. Measured on the corpus, each line moved on its own: reading the defaults
-		// instead leaves twenty five true notes unsaid under terrain=off, nine under particles=off
+		// instead leaves twenty-five true notes unsaid under terrain=off, nine under particles=off
 		// and six under seed=off, and holds the entities out of the map wherever entities=on is
 		// written, which no pack of the corpus is caught by.
 		//
@@ -435,9 +443,18 @@ public final class ChainPlan {
 		// AND at the size of the screen, which is the same condition read off the other side: every
 		// family below shares the pass the renderer opened for the game's own target, one render pass
 		// has one render area, and each of their files turns the draw down when the pack asked for
-		// targets of another size. No pack of the corpus scales one, so this moves nothing today; it
+		// targets of another size. No pack of the corpus scales one, so this moved nothing on the
+		// August 2026 corpus; it
 		// is here because the two readings must not be able to disagree. The terrain carries no such
-		// condition and is not held to it: it draws into a pass of its own.
+		// condition and is not held to it: it draws into a pass of its own. Iris carries no such
+		// refusal either way - it scales single targets (ShaderProperties.java:277,
+		// TextureScaleOverride) and no size condition was found on its geometry routing - so the
+		// refusal is this render-pass shape's price, and where a pack scaled a target a family
+		// writes, that family would be drawn by the game's shader, the note this map keeps being
+		// what says so. One asymmetry stands with it and is said: this map counts per NAME where
+		// render/EntityDraw refuses per FAMILY, so two entity names resolving to two files, one of
+		// them refused here, would be counted half drawn while the family served nothing. No pack of
+		// the corpus reaches that case.
 		//
 		// WHAT THIS MAP DELIBERATELY DOES NOT FOLLOW: with chain=off the two families that ride on
 		// the seed are still drawn even with seed=off, which render/EntityDraw spells out - it is the
@@ -606,7 +623,8 @@ public final class ChainPlan {
 	 * program is not part of the chain, so a place that cannot carry its targets is a place where
 	 * the geometry writes one attachment instead of several, not a place that draws nothing.
 	 * <p>
-	 * The empty writes below are down to two cases since the inference took the geometry in, and both
+	 * The empty writes handed in below - the walk's own refusals keep to the one list on
+	 * {@code attachmentsOf} - are down to two cases since the inference took the geometry in, and both
 	 * are honest: a program drawn from the light, whose draw buffers name shadow targets this plan
 	 * does not hold, and a file the expander could not read at all. A pack that simply declares no
 	 * directive no longer arrives here - it arrives with colortex0, as it does under Iris, and its
@@ -730,7 +748,9 @@ public final class ChainPlan {
 	 * for a half {@code gbuffers_water} had just written.
 	 *
 	 * @param seed  where the game's finished frame is really painted, or null where the line that
-	 *              paints it is off. Not the same as where the plan says it would be painted, which
+	 *              paints it is off - or where the plan itself could not say where it would go,
+	 *              which arrives here the same way and counts the same. Not the same as where the
+	 *              plan says it would be painted, which
 	 *              stands whatever is written: this one is what the frame does
 	 * @param world every family this engine really draws into the pack's targets, by the key its
 	 *              answer lives under. It is not the terrain alone, and with the terrain switched off
@@ -854,8 +874,9 @@ public final class ChainPlan {
 		if (undrawn.contains(half.target())) {
 			// What ends up here is the geometry no pass of this engine fills in EVERY place: the sky's
 			// three, whose branch of the game's own pass is not taken below the overworld, the
-			// weather, which is drawn only where the level has weather, and the entity halves wherever
-			// their line is off, which is where it stands unless somebody writes it. Why that is the
+			// weather, which is drawn only where the level has weather, and every family whose line
+			// is off - the entity halves by default, and the terrain, the particles or the seed's
+			// riders wherever somebody writes those lines. Why that is the
 			// question, and what holding each out was measured to cost, is where the verdicts are
 			// handed their map.
 			//

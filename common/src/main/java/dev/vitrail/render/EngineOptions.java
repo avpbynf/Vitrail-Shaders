@@ -151,9 +151,9 @@ final class EngineOptions {
 	 * written out in full rather than left to be discovered.
 	 * <ul>
 	 * <li><em>What Iris does</em>: it routes the game's entities to the pack's program with nothing
-	 * to switch, {@code shaderpack/loading/ProgramId.java:40-41}, where {@code Entities} and
-	 * {@code EntitiesTrans} are declared like any other gbuffers program and fall back on
-	 * {@code TexturedLit}. There is no line of any file of its own that turns them off.</li>
+	 * to switch, {@code shaderpack/loading/ProgramId.java:40-41}, where {@code Entities} falls back
+	 * on {@code TexturedLit} and {@code EntitiesTrans} falls back on {@code Entities}. There is no
+	 * line of any file of its own that turns them off.</li>
 	 * <li><em>What stops this engine matching it</em>: nothing of the API, and it has to be said
 	 * plainly. {@code render/EntityDraw} draws them, and drawing them is one word in this file. What
 	 * holds the word at off is the gap above, and the rule this engine works to: a family's line goes
@@ -247,7 +247,9 @@ final class EngineOptions {
 		 * built for, and the sky, the clouds and the weather are not drawn in every place however
 		 * their line reads, so their line cannot move that answer. {@code chain} and {@code passes}
 		 * cannot either, for the opposite reason: they take away the passes those lines are about, so
-		 * with them there is no frame left for a note to describe.
+		 * with them there is no frame left for a note to describe. {@code shadow} draws geometry too,
+		 * but into the shadow map's own targets, which the plan does not hold, so no verdict can
+		 * count it either way; and {@code screen} and {@code dump} draw nothing at all.
 		 */
 		ChainPlan.Families families() {
 			return new ChainPlan.Families(this.terrain, this.entities, this.particles, this.seed);
