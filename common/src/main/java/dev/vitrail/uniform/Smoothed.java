@@ -45,8 +45,7 @@ public final class Smoothed {
 			return this.accumulator;
 		}
 
-		float decay = decayConstant(value > this.accumulator ? halfLifeUp : halfLifeDown);
-		float factor = 1.0F - (float) Math.exp(-decay * dt);
+		float factor = blend(value > this.accumulator ? halfLifeUp : halfLifeDown, dt);
 		this.accumulator = this.accumulator + (value - this.accumulator) * factor;
 
 		return this.accumulator;
@@ -55,6 +54,23 @@ public final class Smoothed {
 	public void reset() {
 		this.started = false;
 		this.accumulator = 0.0F;
+	}
+
+	/**
+	 * How far one frame moves an accumulator towards the value it is fed, between nought and one.
+	 * <p>
+	 * Public because the smoothing is not always done here. {@code centerDepthSmooth} is accumulated
+	 * in a texel on the card, where the accumulator never comes back to this side at all, and it
+	 * still has to fade at the rate the pack asked for; this is the one place that knows the half
+	 * life is a decisecond, and a second reading of that unit is how the two come to disagree.
+	 *
+	 * @param halfLife how long the accumulator takes to cover half the distance, in deciseconds. A
+	 *                 nought gives an infinite decay constant, hence a factor of one, hence no
+	 *                 smoothing, which falls out of the arithmetic rather than needing a case
+	 * @param dt       the frame's duration in seconds
+	 */
+	public static float blend(float halfLife, float dt) {
+		return 1.0F - (float) Math.exp(-decayConstant(halfLife) * dt);
 	}
 
 	private static float decayConstant(float halfLife) {
