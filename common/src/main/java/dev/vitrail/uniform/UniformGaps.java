@@ -45,9 +45,17 @@ public final class UniformGaps {
 	/** The same, for a pass drawn from the entity mesh alone. See the class comment. */
 	private static final Map<String, String> ENTITY_MESH = entityMesh();
 
-	/** Not registered at all, because what would answer them does not run. */
-	private static final Map<String, String> AWAITED = Map.of("centerDepthSmooth",
-			"the pass that reduces the depth buffer to its centre sample does not run");
+	/**
+	 * Not registered at all, because what would answer them does not run.
+	 * <p>
+	 * Empty, and that is the state it is meant to be found in: a name enters it when the engine
+	 * starts owing a value it cannot yet draw, and leaves it the day the machinery lands.
+	 * {@code centerDepthSmooth} was the last one out. A full screen pass no longer carries it in its
+	 * block at all, the translation having moved it onto a sampler the way Iris does; a geometry
+	 * program that declares it keeps a member nothing answers, which is a zero here and a zero under
+	 * Iris, since Iris makes the value available to the full screen stages and to no other.
+	 */
+	private static final Map<String, String> AWAITED = Map.of();
 
 	private UniformGaps() {
 	}

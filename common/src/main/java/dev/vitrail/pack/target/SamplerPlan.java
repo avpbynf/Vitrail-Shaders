@@ -48,6 +48,15 @@ public final class SamplerPlan {
 	 */
 	private static final String FORGED = "ofPackTexture_";
 
+	/**
+	 * The one texel image the translation moves {@code centerDepthSmooth} onto.
+	 * <p>
+	 * The value is accumulated on the card and never comes back, so the pack cannot be handed it as a
+	 * member of the uniform block: what replaces the name is a lookup, and a lookup needs a sampler.
+	 * That is Iris's own answer, {@code CompositeDepthTransformer}, under a name of ours.
+	 */
+	private static final String CENTER_DEPTH = "ofCenterDepthSmooth";
+
 	/** Iris allows eight, and the corpus stops at three. */
 	private static final int MAX_SHADOW_COLOURS = 8;
 
@@ -73,7 +82,8 @@ public final class SamplerPlan {
 	 * over a name that already meant something else.
 	 */
 	public enum Kind {
-		COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, PACK_TEXTURE, UNSERVED, UNBINDABLE
+		COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, PACK_TEXTURE, CENTER_DEPTH, UNSERVED,
+		UNBINDABLE
 	}
 
 	/**
@@ -166,6 +176,11 @@ public final class SamplerPlan {
 		return FORGED + sampler;
 	}
 
+	/** What the translation declares in place of {@code centerDepthSmooth}, and what binds the texel. */
+	public static String centerDepth() {
+		return CENTER_DEPTH;
+	}
+
 	/** The pack's own name behind a forged one, or the name as it stands. */
 	public static String behind(String sampler) {
 		return sampler.startsWith(FORGED) ? sampler.substring(FORGED.length()) : sampler;
@@ -176,6 +191,12 @@ public final class SamplerPlan {
 		// produces this prefix, and it only produces it for a name it has already moved.
 		if (name.startsWith(FORGED)) {
 			return Kind.PACK_TEXTURE;
+		}
+
+		// And for the same reason: only the translation writes this name, and only where it has taken
+		// centerDepthSmooth off its declaration.
+		if (name.equals(CENTER_DEPTH)) {
+			return Kind.CENTER_DEPTH;
 		}
 
 		if (TargetName.index(name).isPresent()) {

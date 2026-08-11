@@ -268,6 +268,16 @@ final class PackPass {
 	}
 
 	/**
+	 * Whether this program reads the smoothed centre depth, which is what decides that the pass
+	 * drawing it is worth running at all. Iris asks the same question and for the same reason, in
+	 * {@code CenterDepthSampler.setUsage}. Two packs of the corpus never write the name at all, and
+	 * three more only declare it under a setting that is off by default.
+	 */
+	boolean readsCenterDepth() {
+		return this.samplers.contains(SamplerPlan.centerDepth());
+	}
+
+	/**
 	 * One target this program reads at a lod, on the half the schedule gives this program.
 	 *
 	 * @param target the colour target index
@@ -487,6 +497,10 @@ final class PackPass {
 						: targets.shadow().depth(), targets.white());
 				case SHADOW_COLOUR -> or(targets.shadow().colour(binding.index()), targets.white());
 				case NOISE -> targets.noise();
+				// White until the pass behind it has drawn once, which is the far plane in the pack's
+				// own window and so a focus point at the horizon. Black would be a focus point at the
+				// camera, which is the defect this whole path exists to close.
+				case CENTER_DEPTH -> or(targets.centerDepth().view(), targets.white());
 				// A name this backend cannot bind should have taken its program out of the chain
 				// before a frame was drawn. It is still answered rather than left out, because the
 				// layout carries it either way and the draw throws on the first name it misses.

@@ -127,6 +127,12 @@ final class ColorTargets {
 	 */
 	private final PackDepth depth = new PackDepth();
 
+	/**
+	 * The smoothed depth at the centre of the screen, held here for the same reason again: it is a
+	 * sampler a program binds, and everything that binds one already holds this object.
+	 */
+	private final CenterDepth centerDepth = new CenterDepth();
+
 	private final Map<Integer, GpuFormat> formats = new LinkedHashMap<>();
 	private final Map<Integer, Vector4fc> clearColours = new LinkedHashMap<>();
 
@@ -416,6 +422,14 @@ final class ColorTargets {
 		return this.depth;
 	}
 
+	/**
+	 * The one texel {@code centerDepthSmooth} is read out of, and the pass that draws it. Its own
+	 * image is null until a frame has drawn it, and a name bound to it then reads the far plane.
+	 */
+	CenterDepth centerDepth() {
+		return this.centerDepth;
+	}
+
 	/** Never held from one frame to the next. Null when this index was never allocated. */
 	GpuTextureView view(int index, TargetSchedule.Side side) {
 		TargetSurface surface = target(index, side);
@@ -580,6 +594,7 @@ final class ColorTargets {
 		this.coverage = release(this.coverage);
 		this.shadowMap.release();
 		this.depth.release();
+		this.centerDepth.release();
 
 		// Whatever is allocated next is a first allocation again, and it has to say what it costs
 		// even when it happens to cost the same as what was just let go.

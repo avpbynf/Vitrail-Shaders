@@ -214,6 +214,10 @@ public final class PackChain {
 
 	private List<PackPass> programs;
 	private PackPass last;
+
+	/** Whether any program of this chain reads centerDepthSmooth, settled once the passes are built. */
+	private boolean centerDepthRead;
+
 	private MappableRingBuffer block;
 	private GpuBuffer quad;
 	private CompiledRenderPipeline head;
@@ -1719,12 +1723,36 @@ public final class PackChain {
 					+ "earlier in this frame");
 		}
 
+		// Where Iris samples it, beginHand: after the world and its translucents, before the hand.
+		// That moment is what decides which frame a program reads: the deferred stage has already been
+		// drawn above and reads what the previous frame left in the texel, and the composites below
+		// read the value this line has just folded. Outside any render pass, since it opens one.
+		sampleCenterDepth(device);
+
 		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene());
 
 		// Outside any pass, and after the last one. Only the targets the pack keeps between frames
 		// and that the chain left on the far half are copied: the next frame walks from an empty
 		// flipped set and would otherwise be handed what was written two frames ago.
 		this.targets.swapBack(device.createCommandEncoder(), this.chain.chain().swapBack());
+	}
+
+	/**
+	 * Folds this frame's centre depth into the texel the pack reads it out of, on the packs that read
+	 * it at all.
+	 * <p>
+	 * Skipped where nothing reads the name, which is Iris's own rule rather than a saving of ours:
+	 * {@code CenterDepthSampler.sampleCenterDepth} returns without drawing once it has seen that no
+	 * program asked for the sampler. Five packs of the corpus skip it at their own defaults.
+	 */
+	private void sampleCenterDepth(GpuDevice device) {
+		if (!this.centerDepthRead) {
+			return;
+		}
+
+		WorldState world = this.values.world();
+		this.targets.centerDepth().sample(device.createCommandEncoder(), device, this.quad,
+				this.targets.depth().scene(), world.centerDepthHalfLife(), world.frameTime());
 	}
 
 	/**
@@ -1780,6 +1808,7 @@ public final class PackChain {
 
 		this.programs = List.copyOf(built);
 		this.last = built.isEmpty() ? null : built.get(built.size() - 1);
+		this.centerDepthRead = built.stream().anyMatch(PackPass::readsCenterDepth);
 		this.blockBytes = Math.max(alignment, offset);
 	}
 
@@ -2091,6 +2120,9 @@ public final class PackChain {
 				: "read the shadow map";
 		named(byKind, SamplerPlan.Kind.SHADOW_DEPTH, map);
 		named(byKind, SamplerPlan.Kind.SHADOW_COLOUR, map);
+		named(byKind, SamplerPlan.Kind.CENTER_DEPTH,
+				"read the smoothed depth at the centre of the screen, which is what a depth of field "
+						+ "focuses on");
 		named(byKind, SamplerPlan.Kind.UNBINDABLE,
 				"are declared under a type this backend cannot bind, and should have gone with "
 						+ "their pass");

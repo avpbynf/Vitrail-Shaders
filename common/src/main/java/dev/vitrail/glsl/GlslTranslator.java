@@ -4,6 +4,7 @@ import dev.vitrail.glsl.GlslLexer.Kind;
 import dev.vitrail.glsl.GlslLexer.Token;
 import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.pack.program.AlphaTest;
+import dev.vitrail.pack.program.ProgramNames;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.target.DrawBuffers;
@@ -126,6 +127,12 @@ public final class GlslTranslator {
 
 	/** What a lookup on a volume the pack ships is called once the volume has been laid out flat. */
 	private static final String VOLUME_LOOKUP = "ofTexture3D_";
+
+	/** The depth at the centre of the screen, which is accumulated in a texel rather than in a value. */
+	private static final String CENTER_DEPTH = "centerDepthSmooth";
+
+	/** The type a pack declares {@link #CENTER_DEPTH} under, and the only one this moves. */
+	private static final String CENTER_DEPTH_TYPE = "float";
 
 	/** The one call a volume lookup may be written as, and the number of arguments it takes. */
 	private static final String LOOKUP = "texture";
@@ -391,6 +398,10 @@ public final class GlslTranslator {
 		dropPrecision();
 		rewriteFragmentOutputs();
 		liftFragmentOutputs();
+		// Before the lifting and after the depth, and both halves matter: what this leaves behind is a
+		// sampler, which the lifting has to see as one to leave it standing, and the lookup it writes
+		// is text of ours that the depth conversion must not have had a chance to wrap.
+		moveCenterDepth();
 		liftUniforms();
 		// Decided before the outputs are ordered and applied after: whether the fragment body is
 		// wrapped is what decides where the ascending call goes, and both are settled from the one
@@ -2003,6 +2014,114 @@ public final class GlslTranslator {
 						lines[functionEnd(parameters)]));
 			}
 		}
+	}
+
+	/**
+	 * Moves {@code centerDepthSmooth} off its declaration and onto a lookup in one texel.
+	 * <p>
+	 * The value is the depth at the middle of the screen, smoothed by the pack's own half life, and
+	 * it is what a depth of field focuses on. It is accumulated on the card, in the texel the
+	 * engine's {@code CenterDepth} pass draws, and never comes back to this side at all, so it
+	 * cannot be a member of the uniform block: the declaration has to become a sampler and every use
+	 * of the name a lookup. That is exactly what Iris does, in
+	 * {@code CompositeDepthTransformer}, and the packs are written against the result rather than
+	 * against a float.
+	 * <p>
+	 * <strong>Only a full screen family, which is where Iris makes it available and nowhere
+	 * else.</strong> Its transformer runs under {@code Patch.COMPOSITE} alone, so a
+	 * {@code gbuffers} program that declares the name keeps a float nothing writes and reads a
+	 * nought. Mellow is the one pack of the corpus that reaches that case, declaring it in an include
+	 * its whole tree takes, and serving it there would be a value where the packs were written for a
+	 * zero.
+	 * <p>
+	 * The family and not the vertex format, for the same reason Iris chooses on the patch: what
+	 * decides this is which stage of the frame a program is drawn in, and a file translated with no
+	 * pass named is the entry point of nothing and is left as it stands.
+	 * <p>
+	 * Nothing is moved unless the declaration is the plain one. A name declared under another type,
+	 * or beside other names in one statement, or as an ordinary global, leaves the whole unit as it
+	 * stands: both Complementary packs write the uniform in one branch of an {@code #if} and an
+	 * ordinary {@code float} of the same name in the other, and a unit whose live branch is the
+	 * second has nothing here to move and must not have its own variable rewritten into a lookup.
+	 */
+	private void moveCenterDepth() {
+		if (!fullScreenFamily() || this.packMacros.contains(CENTER_DEPTH)) {
+			return;
+		}
+
+		int[] lines = lineNumbers();
+		List<Integer> declarations = new ArrayList<>();
+		List<Integer> reads = new ArrayList<>();
+
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.IDENTIFIER || !token.text().equals(CENTER_DEPTH)
+					|| token.directive() != null || !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int type = significantBefore(index);
+			if (type < 0 || this.tokens.get(type).kind() != Kind.IDENTIFIER) {
+				reads.add(index);
+				continue;
+			}
+
+			if (!movableCenterDepth(index, type)) {
+				return;
+			}
+
+			declarations.add(index);
+		}
+
+		// A unit that reads the name without declaring it as a uniform is left alone, which is the
+		// same answer Iris gives: what is not declared is not made available.
+		if (declarations.isEmpty()) {
+			return;
+		}
+
+		String texel = SamplerPlan.centerDepth();
+		for (int declaration : declarations) {
+			replace(significantBefore(declaration), "sampler2D");
+			replace(declaration, texel);
+		}
+
+		reads.forEach(read -> inject(read, LOOKUP + "(" + texel + ", vec2(0.5)).r"));
+	}
+
+	/**
+	 * Whether the pass this file is the entry point of is drawn over a quad rather than over the
+	 * world, which is the line Iris draws between {@code Patch.COMPOSITE} and the rest.
+	 */
+	private boolean fullScreenFamily() {
+		return !this.program.isEmpty()
+				&& !ProgramNames.geometry(ProgramNames.familyOf(this.program));
+	}
+
+	/**
+	 * Whether this declaration of {@code centerDepthSmooth} is the one shape that can become a
+	 * sampler: a uniform, of type float, and the only name the statement introduces.
+	 *
+	 * @param type the type token in front of the name, already known to be an identifier
+	 */
+	private boolean movableCenterDepth(int index, int type) {
+		if (!this.tokens.get(type).text().equals(CENTER_DEPTH_TYPE)) {
+			return false;
+		}
+
+		int cursor = significantBefore(type);
+		while (cursor >= 0 && isQualifier(this.tokens.get(cursor))) {
+			cursor = significantBefore(cursor);
+		}
+
+		if (cursor < 0 || !this.tokens.get(cursor).identifier("uniform")) {
+			return false;
+		}
+
+		// The semicolon straight after the name, so that a statement declaring a second name beside
+		// this one is left whole: the type is shared, and changing it would change the other name too.
+		int end = significantAfter(index);
+
+		return end >= 0 && this.tokens.get(end).operator(";");
 	}
 
 	/**
