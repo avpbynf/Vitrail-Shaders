@@ -186,7 +186,13 @@ public final class SodiumVertex {
 		lines.add("\tvec2 ofInward = vec2(a_TexCoord >> 15u) * 2.0 - 1.0;");
 		lines.add("\tof_MultiTexCoord0 = vec4(vec2(a_TexCoord & 32767u) / 32768.0"
 				+ " + ofInward * of_TexShrink, 0.0, 1.0);");
-		lines.add("\tof_MultiTexCoord1 = vec4(vec2(a_LightAndData.xy) / 256.0, 0.0, 1.0);");
+		// The light map RAW, as the mesh carries it, which is a pair of levels from nought to two
+		// hundred and forty. This used to divide by 256 here, and dividing here is the same mistake
+		// as answering gl_TextureMatrix[1] with the identity, seen from the other end: the scale
+		// belongs in that matrix, where the pack applies it itself and where the half texel that
+		// centres the sample on its level comes with it. Iris carries the raw pair too,
+		// SodiumTransformer.java:228, and every other family of this engine already did.
+		lines.add("\tof_MultiTexCoord1 = vec4(vec2(a_LightAndData.xy), 0.0, 1.0);");
 		lines.add("\tof_Normal = " + NORMAL + ".xyz;");
 		globals.forEach((name, type) -> {
 			if (ANSWERED.contains(name)) {

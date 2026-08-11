@@ -58,10 +58,15 @@ program will ever produce "flat unlit albedo" as long as vertex colour comes fro
 sides are darker than the tops" is true before any normal exists and therefore proves nothing about
 one. Any test of a normal has to be an A/B on the same scene from the same camera.
 
-**Light is packed ready to use.** Sky and block light are clamped into a range and offset before
-packing, and that offset is exactly the half-texel centring a sixteen-by-sixteen lightmap wants. So
-dividing by the packing scale already yields the coordinate a pack expects, with the fixed-function
-texture matrix left at identity. Applying a scale on top of that is the mistake to avoid.
+**Light arrives raw, and the scale belongs to the texture matrix.** The pair is carried as the game
+stores it, a level times sixteen per channel, and the smooth pipeline interpolates between those, so
+it is a number from nought to two hundred and forty and not a texture coordinate. What turns it into
+one is `gl_TextureMatrix[1]`, which a pack multiplies it by itself: a scale of 1/256 puts a level on
+its own texel of a sixteen-by-sixteen lightmap and a translation of 1/32 puts it on that texel's
+centre, which matters because the map is filtered linearly. Dividing in the vertex prologue instead,
+and leaving that matrix at identity, is the mistake to avoid - it lands every level on a texel edge,
+and it hands a pack reading the coordinate without the matrix a different number from the one every
+pack is written against.
 
 **The section index rides in the same word.** Translating by it is not optional: without that
 translation every section of a region stacks at the region's corner. It is a separate quantity from

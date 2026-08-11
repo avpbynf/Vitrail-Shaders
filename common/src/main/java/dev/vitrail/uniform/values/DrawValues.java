@@ -67,8 +67,13 @@ public final class DrawValues {
 		builder.add("of_ProjectionMatrixInverse", UniformShape.MAT4, (_, out) -> out.set(QUAD_PROJECTION_INVERSE));
 		builder.add("of_NormalMatrix", UniformShape.MAT3, (_, out) -> out.set(NORMAL_IDENTITY));
 
-		// Eight identities. The pack reads gl_TextureMatrix[0] and expects the texture coordinates
-		// it was handed, which for a quad are already the ones it wants.
+		// Eight identities, and here that is the whole answer rather than a stand in: the pack reads
+		// gl_TextureMatrix[0] and expects the texture coordinates it was handed, which for a quad are
+		// already the ones it wants, and Iris substitutes the identity for all eight of them in a
+		// composite for the same reason (CompositeTransformer.java:43).
+		//
+		// It is the GEOMETRY table that has to answer differently, and it does: a quad carries no
+		// light map, so unit one is the identity here and the light map's matrix there.
 		builder.add("of_TextureMatrix", UniformShape.MAT4, (_, out) -> out.set(IDENTITY));
 
 		builder.add("viewWidth", UniformShape.FLOAT, (world, out) -> out.set(world.viewWidth()));

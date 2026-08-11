@@ -172,12 +172,13 @@ public final class LegacyGlsl {
 	 * else, so every full screen vertex stage of those packs names an identifier nothing declares.
 	 * Fifty four programs of the corpus, and no other pack writes the name at all.
 	 * <p>
-	 * One residual difference from Iris, which costs nothing measurable here: Iris also overwrites
-	 * {@code gl_TextureMatrix} with the identity in a full screen pass, where ours comes from the
-	 * uniform block, so {@code of_TextureMatrix[1] * of_MultiTexCoord1} gives that matrix's
-	 * translation column rather than exactly nought. No program of the corpus reads it: the only
-	 * live site is the body of a function no full screen pass calls, and an uncalled function is
-	 * gone before the SPIR-V is emitted.
+	 * One residual difference from Iris, in form and not in value: Iris substitutes the identity for
+	 * all eight of {@code gl_TextureMatrix} in a full screen pass,
+	 * {@code CompositeTransformer.java:43}, where ours arrives through the uniform block. It is eight
+	 * identities there too, {@link dev.vitrail.uniform.values.DrawValues}, so the product above is
+	 * exactly nought either way, and it is the geometry table that answers the light map's unit with
+	 * a matrix rather than an identity. Which is where that difference really lives: a full screen
+	 * pass has no light map to sample, and its unit one is nought on both sides.
 	 */
 	public static final List<String> FULLSCREEN_ATTRIBUTES = List.of(
 			"in vec3 Position;",

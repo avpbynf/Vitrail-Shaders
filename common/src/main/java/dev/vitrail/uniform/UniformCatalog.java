@@ -81,7 +81,7 @@ public final class UniformCatalog {
 	}
 
 	/**
-	 * The engine table with the six fixed function names answered for a pass drawn over the world.
+	 * The engine table with the seven fixed function names answered for a pass drawn over the world.
 	 * <p>
 	 * A layer and not a table of its own: {@link #builder(UniformCatalog)} refuses a duplicate only
 	 * among the names it registers itself, so shadowing an engine name is what layering is for and
@@ -106,10 +106,15 @@ public final class UniformCatalog {
 	}
 
 	/**
-	 * The same again for a pass drawn from the light, where the six answer the shadow pair. Layered
-	 * over {@link #geometry()} rather than over the engine table, so that the two stay one list of
-	 * six names: a name added to one and forgotten in the other would leave a shadow program reading
-	 * the camera.
+	 * The same again for a pass drawn from the light, where the six that depend on the point of view
+	 * answer the shadow pair. Layered over {@link #geometry()} rather than over the engine table, so
+	 * that the two stay one list: a name added to one and forgotten in the other would leave a shadow
+	 * program reading the camera.
+	 * <p>
+	 * The seventh, the texture matrices, is deliberately NOT among them and inherits from the layer
+	 * below. A light map coordinate is the same number whichever end of the world it is drawn from,
+	 * and Iris translates a shadow program through the very transformers it translates a camera one
+	 * with, so the substitution it makes for {@code gl_TextureMatrix[1]} is the same on both.
 	 */
 	public static UniformCatalog shadowGeometry() {
 		UniformCatalog built = shadowGeometry;

@@ -18,11 +18,14 @@ import java.util.List;
  * layout and loses only that value. Those names are collected so the gap can be said out loud
  * instead of being discovered as a wrong image.
  * <p>
- * Arrays are the trap. {@code gl_TextureMatrix} is declared {@code mat4 of_TextureMatrix[8]}, five
- * hundred and twelve bytes, and the arity lives only in the declaration text: the type is
- * {@code mat4} either way. Read it as a single matrix and everything after it, including every
- * uniform the pack declared for itself, lands four hundred and forty eight bytes early. A hundred
- * and ninety four files of the corpus read that name.
+ * Arrays are the trap, and twice over. {@code gl_TextureMatrix} is declared
+ * {@code mat4 of_TextureMatrix[8]}, five hundred and twelve bytes, and the arity lives only in the
+ * declaration text: the type is {@code mat4} either way. Read it as a single matrix and everything
+ * after it, including every uniform the pack declared for itself, lands four hundred and forty eight
+ * bytes early. A hundred and ninety four files of the corpus read that name. The second half of the
+ * trap is quieter: the source is asked per ELEMENT and not per member, because that same name holds
+ * eight different matrices and one value written eight times is a wrong number rather than a wrong
+ * layout.
  */
 public final class UniformBlock {
 
@@ -101,9 +104,6 @@ public final class UniformBlock {
 	private <T extends UniformSink> T walk(T sink, WorldState world) {
 		for (Member member : this.members) {
 			boolean supplied = member.source() != null && world != null;
-			if (supplied) {
-				member.source().read(world, this.carrier);
-			}
 
 			sink.member(member.name(), member.elements(), supplied);
 
@@ -116,6 +116,11 @@ public final class UniformBlock {
 				}
 
 				if (supplied) {
+					// Asked once per element and not once per member. Almost every source answers
+					// them all alike and pays a call it did not need; the one that does not is
+					// gl_TextureMatrix, whose unit one is the light map's and is not the identity the
+					// others are. Reading the member once wrote that one value eight times.
+					member.source().read(world, this.carrier, element);
 					UniformCoercion.write(sink, member.shape(), this.carrier);
 				} else {
 					member.shape().zero(sink);
