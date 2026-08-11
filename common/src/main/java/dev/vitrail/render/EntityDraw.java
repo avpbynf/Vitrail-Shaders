@@ -33,11 +33,13 @@ import org.joml.Matrix4fc;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
@@ -104,10 +106,17 @@ import java.util.stream.Stream;
  * <p>
  * <strong>What is still the game's inside this window</strong>, and therefore still goes to that
  * layer, is the eyes ({@code EYES} and {@code ENTITY_TRANSLUCENT_EMISSIVE}), the glint, the beacon
- * beam, the text of a name plate or a sign, and the two pipelines {@link #WITHHELD} names. The hand
- * and the shadow map are families of their own too and are NOT in this window: the hand is drawn
- * after the level returns, the shadow map is a pass of its own, and neither is reached by either
- * bracket.
+ * beam, the text of a name plate or a sign, and the two pipelines {@link #WITHHELD} names. The
+ * shadow map is a family of its own and is NOT in either window, a pass of its own that neither
+ * bracket reaches.
+ * <p>
+ * <strong>The hand comes in by this same door and is not one of those.</strong> {@link HandDraw}
+ * moves it off the game's late call and submits it twice, and both submissions are
+ * drawn by feature renderers with the pipelines of the table below, so a hand draw is indexed here
+ * like a mob's. What tells it apart is the moment and not the draw, exactly as it is for a block
+ * entity, and {@link #element} asks about it FIRST for the reason Iris does
+ * ({@code pipeline/IrisPipelines.java:191-218}): a pipeline that would answer with the block or the
+ * entity program answers with a hand program while a hand pass is up, whatever else is true of it.
  * <p>
  * <strong>The block entities are not one of those and come in by this same door</strong>, because
  * that is where the game brings them: a chest and a mob are submitted into one phase and drawn with
@@ -129,6 +138,12 @@ public final class EntityDraw {
 	 * two out of a submit storage of their own that {@code GameRenderer} hands it after the level is
 	 * finished. Every one of them reaches this class with the same pipelines and the same main
 	 * target, so nothing about a draw says which of the three it belongs to; only the moment does.
+	 * <p>
+	 * <strong>The hand is no longer among what this window has to keep out, and the window is kept
+	 * all the same.</strong> {@link HandDraw} takes it off that late call and submits it inside the
+	 * level with a dispatcher of its own, so it now arrives with a mark of its own and is served
+	 * rather than excluded. What is left after the level is the screen, which has none and would
+	 * otherwise be drawn as a mob, so nothing about this window may be relaxed.
 	 * <p>
 	 * Measured rather than reasoned about, and it cost a session: with this open all the time, every
 	 * item in the inventory was drawn with {@code gbuffers_entities} under the world's own camera
@@ -192,14 +207,20 @@ public final class EntityDraw {
 	 *                  transforms, which is a buffer nothing can read back. The association below is
 	 *                  therefore ours; the transform itself is the game's own constant, so what it
 	 *                  does to the matrix stays the game's answer
-	 * @param stage     what the pack is told it is drawing. {@code NONE} for a mob, which is not a
-	 *                  reading of what the pass is but Iris's answer, and {@link EntityProgram} has
-	 *                  the four places it was read from; {@code BLOCK_ENTITIES} for a block entity,
-	 *                  which Iris really does pose and which is the very phase its own table branches
-	 *                  on to reach {@code gbuffers_block}
+	 * @param stage         what the pack is told it is drawing. {@code NONE} for a mob, which is not a
+	 *                      reading of what the pass is but Iris's answer, and {@link EntityProgram}
+	 *                      has the four places it was read from; {@code BLOCK_ENTITIES} for a block
+	 *                      entity, which Iris really does pose and which is the very phase its own
+	 *                      table branches on to reach {@code gbuffers_block}; and one of the two hand
+	 *                      phases for a hand piece, which Iris poses around each of its two passes
+	 *                      ({@code pathways/HandRenderer.java:106,143})
+	 * @param afterDeferred whether this piece is drawn after the deferred stage even though its
+	 *                      pipeline does not blend. True for the hand's water rows alone, which are
+	 *                      made from the mob pipelines and cannot read their side off them; every
+	 *                      other piece answers the side with {@link #blended()}
 	 */
 	record Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
-			LayeringTransform layering, RenderStage stage) {
+			LayeringTransform layering, RenderStage stage, boolean afterDeferred) {
 
 		/** A piece the game draws where the depth says, which is most of the table below. */
 		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest) {
@@ -209,7 +230,20 @@ public final class EntityDraw {
 		/** A piece of the mob half, which is every row of the table above. */
 		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
 				LayeringTransform layering) {
-			this(pipeline, element, program, alphaTest, layering, RenderStage.NONE);
+			this(pipeline, element, program, alphaTest, layering, RenderStage.NONE, false);
+		}
+
+		/**
+		 * Whether this piece belongs to the hand, which is a question about the phase and not about
+		 * the pipeline: a hand row and the mob row it was made from share one.
+		 */
+		boolean hand() {
+			return this.stage == RenderStage.HAND_SOLID || this.stage == RenderStage.HAND_TRANSLUCENT;
+		}
+
+		/** One word for the log, which has to say which of the two families a line is about. */
+		String family() {
+			return hand() ? "hand" : "entities";
 		}
 
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
@@ -254,12 +288,20 @@ public final class EntityDraw {
 		 */
 		private Matrix4fc modelView() {
 			Consumer<Matrix4f> modifier = this.layering.getModifier();
-			if (modifier == null) {
+			// A hand piece always hands one in, transform or none, and answering null there would be
+			// the one place this returns the wrong matrix rather than a spare one: null means the
+			// frame's camera, and the hand is not drawn under the frame's camera. What the stack holds
+			// while a hand pass runs is the identity, HandDraw putting the whole of the hand's
+			// transform in the projection, so what is read here is what the game itself would have
+			// read at that draw.
+			if (modifier == null && !hand()) {
 				return null;
 			}
 
 			Matrix4f matrix = RenderSystem.getModelViewMatrixCopy();
-			modifier.accept(matrix);
+			if (modifier != null) {
+				modifier.accept(matrix);
+			}
 
 			return matrix;
 		}
@@ -354,9 +396,10 @@ public final class EntityDraw {
 	 * Iris keys the same table by the same pipelines, and most of these rows reach a function of its
 	 * own rather than a constant: that function answers {@code gbuffers_block} while a block entity is
 	 * being drawn, and {@code gbuffers_hand} or {@code gbuffers_hand_water} while the hand is, by its
-	 * half. The hand half cannot arise here, the window above being closed by then. Only the end
-	 * crystal beam and the offset cutout are {@code gbuffers_entities} unconditionally, and that holds
-	 * of its MAIN table alone: its shadow table sends both to {@code shadow_entities}.
+	 * half. All three of those halves are here, {@link #BLOCK_ELEMENTS} and the two hand tables under
+	 * it. Only the end crystal beam and the offset cutout are {@code gbuffers_entities}
+	 * unconditionally, and that holds of its MAIN table alone: its shadow table sends both to
+	 * {@code shadow_entities}.
 	 * <p>
 	 * Three families are arguably somebody else's and are served here all the same: the armour pieces
 	 * are the entity wearing them, the end crystal beam is drawn with the entity format and the
@@ -505,7 +548,7 @@ public final class EntityDraw {
 	private static Element blockTwin(Element mob) {
 		if (mob.blended()) {
 			return new Element(mob.pipeline(), "block_" + mob.element(), BLOCK_TRANSLUCENT, CUTOUT,
-					mob.layering(), RenderStage.BLOCK_ENTITIES);
+					mob.layering(), RenderStage.BLOCK_ENTITIES, false);
 		}
 
 		boolean ownProgram = mob.pipeline() != RenderPipelines.END_CRYSTAL_BEAM
@@ -513,7 +556,55 @@ public final class EntityDraw {
 
 		return new Element(mob.pipeline(), "block_" + mob.element(),
 				ownProgram ? BLOCK : mob.program(), ownProgram ? CUTOUT : mob.alphaTest(),
-				mob.layering(), RenderStage.BLOCK_ENTITIES);
+				mob.layering(), RenderStage.BLOCK_ENTITIES, false);
+	}
+
+	/** What the hand asks for in its solid pass, and what its blending pass asks for instead. */
+	private static final String HAND = "gbuffers_hand";
+	private static final String HAND_WATER = "gbuffers_hand_water";
+
+	/**
+	 * The same pieces again for each of the hand's two passes, which are two programs of the pack and
+	 * not two halves of the geometry.
+	 * <p>
+	 * <strong>Nothing about a pipeline decides which of the two answers.</strong> Iris keys the whole
+	 * of it on which pass is running: every row that can carry a hand answers
+	 * {@code isRenderingSolid() ? HAND_* : HAND_WATER_*}, whether it went through {@code getSolid},
+	 * {@code getCutout} or {@code getTranslucent} ({@code pipeline/IrisPipelines.java:191-218}). What
+	 * separates the passes is which ITEMS go into them, and that is settled a step earlier, in the
+	 * submission; {@code HandDraw.skip} carries it.
+	 * <p>
+	 * <strong>Every row discards at a tenth, the solid ones included</strong>, and that is Iris's
+	 * answer rather than an inheritance from the pipeline: all nine of its hand keys carry
+	 * {@code ONE_TENTH_ALPHA} ({@code pipeline/programs/ShaderKey.java:46-54}), where the entity solid
+	 * key carries none. A hand row therefore does not keep the threshold of the mob row it was made
+	 * from.
+	 * <p>
+	 * <strong>The blending pass reaches the ARM and not what it is holding, and that is a gap rather
+	 * than a divergence.</strong> A translucent block held in hand is drawn with a blending pipeline,
+	 * which is no row of the table above and which this engine serves for no family yet; the arm
+	 * around it is drawn with the player's skin on {@code ENTITY_SOLID}, which is a row, so
+	 * {@code gbuffers_hand_water} really is reached and really does serve something. What the pack
+	 * does not get is the block, and it is the same gap the entities have and named in the same
+	 * terms: what blends is still the game's.
+	 */
+	private static final Map<RenderPipeline, Element> HAND_ELEMENTS = new LinkedHashMap<>();
+	private static final Map<RenderPipeline, Element> HAND_WATER_ELEMENTS = new LinkedHashMap<>();
+
+	static {
+		// Derived from the mob table like the block one above and for the same reason: a row too many
+		// is a compiled module nobody selects, a row too few is a piece of the hand silently drawn by
+		// the game in the middle of one the pack drew.
+		twins(HAND_ELEMENTS, "hand_", HAND, RenderStage.HAND_SOLID, false);
+		twins(HAND_WATER_ELEMENTS, "hand_water_", HAND_WATER, RenderStage.HAND_TRANSLUCENT, true);
+	}
+
+	private static void twins(Map<RenderPipeline, Element> into, String prefix, String program,
+			RenderStage stage, boolean afterDeferred) {
+		ELEMENTS.values().stream()
+				.map(mob -> new Element(mob.pipeline(), prefix + mob.element(), program, CUTOUT,
+						mob.layering(), stage, afterDeferred))
+				.forEach(element -> into.put(element.pipeline(), element));
 	}
 
 	private static void put(Element element) {
@@ -524,10 +615,22 @@ public final class EntityDraw {
 	 * Which piece answers for a draw of this pipeline, which is the block entity one only where the
 	 * draw came from a block entity renderer AND that pipeline has one. Null for a pipeline this
 	 * engine does not serve at all, which is most of them.
+	 * <p>
+	 * <strong>The hand is asked about first and the order is Iris's</strong>, whose three ambiguous
+	 * rows all test the hand before the block entity phase and the block entity phase before the
+	 * default ({@code pipeline/IrisPipelines.java:191-218}). It matters rather than being a tidy
+	 * order: the two marks can be up at once. A hand holding a chest submits through the very calls
+	 * that raise the block entity mark, and asked the other way round that arm's chest would be drawn
+	 * with {@code gbuffers_block} in the middle of a hand pass.
 	 */
 	private static Element element(RenderPipeline pipeline) {
+		if (HandDraw.drawing()) {
+			return (HandDraw.drawingSolid() ? HAND_ELEMENTS : HAND_WATER_ELEMENTS).get(pipeline);
+		}
+
 		// One table or the other and no falling between them: the block table is built from every row
-		// of the mob one, so a pipeline either has both halves or neither.
+		// of the mob one, so a pipeline either has both halves or neither. The two hand tables are
+		// built the same way, from the same rows.
 		return BlockEntityGeometry.drawing()
 				? BLOCK_ELEMENTS.get(pipeline)
 				: ELEMENTS.get(pipeline);
@@ -713,7 +816,13 @@ public final class EntityDraw {
 
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Element element = element(prepared.pipeline());
-		if (!wanted || device == null || element == null || !inWindow(element)) {
+		// Two families and two conditions, because they are served at different moments. The
+		// entities live inside the two windows the level's features are drawn in; the hand is
+		// submitted by this engine itself, twice, and both of those moments fall outside the
+		// windows. Each family is guarded by its own switch and neither borrows the other's.
+		boolean inMoment = HandDraw.drawing() ? HandDraw.wanted()
+				: wanted && element != null && inWindow(element);
+		if (!inMoment || device == null || element == null) {
 			draw.end();
 			if (wanted && element == null && translucentFeatures) {
 				draw.withheld(prepared.pipeline());
@@ -725,7 +834,7 @@ public final class EntityDraw {
 		if (!onMainTarget(prepared)) {
 			draw.end();
 
-			return draw.refuse("elsewhere:" + prepared.outputTarget(), true, "the game sends it to "
+			return draw.refuse(element, "elsewhere:" + prepared.outputTarget(), true, "the game sends it to "
 					+ prepared.outputTarget() + ", which it composes itself afterwards, and the pack's "
 					+ "colour targets cannot be attached beside a picture this engine has not got. It "
 					+ "is the game's improved transparency that allocates those targets, and Iris "
@@ -740,8 +849,15 @@ public final class EntityDraw {
 			// Said before the pass is closed and not after: closing one the failure left in a bad
 			// state can throw in its turn, and the second throw would carry away the only line that
 			// says what went wrong first.
+			//
+			// Both families go down together, and that is not caution: they come in by one door with
+			// one set of tables, so whatever this door failed at will fail again on the next draw of
+			// either. Leaving the hand on would keep the same throw coming, once a frame, with the
+			// line that explains it printed only the first time.
 			wanted = false;
-			Vitrail.logger().error("Vitrail stopped drawing the entities after an error", e);
+			HandDraw.wanted(false);
+			Vitrail.logger().error("Vitrail stopped drawing the entities and the hand after an error",
+					e);
 			draw.end();
 
 			return false;
@@ -797,7 +913,7 @@ public final class EntityDraw {
 			// No pack of the corpus is in that position, measured over its twenty five places. The
 			// line is written for the pack that will be, because this is the one shape of failure
 			// that looks like a decision rather than a fault.
-			return refuse("missing:" + element.element(), true,
+			return refuse(element, "missing:" + element.element(), true,
 					"the load left no program for the " + element.element() + " piece");
 		}
 
@@ -836,18 +952,22 @@ public final class EntityDraw {
 		end();
 		this.owner.beginFrame();
 		if (!this.owner.openTargets(device)) {
-			return refuse("targets", "the colour targets could not be opened this frame");
+			return refuse(element, "targets", "the colour targets could not be opened this frame");
 		}
 
 		if (!shown()) {
-			return refuse("warming", "the chain is still compiling, so nothing written to the pack's targets "
+			return refuse(element, "warming", "the chain is still compiling, so nothing written to the pack's targets "
 					+ "would reach the screen yet");
 		}
 
 		// The matrix belongs to the RUN and not to the draw, which is what makes it settleable here:
 		// the depth nudge is the render type's and every draw of a run is one piece of the table, so
 		// the whole run shares the one the piece carries. Written into the block a few lines down.
-		RenderPipeline pipeline = program.prepare(device, element.modelView());
+		// The volume goes in beside the matrix and comes from the same place the matrix does, which is
+		// the pass being drawn: null for everything but the hand, and for the hand the one it was
+		// really submitted under. Asked of HandDraw rather than carried on the row, so that the two
+		// cannot be two answers: it holds nothing between its passes.
+		RenderPipeline pipeline = program.prepare(device, element.modelView(), HandDraw.volume());
 		if (pipeline == null) {
 			// Lasting, and it took a review to see it: a program that would not compile, or that
 			// declares a storage block, latches broken in GeometryProgram and never unlatches, so
@@ -856,7 +976,7 @@ public final class EntityDraw {
 			// of the family are usually two files, so one key would name whichever failed first and
 			// leave the other silent. Not by piece either, or a file that will not compile would say
 			// so once per piece it serves, which is ten lines for one fault.
-			return refuse("prepare:" + element.program(), true,
+			return refuse(element, "prepare:" + element.program(), true,
 					"the " + element.element() + " program refused to prepare, which it says on its "
 							+ "own line above");
 		}
@@ -878,7 +998,7 @@ public final class EntityDraw {
 			// The colour targets are not there yet, which is the first frame or two and the frames
 			// after a resize. A plain pass would carry one attachment against a pipeline holding a
 			// state per target the pack asked for, and setPipeline refuses that by name.
-			return refuse("unallocated", "one of the pack's colour targets has no image yet");
+			return refuse(element, "unallocated", "one of the pack's colour targets has no image yet");
 		}
 
 		CommandEncoder encoder = device.createCommandEncoder();
@@ -917,10 +1037,10 @@ public final class EntityDraw {
 	 * @param lasting whether it holds for the whole load rather than for this frame
 	 * @return false always, so that a caller can hand this straight back
 	 */
-	private boolean refuse(String reason, boolean lasting, String why) {
+	private boolean refuse(Element element, String reason, boolean lasting, String why) {
 		if (this.refused.add(reason)) {
-			Vitrail.logger().warn("An entity draw went back to the game's own shader because {}. {}",
-					why, lasting
+			Vitrail.logger().warn("A draw of the {} went back to the game's own shader because {}. {}",
+					element.family(), why, lasting
 							? "It is settled for as long as this pack is loaded, so this geometry is "
 									+ "drawn by the game on every frame until the pack is read again, "
 									+ "steadily rather than as a flicker"
@@ -932,8 +1052,8 @@ public final class EntityDraw {
 	}
 
 	/** The ordinary kind, which answers a question about this frame alone. */
-	private boolean refuse(String reason, String why) {
-		return refuse(reason, false, why);
+	private boolean refuse(Element element, String reason, String why) {
+		return refuse(element, reason, false, why);
 	}
 
 	/**
@@ -1001,14 +1121,20 @@ public final class EntityDraw {
 	}
 
 	/**
-	 * Reads the pack for every piece at once, at the first entity the game draws, and settles where
-	 * the outputs of each of them go.
+	 * Reads the pack for every piece at once, at the first entity or hand the game draws, and settles
+	 * where the outputs of each of them go.
 	 * <p>
 	 * All of them and not the one being asked for, for the reason the sky reads all six: the moment
 	 * a piece is first drawn is the world's to choose, and some of them wait a long time. Nothing
 	 * asks for the armour decal until somebody wears armour that carries one, and read one at a time
 	 * the pack would be opened, expanded and translated inside that frame, on the render thread and
 	 * in the middle of the world.
+	 * <p>
+	 * <strong>Only what a switch asked for is read.</strong> Each of the two families here is one
+	 * compiled module per row of the table, so reading a family nothing will draw is a pack expansion
+	 * and ten translations spent on programs no draw will ever select. It also keeps the log honest:
+	 * a line saying a pack serves nothing for the hand, printed for somebody who never turned the
+	 * hand on, reads as a fault of the pack.
 	 */
 	private void read() {
 		this.read = true;
@@ -1032,70 +1158,48 @@ public final class EntityDraw {
 				})
 				.toList();
 
-		// The block entity half of each served piece, added here rather than filtered again: the two
-		// share a pipeline, so a format this engine cannot decode has already been reported once and
-		// saying it twice would read as two defects.
-		List<Element> asked = Stream.concat(served.stream(),
-						served.stream().map(element -> BLOCK_ELEMENTS.get(element.pipeline())))
-				.toList();
+		// The block entity half of each served piece, and the two hand halves, added here rather than
+		// filtered again: all four tables share the pipelines of the first, so a format this engine
+		// cannot decode has already been reported once and saying it four times would read as four
+		// defects.
+		//
+		// Four GROUPS and not one list, because what stands or falls together is not the same in
+		// each. The entity names walk one picture and hold together WITHIN a half, and the two
+		// halves settle apart, which is the particles' position; the hand's two passes are two
+		// moments of the frame that share no target, so one of them can be served while the other
+		// is not.
+		List<List<Element>> groups = new ArrayList<>();
+		if (wanted) {
+			List<Element> family = Stream.concat(served.stream(),
+							served.stream().map(element -> BLOCK_ELEMENTS.get(element.pipeline())))
+					.toList();
+			groups.add(family.stream().filter(element -> !element.blended()).toList());
+			groups.add(family.stream().filter(Element::blended).toList());
+		}
+
+		if (HandDraw.wanted()) {
+			groups.add(twinsOf(served, HAND_ELEMENTS));
+			groups.add(twinsOf(served, HAND_WATER_ELEMENTS));
+		}
+
+		List<Element> asked = groups.stream().flatMap(List::stream).toList();
+		if (asked.isEmpty()) {
+			return;
+		}
 
 		try {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(this.packPath, this.place,
 					VertexInputs.ENTITY, asked.stream().map(Element::asked).toList(), this.chosen,
 					this.profile);
 			if (loaded.isEmpty()) {
-				Vitrail.logger().info("{} serves nothing in {} for the entities, so the game keeps its "
-						+ "own shader for them", this.packPath.getFileName(),
+				Vitrail.logger().info("{} serves nothing in {} for the entities or the hand, so the "
+						+ "game keeps its own shader for them", this.packPath.getFileName(),
 						this.place.isEmpty() ? "its root" : this.place);
 
 				return;
 			}
 
-			// Asked once per serving FILE and per HALF, and not once per piece: the pieces are four
-			// program names at most, so they are four files at most, and the plan would answer for
-			// each of them ten times over. The half is half the key and not a detail, the two sides
-			// of the deferred stage reading and writing opposite sides of every target.
-			//
-			// All of them or none of them WITHIN a half, which is what the two flags are. It holds
-			// across the two names of a half rather than per name: those two programs write into one
-			// picture, so a piece whose answer could not be settled would be drawn by the game into
-			// it, and a chest and the mob beside it would disagree about what lights them. It does
-			// NOT hold across the halves, for the reason the particles give: they share no target and
-			// no pass, so taking the second down with the first would be a choice nothing forced.
-			Map<Half, List<ChainPlan.Attachment>> byFile = new LinkedHashMap<>();
-			boolean opaqueRefused = false;
-			boolean blendedRefused = false;
-			for (Element element : asked) {
-				PackProgram.Loaded one = loaded.get(element.element());
-				if (one == null) {
-					continue;
-				}
-
-				Half half = new Half(servedBy(one), element.blended());
-				if (byFile.containsKey(half) || (half.blended() ? blendedRefused : opaqueRefused)) {
-					continue;
-				}
-
-				List<ChainPlan.Attachment> writes = writes(half);
-				if (writes == null) {
-					opaqueRefused |= !half.blended();
-					blendedRefused |= half.blended();
-					continue;
-				}
-
-				byFile.put(half, writes);
-			}
-
-			for (Element element : asked) {
-				PackProgram.Loaded one = loaded.get(element.element());
-				if (one == null || (element.blended() ? blendedRefused : opaqueRefused)) {
-					continue;
-				}
-
-				this.programs.put(element.element(), EntityProgram.of(one, element, this.values,
-						this.load, byFile.get(new Half(servedBy(one), element.blended())),
-						this.chainTargets, this.targets, this.chainRuns));
-			}
+			groups.forEach(group -> keep(group, loaded));
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the entity programs of "
 					+ this.packPath.getFileName() + ", so the game keeps its own shader for them", e);
@@ -1103,8 +1207,71 @@ public final class EntityDraw {
 	}
 
 	/**
+	 * One table's row for each served mob row, which is how the hand tables are walked. Rows without
+	 * a twin are dropped rather than carried as nulls: the hand tables twin the opaque rows, and a
+	 * blended row's held counterpart is the debt the hand's own javadoc names.
+	 */
+	private static List<Element> twinsOf(List<Element> served, Map<RenderPipeline, Element> table) {
+		return served.stream().map(element -> table.get(element.pipeline()))
+				.filter(Objects::nonNull).toList();
+	}
+
+	/**
+	 * Builds the programs of one group, all of them or none of them, and settles where each serving
+	 * file writes.
+	 * <p>
+	 * Asked once per serving FILE and per HALF, and not once per piece: a group is a few program
+	 * names at most, so it is a few files at most, and the plan would otherwise answer for each of
+	 * them ten times over. The half is half the key and not a detail, the two sides of the deferred
+	 * stage reading and writing opposite sides of every target; a group is drawn wholly on one side,
+	 * and the hand's two passes are two groups for exactly that reason, since they really can
+	 * resolve to the same file, {@code gbuffers_hand_water} falling back on {@code gbuffers_hand}.
+	 * <p>
+	 * All of them or none of them, which is what the return in the middle is, and it holds across
+	 * the names of ONE group rather than per name or across groups. These programs write into one
+	 * picture, so a piece whose answer could not be settled would be drawn by the game into it, and
+	 * a chest and the mob beside it would disagree about what lights them. Across groups it does NOT
+	 * hold, for the reason the particles give: they share no target and no pass, so taking one down
+	 * with another would be a choice nothing forced.
+	 */
+	private void keep(List<Element> group, Map<String, PackProgram.Loaded> loaded) {
+		// The side is the pipeline's answer OR the row's own flag, and the flag exists for one case:
+		// the hand's water rows are made from the mob pipelines, most of which do not blend, yet the
+		// pass is drawn after the deferred stage all the same.
+		Map<Half, List<ChainPlan.Attachment>> byFile = new LinkedHashMap<>();
+		for (Element element : group) {
+			PackProgram.Loaded one = loaded.get(element.element());
+			if (one == null) {
+				continue;
+			}
+
+			Half half = new Half(servedBy(one), element.blended() || element.afterDeferred());
+			if (byFile.containsKey(half)) {
+				continue;
+			}
+
+			List<ChainPlan.Attachment> writes = writes(half);
+			if (writes == null) {
+				return;
+			}
+
+			byFile.put(half, writes);
+		}
+
+		group.stream()
+				.filter(element -> loaded.containsKey(element.element()))
+				.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
+						loaded.get(element.element()), element, this.values, this.load,
+						byFile.get(new Half(servedBy(loaded.get(element.element())),
+								element.blended() || element.afterDeferred())),
+						this.chainTargets, this.targets, this.chainRuns)));
+	}
+
+	/**
 	 * One file serving one half of the family, which is what the plan has to be asked by: the same
-	 * file may serve both halves, and the two answers are on opposite sides of every target.
+	 * file may serve both halves, and the two answers are on opposite sides of every target. The
+	 * hand's water pass is a blended half like any other here, {@code gbuffers_hand_water} falling
+	 * back on {@code gbuffers_hand} with the two answers apart.
 	 */
 	private record Half(String servedBy, boolean blended) {
 	}
@@ -1163,8 +1330,9 @@ public final class EntityDraw {
 		// gbuffer from a wrong composite, which is what these switches exist for.
 		if (!half.blended() && this.chainRuns && !this.seeded) {
 			Vitrail.logger().info("The scene seed is off, and it is the only way the first output of "
-					+ "an opaque entity reaches the pack's picture, so the game keeps its own shader "
-					+ "for that half: served, it would write every other draw buffer and no colour");
+					+ "an opaque piece reaches the pack's picture, so the game keeps its own shader "
+					+ "for what {} serves: served, it would write every other draw buffer and no "
+					+ "colour", half.servedBy());
 
 			return null;
 		}
@@ -1177,8 +1345,8 @@ public final class EntityDraw {
 		ChainPlan.Pass pass = geometry.get();
 		if (!pass.size().equals(TargetSize.ofScreen())) {
 			Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so they cannot share "
-					+ "a pass with the game's own target and the game keeps its own shader for the {} "
-					+ "entities", half.servedBy(), half.blended() ? "translucent" : "opaque");
+					+ "a pass with the game's own target and the game keeps its own shader for that "
+					+ "half of what it serves", half.servedBy());
 
 			return null;
 		}
@@ -1192,7 +1360,7 @@ public final class EntityDraw {
 		if (seed.isEmpty() || seed.get().target() != first.target()
 				|| seed.get().side() != first.side()) {
 			Vitrail.logger().warn("{} writes {} first and the scene seed paints {}, so the first output "
-					+ "of an opaque entity would be carried into a target the pack did not ask for: the "
+					+ "of an opaque piece would be carried into a target the pack did not ask for: the "
 					+ "game keeps its own shader for that half", half.servedBy(),
 					TargetName.canonical(first.target()),
 					seed.map(where -> TargetName.canonical(where.target())).orElse("nothing"));

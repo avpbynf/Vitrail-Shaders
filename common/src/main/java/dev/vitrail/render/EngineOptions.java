@@ -65,7 +65,8 @@ final class EngineOptions {
 	 * way, by element rather than by file: {@code disc}, {@code dark}, {@code stars},
 	 * {@code sunrise}, {@code sun} and {@code moon}, four of the six being one file. The entities
 	 * answer the same way, {@code cutout_cull}, {@code armor}, {@code item} and the rest, with the
-	 * block entity half carrying those same names under a {@code block_} in front. The weather is
+	 * block entity half carrying those same names under a {@code block_} in front and the two hand
+	 * passes under a {@code hand_} and a {@code hand_water_}. The weather is
 	 * {@code weather} and {@code weather_depth}, the particles {@code particles} and
 	 * {@code particles_translucent}. A whole half is
 	 * reached by the name it asks the pack for, {@code dump=gbuffers_entities} or
