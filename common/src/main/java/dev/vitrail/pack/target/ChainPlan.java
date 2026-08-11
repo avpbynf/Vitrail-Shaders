@@ -127,6 +127,19 @@ public final class ChainPlan {
 					// more than it looks, and it is what the harness gate measures.
 					new NamedProgram("gbuffers_entities_translucent", true, Families::entities),
 					new NamedProgram("gbuffers_block_translucent", true, Families::entities),
+					// The hand's two passes, which straddle the stage as the particles do and for the
+					// same kind of reason: the solid one is drawn among the game's opaque features and
+					// the blending one at the end of the level. Not counted, and not by a switch:
+					// even with the line written, the hand is only drawn where a player has one,
+					// which is no place at all from a third person camera - a per frame answer no
+					// per place map may carry, so its entries take the weather's constant.
+					//
+					// The two really can resolve to ONE file, gbuffers_hand_water falling back on
+					// gbuffers_hand, and that is exactly why they are two entries rather than one: a
+					// single walk would put one key in and leave the other side of the same file
+					// unanswered, which is the silence the head of this list is about.
+					new NamedProgram("gbuffers_hand", false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_hand_water", true, NOT_EVERYWHERE),
 					// Drawn, and still not counted: the game draws no rain and no snow where there is
 					// no weather, which is every place but the overworld.
 					new NamedProgram("gbuffers_weather", true, NOT_EVERYWHERE),
