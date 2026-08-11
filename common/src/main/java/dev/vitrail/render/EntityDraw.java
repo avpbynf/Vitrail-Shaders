@@ -22,10 +22,10 @@ import com.mojang.blaze3d.systems.ScissorState;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.StagedVertexBuffer;
 import net.minecraft.client.renderer.rendertype.LayeringTransform;
-import net.minecraft.client.renderer.rendertype.OutputTarget;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 
 import org.joml.Matrix4f;
@@ -70,11 +70,23 @@ import java.util.stream.Stream;
  * are mobs on screen, while the pipelines are a fixed table the game builds once.
  * <p>
  * <strong>Both halves of the geometry are served, in two windows and never in one</strong>, because
- * the game itself splits them: a render type goes to the solid submits or to the translucent ones
- * on {@code RenderType.hasBlending} alone, and the two are executed on opposite sides of the event
- * this engine runs its deferred stage at. The table below is keyed by pipeline and so carries the
- * same split without a column for it, a pipeline either declaring a blend function or not, and
- * {@link #inWindow} is what refuses a row offered in the other half's window.
+ * the game itself splits them: a submitted model goes to the solid submits or to the translucent
+ * ones on {@code RenderType.hasBlending} ({@code SubmitNodeCollection.java:173-179}), and the two
+ * are executed on opposite sides of the event this engine runs its deferred stage at
+ * ({@code feature/FeatureRenderDispatcher.java:198-217}). The table below is keyed by pipeline and
+ * so carries the same split without a column for it, a pipeline either declaring a blend function
+ * or not, and {@link #inWindow} is what refuses a row offered in the other half's window.
+ * <p>
+ * <strong>That sort is not the whole of how geometry reaches the two windows, and two of the rows
+ * below depend on the rest of it.</strong> The water mask is peeled off by identity BEFORE the blend
+ * is looked at ({@code SubmitNodeCollection.java:174-175}), so it is neither half. And the mob's
+ * ground shadow never goes through that sort at all: {@code submitShadow} puts it in a phase of its
+ * own ({@code :88-90}), which {@code executeTranslucent} runs FIRST, ahead of the translucent models
+ * ({@code feature/FeatureRenderDispatcher.java:212}). It reaches this door all the same, and that
+ * had to be proved rather than assumed, its renderer being the one that could have had an
+ * {@code executeGroup} of its own as the particles do:
+ * {@code ShadowFeatureRenderer extends RenderTypeFeatureRenderer}
+ * ({@code feature/ShadowFeatureRenderer.java:19}), inheriting it.
  * <p>
  * <strong>What that costs the two halves is not the same thing, and it is the whole of why they
  * are two.</strong> The opaque half is drawn before the deferred stage, so its first draw buffer
@@ -87,11 +99,15 @@ import java.util.stream.Stream;
  * The layer catches what the game draws for itself during that window, by the game's own colour
  * override; a draw this engine records is one the game never makes, and where the pack took draw
  * buffers at all the pass built for it names the pack's target rather than the override. What is
- * left over is an ORDER: the layer is composed once, at the end of the window, over whatever is
- * there by then, so a translucent feature this engine does not serve is put in front of one it
- * did whatever the depth says. Nothing here can fix that, and it goes away as the families below
- * arrive. The eyes, the beacon beam, the glint, the hand, the text and the shadow map are each a
- * family of their own and none of them is here yet.
+ * left over is an ORDER, and it is a documented divergence from Iris rather than a detail:
+ * {@link FeatureLayer} carries it, with what Iris does instead and what it costs the image.
+ * <p>
+ * <strong>What is still the game's inside this window</strong>, and therefore still goes to that
+ * layer, is the eyes ({@code EYES} and {@code ENTITY_TRANSLUCENT_EMISSIVE}), the glint, the beacon
+ * beam, the text of a name plate or a sign, and the two pipelines {@link #WITHHELD} names. The hand
+ * and the shadow map are families of their own too and are NOT in this window: the hand is drawn
+ * after the level returns, the shadow map is a pass of its own, and neither is reached by either
+ * bracket.
  * <p>
  * <strong>The block entities are not one of those and come in by this same door</strong>, because
  * that is where the game brings them: a chest and a mob are submitted into one phase and drawn with
@@ -136,10 +152,14 @@ public final class EntityDraw {
 	 * <p>
 	 * A window of its own and not the other one widened, for the reason the other one exists at all:
 	 * the hand and the screen come through this same door with these same pipelines, and the second
-	 * of the two events below is what puts them outside. It brackets exactly the game's
-	 * {@code executeTranslucent}, which is also what {@code PackChain.openFeatures} and
-	 * {@code closeFeatures} bracket, so a draw served here is one the layer would otherwise have
-	 * caught.
+	 * of the two events below is what puts them outside. It is the same bracket
+	 * {@code PackChain.openFeatures} and {@code closeFeatures} take, so a draw served here is one the
+	 * layer would otherwise have caught.
+	 * <p>
+	 * The bracket holds the game's {@code executeTranslucent} and a little more: the game copies the
+	 * main depth into its translucent, item entity and particle targets between the first event and
+	 * that call ({@code LevelRenderer.java:456-464}). Nothing of ours draws in there, so nothing of
+	 * ours has a pass open across those copies, which the encoder would refuse.
 	 */
 	private static volatile boolean translucentFeatures;
 
@@ -258,8 +278,8 @@ public final class EntityDraw {
 	/**
 	 * The blending half of each of those two names, which is what Iris's own {@code getTranslucent}
 	 * answers with: {@code ENTITIES_TRANSLUCENT} for a mob and {@code BE_TRANSLUCENT} for a block
-	 * entity ({@code pipeline/IrisPipelines.java:216-224}), which are {@code ProgramId.EntitiesTrans}
-	 * and {@code ProgramId.BlockTrans} ({@code pipeline/programs/ShaderKey.java:42,73}).
+	 * entity ({@code pipeline/IrisPipelines.java:212-222}), which are {@code ProgramId.EntitiesTrans}
+	 * and {@code ProgramId.BlockTrans} ({@code pipeline/programs/ShaderKey.java:43,69}).
 	 * <p>
 	 * Both fall back onto their own opaque name and not onto the terrain, so a pack that ships one
 	 * entity program and no translucent one draws its whole family with the file it wrote.
@@ -280,8 +300,8 @@ public final class EntityDraw {
 	 * <p>
 	 * Both are drawn with a render type carrying a {@code TextureTransform} of the game's own, an
 	 * {@code OffsetTextureTransform} built afresh per frame from the offsets the breeze and the swirl
-	 * are animated by ({@code rendertype/RenderTypes.java:522-524,533-535}); every other render type
-	 * of this family leaves it at {@code DEFAULT_TEXTURING}. That matrix is what a pack multiplies
+	 * are animated by ({@code rendertype/RenderTypes.java:524,536}); every other render type of this
+	 * family leaves it at {@code DEFAULT_TEXTURING}. That matrix is what a pack multiplies
 	 * {@code gl_MultiTexCoord0} by, and Iris hands the real one over on everything the game draws as
 	 * a render type ({@code transform/transformer/VanillaCoreTransformer.java:86}), while this engine
 	 * answers unit nought with the identity ({@code uniform/values/GeometryValues.java:169-180}).
@@ -295,6 +315,12 @@ public final class EntityDraw {
 	 * and not to the run, two breezes on screen holding two offsets, where this engine writes one
 	 * uniform block per run of draws. The glint lives on the same matrix and is a family of its own;
 	 * whatever pays for it there pays for these two.
+	 * <p>
+	 * <strong>They are not one row when they come back.</strong> The breeze is a {@code getTranslucent}
+	 * row ({@code pipeline/IrisPipelines.java:56}), so it belongs with the six below; the swirl is
+	 * pinned to {@code ENTITIES_CUTOUT} ({@code :60}), which is {@code ProgramId.Entities}, so it asks
+	 * for the OPAQUE {@code gbuffers_entities} even though the game blends it. Whoever serves it will
+	 * be adding a blending row that asks for the writing half's name, which no row here does.
 	 */
 	private static final Set<RenderPipeline> WITHHELD =
 			Set.of(RenderPipelines.BREEZE_WIND, RenderPipelines.ENERGY_SWIRL);
@@ -302,10 +328,17 @@ public final class EntityDraw {
 	/**
 	 * Every pipeline the game draws entity geometry with, and nothing else.
 	 * <p>
-	 * The list is the pipelines of {@code RenderPipelines} that bind
+	 * The list is drawn from the pipelines of {@code RenderPipelines} that bind
 	 * {@code DefaultVertexFormat.ENTITY}, in two runs: those that declare no blend function, which
 	 * the game draws among its solid features, and those that do, which it draws among its
-	 * translucent ones. Each of them is a piece of
+	 * translucent ones. <strong>It is not all of them, and the ones left out are named rather than
+	 * counted</strong>: {@code EYES} ({@code RenderPipelines.java:351-364}) and
+	 * {@code ENTITY_TRANSLUCENT_EMISSIVE} ({@code :287-297}) bind that format and blend, and both are
+	 * the EYES family, which Iris serves with {@code gbuffers_spidereyes} through
+	 * {@code ENTITIES_EYES} and {@code ENTITIES_EYES_TRANS}
+	 * ({@code pipeline/IrisPipelines.java:52,53}). That family is not here yet, so the game draws it
+	 * and {@link FeatureLayer} carries it in. {@link #WITHHELD} names the other two left out, for a
+	 * reason of their own. Each row that is here is a piece of
 	 * its own even where two ask for the same program at the same threshold, which is how the sky is
 	 * six pieces out of three files: they differ in what {@link Element} reads off them, and a piece
 	 * is one compiled module.
@@ -339,12 +372,15 @@ public final class EntityDraw {
 	 * is clipped where it crosses it. Iris clips it too, and a pack writing its own
 	 * {@code alphaTest} directive settles it for both.
 	 * <p>
-	 * <strong>Two rows Iris serves are missing on purpose</strong> and are named in {@link #WITHHELD},
-	 * and two more are unreachable rather than missing: the game builds no main target render type
-	 * for {@code ITEM_TRANSLUCENT} or for {@code ENTITY_TRANSLUCENT_CULL}, both of its own going to
-	 * {@code ITEM_ENTITY_TARGET} ({@code rendertype/RenderTypes.java:137-150,163-176}), which the
-	 * door refuses by output target. They are tabled anyway, on the rule the block twins are tabled
-	 * on: a row too many is a compiled module nobody selects.
+	 * <strong>Two rows Iris serves are missing on purpose</strong> and are named in {@link #WITHHELD}.
+	 * <p>
+	 * <strong>{@code ITEM_TRANSLUCENT} and {@code ENTITY_TRANSLUCENT_CULL} are here and are not
+	 * corner cases</strong>, though both of the game's render types for them name
+	 * {@code ITEM_ENTITY_TARGET} ({@code rendertype/RenderTypes.java:137-150,163-176}). That target
+	 * is allocated only under the game's improved transparency and resolves to the main one
+	 * otherwise, which is what {@link #onMainTarget} reads and why they are served at all: between
+	 * them they carry every experience orb, every translucent item sheet and the translucent type of
+	 * every living entity.
 	 */
 	private static final Map<RenderPipeline, Element> ELEMENTS = new LinkedHashMap<>();
 
@@ -365,7 +401,7 @@ public final class EntityDraw {
 		put(new Element(RenderPipelines.ITEM_CUTOUT, "item", ENTITIES, CUTOUT));
 
 		// The blending run. Every one of them reaches Iris through getTranslucent, which is one
-		// function and not six rows: pipeline/IrisPipelines.java:35-36,38-39,58,61,84.
+		// function and not six rows: pipeline/IrisPipelines.java:35,36,38,39,55,83.
 		put(new Element(RenderPipelines.ENTITY_TRANSLUCENT, "translucent", ENTITIES_TRANSLUCENT,
 				CUTOUT));
 		put(new Element(RenderPipelines.ENTITY_TRANSLUCENT_CULL, "translucent_cull",
@@ -457,9 +493,12 @@ public final class EntityDraw {
 	 * not vary: it is what the origin of the draw says.
 	 * <p>
 	 * <strong>The blending run has no exception at all</strong>, and that is Iris's shape rather than
-	 * a simplification of it: its two fixed rows are reached from the cutout table, and every row
-	 * that reaches {@code getTranslucent} answers {@code BE_TRANSLUCENT} under the phase without a
-	 * pipeline being consulted ({@code pipeline/IrisPipelines.java:216-224}). So a blending twin is
+	 * a simplification of it. Its three rows pinned to {@code ENTITIES_CUTOUT} whatever the phase are
+	 * the energy swirl, the end crystal beam and the offset cutout
+	 * ({@code pipeline/IrisPipelines.java:60,61,62}); the first of those three is withheld here and
+	 * the other two are opaque, so none of them is a blending row of ours. Every row that does reach
+	 * {@code getTranslucent} answers {@code BE_TRANSLUCENT} under the phase without the pipeline
+	 * being consulted at all ({@code pipeline/IrisPipelines.java:212-222}). So a blending twin is
 	 * always {@code gbuffers_block_translucent}, and the tenth is already what its mob row carries.
 	 */
 	@SuppressWarnings("ReferenceEquality")
@@ -601,6 +640,39 @@ public final class EntityDraw {
 		return element.blended() ? translucentFeatures : opaqueFeatures;
 	}
 
+	/**
+	 * Whether this draw really lands on the game's main target, asked of what its output target
+	 * RESOLVES to rather than of which target object it names.
+	 * <p>
+	 * <strong>The difference is not pedantry and it cost this family two rows.</strong> Three of the
+	 * four output targets exist only while the game's improved transparency is on, and
+	 * {@code OutputTarget.getRenderTarget} resolves an absent one to the main target
+	 * ({@code rendertype/OutputTarget.java:24-27}); the render type keeps naming it either way. Read
+	 * by identity, {@code ITEM_TRANSLUCENT} and {@code ENTITY_TRANSLUCENT_CULL} were refused on every
+	 * machine that has improved transparency off, which is the default, although the game was drawing
+	 * them onto the very target this engine had open. What that left to the game's own shader is not
+	 * a corner: every experience orb ({@code entity/ExperienceOrbRenderer.java:21}), every translucent
+	 * item sheet ({@code Sheets.java:39,41}) and the translucent type of every living entity
+	 * ({@code entity/LivingEntityRenderer.java:130}).
+	 * <p>
+	 * Iris keys on neither, because it never meets the question: it turns improved transparency off
+	 * as soon as shaders are enabled ({@code mixin/fabulous/MixinDisableFabulousGraphics.java:37-40})
+	 * and then serves both pipelines through {@code getTranslucent}
+	 * ({@code pipeline/IrisPipelines.java:35,36}).
+	 * <p>
+	 * <strong>The question is shared with the opaque half and the answer moves nothing there</strong>,
+	 * which was measured rather than assumed: of the nine render types of 26.2 that name a target
+	 * other than the main one ({@code rendertype/RenderTypes.java:25,141,167,260,324,345,352,359,397}),
+	 * none is built on a pipeline of the opaque table, so every opaque row named the main target
+	 * before and resolves to it now.
+	 */
+	private static boolean onMainTarget(PreparedRenderType prepared) {
+		Minecraft minecraft = Minecraft.getInstance();
+		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
+
+		return main != null && prepared.outputTarget().getRenderTarget() == main;
+	}
+
 	/** What closing either window costs, which is the same two things. */
 	private static void closeWindow() {
 		// The three marks of the block entities go with it, and this is their frame boundary. They
@@ -611,10 +683,13 @@ public final class EntityDraw {
 		// again one line before every draw.
 		BlockEntityGeometry.clear();
 
-		// Closing the window closes the pass, and that is not the same safety net as the one at
-		// the end of a group. The next thing the game does after this is called is to copy a
-		// depth between targets, which the encoder refuses while a pass is open, so a pass that
-		// only the frame boundary closed would already have cost the frame by then.
+		// Closing the window closes the pass, and that is not the same safety net as the one at the
+		// end of a group. What the game does next is not the same for the two closings and both
+		// refuse an open pass: after the first it copies a depth between targets, which the encoder
+		// refuses outright; after the second it composes the feature layer, draws the outlines and
+		// then the translucent chunk group (LevelRenderer.java:456-464,470-475), each of which opens
+		// a pass of its own where only one may be open. A pass that only the frame boundary closed
+		// would already have cost the frame by then, either way.
 		endGroup();
 	}
 
@@ -622,7 +697,7 @@ public final class EntityDraw {
 	 * Records one draw of a feature group with the pack's own program, or answers no and leaves it to
 	 * the game.
 	 * <p>
-	 * No is the ordinary answer and covers everything from text to particles: the table holds ten
+	 * No is the ordinary answer and covers everything from text to particles: the table holds sixteen
 	 * pipelines and the game has a hundred. What matters about a no is that it closes the pass this
 	 * was recording into, since the caller is about to open one of its own for the same draw and the
 	 * two would overlap.
@@ -638,14 +713,25 @@ public final class EntityDraw {
 
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Element element = element(prepared.pipeline());
-		if (!wanted || device == null || element == null || !inWindow(element)
-				|| prepared.outputTarget() != OutputTarget.MAIN_TARGET) {
+		if (!wanted || device == null || element == null || !inWindow(element)) {
 			draw.end();
 			if (wanted && element == null && translucentFeatures) {
 				draw.withheld(prepared.pipeline());
 			}
 
 			return false;
+		}
+
+		if (!onMainTarget(prepared)) {
+			draw.end();
+
+			return draw.refuse("elsewhere:" + prepared.outputTarget(), "the game sends it to "
+					+ prepared.outputTarget() + ", which it composes itself afterwards, and the pack's "
+					+ "colour targets cannot be attached beside a picture this engine has not got. It "
+					+ "is the game's improved transparency that allocates those targets, and Iris "
+					+ "never meets this: it turns improved transparency OFF as soon as shaders are "
+					+ "enabled (mixin/fabulous/MixinDisableFabulousGraphics.java:37-40), which this "
+					+ "engine does not do. Turning improved transparency off gives it back");
 		}
 
 		try {
@@ -1027,17 +1113,29 @@ public final class EntityDraw {
 	 * Where the outputs of one file that serves a half belong, in draw buffer order and each on the
 	 * side the schedule gives it, or null when this place cannot answer for it.
 	 * <p>
-	 * Empty is not a refusal, and it is no longer the pack's silence: a program that declares no draw
-	 * buffer is answered colortex0, as Iris answers it. What is left is the plan having no answer at
-	 * all for the file that serves the piece, and what puts a file there is the one list
-	 * {@link ChainPlan#geometry} carries. Every place of the corpus answers, Body Camera's
-	 * {@code world1} and {@code world-1} among them: their entities fall back on a
-	 * {@code gbuffers_textured} that declares nothing, and the colortex0 inferred for it is the very
-	 * target their scene seed is painted into, so the last refusal below does not fire there either.
-	 * An empty answer on the BLENDING half lands its single output on the game's target, and
-	 * {@link FeatureLayer} is what carries it into the picture, the game's colour override still
-	 * being posed over that whole window and the layer composed onto the first draw buffer of the
-	 * translucent chunk pass.
+	 * <strong>Empty is not a refusal, and it no longer means what it used to.</strong> It makes the
+	 * piece write ONE output, to the game's target, and it covers three quite different things. A key
+	 * the plan never walked, which is a name missing from its {@code NAMED_PROGRAMS}. A program the
+	 * plan holds no draw buffers for at all, which since the inference means a program drawn from the
+	 * light or a file the expander could not read ({@code ChainPlan.geometryOf}). And a
+	 * walk the plan REFUSED, which is five cases of its own: more than eight draw buffers, the same
+	 * target named twice, no schedule step, a target nothing allocates, or two sizes in one pass -
+	 * the one list {@code ChainPlan.attachmentsOf} carries.
+	 * <p>
+	 * The last of those three is the one worth naming, because it is a fault dressed as a default: a
+	 * pack whose entity program the plan refused is served with one output and loses its normals and
+	 * its specular map without this file saying anything, the plan having put its reason in the notes
+	 * rather than here. <strong>What is NOT in that list any more is the ordinary pack.</strong> A
+	 * pack that simply declares no directive arrives with colortex0, as it does under Iris, so it
+	 * never reaches this branch at all: Body Camera's {@code world1} and {@code world-1} are that
+	 * case, their entities falling back on a {@code gbuffers_textured} that declares nothing, and
+	 * the colortex0 inferred for it is the very target their scene seed is painted into, so the last
+	 * refusal below does not fire there either.
+	 * <p>
+	 * An empty answer on the OPAQUE half still reaches the pack's picture, through the scene seed.
+	 * On the BLENDING half it is {@link FeatureLayer} that carries it, the game's colour override
+	 * still being posed over that whole window, and the layer is composed onto the first draw buffer
+	 * of the translucent chunk pass.
 	 * <p>
 	 * Null is a refusal. Both halves refuse a place whose targets are not the size of the screen, one
 	 * render pass having one render area. The opaque half refuses two more, and they are both about
