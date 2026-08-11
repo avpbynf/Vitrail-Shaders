@@ -14,11 +14,14 @@ import org.joml.Matrix4f;
  * model view worth the name: the model view is the identity and the projection is the one that
  * carries the quad onto the screen, so their product is the projection.
  * <p>
- * The stand ins at the bottom are copied from Iris rather than left out. They exist so that a
- * program declaring {@code entityColor} outside a gbuffers pass compiles and reads something
- * harmless instead of failing to resolve; the real values arrive with the gbuffers, and at that
- * point three of them stop being block members at all and become the components of a flat integer
- * vector, which moves the layout. They are named here so that finding them again is not a search.
+ * The values at the bottom are copied from Iris rather than left out, and they are copied whole:
+ * outside a gbuffers pass they are what Iris supplies as well, so a composite declaring
+ * {@code entityColor} both compiles and reads the number it would read there. What differs is what
+ * happens INSIDE a gbuffers pass drawn from the entity mesh, and it differs in the mesh rather than
+ * in the table: Iris stops answering four of these from a uniform at all and answers them from
+ * elements of a vertex format of its own, which this engine does not have. So the real values
+ * arrive with the gbuffers under Iris and do not arrive at all here, and the comment on those lines
+ * says what each costs. They are named here so that finding them again is not a search.
  */
 public final class DrawValues {
 
@@ -107,22 +110,36 @@ public final class DrawValues {
 
 		builder.add("entityColor", UniformShape.VEC4,
 				(_, out) -> out.set(0.0F, 0.0F, 0.0F, 0.0F));
-		// The three identifiers a pack tells one entity, block entity or held item apart by, and not
-		// one of them is a value: nothing in this engine ever writes one, so each is the same number
-		// on every draw and a pack branching on it takes one branch for the whole world. Iris reads
-		// them off a vertex element of its own, an unsigned short triple it adds to its entity
-		// format and hands the stages back as iris_entityInfo
-		// (pipeline/transform/transformer/EntityPatcher.java:125-160); the game's
-		// DefaultVertexFormat.ENTITY has no room for one and this engine decodes the game's format.
+		// The three identifiers a pack tells one entity, block entity or held item apart by, and the
+		// numbers are Iris's own: it registers blockEntityId and currentRenderedItemId at -1 once
+		// and for the session (uniforms/CommonUniforms.java:164-165), and entityId comes off a field
+		// its render dispatcher sets to the entity being submitted and back to zero at the end of
+		// every submit (mixin/entity_render_context/MixinEntityRenderDispatcher.java:82 and :89), so
+		// zero is what a pass drawn between two entities reads. The -1 that field starts at
+		// (uniforms/CapturedRenderingState.java:23) is the value before the first entity of the
+		// session and is not what a pack meets.
 		//
-		// The numbers are Iris's own uniform fallback, which is what it gives a program the element
-		// never reached, for two of the three (uniforms/CommonUniforms.java:164-165). entityId is
-		// zero where that fallback is -1 (uniforms/CommonUniforms.java:73), and which of the two a
-		// program should read is genuinely open: nothing in Iris ever sets that fallback either, so
-		// the answer a shader really takes there comes from the element, whose type cannot carry -1.
+		// So these three are the right answer wherever Iris hands the uniform over, which is every
+		// pass whose mesh has no overlay: the composites, and the terrain and the sky with them.
 		//
-		// UniformGaps names all three, so that the log says which of a program's values are these
-		// rather than leaving them to count as supplied.
+		// The one divergence is the other case, and it is real rather than a placeholder. Where the
+		// mesh does carry the overlay, Iris deletes these declarations and rewrites every read onto
+		// a vertex element of its own (pipeline/transform/transformer/EntityPatcher.java:130-152),
+		// four unsigned shorts wide with three lanes read as an ivec3
+		// (vertices/IrisVertexFormats.java:30). The game's entity format has no such element and
+		// this engine decodes the game's format, which is said where the prologue is built,
+		// glsl/EntityVertex.java:74-76. A chest or a mob therefore reads one number for the whole
+		// world here, where Iris gives it the identifier its pack mapped.
+		//
+		// It has a second half that is not about the mesh at all, and it is not live yet. Iris keeps
+		// the uniform for a program the element cannot reach and names the case: the lightning
+		// (uniforms/CommonUniforms.java:72-73), whose shard puts the live identifier in the field
+		// around the draw (layer/LightningRenderStateShard.java:19-21). Served, our lightning would
+		// read zero there, and what a pack loses is the branch it writes on that one identifier.
+		// This engine draws no lightning, so today it costs the image nothing.
+		//
+		// UniformGaps carries both halves, and per pass rather than in one list, which is the whole
+		// reason it has two: named everywhere, these would be a false alarm on every composite.
 		builder.add("entityId", UniformShape.INT, (_, out) -> out.set(0));
 		builder.add("blockEntityId", UniformShape.INT, (_, out) -> out.set(-1));
 		builder.add("currentRenderedItemId", UniformShape.INT, (_, out) -> out.set(-1));
