@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * OpResolver maps the trailing characters identifying an operator to an actual operator.
  *
- * @param <T>
+ * @param <T> what resolving hands back, which is the operator itself
  */
 abstract class OpResolver<T> {
 	abstract T resolve(StringReader input) throws ParseException;

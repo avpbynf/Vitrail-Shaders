@@ -108,9 +108,9 @@ public class Parser {
 		while (!this.stack.isEmpty()) {
 			Element x = this.peek();
 
-			if (x instanceof PriorityOperatorElement && ((PriorityOperatorElement) x).getPriority() <= priority) {
+			if (x instanceof PriorityOperatorElement operator && operator.getPriority() <= priority) {
 				this.pop();
-				token = ((PriorityOperatorElement) x).resolveWith(token);
+				token = operator.resolveWith(token);
 			} else {
 				break;
 			}
@@ -145,8 +145,8 @@ public class Parser {
 			);
 		}
 
-		if (args instanceof UnfinishedArgsExpression) {
-			((UnfinishedArgsExpression) args).tokens.add(expr);
+		if (args instanceof UnfinishedArgsExpression unfinished) {
+			unfinished.tokens.add(expr);
 		} else {
 			throw new UnexpectedTokenException(
 				"Expected to see an opening bracket '(' or a comma ',' right before an expression followed by a " +
@@ -215,19 +215,19 @@ public class Parser {
 
 			Element pop = this.pop();
 
-			if (!(pop instanceof UnfinishedArgsExpression)) {
+			if (!(pop instanceof UnfinishedArgsExpression unfinished)) {
 				throw new UnexpectedTokenException(
 					"Expected to see an opening bracket '(' or a comma ',' right before an expression followed by a " +
 						"closing bracket ')' or a comma ','", index);
 			}
-			args = (UnfinishedArgsExpression) pop;
+			args = unfinished;
 		}
 
 		Element top = this.peek();
 
-		if (top instanceof IdToken) {
+		if (top instanceof IdToken id) {
 			this.pop();
-			this.push(new FunctionCall(((IdToken) top).getId(), args.tokens));
+			this.push(new FunctionCall(id.getId(), args.tokens));
 		} else {
 			if (args.tokens.isEmpty()) {
 				throw new MissingTokenException("Encountered empty brackets that aren't a call", index);

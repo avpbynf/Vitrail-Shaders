@@ -6,6 +6,14 @@ import dev.vitrail.uniform.expr.MatrixType;
 import dev.vitrail.uniform.expr.VectorType;
 import dev.vitrail.uniform.UniformShape;
 
+// The names below are the ones an expression is written against, and they are upstream's: a pack
+// author reads bool, int and float, and the classes carrying them are spelled the same way on
+// purpose. Renaming them, boxing the primitive table or splitting the holder would make this file
+// diverge from stareval for the analyser's sake alone.
+@SuppressWarnings({
+	"ClassInitializationDeadlock", "VariableNameSameAsType", "AvoidCommonTypeNames",
+	"MutablePublicArray"
+})
 public abstract class Type {
 	public static final Boolean Boolean = new Boolean();
 	public static final Int Int = new Int();
@@ -16,6 +24,11 @@ public abstract class Type {
 	public static final Primitive[] AllPrimitives = {Type.Boolean, Type.Int, Type.Float};
 
 	/** The block shape a value of this type takes, or null when nothing here can carry it. */
+	// Identity is what a type token is compared on: each name below is the sole instance of its
+	// class, and none of them overrides equals, so .equals() here would be the same test run
+	// slower. The one type in this system that does compare by value, VectorType.ArrayVector, is
+	// never matched this way.
+	@SuppressWarnings("ReferenceEquality")
 	public static UniformShape convert(Type type) {
 		if (type == Type.Int || type == Type.Boolean) return UniformShape.INT;
 		else if (type == Type.Float) return UniformShape.FLOAT;
@@ -55,6 +68,7 @@ public abstract class Type {
 
 	public abstract void getValueFromArray(Object array, int index, FunctionReturn value);
 
+	@Override
 	public abstract String toString();
 
 	public abstract static class Primitive extends Type {

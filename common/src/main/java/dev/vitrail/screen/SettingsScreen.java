@@ -74,7 +74,6 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	private static final int FOOTER_HEIGHT = 44;
 	private static final int LINE_HEIGHT = 11;
 	private static final int NARROW_BUTTON = 80;
-	private static final int WIDE_BUTTON = 120;
 	private static final int BUTTON_GAP = 8;
 
 	/** How often the pack folder is looked at while the list is drawn, in milliseconds. */
@@ -267,6 +266,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	 * file: a line added to {@code options.txt} greys a setting without losing the click made under
 	 * it. Another pack drops it, a value set on one pack having no meaning in the next one's file.
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	private void syncWithLoadedPack() {
 		PackSession loaded = PackChain.session().orElse(null);
 		PackSession held = this.session;

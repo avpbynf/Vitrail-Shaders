@@ -37,6 +37,7 @@ public class CallExpression implements Expression {
 	}
 
 	@Override
+	@SuppressWarnings("ReferenceEquality")
 	public Expression partialEval(FunctionContext context, FunctionReturn functionReturn) {
 		// the dirty way would be this
 		/*

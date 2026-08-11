@@ -13,8 +13,12 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
+// Each name below is the sole instance of its class and is read as such, so the holder is this
+// class and not a separate table: a subclass instance in a superclass field can only deadlock if
+// two threads initialise the pair at once, and the whole type system is built on the render thread
+// before the first expression is parsed.
+@SuppressWarnings("ClassInitializationDeadlock")
 abstract public class VectorType extends Type.ObjectType {
 	public static final JOMLVector<Vector2f> VEC2 = new JOMLVector<>("vec2", Vector2f::new);
 	public static final JOMLVector<Vector3f> VEC3 = new JOMLVector<>("vec3", Vector3f::new);
@@ -22,15 +26,6 @@ abstract public class VectorType extends Type.ObjectType {
 	public static final JOMLVector<Vector2i> I_VEC2 = new JOMLVector<>("ivec2", Vector2i::new);
 	public static final JOMLVector<Vector3i> I_VEC3 = new JOMLVector<>("ivec3", Vector3i::new);
 	public static final JOMLVector<Vector4i> I_VEC4 = new JOMLVector<>("ivec4", Vector4i::new);
-	public static final VectorType B_VEC2 = new ArrayVector(Type.Boolean, 2);
-	public static final VectorType B_VEC3 = new ArrayVector(Type.Boolean, 3);
-	public static final VectorType B_VEC4 = new ArrayVector(Type.Boolean, 4);
-	public static final ArrayVector[] AllArrayVectorTypes = Stream.of(Type.Int, Type.Boolean)
-		.flatMap(type ->
-			IntStream
-				.rangeClosed(2, 4)
-				.mapToObj(i -> new ArrayVector(type, i))
-		).toArray(ArrayVector[]::new);
 	public static final VectorType[] AllVectorTypes = Arrays.stream(Type.AllPrimitives)
 		.flatMap(type ->
 			IntStream

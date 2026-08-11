@@ -64,7 +64,8 @@ public final class DrawBuffers {
 		// DRAWBUFFERS runs its indices together, so it cannot name an attachment past nine.
 		// RENDERTARGETS separates them with commas and can.
 		if (runTogether) {
-			for (char digit : value.toCharArray()) {
+			for (int i = 0; i < value.length(); i++) {
+				char digit = value.charAt(i);
 				if (digit >= '0' && digit <= '9') {
 					slots.add(digit - '0');
 				}
