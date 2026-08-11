@@ -341,10 +341,13 @@ final class EngineOptions {
 		// list of names go through untouched.
 		String text = value.isBoolean() ? (value.asBoolean() ? "" : "0") : value.text();
 		ChainFilter filter = ChainFilter.parse(text);
-		if (filter == ChainFilter.ALL && !text.isBlank()) {
+		// By value: ChainFilter is a record, and parse returns the ALL constant itself only on the
+		// paths that happen to fall back to it today. Identity here would answer a question about
+		// which object came back rather than about which chain was asked for.
+		if (filter.equals(ChainFilter.ALL) && !text.isBlank()) {
 			Vitrail.logger().warn("'{}={}' is neither a count nor a list of program names, so the "
 					+ "whole chain runs", PASSES_KEY, text);
-		} else if (filter != ChainFilter.ALL) {
+		} else if (!filter.equals(ChainFilter.ALL)) {
 			Vitrail.logger().info("Running only part of the chain, {}={}", PASSES_KEY, text);
 		}
 
