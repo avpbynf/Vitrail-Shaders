@@ -197,6 +197,25 @@ They are not lost: the engine redirects the game's colour output for the length 
 composes what it catches onto the pack's target afterwards. It is a second full-screen layer,
 bracketing one phase rather than standing at one seam.
 
+### The hand is the one family the engine has to move rather than intercept
+
+The player's own hand is drawn *after* the level returns, which is after the chain has run: the game
+paints it straight onto the finished, tone mapped image. No seam catches it, because there is no
+seam left. A layer of the kind above cannot help either - what it would catch is a hand that has
+already been lit by the game's shader over an image the pack finished.
+
+So with `hand=on` the engine does not intercept the hand, it **moves** it. The game's own submission
+is suppressed and the hand is submitted twice from inside the level: the solid pass among the game's
+opaque features, before the deferred stage, and the blending pass at the end of the world, before
+the composites. Where each lands is what decides which half of every target it writes, and both are
+in the picture the composites read. This is where the reference puts them too.
+
+Moving it costs two things worth knowing. The hand needs a projection of its own - the head-up field
+of view, and a clip depth squeezed to an eighth so that an arm held against a wall is not cut in half
+by it, which is the number packs know as `MC_HAND_DEPTH` - so it is the one family whose
+`gl_ProjectionMatrix` is not the frame's. And it needs a second feature renderer, because the game's
+own is already mid-frame at both of those moments and refuses to be re-entered.
+
 ## Why a family cannot simply be switched over
 
 There is a trap here that looks like an easy win and is a regression, and it explains the shape of

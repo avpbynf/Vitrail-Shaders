@@ -131,8 +131,19 @@ player's own body is in that half, so third person still shows the symptom this 
 What is left is named in the log rather than on this page, by the line the close of this section
 points at.
 
+**The hand you are holding has a switch of its own, and turning it on moves it as well as lighting
+it.** The game draws the hand after the whole chain has finished, so with `hand=off` it is not
+merely lit by the game, it is painted onto an image the pack had already completed: nothing the pack
+does to the world reaches it, and nothing it draws reaches a composite. With `hand=on` it is drawn
+inside the level instead, in two passes, and served by `gbuffers_hand` and `gbuffers_hand_water` as
+the reference serves them. A pack that squeezes the hand's depth with `MC_HAND_DEPTH` gets the same
+eighth it expects. What stays behind is what blends: a translucent block held in hand is drawn with
+a blending pipeline no family here serves yet, so the arm around it becomes the pack's while the
+block in it stays the game's.
+
 **Nothing named in this section CASTS a shadow** - not the rain, not the snow, not the particles,
-not the mobs, not the block entities - because none of them is drawn into the shadow map. Receiving
+not the mobs, not the block entities, not the hand - because none of them is drawn into the shadow
+map. Receiving
 and casting are two different things here: a mob with `entities=on` has the pack's light on it and
 no shadow under it. The reference draws the mobs and the block entities into its own map; this is a
 gap and not a choice.
