@@ -99,7 +99,7 @@ public final class PackValues {
 			values.state.endFlashShadows(properties.endFlashShadows());
 			values.skyElements = properties.skyElements(settings.globalDefines(options));
 			values.weather = properties.weather(settings.globalDefines(options));
-			values.rainDepth = properties.rainDepth();
+			values.rainDepth = properties.rainDepth(settings.globalDefines(options));
 			values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
 			values.declare(properties, settings.globalDefines(options));
 			values.readNoise(properties, source);

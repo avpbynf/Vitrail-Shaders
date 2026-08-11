@@ -67,9 +67,12 @@ public final class ShaderProperties {
 	private static final Pattern IRIS_FEATURES =
 			Pattern.compile("^\\s*iris\\.features\\.(required|optional)\\s*=\\s*(.*)$");
 	private static final Pattern END_FLASH_SHADOWS = Pattern.compile("^\\s*endFlashShadows\\s*=\\s*(.*)$");
-	// Whether the rain and the snow write the world's depth. Flat like the line above and unlike the
-	// family below, because that is where Iris reads it: it is one of its plain boolean directives,
-	// ShaderProperties.java:208, and no pack of the corpus writes it under a condition.
+	// Whether the rain and the snow write the world's depth. Read on the live lines like the family
+	// below, and that is what Iris does too, by another road: it runs the whole file through its own
+	// preprocessor with the pack's settings as macros before its parser sees a line at all
+	// (Iris shaderpack/properties/ShaderProperties.java:132 and preprocessor/PropertiesPreprocessor
+	// .java:28-63), so a dead branch is gone by then. Read flat, a pack writing this under an #if it
+	// leaves off would get depth-writing rain here and none there.
 	private static final Pattern RAIN_DEPTH = Pattern.compile("^\\s*rain\\.depth\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
@@ -133,7 +136,6 @@ public final class ShaderProperties {
 	private final int continuationCount;
 	private final boolean present;
 	private final boolean endFlashShadows;
-	private final boolean rainDepth;
 
 	private ShaderProperties(Builder builder) {
 		this.lines = List.copyOf(builder.lines);
@@ -163,7 +165,6 @@ public final class ShaderProperties {
 		this.continuationCount = builder.continuationCount;
 		this.present = builder.present;
 		this.endFlashShadows = builder.endFlashShadows;
-		this.rainDepth = builder.rainDepth;
 	}
 
 	public static ShaderProperties parse(ShaderPackSource source) throws IOException {
@@ -313,18 +314,12 @@ public final class ShaderProperties {
 			return;
 		}
 
-		// Whether the rain and the snow are written into the world's depth, which the game only does
-		// when its own transparency chain is on. Off unless the pack says so, which is Iris's default
-		// for it as well. Three packs of the corpus write the line and all three ask for false, so
-		// what reading it buys today is the pack that will ask for true rather than a picture that
-		// changes now.
+		// Consumed here and read by rainDepth, which walks the conditionals. Consumed only where the
+		// value is one this engine reads, which is the rule the branches below follow: anything else
+		// belongs among the keys nothing reads, where the pack's author can see it.
 		Matcher rainDepth = RAIN_DEPTH.matcher(line);
-		if (rainDepth.matches()) {
-			Boolean value = truth(rainDepth.group(1).trim());
-			if (value != null) {
-				builder.rainDepth = value;
-				return;
-			}
+		if (rainDepth.matches() && truth(rainDepth.group(1).trim()) != null) {
+			return;
 		}
 
 		// The value is kept exactly as written. It is often not a number at all but the name of
@@ -354,11 +349,13 @@ public final class ShaderProperties {
 			return;
 		}
 
-		// The same rule for the two word member of that family: consumed only where the first word
-		// is one this engine reads, so that a "weather=on" falls through and is counted among the
-		// keys nothing reads rather than looking honoured.
+		// The same rule for the two word member of that family, and it takes EITHER word: a line is
+		// honoured as soon as one of the two says something this engine reads, so testing the first
+		// alone would count "weather = on false" among the keys nothing reads while its second word
+		// really did take the splashes away. A line whose two words are both unreadable falls
+		// through, which is where a reader has to be able to find it.
 		Matcher weather = WEATHER.matcher(line);
-		if (weather.matches() && truth(weather.group(1).trim().split("\\s+", 0)[0]) != null) {
+		if (weather.matches() && reads(weather.group(1).trim().split("\\s+", 0))) {
 			return;
 		}
 
@@ -841,10 +838,12 @@ public final class ShaderProperties {
 	 * <p>
 	 * The same family as {@link #skyElements} and read the same way, for the same measured reason:
 	 * the packs of the corpus that write one of these words write it under an {@code #if} on a
-	 * setting of their own, and read flat two of them come out backwards. Iris reads this one flat
-	 * ({@code shaderpack/properties/ShaderProperties.java:259-267}); no pack of the corpus writes it
-	 * at all, so what that difference decides today is nothing, and what it buys is one reader for
-	 * one family rather than two that can drift.
+	 * setting of their own, and read flat two of them come out backwards. <strong>Iris reaches the
+	 * same answer by another road and not by another rule</strong>: it hands the whole file to its
+	 * own preprocessor with the pack's settings as macros
+	 * ({@code shaderpack/properties/ShaderProperties.java:132}) and parses what comes back
+	 * ({@code :152}), so the branch this walk steps over never reaches its directive at
+	 * {@code :259-267} either.
 	 * <p>
 	 * <strong>The second word is a word about particles and not about the rain.</strong> It leaves
 	 * the curtain of rain alone and takes away the splash particles the ground throws up under it,
@@ -939,6 +938,17 @@ public final class ShaderProperties {
 		}
 
 		return matched;
+	}
+
+	/** Whether any word of a multi word directive is one {@link #truth} answers. */
+	private static boolean reads(String[] words) {
+		for (String word : words) {
+			if (truth(word) != null) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -1048,16 +1058,28 @@ public final class ShaderProperties {
 	}
 
 	/**
-	 * Whether the pack asked for the rain and the snow to write the world's depth, off unless it
-	 * says otherwise.
+	 * Whether the pack asked for the rain and the snow to write the world's depth, live lines only,
+	 * off unless it says otherwise.
 	 * <p>
 	 * The game writes it only where its own transparency chain is running, so a pack asking for this
 	 * is asking for the curtain to occlude whatever is drawn behind it afterwards, and what that
 	 * decides on our side is which of the game's two weather pipelines the pack's program inherits
 	 * its depth state from.
+	 * <p>
+	 * Read through {@link #live} like the rest of the family, and the pattern's own note says why
+	 * that is what the reference does as well. Three packs of the corpus write the line and all
+	 * three ask for false, so what this buys today is the pack that will ask for true.
 	 */
-	public boolean rainDepth() {
-		return this.rainDepth;
+	public boolean rainDepth(Map<String, String> defines) {
+		boolean asked = false;
+		for (Matcher line : live(RAIN_DEPTH, defines)) {
+			Boolean value = truth(line.group(1).trim());
+			if (value != null) {
+				asked = value;
+			}
+		}
+
+		return asked;
 	}
 
 	/** Each profile's unexpanded body, in the order the pack declares them. */
@@ -1340,6 +1362,5 @@ public final class ShaderProperties {
 		private int continuationCount;
 		private boolean present;
 		private boolean endFlashShadows;
-		private boolean rainDepth;
 	}
 }

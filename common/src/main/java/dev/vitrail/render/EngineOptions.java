@@ -20,11 +20,12 @@ import java.util.Set;
  * They are kept together, and taken out of the pack's settings in one place, because a name left in
  * would be written into the head of every translated unit as {@code #define screen settings}, which
  * is a plausible identifier in somebody's GLSL. None of the twelve collides with a setting any pack
- * of the corpus declares, and what keeps that true is thinner than it looks: five of these words
- * really are defined by packs of the corpus, {@code CLOUDS}, {@code WEATHER}, {@code PARTICLES},
- * {@code ENTITIES} and {@code SHADOW}, and every one of them in capitals. The names here are
- * lowercase and the comparison is not, so the two stay apart; a word added here in the spelling a
- * pack uses would be swallowed before the pack ever saw it.
+ * of the corpus declares, and what keeps that true is thinner than it looks: several of these words
+ * really are declared by packs, {@code CLOUDS}, {@code WEATHER}, {@code ENTITIES} and
+ * {@code SHADOW} among them. What holds them apart is the case alone - the names here are lowercase
+ * and the comparison is not - so a word added here in the spelling a pack uses would be swallowed
+ * before the pack ever saw it. No count is given on purpose: one taken by hand goes stale at the
+ * next pack read, and nothing here measures it.
  * <p>
  * Every one of them answers a question the picture cannot: which passes ran, which half a target
  * was read from, whether the values a program was handed were the right numbers. A word that is
@@ -168,9 +169,9 @@ final class EngineOptions {
 	 * engine can serve, it serves, and only taking a family back out is written down.
 	 * <p>
 	 * A line of its own and not part of the entities', though the two arrived together: the weather
-	 * is the one family drawn after the deferred stage, so it is the one that can be turned off to
-	 * tell a curtain the pack drew from a curtain the game drew, without touching anything the pack
-	 * does before the deferreds.
+	 * is the one family drawn WHOLLY after the deferred stage - the particles straddle it - so it is
+	 * the one that can be turned off to tell a curtain the pack drew from a curtain the game drew,
+	 * without touching anything the pack does before the deferreds.
 	 */
 	private static final String WEATHER_KEY = "weather";
 

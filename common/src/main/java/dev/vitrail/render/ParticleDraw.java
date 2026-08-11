@@ -66,9 +66,9 @@ import java.util.Set;
  * of the eight that write it all write {@code mixed}, which names the placement above exactly. A pack
  * asking for either of the other two would be asking for its particles to be moved across the
  * deferred stage, which no engine does today, Iris parsing the word and reaching for it nowhere; the
- * difference is that here it is said in the log. That line comes out of the reading, so it needs
- * {@code particles=on} and a pack this place serves at least one half for, which is the same
- * condition every other line of this family answers under.
+ * difference is that here it is said in the log. That line comes out of the reading, so it needs a
+ * pack this place serves at least one half for, and {@code particles=off} not written, which is the
+ * same condition every other line of this family answers under.
  */
 public final class ParticleDraw {
 
@@ -158,6 +158,13 @@ public final class ParticleDraw {
 	private ParticleProgram drawing;
 	private RenderPipeline standsIn;
 	private RenderPipeline bound;
+
+	/**
+	 * Whether the pipeline this engine last handed the renderer was its own. False for a layer that
+	 * kept the game's, which is the one case where the pass draws with a shader the pack never
+	 * wrote, and what {@link #texture} reads before it binds anything over it.
+	 */
+	private boolean handedOurs;
 
 	/** The pass that program wants opened, worked out beside it. Null means the renderer's own. */
 	private RenderPassDescriptor descriptor;
@@ -266,6 +273,7 @@ public final class ParticleDraw {
 			return game;
 		}
 
+		draw.handedOurs = true;
 		if (draw.standsIn == game) {
 			return draw.bound;
 		}
@@ -273,6 +281,8 @@ public final class ParticleDraw {
 		// The pack took no draw buffer here, so the pass is the renderer's own and the layer's
 		// pipeline binds into it as it always did. Nothing is lost and nothing is said.
 		if (draw.descriptor == null) {
+			draw.handedOurs = false;
+
 			return game;
 		}
 
@@ -298,7 +308,12 @@ public final class ParticleDraw {
 	 */
 	public static void texture(RenderPass pass, GpuTextureView view, GpuSampler sampler) {
 		ParticleDraw draw = PackChain.particles();
-		if (draw == null || draw.drawing == null || draw.bound == null) {
+		// What the pass really got decides, as it does for the weather and for the sky. A foreign
+		// layer keeps its own pipeline wherever the pass allows it, which pipeline() answers just
+		// above and this would otherwise ignore: binding the pack's block over the game's shader is
+		// harmless in itself, the descriptor flush walking the layout of the pipeline really bound,
+		// but it makes this engine announce a first draw for a program that drew nothing.
+		if (draw == null || draw.drawing == null || draw.bound == null || !draw.handedOurs) {
 			return;
 		}
 
@@ -327,6 +342,7 @@ public final class ParticleDraw {
 		this.standsIn = null;
 		this.bound = null;
 		this.descriptor = null;
+		this.handedOurs = false;
 	}
 
 	/**

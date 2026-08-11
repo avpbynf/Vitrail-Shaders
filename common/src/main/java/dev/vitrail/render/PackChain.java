@@ -293,9 +293,10 @@ public final class PackChain {
 		this.clouds = new CloudDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 		// And once more, read on demand for a fifth reason: a pack may be loaded for an hour before
-		// it rains. It needs no switch of the seed's, being the one family here drawn after the
-		// deferred stage: it blends onto what the chain has already put in the pack's target, which
-		// is the position the world's own translucents are in.
+		// it rains. It needs no switch of the seed's, being the one family here drawn WHOLLY after
+		// the deferred stage: it blends onto what the chain has already put in the pack's target,
+		// which is the position the world's own translucents are in. The particles below straddle
+		// that stage instead, and that is why they need the switch and this does not.
 		this.weather = new WeatherDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 		// And the sixth, which needs the seed's switch as the entities do and only for half of

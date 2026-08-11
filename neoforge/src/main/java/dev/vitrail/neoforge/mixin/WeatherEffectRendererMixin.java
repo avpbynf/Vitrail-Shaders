@@ -17,6 +17,7 @@ import net.minecraft.client.renderer.state.level.LevelRenderState;
 import net.minecraft.client.renderer.state.level.WeatherRenderState;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -63,6 +64,7 @@ public abstract class WeatherEffectRendererMixin {
 	 * The pipeline the curtain is drawn with, or null for the game's own. A field of the mixin and
 	 * not a static: the renderer is one object and its pass does not overlap with itself.
 	 */
+	@Unique
 	private RenderPipeline vitrail$pipeline;
 
 	/**

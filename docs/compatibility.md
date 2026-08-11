@@ -9,7 +9,7 @@ rather than guess.
 | An effect does nothing at all | [The effect never ran](#the-effect-never-ran) |
 | Water is missing, or looks like the game's | [The water](#the-water) |
 | A hard straight line across the sky near the horizon | [The horizon line](#the-horizon-line) |
-| Mobs, particles or the held item look flat and unlit | [Anything that moves](#anything-that-moves) |
+| Mobs or the held item look flat and unlit | [Anything that moves](#anything-that-moves) |
 | The sky turns into a flat grey sheet at sunrise | [The sky goes flat](#the-sky-goes-flat) |
 | Blocks wave, glow or cast wrong shadows after switching packs | [You just changed packs](#you-just-changed-packs) |
 | The terrain is uniformly too dark | [Terrain that is too dark](#terrain-that-is-too-dark) |
@@ -131,9 +131,11 @@ player's own body is in that half, so third person still shows the symptom this 
 What is left is named in the log rather than on this page, by the line the close of this section
 points at.
 
-**None of the three CASTS a shadow**, whichever of them is drawn through the pack, because none of
-them is drawn into the shadow map. Receiving and casting are two different things here: a mob in the
-sun has the pack's light on it and no shadow under it.
+**Nothing named in this section CASTS a shadow** - not the rain, not the snow, not the particles,
+not the mobs, not the block entities - because none of them is drawn into the shadow map. Receiving
+and casting are two different things here: a mob with `entities=on` has the pack's light on it and
+no shadow under it. The reference draws the mobs and the block entities into its own map; this is a
+gap and not a choice.
 
 **Turn the game's improved transparency off if the rain or the translucent particles do not change.**
 It is a video setting of its own, which the Fabulous preset turns on everywhere except macOS. With

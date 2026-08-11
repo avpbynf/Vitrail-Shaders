@@ -521,8 +521,11 @@ public final class PackProgram {
 	 * difference between the sky and every other family: the sky binds four formats between its
 	 * passes, while the entities all bind {@code DefaultVertexFormat.ENTITY} and the particles and
 	 * the weather all bind {@code DefaultVertexFormat.PARTICLE}, so one family is one format and the
-	 * elements to declare are the {@link VertexInputs} constant's. The door of each family is what
-	 * checks that claim against the pipeline in hand rather than trusting it.
+	 * elements to declare are the {@link VertexInputs} constant's. <strong>The entities are the one
+	 * family whose door checks that claim against the pipeline in hand</strong>, reading the format
+	 * off the binding rather than trusting the constant; the particles and the weather trust it, so a
+	 * pipeline of theirs that ever bound something else would read its attributes off the wrong
+	 * offsets in silence.
 	 *
 	 * @param element   what the caller calls this piece, one word, and the key it gets its answer back
 	 *                  under. Several pieces are commonly one program under one format, and they are
