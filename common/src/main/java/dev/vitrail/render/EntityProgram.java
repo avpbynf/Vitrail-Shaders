@@ -137,13 +137,19 @@ final class EntityProgram implements DumpedProgram {
 		return new EntityProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				element.element(), NAMESPACE, ANSWERED, false,
 				game.getColorTargetState().blendFunction(),
-				// No coverage mask on either half. On the writing one that is the same decision as
-				// leaving draw buffer nought on the game's target and not a second one: the two are
-				// tied together in GeometryProgram, and marking a pixel the seed is going to repaint
-				// anyway would only take the game's own picture away from whatever is drawn there
-				// next. On the blending one the question does not arise, the mask being cut against
-				// the seed and the seed having run long before.
-				false, element.blended(), game.getPrimitiveTopology(), game.isCull(),
+				// covers: no coverage mask on either half. On the writing one that is the same
+				// decision as leaving draw buffer nought on the game's target and not a second one:
+				// the two are tied together in GeometryProgram, and marking a pixel the seed is
+				// going to repaint anyway would only take the game's own picture away from whatever
+				// is drawn there next. On the blending one the question does not arise, the mask
+				// being cut against the seed and the seed having run long before.
+				false,
+				// afterDeferred: which side of the stage this piece is drawn on, which decides the
+				// half of every target it reads and whether a depth sampler may be answered with the
+				// opaque world's image. It is the blend and nothing else, the game drawing what
+				// blends among its translucent features.
+				element.blended(),
+				game.getPrimitiveTopology(), game.isCull(),
 				// The piece's own, and the two halves answer differently: NONE for a mob, which is
 				// Iris's answer rather than a reading of what the pass is, and BLOCK_ENTITIES for a
 				// block entity, which Iris really does pose. The class comment has the file:line.

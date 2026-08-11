@@ -119,9 +119,12 @@ public final class ChainPlan {
 					new NamedProgram("gbuffers_block", false, Families::entities),
 					// The blending half of those same two, on the far side of the stage: the game
 					// draws them among its translucent features, which is after the deferreds have
-					// run. Four entries and not two because the side is half the key, and a name
-					// that never enters this list answers empty rather than answering wrongly,
-					// which reads exactly like a pack that declared no draw buffer at all.
+					// run. Four entries and not two because the side is half the key.
+					//
+					// A name that never enters this list answers empty, and empty is the same word
+					// this table uses for a walk it REFUSED, so the caller cannot tell the two
+					// apart: both make the family draw one output. That is why the entry matters
+					// more than it looks, and it is what the harness gate measures.
 					new NamedProgram("gbuffers_entities_translucent", true, Families::entities),
 					new NamedProgram("gbuffers_block_translucent", true, Families::entities),
 					// Drawn, and still not counted: the game draws no rain and no snow where there is
@@ -166,9 +169,9 @@ public final class ChainPlan {
 	 * <p>
 	 * One table for every family rather than one per family, which is what lets a family that does
 	 * not exist yet ask the same question: the terrain asks it three times, the sky three times, and
-	 * the entities once per FILE that serves them, which is one or two: their pieces ask under two
-	 * names, and the two names walk to one file wherever the fallback tree lands them on the same
-	 * program.
+	 * the entities once per FILE AND SIDE that serves them. Their pieces ask under four names, two
+	 * per side, and those four collapse onto fewer keys wherever the fallback tree lands two of them
+	 * on one program - but never across the sides, the side being half the key.
 	 * What differs between families is only how they reach a key, and that is the two tables below
 	 * plus {@link #geometryOf} for whoever needs neither.
 	 * <p>

@@ -47,14 +47,28 @@ import java.util.Optional;
  * real milestone, entities through the pack's gbuffers, and it goes away with that milestone the
  * same day the seed does.
  * <p>
- * <strong>It now catches less than the whole window, and what that costs is an ORDER.</strong>
- * {@link EntityDraw} serves the blending half of the entities inside this same bracket, and those
- * draws the game never makes: what is left here is the families nobody serves yet, the eyes, the
- * glint, the beacon beam, the text and the lightning. No draw takes both roads. But this layer is
- * composed ONCE, at the end of the window and over a full screen quad that tests no depth, so
- * whatever is left in it is put in front of everything served, however far behind it stands. A name
- * plate through a mob rather than behind it is the shape of that, and it shrinks as those families
- * arrive rather than being fixable here.
+ * <strong>It catches less than the whole window, and what that costs is an ORDER. This is a
+ * divergence from Iris and it is written out in the three parts one owes.</strong>
+ * <p>
+ * What Iris does: it replaces the SHADER of a draw and never the target it goes to, keying the
+ * replacement on the pipeline ({@code pipeline/IrisPipelines.java:52} for the eyes, {@code :66,67}
+ * for the beacon beam, {@code :72} for the text, {@code :50} for the glint), so the text, the eyes,
+ * the beams and the served entities are all drawn into the same attachments in the order the game
+ * walks its phases, each one depth tested against the last. It composes nothing, so the question
+ * cannot arise there.
+ * <p>
+ * What stops that here: {@link EntityDraw} serves the blending half of the entities inside this same
+ * bracket and the families nobody serves yet stay the game's - the eyes, the glint, the beacon beam,
+ * the text and the lightning. No draw takes both roads, but the ones left here are drawn into a
+ * layer of this class's own and that layer is composed ONCE, at {@code PackChain.closeFeatures}, over
+ * a full screen quad carrying no depth attachment and therefore no depth test.
+ * <p>
+ * What it costs the image: everything still left to the game is painted in front of everything
+ * served, however far behind it stands. The game draws the shadows, then the translucent models,
+ * then the see-through name plates, the name plates and the texts, in that order
+ * ({@code feature/FeatureRenderDispatcher.java:212-217}), so the shape of it is a name plate or a
+ * sign's text reading through the mob that should hide it. It shrinks family by family as those
+ * families arrive, and it goes with this class.
  * <p>
  * <strong>What it costs is worth naming, because it looks like something else entirely.</strong> The
  * redirected draws write the world's depth, and they write it after {@code depthtex1} has been taken
