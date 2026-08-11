@@ -39,6 +39,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
@@ -227,6 +228,18 @@ final class GeometryProgram {
 	private final RenderPipeline pipeline;
 	private final ShaderSource source;
 
+	/**
+	 * Whether this pass draws the mesh that carries the overlay, which is the entity one and no
+	 * other of ours.
+	 * <p>
+	 * It is the question Iris asks before rewriting {@code entityColor} and the three identifiers
+	 * onto elements of that mesh, and it asks it exactly once, on the inputs
+	 * ({@code pipeline/transform/transformer/VanillaTransformer.java:20-25}). So the same names are
+	 * a placeholder here and a real answer on the terrain, and only a pass that knows which mesh it
+	 * binds can tell the log which it is.
+	 */
+	private final boolean entityMesh;
+
 	private MappableRingBuffer block;
 	private TextureTarget black;
 	private TextureTarget white;
@@ -252,6 +265,7 @@ final class GeometryProgram {
 			boolean chainRuns) {
 		this.pass = pass;
 		this.path = loaded.path();
+		this.entityMesh = DefaultVertexFormat.ENTITY.equals(format);
 		this.blockLabel = () -> "Vitrail " + pass.family() + " OfGlobals";
 		this.passLabel = () -> "Vitrail " + pass.family();
 		TranslatedUnit.Notes notes = loaded.program().stages().get(ProgramStage.FRAGMENT).notes();
@@ -1149,16 +1163,18 @@ final class GeometryProgram {
 		// Underneath that, and it is not the same list: these are members a source really answered,
 		// with something that is not the value. They count as supplied wherever a count is taken,
 		// which is the whole reason for naming them, and a full screen pass has named them since the
-		// block existed. A geometry pass is where the silence costs the most, because the names a
-		// mob and a chest read to tell themselves apart are in it.
-		List<String> standIns = PackValues.standIns(this.loaded.program().uniforms().stream()
-				.map(TranslatedUnit.Uniform::name)
-				.toList());
-		if (!standIns.isEmpty()) {
-			Vitrail.logger().warn("{} reads {} values answered with a stand-in rather than with a "
-					+ "value, which count as supplied everywhere else: {}", this.path,
-					standIns.size(), standIns);
-		}
+		// block existed while a geometry pass named none.
+		//
+		// The mesh is handed in because it decides the list. A name Iris reads off an element is a
+		// placeholder only where that element would have been, so the terrain hears about the names
+		// it shares with a composite and nothing else, and a pass drawn from the entity mesh hears
+		// about the identifiers and the overlay colour as well.
+		PackValues.standIns(this.loaded.program().uniforms().stream()
+						.map(TranslatedUnit.Uniform::name)
+						.toList(), this.entityMesh)
+				.forEach((reason, names) -> Vitrail.logger().warn("{} reads {} answered with a "
+						+ "stand-in rather than with a value, which count as supplied everywhere "
+						+ "else, because {}", this.path, names, reason));
 	}
 
 	private static TextureTarget release(TextureTarget target) {

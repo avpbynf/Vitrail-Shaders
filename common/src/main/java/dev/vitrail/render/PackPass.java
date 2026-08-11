@@ -657,14 +657,16 @@ final class PackPass {
 
 		// Underneath the three, the members that count as supplied and are not: a zero that
 		// arrived through a registered source is the one failure a screenshot can never show.
-		List<String> standIns = PackValues.standIns(this.loaded.program().uniforms().stream()
-				.map(TranslatedUnit.Uniform::name)
-				.toList());
-		if (!standIns.isEmpty()) {
-			this.notes.add(this.path + " reads " + standIns.size() + " values answered with a "
-					+ "stand-in rather than with a value, which count as supplied everywhere else: "
-					+ standIns);
-		}
+		// False, and it is the whole of what this pass is: a full screen program draws no mesh at
+		// all, so the names Iris answers from the entity mesh are answered here with the constant
+		// Iris answers them with too, and calling one of those a stand-in would be a false alarm on
+		// every composite that reads it.
+		PackValues.standIns(this.loaded.program().uniforms().stream()
+						.map(TranslatedUnit.Uniform::name)
+						.toList(), false)
+				.forEach((reason, names) -> this.notes.add(this.path + " reads " + names
+						+ " answered with a stand-in rather than with a value, which count as "
+						+ "supplied everywhere else, because " + reason));
 
 		List<String> unserved = this.loaded.samplers().unserved();
 		if (!unserved.isEmpty()) {

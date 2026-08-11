@@ -22,6 +22,7 @@ import org.joml.Vector4fc;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -340,20 +341,28 @@ public final class PackValues {
 	}
 
 	/**
-	 * Which of a block's members are answered with a stand-in rather than with a value. These
-	 * count as supplied everywhere else, which is exactly why they are worth naming: a zero that
-	 * came through a registered source cannot be told from a measured one by looking at it.
+	 * Which of a block's members are answered with a stand-in rather than with a value, the names
+	 * grouped under the one sentence that explains them. These count as supplied everywhere else,
+	 * which is exactly why they are worth naming: a zero that came through a registered source
+	 * cannot be told from a measured one by looking at it.
+	 * <p>
+	 * Grouped and not one entry per name, because the reason is a sentence and the names that share
+	 * one are usually several: a list built the other way printed the same clause three times in a
+	 * row and the names were what got lost in it.
+	 *
+	 * @param entityMesh whether the pass asking draws the entity mesh, which is a second list of
+	 *                   names. {@link UniformGaps} says why the answer differs by pass at all
 	 */
-	public static List<String> standIns(List<String> members) {
-		List<String> named = new ArrayList<>();
+	public static Map<String, List<String>> standIns(List<String> members, boolean entityMesh) {
+		Map<String, List<String>> named = new LinkedHashMap<>();
 		for (String member : members) {
-			String reason = UniformGaps.standIn(member);
+			String reason = UniformGaps.standIn(member, entityMesh);
 			if (reason != null) {
-				named.add(member + " (" + reason + ")");
+				named.computeIfAbsent(reason, _ -> new ArrayList<>()).add(member);
 			}
 		}
 
-		return List.copyOf(named);
+		return Map.copyOf(named);
 	}
 
 	/**
