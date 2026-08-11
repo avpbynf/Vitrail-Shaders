@@ -455,10 +455,10 @@ public final class WeatherDraw {
 	 * <p>
 	 * Empty is not a refusal, and it is no longer the pack's silence: a program that declares no draw
 	 * buffer is answered colortex0, as Iris answers it, and the curtain then lands in the pack's own
-	 * target rather than on the game's. What is left is a plan with no answer at all for the file
-	 * that serves the weather, which is a file the expander could not read or draw buffers this place
-	 * cannot carry in one pass; the curtain then stays on the game's own target, where the game's own
-	 * weather went and where the chain's final still overwrites it.
+	 * target rather than on the game's. What is left is the plan having no answer at all for the file
+	 * that serves the weather, and what puts a file there is the one list
+	 * {@link ChainPlan#geometry} carries; the curtain then stays on the game's own target, where the
+	 * game's own weather went and where the chain's final still overwrites it.
 	 * <p>
 	 * Null is a refusal, and there is one: a place whose weather targets are not the size of the
 	 * screen cannot share a pass with the game's own target, one render pass having one render area.

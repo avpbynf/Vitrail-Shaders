@@ -50,7 +50,8 @@ import java.util.Optional;
  * expects to blend onto. A pack that declares no draw buffer on the program is answered colortex0,
  * as Iris answers it, so the clouds land in a target of the pack's like any other piece; what leaves
  * them on the game's target, where the full screen layer brings them across flat exactly as it did
- * before this class existed, is a plan with no answer for the program at all.
+ * before this class existed, is the plan having no answer for the program at all, which
+ * {@link ChainPlan#geometry} lists the causes of.
  */
 public final class CloudDraw {
 

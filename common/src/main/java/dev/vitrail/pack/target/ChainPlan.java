@@ -958,13 +958,18 @@ public final class ChainPlan {
 	 * translucent pass draws after the deferred stage and its targets are on the sides the
 	 * deferreds leave them, even when the very same file serves the solid pass before them.
 	 * <p>
-	 * Empty is not a failure and covers three cases, all of them normal for a pack: the file serving
-	 * it could not be read at all; it writes a target this place does not allocate; or its targets are
-	 * not all the same size, which one render pass cannot carry. <strong>The last two are said in
-	 * {@link #notes()} and the first is not</strong> - it returns before anything is added, and the
-	 * line naming it belongs to {@code TargetPlan.notes()}, which is a different list. A pack that
-	 * declares no draw buffer used to be a fourth case and is not one any more: it is answered
-	 * colortex0, as Iris answers it.
+	 * <strong>Empty is not a failure, and this is the one list of what puts a file there</strong>,
+	 * which every family reads rather than keeping its own: the file could not be read at all; it
+	 * writes more than the eight draw buffers one pass carries; it names the same target twice, and
+	 * one image cannot be two attachments; the schedule holds no step for it; it writes a target
+	 * nothing of this place allocates; or its targets are not all the same size, which one render
+	 * pass cannot carry. All of them but the first are said in {@link #notes()} - the first returns
+	 * before anything is added, and the line naming it belongs to {@code TargetPlan.notes()}, which
+	 * is a different list.
+	 * <p>
+	 * <strong>A pack that declares no draw buffer is not one of them and used to be</strong>: it is
+	 * answered colortex0, as Iris answers it. Measured on the corpus in August 2026, no place answers
+	 * empty for any family at all.
 	 */
 	public Optional<Pass> geometry(TerrainPass pass) {
 		return Optional.ofNullable(this.terrainKeys.get(pass)).map(this.attachments::get);
@@ -977,9 +982,8 @@ public final class ChainPlan {
 	 * This is the question the three families share, and {@link #geometry} and {@link #sky} are
 	 * shorthands for it: the terrain knows its pass, the sky knows its name, and a family that knows
 	 * neither, which is every family the game hands over as a render type, asks here. Empty covers
-	 * the same normal cases as {@link #geometry}, plus the one that matters most for a caller holding
-	 * a name from the game: this place was never asked about that program, so nothing was walked for
-	 * it.
+	 * the list {@link #geometry} carries, plus the one that matters most for a caller holding a name
+	 * from the game: this place was never asked about that program, so nothing was walked for it.
 	 * <p>
 	 * The entities are the family that asks it, once per program the game hands them, and they were
 	 * not there when it was written: it was put in place and proved on its own first, which is what
@@ -993,9 +997,9 @@ public final class ChainPlan {
 	 * Where one sky program's outputs belong, in draw buffer order and each on the half the schedule
 	 * gives it, or empty when this place cannot answer.
 	 * <p>
-	 * Empty covers the same three normal cases as {@link #geometry}, plus one of its own: a pack that
-	 * ships no sky program at all and whose fallback tree leads nowhere. None of them is a failure,
-	 * and a place that cannot answer leaves the game drawing its own sky.
+	 * Empty covers the list {@link #geometry} carries, plus one of its own: a pack that ships no sky
+	 * program at all and whose fallback tree leads nowhere. None of them is a failure, and a place
+	 * that cannot answer leaves the game drawing its own sky.
 	 *
 	 * @param program the bare name, {@code gbuffers_skybasic}, not the file that ends up serving it
 	 */

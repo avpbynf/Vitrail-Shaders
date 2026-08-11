@@ -823,9 +823,9 @@ public final class EntityDraw {
 	 * half the schedule gives it, or null when this place cannot answer for it.
 	 * <p>
 	 * Empty is not a refusal, and it is no longer the pack's silence: a program that declares no draw
-	 * buffer is answered colortex0, as Iris answers it. What is left is a plan with no answer at all
-	 * for the file that serves the piece, which is a file the expander could not read or draw buffers
-	 * this place cannot carry in one pass. Every place of the corpus answers, Body Camera's
+	 * buffer is answered colortex0, as Iris answers it. What is left is the plan having no answer at
+	 * all for the file that serves the piece, and what puts a file there is the one list
+	 * {@link ChainPlan#geometry} carries. Every place of the corpus answers, Body Camera's
 	 * {@code world1} and {@code world-1} among them: their entities fall back on a
 	 * {@code gbuffers_textured} that declares nothing, and the colortex0 inferred for it is the very
 	 * target their scene seed is painted into, so the last refusal below does not fire there either.

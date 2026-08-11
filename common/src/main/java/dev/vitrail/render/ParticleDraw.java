@@ -514,9 +514,9 @@ public final class ParticleDraw {
 	 * its side of the deferred stage gives it, or null when this place cannot answer for it.
 	 * <p>
 	 * Empty is not a refusal, and it is no longer the pack's silence: a program that declares no draw
-	 * buffer is answered colortex0, as Iris answers it. What is left is a plan with no answer at all
-	 * for the file that serves this half, which is a file the expander could not read or draw buffers
-	 * this place cannot carry in one pass, and no place of the corpus is in that case.
+	 * buffer is answered colortex0, as Iris answers it. What is left is the plan having no answer at
+	 * all for the file that serves this half, and what puts a file there is the one list
+	 * {@link ChainPlan#geometry} carries. No place of the corpus is in that case.
 	 * <p>
 	 * Null is a refusal, and the reasons are not the same for the two halves. Both refuse a place
 	 * whose targets are not the size of the screen, one render pass having one render area. The

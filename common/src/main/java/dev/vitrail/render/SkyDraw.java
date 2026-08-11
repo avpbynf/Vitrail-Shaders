@@ -502,10 +502,10 @@ public final class SkyDraw {
 	 * A piece is one of these for either of two reasons, and they weigh the same: the pack serves no
 	 * program for it, so the game's own shader draws it, or it serves one the plan has no answer for.
 	 * The second is no longer the pack's silence, a program that declares no draw buffer being
-	 * answered colortex0 as Iris answers it: what is left of it is a file the expander could not
-	 * read, draw buffers this place cannot carry in one pass, and targets the pack asked to be
-	 * scaled, which {@link #writes} turns down above. Both leave that piece reaching the pack's
-	 * colour target through the scene seed alone.
+	 * answered colortex0 as Iris answers it: what puts a file there is the one list
+	 * {@link ChainPlan#geometry} carries, plus the targets the pack asked to be scaled, which
+	 * {@link #writes} turns down above. Both leave that piece reaching the pack's colour target
+	 * through the scene seed alone.
 	 * <p>
 	 * A piece the pack switched off is not counted at all. Nothing draws it, so there is nothing
 	 * about it for the seed to carry and nothing for it to hold the rest back over.
