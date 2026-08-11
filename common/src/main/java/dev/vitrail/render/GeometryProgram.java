@@ -1145,6 +1145,20 @@ final class GeometryProgram {
 			Vitrail.logger().warn("{} reads {} values written as zeroes: {}", this.path,
 					gaps.engine().size(), gaps.engine());
 		}
+
+		// Underneath that, and it is not the same list: these are members a source really answered,
+		// with something that is not the value. They count as supplied wherever a count is taken,
+		// which is the whole reason for naming them, and a full screen pass has named them since the
+		// block existed. A geometry pass is where the silence costs the most, because the names a
+		// mob and a chest read to tell themselves apart are in it.
+		List<String> standIns = PackValues.standIns(this.loaded.program().uniforms().stream()
+				.map(TranslatedUnit.Uniform::name)
+				.toList());
+		if (!standIns.isEmpty()) {
+			Vitrail.logger().warn("{} reads {} values answered with a stand-in rather than with a "
+					+ "value, which count as supplied everywhere else: {}", this.path,
+					standIns.size(), standIns);
+		}
 	}
 
 	private static TextureTarget release(TextureTarget target) {
