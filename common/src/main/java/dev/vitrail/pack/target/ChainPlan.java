@@ -301,17 +301,19 @@ public final class ChainPlan {
 	 * What this engine is really drawing into the pack's targets, from the lines of
 	 * {@code vitrail/options.txt} that decide it rather than from anything the pack says.
 	 * <p>
-	 * Four lines and not twelve, and the eight others are not missing: what a verdict has to know is
+	 * Five lines and not thirteen, and the eight others are not missing: what a verdict has to know is
 	 * which targets are filled in EVERY place a plan is built for, and the sky, the clouds and the
 	 * weather are not drawn in every place however their line reads, so their line cannot move that
 	 * answer; {@code chain} and {@code passes} take the frame away entirely, {@code shadow} draws
 	 * into the shadow map's own targets, which this plan does not hold, and {@code screen} and
-	 * {@code dump} draw nothing. These four can. Measured on the corpus in August 2026, each line
+	 * {@code dump} draw nothing. These five can. Measured on the corpus in August 2026, each line
 	 * moved on its own and everything else left at its default: read as defaults instead,
 	 * {@code terrain=off} leaves
 	 * twenty-five true notes unsaid, {@code particles=off} nine and {@code seed=off} six, and
 	 * {@code entities=on} holds out of the map a family that really draws, which no pack of the
 	 * corpus is caught by and which is therefore the same failure waiting rather than a second one.
+	 * The hand's line is the entities' twin, off by default for the same reason, and it holds its
+	 * two names out of the map the same way.
 	 *
 	 * @param terrain   whether the pack's own terrain program draws the world's opaque chunks. Off,
 	 *                  the game's own shader draws them and the seed carries them in, so nothing of
@@ -325,16 +327,20 @@ public final class ChainPlan {
 	 *                  and the opaque particles back to the game, which is
 	 *                  {@code render/EntityDraw.writes} and {@code render/ParticleDraw.writes}
 	 *                  refusing on the same answer
+	 * @param hand      whether the player's own hand is drawn inside the level with the pack's two
+	 *                  hand programs, the solid half riding the seed as the entities do and the
+	 *                  water half writing the pack's targets outright
 	 */
-	public record Families(boolean terrain, boolean entities, boolean particles, boolean seed) {
+	public record Families(boolean terrain, boolean entities, boolean particles, boolean seed,
+			boolean hand) {
 
 		/**
 		 * What a caller with no {@code options.txt} to read gets, which is the harness and the corpus
-		 * measurements: the entities off and the three others on, which is what {@code EngineOptions}
-		 * defaults those four lines to. Written out here rather than read, nothing in this package
-		 * having a game directory to read it from.
+		 * measurements: the entities and the hand off, the three others on, which is what
+		 * {@code EngineOptions} defaults those five lines to. Written out here rather than read,
+		 * nothing in this package having a game directory to read it from.
 		 */
-		public static final Families DEFAULT = new Families(true, false, true, true);
+		public static final Families DEFAULT = new Families(true, false, true, true, false);
 	}
 
 	/** What a caller with no {@code options.txt} to read gets. See {@link Families#DEFAULT}. */

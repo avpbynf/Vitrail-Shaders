@@ -41,6 +41,21 @@ public final class CameraBob {
 	private static final Matrix4f TAKEN = new Matrix4f();
 	private static final Matrix4f CHECK = new Matrix4f();
 
+	/**
+	 * The first of the four on its own, which is the walk bob and the damage tilt and nothing else.
+	 * <p>
+	 * Kept apart from {@link #TAKEN} because the hand wants exactly this much and no more. The game
+	 * gives its own hand the same pose and leaves the nausea and the portal out of it, those two
+	 * being a distortion of the world rather than of the arm, so a hand built on the accumulation
+	 * would skew and spin with a portal the game's own does not.
+	 * <p>
+	 * Unlike the accumulation it is NOT dropped at the frame boundary, and it may not be: the boundary
+	 * falls at the first geometry of the frame and the hand is drawn long after it, so a value cleared
+	 * there would always be read as the identity. What replaces it is the next frame's capture, which
+	 * happens once per level render and before anything is drawn.
+	 */
+	private static final Matrix4f POSE = new Matrix4f();
+
 	private static boolean taken;
 	private static boolean trusted = true;
 
@@ -65,7 +80,22 @@ public final class CameraBob {
 	 */
 	public static void take(Matrix4fc bob) {
 		TAKEN.set(bob);
+		POSE.set(bob);
 		taken = true;
+	}
+
+	/**
+	 * The walk bob and the damage tilt alone, for the hand, or the identity when nothing has ever
+	 * taken one.
+	 * <p>
+	 * Answered whatever {@link #trusted} says, unlike {@link #taken()}. That flag is about whether
+	 * the projection and the model view a pack reads still multiply back to what the level was drawn
+	 * with, which is a question about the split; the hand is not split, it is one matrix built here
+	 * and handed to the device, and dropping the bob out of it would make the arm the one thing on
+	 * screen that does not move with the walk.
+	 */
+	static Matrix4fc pose() {
+		return POSE;
 	}
 
 	/** The nausea and portal rotation, appended in the order the game applies it. */

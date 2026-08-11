@@ -20,7 +20,7 @@ import java.util.Set;
  * <p>
  * They are kept together, and taken out of the pack's settings in one place, because a name left in
  * would be written into the head of every translated unit as {@code #define screen settings}, which
- * is a plausible identifier in somebody's GLSL. None of the twelve collides with a setting any pack
+ * is a plausible identifier in somebody's GLSL. None of the thirteen collides with a setting any pack
  * of the corpus declares, and what keeps that true is thinner than it looks: several of these words
  * really are declared by packs, {@code CLOUDS}, {@code WEATHER}, {@code ENTITIES} and
  * {@code SHADOW} among them. What holds them apart is the case alone - the names here are lowercase
@@ -128,8 +128,8 @@ final class EngineOptions {
 	private static final String SKY_KEY = "sky";
 
 	/**
-	 * Draws the game's own entity geometry with the pack's own program. <strong>Off</strong>, alone
-	 * among these.
+	 * Draws the game's own entity geometry with the pack's own program. <strong>Off</strong>, with
+	 * the hand below and with nothing else here.
 	 * <p>
 	 * <strong>It is not a convention and it is not a taste.</strong> It used to say it was the shape
 	 * every family still to come would land under, and the clouds landed on instead. What a line at
@@ -166,6 +166,25 @@ final class EngineOptions {
 	 * </ul>
 	 */
 	private static final String ENTITIES_KEY = "entities";
+
+	/**
+	 * Takes the player's own hand out of the game's late call and draws it inside the level, with the
+	 * pack's own {@code gbuffers_hand} and {@code gbuffers_hand_water}. <strong>Off</strong>, with the
+	 * entities.
+	 * <p>
+	 * It is off for the entities' reason and for one of its own. The entities' reason first: the hand
+	 * comes in by the same door and through the same vertex format, so it arrives with no normal and
+	 * no material id, and a pack that classifies its pixels by material reads the arm as something
+	 * else. Its own second, and it is what a reader turning this on should expect to see: the half
+	 * that blends is served for the ARM alone. A hand holding a translucent block is drawn with a
+	 * blending pipeline, which this engine serves for no family yet, so the block stays the game's
+	 * while the arm holding it becomes the pack's.
+	 * <p>
+	 * Off also means the hand keeps the position in the frame the game gives it, which is after the
+	 * chain: what a player sees is then an arm lit by the game over an image lit by the pack, and that
+	 * is what this line turns off rather than a shader swap alone.
+	 */
+	private static final String HAND_KEY = "hand";
 
 	/**
 	 * Draws the game's clouds with the pack's own program. On, like most of these.
@@ -206,19 +225,19 @@ final class EngineOptions {
 	private static final String PARTICLES_KEY = "particles";
 
 	/**
-	 * All thirteen, for the one place that has to tell them from a setting of the pack: the log that
+	 * All fourteen, for the one place that has to tell them from a setting of the pack: the log that
 	 * says what the file forces. {@code profile} is the settings layer's own, since that is the side
-	 * that writes it back; the other twelve are read here and nowhere else.
+	 * that writes it back; the other thirteen are read here and nowhere else.
 	 */
 	private static final Set<String> RESERVED = Set.of(SettingsFile.PROFILE_KEY, SEED_KEY,
 			PASSES_KEY, SCREEN_KEY, DUMP_KEY, TERRAIN_KEY, CHAIN_KEY, SHADOW_KEY, SKY_KEY,
-			ENTITIES_KEY, CLOUDS_KEY, WEATHER_KEY, PARTICLES_KEY);
+			ENTITIES_KEY, HAND_KEY, CLOUDS_KEY, WEATHER_KEY, PARTICLES_KEY);
 
 	private EngineOptions() {
 	}
 
 	/**
-	 * What the twelve lines this class reads were set to.
+	 * What the thirteen lines this class reads were set to.
 	 *
 	 * @param seed       whether the game's finished frame is painted where the world would be
 	 * @param passes     what the user asked to run on top of what the pack keeps
@@ -230,34 +249,38 @@ final class EngineOptions {
 	 * @param sky        whether the game's sky is drawn with the pack's own program
 	 * @param entities   whether the game's entity geometry is drawn with the pack's own program
 	 *                   rather than the game's, both halves of it
+	 * @param hand       whether the player's own hand is taken out of the game's late call and drawn
+	 *                   inside the level with the pack's own two hand programs
 	 * @param clouds     whether the game's clouds are drawn with the pack's own program, and with
 	 *                   that whether the pack's own {@code clouds} directive is honoured at all
 	 * @param weather    whether the game's rain and snow are drawn with the pack's own program
 	 * @param particles  whether the game's quad particles are, both halves of them
 	 */
 	record Read(boolean seed, ChainFilter passes, boolean packsFirst, String dump, boolean terrain,
-			boolean chain, boolean shadow, boolean sky, boolean entities, boolean clouds,
-			boolean weather, boolean particles) {
+			boolean chain, boolean shadow, boolean sky, boolean entities, boolean hand,
+			boolean clouds, boolean weather, boolean particles) {
 
 		/**
-		 * The four of these the chain plan has to be handed, because its verdicts count a target as
+		 * The five of these the chain plan has to be handed, because its verdicts count a target as
 		 * already written and would otherwise count it off a default nobody wrote.
 		 * <p>
-		 * Four and not twelve: what the plan is asked is which targets are filled in EVERY place it is
-		 * built for, and the sky, the clouds and the weather are not drawn in every place however
-		 * their line reads, so their line cannot move that answer. {@code chain} and {@code passes}
-		 * cannot either, for the opposite reason: they take away the passes those lines are about, so
-		 * with them there is no frame left for a note to describe. {@code shadow} draws geometry too,
-		 * but into the shadow map's own targets, which the plan does not hold, so no verdict can
-		 * count it either way; and {@code screen} and {@code dump} draw nothing at all.
+		 * Five and not thirteen: what the plan is asked is which targets are filled in EVERY place
+		 * it is built for, and the sky, the clouds and the weather are not drawn in every place
+		 * however their line reads, so their line cannot move that answer. {@code chain} and
+		 * {@code passes} cannot either, for the opposite reason: they take away the passes those
+		 * lines are about, so with them there is no frame left for a note to describe. {@code shadow}
+		 * draws geometry too, but into the shadow map's own targets, which the plan does not hold,
+		 * so no verdict can count it either way; and {@code screen} and {@code dump} draw nothing at
+		 * all.
 		 */
 		ChainPlan.Families families() {
-			return new ChainPlan.Families(this.terrain, this.entities, this.particles, this.seed);
+			return new ChainPlan.Families(this.terrain, this.entities, this.particles, this.seed,
+					this.hand);
 		}
 	}
 
 	/**
-	 * Reads the twelve and <strong>removes them</strong> from what is handed to the pack, which is
+	 * Reads the thirteen and <strong>removes them</strong> from what is handed to the pack, which is
 	 * the point: what is left is settings the pack declared.
 	 */
 	static Read take(Map<String, OptionValue> chosen) {
@@ -274,6 +297,7 @@ final class EngineOptions {
 				asked(chosen.remove(SHADOW_KEY), SHADOW_KEY, true),
 				asked(chosen.remove(SKY_KEY), SKY_KEY, true),
 				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, false),
+				asked(chosen.remove(HAND_KEY), HAND_KEY, false),
 				asked(chosen.remove(CLOUDS_KEY), CLOUDS_KEY, true),
 				asked(chosen.remove(WEATHER_KEY), WEATHER_KEY, true),
 				asked(chosen.remove(PARTICLES_KEY), PARTICLES_KEY, true));
@@ -307,7 +331,7 @@ final class EngineOptions {
 	 * Said once when the entities are off, which is the default, because nothing else would say the
 	 * line exists.
 	 * <p>
-	 * The eight other lines that take a yes or a no are on unless somebody asks, so their line is a
+	 * The nine other lines that take a yes or a no are on unless somebody asks, so their line is a
 	 * thing the reader wrote and knows about. This one is the opposite: the picture with it off is
 	 * the picture without this mod having heard of entities at all, and a reader who never sees the
 	 * name has no reason to look for it.
@@ -316,6 +340,23 @@ final class EngineOptions {
 		Vitrail.logger().info("{}=off, so the game draws its own entities and the scene seed carries "
 				+ "them in, already lit and already tone mapped. Write '{}=on' in {} to have the pack "
 				+ "draw them", ENTITIES_KEY, ENTITIES_KEY, SettingsLayers.file(gameDirectory));
+	}
+
+	/**
+	 * The same for the hand, which is the entities' case rather than the clouds': this line is off by
+	 * default too, so a reader who never sees the name has no reason to look for it.
+	 * <p>
+	 * What it costs is worth two sentences rather than one, because half of it is not a shader. Off,
+	 * the hand is drawn where the game draws it, which is after the pack's whole chain has run: it is
+	 * not merely lit by the game, it is painted over an image the pack has already finished, so no
+	 * depth of it reaches a composite and nothing the pack does to the world reaches it.
+	 */
+	static void announceHandOff(Path gameDirectory) {
+		Vitrail.logger().info("{}=off, so the player's own hand stays where the game draws it, after "
+				+ "the pack's chain: painted over the finished image by the game's own shader, absent "
+				+ "from every gbuffer and from every depth a composite reads. Write '{}=on' in {} to "
+				+ "have it drawn inside the level with the pack's two hand programs", HAND_KEY,
+				HAND_KEY, SettingsLayers.file(gameDirectory));
 	}
 
 	/**
@@ -434,7 +475,7 @@ final class EngineOptions {
 			return false;
 		}
 
-		// Named, like the two readings above do it: nine lines share this one, so the value on its
+		// Named, like the two readings above do it: ten lines share this one, so the value on its
 		// own leaves whoever fixes the typo looking for which of the nine carries it.
 		Vitrail.logger().warn("'{}={}' is neither on nor off, so this line is ignored and {} stays "
 				+ "{}", key, value.asText(), key, byDefault ? "on" : "off");

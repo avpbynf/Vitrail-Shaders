@@ -51,7 +51,12 @@ public final class CapturedProjection {
 	 * them and is one on the orthographic and quad matrices this is meant to keep out.
 	 */
 	public static void capture(Matrix4fc rendered) {
-		if (rendered.m00() == 0.0F || rendered.m33() != 0.0F) {
+		// The hand binds a perspective of its own, through the same overload, and it is not the
+		// level's: a head-up field of view and a clip depth squeezed to an eighth. It passes the test
+		// below, so the test cannot be what keeps it out. Taken as the frame's, it would be published
+		// as gbufferProjection to everything drawn after it, and every composite would rebuild the
+		// world through a volume nothing was drawn in.
+		if (HandDraw.drawing() || rendered.m00() == 0.0F || rendered.m33() != 0.0F) {
 			return;
 		}
 

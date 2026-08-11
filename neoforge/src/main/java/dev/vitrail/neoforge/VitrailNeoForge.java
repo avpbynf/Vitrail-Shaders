@@ -2,6 +2,7 @@ package dev.vitrail.neoforge;
 
 import dev.vitrail.neoforge.sodium.ShadowTerrain;
 import dev.vitrail.render.EntityDraw;
+import dev.vitrail.render.HandDraw;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
@@ -131,8 +132,16 @@ public final class VitrailNeoForge {
 	 */
 	private void onAfterOpaqueFeatures(RenderLevelStageEvent.AfterOpaqueFeatures event) {
 		// First, and before anything of this engine draws: everything after this point is either the
-		// world's translucents or, once the level returns, the hand and the screen.
+		// world's translucents or, once the level returns, the screen.
 		EntityDraw.opaqueFeatures(false);
+
+		// Then the hand's solid half, and the order of these two lines is the whole of where it
+		// belongs in the frame: after the game's own opaque features, which the window above has just
+		// closed, and BEFORE the deferred stage the next line runs. That is exactly where Iris puts
+		// it, between renderTranslucentFeatures and its own beginTranslucents
+		// (mixin/MixinLevelRenderer.java:278-283, pipeline/IrisRenderingPipeline.java:1060-1073).
+		// Drawn after the deferreds instead, the hand would write gbuffers nothing would ever read.
+		HandDraw.drawSolid();
 		PackChain.drawBeforeTranslucents();
 		PackChain.openFeatures();
 
@@ -149,6 +158,12 @@ public final class VitrailNeoForge {
 	}
 
 	private void onAfterLevel(RenderLevelStageEvent.AfterLevel event) {
+		// The hand's blending half, before the chain and never after it: what it draws has to be in
+		// the picture the composites read, and this event is the last moment it can be. Iris draws it
+		// at the same place, one line ahead of its own finalizeLevelRendering
+		// (mixin/MixinLevelRenderer.java:170-179).
+		HandDraw.drawTranslucent();
+
 		// Nothing is drawn when no pack can be: the game's own image is a better answer than
 		// anything this mod could put over it, and the reason is already said, once in the log
 		// and again on the settings screen through PackChain.lastError.
@@ -170,5 +185,9 @@ public final class VitrailNeoForge {
 
 	private void onClientStopping(ClientStoppingEvent event) {
 		PackChain.close();
+		// Its own line and not part of the chain's: what it holds is a second feature renderer and
+		// the buffers under it, which belong to the session rather than to a pack, and which have to
+		// go back while the device is still alive.
+		HandDraw.close();
 	}
 }

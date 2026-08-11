@@ -338,6 +338,14 @@ public final class PackChain {
 			carried.add("the entities");
 		}
 
+		if (!HandDraw.wanted()) {
+			// The one entry the seed does not in fact carry, and it is named all the same because the
+			// sentence is about what the picture still owes the game. Off, the hand is drawn after the
+			// chain rather than into it, so it is painted straight onto the finished image and no seed
+			// is involved; EngineOptions.announceHandOff is where that difference is spelt out.
+			carried.add("the hand");
+		}
+
 		if (!SkyDraw.wanted()) {
 			carried.add("the sky");
 		}
@@ -496,6 +504,7 @@ public final class PackChain {
 			TerrainDraw.shadowWanted(engine.shadow());
 			SkyDraw.wanted(engine.sky());
 			EntityDraw.wanted(engine.entities());
+			HandDraw.wanted(engine.hand());
 			CloudDraw.wanted(engine.clouds());
 			WeatherDraw.wanted(engine.weather());
 			ParticleDraw.wanted(engine.particles());
@@ -588,6 +597,10 @@ public final class PackChain {
 
 			if (!engine.entities()) {
 				EngineOptions.announceEntitiesOff(gameDirectory);
+			}
+
+			if (!engine.hand()) {
+				EngineOptions.announceHandOff(gameDirectory);
 			}
 
 			if (!engine.clouds()) {
