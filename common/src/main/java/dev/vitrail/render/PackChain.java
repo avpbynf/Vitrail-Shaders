@@ -551,7 +551,7 @@ public final class PackChain {
 
 			long began = System.nanoTime();
 			Optional<PackProgram.Chain> read = PackProgram.loadChain(pack, place, chosen,
-					settings.profile(), engine.passes());
+					settings.profile(), engine.passes(), engine.families());
 			if (read.isEmpty()) {
 				String where = place.isEmpty() ? "at its root" : "in " + place + " or at its root";
 				String named = ShaderPackSource.nameOf(pack);

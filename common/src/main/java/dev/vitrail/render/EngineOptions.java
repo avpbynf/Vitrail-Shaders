@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.ChainFilter;
+import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsFile;
 import dev.vitrail.settings.SettingsLayers;
@@ -219,6 +220,18 @@ final class EngineOptions {
 	record Read(boolean seed, ChainFilter passes, boolean packsFirst, String dump, boolean terrain,
 			boolean chain, boolean shadow, boolean sky, boolean entities, boolean clouds,
 			boolean weather, boolean particles) {
+
+		/**
+		 * The two of these the chain plan has to be handed, because its verdicts count a family's
+		 * targets as filled and would otherwise count them off a default nobody wrote.
+		 * <p>
+		 * Two and not twelve: what the plan is asked is which families fill their targets in EVERY
+		 * place it is built for, and the three other families it knows are drawn in the overworld
+		 * alone, so their line cannot change that answer.
+		 */
+		ChainPlan.Families families() {
+			return new ChainPlan.Families(this.entities, this.particles);
+		}
 	}
 
 	/**

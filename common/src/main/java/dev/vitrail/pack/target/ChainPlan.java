@@ -15,6 +15,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /**
@@ -63,6 +64,13 @@ public final class ChainPlan {
 			List.of("gbuffers_skybasic", "gbuffers_skytextured", CLOUD_PROGRAM);
 
 	/**
+	 * The answer for a family no line of {@code options.txt} can have drawn in every place, which is
+	 * the sky's three and the weather: their switch decides whether they are drawn at all and never
+	 * where, so it cannot change what a verdict may claim.
+	 */
+	private static final Predicate<Families> NOT_EVERYWHERE = _ -> false;
+
+	/**
 	 * Every geometry program asked for by the name the format gives it rather than by a pass of the
 	 * renderer, walked through the fallback tree and into the shared table.
 	 * <p>
@@ -89,37 +97,40 @@ public final class ChainPlan {
 	 * deferreds left, exactly as the world's translucents do. A name walked on the wrong side answers
 	 * a real pass on the wrong half of every target, which is a picture nothing reports.
 	 * <p>
-	 * <strong>And each carries whether that family fills its targets in EVERY place</strong>, which is
+	 * <strong>And each carries WHEN that family fills its targets in EVERY place</strong>, which is
 	 * a different question with a different answer and is what {@link #verdicts} counts. Being in this
 	 * list means a pack's program is resolved and its attachments worked out; being counted means a
-	 * verdict may take those targets for filled wherever this plan is built.
+	 * verdict may take those targets for filled wherever this plan is built. Four of these names
+	 * answer that with a switch of {@link Families} rather than with a constant, because their family
+	 * is drawn or not on a line somebody wrote.
 	 */
 	private static final List<NamedProgram> NAMED_PROGRAMS = Stream.concat(
 			// None of the sky's three is counted, the clouds included, and the reason is the same for
 			// all three: the game opens no sky and no cloud pass below the overworld. It is spelled
 			// out, with what it was measured to cost, where the verdicts are handed their map.
 			SKY_PROGRAMS.stream()
-					.map(program -> new NamedProgram(program, CLOUD_PROGRAM.equals(program), false)),
+					.map(program -> new NamedProgram(program, CLOUD_PROGRAM.equals(program),
+							NOT_EVERYWHERE)),
 			Stream.of(
-					// The entity halves are the two the file has to ask for: off unless somebody
-					// writes the line, so nothing of this engine draws them by default.
-					new NamedProgram("gbuffers_entities", false, false),
-					new NamedProgram("gbuffers_block", false, false),
+					// The entity halves are the two the file has to ask for, and they are drawn in
+					// every place once it has: what decides them is the line and not the format.
+					new NamedProgram("gbuffers_entities", false, Families::entities),
+					new NamedProgram("gbuffers_block", false, Families::entities),
 					// Drawn, and still not counted: the game draws no rain and no snow where there is
 					// no weather, which is every place but the overworld.
-					new NamedProgram("gbuffers_weather", true, false),
+					new NamedProgram("gbuffers_weather", true, NOT_EVERYWHERE),
 					// The one family that straddles the stage: the game submits every particle group
-					// twice, and the two land on either side of it. The only one counted, and what
-					// earns it is that particles are drawn in every place there is.
-					new NamedProgram("gbuffers_particles", false, true),
-					new NamedProgram("gbuffers_particles_translucent", true, true)))
+					// twice, and the two land on either side of it. Counted wherever its line is on,
+					// and what earns it is that particles are drawn in every place there is.
+					new NamedProgram("gbuffers_particles", false, Families::particles),
+					new NamedProgram("gbuffers_particles_translucent", true, Families::particles)))
 			.toList();
 
 	/**
 	 * One name of that list, the side of the deferred stage the family asking for it draws on, and
-	 * whether a verdict may take its targets for filled.
+	 * when a verdict may take its targets for filled.
 	 *
-	 * @param everywhere whether this engine draws that family, with an empty {@code options.txt}, in
+	 * @param everywhere whether this engine draws that family, with the switches it was handed, in
 	 *                   EVERY place a plan is built for. Not simply whether it draws it: a plan is
 	 *                   per place, and a family drawn in the overworld alone would have a verdict
 	 *                   report the world as drawn in the two places the format reserves for the
@@ -127,7 +138,8 @@ public final class ChainPlan {
 	 *                   about the verdicts, which are the one place that must not tell a reader a
 	 *                   target holds a clear colour when a family of ours has just written it
 	 */
-	private record NamedProgram(String program, boolean afterDeferred, boolean everywhere) {
+	private record NamedProgram(String program, boolean afterDeferred,
+			Predicate<Families> everywhere) {
 	}
 
 	private final List<Pass> passes;
@@ -274,18 +286,51 @@ public final class ChainPlan {
 	public record Seed(int target, TargetSchedule.Side side, String from, int at) {
 	}
 
+	/**
+	 * Which of the families whose targets a verdict may take for filled this engine is really
+	 * drawing, which is a line of {@code vitrail/options.txt} for each of them rather than anything
+	 * the pack says.
+	 * <p>
+	 * Two families and not five, and the other three are not missing: the sky's three and the weather
+	 * are drawn in the overworld alone, so no line can have them fill their targets in every place
+	 * and their answer is the same however it is written. These two answer differently, and a plan
+	 * handed the defaults instead answers off a line nobody wrote. Measured on the corpus in August
+	 * 2026: with {@code particles=off} it takes for filled what nobody draws and nine true notes go
+	 * unsaid; with {@code entities=on} it holds out of the map a family that really draws, which no
+	 * pack of the corpus is caught by and which is therefore the same failure waiting rather than a
+	 * second one.
+	 *
+	 * @param entities  whether the game's own opaque entity geometry is drawn with the pack's
+	 *                  programs
+	 * @param particles whether the game's quad particles are, both halves of them
+	 */
+	public record Families(boolean entities, boolean particles) {
+
+		/**
+		 * What a caller with no {@code options.txt} to read gets, which is the harness and the corpus
+		 * measurements: the entities off and the particles on, which is what {@code EngineOptions}
+		 * defaults those two lines to. Written out here rather than read, nothing in this package
+		 * having a game directory to read it from.
+		 */
+		public static final Families DEFAULT = new Families(false, true);
+	}
+
+	/** What a caller with no {@code options.txt} to read gets. See {@link Families#DEFAULT}. */
 	public static ChainPlan of(TargetPlan plan, ProgramResolver resolver) {
-		return of(plan, resolver, List.of());
+		return of(plan, resolver, List.of(), Families.DEFAULT);
 	}
 
 	/**
 	 * Builds the chain of one place from the programs that could be resolved.
 	 *
-	 * @param refused why programs of this place can have no pipeline built for them at all, in
-	 *                whole sentences. They are put first because the caller shows one of them and
-	 *                the one worth showing is the one nothing downstream could have worked around
+	 * @param refused  why programs of this place can have no pipeline built for them at all, in
+	 *                 whole sentences. They are put first because the caller shows one of them and
+	 *                 the one worth showing is the one nothing downstream could have worked around
+	 * @param families the switches in force, which decide nothing about the passes and everything
+	 *                 about what {@link #notes()} may claim is already written
 	 */
-	public static ChainPlan of(TargetPlan plan, ProgramResolver resolver, List<String> refused) {
+	public static ChainPlan of(TargetPlan plan, ProgramResolver resolver, List<String> refused,
+			Families families) {
 		List<Pass> passes = new ArrayList<>();
 		List<String> refusals = new ArrayList<>(refused);
 		List<String> notes = new ArrayList<>();
@@ -328,22 +373,28 @@ public final class ChainPlan {
 
 		Seed seed = seedOf(plan, resolver, notes);
 
-		// The terrain and the two halves of the particles, and the rule that admits those and no
-		// others is ONE question: does this engine draw that family, with nothing written in
-		// options.txt, in every place a plan is built for? A plan is per PLACE, so a family drawn in
+		// The terrain and whatever the switches leave, and the rule that admits those and no others
+		// is ONE question: does this engine draw that family, with the lines that were really
+		// written, in every place a plan is built for? A plan is per PLACE, so a family drawn in
 		// the overworld alone cannot be counted at all - counting it reports the world as drawn in
 		// the two places the format reserves for the Nether and the End.
 		//
-		// Four families fail that question and each fails it differently. The entities are off unless
-		// somebody writes the line. The sky's two and the clouds are not drawn below the overworld:
-		// the game opens no sky pass there and the End's own sky is two methods nothing here hooks.
-		// The weather is drawn wherever there IS weather, which is the overworld and nowhere else.
+		// Three families fail that question however options.txt is written, and each fails it
+		// differently. The sky's two and the clouds are not drawn below the overworld: the game opens
+		// no sky pass there and the End's own sky is two methods nothing here hooks. The weather is
+		// drawn wherever there IS weather, which is the overworld and nowhere else.
+		//
+		// The entities and the particles pass it or fail it on their line alone, and asking the line
+		// rather than its default is why this method is handed the switches at all. Measured on the
+		// corpus: reading the default instead counts particles nobody draws wherever particles=off is
+		// written, which leaves nine true notes unsaid, and holds the entities out of the map
+		// wherever entities=on is, which no pack of the corpus is caught by yet.
 		//
 		// It is measured rather than argued, and the measurement is a trade rather than a clean win.
 		// Counting the sky silences Bliss's colortex0 note in all three of its places and two of the
 		// three are true. Counting the weather rewrites the colortex12 note of both Complementary in
 		// all three of theirs, which makes it true in world0 and makes it name, in the other two, a
-		// program that will never run there: four lines lost against two gained. Holding all four out
+		// program that will never run there: four lines lost against two gained. Holding the three out
 		// keeps the true notes and pays one false one per family in the overworld, which is the
 		// cheaper half of both trades and the one this engine takes.
 		//
@@ -363,7 +414,7 @@ public final class ChainPlan {
 		Map<Key, Pass> world = new LinkedHashMap<>();
 		terrainKeys.values().forEach(key -> world.put(key, attachments.get(key)));
 		for (NamedProgram named : NAMED_PROGRAMS) {
-			Key key = named.everywhere() ? namedKeys.get(named.program()) : null;
+			Key key = named.everywhere().test(families) ? namedKeys.get(named.program()) : null;
 			Pass drawing = key == null ? null : attachments.get(key);
 			if (drawing != null && (named.afterDeferred() || leadsWithSeed(seed, drawing))) {
 				world.put(key, drawing);
@@ -760,11 +811,11 @@ public final class ChainPlan {
 		}
 
 		if (undrawn.contains(half.target())) {
-			// What ends up here is the geometry no pass of this engine fills in EVERY place: the
-			// entity halves, off unless somebody writes the line, and the sky's three and the weather,
-			// which the game draws in the overworld and nowhere below it. Why that is the question,
-			// and what holding each out was measured to cost, is where the verdicts are handed their
-			// map.
+			// What ends up here is the geometry no pass of this engine fills in EVERY place: the sky's
+			// three and the weather, which the game draws in the overworld and nowhere below it, and
+			// the entity halves wherever their line is off, which is where it stands unless somebody
+			// writes it. Why that is the question, and what holding each out was measured to cost, is
+			// where the verdicts are handed their map.
 			//
 			// The particles used to be here and no longer are. The sentence went on saying no geometry
 			// of ours reached the pack's targets while a particle program of the pack was writing them,

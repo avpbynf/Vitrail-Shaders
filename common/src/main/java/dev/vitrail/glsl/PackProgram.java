@@ -652,6 +652,15 @@ public final class PackProgram {
 	}
 
 	/**
+	 * The same chain for a caller with no {@code options.txt} to read, which is the harness and the
+	 * corpus measurements. See {@link ChainPlan.Families#DEFAULT}.
+	 */
+	public static Optional<Chain> loadChain(Path packPath, String dimension,
+			Map<String, OptionValue> chosen, String profile, ChainFilter filter) throws IOException {
+		return loadChain(packPath, dimension, chosen, profile, filter, ChainPlan.Families.DEFAULT);
+	}
+
+	/**
 	 * Reads one dimension's whole chain in one opening of the pack.
 	 * <p>
 	 * Calling {@link #load} once per program would open the pack and build a whole plan each time,
@@ -675,10 +684,14 @@ public final class PackProgram {
 	 * @param dimension the directory the programs are wanted from, {@code world0}. The place is
 	 *                  worked out from it by the plan and may turn out to be the root
 	 * @param filter    what the user asked to run on top of what the pack keeps
+	 * @param families  which of the families the plan's verdicts may count are really drawn, which
+	 *                  is what keeps those lines from claiming a target is filled by a family
+	 *                  somebody switched off
 	 * @return empty when the pack serves no final with both stages in that place
 	 */
 	public static Optional<Chain> loadChain(Path packPath, String dimension,
-			Map<String, OptionValue> chosen, String profile, ChainFilter filter) throws IOException {
+			Map<String, OptionValue> chosen, String profile, ChainFilter filter,
+			ChainPlan.Families families) throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
 			ShaderProperties properties = ShaderProperties.parse(source);
@@ -726,7 +739,7 @@ public final class PackProgram {
 			DimensionSet dimensions = DimensionSet.discover(source);
 			ProgramSet programs = ProgramSet.enumerate(source, dimensions);
 			ChainPlan chain = ChainPlan.of(targets, ProgramResolver.resolve(programs, dimensions),
-					refusals);
+					refusals, families);
 
 			Map<String, Loaded> loaded = new LinkedHashMap<>();
 			for (String name : targets.running()) {
