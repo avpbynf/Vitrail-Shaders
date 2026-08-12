@@ -83,10 +83,14 @@ public final class ShaderProperties {
 	private static final Pattern SHADOW_CASTER = Pattern.compile(
 			"^\\s*(shadowTerrain|shadowTranslucent|shadowEntities|shadowPlayer|shadowBlockEntities)"
 					+ "\\s*=\\s*(.*)$");
-	// How the pack wants the world walked for the light. Not a boolean despite two of its four words
-	// being true and false, which is why it is read apart from the family above.
-	private static final Pattern SHADOW_CULLING =
-			Pattern.compile("^\\s*shadow\\.culling\\s*=\\s*(.*)$");
+	// shadow.culling is deliberately NOT read, and it is the one word of this family that is not.
+	// Six of the eight packs write it, so leaving it among the keys nothing reads is a line each of
+	// them gets, and that is the honest state: its four answers are not four ways of walking the
+	// same frustum. They pick between a box culler at the shadow distance, a box culler at the VOXEL
+	// distance, no culling at all and culling everything, each with its own capping against the
+	// render distance (Iris shadows/ShadowRenderer.java:302-355), and every one of those needs a
+	// distance directive this engine does not read yet. Reading the word and walking one frustum
+	// anyway would put casters in a map the pack asked to keep them out of.
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
 	// The fifth word of that family, kept apart because it is the one that takes neither a yes nor a
@@ -340,11 +344,6 @@ public final class ShaderProperties {
 		// see that it was not understood.
 		Matcher caster = SHADOW_CASTER.matcher(line);
 		if (caster.matches() && truth(caster.group(2).trim()) != null) {
-			return;
-		}
-
-		Matcher culling = SHADOW_CULLING.matcher(line);
-		if (culling.matches() && ShadowCulling.of(culling.group(1).trim()) != null) {
 			return;
 		}
 
@@ -1143,22 +1142,6 @@ public final class ShaderProperties {
 		}
 
 		return new ShadowCasters(terrain, translucent, entities, player, blockEntities);
-	}
-
-	/**
-	 * How the pack wants the world walked for the light, live lines only, and
-	 * {@link ShadowCulling#DEFAULT} where it says nothing this directive takes.
-	 */
-	public ShadowCulling shadowCulling(Map<String, String> defines) {
-		ShadowCulling asked = ShadowCulling.DEFAULT;
-		for (Matcher line : live(SHADOW_CULLING, defines)) {
-			ShadowCulling value = ShadowCulling.of(line.group(1).trim());
-			if (value != null) {
-				asked = value;
-			}
-		}
-
-		return asked;
 	}
 
 	/** Each profile's unexpanded body, in the order the pack declares them. */
