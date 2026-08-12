@@ -232,11 +232,14 @@ final class GeometryProgram {
 	 * Whether this pass draws the mesh that carries the overlay, which is the entity one and no
 	 * other of ours.
 	 * <p>
-	 * It is the question Iris asks before rewriting {@code entityColor} and the three identifiers
-	 * onto elements of that mesh, and it asks it exactly once, on the inputs
-	 * ({@code pipeline/transform/transformer/VanillaTransformer.java:20-25}). So the same names are
-	 * a placeholder here and a real answer on the terrain, and only a pass that knows which mesh it
-	 * binds can tell the log which it is.
+	 * Iris asks it in two halves: the three identifiers are rewritten onto elements where the mesh
+	 * carries the overlay or is text
+	 * ({@code pipeline/transform/transformer/VanillaTransformer.java:20-25}), the overlay colour
+	 * where it carries the overlay and is not text ({@code VanillaCoreTransformer.java:21-26}).
+	 * Every pass this engine serves that reads these names draws the entity mesh, so the one
+	 * question covers both halves today; a text family would have to join the split. The same names
+	 * are a placeholder here and a real answer on the terrain, and only a pass that knows which
+	 * mesh it binds can tell the log which it is.
 	 */
 	private final boolean entityMesh;
 
@@ -1172,9 +1175,9 @@ final class GeometryProgram {
 		PackValues.standIns(this.loaded.program().uniforms().stream()
 						.map(TranslatedUnit.Uniform::name)
 						.toList(), this.entityMesh)
-				.forEach((reason, names) -> Vitrail.logger().warn("{} reads {} answered with a "
-						+ "stand-in rather than with a value, which count as supplied everywhere "
-						+ "else, because {}", this.path, names, reason));
+				.forEach((reason, names) -> Vitrail.logger().warn("{} reads {} values answered with "
+						+ "a stand-in rather than with the value, {}, which count as supplied "
+						+ "everywhere else, because {}", this.path, names.size(), names, reason));
 	}
 
 	private static TextureTarget release(TextureTarget target) {

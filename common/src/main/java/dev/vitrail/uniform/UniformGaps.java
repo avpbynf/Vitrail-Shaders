@@ -27,11 +27,14 @@ import java.util.Map;
  * the PASS.</strong> {@code entityColor} was the standing example of it: a constant under a full
  * screen pass is the right answer there and the same one Iris gives
  * ({@code uniforms/CommonUniforms.java:163}), while the very same constant under a pass drawn from
- * the entity mesh is a mob that does not flash when it is hurt. Iris draws the line in one place and
- * this class copies it: both of its rewrites are gated on the mesh carrying the overlay
- * ({@code pipeline/transform/transformer/VanillaTransformer.java:20-25} and
- * {@code VanillaCoreTransformer.java:21-26}), so a name is either a stand-in everywhere or a
- * stand-in exactly where that gate opens. Listing the second kind in the first would put a false
+ * the entity mesh is a mob that does not flash when it is hurt. Iris splits the line in two: the
+ * identifiers are rewritten where the mesh carries the overlay OR is text
+ * ({@code pipeline/transform/transformer/VanillaTransformer.java:20-25}), the overlay colour where
+ * it carries the overlay and is NOT text ({@code VanillaCoreTransformer.java:21-26}). Every pass
+ * this engine serves that reads these names draws the entity mesh, so one question covers both
+ * gates today; the day a text family is served, its programs read the identifiers and this split
+ * has to follow, which is written here so the silence cannot arrive unannounced. Listing the
+ * mesh-bound kind in the everywhere list would put a false
  * alarm on every composite that reads it, which is the one thing a list like this cannot afford.
  */
 public final class UniformGaps {
@@ -109,8 +112,8 @@ public final class UniformGaps {
 		// carries it, the uniform declaration is deleted outright and every read is rewritten onto
 		// the element (pipeline/transform/transformer/EntityPatcher.java:130-152), so the uniform
 		// values this engine registers are what Iris hands a pass the element never reached.
-		String noElement = "Iris reads it here off a vertex element the game's entity format has "
-				+ "not got, so this is the same number for every draw";
+		String noElement = "Iris reads these off a vertex element the game's entity format has "
+				+ "not got, so they are the same numbers for every draw";
 		reasons.put("entityId", noElement);
 		reasons.put("blockEntityId", noElement);
 		reasons.put("currentRenderedItemId", noElement);

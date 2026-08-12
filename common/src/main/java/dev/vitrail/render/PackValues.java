@@ -22,6 +22,7 @@ import org.joml.Vector4fc;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -362,7 +363,12 @@ public final class PackValues {
 			}
 		}
 
-		return Map.copyOf(named);
+		// Not Map.copyOf, which shuffles its iteration order differently on every run: the groups
+		// are printed, and two launches of the same jar must print them in the members' order both
+		// times or the journals stop comparing.
+		named.replaceAll((_, names) -> List.copyOf(names));
+
+		return Collections.unmodifiableMap(named);
 	}
 
 	/**

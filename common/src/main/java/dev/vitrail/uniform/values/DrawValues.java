@@ -136,7 +136,8 @@ public final class DrawValues {
 		// (uniforms/CommonUniforms.java:72-73), whose shard puts the live identifier in the field
 		// around the draw (layer/LightningRenderStateShard.java:19-21). Served, our lightning would
 		// read zero there, and what a pack loses is the branch it writes on that one identifier.
-		// This engine draws no lightning, so today it costs the image nothing.
+		// No program of the pack serves the lightning here - the game draws it and the feature
+		// layer carries it in - so today it costs the image nothing.
 		//
 		// UniformGaps carries both halves, and per pass rather than in one list, which is the whole
 		// reason it has two: named everywhere, these would be a false alarm on every composite.
