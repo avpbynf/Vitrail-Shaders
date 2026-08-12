@@ -96,6 +96,39 @@ public final class ShadowGeometry {
 	 * @param casters which families the pack asked for
 	 */
 	public static void draw(Matrix4f light, Vec3 camera, ShadowCasters casters) {
+		try {
+			walk(light, camera, casters);
+		} finally {
+			// <strong>The frame of this family's own buffers ends here whether anything was drawn or
+			// not</strong>, and it is not tidiness: {@code RenderBuffers.endFrame} is the ONLY path
+			// that recycles what {@code StagedVertexBuffer} took, so without it every frame's
+			// acquire misses the pool and falls through to a fresh device allocation that nothing
+			// ever hands back. Measured before this line existed: 144 frames a second became ten to
+			// fifteen, on two entities, because the cost is per FRAME and not per caster.
+			// {@link HandDraw#drawTranslucent} ends its own on both paths for the same reason.
+			if (buffers != null) {
+				buffers.endFrame();
+			}
+		}
+	}
+
+	/** Hands back the buffers and the dispatcher, at the end of the client and nowhere else. */
+	public static void close() {
+		FeatureRenderDispatcher held = dispatcher;
+		RenderBuffers owned = buffers;
+		dispatcher = null;
+		storage = null;
+		buffers = null;
+		if (held != null) {
+			held.close();
+		}
+
+		if (owned != null) {
+			owned.close();
+		}
+	}
+
+	private static void walk(Matrix4f light, Vec3 camera, ShadowCasters casters) {
 		// The entity switch and not one of its own, which is the convention: what enters the map here
 		// is the same geometry that door serves, read from the same tables, and a family does not take
 		// a second switch without a reason. It is also what keeps the walk honest when the switch is

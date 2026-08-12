@@ -4,6 +4,7 @@ import dev.vitrail.neoforge.sodium.ShadowTerrain;
 import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.HandDraw;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
 import dev.vitrail.Vitrail;
@@ -191,5 +192,10 @@ public final class VitrailNeoForge {
 		// the buffers under it, which belong to the session rather than to a pack, and which have to
 		// go back while the device is still alive.
 		HandDraw.close();
+
+		// The light's walk holds a third one, for the same reason and with the same lifetime: the
+		// map is filled from a submission of its own, so it carries its own dispatcher and its own
+		// buffers, and they go back here rather than with any pack.
+		ShadowGeometry.close();
 	}
 }
