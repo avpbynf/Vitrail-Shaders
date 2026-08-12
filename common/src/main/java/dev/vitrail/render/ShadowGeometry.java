@@ -73,8 +73,15 @@ public final class ShadowGeometry {
 	/** Where this walk's own extraction lands, which is never the one the frame was drawn from. */
 	private static final LevelRenderState STATE = new LevelRenderState();
 
-	/** Said once a session rather than once a frame, like every other count of the stage. */
-	private static boolean counted;
+	/**
+	 * The block table this walk was last counted against, or -1 for none.
+	 * <p>
+	 * Counted rather than latched, which is the idiom the terrain's own cull line already uses and
+	 * for a reason this repository has paid for: a flag of the process reports the FIRST pack of the
+	 * session and says nothing for any pack loaded after it, and a pack loaded after it is exactly
+	 * when the reading is worth having.
+	 */
+	private static int counted = -1;
 
 	private ShadowGeometry() {
 	}
@@ -290,10 +297,10 @@ public final class ShadowGeometry {
 	 * counts and not one: they are gathered by two different walks and a pack can refuse either.
 	 */
 	private static void say(int entities, int blockEntities) {
-		if (!counted) {
-			counted = true;
+		if (counted != BlockStateIds.generation()) {
+			counted = BlockStateIds.generation();
 			Vitrail.logger().info("The light's walk submitted {} entities and {} block entities into "
-					+ "the shadow map", entities, blockEntities);
+					+ "the shadow map, on block table {}", entities, blockEntities, counted);
 		}
 	}
 }
