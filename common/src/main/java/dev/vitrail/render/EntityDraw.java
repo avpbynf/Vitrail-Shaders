@@ -1088,9 +1088,19 @@ public final class EntityDraw {
 	private boolean begin(GpuDevice device, Element element, EntityProgram program,
 			PreparedRenderType prepared) {
 		end();
-		this.owner.beginFrame();
-		if (!this.owner.openTargets(device)) {
-			return refuse(element, "targets", "the colour targets could not be opened this frame");
+
+		// <strong>Neither of these inside the light's walk</strong>, and {@link TerrainDraw} already
+		// guards the same pair for the same reason, in the same words. The walk stands after the
+		// chain has closed the frame, so both per frame guards are down again: opening here advances
+		// the value store a SECOND time, which turns every {@code gbufferPrevious*} of the next frame
+		// into the current one, and clears the pack's colour targets over what the chain has just
+		// written into them. Neither call has anything to give a caster: it is drawn into the map,
+		// which the stage ensured and emptied before any of this, and it reads no colour target.
+		if (!element.shadow()) {
+			this.owner.beginFrame();
+			if (!this.owner.openTargets(device)) {
+				return refuse(element, "targets", "the colour targets could not be opened this frame");
+			}
 		}
 
 		if (!shown()) {
