@@ -105,10 +105,11 @@ public final class ChainPlan {
 	 * is drawn or not on a line somebody wrote.
 	 */
 	private static final List<NamedProgram> NAMED_PROGRAMS = Stream.concat(
-			// None of the sky's three is counted, the clouds included, and the reason is the same for
-			// all three: the game opens no sky pass at all in the Nether, and no cloud pass below the
-			// overworld. It is spelled out, with what it was measured to cost, where the verdicts are
-			// handed their map.
+			// None of the sky's three is counted, the clouds included, but not for one reason: the
+			// sky's two hang off a pass the game opens nowhere the place's skybox is NONE, which in
+			// vanilla is the Nether, while the clouds hang off a pass of their own that the game
+			// opens in the overworld alone. It is spelled out, with what it was measured to cost,
+			// where the verdicts are handed their map.
 			SKY_PROGRAMS.stream()
 					.map(program -> new NamedProgram(program, CLOUD_PROGRAM.equals(program),
 							false, NOT_EVERYWHERE)),
@@ -484,13 +485,17 @@ public final class ChainPlan {
 		// the two places the format reserves for the Nether and the End.
 		//
 		// Three families fail that question however options.txt is written, and each fails it
-		// differently. The sky's two and the clouds hang off the game's own sky pass, and a place
-		// whose skybox is NONE opens none at all: that is the Nether (LevelRenderer.addSkyPass, the
-		// Skybox.NONE gate at :337). Both branches of that pass are served now, the End's two methods
-		// as much as the overworld's six, RenderPipelines.END_SKY being assigned gbuffers_skytextured
-		// as Iris assigns it (IrisPipelines.java:69). So what keeps the sky out of this count is one
-		// place and no longer two, and the clouds are held out by their own pass, which the game
-		// draws in the overworld alone. The weather is drawn only where the level has weather,
+		// differently. The sky's two hang off the game's own sky pass, and a place whose skybox is
+		// NONE opens none at all (LevelRenderer.addSkyPass, the Skybox.NONE gate at :337). Vanilla
+		// answers NONE in the Nether and nowhere else, but the field is a datapack one with a codec
+		// and OVERWORLD for a default (DimensionType.java:97), so a modded dimension may answer it
+		// anywhere and the gate is what this depends on, not the name. Both branches of that pass
+		// are served now, the End's two methods as much as the other six, RenderPipelines.END_SKY
+		// being assigned gbuffers_skytextured as Iris assigns it (IrisPipelines.java:69), so what
+		// keeps the sky out of this count is that one gate and no longer two. The clouds are held
+		// out by something else entirely: a pass of their own, opened on the cloud setting and on
+		// the alpha of the cloud colour (LevelRenderer:220-233) and in the overworld alone.
+		// The weather is drawn only where the level has weather,
 		// which the weather renderer decides on its own; what is certain here is that it is not every
 		// place.
 		//

@@ -47,8 +47,9 @@ import java.util.function.Supplier;
  * element for prepares nothing and draws exactly as it did.
  * <p>
  * <strong>The eight are two branches and not one list.</strong> {@code LevelRenderer.addSkyPass}
- * draws the End's two or the overworld's six and never both, so a place reaches at most one half of
- * what is wrapped here, and the four methods a place never calls cost it nothing.
+ * takes the End's branch or the other and never both, at {@code :344-348} and {@code :350-358}: a
+ * place under the End's skybox reaches two of these methods and a place under any other reaches the
+ * remaining six, and the ones a place never calls cost it nothing.
  * <p>
  * <strong>One of the pack's answers is not a shader at all.</strong> Two of these pieces, the sun
  * and the moon, can be refused outright in {@code shaders.properties}, and a refusal is cancelled at
