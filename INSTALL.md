@@ -13,17 +13,17 @@ installed on one.
 | Chloride | any 26.2 build, to run on the Vulkan backend at all |
 | Java | 25, to build (the game brings its own runtime) |
 
-Sodium is declared as a required dependency, so the game will refuse to start
-without it. Do not update Sodium past 0.9.x: it has no stable API for what a
-shader engine needs from it.
+Sodium and Chloride are both declared as required dependencies, so the game will
+refuse to start without either of them. Do not update Sodium past 0.9.x: it has
+no stable API for what a shader engine needs from it. Chloride is pinned to no
+version at all, since nothing here calls into it.
 
-Chloride is not declared as a dependency and is needed all the same, because
-without it the Vulkan backend has no window to draw into. NeoForge shows an
-early loading screen, and the game takes that window over rather than making one
-of its own, so the window it inherits was created for OpenGL and the Vulkan
-surface fails at boot with `GLFW error 65540 ... requires the window to have the
-client API set to GLFW_NO_API`. Chloride is what makes that window Vulkan
-capable.
+Chloride is needed because without it the Vulkan backend has no window to draw
+into. NeoForge shows an early loading screen, and the game takes that window over
+rather than making one of its own, so the window it inherits was created for
+OpenGL and the Vulkan surface fails at boot with `GLFW error 65540 ... requires
+the window to have the client API set to GLFW_NO_API`. Chloride is what makes
+that window Vulkan capable.
 
 Worth knowing because the failure hides itself: a Vulkan boot that fails
 downgrades `preferredGraphicsBackend` to `default`, and the dying process writes
