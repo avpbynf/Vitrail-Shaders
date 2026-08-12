@@ -669,6 +669,16 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * <p>
 	 * The position is the section's own, which is what the mesh is written in and what
 	 * {@link TerrainVertex#pack} reduced the block's world position to.
+	 * <p>
+	 * <strong>Iris subtracts from the WORLD position and gets the same byte</strong>, which is worth
+	 * writing down so that nobody closes a gap that is not one.
+	 * {@code MixinChunkMeshBuildTask.iris$onRenderModel} hands {@code blockPos.getX()} straight in,
+	 * {@code ExtendedDataHelper.computeMidBlock} masks it to sixteen bits, and Sodium's vertex is
+	 * section local, so the difference it carries is a whole number of blocks. Sixty-four times a
+	 * whole number of sixteens is a whole number of two hundred and fifty-sixes, and the mask to a
+	 * byte at the end of the packing takes it away. What does not survive is the last bit of
+	 * precision: a float holds {@code 65535.5} exactly and then loses half a unit at the multiply,
+	 * so far from the origin Iris's own answer can land one sixty-fourth off where this one does not.
 	 */
 	private static int midBlock(ChunkVertexEncoder.Vertex vertex) {
 		int origin = ((TerrainVertex) vertex).vitrailBlockOrigin();

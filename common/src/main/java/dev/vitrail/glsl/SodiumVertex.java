@@ -70,8 +70,10 @@ public final class SodiumVertex {
 	 * light that block gives off in the fourth component.
 	 * <p>
 	 * A pack divides it by 64 itself, which is why nothing here does: four packs of the corpus write
-	 * {@code at_midBlock.xyz / 64.0} word for word, and Bliss reads the fourth component as a block
-	 * light index. It is what places a block in a voxel grid from inside a vertex stage, which is how
+	 * {@code at_midBlock.xyz / 64.0} word for word, and the two that declare the name as a
+	 * {@code vec4}, Bliss and Reverie, both read its fourth component as the block's own light -
+	 * Bliss as an index into its voxel ids, Reverie as a level it divides by fifteen. It is what
+	 * places a block in a voxel grid from inside a vertex stage, which is how
 	 * the five packs that voxelise their lighting find out where a light actually stands.
 	 */
 	public static final String MID_BLOCK = "a_MidBlock";
@@ -279,7 +281,9 @@ public final class SodiumVertex {
 	 * block a pack voxelises sixty-four times too close to its own corner.
 	 * <p>
 	 * A pack declaring three components gets the offset alone and one declaring four gets the block's
-	 * light with it, which is the shape Bliss reads as a light index.
+	 * light with it, which is the shape Bliss and Reverie read. Both shapes are Iris's own: its
+	 * chunk format declares four signed bytes unnormalised, {@code IrisChunkMeshAttributes.MID_BLOCK},
+	 * so a three component declaration there drops the light in exactly the same way.
 	 */
 	private static String midBlock(String type) {
 		return switch (type) {
