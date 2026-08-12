@@ -100,7 +100,7 @@ public final class ChainPlan {
 	 * <strong>And each carries WHEN that family fills its targets in EVERY place</strong>, which is
 	 * a different question with a different answer and is what {@link #verdicts} counts. Being in this
 	 * list means a pack's program is resolved and its attachments worked out; being counted means a
-	 * verdict may take those targets for filled wherever this plan is built. Four of these names
+	 * verdict may take those targets for filled wherever this plan is built. Six of these names
 	 * answer that with a switch of {@link Families} rather than with a constant, because their family
 	 * is drawn or not on a line somebody wrote.
 	 */
