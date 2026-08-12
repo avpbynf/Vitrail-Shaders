@@ -71,6 +71,9 @@ public final class ShadowGeometry {
 	private static SubmitNodeStorage storage;
 	private static FeatureRenderDispatcher dispatcher;
 
+	/** Whether building them has already failed, which is settled for the session and not retried. */
+	private static boolean broken;
+
 	/** Where this walk's own extraction lands, which is never the one the frame was drawn from. */
 	private static final LevelRenderState STATE = new LevelRenderState();
 
@@ -232,28 +235,44 @@ public final class ShadowGeometry {
 	/**
 	 * Builds the three pieces at the first walk, and answers whether they are there.
 	 * <p>
-	 * One section builder and not the processor count Iris asks for
-	 * ({@code shadows/ShadowRenderer.java:180}): what this storage is used for is submissions, and
-	 * the section builders of a {@code RenderBuffers} are for the chunk meshes, which this walk never
-	 * touches. Sodium meshes the sections here and the map is drawn off its own lists.
+	 * No section builders at all, which is what {@link HandDraw} asks for and for the same reason:
+	 * what this storage is used for is submissions, and the section builders of a
+	 * {@code RenderBuffers} are for the chunk meshes, which this walk never touches. Sodium meshes
+	 * the sections here and the map is drawn off its own lists.
+	 * <p>
+	 * <strong>A failure is settled for the session rather than retried.</strong> The buffers are
+	 * built before the dispatcher and are a device allocation, so the one that succeeded goes back
+	 * before the fields are dropped; and the latch is what makes the message true, a walk that
+	 * retried would allocate and log once a frame for the rest of the run.
 	 */
 	private static boolean ensure(Minecraft minecraft) {
 		if (dispatcher != null) {
 			return true;
 		}
 
+		if (broken) {
+			return false;
+		}
+
+		RenderBuffers owned = null;
 		try {
-			buffers = new RenderBuffers(1);
+			owned = new RenderBuffers(0);
 			storage = new SubmitNodeStorage();
-			dispatcher = new FeatureRenderDispatcher(buffers, minecraft.getModelManager(),
+			dispatcher = new FeatureRenderDispatcher(owned, minecraft.getModelManager(),
 					minecraft.getAtlasManager(), minecraft.font,
 					minecraft.gameRenderer.gameRenderState());
+			buffers = owned;
 
 			return true;
 		} catch (RuntimeException e) {
+			if (owned != null) {
+				owned.close();
+			}
+
 			buffers = null;
 			storage = null;
 			dispatcher = null;
+			broken = true;
 			Vitrail.logger().error("Vitrail could not build the second submission the shadow map is "
 					+ "filled from, so nothing that moves casts a shadow this session", e);
 
