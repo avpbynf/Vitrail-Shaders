@@ -122,10 +122,11 @@ Both an empty value and a non-evaluable expression mean enabled: this file is re
 **Unrecognised keys are not dropped in silence.** They are counted by prefix and printed, which is
 what makes a pack's misspelled key visible - correct to ignore, wrong to lose.
 
-### The shadow caster directives, and the one that is not a flag
+### The shadow caster directives, and the two that are not flags
 
-`shadowTerrain`, `shadowTranslucent`, `shadowEntities`, `shadowPlayer` and `shadowBlockEntities` say
-which families a pack wants drawn into its shadow map. All but `shadowPlayer` default to on.
+`shadowTerrain`, `shadowTranslucent`, `shadowEntities`, `shadowPlayer`, `shadowBlockEntities` and
+`shadowLightBlockEntities` say which families a pack wants drawn into its shadow map. The first four
+of that list default to on, the last two to off.
 
 **`shadowPlayer` is not a flag that adds the player to the others.** It is what is left when the
 others are refused: where `shadowEntities` is on, the player is one of the entities and is drawn
@@ -133,17 +134,23 @@ with them, and `shadowPlayer` decides nothing; where `shadowEntities` is off, `s
 whole of what the walk extracts, together with whatever the player is riding. Read additively, a
 directive that is off by default would keep the player out of every default shadow map there is.
 
-These five are read through the pack's own preprocessor conditionals, like the per-program enable
+**`shadowLightBlockEntities` is the same shape**, one family down: it is consulted where
+`shadowBlockEntities` is off, and there what reaches the map is the block entities that give off
+light and nothing else. With both on, the wider one decides and every block entity is drawn.
+
+These six are read through the pack's own preprocessor conditionals, like the per-program enable
 flags above and for a sharper reason: packs write the same word twice with two different values in
 two arms of one conditional, and some write a word whose value the pack's own settings file then
 contradicts. Read flat, the answer is whichever line the file happens to end with, and the most
 used packs of the corpus lose their entity shadows to a line their settings had already killed.
 
-A sixth word of the family, `shadowLightBlockEntities`, is parsed by Iris and is not read here. No
-pack seen so far writes it.
+`entityShadowDistanceMul` is read too, but as a `const float` of the pack's source rather than as a
+key of this file. It bounds how far from the camera a caster that moves may stand and still reach
+the map.
 
-`shadow.culling` is recognised as a word this engine does not act on, and is reported among the keys
-nothing reads rather than half-honoured. Its values do not pick between ways of walking one frustum:
+`shadow.culling` is not read, and it is not treated as a word this engine knows either: a pack that
+writes it sees it among the keys nothing reads, in the same list as a misspelling. That is
+deliberate rather than half-honoured. Its values do not pick between ways of walking one frustum:
 they pick between different cullers with different distance directives behind them, and reading the
 word while walking one frustum anyway would put casters into a map the pack asked to keep them out
 of.

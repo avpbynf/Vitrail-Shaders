@@ -651,21 +651,24 @@ public final class EntityDraw {
 	 * <p>
 	 * <strong>The ground shadow is left out, and it is left out because Iris leaves it out.</strong>
 	 * {@code ENTITY_SHADOW} is assigned in the main table and appears nowhere in the shadow one, so a
-	 * mob's dark oval keeps the game's own shader when the map is drawn. Serving it would put the
-	 * oval into the depth the pack reads as a shadow, which is a flat disc of occluder lying on the
-	 * ground under every mob.
+	 * mob's dark oval keeps the game's own shader when the map is drawn. What serving it would add is
+	 * not an occluder: the pipeline writes no depth at all
+	 * ({@code RenderPipelines.java:375}, {@code DepthStencilState(GREATER_THAN_OR_EQUAL, false)}) and
+	 * blends, so what it would put into the map is colour in {@code shadowcolor0} and nothing in the
+	 * depth a pack reads its shadows from.
 	 * <p>
 	 * <strong>Every row discards at a tenth and none of them blends</strong>, both read rather than
 	 * chosen: the key carries {@code ONE_TENTH_ALPHA} whatever threshold its main twin had, and every
 	 * shadow program of Iris is declared with {@code BlendModeOverride.OFF}
-	 * ({@code shaderpack/programs/ProgramId.java:13-19}). A blending row therefore draws into the map
+	 * ({@code shaderpack/loading/ProgramId.java:13-19}). A blending row therefore draws into the map
 	 * outright, which is what a shadow map wants: the depth a surface stands at, not that depth mixed
 	 * with the one behind it.
 	 * <p>
 	 * The stage is {@code ENTITIES} for the whole table, including the rows the camera draws under
-	 * {@code NONE}. Iris poses it once for the entire stretch of its shadow render rather than per
-	 * row ({@code shadows/ShadowRenderer.java:521}), so unlike the main table there is no second
-	 * answer for a block entity here.
+	 * {@code NONE}. Iris poses it once for the whole stretch its feature renderers are drawn in
+	 * ({@code shadows/ShadowRenderer.java:521} up to the copy), the two chunk groups of the same
+	 * stage having their own ({@code :509} and {@code :599}), so unlike the main table there is no
+	 * second answer for a block entity here.
 	 */
 	private static final Map<RenderPipeline, Element> SHADOW_ELEMENTS = new LinkedHashMap<>();
 
@@ -917,7 +920,7 @@ public final class EntityDraw {
 			return true;
 		}
 
-		// <strong>Inside the light's walk there is no such thing as handing a draw back.</strong>
+		// INSIDE THE LIGHT'S WALK THERE IS NO SUCH THING AS HANDING A DRAW BACK.
 		// Every no above ends with the caller drawing it itself, on the target its render type names,
 		// and that target at the end of a frame is the finished picture: the caster would be painted
 		// across the image the player is looking at, once per frame, for as long as the reason lasts.
@@ -1089,10 +1092,10 @@ public final class EntityDraw {
 			PreparedRenderType prepared) {
 		end();
 
-		// <strong>Neither of these inside the light's walk</strong>, and {@link TerrainDraw} already
-		// guards the same pair for the same reason, in the same words. The walk stands after the
+		// NEITHER OF THESE inside the light's walk, and TerrainDraw already guards the same pair for
+		// the same reason, in the same words. The walk stands after the
 		// chain has closed the frame, so both per frame guards are down again: opening here advances
-		// the value store a SECOND time, which turns every {@code gbufferPrevious*} of the next frame
+		// the value store a SECOND time, which turns every gbufferPrevious* of the next frame
 		// into the current one, and clears the pack's colour targets over what the chain has just
 		// written into them. Neither call has anything to give a caster: it is drawn into the map,
 		// which the stage ensured and emptied before any of this, and it reads no colour target.
@@ -1237,13 +1240,14 @@ public final class EntityDraw {
 		// The deliberate one is named apart from the rest, because reporting a parity choice as a
 		// fault is how a reader is sent hunting something that is working. Iris assigns
 		// ENTITY_SHADOW in its main table and nowhere in its shadow one, so a mob's ground oval
-		// keeps the game's shader there; serving it would lay a flat disc of occluder under every
-		// mob. The walk also submits name tags, text and other geometry no shadow table anywhere
-		// has a row for, and those are the same silence the camera's table gives them.
+		// keeps the game's shader there. The walk also submits name tags, text and other geometry no
+		// shadow table anywhere has a row for, and those are the same silence the camera's table
+		// gives them.
 		if (pipeline == RenderPipelines.ENTITY_SHADOW) {
 			Vitrail.logger().info("The ground oval under a mob is left out of the shadow map, which "
-					+ "is what Iris does: served, it would be a flat disc of occluder lying under "
-					+ "every mob in the map");
+					+ "is what Iris does: it has no shadow row for that pipeline either, and the "
+					+ "pipeline writes no depth, so what a row would add to the map is colour rather "
+					+ "than an occluder");
 
 			return;
 		}

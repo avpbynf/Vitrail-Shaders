@@ -147,7 +147,7 @@ final class EntityProgram implements DumpedProgram {
 				element.element(), NAMESPACE, ANSWERED, shadow,
 				// Nothing blends into the shadow map, whatever the pipeline the row was made from
 				// says. Every shadow program of Iris is declared with BlendModeOverride.OFF
-				// (shaderpack/programs/ProgramId.java:13-19), and the reason is what a map is for:
+				// (shaderpack/loading/ProgramId.java:13-19), and the reason is what a map is for:
 				// what it wants of a translucent surface is the depth that surface stands at, not
 				// that depth mixed with the one behind it.
 				shadow ? Optional.<BlendFunction>empty() : game.getColorTargetState().blendFunction(),
@@ -164,18 +164,22 @@ final class EntityProgram implements DumpedProgram {
 				// blends among its translucent features. A shadow row is on neither side of a stage
 				// that has not run when it draws.
 				!shadow && element.blended(),
-				// The piece's own on both sides of the map, which is Iris's answer and not the chunk
-				// passes'. It applies the vanilla pipeline's own cull inside its shadow pass
-				// (mixin/MixinGlCommandEncoder.java:136-140), so ENTITY_CUTOUT_CULL culls there as it
-				// culls in the picture. The chunk passes really do drop it, and that is about a wall
-				// meshed one side only; a mob is closed geometry and has no such back to leak
-				// through.
+				// The piece's own on both sides of the map, and NOT the chunk passes' answer, which
+				// really do drop the cull: that is about a wall meshed one side only, and a mob is
+				// closed geometry with no such back to leak through. Iris says two things about this
+				// and neither source settles the other. It brackets its whole shadow stage with
+				// _disableCull() and _enableCull() (shadows/ShadowRenderer.java:501 and :615), and it
+				// also re-applies each pipeline's own cull, but only inside the branch for the passes
+				// it opens itself (mixin/MixinGlCommandEncoder.java:137-141, under the test at :101),
+				// which a geometry draw does not enter. What the piece's own costs if the bracket is
+				// the one that wins is the back faces of an open caster, a banner or a cape, missing
+				// from the map where Iris has them.
 				game.getPrimitiveTopology(), game.isCull(),
+				// The piece's own, TURNED ROUND rather than replaced. See intoMap.
+				shadow ? intoMap(game.getDepthStencilState()) : game.getDepthStencilState(),
 				// The piece's own, and the halves answer differently: NONE for a mob, which is
 				// Iris's answer rather than a reading of what the pass is, and BLOCK_ENTITIES for a
 				// block entity, which Iris really does pose. The class comment has the file:line.
-				// The piece's own again, TURNED ROUND rather than replaced. See intoMap.
-				shadow ? intoMap(game.getDepthStencilState()) : game.getDepthStencilState(),
 				element.stage(),
 				// Nothing of the game's bound beside the mesh: an entity pipeline carries samplers
 				// and transforms, and this program declares none of their names.
@@ -192,9 +196,10 @@ final class EntityProgram implements DumpedProgram {
 	 * ({@code RenderPipelines.java:222}), and {@code BANNER_PATTERN} tests
 	 * {@code GREATER_THAN_OR_EQUAL} and writes none either ({@code :319}). Given one forced state
 	 * both become occluders in the map, which is a decal and a banner's pattern casting a shadow of
-	 * their own over the surface they are lying on. Iris keeps the vanilla state for its shadow
-	 * draws ({@code mixin/MixinGlCommandEncoder.java:120-127}) and has nothing to turn round, its
-	 * map running in the same direction as its scene.
+	 * their own over the surface they are lying on. Iris has nothing to turn round: its shadow
+	 * projection is a plain forward ortho built the same way as the camera's
+	 * ({@code shadows/ShadowMatrices.java:21-24}), so its map runs in the same direction as its
+	 * scene and the vanilla state stands as written.
 	 * <p>
 	 * <strong>The conversion is three things and not one.</strong> The game rasterises under a
 	 * REVERSED Z, nought at the far plane, and {@link ShadowTargets} stores the forward window, one

@@ -141,8 +141,38 @@ middle of the draw, so there is nothing to hand back to. What it costs is a cast
 shadow; the alternative costs worse, the pass open at that moment carrying the finished picture, so
 the caster would be painted across the frame the player is looking at.
 
-The ground oval under a mob is left out on purpose, as Iris leaves it out. Served, it would lay a
-flat disc of occluder under every mob in the map.
+The ground oval under a mob is left out on purpose, as Iris leaves it out: neither engine has a
+shadow row for that pipeline. It is worth knowing what serving it would and would not do, because
+the answer is not the obvious one - the pipeline writes no depth and blends, so what a row would add
+to the map is colour in `shadowcolor0`, not an occluder lying under every mob.
+
+The two halves of that second walk are gathered at different moments, and it is not a tidiness.
+The entities are worked out before the light's own walk of the sections, since nothing that decides
+whether one is kept moves with that walk. The block entities can only be gathered after it: they are
+held on the sections' meshes, and what says which sections to ask is the set of render lists the
+walk has just filled. Asked any earlier, the question has the camera's answer or none at all.
+
+### Which of them the pack chooses
+
+Six keys of `shaders.properties` say which families reach the map: `shadowTerrain`,
+`shadowTranslucent`, `shadowEntities`, `shadowPlayer`, `shadowBlockEntities` and
+`shadowLightBlockEntities`. Four are on unless the pack says otherwise; the last two of the list are
+off. The two that are off are not additive flags, and reading them as such is the mistake that
+costs an image: each is consulted only where its wider partner is refused. `shadowPlayer` means
+"the player alone, once the entities are out", and `shadowLightBlockEntities` means "the ones that
+give off light, once the block entities are out". The player casts by default because the entities
+carry it, not because its own key is on.
+
+`entityShadowDistanceMul` is read as well, as a `const float` of the pack's own source. It bounds
+how far from the camera a caster that moves may stand and still reach the map. Half of the packs
+tested set it to a quarter or an eighth, so it is not a rounding detail: ignored, casters enter the
+map four to eight times further out than the pack intended.
+
+These keys are read on the file's **live** lines only, which is what the pack's own settings decide.
+It matters more than it sounds: the most widely used pack of the test corpus writes
+`shadowEntities` and `shadowBlockEntities` once each under a condition its own settings file
+switches off, so both lines are dead. Read flat, that pack would come out with no entity shadows at
+all.
 
 ### Culling for the light
 
@@ -180,6 +210,13 @@ boundary.
 Finally, per-face batch culling has to be disabled for the shadow pass, and the pipeline state is
 not enough to do it: batches choose which faces to submit before any pipeline exists, and a face
 the camera cannot see is exactly the face standing between the sun and the ground.
+
+All of the above is about the terrain. What moves is culled separately, and one divergence is worth
+stating plainly. A caster is measured against the light's own frustum, the same matrix the terrain
+is culled against, and where the pack asked for a shorter reach that reach is cut about the camera.
+The reference implementation instead builds a second, narrower frustum for the movers at the shadow
+distance times `entityShadowDistanceMul`. What the difference costs is a caster that stands inside
+the light's box but outside that narrower frustum: kept here, dropped there.
 
 ### The experiment that separates the two failure modes
 
