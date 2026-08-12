@@ -11,18 +11,7 @@ displayURL = "https://github.com/avpbynf/Vitrail-Shaders"
 logoFile = "vitrail.png"
 authors = "avpbynf"
 displayTest = "IGNORE_ALL_VERSION"
-description = '''
-Minecraft 26.2 ships a native Vulkan renderer alongside the OpenGL one, and the shader
-ecosystem has not crossed over yet. Vitrail loads existing OptiFine-format packs, unmodified,
-on the Vulkan backend, so that turning Vulkan on does not mean giving up the packs you use.
-
-Pack GLSL is rewritten once, when the pack is loaded, and compiled to SPIR-V by the compiler
-the game already ships. Nothing is translated per frame.
-
-Still early: the terrain, the water, the shadow map, the overworld sky and its clouds already
-run on the pack's own programs, with the pack's full pass chain and settings screen; the
-entities and the particles still come from the game.
-'''
+description = '''OptiFine-format shader packs, on Minecraft's native Vulkan renderer'''
 
 # Sodium reads this block out of every mod's own metadata and turns the named mixin off.
 # features.render.world.sky hides the whole sky pass whenever the camera is in a fluid, which with a
