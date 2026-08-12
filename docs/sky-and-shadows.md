@@ -229,8 +229,11 @@ Worse, the sky is not one vertex format. Four formats serve the eight pieces, an
 carry position, colour and texture coordinates and nothing else: no normal, no lightmap, no
 overlay. So the vertex elements a translated program must declare are the answer of the *pass*, not
 of the family. The End's own sky is the piece that makes the point: it is the only one whose mesh
-carries a texture coordinate *and* a colour, so it is the only one that would be refused outright by
-a program written against the sun's format.
+carries a texture coordinate *and* a colour, and it falls to the same program file as the sun and
+the moon, whose mesh carries no colour at all. That one file read for the End and then bound to the
+sun's format is refused outright; read for the sun and bound to the End's it is not refused at all,
+and simply never sees the colour. So it is read once per format it can be drawn against, and never
+bound to a format it was not read for.
 
 That is forced by how vertex inputs bind. The match is by name and asymmetric in both directions: a
 name the stage declares that the bound format does not carry makes the program refused, while a
@@ -267,7 +270,9 @@ reference rather than chosen. The reference sets a stage at the head of each ove
 sky renderer and sets none in either End method; what it does set, once, is the custom-sky stage at
 the head of the whole sky pass, as a heuristic for sky mods drawing before the game does. The End
 branch never reaches a method that replaces it, so custom sky is what a pack reads there - for the
-End's own sky and for the dragon's flash alike.
+End's own sky and for its flash alike. The flash is worth naming for what it is not: it is a clock,
+seeded every six hundred ticks and fading in and out over a stretch drawn at random, not an event
+anything in the world sets off.
 
 ### The pass matrix is the body's position
 
@@ -312,9 +317,9 @@ nothing had no clouds at all, at any setting, and nothing said why.
 
 It is then all eight or none. If any piece the game still draws would stay behind, the whole sky
 keeps the game's target, because the layer is the only road left to a piece that stayed on it and the
-pieces that write outright cut the layer where they land. A pack serving no program for the basic
-sky and one for the textured one (which the format allows) would otherwise get a sky whose
-disc marks the whole frame and whose sun and moon are cut out of it.
+pieces that claim every pixel they span cut the layer where they land. A pack serving no program for
+the basic sky and one for the textured one (which the format allows) would otherwise get a sky
+whose disc marks the whole frame and whose sun and moon are cut out of it.
 
 All eight and not the branch in hand, which costs one thing worth naming: a place serving one branch
 and not the other holds the served branch back too, though the two are never drawn together. Every
@@ -325,9 +330,18 @@ frame. Not always: `sky=off` in the options stops it, so does a pack that serves
 all, and so does the Nether, whose skybox is none and which opens no sky pass whatever. In those
 cases the terrain opens the frame, as it always did.
 
-The End is the case to be careful with. Its two passes are served like the rest, but it draws no
-**disc**, and the disc is the piece the horizon cone rides in: there is no band under the End's
-horizon to close, and nothing there gates itself on the directive that gates the cone.
+The End is the case to be careful with, and in two ways at once. It draws no **disc**, and the disc
+is the piece the horizon cone rides in: there is no band under the End's horizon to close, and
+nothing there gates itself on the directive that gates the cone. The disc is also the piece that
+cuts the layer in the overworld, so the End needs a piece of its own that cuts it, or its sky is
+drawn into the pack's target and then painted over with the game's - which in the End holds nothing
+but the frame's clear, the draw having been taken from it. The End's own sky is that piece.
+
+**Which is why the cut is a property of the piece and not of its blending.** The obvious reading -
+a piece that writes outright claims its pixels, a piece that blends does not - is right for seven of
+the eight and wrong for the End's sky, whose pipeline blends and whose mesh is nonetheless opaque at
+every vertex behind a texture with no transparent texel in it. Read off the blend, the End loses its
+sky to a flat fog colour and nothing in the log says so.
 
 ### The sun's path is tilted for the bodies as well as for the light
 

@@ -76,11 +76,13 @@ final class SkyProgram implements DumpedProgram {
 		PackProgram.Loaded bound =
 				loaded.rebind(chainTargets, chainTargets.schedule().step(servedBy));
 
-		// A piece that writes outright is one the scene seed must not paint over, and a piece that
-		// blends is not: the mask is written whatever the blend, so a star quad, which is a hundred
-		// parts transparent to one part star, would claim every pixel it spans and cut the game's
-		// picture out of all of them. The opaque and cutout chunk passes answer the same question the
-		// same way, and the translucent one answers it no.
+		// A piece that claims every pixel it spans is one the scene seed must not paint over, and the
+		// element answers that itself rather than this deriving it from the blend. The mask is
+		// written whatever the blend, so a star quad, a hundred parts transparent to one part star,
+		// would claim every pixel it spans and cut the game's picture out of all of them; but the
+		// converse does not hold, and the End's cube of sky is where it fails, the game blending a
+		// mesh that is opaque at every vertex. The opaque and cutout chunk passes answer the same
+		// question the same way, and the translucent one answers it no.
 		return new SkyProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY, element.element(),
 				NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, element.blend(),
 				// claimed, and the sky is the one family that answers it yes: it draws opaque pieces
@@ -99,7 +101,7 @@ final class SkyProgram implements DumpedProgram {
 				// writes the colour target rather than reaching it through the seed. There, and
 				// over the whole sky wherever the disc's own mask is turned down, the four are
 				// repainted, exactly as they were before this field existed.
-				element.blend().isEmpty(), true, false, element.topology(),
+				element.covers(), true, false, element.topology(),
 				// None of the five sky pipelines names a culling of its own, so all five take the
 				// builder's default, which is to cull.
 				true, null, element.stage(),

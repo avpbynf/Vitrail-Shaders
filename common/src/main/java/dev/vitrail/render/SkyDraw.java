@@ -47,8 +47,10 @@ import java.util.Optional;
  * <p>
  * <strong>Every piece draws where the pack's own draw buffers send it</strong>, on the halves the
  * schedule gives them, which for most of the corpus is colortex0 and for Sildur's is colortex4. The
- * two pieces that write outright rather than blend also mark the pixels they covered, so the scene
- * seed stops painting the game's own sky over them, exactly as it stops over the terrain.
+ * three pieces that claim every pixel they span also mark those pixels, so the scene seed stops
+ * painting the game's own sky over them, exactly as it stops over the terrain. Each branch of the
+ * pass carries one such piece, the two discs in the overworld and the End's cube in the End, and a
+ * branch with no mark in it would have its whole sky drawn and then painted flat.
  * <p>
  * <strong>All the pieces or none of them</strong>, settled once per place in {@link #read}. The
  * mark is what makes it all or nothing: it cuts the seed, and the seed is the one road into the
@@ -66,9 +68,17 @@ public final class SkyDraw {
 	 *
 	 * @param label    the game's own label, which is how a pass is recognised
 	 * @param program  the bare name the game would have drawn with
-	 * @param element  one word for the log and for the shader identifier, which has to tell two
-	 *                 elements served by one file apart: the sun and the moon are one program
+	 * @param element  one word for the log and for the shader identifier, which has to tell apart the
+	 *                 elements one file answers for, and there are four of each: the sun, the moon
+	 *                 and the End's two fall to {@code gbuffers_skytextured}, the rest to
+	 *                 {@code gbuffers_skybasic}
 	 * @param blend    what the game's own pipeline blends this element with
+	 * @param covers   whether this piece claims every pixel it spans, which is what the scene seed is
+	 *                 cut with. <strong>Not the same question as the blend</strong>, and the End's
+	 *                 cube of sky is where the two part company: the game's own pipeline blends it,
+	 *                 and {@code SkyRenderer.buildEndSky} still gives every vertex an alpha of 255
+	 *                 behind a texture with no transparent texel in it, so it covers the frame the
+	 *                 way the discs do. Read off the mesh, never off the blend
 	 * @param rotated  whether the game pushes a model view of its own for this element, which is
 	 *                 where the sun and the moon are. The disc pushes nothing and is drawn under the
 	 *                 camera's, so it is handed none and reads the frame's, which is the same matrix
@@ -82,19 +92,19 @@ public final class SkyDraw {
 	 *                 {@code MixinSkyRenderer.java:29} would have replaced had the End branch called
 	 *                 {@code renderSkyDisc}
 	 * @param directive the line of {@code shaders.properties} that takes this piece out of the frame
-	 *                  altogether, spelled as the file spells it, or "" for the four pieces nothing
+	 *                  altogether, spelled as the file spells it, or "" for the six pieces nothing
 	 *                  takes out. Only the sun and the moon carry one, and {@link #draws} says why the
 	 *                  other two words of the family are not a refusal of a piece
 	 */
 	record Element(String label, String program, String element, VertexFormat format,
-			PrimitiveTopology topology, Optional<BlendFunction> blend, boolean rotated,
+			PrimitiveTopology topology, Optional<BlendFunction> blend, boolean covers, boolean rotated,
 			RenderStage stage, String directive) {
 
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
 		private PackProgram.SkyElement asked() {
 			return new PackProgram.SkyElement(this.element, this.program,
 					this.format.getElements().stream().map(VertexFormatElement::name).toList(),
-					this.blend.isEmpty());
+					this.covers);
 		}
 	}
 
@@ -122,34 +132,42 @@ public final class SkyDraw {
 
 	static {
 		put(new Element(DISC, "gbuffers_skybasic", "disc", DefaultVertexFormat.POSITION,
-				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), false, RenderStage.SKY, ""));
+				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true, false, RenderStage.SKY, ""));
 		put(new Element("Sky dark", "gbuffers_skybasic", "dark", DefaultVertexFormat.POSITION,
-				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true, RenderStage.VOID, ""));
+				PrimitiveTopology.TRIANGLE_FAN, Optional.empty(), true, true, RenderStage.VOID, ""));
 		put(new Element("Stars", "gbuffers_skybasic", "stars", DefaultVertexFormat.POSITION,
-				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true,
+				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), false, true,
 				RenderStage.STARS, ""));
 		put(new Element("Sunrise sunset", "gbuffers_skybasic", "sunrise",
 				DefaultVertexFormat.POSITION_COLOR, PrimitiveTopology.TRIANGLE_FAN,
-				Optional.of(BlendFunction.TRANSLUCENT), true, RenderStage.SUNSET, ""));
+				Optional.of(BlendFunction.TRANSLUCENT), false, true, RenderStage.SUNSET, ""));
 		put(new Element("Sky sun", "gbuffers_skytextured", "sun", DefaultVertexFormat.POSITION_TEX,
-				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true, RenderStage.SUN,
-				"sun"));
+				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), false, true,
+				RenderStage.SUN, "sun"));
 		put(new Element("Sky moon", "gbuffers_skytextured", "moon", DefaultVertexFormat.POSITION_TEX,
-				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true,
+				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), false, true,
 				RenderStage.MOON, "moon"));
 		// The End's cube of sky is the one element whose mesh carries a colour of its own AND a
 		// texture coordinate. It is drawn under the frame's own matrix as the disc is, renderEndSky
 		// writing its transform from getModelViewMatrixCopy without pushing anything of its own, so
 		// it is handed no matrix here and reads the frame's.
+		//
+		// And it MARKS, though the game's own pipeline blends it, because it is the only piece the
+		// End draws that could: buildEndSky writes 0xFF282828 at every vertex and end_sky.png has no
+		// transparent texel, so the cube covers the frame the way the disc does. Left unmarked, the
+		// End's whole sky was drawn into the pack's target and then painted over by the scene seed,
+		// with the game's own target holding nothing but the frame's clear since the draw was taken
+		// from it: a flat sky the colour of the fog, in the one place the pack had answered for.
 		put(new Element("End sky", "gbuffers_skytextured", "endsky",
 				DefaultVertexFormat.POSITION_TEX_COLOR, PrimitiveTopology.QUADS,
-				Optional.of(BlendFunction.TRANSLUCENT), false, RenderStage.CUSTOM_SKY, ""));
-		// The dragon's flash, which the game draws with the celestial pipeline and the celestial
+				Optional.of(BlendFunction.TRANSLUCENT), true, false, RenderStage.CUSTOM_SKY, ""));
+		// The End's flash, which the game draws with the celestial pipeline and the celestial
 		// atlas: same format, same topology and same blend as the sun and the moon, and rotated like
-		// them, renderEndFlash pushing a model view of its own before it writes its transform.
+		// them, renderEndFlash pushing a model view of its own before it writes its transform. It
+		// blends over the cube and claims nothing, as the sun blends over the disc.
 		put(new Element("End flash", "gbuffers_skytextured", "endflash",
 				DefaultVertexFormat.POSITION_TEX, PrimitiveTopology.QUADS,
-				Optional.of(BlendFunction.OVERLAY), true, RenderStage.CUSTOM_SKY, ""));
+				Optional.of(BlendFunction.OVERLAY), false, true, RenderStage.CUSTOM_SKY, ""));
 	}
 
 	private static void put(Element element) {
@@ -411,14 +429,14 @@ public final class SkyDraw {
 	 * Reads the pack for all eight pieces at once, at the first of them the game draws, and settles
 	 * where every one of them is drawn.
 	 * <p>
-	 * All eight and not the one being asked for, which is what this used to do. The game reaches five
-	 * of these pieces at moments of its own choosing and four of those moments are conditions of the
-	 * sky itself: the band is skipped until its alpha passes a thousandth, the stars until their
-	 * brightness leaves nought, the void plane until the eye goes under the world's horizon, and the
-	 * End's flash until the dragon sets one off. Read one at a time, the pack was opened, expanded and
-	 * translated inside the frame the sun first neared the horizon, on the render thread and in the
-	 * middle of the world. The compiling is not moved with it and still falls where the piece is first
-	 * drawn, one module a piece.
+	 * All eight and not the one being asked for, which is what this used to do. The game reaches four
+	 * of these pieces at moments of its own choosing: the band is skipped until its alpha passes a
+	 * thousandth, the stars until their brightness leaves nought, the void plane until the eye goes
+	 * under the world's horizon, and the End's flash until its own clock brings one round, which it
+	 * does once every six hundred ticks for a stretch drawn at random. Read one at a time, the pack
+	 * was opened, expanded and translated inside the frame the sun first neared the horizon, on the
+	 * render thread and in the middle of the world. The compiling is not moved with it and still
+	 * falls where the piece is first drawn, one module a piece.
 	 * <p>
 	 * The two branches of the game's sky pass are read together and neither waits for the other, which
 	 * costs a translation of the overworld's programs in the End and of the End's in the overworld.
@@ -439,15 +457,19 @@ public final class SkyDraw {
 		// Off the elements and not off the four words the pack may write, because only two of them
 		// take a piece away: a pack that wrote stars=false still gets its stars drawn, and saying so
 		// here would be a line the picture contradicts.
+		//
+		// Worded as a condition and not as an event, because the table is read whole and the two
+		// pieces a word can take out are both the overworld's: in the End this line names a sun and
+		// a moon nothing was going to draw there anyway.
 		List<String> off = ELEMENTS.values().stream()
 				.map(Element::directive)
 				.filter(directive -> !directive.isEmpty()
 						&& !this.values.skyElements().allows(directive))
 				.toList();
 		if (!off.isEmpty()) {
-			Vitrail.logger().info("{} draws its own {}, so the game draws neither that nor a shader "
-					+ "of the pack's in its place", this.packPath.getFileName(),
-					String.join(" and ", off));
+			Vitrail.logger().info("{} draws its own {}, so where the game draws one this engine "
+					+ "draws neither it nor a shader of the pack's in its place",
+					this.packPath.getFileName(), String.join(" and ", off));
 		}
 
 		try {
@@ -485,13 +507,16 @@ public final class SkyDraw {
 							byProgram.getOrDefault(element.program(), List.of()), this.chainTargets,
 							this.targets, this.chainRuns)));
 
+			// Both branches again, and worded for it: a place takes only the half of this list its
+			// own branch reaches, so in the End the four pieces of gbuffers_skybasic can be named
+			// here without the game ever having drawn one of them.
 			List<String> missing = ELEMENTS.values().stream()
 					.filter(element -> !loaded.containsKey(element.element()))
 					.map(Element::element)
 					.toList();
 			if (!missing.isEmpty()) {
-				Vitrail.logger().info("{} serves nothing in {} for the {} of its sky, so the game "
-						+ "keeps its own", this.packPath.getFileName(),
+				Vitrail.logger().info("{} serves nothing in {} for the {} of its sky, so where the "
+						+ "game draws one it keeps its own shader", this.packPath.getFileName(),
 						this.place.isEmpty() ? "its root" : this.place, String.join(", ", missing));
 			}
 		} catch (IOException | RuntimeException e) {
@@ -526,8 +551,13 @@ public final class SkyDraw {
 	}
 
 	/**
-	 * The pieces of the sky that would keep the game's own target, out of those the game still
-	 * draws. Empty is the answer that lets the sky move into the pack's targets at all.
+	 * The pieces of the sky that would keep the game's own target, out of those the pack has not
+	 * switched off. Empty is the answer that lets the sky move into the pack's targets at all.
+	 * <p>
+	 * <strong>Both branches of the game's pass and not the one this place takes</strong>, which is
+	 * the reading {@link #read} settles once for all eight: the only thing weighed away here is the
+	 * directive, and the directive knows nothing of the place, so in the End this walk still weighs
+	 * the overworld's six. {@link #read} says what that costs and why no pack of the corpus pays it.
 	 * <p>
 	 * A piece is one of these for either of two reasons, and they weigh the same: the pack serves no
 	 * program for it, so the game's own shader draws it, or it serves one the plan has no answer for.

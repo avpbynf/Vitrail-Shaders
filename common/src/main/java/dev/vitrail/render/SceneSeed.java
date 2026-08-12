@@ -35,12 +35,13 @@ import java.util.Optional;
  * every gbuffers stage that does not run: the entities, the particles and the weather.
  * <p>
  * It is cut around the pack's own geometry rather than painted over it. The opaque and cutout chunk
- * passes write that target themselves, and so do the two pieces of the sky that write outright and
- * the opaque half of the entities, and every one of them records the depth it left as it goes, so
- * what lands here is the game's picture everywhere the pack answered for nothing. Without the cut
- * the two would fight and the game would win, because it is drawn second. The pieces that blend are
- * different again, the translucent chunk pass with them: they draw over what the others left and
- * claim no pixel of their own.
+ * passes write that target themselves, and so do the three pieces of the sky that claim every pixel
+ * they span and the opaque half of the entities, and every one of them records the depth it left as
+ * it goes, so what lands here is the game's picture everywhere the pack answered for nothing.
+ * Without the cut the two would fight and the game would win, because it is drawn second. The pieces
+ * that claim nothing are different again, the translucent chunk pass among them: they draw over what
+ * the others left, and whether they blend is not the question - the End's cube of sky blends and
+ * claims the frame all the same.
  * <p>
  * <strong>The cut is one comparison, and it is the mask against the world's depth as it stands.</strong>
  * The mask carries a depth and not a flag: what a program of the pack wrote into the depth
