@@ -164,22 +164,63 @@ final class EntityProgram implements DumpedProgram {
 				// blends among its translucent features. A shadow row is on neither side of a stage
 				// that has not run when it draws.
 				!shadow && element.blended(),
-				// Nothing is culled into the shadow map, and it is the reason the chunk passes give:
-				// what matters there is which surface is nearest the light and not which way it
-				// faces, and a wall drawn on one side only leaks light through its back.
-				game.getPrimitiveTopology(), !shadow && game.isCull(),
+				// The piece's own on both sides of the map, which is Iris's answer and not the chunk
+				// passes'. It applies the vanilla pipeline's own cull inside its shadow pass
+				// (mixin/MixinGlCommandEncoder.java:136-140), so ENTITY_CUTOUT_CULL culls there as it
+				// culls in the picture. The chunk passes really do drop it, and that is about a wall
+				// meshed one side only; a mob is closed geometry and has no such back to leak
+				// through.
+				game.getPrimitiveTopology(), game.isCull(),
 				// The piece's own, and the halves answer differently: NONE for a mob, which is
 				// Iris's answer rather than a reading of what the pass is, and BLOCK_ENTITIES for a
 				// block entity, which Iris really does pose. The class comment has the file:line.
-				// The map stores the forward window and is cleared to one, so its test is the other
-				// way round from every target the game rasterises under a reversed Z.
-				shadow ? new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true)
-						: game.getDepthStencilState(),
+				// The piece's own again, TURNED ROUND rather than replaced. See intoMap.
+				shadow ? intoMap(game.getDepthStencilState()) : game.getDepthStencilState(),
 				element.stage(),
 				// Nothing of the game's bound beside the mesh: an entity pipeline carries samplers
 				// and transforms, and this program declares none of their names.
 				null),
 				bound, values, load, DefaultVertexFormat.ENTITY, writes, targets, chainRuns));
+	}
+
+	/**
+	 * The same depth state, turned round for the window the shadow map stores.
+	 * <p>
+	 * <strong>Turned round and not replaced, because the state carries an intention that is not
+	 * this engine's to overrule.</strong> Two rows of the table are not a plain depth write:
+	 * {@code ARMOR_DECAL_CUTOUT_NO_CULL} tests {@code EQUAL} and writes no depth
+	 * ({@code RenderPipelines.java:222}), and {@code BANNER_PATTERN} tests
+	 * {@code GREATER_THAN_OR_EQUAL} and writes none either ({@code :319}). Given one forced state
+	 * both become occluders in the map, which is a decal and a banner's pattern casting a shadow of
+	 * their own over the surface they are lying on. Iris keeps the vanilla state for its shadow
+	 * draws ({@code mixin/MixinGlCommandEncoder.java:120-127}) and has nothing to turn round, its
+	 * map running in the same direction as its scene.
+	 * <p>
+	 * <strong>The conversion is three things and not one.</strong> The game rasterises under a
+	 * REVERSED Z, nought at the far plane, and {@link ShadowTargets} stores the forward window, one
+	 * at the far plane. So the comparison is MIRRORED, greater becoming lesser and lesser greater,
+	 * the two windows running in opposite directions; the write is KEPT exactly, which is what stops
+	 * a row that writes no depth from becoming an occluder; and the depth bias is NEGATED, for the
+	 * same reason as the comparison, a bias nudging a surface towards the viewer and the sign of
+	 * that nudge depending on which way the window runs.
+	 */
+	private static DepthStencilState intoMap(DepthStencilState state) {
+		return new DepthStencilState(mirrored(state.depthTest()), state.writeDepth(),
+				-state.depthBiasScaleFactor(), -state.depthBiasConstant());
+	}
+
+	/**
+	 * A comparison read in the opposite window. {@code EQUAL} and {@code NOT_EQUAL} are their own
+	 * mirrors, and the two constants have nothing to mirror.
+	 */
+	private static CompareOp mirrored(CompareOp op) {
+		return switch (op) {
+			case LESS_THAN -> CompareOp.GREATER_THAN;
+			case LESS_THAN_OR_EQUAL -> CompareOp.GREATER_THAN_OR_EQUAL;
+			case GREATER_THAN -> CompareOp.LESS_THAN;
+			case GREATER_THAN_OR_EQUAL -> CompareOp.LESS_THAN_OR_EQUAL;
+			default -> op;
+		};
 	}
 
 	/**
