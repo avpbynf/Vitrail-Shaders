@@ -311,8 +311,26 @@ public final class ShadowGeometry {
 			}
 		} else if (casters.player()) {
 			Player player = minecraft.player;
-			if (player != null && !player.isSpectator() && !player.isInvisible()) {
-				STATE.entityRenderStates.add(extract(entities, delta, ticks, player));
+			if (player == null) {
+				return STATE.entityRenderStates.size();
+			}
+
+			// <strong>Iris's own constant here, and not the entity's own tick.</strong> Its player
+			// branch takes one getGameTimeDeltaPartialTick(false) for the pair
+			// (shadows/ShadowRenderer.java:553) where its entity branch asks per caster (:712). The
+			// split is Iris's and it is not ours to tidy: made uniform, a frozen world poses the
+			// player one way here and another way there, and the packs are written against there.
+			float partial = delta.getGameTimeDeltaPartialTick(false);
+			if (!player.isSpectator() && !player.isInvisible()) {
+				STATE.entityRenderStates.add(entities.extractEntity(player, partial));
+			}
+
+			// What carries the player, extracted beside it as Iris extracts it (:557-560) and
+			// outside the test above, as there too: a rider whose own shadow falls on a horse
+			// casting none is worse than neither casting one.
+			Entity vehicle = player.getVehicle();
+			if (vehicle != null) {
+				STATE.entityRenderStates.add(entities.extractEntity(vehicle, partial));
 			}
 		}
 
@@ -332,8 +350,13 @@ public final class ShadowGeometry {
 	 * <strong>And the partial tick is the entity's own.</strong> Both ask
 	 * {@code getGameTimeDeltaPartialTick(!isEntityFrozen(entity))}, per caster, because a frozen
 	 * entity stands still and one interpolated as though it ran drags its shadow off it. This walk
-	 * passed a constant, and not the same constant on its two branches: the player was extracted one
-	 * way where the pack allowed the entities and the other way where it allowed only the player.
+	 * passed {@code true} for the lot, which is that same value for everything the tick rate manager
+	 * has not frozen and the wrong one for everything it has.
+	 * <p>
+	 * <strong>For the walk over the entities only</strong>, which is where both of them ask it. The
+	 * player branch of Iris takes a constant instead ({@code shadows/ShadowRenderer.java:553}) and
+	 * carries no old position guard, so that branch is written out there rather than sent here: a
+	 * split that exists in the reference is not a tidiness to remove.
 	 */
 	private static EntityRenderState extract(EntityRenderDispatcher entities, DeltaTracker delta,
 			TickRateManager ticks, Entity entity) {
