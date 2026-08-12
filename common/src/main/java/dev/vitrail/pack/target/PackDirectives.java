@@ -51,6 +51,7 @@ public final class PackDirectives {
 	private final int noiseTextureResolution;
 	private final int shadowMapResolution;
 	private final float shadowDistance;
+	private final float entityShadowDistanceMul;
 	private final float shadowNearPlane;
 	private final float shadowFarPlane;
 	private final float shadowIntervalSize;
@@ -85,6 +86,7 @@ public final class PackDirectives {
 		this.noiseTextureResolution = builder.noiseTextureResolution;
 		this.shadowMapResolution = builder.shadowMapResolution;
 		this.shadowDistance = builder.shadowDistance;
+		this.entityShadowDistanceMul = builder.entityShadowDistanceMul;
 		this.shadowNearPlane = builder.shadowNearPlane;
 		this.shadowFarPlane = builder.shadowFarPlane;
 		this.shadowIntervalSize = builder.shadowIntervalSize;
@@ -193,6 +195,20 @@ public final class PackDirectives {
 		return this.shadowDistance;
 	}
 
+	/**
+	 * How much shorter the light reaches for the casters that MOVE than for the world, one unless the
+	 * pack says otherwise.
+	 * <p>
+	 * A multiplier of the shadow distance and not a distance of its own, which is how Iris reads it
+	 * ({@code shaderpack/properties/PackShadowDirectives.java:79,313}). One and any negative value
+	 * mean the same thing there and here: the casters are measured against the light exactly as the
+	 * world is, with no second bound ({@code shadows/ShadowRenderer.java:536-541}). Four packs of the
+	 * eight tested write it, two of them behind a slider of their own.
+	 */
+	public float entityShadowDistanceMul() {
+		return this.entityShadowDistanceMul;
+	}
+
 	public float shadowNearPlane() {
 		return this.shadowNearPlane;
 	}
@@ -279,6 +295,7 @@ public final class PackDirectives {
 		private int noiseTextureResolution = 256;
 		private int shadowMapResolution = 1024;
 		private float shadowDistance = 160.0F;
+		private float entityShadowDistanceMul = 1.0F;
 		private float shadowNearPlane = -100.05F;
 		private float shadowFarPlane = 156.0F;
 		private float shadowIntervalSize = 2.0F;
@@ -316,6 +333,8 @@ public final class PackDirectives {
 						value -> this.noiseTextureResolution = Math.clamp(value, 1, MAX_NOISE_RESOLUTION));
 				case "shadowMapResolution" -> asInt(directive, value -> this.shadowMapResolution = value);
 				case "shadowDistance" -> asFloat(directive, value -> this.shadowDistance = value);
+				case "entityShadowDistanceMul" -> asFloat(directive,
+						value -> this.entityShadowDistanceMul = value);
 				case "shadowNearPlane" -> asFloat(directive, value -> this.shadowNearPlane = value);
 				case "shadowFarPlane" -> asFloat(directive, value -> this.shadowFarPlane = value);
 				case "shadowIntervalSize" -> asFloat(directive, value -> this.shadowIntervalSize = value);

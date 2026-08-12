@@ -88,6 +88,12 @@ public final class ShadowGeometry {
 	private static int gathered;
 	private static int gatheredBlocks;
 
+	/**
+	 * How far a caster that moves may stand from the camera and still reach the map, or a value that
+	 * is not positive where the pack asks for no bound beyond the light's own.
+	 */
+	private static float reach = -1.0F;
+
 
 	private ShadowGeometry() {
 	}
@@ -144,6 +150,12 @@ public final class ShadowGeometry {
 		// another one would be dropped out of a map its own shadow belongs in.
 		Frustum frustum = new Frustum(new Matrix4f(), light);
 		frustum.prepare(camera.x, camera.y, camera.z);
+
+		// The pack's own bound on the casters that move, read once for the walk. Iris measures them
+		// against a SECOND, shorter frustum where the pack asked for one, built at the shadow
+		// distance times entityShadowDistanceMul (shadows/ShadowRenderer.java:536-541); here the
+		// shape stays the light's and only the reach is cut, which is what the multiplier means.
+		reach = TerrainDraw.entityShadowDistance();
 
 		// The frame's own, borrowed rather than built: it carries where the camera stands and which
 		// way it faces, and the submissions are posed against it. The level renderer takes it from
@@ -340,17 +352,23 @@ public final class ShadowGeometry {
 	 * the frustum refuses it, or the boat under a player casting a shadow would cast none. A
 	 * spectator is left out for the reason Iris leaves it out: it is not in the world to be lit.
 	 * <p>
-	 * <strong>The frustum is the only term that differs from the game's own</strong>, both tests
-	 * ending on the same {@code blockPosition}. It is a real difference and it is not the one Iris
-	 * makes: Iris measures its casters against a shadow frustum of its own, built from
-	 * {@code entityShadowDistanceMul} ({@code shadows/ShadowRenderer.java:536-541}), where this walk
-	 * uses the terrain's. A pack shortening its entity shadow distance is not obeyed here. It is
-	 * counted as a divergence rather than a defect of the picture, no pack of the corpus having been
-	 * seen to write the directive.
+	 * <strong>The pack's own reach is a second bound and not a second shape.</strong> Iris builds a
+	 * whole shadow frustum for the casters that move where the pack asked for one, at the shadow
+	 * distance times {@code entityShadowDistanceMul} ({@code shadows/ShadowRenderer.java:536-541}),
+	 * and keeps the terrain's where it did not. Here the light's frustum is kept in both cases and
+	 * the reach alone is cut, about the camera, which is what a multiplier of a distance means. What
+	 * it costs against Iris is a caster inside the box but outside its frustum: kept there and here
+	 * alike, since both bounds are the light's own beyond this one.
 	 */
 	private static boolean visible(Minecraft minecraft, EntityRenderDispatcher entities, Entity entity,
 			Frustum frustum, Vec3 at) {
 		if (entity instanceof Player spectator && spectator.isSpectator()) {
+			return false;
+		}
+
+		if (reach > 0.0F && (Math.abs(entity.getX() - at.x) > reach
+				|| Math.abs(entity.getY() - at.y) > reach
+				|| Math.abs(entity.getZ() - at.z) > reach)) {
 			return false;
 		}
 

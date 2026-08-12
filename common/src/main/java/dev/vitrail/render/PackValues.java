@@ -249,6 +249,17 @@ public final class PackValues {
 		return this.state.directives().shadowMapResolution();
 	}
 
+	/**
+	 * How far from the camera a caster that moves may still be and reach the map, or a value that is
+	 * not positive where the pack sets no bound of its own beyond the light's.
+	 */
+	public float entityShadowDistance() {
+		float multiplier = this.state.directives().entityShadowDistanceMul();
+
+		return multiplier == 1.0F || multiplier < 0.0F ? -1.0F
+				: this.state.directives().shadowDistance() * multiplier;
+	}
+
 	/** What the pack asks of {@code shadowcolor0}: its format, and what emptying it means. */
 	public PackDirectives.ShadowColour shadowColour() {
 		return this.state.directives().shadowColour(0);
