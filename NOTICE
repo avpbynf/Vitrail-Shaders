@@ -173,6 +173,25 @@ GNU Lesser General Public License version 3
   stated in common/src/main/java/dev/vitrail/render/GeometryProgram.java, Iris writing its hand
   colour to the pack's own target where here it reaches the pack through the scene seed.
 
+  common/src/main/java/dev/vitrail/render/PackDepth.java keeps a third depth image, the world as it
+  stood before the player's own hand was drawn, which is what a pack reads as depthtex2. Both the
+  image and the moment it is taken at are net.irisshaders.iris.targets.RenderTargets's, read in
+  August 2026: the texture it names Depth / Before Hand, line 73, refilled by its copyPreHandDepth,
+  line 234, which net.irisshaders.iris.pipeline.IrisRenderingPipeline calls from beginHand, lines
+  1050 to 1057, one line ahead of the solid hand and one step ahead of the beginTranslucents that
+  takes depthtex1, net.irisshaders.iris.mixin.MixinLevelRenderer lines 279 to 280. That order is
+  what common/src/main/java/dev/vitrail/render/PackChain.java keeps, and
+  common/src/main/java/dev/vitrail/pack/target/SamplerPlan.java is where depthtex2 is told from
+  depthtex1 for it. Which programs are served from the image is Iris's answer as well: one table
+  hands depthtex0, depthtex1 and depthtex2 together to the gbuffers, the shadow and the terrain
+  programs alike, net.irisshaders.iris.samplers.IrisSamplers lines 220 to 226.
+  Two things in this entry are not transcriptions. The image is allocated with the hand family and
+  handed back with it, where Iris holds one for the whole session, and it is filled only on the
+  frames a hand is really drawn rather than on every frame; a frame that draws none leaves the two
+  moments holding the same depth, and depthtex2 is answered from the opaque copy instead. And the
+  window each image is stored in is this backend's inverted z turned round once, where Iris copies
+  a depth it can hand over as it stands. Both are written out in the files.
+
   common/src/main/java/dev/vitrail/render/ParticleDraw.java draws the game's particles with the
   pack's programs, and three of its answers are Iris's, read in August 2026. The alpha test of one
   tenth both particle keys of ShaderKey carry, lines 58 and 59, the game's own particle pipeline

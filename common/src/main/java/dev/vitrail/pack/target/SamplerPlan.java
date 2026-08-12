@@ -134,7 +134,7 @@ public final class SamplerPlan {
 	 * {@code depthtex2} and nothing else.
 	 * <p>
 	 * Iris takes that copy in {@code RenderTargets.copyPreHandDepth}
-	 * ({@code targets/RenderTargets.java:234}), called from a {@code beginHand} that draws nothing
+	 * ({@code targets/RenderTargets.java:234}), called from a {@code beginHand} that draws no hand
 	 * ({@code pipeline/IrisRenderingPipeline.java:1050-1057}). The solid hand is drawn on the line
 	 * after the call to it ({@code mixin/MixinLevelRenderer.java:279-280}) and the
 	 * {@code beginTranslucents} that copies {@code depthtex1} comes one step behind both, which is

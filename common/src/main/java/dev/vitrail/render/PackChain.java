@@ -1407,8 +1407,8 @@ public final class PackChain {
 	 * pack reads as {@code depthtex2}. Called from the event the hand's solid half is drawn at and
 	 * one line ahead of it.
 	 * <p>
-	 * The moment is Iris's and so is the reason. Its {@code beginHand} copies the depth and draws
-	 * nothing ({@code pipeline/IrisRenderingPipeline.java:1050-1057}); the solid hand is drawn on the
+	 * The moment is Iris's and so is the reason. Its {@code beginHand} copies the depth and draws no
+	 * hand ({@code pipeline/IrisRenderingPipeline.java:1050-1057}); the solid hand is drawn on the
 	 * line after the call to it, by the mixin ({@code mixin/MixinLevelRenderer.java:279-280}); and the
 	 * {@code beginTranslucents} that copies {@code depthtex1} comes one step behind both. So
 	 * {@code depthtex2} is the only depth of the pair the hand is missing from. A pack reads it to
