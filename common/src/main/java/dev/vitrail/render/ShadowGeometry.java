@@ -88,20 +88,6 @@ public final class ShadowGeometry {
 	private static int gathered;
 	private static int gatheredBlocks;
 
-	/**
-	 * What each arm of {@link #visible} dropped on the last walk, what was last said of the pair, and
-	 * how many walks ago.
-	 * <p>
-	 * <strong>A PROBE, and it goes out with the blink it was written for.</strong> Two explanations
-	 * of that blink have been written and both were wrong, the second while the first was still
-	 * believed, so what goes in next is a measurement.
-	 */
-	private static int outsideLight;
-	private static int unbuilt;
-	private static int saidOutside = -1;
-	private static int saidUnbuilt = -1;
-	private static long walks;
-	private static long said = -20;
 
 	private ShadowGeometry() {
 	}
@@ -120,9 +106,11 @@ public final class ShadowGeometry {
 	 * microseconds between the two, and the shadows of mobs went on blinking at a walk when this
 	 * moved. It stays here because it is the plainer place to ask, not because it fixes anything.
 	 * <p>
-	 * Iris carries the same test ({@code shadows/ShadowRenderer.java:703-705}). What the blink really
-	 * is has not been established; {@link #visible} carries what has been ruled out and counts what
-	 * is left.
+	 * Iris carries the same test ({@code shadows/ShadowRenderer.java:703-705}). The blink that sent
+	 * three readings through this method was not in it at all: it was the pack's frame opened a
+	 * second time by the door this walk draws through, which made every reprojected value of the
+	 * next frame its current one. Nothing here needed changing, and this order was kept only because
+	 * it is the plainer place to ask.
 	 *
 	 * @param light   the light's own view projection, the matrix the terrain is culled against
 	 * @param camera  where the frame was drawn from, which the map is built around
@@ -132,9 +120,6 @@ public final class ShadowGeometry {
 		STATE.reset();
 		gathered = 0;
 		gatheredBlocks = 0;
-		outsideLight = 0;
-		unbuilt = 0;
-		walks++;
 
 		// The entity switch and not one of its own, which is the convention: what enters the map here
 		// is the same geometry that door serves, read from the same tables, and a family does not take
@@ -169,28 +154,6 @@ public final class ShadowGeometry {
 
 		gathered = extractEntities(minecraft, view, frustum, casters);
 		gatheredBlocks = extractBlockEntities(minecraft, renderer, casters);
-		probe();
-	}
-
-	/**
-	 * Says which arm of {@link #visible} is dropping casters, and goes out with the blink.
-	 * <p>
-	 * Printed on a change of the pair rather than every walk, and no oftener than one line in
-	 * twenty, because what is being looked for is an OSCILLATION and not a level: a shadow that
-	 * blinks at a walk and holds at rest is one of these two numbers moving while the other stands
-	 * still. A per frame line would say the same thing and bury it.
-	 */
-	private static void probe() {
-		if ((outsideLight == saidOutside && unbuilt == saidUnbuilt) || walks - said < 20) {
-			return;
-		}
-
-		said = walks;
-		saidOutside = outsideLight;
-		saidUnbuilt = unbuilt;
-		Vitrail.logger().info("The light's walk kept {} casters, dropped {} outside the light's own "
-				+ "frustum and {} standing in a section the game has not finished showing",
-				gathered, outsideLight, unbuilt);
 	}
 
 	/**
@@ -377,12 +340,13 @@ public final class ShadowGeometry {
 	 * the frustum refuses it, or the boat under a player casting a shadow would cast none. A
 	 * spectator is left out for the reason Iris leaves it out: it is not in the world to be lit.
 	 * <p>
-	 * <strong>The frustum is the only term that differs from the game's own, and that is what
-	 * narrows the blink.</strong> Both tests end on the same {@code blockPosition}, so for a caster
-	 * the player can see on screen the section arm is true by construction, and it is true of the
-	 * player itself, which stands in its own section. A shadow blinking under a body that does not
-	 * can therefore only be blinking on {@code shouldRender} against the light. That is a deduction
-	 * and not a measurement, which is why each arm is counted.
+	 * <strong>The frustum is the only term that differs from the game's own</strong>, both tests
+	 * ending on the same {@code blockPosition}. It is a real difference and it is not the one Iris
+	 * makes: Iris measures its casters against a shadow frustum of its own, built from
+	 * {@code entityShadowDistanceMul} ({@code shadows/ShadowRenderer.java:536-541}), where this walk
+	 * uses the terrain's. A pack shortening its entity shadow distance is not obeyed here. It is
+	 * counted as a divergence rather than a defect of the picture, no pack of the corpus having been
+	 * seen to write the directive.
 	 */
 	private static boolean visible(Minecraft minecraft, EntityRenderDispatcher entities, Entity entity,
 			Frustum frustum, Vec3 at) {
@@ -393,20 +357,13 @@ public final class ShadowGeometry {
 		Player player = minecraft.player;
 		if (!entities.shouldRender(entity, frustum, at.x, at.y, at.z)
 				&& (player == null || !entity.hasIndirectPassenger(player))) {
-			outsideLight++;
-
 			return false;
 		}
 
 		BlockPos block = entity.blockPosition();
-		if (minecraft.level.isOutsideBuildHeight(block.getY())
-				|| minecraft.levelRenderer.isSectionCompiledAndVisible(block)) {
-			return true;
-		}
 
-		unbuilt++;
-
-		return false;
+		return minecraft.level.isOutsideBuildHeight(block.getY())
+				|| minecraft.levelRenderer.isSectionCompiledAndVisible(block);
 	}
 
 	/**
