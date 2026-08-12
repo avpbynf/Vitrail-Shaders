@@ -170,13 +170,15 @@ final class EntityProgram implements DumpedProgram {
 				// to leak through.
 				//
 				// Iris looks like it says otherwise and does not. It brackets its shadow stage with
-				// _disableCull() and _enableCull() (shadows/ShadowRenderer.java:501 and :615), but
-				// its hook into the encoder is @Inject at the HEAD of trySetup, cancellable, and it
-				// only cancels inside the branch for the passes it opens itself
-				// (mixin/MixinGlCommandEncoder.java:92 and :101). A geometry draw is not one of them,
-				// so the vanilla setup runs to the end for it and applies the pipeline's own cull,
-				// over the bracket. The bracket is what its full screen passes see.
-
+				// _disableCull() and _enableCull() (shadows/ShadowRenderer.java:501 and :615), and
+				// that bracket is overridden on the first pipeline change either way. Inside the
+				// branch for the passes it opens itself it re-applies the pipeline's own cull in so
+				// many words (mixin/MixinGlCommandEncoder.java:137-140, under the pipeline memo at
+				// :117); and it never reaches that branch for a geometry draw, its hook being an
+				// @Inject at the HEAD of trySetup that only cancels there (:92, :101), so the vanilla
+				// setup runs to the end and applies the same thing. The second leg is read on 26.2's
+				// GL encoder rather than on the one Iris runs against, which is the weaker half of
+				// this; the first is read in Iris itself.
 				game.getPrimitiveTopology(), game.isCull(),
 				// The piece's own, TURNED ROUND rather than replaced. See intoMap.
 				shadow ? intoMap(game.getDepthStencilState()) : game.getDepthStencilState(),

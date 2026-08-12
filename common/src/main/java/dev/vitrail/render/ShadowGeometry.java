@@ -402,9 +402,6 @@ public final class ShadowGeometry {
 			}
 		} else if (casters.player()) {
 			Player player = minecraft.player;
-			if (player == null) {
-				return STATE.entityRenderStates.size();
-			}
 
 			// IRIS'S OWN CONSTANT HERE, and not the entity's own tick. Its player
 			// branch takes one getGameTimeDeltaPartialTick(false) for the pair
@@ -467,13 +464,14 @@ public final class ShadowGeometry {
 	 * The passenger arm is the game's and Iris's alike: what carries the player is kept even where
 	 * the frustum refuses it, or the boat under a player casting a shadow would cast none.
 	 * <p>
-	 * <strong>One of the game's arms is deliberately not here and one is added.</strong> Its walk
+	 * <strong>Two of the game's arms are deliberately not here and one is added.</strong> Its walk
 	 * also drops whatever the camera is mounted on ({@code extract/LevelExtractor.java:242}), which is
 	 * about not drawing the thing the world is being looked out of; in a map drawn from the sun that
-	 * body is a caster like any other, and Iris keeps it too. Its third arm ({@code :243}) is a
-	 * NeoForge patch that KEEPS the local player rather than dropping it, so there is nothing there to
-	 * diverge from. What is added is the spectator, left out for the reason Iris leaves it out
-	 * ({@code shadows/ShadowRenderer.java:701}): it is not in the world to be lit.
+	 * body is a caster like any other, and Iris keeps it too. Its third arm ({@code :243}) drops the
+	 * local player, narrowly: a NeoForge disjunct keeps it whenever it is the player and not
+	 * spectating, so all that arm still refuses is a spectating one - which the spectator test below
+	 * refuses here anyway, by a different road. What is added is that test, and it is Iris's
+	 * ({@code shadows/ShadowRenderer.java:701}): a spectator is not in the world to be lit.
 	 * <p>
 	 * <strong>The pack's own reach is a bound of a DIFFERENT SHAPE from Iris's, and that is an open
 	 * gap rather than a workaround.</strong> Where the pack asked for one, Iris rebuilds a whole
@@ -534,21 +532,20 @@ public final class ShadowGeometry {
 	 * Says once what the light's walk found, beside the line the terrain's own cull prints. Two
 	 * counts and not one: they are gathered by two different walks and a pack can refuse either.
 	 * <p>
-	 * <strong>A frame that found no block entity does not get to be the one that speaks.</strong>
-	 * The count is a sample of one frame and the line is said once per block table, so the first
-	 * frame to qualify would fix a zero for the whole load - which is exactly the reading this walk
-	 * printed for a session while nothing reached the map at all, and the reader has no way to tell
-	 * the two apart. The terrain's own cull line guards the same way, for the same reason.
+	 * <strong>The line says which frame it is the reading of, and that word carries weight.</strong>
+	 * It is said once per block table, so what it reports is one frame's sample held out for the
+	 * whole load, and either count may legitimately be nought on the frame that happens to speak. A
+	 * nought said as though it were the session's reading is exactly what this walk printed while no
+	 * block entity reached the map at all, and nothing let the reader tell the two apart. Suppressing
+	 * the line until a frame finds something is worse: a world that never puts a chest in the light's
+	 * box would then lose the entity count too.
 	 */
 	private static void say(int entities, int blockEntities) {
-		if (blockEntities == 0 && TerrainDraw.shadowCasters().anyBlockEntity()) {
-			return;
-		}
-
 		if (counted != BlockStateIds.generation()) {
 			counted = BlockStateIds.generation();
-			Vitrail.logger().info("The light's walk submitted {} entities and {} block entities into "
-					+ "the shadow map, on block table {}", entities, blockEntities, counted);
+			Vitrail.logger().info("On this frame the light's walk submitted {} entities and {} block "
+					+ "entities into the shadow map, on block table {}", entities, blockEntities,
+					counted);
 		}
 	}
 
