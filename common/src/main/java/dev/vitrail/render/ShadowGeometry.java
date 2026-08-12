@@ -105,13 +105,15 @@ public final class ShadowGeometry {
 	 * Works out what the light can see, before the light's own walk of the sections runs.
 	 * <p>
 	 * <strong>The order settles nothing, and the sentence that used to stand here was wrong.</strong>
-	 * A caster is kept or dropped by {@code LevelRenderer.isSectionCompiledAndVisible}
-	 * ({@code LevelRenderer.java:975-984}), which ends in
-	 * {@code getVisibility(Util.getMillis()) >= 0.3F}. That reads
+	 * A caster is kept or dropped by {@code LevelRenderer.isSectionCompiledAndVisible}. In the game
+	 * alone that ends in {@code getVisibility(Util.getMillis()) >= 0.3F}, reading
 	 * {@code (now - uploadedTime) / fadeDuration} off the section itself
 	 * ({@code chunk/SectionRenderDispatcher.java:223-225}): a fade since the section's own upload, in
 	 * which no viewport, no list and no frustum appears, and which {@code finalizeRenderLists} never
-	 * touches. Asked before or after the light's walk it answers the same thing to within the
+	 * touches. <strong>Under the Sodium this mod targets that method is replaced outright</strong>,
+	 * by {@code mixin/core/render/world/LevelRendererMixin}, and answers off Sodium's own section
+	 * state instead, so the fade above is the game's answer and not the one that runs here. Neither
+	 * of them is moved by the walk below, which is the only part that decides where this call sits. Asked before or after the light's walk it answers the same thing to within the
 	 * microseconds between the two, and the shadows of mobs went on blinking at a walk when this
 	 * moved. It stays here because it is the plainer place to ask, not because it fixes anything.
 	 * <p>

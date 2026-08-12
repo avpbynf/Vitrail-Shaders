@@ -1228,6 +1228,7 @@ public final class EntityDraw {
 	 * This one ends with the geometry not drawn at all, and a missing shadow is looked for in a
 	 * different place from a wrongly lit mob.
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	private void dropped(RenderPipeline pipeline) {
 		if (!this.refused.add("shadow:" + pipeline.getLocation())) {
 			return;
@@ -1247,10 +1248,15 @@ public final class EntityDraw {
 			return;
 		}
 
-		Vitrail.logger().warn("This engine has no shadow row for {}, so what the game draws with it "
-				+ "casts no shadow. It is dropped rather than handed back: inside the light's walk "
-				+ "the game would open its own pass on the target its render type names, which at "
-				+ "that point in the frame carries the finished picture", pipeline.getLocation());
+		// The reason is NOT asserted here, and that took a review to see: every no from served ends
+		// up on this line, a missing device and a refused program among them, and each of those has
+		// already said what it was on a line of its own. Naming the table as the cause would send a
+		// reader looking for a missing row when the fault is in the load.
+		Vitrail.logger().warn("What the game draws with {} casts no shadow this frame, for whichever "
+				+ "reason is given above, or because this engine has no shadow row for it. It is "
+				+ "dropped rather than handed back: inside the light's walk the game would open its "
+				+ "own pass on the target its render type names, which at that point in the frame "
+				+ "carries the finished picture", pipeline.getLocation());
 	}
 
 	/**
