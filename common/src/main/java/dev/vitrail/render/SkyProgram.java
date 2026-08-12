@@ -33,9 +33,10 @@ import java.util.Set;
  * declared that the format has not got refuses the program outright, and an element the format
  * carries that the stage does not declare shifts the location of every one after it without a word.
  * <p>
- * <strong>It neither tests nor writes a depth.</strong> {@code RenderPipelines.SKY} declares no
- * depth state at all, and the disc is drawn before the world: given the ordinary one, the pack's
- * program would write the sky into the depth buffer and the world would be tested against it.
+ * <strong>It neither tests nor writes a depth.</strong> Not one of the five pipelines the sky is
+ * drawn with declares a depth state at all, {@code RenderPipelines.END_SKY} included, and the sky is
+ * drawn before the world: given the ordinary one, the pack's program would write the sky into the
+ * depth buffer and the world would be tested against it.
  * <p>
  * <strong>Its namespace is ours and has no {@code sodium} in it.</strong> The word is what makes
  * Sodium's mixin push twenty bytes of region offset into the layout, and the sky is the game's
@@ -99,11 +100,11 @@ final class SkyProgram implements DumpedProgram {
 				// over the whole sky wherever the disc's own mask is turned down, the four are
 				// repainted, exactly as they were before this field existed.
 				element.blend().isEmpty(), true, false, element.topology(),
-				// None of the six sky pipelines names a culling of its own, so all six take the
+				// None of the five sky pipelines names a culling of its own, so all five take the
 				// builder's default, which is to cull.
 				true, null, element.stage(),
 				// Nothing of the game's bound beside the mesh, unlike the clouds: every one of the
-				// six sky passes carries its whole geometry in the vertex buffer it binds.
+				// eight sky passes carries its whole geometry in the vertex buffer it binds.
 				null),
 				bound, values, load, element.format(), writes, targets, chainRuns));
 	}
