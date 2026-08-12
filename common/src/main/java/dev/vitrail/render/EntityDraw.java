@@ -769,6 +769,7 @@ public final class EntityDraw {
 	 * none is built on a pipeline of the opaque table, so every opaque row named the main target
 	 * before and resolves to it now.
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	private static boolean onMainTarget(PreparedRenderType prepared) {
 		Minecraft minecraft = Minecraft.getInstance();
 		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
