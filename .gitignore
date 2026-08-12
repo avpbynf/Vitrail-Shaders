@@ -38,11 +38,18 @@ replay_pid*.log
 # Working notes, planning and measurement work. Useful to have next to the code,
 # but none of it is part of what the project ships. Matched by shape rather than
 # listed by name: any Markdown at the root that is not one of the three published
-# pages, and any dotted directory that is not the workflow definitions.
+# pages, any table of measurements written there, and any dotted directory that is
+# not the workflow definitions.
+#
+# The tables earn their line the hard way: two of them sat at the root untracked for
+# a week, and every one is measured on shader packs that may not be redistributed.
+# Nothing of a pack's own text is in them, but a git add -A would still have put a
+# reading of somebody else's work into a repository meant to be public.
 /*.md
 !/README.md
 !/INSTALL.md
 !/CONTRIBUTING.md
+/*.tsv
 /.*/
 !/.github/
 
