@@ -143,11 +143,10 @@ public final class ShadowTerrain {
 
 		int seen = sections(manager.getRenderLists());
 
-		// What the light can see is worked out HERE, before the walk below replaces the section
-		// state it is measured against. The test that keeps or drops a caster is a fade in time over
-		// the CAMERA's sections, so asked after finalizeRenderLists it answers about the light's and
-		// the two disagree on every frame the player moves. Seen in game on 12 August 2026 as the
-		// shadow of a mob or of the player blinking at a walk and steady at rest.
+		// What the light can see is worked out here, and the position settles nothing: the test that
+		// keeps or drops a caster is a fade since a section's own upload, which no walk of ours
+		// moves. It sits ahead of the walk because that is the plainer place to ask it, and
+		// ShadowGeometry.gather carries the reading with the lines it rests on.
 		ShadowCasters casters = TerrainDraw.shadowCasters();
 		ShadowGeometry.gather(light, camera, casters);
 
@@ -176,7 +175,7 @@ public final class ShadowTerrain {
 						seen, measured);
 			}
 
-			draw(renderer, minecraft, camera, light);
+			draw(renderer, minecraft, camera);
 		} finally {
 			// The flag finalizeRenderLists just lowered, back up whatever happened above: the
 			// camera's walk at the top of the next frame has to rebuild, or the world would be
@@ -185,8 +184,7 @@ public final class ShadowTerrain {
 		}
 	}
 
-	private static void draw(SodiumWorldRenderer renderer, Minecraft minecraft, Vec3 camera,
-			Matrix4f light) {
+	private static void draw(SodiumWorldRenderer renderer, Minecraft minecraft, Vec3 camera) {
 		// Sodium's own source for it, so that what reaches u_Globals is what would have reached it
 		// anyway: this one carries the walk bob and the camera state's does not.
 		Matrix4fc projection =
