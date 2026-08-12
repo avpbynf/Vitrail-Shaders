@@ -39,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
@@ -177,6 +178,18 @@ public final class EntityDraw {
 	 */
 	private static volatile boolean translucentFeatures;
 
+	/**
+	 * Whether this engine is walking the world for the light at this instant, which is the only
+	 * moment a row of the shadow table may be served.
+	 * <p>
+	 * The third window, and the one that is entirely ours: the game submits nothing of its own into
+	 * the shadow map, so what is drawn between these two calls is what this engine's own walk of the
+	 * world for the light put there and nothing else. It is still a window rather than a test on the
+	 * draw, for the same reason the other two are: the pipelines are the same ones the camera drew
+	 * with, and nothing about a draw says which walk submitted it.
+	 */
+	private static volatile boolean shadowFeatures;
+
 	/** The pass this engine opens for a run of draws, when the pack has nothing more to say. */
 	private static final String LABEL = "Vitrail entity";
 
@@ -241,8 +254,20 @@ public final class EntityDraw {
 			return this.stage == RenderStage.HAND_SOLID || this.stage == RenderStage.HAND_TRANSLUCENT;
 		}
 
-		/** One word for the log, which has to say which of the two families a line is about. */
+		/**
+		 * Whether this piece is drawn into the shadow map rather than into the picture, which is a
+		 * question about the program: the shadow table asks for one name and no row outside it does.
+		 */
+		boolean shadow() {
+			return SHADOW_ENTITIES.equals(this.program);
+		}
+
+		/** One word for the log, which has to say which of the three families a line is about. */
 		String family() {
+			if (shadow()) {
+				return "entities in the shadow map";
+			}
+
 			return hand() ? "hand" : "entities";
 		}
 
@@ -607,6 +632,51 @@ public final class EntityDraw {
 				.forEach(element -> into.put(element.pipeline(), element));
 	}
 
+	/** What everything submitted through the feature renderers asks for, seen from the light. */
+	private static final String SHADOW_ENTITIES = "shadow_entities";
+
+	/**
+	 * The same pieces again as the shadow map sees them, which is ONE program for the lot and not the
+	 * three the camera uses.
+	 * <p>
+	 * <strong>The block entities lose their own name here, and that is Iris's answer and not a
+	 * simplification.</strong> Its shadow table is keyed on the pipeline like its main one, and every
+	 * entity pipeline in it answers {@code SHADOW_ENTITIES_CUTOUT}, which is
+	 * {@code ProgramId.ShadowEntities} ({@code pipeline/IrisPipelines.java:91-111,131} and
+	 * {@code pipeline/programs/ShaderKey.java:79}). A chest and a mob are submitted with the same
+	 * pipelines, so the block entity mark that buys {@code gbuffers_block} against the camera buys
+	 * nothing against the light: there is no {@code shadow_block} row for anything this engine draws.
+	 * The name exists in Iris and only {@code END_PORTAL} and {@code END_GATEWAY} reach it
+	 * ({@code :129-130}), and neither is a row of the table above.
+	 * <p>
+	 * <strong>The ground shadow is left out, and it is left out because Iris leaves it out.</strong>
+	 * {@code ENTITY_SHADOW} is assigned in the main table and appears nowhere in the shadow one, so a
+	 * mob's dark oval keeps the game's own shader when the map is drawn. Serving it would put the
+	 * oval into the depth the pack reads as a shadow, which is a flat disc of occluder lying on the
+	 * ground under every mob.
+	 * <p>
+	 * <strong>Every row discards at a tenth and none of them blends</strong>, both read rather than
+	 * chosen: the key carries {@code ONE_TENTH_ALPHA} whatever threshold its main twin had, and every
+	 * shadow program of Iris is declared with {@code BlendModeOverride.OFF}
+	 * ({@code shaderpack/programs/ProgramId.java:13-19}). A blending row therefore draws into the map
+	 * outright, which is what a shadow map wants: the depth a surface stands at, not that depth mixed
+	 * with the one behind it.
+	 * <p>
+	 * The stage is {@code ENTITIES} for the whole table, including the rows the camera draws under
+	 * {@code NONE}. Iris poses it once for the entire stretch of its shadow render rather than per
+	 * row ({@code shadows/ShadowRenderer.java:521}), so unlike the main table there is no second
+	 * answer for a block entity here.
+	 */
+	private static final Map<RenderPipeline, Element> SHADOW_ELEMENTS = new LinkedHashMap<>();
+
+	static {
+		ELEMENTS.values().stream()
+				.filter(mob -> mob.pipeline() != RenderPipelines.ENTITY_SHADOW)
+				.map(mob -> new Element(mob.pipeline(), "shadow_" + mob.element(), SHADOW_ENTITIES,
+						CUTOUT, mob.layering(), RenderStage.ENTITIES, false))
+				.forEach(element -> SHADOW_ELEMENTS.put(element.pipeline(), element));
+	}
+
 	private static void put(Element element) {
 		ELEMENTS.put(element.pipeline(), element);
 	}
@@ -624,6 +694,16 @@ public final class EntityDraw {
 	 * with {@code gbuffers_block} in the middle of a hand pass.
 	 */
 	private static Element element(RenderPipeline pipeline) {
+		// Asked before the other two and not after, because both of their marks can be up inside it:
+		// the walk for the light submits block entities, which raises the block entity mark, and a
+		// chest asked the other way round would be given gbuffers_block in the middle of the shadow
+		// map. Iris has no such order to keep, its shadow table being a second table consulted
+		// instead of the main one rather than a branch inside it (pipeline/IrisPipelines.java:85-134
+		// against :25-83).
+		if (shadowFeatures) {
+			return SHADOW_ELEMENTS.get(pipeline);
+		}
+
 		if (HandDraw.drawing()) {
 			return (HandDraw.drawingSolid() ? HAND_ELEMENTS : HAND_WATER_ELEMENTS).get(pipeline);
 		}
@@ -738,8 +818,32 @@ public final class EntityDraw {
 		}
 	}
 
+	/**
+	 * Opens and closes the third window, the one the shadow map is filled in, which the caller
+	 * brackets around its own walk of the world for the light.
+	 * <p>
+	 * A window of its own and not either of the other two widened, and the reason is what the other
+	 * two are for: they say WHICH HALF of the picture is being drawn, and the map has no halves. Both
+	 * of the game's submissions are drawn into it in one go, blending and writing alike, so a test
+	 * that asked which half was open would refuse one of them.
+	 * <p>
+	 * It cannot overlap either of the others. The stage stands at the very end of the frame, after
+	 * the level render has finished and both feature windows have been closed at their own events,
+	 * which is also why the pass this opens can be a pass of ours: nothing of the game's is open.
+	 */
+	public static void shadowFeatures(boolean drawing) {
+		shadowFeatures = drawing;
+		if (!drawing) {
+			closeWindow();
+		}
+	}
+
 	/** Whether the window this piece is drawn in is the one that is open. */
 	private static boolean inWindow(Element element) {
+		if (element.shadow()) {
+			return shadowFeatures;
+		}
+
 		return element.blended() ? translucentFeatures : opaqueFeatures;
 	}
 
@@ -829,10 +933,25 @@ public final class EntityDraw {
 				draw.withheld(prepared.pipeline());
 			}
 
+			// Inside the light's walk, no is not the same answer, and the class comment of
+			// ShadowGeometry carries the divergence in full. Handing this back would have the game
+			// open its own pass on the target it named, which at this point in the frame carries the
+			// finished picture: the caster would be painted across the image the player is looking
+			// at. Dropped instead, so the caster casts no shadow and nothing else is harmed.
+			if (shadowFeatures) {
+				draw.dropped(prepared.pipeline());
+
+				return true;
+			}
+
 			return false;
 		}
 
-		if (!onMainTarget(prepared)) {
+		// Asked of the picture's rows alone. A shadow row is not drawn into the target the game named
+		// at all: its pass carries the map, so which of the four the submission was addressed to
+		// decides nothing here, and refusing on it would drop a caster out of the map for a reason
+		// that belongs to a picture this draw never touches.
+		if (!element.shadow() && !onMainTarget(prepared)) {
 			draw.end();
 
 			return draw.refuse(element, "elsewhere:" + prepared.outputTarget(), true, "the game sends it to "
@@ -995,6 +1114,16 @@ public final class EntityDraw {
 						: target.getDepthTextureView();
 
 		RenderPassDescriptor descriptor = program.descriptor(colour, depth);
+		if (descriptor == null && element.shadow()) {
+			// The two arguments above were ignored: a shadow program builds its descriptor out of the
+			// map and never out of the target the game named. Null here means the map is not there,
+			// which the stage should already have refused, so this is the second door rather than the
+			// first and it is worth its own sentence: with the map gone, a pass opened on the game's
+			// own attachment would paint the picture with a program written for a depth buffer.
+			return refuse(element, "no shadow map",
+					"the shadow map has no image, so there is nothing for the caster to be drawn into");
+		}
+
 		if (descriptor == null && !program.plain()) {
 			// The colour targets are not there yet, which is the first frame or two and the frames
 			// after a resize. A plain pass would carry one attachment against a pipeline holding a
@@ -1055,6 +1184,24 @@ public final class EntityDraw {
 	/** The ordinary kind, which answers a question about this frame alone. */
 	private boolean refuse(Element element, String reason, String why) {
 		return refuse(element, reason, false, why);
+	}
+
+	/**
+	 * Says once, per pipeline, that a caster was dropped out of the shadow map rather than handed
+	 * back to the game.
+	 * <p>
+	 * Worth a line of its own and not folded into {@link #refuse}: every other no in this class ends
+	 * with the game drawing the thing, so what the reader sees is geometry lit by the wrong engine.
+	 * This one ends with the geometry not drawn at all, and a missing shadow is looked for in a
+	 * different place from a wrongly lit mob.
+	 */
+	private void dropped(RenderPipeline pipeline) {
+		if (this.refused.add("shadow:" + pipeline.getLocation())) {
+			Vitrail.logger().warn("This engine has no shadow row for {}, so what the game draws with "
+					+ "it casts no shadow. It cannot be handed back inside the light's walk: the game "
+					+ "would open its own pass on the target it named, which at that point in the "
+					+ "frame carries the finished picture", pipeline.getLocation());
+		}
 	}
 
 	/**
@@ -1183,6 +1330,19 @@ public final class EntityDraw {
 			groups.add(twinsOf(served, HAND_WATER_ELEMENTS));
 		}
 
+		// One group for the whole shadow table, where the picture takes two: the map has no deferred
+		// stage to stand either side of and one program name for the lot, so there is no line inside
+		// it for a half to fall on.
+		//
+		// Asked for only where the pack draws something through the feature renderers at all. A pack
+		// that keeps the entities and the block entities out of its map wants no shadow_entities read,
+		// and reading it anyway would be a translation and a compilation spent on a program no draw
+		// can ever select. The ground shadow is not in the table, so this really is empty for such a
+		// pack rather than nearly empty.
+		if (wanted && TerrainDraw.shadowsAsked() && this.values.shadowCasters().anyFeature()) {
+			groups.add(twinsOf(served, SHADOW_ELEMENTS));
+		}
+
 		List<Element> asked = groups.stream().flatMap(List::stream).toList();
 		if (asked.isEmpty()) {
 			return;
@@ -1208,11 +1368,17 @@ public final class EntityDraw {
 	}
 
 	/**
-	 * One table's row for each served mob row, which is how the hand tables are walked: the twin
-	 * tables are derived from the whole mob table, so every served row has one.
+	 * One table's row for each served mob row, for the tables derived from the mob one.
+	 * <p>
+	 * A missing row is dropped rather than carried as a null, and only one table has any: the shadow
+	 * one leaves the ground shadow out, because Iris leaves it out. The two hand tables and the block
+	 * one are derived row for row and cannot lose one here.
 	 */
 	private static List<Element> twinsOf(List<Element> served, Map<RenderPipeline, Element> table) {
-		return served.stream().map(element -> table.get(element.pipeline())).toList();
+		return served.stream()
+				.map(element -> table.get(element.pipeline()))
+				.filter(Objects::nonNull)
+				.toList();
 	}
 
 	/**

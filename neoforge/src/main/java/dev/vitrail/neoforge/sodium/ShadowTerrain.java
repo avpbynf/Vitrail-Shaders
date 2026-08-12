@@ -2,7 +2,9 @@ package dev.vitrail.neoforge.sodium;
 
 import dev.vitrail.neoforge.mixin.MixinSodiumWorldRenderer;
 import dev.vitrail.neoforge.mixin.RenderSectionManagerAccessor;
+import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.render.BlockStateIds;
+import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.Vitrail;
 
@@ -166,7 +168,7 @@ public final class ShadowTerrain {
 						seen, measured);
 			}
 
-			draw(renderer, minecraft, camera);
+			draw(renderer, minecraft, camera, light);
 		} finally {
 			// The flag finalizeRenderLists just lowered, back up whatever happened above: the
 			// camera's walk at the top of the next frame has to rebuild, or the world would be
@@ -175,7 +177,8 @@ public final class ShadowTerrain {
 		}
 	}
 
-	private static void draw(SodiumWorldRenderer renderer, Minecraft minecraft, Vec3 camera) {
+	private static void draw(SodiumWorldRenderer renderer, Minecraft minecraft, Vec3 camera,
+			Matrix4f light) {
 		// Sodium's own source for it, so that what reaches u_Globals is what would have reached it
 		// anyway: this one carries the walk bob and the camera state's does not.
 		Matrix4fc projection =
@@ -187,16 +190,33 @@ public final class ShadowTerrain {
 		// atlas's alpha, and a leaf sampled without mipmaps casts a shadow that crawls at distance.
 		GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR, true);
 
-		TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.OPAQUE, matrices,
-				camera.x, camera.y, camera.z, sampler));
+		ShadowCasters casters = TerrainDraw.shadowCasters();
 
-		// Between the two groups and nowhere else: this is the one moment shadowtex0 and shadowtex1
-		// hold different things, and what separates them is exactly the draw that comes next. The
-		// renderer closes its own render pass before returning, so a copy here is outside one.
+		// Refused by the pack rather than skipped for cheapness, and the two chunk groups are the
+		// only halves a pack can take out one at a time here: the walk above still happens, because
+		// it is what the block entities below are gathered from.
+		if (casters.terrain()) {
+			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.OPAQUE,
+					matrices, camera.x, camera.y, camera.z, sampler));
+		}
+
+		// Everything that moves, between the opaque world and the copy, which is where Iris puts it
+		// (shadows/ShadowRenderer.java:584 then :688). It matters that it is before the copy and not
+		// after: shadowtex1 is the map WITHOUT the translucent half, and a mob belongs in it. Drawn
+		// after the copy, every caster that moves would be missing from the one name half the corpus
+		// reads its shadows through.
+		ShadowGeometry.draw(light, camera, casters);
+
+		// Between the translucent group and everything else, and nowhere else: this is the one moment
+		// shadowtex0 and shadowtex1 hold different things, and what separates them is exactly the
+		// draw that comes next. The renderer closes its own render pass before returning, and the
+		// walk above closes its last one, so a copy here is outside one.
 		TerrainDraw.copyShadowDepth();
 
-		TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.TRANSLUCENT,
-				matrices, camera.x, camera.y, camera.z, sampler));
+		if (casters.translucent()) {
+			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.TRANSLUCENT,
+					matrices, camera.x, camera.y, camera.z, sampler));
+		}
 	}
 
 	private static int sections(SortedRenderLists lists) {

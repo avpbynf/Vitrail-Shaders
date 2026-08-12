@@ -7,6 +7,8 @@ import dev.vitrail.pack.option.SettingSet;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
+import dev.vitrail.pack.source.ShadowCasters;
+import dev.vitrail.pack.source.ShadowCulling;
 import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.uniform.expr.CustomUniforms;
 import dev.vitrail.uniform.NoiseTexture;
@@ -61,6 +63,15 @@ public final class PackValues {
 			true, true, ShaderProperties.CloudSetting.DEFAULT);
 	private ShaderProperties.Weather weather = new ShaderProperties.Weather(true, true);
 	private boolean rainDepth;
+
+	/**
+	 * Which of the world's families this pack draws into its shadow map, everything but the player
+	 * alone until it says otherwise. The defaults are Iris's and {@code ShaderProperties} carries why
+	 * the player one is not the flag it looks like.
+	 */
+	private ShadowCasters shadowCasters = new ShadowCasters(true, true, true, false, true);
+
+	private ShadowCulling shadowCulling = ShadowCulling.DEFAULT;
 	private Optional<String> particleOrdering = Optional.empty();
 	private NoiseTexture.Image noiseImage;
 	private PackImages packImages = PackImages.none();
@@ -102,6 +113,8 @@ public final class PackValues {
 			values.skyElements = properties.skyElements(settings.globalDefines(options));
 			values.weather = properties.weather(settings.globalDefines(options));
 			values.rainDepth = properties.rainDepth(settings.globalDefines(options));
+			values.shadowCasters = properties.shadowCasters(settings.globalDefines(options));
+			values.shadowCulling = properties.shadowCulling(settings.globalDefines(options));
 			values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
 			values.declare(properties, settings.globalDefines(options));
 			values.readNoise(properties, source);
@@ -279,6 +292,19 @@ public final class PackValues {
 	/** Whether this pack asked for the rain and the snow to write the world's depth. */
 	public boolean rainDepth() {
 		return this.rainDepth;
+	}
+
+	/**
+	 * Which of the world's families this pack wants drawn into its shadow map, read on the same walk
+	 * and with the same settings as the sky's four words.
+	 */
+	public ShadowCasters shadowCasters() {
+		return this.shadowCasters;
+	}
+
+	/** How this pack wants the world walked for the light. */
+	public ShadowCulling shadowCulling() {
+		return this.shadowCulling;
 	}
 
 	/**

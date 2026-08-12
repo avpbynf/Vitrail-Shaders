@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.TerrainPass;
+import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.Vitrail;
@@ -217,8 +218,38 @@ public final class TerrainDraw {
 	}
 
 	/**
+	 * Which families the loaded pack draws into its shadow map, and everything but the player alone
+	 * where no pack is loaded at all.
+	 * <p>
+	 * Answered here rather than read off the pack by each caller, because the stage has one of them
+	 * and the door has another: two readings of one directive are two answers waiting to disagree,
+	 * and the disagreement would be a family drawn into a map the pack asked to keep it out of.
+	 */
+	public static ShadowCasters shadowCasters() {
+		TerrainDraw self = PackChain.terrain();
+
+		return self == null ? DEFAULT_CASTERS : self.values.shadowCasters();
+	}
+
+	/** What a frame with no pack loaded answers, which is Iris's own set of defaults. */
+	private static final ShadowCasters DEFAULT_CASTERS =
+			new ShadowCasters(true, true, true, false, true);
+
+	/**
+	 * Whether the shadow map is drawn at all, asked of the LOAD rather than of this frame.
+	 * <p>
+	 * The question {@link #shadows} asks needs a chain already standing, which is not true at the
+	 * moment another family is deciding what to read the pack for: what a load has to know is
+	 * whether the map will be drawn this session, so that a family reads its shadow programs then
+	 * and not in the middle of a frame.
+	 */
+	static boolean shadowsAsked() {
+		return wanted && shadowWanted;
+	}
+
+	/**
 	 * Whether a shadow pass may run at all: the pack's own geometry has to be drawing, or the map
-	 * would be filled by the game's chunk shader, which writes the world's colours into it.
+	 *would be filled by the game's chunk shader, which writes the world's colours into it.
 	 */
 	public static boolean shadows() {
 		return wanted && shadowWanted && PackChain.terrain() != null;

@@ -7,6 +7,9 @@ import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -18,6 +21,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import org.joml.Matrix4fc;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -128,15 +132,25 @@ final class EntityProgram implements DumpedProgram {
 		// reads the side of every target the chain is about to write rather than the one it wrote,
 		// which is a frame of lag nothing anywhere would report.
 		String servedBy = loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
-		PackProgram.Loaded bound = loaded.rebind(chainTargets, element.blended()
+		// A shadow row is bound at the step of the half its geometry is drawn in, which is the early
+		// one: the map is filled before the deferred stage of the frame it is read by, and it writes
+		// shadowcolor rather than any colortex, so the side it reads is the only thing the step
+		// decides for it.
+		boolean shadow = element.shadow();
+		PackProgram.Loaded bound = loaded.rebind(chainTargets, !shadow && element.blended()
 				? chainTargets.schedule().stepAfterDeferred(servedBy)
 				: chainTargets.schedule().step(servedBy));
 
 		RenderPipeline game = element.pipeline();
 
 		return new EntityProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
-				element.element(), NAMESPACE, ANSWERED, false,
-				game.getColorTargetState().blendFunction(),
+				element.element(), NAMESPACE, ANSWERED, shadow,
+				// Nothing blends into the shadow map, whatever the pipeline the row was made from
+				// says. Every shadow program of Iris is declared with BlendModeOverride.OFF
+				// (shaderpack/programs/ProgramId.java:13-19), and the reason is what a map is for:
+				// what it wants of a translucent surface is the depth that surface stands at, not
+				// that depth mixed with the one behind it.
+				shadow ? Optional.<BlendFunction>empty() : game.getColorTargetState().blendFunction(),
 				// covers: no coverage mask on either half. On the writing one that is the same
 				// decision as leaving draw buffer nought on the game's target and not a second one:
 				// the two are tied together in GeometryProgram, and marking a pixel the seed is
@@ -147,13 +161,21 @@ final class EntityProgram implements DumpedProgram {
 				// afterDeferred: which side of the stage this piece is drawn on, which decides the
 				// half of every target it reads and whether a depth sampler may be answered with the
 				// opaque world's image. It is the blend and nothing else, the game drawing what
-				// blends among its translucent features.
-				element.blended(),
-				game.getPrimitiveTopology(), game.isCull(),
-				// The piece's own, and the two halves answer differently: NONE for a mob, which is
+				// blends among its translucent features. A shadow row is on neither side of a stage
+				// that has not run when it draws.
+				!shadow && element.blended(),
+				// Nothing is culled into the shadow map, and it is the reason the chunk passes give:
+				// what matters there is which surface is nearest the light and not which way it
+				// faces, and a wall drawn on one side only leaks light through its back.
+				game.getPrimitiveTopology(), !shadow && game.isCull(),
+				// The piece's own, and the halves answer differently: NONE for a mob, which is
 				// Iris's answer rather than a reading of what the pass is, and BLOCK_ENTITIES for a
 				// block entity, which Iris really does pose. The class comment has the file:line.
-				game.getDepthStencilState(), element.stage(),
+				// The map stores the forward window and is cleared to one, so its test is the other
+				// way round from every target the game rasterises under a reversed Z.
+				shadow ? new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true)
+						: game.getDepthStencilState(),
+				element.stage(),
 				// Nothing of the game's bound beside the mesh: an entity pipeline carries samplers
 				// and transforms, and this program declares none of their names.
 				null),
