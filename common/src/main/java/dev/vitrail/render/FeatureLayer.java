@@ -51,17 +51,18 @@ import java.util.Optional;
  * divergence from Iris and it is written out in the three parts one owes.</strong>
  * <p>
  * What Iris does: it replaces the SHADER of a draw and never the target it goes to, keying the
- * replacement on the pipeline ({@code pipeline/IrisPipelines.java:52} for the eyes, {@code :66,67}
- * for the beacon beam, {@code :72} for the text), so the text, the eyes, the beams and the served
- * entities are all drawn into the same attachments in the order the game walks its phases, each one
- * depth tested against the last. It composes nothing, so the question cannot arise there.
+ * replacement on the pipeline ({@code pipeline/IrisPipelines.java:66,67} for the beacon beam,
+ * {@code :72} for the text, {@code :63} for the lightning), so the text, the beams, the bolts and
+ * the served entities are all drawn into the same attachments in the order the game walks its
+ * phases, each one depth tested against the last. It composes nothing, so the question cannot arise
+ * there.
  * <p>
- * What stops that here: {@link EntityDraw} serves the blending half of the entities inside this same
- * bracket and the families nobody serves yet stay the game's - the eyes, the beacon beam, the text
- * and the lightning, plus the one glint that is addressed away from the main target and handed back
- * with them. No draw takes both roads, but the ones left here are drawn into a
- * layer of this class's own and that layer is composed ONCE, at {@code PackChain.closeFeatures}, over
- * a full screen quad carrying no depth attachment and therefore no depth test.
+ * What stops that here: {@link EntityDraw} serves the blending half of the entities and the eyes
+ * inside this same bracket and the families nobody serves yet stay the game's, the beacon beam, the
+ * text and the lightning, plus the one glint that is addressed away from the main target and handed
+ * back with them. No draw takes both roads, but the ones left here are drawn into a layer of this
+ * class's own and that layer is composed ONCE, at {@code PackChain.closeFeatures}, over a full
+ * screen quad carrying no depth attachment and therefore no depth test.
  * <p>
  * What it costs the image: everything still left to the game is painted in front of everything
  * served, however far behind it stands. The game draws the shadows, then the translucent models,
