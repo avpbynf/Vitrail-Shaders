@@ -49,19 +49,26 @@ on does not mean giving up the packs you already use.
 
 In development, and moving quickly. The core is in place: point Vitrail at a
 pack and it loads it, settings and all, translates its programs once, and runs
-its frame on the Vulkan backend, in the order the format prescribes. The world's
-terrain and water are drawn through the pack's own programs, the shadow map is
-drawn and read, and a settings screen reads the pack's own menu layout.
+its frame on the Vulkan backend, in the order the format prescribes. Drawn
+through the pack's own programs today: the world's terrain and water, the shadow
+map, the overworld sky and its clouds, the weather and the particles. A settings
+screen reads the pack's own menu layout.
 
-What is missing is what decides how close a pack looks to its OpenGL self. The
-entities are still drawn by the game rather than through the pack: their program
-is there, behind `entities=on` in `vitrail/options.txt`, and it is the one line
-of that file that does nothing until it is written. The held item has no answer at all yet, and the
-sky only partly goes through the pack, the overworld's own elements and its
-clouds do, the End's do not. Until all of it goes through the pack, packs run but
-do not yet look entirely like themselves. Expect visible differences and
-rough edges rather than a finished picture, and expect them to shrink release by
-release.
+Two families are written and not switched on. The entities, which covers the
+mobs and the block entities alike, wait behind `entities=on` in
+`vitrail/options.txt`, and the player's own hand behind `hand=on`. The entities
+are off pending a judgement in game rather than because anything is missing. The
+hand has a limit of its own on top of that: a translucent block is drawn with a
+blending pipeline this engine serves for no family yet, so the arm becomes the
+pack's while the block it holds stays the game's. While they stay off, both cost
+the same thing, a mob and an arm lit by the game inside a world lit by the pack.
+
+The End's sky has no answer at all: the overworld's own elements go through the
+pack and the End's do not. Neither do the smaller families that stay the game's
+inside the entity window, the eyes, the glint, the beacon beam and the text of a
+name plate. Until all of it goes through the pack, packs run but do not yet look
+entirely like themselves. Expect visible differences and rough edges rather than
+a finished picture, and expect them to shrink release by release.
 
 ## Quick start
 
@@ -163,14 +170,16 @@ ago, running as it is, on the renderer that now ships with the game.
 ## Compatibility
 
 Vitrail hooks the frame through public NeoForge events where the game offers
-them, and through a small set of mixins where it does not: the matrices the
-world is really drawn with, which are never stored anywhere the camera exposes;
-the game's sky renderer, which opens a pass of its own per sky element and is
-handed the pack's program for that element, the colour targets the pack sends
-it to, and the pack's word on whether that element is drawn at all; and
+them, and through mixins where it does not. The load-bearing ones: the matrices
+the world is really drawn with, which are never stored anywhere the camera
+exposes; the game's sky renderer, which opens a pass of its own per sky element
+and is handed the pack's program for that element, the colour targets the pack
+sends it to, and the pack's word on whether that element is drawn at all; and
 Sodium's chunk renderer, which is handed the pack's terrain programs, one extra
 vertex element carrying the block id, and the render pass its draw buffers
 need. Sodium has no API for any of that, which is why its version is pinned.
+Every family drawn since takes one or two more, and the whole list is the mixin
+config shipped in the jar rather than anything summarised here.
 
 Any mod that unwraps a GPU texture into an OpenGL handle will crash on the
 Vulkan backend, with or without Vitrail. Distant Horizons 3.2.0-b does this and
