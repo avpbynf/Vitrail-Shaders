@@ -262,12 +262,14 @@ final class EngineOptions {
 			boolean clouds, boolean weather, boolean particles) {
 
 		/**
-		 * The five of these the chain plan has to be handed, because its verdicts count a target as
+		 * The four of these the chain plan has to be handed, because its verdicts count a target as
 		 * already written and would otherwise count it off a default nobody wrote.
 		 * <p>
-		 * Five and not thirteen: what the plan is asked is which targets are filled in EVERY place
+		 * Four and not thirteen: what the plan is asked is which targets are filled in EVERY place
 		 * it is built for, and the sky, the clouds and the weather are not drawn in every place
-		 * however their line reads, so their line cannot move that answer. {@code chain} and
+		 * however their line reads, so their line cannot move that answer, and neither can the
+		 * {@code hand}'s, its family being drawn only where a player holds one, which is the frame's
+		 * camera and not the place. {@code chain} and
 		 * {@code passes} cannot either, for the opposite reason: they take away the passes those
 		 * lines are about, so with them there is no frame left for a note to describe. {@code shadow}
 		 * draws geometry too, but into the shadow map's own targets, which the plan does not hold,
@@ -275,8 +277,7 @@ final class EngineOptions {
 		 * all.
 		 */
 		ChainPlan.Families families() {
-			return new ChainPlan.Families(this.terrain, this.entities, this.particles, this.seed,
-					this.hand);
+			return new ChainPlan.Families(this.terrain, this.entities, this.particles, this.seed);
 		}
 	}
 
@@ -332,8 +333,9 @@ final class EngineOptions {
 	 * Said once when the entities are off, which is the default, because nothing else would say the
 	 * line exists.
 	 * <p>
-	 * The nine other lines that take a yes or a no are on unless somebody asks, so their line is a
-	 * thing the reader wrote and knows about. This one is the opposite: the picture with it off is
+	 * The other lines that take a yes or a no are on unless somebody asks - the hand's excepted,
+	 * which is off with its reasons written beside it - so their line is a thing the reader wrote
+	 * and knows about. This one is the opposite: the picture with it off is
 	 * the picture without this mod having heard of entities at all, and a reader who never sees the
 	 * name has no reason to look for it.
 	 */
@@ -477,7 +479,7 @@ final class EngineOptions {
 		}
 
 		// Named, like the two readings above do it: ten lines share this one, so the value on its
-		// own leaves whoever fixes the typo looking for which of the nine carries it.
+		// own leaves whoever fixes the typo looking for which of them carries it.
 		Vitrail.logger().warn("'{}={}' is neither on nor off, so this line is ignored and {} stays "
 				+ "{}", key, value.asText(), key, byDefault ? "on" : "off");
 

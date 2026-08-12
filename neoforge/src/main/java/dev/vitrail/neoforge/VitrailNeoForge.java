@@ -140,7 +140,7 @@ public final class VitrailNeoForge {
 		// Then the hand's solid half, and the order of these two lines is the whole of where it
 		// belongs in the frame: after the game's own opaque features, which the window above has just
 		// closed, and BEFORE the deferred stage the next line runs. That is exactly where Iris puts
-		// it, between renderTranslucentFeatures and its own beginTranslucents
+		// it: renderSolid runs first, before beginTranslucents and the translucent features behind it
 		// (mixin/MixinLevelRenderer.java:277-283, pipeline/IrisRenderingPipeline.java:1060-1073).
 		// Drawn after the deferreds instead, the hand would write gbuffers nothing would ever read.
 		HandDraw.drawSolid();

@@ -136,10 +136,11 @@ it.** The game draws the hand after the whole chain has finished, so with `hand=
 merely lit by the game, it is painted onto an image the pack had already completed: nothing the pack
 does to the world reaches it, and nothing it draws reaches a composite. With `hand=on` it is drawn
 inside the level instead, in two passes, and served by `gbuffers_hand` and `gbuffers_hand_water` as
-the reference serves them. A pack that squeezes the hand's depth with `MC_HAND_DEPTH` gets the same
-eighth it expects. What stays behind is what blends: a translucent block held in hand is drawn with
-a blending pipeline no family here serves yet, so the arm around it becomes the pack's while the
-block in it stays the game's.
+the reference serves them. The engine squeezes the hand's depth the way the reference does, and a
+pack that divides it back out with `MC_HAND_DEPTH` gets the same eighth it expects. What stays
+behind is what blends: a translucent block held in hand is drawn with a blending pipeline no family
+here serves - a gap and not a choice - so the arm around it becomes the pack's while the block in
+it stays the game's.
 
 **Nothing named in this section CASTS a shadow** - not the rain, not the snow, not the particles,
 not the mobs, not the block entities, not the hand - because none of them is drawn into the shadow
