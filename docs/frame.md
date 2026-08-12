@@ -200,6 +200,27 @@ somebody wrote `entities=off` in `vitrail/options.txt`, which hands every entity
 the game's shader. Failing that, an entity that still looks flat is one the pack's own program did
 not reach: the log names the reason at the moment it happens. Neither case is the coverage mask.
 
+### What the entity door can carry, and what the mesh keeps out
+
+`entities=on` covers more than mobs. Block entities come in by the same door and are asked for
+`gbuffers_block` rather than `gbuffers_entities`, the hand rides its own switch, and a mob's glowing
+eyes are asked for `gbuffers_spidereyes` - blended additively, which is what makes an eye a light
+rather than a decal, and which the pack overrides with `blend.gbuffers_spidereyes` like any other.
+
+What decides whether a family can come in at all is **the mesh the game binds for it**, not how
+interesting the family is. The door reads one vertex layout, the game's entity format, and names the
+attributes a pack expects out of its elements. A pipeline binding anything else would have every
+attribute read from the wrong offset - a picture, and a wrong one, with nothing to say so - so it is
+refused and named in the log instead.
+
+That is the whole reason the beacon beam, the lightning bolt, the enchantment glint and the text of
+a sign or a name plate still come from the game's own shader: they bind the block, position-colour,
+position-texture and glyph layouts respectively. They reach the pack's image through the layer
+described below, which means they are visible but flat, and drawn in front of what should hide them.
+The glint has a second reason of its own: its render type animates by moving its texture matrix
+every frame, and a pack reading that matrix here would be handed the identity, so the scroll that is
+the entire effect would be frozen on one frame.
+
 Which target is seeded is the first draw buffer of the pass that draws the terrain, resolved through
 the fallback tree, and it is not always target zero: one pack of the corpus serves its terrain
 through the textured gbuffers program, whose draw buffers start at the fifth target.
