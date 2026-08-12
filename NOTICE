@@ -127,6 +127,79 @@ GNU Lesser General Public License version 3
   thousandth, and looks an alphaTest override up under the name of the file that really serves
   the pass, which is Iris's lookup too.
 
+  common/src/main/java/dev/vitrail/render/EntityDraw.java and
+  common/src/main/java/dev/vitrail/render/EntityProgram.java send the game's entity and block entity
+  geometry to the pack's programs on the table of net.irisshaders.iris.pipeline.IrisPipelines, read
+  in August 2026, because a pack is written against that routing and against no other. What is
+  reproduced is which pipeline reaches which program name; the pairing of each opaque name with the
+  blending one its getTranslucent answers with, lines 212 to 222, which are the EntitiesTrans and
+  BlockTrans of ProgramId reached through
+  net.irisshaders.iris.pipeline.programs.ShaderKey lines 43 and 69, and which fall back on their own
+  opaque name rather than on the terrain; the
+  alpha test of one tenth the entity keys carry; and the priority under which a pipeline that could
+  answer with the block or the entity program answers with a hand program instead while a hand pass
+  is up, lines 191 to 218. Keying the replacement on the pipeline rather than on the render type is
+  Iris's shape as well, a render type being made per texture where the pipelines are a fixed table.
+  The render stage a pack is told it is drawing is Iris's answer and not a reading of the pass: NONE
+  for a mob, since the call that would pose it in net.irisshaders.iris.layer.GbufferPrograms hangs
+  off a shard Iris installs on no render type anywhere, where its block entity counterpart is
+  installed at four sites, and BLOCK_ENTITIES for a block entity, which Iris really
+  does pose and which is the phase its own entity pipelines branch on,
+  net.irisshaders.iris.pipeline.programs.ShaderOverrides lines 42 to 44. The blend override of OFF
+  that every shadow program of net.irisshaders.iris.shaderpack.loading.ProgramId carries, lines 13
+  to 19, is reproduced with the reason given for it.
+  The ORDER in which the two halves are drawn is not Iris's, and that divergence is written out in
+  common/src/main/java/dev/vitrail/render/FeatureLayer.java rather than here.
+
+  common/src/main/java/dev/vitrail/render/HandDraw.java takes the player's hand out of the game's
+  late call and draws it inside the level the way net.irisshaders.iris.pathways.HandRenderer does,
+  adapted in August 2026: the squeezing of the clip depth by its DEPTH constant, so that the arm
+  cannot reach through the world it is drawn over, and the building of a second dispatcher, the
+  game's own not being re-entrant from inside the level. Which of the two hand passes a row answers
+  with is Iris's keying, IrisPipelines lines 191 to 218. The test that decides whether a hand is
+  drawn at all is that of net.irisshaders.iris.mixin.MixinItemInHandRenderer, lines 32 to 39, and
+  neoforge/src/main/java/dev/vitrail/neoforge/mixin/ItemInHandRendererMixin.java cancels the same
+  head of the same per arm method on the same comparison, while
+  neoforge/src/main/java/dev/vitrail/neoforge/mixin/GameRendererHandMixin.java redirects the call
+  net.irisshaders.iris.mixin.MixinGameRenderer redirects, line 75, so that the hand is neutralised
+  where it is submitted rather than where it is drawn. Its moment in the frame, ahead of the
+  deferred stage, is Iris's constraint as well, net.irisshaders.iris.mixin.MixinLevelRenderer lines
+  277 to 283 against net.irisshaders.iris.pipeline.IrisRenderingPipeline lines 1060 to 1073, and it
+  is what neoforge/src/main/java/dev/vitrail/neoforge/VitrailNeoForge.java keeps.
+  The depth constant is carried across rather than copied, and that is the one thing in this entry
+  that is not a transcription: Iris runs against an OpenGL clip volume where this backend rasterises
+  in inverted z, so its formula gives a different expression here. The conversion is written out in
+  the file. What draw buffer nought is owned by while a hand pass is up is this project's own and is
+  stated in common/src/main/java/dev/vitrail/render/GeometryProgram.java, Iris writing its hand
+  colour to the pack's own target where here it reaches the pack through the scene seed.
+
+  common/src/main/java/dev/vitrail/render/ParticleDraw.java draws the game's particles with the
+  pack's programs, and three of its answers are Iris's, read in August 2026. The alpha test of one
+  tenth both particle keys of ShaderKey carry, lines 58 and 59, the game's own particle pipeline
+  declaring no cutout define there is anything to inherit from. The render stage posed over the
+  whole of the particle renderer rather than per half,
+  net.irisshaders.iris.mixin.MixinParticleEngine lines 24 to 30. And leaving the game's own shader
+  on a layer the table has no key for, which is what an unassigned pipeline gets there,
+  IrisPipelines lines 224 to 231 through net.irisshaders.iris.mixin.MixinShaderManager_Overrides
+  lines 97 to 101; the difference is that the refusal is said in the log here.
+
+  common/src/main/java/dev/vitrail/render/WeatherDraw.java carries the alpha test of one tenth of
+  the single weather key of ShaderKey, line 60, and the shape under which both of the game's weather
+  pipelines reach that one key, IrisPipelines lines 70 and 71.
+  neoforge/src/main/java/dev/vitrail/neoforge/mixin/ClientLevelMixin.java hands the rain particle
+  count the frugal setting rather than skipping the walk, which is what
+  net.irisshaders.iris.mixin.MixinWeatherRenderer does with the same word, lines 30 to 37. The
+  method Iris hangs that on is gone in 26.2, the spawning having moved out of the weather renderer
+  and into the level's own tick, so the setting is substituted into the local that still reads it.
+
+  neoforge/src/main/java/dev/vitrail/neoforge/mixin/BlockEntityRenderDispatcherMixin.java marks the
+  block entities around the dispatcher and not around each renderer, which is where
+  net.irisshaders.iris.mixin.entity_render_context.MixinBlockEntityRenderDispatcher puts it, lines
+  52 and 71: one method covers every block entity in the game and no renderer of them has to know.
+  What the mark is used for, and the single boolean that carries it where Iris treats the nested
+  case as impossible by contract and throws, are this project's own and are stated in
+  common/src/main/java/dev/vitrail/render/BlockEntityGeometry.java.
+
   common/src/main/java/dev/vitrail/pack/source/DimensionSet.java ports the folder conventions of
   net.irisshaders.iris.shaderpack.ShaderPack, lines 132 to 148, defaults included: the overworld
   folder answering for every world the pack never names, the other two answering for themselves
@@ -242,6 +315,28 @@ GNU Lesser General Public License version 3
   stacked on a PoseStack, since no game type may cross into the value package, and the orthographic
   matrix is always built in the legacy volume because this one is published and never drawn with.
 
+  common/src/main/java/dev/vitrail/render/ShadowGeometry.java walks the world for the light so that
+  what moves casts a shadow, on the construction of net.irisshaders.iris.shadows.ShadowRenderer,
+  adapted in August 2026. Four things are taken. The light's own camera, built the way Iris builds
+  it rather than borrowed from the frame. The place the list of casters is cut, and the test it is
+  cut by, which is after the extraction rather than before it. One caster extracted the way the game
+  and Iris both extract it. And the player read as Iris reads it, which is not as a flag: where a
+  pack's directives refuse the families that move, the player directive is the whole of what is
+  left, and Iris keeps that case as a branch of its own, lines 550 to 560, which extracts the player
+  and whatever it is riding one by one instead of walking the visible entities. The split is kept
+  rather than tidied into a uniform rule, the vehicle being carried by that branch alone.
+  What is not reused is what the walk refuses. Iris binds the shadow framebuffer for the whole of
+  its stage, so a pipeline its shadow table has no key for keeps the game's shader and still writes
+  the map; here what is not served is not drawn at all. That is a divergence, and the file carries
+  it with what it costs the image.
+  neoforge/src/main/java/dev/vitrail/neoforge/sodium/ShadowTerrain.java draws everything that moves
+  between the opaque world and the copy, which is where Iris puts it, ShadowRenderer line 584 then
+  line 588, so that a caster that moves is in shadowtex1 as well as in shadowtex0.
+
+  common/src/main/java/dev/vitrail/pack/source/ShadowCasters.java reads which families a pack lets
+  into its shadow map. The set a pack asks for by saying nothing is Iris's own, and the pair of
+  directives is tested in the shape Iris tests it in, before anything is extracted.
+
   common/src/main/java/dev/vitrail/uniform/values/CelestialValues.java carries the celestial
   positions of net.irisshaders.iris.uniforms.CelestialUniforms, adapted in August 2026: the single
   step of wrapping, the starting vector of length one hundred, the unread y of the moon, and the w
@@ -257,6 +352,26 @@ GNU Lesser General Public License version 3
   net.irisshaders.iris.uniforms.BiomeUniforms in August 2026, in its order, because the order is
   what decides a biome carrying two tags. The two gaps are reproduced with it and named in the
   file: no category is ever answered UNDERGROUND, and a savanna comes out as plains.
+
+  common/src/main/java/dev/vitrail/uniform/ViewSource.java splits the projection a pack reads the
+  way Iris splits it: gl_ProjectionMatrix becomes the projection really bound at the draw, and
+  therefore the hand's while the hand is being drawn, where gbufferProjection stays the level's.
+  net.irisshaders.iris.pipeline.transform.transformer.VanillaTransformer, line 368.
+
+  common/src/main/java/dev/vitrail/uniform/values/GeometryValues.java substitutes the lightmap
+  texture matrix where net.irisshaders.iris.uniforms.builtin.BuiltinReplacementUniforms substitutes
+  it, line 12, on the terrain and on every family the game hands over as a render type. The sixteen
+  numbers are worked out here from the texel centres rather than read off Iris, and they agree with
+  the sixteen it carries; what is taken is the rule that gl_TextureMatrix[1] is answered with them
+  at all, which is what a pack expects. One family is answered the identity here instead, and the
+  file names that as a divergence.
+
+  common/src/main/java/dev/vitrail/uniform/UniformGaps.java registers the uniforms this engine
+  cannot answer, and one of its entries is Iris's answer rather than an absence: entityColor under a
+  full screen pass is the constant net.irisshaders.iris.uniforms.CommonUniforms gives it, line 163.
+  The rest of the file records what Iris reads off a vertex element the game's entity format has not
+  got, which is why those names are constant here; that is a statement about Iris and not material
+  taken from it.
 
   common/src/main/resources/assets/vitrail/lang/ follows the Iris translations for the words this
   screen and Iris's own screens have in common, in the fourteen languages both projects carry, so
