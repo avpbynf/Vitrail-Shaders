@@ -74,6 +74,19 @@ public final class ShaderProperties {
 	// .java:28-63), so a dead branch is gone by then. Read flat, a pack writing this under an #if it
 	// leaves off would get depth-writing rain here and none there.
 	private static final Pattern RAIN_DEPTH = Pattern.compile("^\\s*rain\\.depth\\s*=\\s*(.*)$");
+	// Which of the world's five families are drawn into the shadow map. One pattern for the lot,
+	// because the five are read together and answered together: a caster the pack asked to keep out
+	// and that casts anyway is worse than no shadow at all, so they are served as a set or not.
+	// Live lines only, and here that is not a nicety. Five packs of the eight write at least one of
+	// these words twice with two different values, both Complementary packs writing shadowPlayer
+	// true and then false: read flat, the answer is whichever line the file happens to end with.
+	private static final Pattern SHADOW_CASTER = Pattern.compile(
+			"^\\s*(shadowTerrain|shadowTranslucent|shadowEntities|shadowPlayer|shadowBlockEntities)"
+					+ "\\s*=\\s*(.*)$");
+	// How the pack wants the world walked for the light. Not a boolean despite two of its four words
+	// being true and false, which is why it is read apart from the family above.
+	private static final Pattern SHADOW_CULLING =
+			Pattern.compile("^\\s*shadow\\.culling\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
 	// The fifth word of that family, kept apart because it is the one that takes neither a yes nor a
@@ -319,6 +332,19 @@ public final class ShaderProperties {
 		// belongs among the keys nothing reads, where the pack's author can see it.
 		Matcher rainDepth = RAIN_DEPTH.matcher(line);
 		if (rainDepth.matches() && truth(rainDepth.group(1).trim()) != null) {
+			return;
+		}
+
+		// Same rule for the shadow casters: consumed where the word is one this engine acts on, and
+		// left among the keys nothing reads where it is not, so a pack writing a fifth spelling can
+		// see that it was not understood.
+		Matcher caster = SHADOW_CASTER.matcher(line);
+		if (caster.matches() && truth(caster.group(2).trim()) != null) {
+			return;
+		}
+
+		Matcher culling = SHADOW_CULLING.matcher(line);
+		if (culling.matches() && ShadowCulling.of(culling.group(1).trim()) != null) {
 			return;
 		}
 
@@ -1074,6 +1100,59 @@ public final class ShaderProperties {
 		boolean asked = false;
 		for (Matcher line : live(RAIN_DEPTH, defines)) {
 			Boolean value = truth(line.group(1).trim());
+			if (value != null) {
+				asked = value;
+			}
+		}
+
+		return asked;
+	}
+
+	/**
+	 * Which of the world's five families the pack wants drawn into the shadow map, live lines only.
+	 * <p>
+	 * <strong>The defaults are Iris's and one of them is not what it looks like.</strong> Four are
+	 * on and {@code shadowPlayer} is OFF ({@code shaderpack/properties/PackShadowDirectives.java
+	 * :87-91}), which does not mean the player casts nothing by default: the player is one of the
+	 * entities, so {@code shadowEntities} carries it. {@link ShadowCasters#player} is consulted only
+	 * where {@code shadowEntities} is off, and there it is the whole of what is drawn. Read as an
+	 * additive flag it would keep the player out of every default shadow map there is.
+	 *
+	 * @param defines the pack's settings, which decide which lines of the file are alive at all
+	 */
+	public ShadowCasters shadowCasters(Map<String, String> defines) {
+		boolean terrain = true;
+		boolean translucent = true;
+		boolean entities = true;
+		boolean player = false;
+		boolean blockEntities = true;
+
+		for (Matcher line : live(SHADOW_CASTER, defines)) {
+			Boolean value = truth(line.group(2).trim());
+			if (value == null) {
+				continue;
+			}
+
+			switch (line.group(1)) {
+				case "shadowTerrain" -> terrain = value;
+				case "shadowTranslucent" -> translucent = value;
+				case "shadowEntities" -> entities = value;
+				case "shadowPlayer" -> player = value;
+				default -> blockEntities = value;
+			}
+		}
+
+		return new ShadowCasters(terrain, translucent, entities, player, blockEntities);
+	}
+
+	/**
+	 * How the pack wants the world walked for the light, live lines only, and
+	 * {@link ShadowCulling#DEFAULT} where it says nothing this directive takes.
+	 */
+	public ShadowCulling shadowCulling(Map<String, String> defines) {
+		ShadowCulling asked = ShadowCulling.DEFAULT;
+		for (Matcher line : live(SHADOW_CULLING, defines)) {
+			ShadowCulling value = ShadowCulling.of(line.group(1).trim());
 			if (value != null) {
 				asked = value;
 			}
