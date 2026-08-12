@@ -1,13 +1,13 @@
 modLoader = "javafml"
 loaderVersion = "[4,)"
 license = "LGPL-3.0-only"
-issueTrackerURL = "https://github.com/avpbynf/vitrail/issues"
+issueTrackerURL = "https://github.com/avpbynf/Vitrail-Shaders/issues"
 
 [[mods]]
 modId = "${mod_id}"
 version = "${mod_version}"
 displayName = "Vitrail"
-displayURL = "https://github.com/avpbynf/vitrail"
+displayURL = "https://github.com/avpbynf/Vitrail-Shaders"
 logoFile = "vitrail.png"
 authors = "avpbynf"
 displayTest = "IGNORE_ALL_VERSION"
