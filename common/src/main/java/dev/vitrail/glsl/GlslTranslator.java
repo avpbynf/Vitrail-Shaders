@@ -134,6 +134,9 @@ public final class GlslTranslator {
 	/** The type a pack declares {@link #CENTER_DEPTH} under, and the only one this moves. */
 	private static final String CENTER_DEPTH_TYPE = "float";
 
+	/** What the engine declares in place of a value it keeps in a texture. */
+	private static final String SAMPLER_2D = "sampler2D";
+
 	/** The one call a volume lookup may be written as, and the number of arguments it takes. */
 	private static final String LOOKUP = "texture";
 	private static final int LOOKUP_ARGUMENTS = 2;
@@ -202,6 +205,13 @@ public final class GlslTranslator {
 
 	private final Map<String, String> blockMembers = new LinkedHashMap<>();
 	private final Map<String, String> samplers = new LinkedHashMap<>();
+
+	/**
+	 * The sampler this unit reads {@code centerDepthSmooth} out of, or null where nothing was moved.
+	 * The header declares it, because the statement it was taken out of may still declare other
+	 * names and cannot carry a second declaration.
+	 */
+	private String centerDepthTexel;
 
 	/** Storage blocks this unit declares at file scope, by the name the block is written under. */
 	private final List<String> storageBlocks = new ArrayList<>();
@@ -398,9 +408,10 @@ public final class GlslTranslator {
 		dropPrecision();
 		rewriteFragmentOutputs();
 		liftFragmentOutputs();
-		// Before the lifting and after the depth, and both halves matter: what this leaves behind is a
-		// sampler, which the lifting has to see as one to leave it standing, and the lookup it writes
-		// is text of ours that the depth conversion must not have had a chance to wrap.
+		// Before the lifting and after the depth, and both halves matter: the declarator it takes out
+		// has to be gone before the lifting reads the statement, or the name would be carried into the
+		// block after all, and the lookup it writes is text of ours that the depth conversion must not
+		// have had a chance to wrap.
 		moveCenterDepth();
 		liftUniforms();
 		// Decided before the outputs are ordered and applied after: whether the fragment body is
@@ -2036,21 +2047,40 @@ public final class GlslTranslator {
 	 * <p>
 	 * The family and not the vertex format, for the same reason Iris chooses on the patch: what
 	 * decides this is which stage of the frame a program is drawn in, and a file translated with no
-	 * pass named is the entry point of nothing and is left as it stands.
+	 * pass named is the entry point of nothing and is left as it stands. A compute stage is out for
+	 * the same reason: {@code TransformPatcher} sends {@code Patch.COMPUTE} to
+	 * {@code CommonTransformer} alone and past this transformer entirely.
 	 * <p>
-	 * Nothing is moved unless the declaration is the plain one. A name declared under another type,
-	 * or beside other names in one statement, or as an ordinary global, leaves the whole unit as it
-	 * stands: both Complementary packs write the uniform in one branch of an {@code #if} and an
-	 * ordinary {@code float} of the same name in the other, and a unit whose live branch is the
-	 * second has nothing here to move and must not have its own variable rewritten into a lookup.
+	 * <strong>A shadow composite is out too, and there the reason is ours.</strong> Iris injects the
+	 * sampler there like anywhere else and never binds it: {@code ShadowCompositeRenderer} does not
+	 * name {@code CenterDepthSampler} once, so what the declaration reads is texture unit nought and
+	 * no pack can build on it. This engine runs no shadow composite at all, which
+	 * {@code TargetPlan} says by name where it drops them, so there is nothing here to bind either.
+	 * Leaving the family alone gives it the nought a gbuffers program gets, which costs the image
+	 * nothing: not one program of the family is drawn.
+	 * <p>
+	 * The member comes out of its declaration rather than the declaration out of the file, which is
+	 * what lets a name declared beside others be moved: {@code uniform float a, centerDepthSmooth;}
+	 * keeps its {@code a}. Iris detaches the member in exactly the same way and injects its sampler
+	 * before the declarations; here the sampler is registered like any other opaque uniform and the
+	 * header writes it, since the lifting has already been given a statement that no longer names it.
+	 * <p>
+	 * A declaration of the name under anything but {@code uniform float} leaves the whole unit as it
+	 * stands, reads included, and that is the one refusal left. It is Iris's answer too: its matcher
+	 * takes {@code uniform float name;} and nothing else, so a unit where the name is a local, a
+	 * parameter or a global of the pack's own is not rewritten on either side. Both Complementary
+	 * packs write the shape that reaches it, the uniform in one branch of an {@code #if} and an
+	 * ordinary {@code float} of the same name in the other; at their own defaults neither branch is
+	 * live, so what they meet is the empty unit above and not this.
 	 */
 	private void moveCenterDepth() {
-		if (!fullScreenFamily() || this.packMacros.contains(CENTER_DEPTH)) {
+		if (this.stage == ProgramStage.COMPUTE || !movesCenterDepth()
+				|| this.packMacros.contains(CENTER_DEPTH)) {
 			return;
 		}
 
 		int[] lines = lineNumbers();
-		List<Integer> declarations = new ArrayList<>();
+		List<Integer> members = new ArrayList<>();
 		List<Integer> reads = new ArrayList<>();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
@@ -2060,50 +2090,53 @@ public final class GlslTranslator {
 				continue;
 			}
 
+			// A built-in type in front of the name is what makes this a declaration rather than a
+			// read, and it has to be the type set rather than any identifier: this lexer has no
+			// keyword, so {@code return centerDepthSmooth;} puts an identifier there too.
 			int type = significantBefore(index);
-			if (type < 0 || this.tokens.get(type).kind() != Kind.IDENTIFIER) {
+			if (type < 0 || !LegacyGlsl.TYPE_NAMES.contains(this.tokens.get(type).text())) {
 				reads.add(index);
 				continue;
 			}
 
-			if (!movableCenterDepth(index, type)) {
+			if (!uniformFloat(type)) {
 				return;
 			}
 
-			declarations.add(index);
+			members.add(index);
 		}
 
 		// A unit that reads the name without declaring it as a uniform is left alone, which is the
 		// same answer Iris gives: what is not declared is not made available.
-		if (declarations.isEmpty()) {
+		if (members.isEmpty()) {
 			return;
 		}
 
 		String texel = SamplerPlan.centerDepth();
-		for (int declaration : declarations) {
-			replace(significantBefore(declaration), "sampler2D");
-			replace(declaration, texel);
-		}
+		members.forEach(this::detachMember);
 
+		this.centerDepthTexel = texel;
+		this.samplers.put(texel, SAMPLER_2D + " " + texel);
 		reads.forEach(read -> inject(read, LOOKUP + "(" + texel + ", vec2(0.5)).r"));
 	}
 
 	/**
-	 * Whether the pass this file is the entry point of is drawn over a quad rather than over the
-	 * world, which is the line Iris draws between {@code Patch.COMPOSITE} and the rest.
+	 * Whether the pass this file is the entry point of is one this engine draws over a quad, which is
+	 * where Iris makes the value available, less the shadow composites it never binds and this engine
+	 * never runs.
 	 */
-	private boolean fullScreenFamily() {
-		return !this.program.isEmpty()
-				&& !ProgramNames.geometry(ProgramNames.familyOf(this.program));
+	private boolean movesCenterDepth() {
+		String family = ProgramNames.familyOf(this.program);
+
+		return !this.program.isEmpty() && !ProgramNames.geometry(family)
+				&& !ProgramNames.shadowComposite(family);
 	}
 
 	/**
-	 * Whether this declaration of {@code centerDepthSmooth} is the one shape that can become a
-	 * sampler: a uniform, of type float, and the only name the statement introduces.
-	 *
-	 * @param type the type token in front of the name, already known to be an identifier
+	 * Whether the declaration this type token opens is a {@code uniform float}, which is the one
+	 * shape whose member can be moved onto a sampler.
 	 */
-	private boolean movableCenterDepth(int index, int type) {
+	private boolean uniformFloat(int type) {
 		if (!this.tokens.get(type).text().equals(CENTER_DEPTH_TYPE)) {
 			return false;
 		}
@@ -2113,15 +2146,44 @@ public final class GlslTranslator {
 			cursor = significantBefore(cursor);
 		}
 
-		if (cursor < 0 || !this.tokens.get(cursor).identifier("uniform")) {
-			return false;
+		return cursor >= 0 && this.tokens.get(cursor).identifier("uniform");
+	}
+
+	/**
+	 * Takes one declarator out of the statement that introduces it, leaving whatever else the
+	 * statement declares standing.
+	 * <p>
+	 * The comma that binds the name is what goes with it, and it is the one before unless the name
+	 * opens the list. Where there is no comma either side the name is the only declarator, and then
+	 * the statement itself goes: a {@code uniform float ;} left behind is not a declaration of
+	 * nothing, it is a syntax error.
+	 */
+	private void detachMember(int name) {
+		int before = significantBefore(name);
+		if (before >= 0 && this.tokens.get(before).operator(",")) {
+			blank(before);
+			blank(name);
+
+			return;
 		}
 
-		// The semicolon straight after the name, so that a statement declaring a second name beside
-		// this one is left whole: the type is shared, and changing it would change the other name too.
-		int end = significantAfter(index);
+		int after = significantAfter(name);
+		if (after >= 0 && this.tokens.get(after).operator(",")) {
+			blank(name);
+			blank(after);
 
-		return end >= 0 && this.tokens.get(end).operator(";");
+			return;
+		}
+
+		int start = statementStart(name);
+		int end = statementEnd(name);
+		if (start < 0 || end < 0) {
+			// A declaration with no semicolon, which is a pack problem and not ours to paper over.
+			// Left whole rather than half emptied, the way the lifting leaves it.
+			return;
+		}
+
+		blankRange(start, end);
 	}
 
 	/**
@@ -2494,6 +2556,13 @@ public final class GlslTranslator {
 			}
 
 			lines.add("};");
+		}
+
+		// The texel centerDepthSmooth was moved onto. Declared here and not left in the body, because
+		// the member was taken out of a statement that may still declare other names of the pack's
+		// own. Iris puts its own before the declarations for the same reason.
+		if (this.centerDepthTexel != null) {
+			lines.add("uniform " + SAMPLER_2D + " " + this.centerDepthTexel + ";");
 		}
 
 		// Attributes stay a matter for the stage that has them. Only a vertex shader has inputs
