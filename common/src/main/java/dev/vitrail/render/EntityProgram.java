@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.pack.program.ProgramFallbacks;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
@@ -164,7 +165,17 @@ final class EntityProgram implements DumpedProgram {
 				// (shaderpack/loading/ProgramId.java:13-19), and the reason is what a map is for:
 				// what it wants of a translucent surface is the depth that surface stands at, not
 				// that depth mixed with the one behind it.
-				shadow ? Optional.<BlendFunction>empty() : game.getColorTargetState().blendFunction(),
+				//
+				// Off the map, the game's own blending for this pipeline, unless the name asked for
+				// is one Iris gives a default of its own; the pack's own blend directive still
+				// displaces either, GeometryProgram looking that one up under the file that really
+				// served the piece. Only the eyes have one, and for them the game's translucent
+				// blend is the wrong answer rather than a duller one: an eye is drawn additively or
+				// it is a decal. The two questions are asked in this order and not folded together:
+				// the map's refusal is about the target, the lookup is about the program name.
+				shadow ? Optional.<BlendFunction>empty()
+						: BlendFunctions.of(ProgramFallbacks.blendOverride(element.program()),
+								game.getColorTargetState().blendFunction()),
 				// covers: the mask on every piece drawn before the seed and on no other, which is
 				// Element.covers and is answered there, beside the question of which side of the
 				// stage a piece is drawn on. It is what takes draw buffer nought of those pieces off

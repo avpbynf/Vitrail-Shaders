@@ -18,17 +18,18 @@ import java.util.Set;
  * copyright the Iris contributors and licensed under the GNU LGPL version 3, the same licence
  * as this project. The original is the enum
  * {@code net.irisshaders.iris.shaderpack.loading.ProgramId}, read on 1 August 2026. Adapted in
- * 2026: the enum became a name to parent map, and the blend mode overrides and the public API
- * mapping the original also carried were left out. It is reproduced rather than guessed
- * because there is no other authority for it: the format's own documentation does not spell
- * the chain out, and getting an edge wrong means a pack renders something with the wrong
- * program and nothing reports it.
+ * 2026: the enum became a name to parent map, and the public API mapping the original also
+ * carried was left out. It is reproduced rather than guessed because there is no other
+ * authority for it: the format's own documentation does not spell the chain out, and getting
+ * an edge wrong means a pack renders something with the wrong program and nothing reports it.
  *
  * @see <a href="https://github.com/IrisShaders/Iris">Iris, LGPL-3.0</a>
  */
 public final class ProgramFallbacks {
 
 	private static final Map<String, String> PARENTS = buildParents();
+
+	private static final Map<String, BlendMode> BLEND_OVERRIDES = buildBlendOverrides();
 
 	private ProgramFallbacks() {
 	}
@@ -94,6 +95,42 @@ public final class ProgramFallbacks {
 		// Not Map.copyOf: the roots of the tree map to null, and the immutable factories reject
 		// a null value rather than storing it.
 		return Collections.unmodifiableMap(parents);
+	}
+
+	/**
+	 * What a program name blends with when the pack names no blending of its own for it.
+	 * <p>
+	 * One entry, and the table exists rather than the constant because the shape is Iris's: the
+	 * override hangs off the program NAME in the same enum the parents above come from
+	 * ({@code shaderpack/loading/ProgramId.java:47-48}), so a second one would be another row here
+	 * and not another special case at a call site.
+	 * <p>
+	 * <strong>It is keyed by the name ASKED FOR and not by the file that ends up serving it</strong>,
+	 * which is the whole reason it cannot live beside the pack's own directive. Iris reads the two
+	 * from two different places on purpose: the pack's {@code blend.<program>} is looked up under the
+	 * resolved source's name and this default under the asked-for id
+	 * ({@code pipeline/programs/ShaderCreator.java:71}), so a pack shipping no
+	 * {@code gbuffers_spidereyes} at all still draws its eyes additively through whatever
+	 * {@code gbuffers_textured} it fell back on.
+	 */
+	private static Map<String, BlendMode> buildBlendOverrides() {
+		Map<String, BlendMode> overrides = new LinkedHashMap<>();
+
+		// Additive, and it is what makes an eye a light rather than a decal: the source is weighted by
+		// its own alpha and the destination is kept whole, so the pupil adds to the mob's skin instead
+		// of replacing it. The game's own pipeline blends the ordinary translucent way, which is the
+		// value this one displaces; alpha keeps ZERO, ONE for the same reason Iris gives it that.
+		overrides.put("gbuffers_spidereyes", new BlendMode(false, "SRC_ALPHA", "ONE", "ZERO", "ONE"));
+
+		return Collections.unmodifiableMap(overrides);
+	}
+
+	/**
+	 * What the pack falls back to for this program when it names no blending of its own, or null
+	 * where the caller's own default stands.
+	 */
+	public static BlendMode blendOverride(String program) {
+		return BLEND_OVERRIDES.get(program);
 	}
 
 	/** Every program name that takes part in the fallback tree. */
