@@ -74,9 +74,10 @@ public final class ShaderProperties {
 	// .java:28-63), so a dead branch is gone by then. Read flat, a pack writing this under an #if it
 	// leaves off would get depth-writing rain here and none there.
 	private static final Pattern RAIN_DEPTH = Pattern.compile("^\\s*rain\\.depth\\s*=\\s*(.*)$");
-	// Which of the world's five families are drawn into the shadow map. One pattern for the lot,
-	// because the five are read together and answered together: a caster the pack asked to keep out
-	// and that casts anyway is worse than no shadow at all, so they are served as a set or not.
+	// Which of the world's six families are drawn into the shadow map, the six Iris parses
+	// (shaderpack/properties/ShaderProperties.java:192-197). One pattern for the lot, because they
+	// are read together and answered together: a caster the pack asked to keep out and that casts
+	// anyway is worse than no shadow at all, so they are served as a set or not.
 	// Live lines only, and here that is not a nicety. Two packs of the eight tested write one of
 	// these words twice with two different values, both Complementary packs writing shadowPlayer
 	// true and then false in the two arms of one conditional: read flat, the answer is whichever
@@ -84,20 +85,18 @@ public final class ShaderProperties {
 	// writes shadowEntities and shadowBlockEntities once each, under an #ifndef its own settings
 	// file defines, so both lines are dead and a flat read turns the most used pack of the corpus
 	// into one with no entity shadows.
+	//
+	// shadow.culling belongs to the same family by its name and is deliberately NOT read, which is a
+	// refusal rather than a gap, so a pack that writes it is told nothing about it and gets a line
+	// among the keys nothing reads. Six of the eight write it. Its four answers are not four ways of
+	// walking one frustum: they pick between a box culler at the shadow distance, a box culler at
+	// the VOXEL distance, no culling at all and culling everything, each with its own capping
+	// against the render distance (Iris shadows/ShadowRenderer.java:302-355), and each of those
+	// rests on distance directives this engine does not read. Reading the word and walking one
+	// frustum anyway would put casters in a map the pack asked to keep them out of.
 	private static final Pattern SHADOW_CASTER = Pattern.compile(
-			"^\\s*(shadowTerrain|shadowTranslucent|shadowEntities|shadowPlayer|shadowBlockEntities)"
-					+ "\\s*=\\s*(.*)$");
-	// shadow.culling is deliberately NOT read. It is not the only word of this family left unread -
-	// Iris parses a sixth caster directive, shadowLightBlockEntities (PackShadowDirectives.java:92,
-	// honoured at shadows/ShadowRenderer.java:576-577), which no pack of the corpus writes and which
-	// this engine does not read either. This one is the deliberate refusal rather than the gap.
-	// Six of the eight packs write it, so leaving it among the keys nothing reads is a line each of
-	// them gets, and that is the honest state: its four answers are not four ways of walking the
-	// same frustum. They pick between a box culler at the shadow distance, a box culler at the VOXEL
-	// distance, no culling at all and culling everything, each with its own capping against the
-	// render distance (Iris shadows/ShadowRenderer.java:302-355), and every one of those needs a
-	// distance directive this engine does not read yet. Reading the word and walking one frustum
-	// anyway would put casters in a map the pack asked to keep them out of.
+			"^\\s*(shadowTerrain|shadowTranslucent|shadowEntities|shadowPlayer|shadowBlockEntities"
+					+ "|shadowLightBlockEntities)\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
 	// The fifth word of that family, kept apart because it is the one that takes neither a yes nor a
@@ -1115,14 +1114,15 @@ public final class ShaderProperties {
 	}
 
 	/**
-	 * Which of the world's five families the pack wants drawn into the shadow map, live lines only.
+	 * Which of the world's six families the pack wants drawn into the shadow map, live lines only.
 	 * <p>
-	 * <strong>The defaults are Iris's and one of them is not what it looks like.</strong> Four are
-	 * on and {@code shadowPlayer} is OFF ({@code shaderpack/properties/PackShadowDirectives.java
-	 * :87-91}), which does not mean the player casts nothing by default: the player is one of the
-	 * entities, so {@code shadowEntities} carries it. {@link ShadowCasters#player} is consulted only
-	 * where {@code shadowEntities} is off, and there it is the whole of what is drawn. Read as an
-	 * additive flag it would keep the player out of every default shadow map there is.
+	 * <strong>The defaults are Iris's and two of them are not what they look like.</strong> Four are
+	 * on, {@code shadowPlayer} and {@code shadowLightBlockEntities} are OFF
+	 * ({@code shaderpack/properties/PackShadowDirectives.java:87-92}), and neither of those two means
+	 * the thing it names casts nothing by default: the player is one of the entities and a lamp is
+	 * one of the block entities, so the wider word carries it. Each narrow word is consulted only
+	 * where its wider one is off, and there it is the whole of what is drawn. Read as additive flags
+	 * they would keep the player out of every default shadow map there is.
 	 *
 	 * @param defines the pack's settings, which decide which lines of the file are alive at all
 	 */
@@ -1132,6 +1132,7 @@ public final class ShaderProperties {
 		boolean entities = ShadowCasters.DEFAULT.entities();
 		boolean player = ShadowCasters.DEFAULT.player();
 		boolean blockEntities = ShadowCasters.DEFAULT.blockEntities();
+		boolean lightBlockEntities = ShadowCasters.DEFAULT.lightBlockEntities();
 
 		for (Matcher line : live(SHADOW_CASTER, defines)) {
 			Boolean value = truth(line.group(2).trim());
@@ -1144,11 +1145,13 @@ public final class ShaderProperties {
 				case "shadowTranslucent" -> translucent = value;
 				case "shadowEntities" -> entities = value;
 				case "shadowPlayer" -> player = value;
-				default -> blockEntities = value;
+				case "shadowBlockEntities" -> blockEntities = value;
+				default -> lightBlockEntities = value;
 			}
 		}
 
-		return new ShadowCasters(terrain, translucent, entities, player, blockEntities);
+		return new ShadowCasters(terrain, translucent, entities, player, blockEntities,
+				lightBlockEntities);
 	}
 
 	/** Each profile's unexpanded body, in the order the pack declares them. */
