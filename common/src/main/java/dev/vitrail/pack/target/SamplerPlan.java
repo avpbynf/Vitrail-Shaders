@@ -117,8 +117,16 @@ public final class SamplerPlan {
 
 	/**
 	 * The two depth copies of the OptiFine model, as opposed to the live depth. {@code depthtex1}
-	 * is taken before the world's translucents and {@code depthtex2} before the hand; nothing here
-	 * draws a hand, so the two moments hold the same image and one copy answers both.
+	 * is taken before the world's translucents and {@code depthtex2} before the hand, and this
+	 * engine answers both with ONE copy, which is a divergence once the hand draws. What Iris does:
+	 * it copies a pre-hand depth of its own before the solid hand is drawn
+	 * ({@code IrisRenderingPipeline.copyPreHandDepth}, called from {@code beginHand} before
+	 * {@code renderSolid}), so its {@code depthtex2} excludes the hand and its {@code depthtex1}
+	 * includes it. What stops the same here: the one copy is taken after the solid hand for
+	 * {@code depthtex1}'s sake, and a second image would be a second copy pass, not yet built. The
+	 * cost: with {@code hand=on}, a pack reading {@code depthtex2} to see past the hand sees the
+	 * hand's depth in it; with the line off, the two moments hold the same image and the copy is
+	 * exact.
 	 */
 	public static boolean depthCopy(String name) {
 		return name.equals("depthtex1") || name.equals("depthtex2");

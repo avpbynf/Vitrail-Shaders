@@ -124,8 +124,12 @@ public final class HandDraw {
 	 * into the projection it binds and leaves its model view at the identity; this engine publishes
 	 * the bob in the model view for every family, {@link CameraBob} saying why, so the hand puts it
 	 * in the same place as its neighbours. The product a pack computes,
-	 * {@code gl_ProjectionMatrix * gl_ModelViewMatrix}, is the same matrix either way, and it is the
-	 * matrix the geometry is really drawn with.
+	 * {@code gl_ProjectionMatrix * gl_ModelViewMatrix}, is the same matrix either way for the walk
+	 * bob, which is all the device's matrix takes in. The nausea roll and the portal scale are
+	 * carried by {@code CameraBob.taken()} into the model view alone, so under those two the pack's
+	 * product bears transforms the drawn geometry does not, and with the bob untrusted it loses the
+	 * bob outright: the matrix the geometry is really drawn with is the device's, and the product
+	 * only approximates it in those states.
 	 */
 	private final Matrix4f volume = new Matrix4f();
 

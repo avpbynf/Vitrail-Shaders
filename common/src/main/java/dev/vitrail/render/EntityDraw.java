@@ -39,7 +39,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
@@ -214,10 +213,11 @@ public final class EntityDraw {
 	 *                      table branches on to reach {@code gbuffers_block}; and one of the two hand
 	 *                      phases for a hand piece, which Iris poses around each of its two passes
 	 *                      ({@code pathways/HandRenderer.java:106,143})
-	 * @param afterDeferred whether this piece is drawn after the deferred stage even though its
-	 *                      pipeline does not blend. True for the hand's water rows alone, which are
-	 *                      made from the mob pipelines and cannot read their side off them; every
-	 *                      other piece answers the side with {@link #blended()}
+	 * @param afterDeferred whether this piece's PASS is drawn after the deferred stage. True for
+	 *                      the hand's water rows alone. A hand row answers the side with this flag
+	 *                      and never with {@link #blended()}, its pipeline being the mob's and its
+	 *                      moment its pass's; an entity row answers with {@link #blended()}, and
+	 *                      carries false here
 	 */
 	record Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
 			LayeringTransform layering, RenderStage stage, boolean afterDeferred) {
@@ -582,13 +582,11 @@ public final class EntityDraw {
 	 * {@code NON_ZERO_ALPHA} ({@code :49-51}); this engine draws no text at all, so no row here
 	 * corresponds to them.
 	 * <p>
-	 * <strong>The blending pass reaches the ARM and not what it is holding, and that is a gap rather
-	 * than a divergence.</strong> A translucent block held in hand is drawn with a blending pipeline,
-	 * which is no row of the table above and which this engine serves for no family yet; the arm
-	 * around it is drawn with the player's skin on {@code ENTITY_SOLID}, which is a row, so
-	 * {@code gbuffers_hand_water} really is reached and really does serve something. What the pack
-	 * does not get is the block, and it is the same gap the entities have and named in the same
-	 * terms: what blends is still the game's.
+	 * <strong>The blending pass reaches the arm and what it holds alike</strong>, and the second
+	 * half arrived with the entities' blending rows: a translucent block held in hand draws with a
+	 * blending pipeline, which is a row of the table above like the rest since that half landed, so
+	 * its water twin serves it with {@code gbuffers_hand_water}; the arm around it comes on
+	 * {@code ENTITY_SOLID}, another row. Both are the pack's in the water pass.
 	 */
 	private static final Map<RenderPipeline, Element> HAND_ELEMENTS = new LinkedHashMap<>();
 	private static final Map<RenderPipeline, Element> HAND_WATER_ELEMENTS = new LinkedHashMap<>();
@@ -1209,13 +1207,11 @@ public final class EntityDraw {
 	}
 
 	/**
-	 * One table's row for each served mob row, which is how the hand tables are walked. Rows without
-	 * a twin are dropped rather than carried as nulls: the hand tables twin the opaque rows, and a
-	 * blended row's held counterpart is the debt the hand's own javadoc names.
+	 * One table's row for each served mob row, which is how the hand tables are walked: the twin
+	 * tables are derived from the whole mob table, so every served row has one.
 	 */
 	private static List<Element> twinsOf(List<Element> served, Map<RenderPipeline, Element> table) {
-		return served.stream().map(element -> table.get(element.pipeline()))
-				.filter(Objects::nonNull).toList();
+		return served.stream().map(element -> table.get(element.pipeline())).toList();
 	}
 
 	/**
@@ -1237,9 +1233,10 @@ public final class EntityDraw {
 	 * with another would be a choice nothing forced.
 	 */
 	private void keep(List<Element> group, Map<String, PackProgram.Loaded> loaded) {
-		// The side is the pipeline's answer OR the row's own flag, and the flag exists for one case:
-		// the hand's water rows are made from the mob pipelines, most of which do not blend, yet the
-		// pass is drawn after the deferred stage all the same.
+		// The side is the pipeline's answer for the entity rows and the row's own flag for the
+		// hand's: a hand pass is drawn wholly on one side of the deferred stage whatever its rows'
+		// pipelines blend, the solid one before it and the water one after, so a hand row made from
+		// a blending mob pipeline still belongs to the side its PASS is drawn on.
 		Map<Half, List<ChainPlan.Attachment>> byFile = new LinkedHashMap<>();
 		for (Element element : group) {
 			PackProgram.Loaded one = loaded.get(element.element());
@@ -1247,7 +1244,8 @@ public final class EntityDraw {
 				continue;
 			}
 
-			Half half = new Half(servedBy(one), element.blended() || element.afterDeferred());
+			Half half = new Half(servedBy(one),
+					element.hand() ? element.afterDeferred() : element.blended());
 			if (byFile.containsKey(half)) {
 				continue;
 			}
@@ -1265,7 +1263,7 @@ public final class EntityDraw {
 				.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
 						loaded.get(element.element()), element, this.values, this.load,
 						byFile.get(new Half(servedBy(loaded.get(element.element())),
-								element.blended() || element.afterDeferred())),
+								element.hand() ? element.afterDeferred() : element.blended())),
 						this.chainTargets, this.targets, this.chainRuns)));
 	}
 

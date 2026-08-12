@@ -16,13 +16,11 @@ import org.spongepowered.asm.mixin.injection.At;
  * Stops the game submitting the player's own hand after the level, so that {@link HandDraw} can
  * submit it inside the level instead.
  * <p>
- * <strong>The submission and not the method.</strong> {@code renderItemInHand} does three things
- * around this call: it builds the pose, it submits the hand, and it executes every feature of the
- * storage the screen effects also go into. Suppressing the whole method would take the third with
- * it, and the screen effects submitted a few lines later in {@code renderLevel} would then be drawn
- * by nothing at all, so a player under water or in lava would lose the overlay. Suppressed at the
- * submission alone, the execute that follows it walks a storage nothing put anything in and costs
- * nothing.
+ * <strong>The submission and not the method.</strong> {@code renderItemInHand} builds the pose and
+ * submits the hand; the storage it submits into, which the screen effects share, is executed by
+ * {@code GameRenderer} itself after this method returns ({@code GameRenderer.java:581-589}).
+ * Suppressed at the submission alone, exactly one thing changes: the storage no longer holds a
+ * hand, and the execute that follows walks what the screen effects put there and nothing else.
  * <p>
  * That is Iris's shape as well: it redirects the same call and nothing around it
  * ({@code mixin/MixinGameRenderer.java:75}), so the hand is neutralised where it is submitted rather
