@@ -7,11 +7,9 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;
-import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
@@ -21,12 +19,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.TickRateManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import org.joml.Matrix4f;
-
-import java.util.List;
 
 /**
  * Walks the world a second time, for the light, and submits everything that moves into the shadow
@@ -37,10 +33,12 @@ import java.util.List;
  * submitted them: {@code LevelRenderer.submitFeatures} calls
  * {@code levelRenderState.entityRenderStates.clear()} on the line after {@code submitEntities} and
  * does the same for the block entities ({@code LevelRenderer.java:284-287}). The shadow stage stands
- * at the very end of the frame, so by the time it runs both are empty. Iris resubmits for a
- * different reason that holds here too: the camera's lists were culled against the CAMERA's frustum,
- * and what has to be in a shadow map is what the LIGHT can see, which is mostly what the camera
- * cannot ({@code shadows/ShadowRenderer.java:124-125,181-182,684,659}).
+ * at the very end of the frame, so by the time it runs both are empty. Iris does not read the
+ * frame's lists either: it keeps a level render state, a storage and a dispatcher of its own
+ * ({@code shadows/ShadowRenderer.java:180-182}) and submits into them ({@code :659} and
+ * {@code :684}). The reason it does holds here too: the camera's lists were culled against the
+ * CAMERA's frustum, and what has to be in a shadow map is what the LIGHT can see, which is mostly
+ * what the camera cannot.
  * <p>
  * <strong>The storage and the dispatcher are ours and are built once.</strong> A dispatcher holds
  * one {@code PreparedFrame} and reuses it ({@code feature/FeatureRenderDispatcher.java:35}), so
@@ -92,6 +90,15 @@ public final class ShadowGeometry {
 	private static int gatheredBlocks;
 
 	/**
+	 * What the pack asked of the block entities on the walk {@link #gather} last made: whether they
+	 * are wanted at all, and whether what is wanted is the emitters alone. The two halves of this
+	 * extraction run at different moments of the stage and only the first one is handed the pack's
+	 * answer, so it leaves it here for the second.
+	 */
+	private static boolean blockEntitiesAsked;
+	private static boolean emittersOnly;
+
+	/**
 	 * How far a caster that moves may stand from the camera and still reach the map, or a value that
 	 * is not positive where the pack asks for no bound beyond the light's own.
 	 */
@@ -102,26 +109,20 @@ public final class ShadowGeometry {
 	}
 
 	/**
-	 * Works out what the light can see, before the light's own walk of the sections runs.
+	 * Works out which entities the light can see, before the light's own walk of the sections runs.
 	 * <p>
-	 * <strong>The order settles nothing, and the sentence that used to stand here was wrong.</strong>
-	 * A caster is kept or dropped by {@code LevelRenderer.isSectionCompiledAndVisible}. In the game
-	 * alone that ends in {@code getVisibility(Util.getMillis()) >= 0.3F}, reading
-	 * {@code (now - uploadedTime) / fadeDuration} off the section itself
-	 * ({@code chunk/SectionRenderDispatcher.java:223-225}): a fade since the section's own upload, in
-	 * which no viewport, no list and no frustum appears, and which {@code finalizeRenderLists} never
-	 * touches. <strong>Under the Sodium this mod targets that method is replaced outright</strong>,
-	 * by {@code mixin/core/render/world/LevelRendererMixin}, and answers off Sodium's own section
-	 * state instead, so the fade above is the game's answer and not the one that runs here. Neither
-	 * of them is moved by the walk below, which is the only part that decides where this call sits. Asked before or after the light's walk it answers the same thing to within the
-	 * microseconds between the two, and the shadows of mobs went on blinking at a walk when this
-	 * moved. It stays here because it is the plainer place to ask, not because it fixes anything.
+	 * <strong>For the entities the order settles nothing, and it is worth saying why.</strong> A
+	 * caster is kept or dropped by {@code LevelRenderer.isSectionCompiledAndVisible}, which Sodium
+	 * replaces outright ({@code mixin/core/render/world/LevelRendererMixin}) and answers off its own
+	 * section state; the game's own answer, a fade since the section's own upload
+	 * ({@code chunk/SectionRenderDispatcher.java:223-225}), is not the one that runs here. Neither
+	 * that state nor the frustum this builds is moved by the walk below, so asked before or after it
+	 * the test answers the same thing. Iris carries the same test
+	 * ({@code shadows/ShadowRenderer.java:703-705}). This sits here because it is the plainer place
+	 * to ask, and for no other reason.
 	 * <p>
-	 * Iris carries the same test ({@code shadows/ShadowRenderer.java:703-705}). The blink that sent
-	 * three readings through this method was not in it at all: it was the pack's frame opened a
-	 * second time by the door this walk draws through, which made every reprojected value of the
-	 * next frame its current one. Nothing here needed changing, and this order was kept only because
-	 * it is the plainer place to ask.
+	 * <strong>For the block entities the order decides everything</strong>, and they are taken in
+	 * {@link #gatherBlockEntities} instead, which says why.
 	 *
 	 * @param light   the light's own view projection, the matrix the terrain is culled against
 	 * @param camera  where the frame was drawn from, which the map is built around
@@ -131,22 +132,23 @@ public final class ShadowGeometry {
 		STATE.reset();
 		gathered = 0;
 		gatheredBlocks = 0;
+		blockEntitiesAsked = false;
+		emittersOnly = false;
 
 		// The entity switch and not one of its own, which is the convention: what enters the map here
 		// is the same geometry that door serves, read from the same tables, and a family does not take
 		// a second switch without a reason. It is also what keeps the walk honest when the switch is
 		// off: the door would refuse every draw, and refusing inside this walk means dropping it, so
-		// the walk would cost a full extraction and a submission to draw nothing and say so sixteen
-		// times.
+		// the walk would cost a full extraction and a submission to draw nothing and say so once per
+		// row of the shadow table.
 		Minecraft minecraft = Minecraft.getInstance();
 		if (minecraft == null || minecraft.level == null || !EntityDraw.wanted()
 				|| !casters.anyFeature()) {
 			return;
 		}
 
-		LevelRenderer renderer = minecraft.levelRenderer;
 		Camera view = minecraft.gameRenderer.mainCamera();
-		if (renderer == null || view == null) {
+		if (minecraft.levelRenderer == null || view == null) {
 			return;
 		}
 
@@ -162,15 +164,81 @@ public final class ShadowGeometry {
 		// shape stays the light's and only the reach is cut, which is what the multiplier means.
 		reach = TerrainDraw.entityShadowDistance();
 
-		// The frame's own, borrowed rather than built: it carries where the camera stands and which
-		// way it faces, and the submissions are posed against it. The level renderer takes it from
-		// the same place (LevelRenderer.java:151), and building a second one here would give the
-		// feature renderers a camera the frame was not drawn from.
-		STATE.cameraRenderState =
-				minecraft.gameRenderer.gameRenderState().levelRenderState.cameraRenderState;
+		// The light's own camera, built the way Iris builds it and NOT the frame's borrowed: a state
+		// extracted fresh from the player camera (shadows/ShadowRenderer.java:390) and then
+		// overwritten on the two matrices that make it a camera at all, the view rotation with the
+		// light's model view (:418) and the projection with the light's ortho (:431). The rest of
+		// the state stays the camera's, position and orientation included, because that is what the
+		// submissions are posed relative to. Aliasing the frame's object instead handed the feature
+		// renderers the CAMERA's view rotation and projection: anything oriented from those faces
+		// the player inside the map and swings as the player turns, and the alias outlived the frame.
+		view.extractRenderState(STATE.cameraRenderState,
+				view.getCameraEntityPartialTicks(minecraft.getDeltaTracker()));
+		if (!TerrainDraw.drawnShadowPair(STATE.cameraRenderState.viewRotationMatrix,
+				STATE.cameraRenderState.projectionMatrix)) {
+			return;
+		}
 
 		gathered = extractEntities(minecraft, view, frustum, casters);
-		gatheredBlocks = extractBlockEntities(minecraft, renderer, casters);
+
+		// The block entities are not taken here, and it is not an order this walk chose: the list
+		// they are read off does not exist yet at this point of the stage. What the pack asked is
+		// left for the half that runs once it does.
+		blockEntitiesAsked = casters.anyBlockEntity();
+		emittersOnly = casters.emittersOnly();
+	}
+
+	/**
+	 * Adds the block entities of the sections the LIGHT walked, once its own render lists exist.
+	 * <p>
+	 * <strong>Apart from {@link #gather} because the only list that answers is made after it.</strong>
+	 * The block entities of a section are held on the section's mesh, and what says which sections to
+	 * ask is a walk's render lists; the light's are filled by the cull that runs after this walk was
+	 * worked out, so asked at gather time the question has the camera's answer or none.
+	 * <p>
+	 * <strong>And the game's own list is empty for the whole session here.</strong>
+	 * {@code LevelRenderer.visibleSections()} is filled by {@code LevelExtractor.applyFrustum}, which
+	 * Sodium redirects to an empty method ({@code mixin/core/render/world/LevelExtractorMixin}, a
+	 * {@code @Redirect} on {@code applyFrustum}, read at the shipped 0.9.1 jar). Walked, it yields
+	 * nothing, once, for ever, and the count printed beside it reads as a world with no chests in it.
+	 * Iris is NOT in that position and never was: it calls the game's
+	 * {@code extractVisibleBlockEntities} ({@code shadows/ShadowRenderer.java:668}), which the same
+	 * Sodium mixin cancels at head and serves from {@code SodiumWorldRenderer.extractBlockEntities},
+	 * off the render lists of whatever walk last filled them. That is the door taken here, and inside
+	 * the light's scope it is the light's sections it hands back.
+	 *
+	 * @param walk the platform's way to that door. Held open rather than called from here, this module
+	 *             naming no Sodium type
+	 */
+	public static void gatherBlockEntities(BlockEntityWalk walk) {
+		Minecraft minecraft = Minecraft.getInstance();
+		if (!blockEntitiesAsked || minecraft == null || minecraft.level == null) {
+			return;
+		}
+
+		walk.into(STATE, minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false));
+		if (emittersOnly) {
+			keepEmitters(minecraft.level);
+		}
+
+		gatheredBlocks = STATE.blockEntityRenderStates.size();
+	}
+
+	/**
+	 * Cuts what was just extracted down to the block entities that give off light, which is the
+	 * narrower of the pack's two words standing alone.
+	 * <p>
+	 * Iris cuts the same list in the same place and by the same test, after the extraction rather
+	 * than inside it ({@code shadows/ShadowRenderer.java:670-677}): there is one door into the block
+	 * entities and it does not take a filter. <strong>The emission is read off the level and not off
+	 * the render state</strong>, which is where Iris reads it: 26.2 made
+	 * {@code BlockEntityRenderState.blockState} private with no accessor
+	 * ({@code blockentity/state/BlockEntityRenderState.java:19}). Both answers are the same block's,
+	 * the extraction that filled the list having run microseconds earlier in this same frame.
+	 */
+	private static void keepEmitters(Level level) {
+		STATE.blockEntityRenderStates
+				.removeIf(state -> level.getBlockState(state.blockPos).getLightEmission() == 0);
 	}
 
 	/**
@@ -183,13 +251,13 @@ public final class ShadowGeometry {
 		try {
 			walk(camera);
 		} finally {
-			// <strong>The frame of this family's own buffers ends here whether anything was drawn or
-			// not</strong>, and it is not tidiness: {@code RenderBuffers.endFrame} is the ONLY path
-			// that recycles what {@code StagedVertexBuffer} took, so without it every frame's
-			// acquire misses the pool and falls through to a fresh device allocation that nothing
-			// ever hands back. Measured before this line existed: 144 frames a second became ten to
-			// fifteen, on two entities, because the cost is per FRAME and not per caster.
-			// {@link HandDraw#drawTranslucent} ends its own on both paths for the same reason.
+			// THE FRAME OF THIS FAMILY'S OWN BUFFERS ENDS HERE whether anything was drawn or not,
+			// and it is not tidiness: RenderBuffers.endFrame is the ONLY path that recycles what
+			// StagedVertexBuffer took, so without it every frame's acquire misses the pool and falls
+			// through to a fresh device allocation that nothing ever hands back. The cost is per
+			// FRAME and not per caster, so it is paid in full by a world holding two entities, and
+			// it was measured on this machine as an order of magnitude off the frame rate.
+			// HandDraw.drawTranslucent ends its own on both paths for the same reason.
 			if (buffers != null) {
 				buffers.endFrame();
 			}
@@ -311,7 +379,7 @@ public final class ShadowGeometry {
 				return STATE.entityRenderStates.size();
 			}
 
-			// <strong>Iris's own constant here, and not the entity's own tick.</strong> Its player
+			// IRIS'S OWN CONSTANT HERE, and not the entity's own tick. Its player
 			// branch takes one getGameTimeDeltaPartialTick(false) for the pair
 			// (shadows/ShadowRenderer.java:553) where its entity branch asks per caster (:712). The
 			// split is Iris's and it is not ours to tidy: made uniform, a frozen world poses the
@@ -367,11 +435,17 @@ public final class ShadowGeometry {
 	}
 
 	/**
-	 * The same test the game makes of its own camera, made of the light instead: {@code shouldRender}
+	 * The game's own visibility test, made of the light instead of the camera: {@code shouldRender}
 	 * against a frustum, then the section behind it ({@code extract/LevelExtractor.java:259-269}).
 	 * The passenger arm is the game's and Iris's alike: what carries the player is kept even where
-	 * the frustum refuses it, or the boat under a player casting a shadow would cast none. A
-	 * spectator is left out for the reason Iris leaves it out: it is not in the world to be lit.
+	 * the frustum refuses it, or the boat under a player casting a shadow would cast none.
+	 * <p>
+	 * <strong>Two of the game's arms are deliberately not here and one is added.</strong> Its walk
+	 * also drops whatever the camera is riding and the local player when the camera is not on it
+	 * ({@code extract/LevelExtractor.java:241-243}), both of which are about not drawing the thing
+	 * the world is being looked out of; in a map drawn from the sun the player is a caster like any
+	 * other, and Iris keeps it too. What is added is the spectator, left out for the reason Iris
+	 * leaves it out: it is not in the world to be lit.
 	 * <p>
 	 * <strong>The pack's own reach is a second bound and not a second shape.</strong> Iris builds a
 	 * whole shadow frustum for the casters that move where the pack asked for one, at the shadow
@@ -405,43 +479,6 @@ public final class ShadowGeometry {
 				|| minecraft.levelRenderer.isSectionCompiledAndVisible(block);
 	}
 
-	/**
-	 * Extracts the block entities of the sections the CAMERA found, which is what Iris extracts too.
-	 * <p>
-	 * The camera's sections and not the light's, and it is a known bound rather than an oversight:
-	 * the block entities of a section are held on the section's mesh, and the only walk that has a
-	 * list of sections at this moment is the one the camera made. Iris is in the same position and
-	 * takes the same list ({@code shadows/ShadowRenderer.java:667}, through the level renderer's own
-	 * extraction). What it costs is a chest behind the camera casting no shadow, on both engines.
-	 */
-	private static int extractBlockEntities(Minecraft minecraft, LevelRenderer renderer,
-			ShadowCasters casters) {
-		if (!casters.blockEntities()) {
-			return 0;
-		}
-
-		float partial = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
-		for (SectionRenderDispatcher.RenderSection section : renderer.visibleSections()) {
-			List<BlockEntity> renderable = section.getSectionMesh().getRenderableBlockEntities();
-			for (BlockEntity blockEntity : renderable) {
-				// No crumbling overlay: it is the picture's business, and all it would add to a depth
-				// buffer is the geometry that is already there.
-				//
-				// The four argument call and not the five argument one, which takes a cull frustum.
-				// That overload is NOT on the classpath this compiles against, whatever a newer copy
-				// of the sources may show; the frustum would have been null here anyway, the light's
-				// own being no use against a bounding box measured for the camera's sections.
-				BlockEntityRenderState state = renderer.blockEntityRenderDispatcher()
-						.tryExtractRenderState(blockEntity, partial, null, false);
-				if (state != null) {
-					STATE.blockEntityRenderStates.add(state);
-				}
-			}
-		}
-
-		return STATE.blockEntityRenderStates.size();
-	}
-
 	/** Poses everything extracted about the camera and hands it to our own storage. */
 	private static void submit(Minecraft minecraft, Vec3 camera) {
 		PoseStack pose = new PoseStack();
@@ -471,5 +508,22 @@ public final class ShadowGeometry {
 			Vitrail.logger().info("The light's walk submitted {} entities and {} block entities into "
 					+ "the shadow map, on block table {}", entities, blockEntities, counted);
 		}
+	}
+
+	/**
+	 * The way to the block entities of the sections a walk has left in its render lists, which only
+	 * the platform half knows how to open.
+	 */
+	@FunctionalInterface
+	public interface BlockEntityWalk {
+
+		/**
+		 * Extracts them into the state the light's own submission is built from.
+		 *
+		 * @param state       where the render states are added, beside the entities already in it
+		 * @param partialTick how far the frame stands between two ticks, which is what a block entity
+		 *                    animates on
+		 */
+		void into(LevelRenderState state, float partialTick);
 	}
 }

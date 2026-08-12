@@ -22,6 +22,7 @@ import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
 import net.caffeinemc.mods.sodium.client.util.GameRendererStorage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayerGroup;
 import net.minecraft.world.phys.Vec3;
 
@@ -143,10 +144,10 @@ public final class ShadowTerrain {
 
 		int seen = sections(manager.getRenderLists());
 
-		// What the light can see is worked out here, and the position settles nothing: the test that
-		// keeps or drops a caster is a fade since a section's own upload, which no walk of ours
-		// moves. It sits ahead of the walk because that is the plainer place to ask it, and
-		// ShadowGeometry.gather carries the reading with the lines it rests on.
+		// Which entities the light can see is worked out here, and for them the position settles
+		// nothing: they are kept or dropped by a frustum and by a section's own state, neither of
+		// which this walk moves. The block entities are the opposite case and are taken further
+		// down, once the light has render lists of its own.
 		ShadowCasters casters = TerrainDraw.shadowCasters();
 		ShadowGeometry.gather(light, camera, casters);
 
@@ -163,6 +164,19 @@ public final class ShadowTerrain {
 					new Vector3d(camera.x, camera.y, camera.z));
 			manager.finalizeRenderLists(minecraft.gameRenderer.mainCamera(), viewport,
 					fog == null ? FogParameters.NONE : fog, true);
+
+			// The block entities, HERE and not with the entities above: this is the first line of the
+			// stage at which the light has render lists of its own, and they are what says which
+			// sections to ask. Sodium's door onto them is the one Iris reaches through the game's
+			// extraction (shadows/ShadowRenderer.java:668, cancelled and served by the same mixin);
+			// the game's own visible sections are never filled at all under Sodium, so the walk that
+			// read them found a world with no chests in it.
+			ClientLevel level = minecraft.level;
+			if (level != null) {
+				ShadowGeometry.gatherBlockEntities((state, partial) -> renderer.extractBlockEntities(
+						minecraft.gameRenderer.mainCamera(), partial, level.destructionProgress(),
+						state));
+			}
 
 			// Once per block table, and never on a frame where the camera saw nothing. Two equal
 			// numbers mean the cull did not happen, and nothing on screen would say so. The table is
@@ -205,7 +219,7 @@ public final class ShadowTerrain {
 		}
 
 		// Everything that moves, between the opaque world and the copy, which is where Iris puts it
-		// (shadows/ShadowRenderer.java:584 then :688). It matters that it is before the copy and not
+		// (shadows/ShadowRenderer.java:584 then :588). It matters that it is before the copy and not
 		// after: shadowtex1 is the map WITHOUT the translucent half, and a mob belongs in it. Drawn
 		// after the copy, every caster that moves would be missing from the one name half the corpus
 		// reads its shadows through.

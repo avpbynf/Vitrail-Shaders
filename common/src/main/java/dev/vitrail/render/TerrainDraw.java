@@ -444,6 +444,21 @@ public final class TerrainDraw {
 		return self == null ? null : self.values.shadowFrustum(dest);
 	}
 
+	/**
+	 * The two halves of that pair, written into the matrices handed in, and false with both left
+	 * alone when no pack is drawing.
+	 */
+	public static boolean drawnShadowPair(Matrix4f modelView, Matrix4f projection) {
+		TerrainDraw self = PackChain.terrain();
+		if (self == null) {
+			return false;
+		}
+
+		self.values.drawnShadowPair(modelView, projection);
+
+		return true;
+	}
+
 	/** Whether the renderer is drawing the shadow map at this instant, for the loader side. */
 	public static boolean drawingShadow() {
 		return shadowing;

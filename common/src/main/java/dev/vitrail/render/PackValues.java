@@ -239,6 +239,17 @@ public final class PackValues {
 		return dest.set(view.drawnShadowProjection()).mul(view.drawnShadowModelView());
 	}
 
+	/**
+	 * The same pair handed over unmultiplied, for whoever needs the two halves apart rather than the
+	 * matrix that culls. The drawn pair again and for the same reason: the published one is a frame
+	 * older than the map about to be drawn.
+	 */
+	public void drawnShadowPair(Matrix4f modelView, Matrix4f projection) {
+		ViewMatrices view = this.state.view();
+		modelView.set(view.drawnShadowModelView());
+		projection.set(view.drawnShadowProjection());
+	}
+
 	/** How big a noise image the pack asked for, its own directive, 256 unless it says otherwise. */
 	public int noiseResolution() {
 		return Math.round(this.state.noiseTextureResolution());
