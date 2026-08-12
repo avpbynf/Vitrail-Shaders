@@ -271,6 +271,35 @@ public final class EntityDraw {
 			return hand() ? "hand" : "entities";
 		}
 
+		/**
+		 * Which side of the deferred stage this piece's PASS is drawn on, which is not always what
+		 * its own pipeline blends.
+		 * <p>
+		 * <strong>One question, three answers, and asked HERE because it used to be written out
+		 * twice and the two copies disagreed.</strong> An entity row is asked of its pipeline, the
+		 * game sorting its own submissions that way. A hand row is asked of its row, a hand pass
+		 * being drawn wholly on one side whatever its rows blend, which is what {@link
+		 * #afterDeferred} carries and what the javadoc of that field says. A shadow row is neither:
+		 * the map is filled before the stage has run at all, so the whole of that table is on the
+		 * early side, and asking its pipeline would put its translucent rows on a side of the frame
+		 * the map never reaches.
+		 * <p>
+		 * The copy that read the blend was {@link EntityProgram}'s, and it misbound exactly the hand
+		 * rows whose blend disagrees with their pass. That is half of them and the halves are
+		 * exact, both tables being twins of the one mob table and the blend being read off the
+		 * shared pipeline: every mob row is misbound in one of the two tables and served correctly
+		 * in the other. The arm blends and is drawn in the solid pass, so it read and wrote the far
+		 * half of every target it touches; a water row built from a pipeline that does not blend was
+		 * bound the other way round.
+		 */
+		boolean afterStage() {
+			if (shadow()) {
+				return false;
+			}
+
+			return hand() ? this.afterDeferred : blended();
+		}
+
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
 		private PackProgram.GeometryElement asked() {
 			return new PackProgram.GeometryElement(this.element, this.program, this.alphaTest);
@@ -610,8 +639,13 @@ public final class EntityDraw {
 	 * <strong>The blending pass reaches the arm and what it holds alike</strong>, and the second
 	 * half arrived with the entities' blending rows: a translucent block held in hand draws with a
 	 * blending pipeline, which is a row of the table above like the rest since that half landed, so
-	 * its water twin serves it with {@code gbuffers_hand_water}; the arm around it comes on
-	 * {@code ENTITY_SOLID}, another row. Both are the pack's in the water pass.
+	 * its water twin serves it with {@code gbuffers_hand_water}; the arm around it comes on another
+	 * row again. Both are the pack's in the water pass.
+	 * <p>
+	 * That row is {@code ENTITY_TRANSLUCENT} and not {@code ENTITY_SOLID}, which is worth saying
+	 * because this file used to say the other and the demotion of draw buffer nought turns on it:
+	 * {@code AvatarRenderer.renderHand} submits the arm with {@code RenderTypes.entityTranslucent}
+	 * ({@code AvatarRenderer.java:288}), and that pipeline blends.
 	 */
 	private static final Map<RenderPipeline, Element> HAND_ELEMENTS = new LinkedHashMap<>();
 	private static final Map<RenderPipeline, Element> HAND_WATER_ELEMENTS = new LinkedHashMap<>();
@@ -1470,7 +1504,7 @@ public final class EntityDraw {
 				continue;
 			}
 
-			Half half = new Half(servedBy(one), sideOf(element), element.shadow());
+			Half half = new Half(servedBy(one), element.afterStage(), element.shadow());
 			if (byFile.containsKey(half)) {
 				continue;
 			}
@@ -1488,26 +1522,8 @@ public final class EntityDraw {
 				.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
 						loaded.get(element.element()), element, this.values, this.load,
 						byFile.get(new Half(servedBy(loaded.get(element.element())),
-								sideOf(element), element.shadow())),
+								element.afterStage(), element.shadow())),
 						this.chainTargets, this.targets, this.chainRuns)));
-	}
-
-	/**
-	 * Which side of the deferred stage a piece's PASS is drawn on, which is not always what its own
-	 * pipeline blends.
-	 * <p>
-	 * One question and three answers. An entity row is asked of its pipeline, the game sorting its
-	 * own submissions that way. A hand row is asked of its row, a hand pass being drawn wholly on one
-	 * side whatever its rows blend. A shadow row is neither: the map is filled before the stage has
-	 * run at all, so the whole of that table is on the early side, and asking its pipeline would put
-	 * its translucent rows on a side of the frame the map never reaches.
-	 */
-	private static boolean sideOf(Element element) {
-		if (element.shadow()) {
-			return false;
-		}
-
-		return element.hand() ? element.afterDeferred() : element.blended();
 	}
 
 	/**
@@ -1516,12 +1532,17 @@ public final class EntityDraw {
 	 * hand's water pass is a blended half like any other here, {@code gbuffers_hand_water} falling
 	 * back on {@code gbuffers_hand} with the two answers apart.
 	 *
+	 * @param afterStage which side of the deferred stage the PASS this half belongs to is drawn on,
+	 *               which is {@code Element.afterStage} and not the pipeline's blend. Named for the
+	 *               question rather than for the answer one family gives it: it was called
+	 *               {@code blended} while both writers already filled it from the row, which is a
+	 *               third spelling of the very confusion this key exists to settle
 	 * @param shadow whether this half fills the shadow map rather than the picture. Part of the key
 	 *               and not a detail: a shadow half is asked nothing of the plan and owes nothing to
 	 *               the scene seed, and without it here one file that serves both would answer for
 	 *               the map with the picture's attachments
 	 */
-	private record Half(String servedBy, boolean blended, boolean shadow) {
+	private record Half(String servedBy, boolean afterStage, boolean shadow) {
 	}
 
 	/**
@@ -1586,7 +1607,7 @@ public final class EntityDraw {
 		// own target and is the picture: the seed has nothing to carry and is never even drawn.
 		// Refusing the family there would take away the one configuration that tells a wrong
 		// gbuffer from a wrong composite, which is what these switches exist for.
-		if (!half.blended() && this.chainRuns && !this.seeded) {
+		if (!half.afterStage() && this.chainRuns && !this.seeded) {
 			Vitrail.logger().info("The scene seed is off, and it is the only way the first output of "
 					+ "an opaque piece reaches the pack's picture, so the game keeps its own shader "
 					+ "for what {} serves: served, it would write every other draw buffer and no "
@@ -1595,7 +1616,7 @@ public final class EntityDraw {
 			return null;
 		}
 
-		Optional<ChainPlan.Pass> geometry = this.plan.geometryOf(half.servedBy(), half.blended());
+		Optional<ChainPlan.Pass> geometry = this.plan.geometryOf(half.servedBy(), half.afterStage());
 		if (geometry.isEmpty()) {
 			return List.of();
 		}
@@ -1609,7 +1630,7 @@ public final class EntityDraw {
 			return null;
 		}
 
-		if (half.blended()) {
+		if (half.afterStage()) {
 			return pass.attachments();
 		}
 

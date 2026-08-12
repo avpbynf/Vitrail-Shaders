@@ -137,7 +137,14 @@ final class EntityProgram implements DumpedProgram {
 		// shadowcolor rather than any colortex, so the side it reads is the only thing the step
 		// decides for it.
 		boolean shadow = element.shadow();
-		PackProgram.Loaded bound = loaded.rebind(chainTargets, !shadow && element.blended()
+		// Asked of the row and never of the blend, which is Element.afterStage: a hand pass is drawn
+		// wholly on one side whatever its rows blend, and the arm blends. Read off the blend here,
+		// every hand row whose blend disagreed with its pass was bound against the wrong step, and
+		// the two tables were wrong in opposite directions: a blending row of the solid pass against
+		// a stage its pass runs before, a row of the water pass that does not blend against one its
+		// pass runs after.
+		boolean afterStage = element.afterStage();
+		PackProgram.Loaded bound = loaded.rebind(chainTargets, afterStage
 				? chainTargets.schedule().stepAfterDeferred(servedBy)
 				: chainTargets.schedule().step(servedBy));
 
@@ -160,10 +167,10 @@ final class EntityProgram implements DumpedProgram {
 				false,
 				// afterDeferred: which side of the stage this piece is drawn on, which decides the
 				// half of every target it reads and whether a depth sampler may be answered with the
-				// opaque world's image. It is the blend and nothing else, the game drawing what
-				// blends among its translucent features. A shadow row is on neither side of a stage
-				// that has not run when it draws.
-				!shadow && element.blended(),
+				// opaque world's image. Asked of the row, Element.afterStage saying why that is not
+				// the same question as what the pipeline blends. A shadow row is on neither side of a
+				// stage that has not run when it draws, and answers the early one.
+				afterStage,
 				// The piece's own on both sides of the map, which is what Iris ends up drawing with
 				// too, and NOT the chunk passes' answer: those really do drop the cull, and that is
 				// about a wall meshed one side only, where a mob is closed geometry with no such back
