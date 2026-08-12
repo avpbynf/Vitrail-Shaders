@@ -121,17 +121,23 @@ A pack reads scene depth under several names, and they are not interchangeable:
 - the depth of the world as drawn,
 - a copy taken **before** the translucent geometry, so that a pass can ask what is behind the
   water,
+- a copy taken one step earlier still, **before the player's own hand**, so that a pass can ask what
+  the hand is held in front of,
 - and, for shadows, the depth from the light's point of view, which follows a different convention
   entirely - see [Sky and shadows](sky-and-shadows.md).
 
 Aliasing the pre-translucent copy onto the ordinary depth is a mistake with no visible signature:
 the effect still appears, still has the right shape, and reads the wrong distance.
 
-The two scene copies are converted from the reversed-Z convention the game renders with into the
-legacy convention packs expect. The world itself keeps being drawn in reversed Z, so its depth
-precision is unaffected; only the copy handed to the pack is converted. The shadow map is not
-converted at all - it is *stored* in the convention the pack reads, which comes to the same thing by
-another road.
+The pre-hand copy is the same mistake at a smaller scale, and it only exists where the engine draws
+the hand at all: with the hand left to the game, nothing is drawn between the two moments and the
+two copies are the same image, so only one is allocated and only one conversion is paid for. Turning
+the hand on is what adds the second image and the second conversion.
+
+The scene copies are converted from the reversed-Z convention the game renders with into the legacy
+convention packs expect. The world itself keeps being drawn in reversed Z, so its depth precision is
+unaffected; only the copy handed to the pack is converted. The shadow map is not converted at all -
+it is *stored* in the convention the pack reads, which comes to the same thing by another road.
 
 ## The seed, and why anything not drawn through the pack looks flat
 
@@ -210,11 +216,13 @@ opaque features, before the deferred stage, and the blending pass at the end of 
 the composites. Where each lands is what decides which half of every target it writes, and both are
 in the picture the composites read. This is where the reference puts them too.
 
-Moving it costs two things worth knowing. The hand needs a projection of its own - the head-up field
-of view, and a clip depth squeezed to an eighth so that an arm held against a wall is not cut in half
-by it, which is the number packs know as `MC_HAND_DEPTH` - so it is the one family whose
-`gl_ProjectionMatrix` is not the frame's. And it needs a second feature renderer, because the game's
-own is already mid-frame at both of those moments and refuses to be re-entered.
+Moving it costs three things worth knowing. The hand needs a projection of its own - the head-up
+field of view, and a clip depth squeezed to an eighth so that an arm held against a wall is not cut
+in half by it, which is the number packs know as `MC_HAND_DEPTH` - so it is the one family whose
+`gl_ProjectionMatrix` is not the frame's. It needs a second feature renderer, because the game's own
+is already mid-frame at both of those moments and refuses to be re-entered. And it splits the depth
+copy above in two, since from the moment the hand is in the world's depth a pack asking what lies
+behind it has to be given the depth from before it was drawn.
 
 ## Why a family cannot simply be switched over
 
