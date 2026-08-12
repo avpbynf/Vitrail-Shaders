@@ -58,12 +58,17 @@ import java.util.Optional;
  * <p>
  * The third image is the same rule applied one step earlier: {@code depthtex2} is the opaque world
  * WITHOUT the hand, so that a pack can read what the hand it is holding stands in front of, and
- * only {@link #takeOpaque}'s image carries the hand. <strong>It is allocated with the hand and not
- * with the pair</strong>, and that is not a divergence from Iris, which keeps a third texture for
- * every session: nothing between the two moments writes the game's depth except the hand's own solid
- * pass, so with the hand left to the game the two images would be the same one to the bit, and
- * {@code depthtex2} is answered from the pair instead. What the difference costs is one full screen
- * image and one conversion a frame, both of which arrive and go with {@code hand=on}.
+ * only {@link #takeOpaque}'s image carries the hand.
+ * <p>
+ * <strong>It is allocated with the hand and not with the pair</strong>, where Iris keeps a third
+ * texture for every session ({@code targets/RenderTargets.java:73}) and refills it on every frame
+ * ({@code targets/RenderTargets.java:234}). What a pack reads is the same either way, and that is
+ * the whole of why the difference is allowed to stand: nothing between the two moments writes the
+ * game's depth except the hand's own solid pass, so on a frame that draws no hand the two images
+ * would be the same one to the bit, and {@code depthtex2} is answered from the pair instead. What
+ * the difference buys is one full screen image and one conversion a frame, which arrive with
+ * {@code hand=on} and go with it: {@link #forgetPreHand} hands the image back the frame the family
+ * stops being this engine's, and the conversion is only paid on the frames a hand is really drawn.
  */
 final class PackDepth {
 
@@ -209,8 +214,9 @@ final class PackDepth {
 	 * pack reads as {@code depthtex2}. Must run on the render thread and outside any render pass.
 	 * <p>
 	 * The caller has to take it before the hand's solid pass and may only take it on the frames that
-	 * pass really runs: an image taken on a frame the game drew its own hand is the opaque world's
-	 * over again, and paying a conversion for it would buy nothing.
+	 * pass really draws something, which is {@code HandDraw.draws} and not the load's own answer: an
+	 * image taken on a frame that drew no hand of ours is the opaque world's over again, and paying
+	 * a conversion for it would buy nothing.
 	 *
 	 * @param live the game's depth as it stands, with the world's opaque features in it and the hand
 	 *             not yet
@@ -241,24 +247,48 @@ final class PackDepth {
 	}
 
 	/**
-	 * The opaque world's depth without the hand, or null on a frame that did not take one, which
-	 * every caller has to read as "the opaque world's image answers this name".
+	 * The opaque world's depth without the hand, or null while this frame has none.
+	 * <p>
+	 * Null covers three cases and a caller cannot tell them apart, which is deliberate: the answer
+	 * to all three is the same, fall back to whatever the pass would have read for a depth copy
+	 * without this class. Only the first of the three is exact. A frame that drew no hand of ours
+	 * really has nothing to give, the two moments holding one image. A refused allocation and a
+	 * conversion that could not be drawn both leave the reader a depth with the hand in it, which is
+	 * the very thing the name asks to be spared; both are said out loud where they happen rather
+	 * than here, {@link #ensurePreHand} at the allocation and {@link #pipeline(GpuDevice)} at the
+	 * conversion.
 	 */
 	GpuTextureView preHand() {
 		return this.preHandWritten ? this.preHand.view() : null;
 	}
 
 	/**
-	 * Forgets this frame's pre-hand image while keeping the memory it lives in.
+	 * Forgets this frame's pre-hand image, and gives the memory back with the family it was
+	 * allocated for.
 	 * <p>
-	 * Per frame, where the other two are per load, and the difference is the one thing that makes
-	 * this image safe. They are refilled at a fixed point of every frame; this one is only filled
-	 * while the engine draws the hand itself, so a flag left standing would go on serving the last
-	 * frame that drew a hand to every frame that did not, which is a depth one frame of camera
-	 * movement out of date and nothing that would report it.
+	 * The forgetting is per frame, where the other two images are per load, and the difference is
+	 * the one thing that makes this image safe. They are refilled at a fixed point of every frame;
+	 * this one is only filled while the engine draws the hand itself, so a flag left standing would
+	 * go on serving the last frame that drew a hand to every frame that did not, which is a depth
+	 * one frame of camera movement out of date and nothing that would report it.
+	 * <p>
+	 * The memory outlives the frame and not the family, which is what makes the class comment's cost
+	 * true both ways. It is deliberately NOT freed on the frames that simply drew no hand - third
+	 * person, a hidden interface - since those come back within a keystroke and an image freed and
+	 * built again at every one of them would trade a megabyte for an allocation a frame.
+	 *
+	 * @param held whether the hand is still this engine's to draw, which is the load's answer and
+	 *             not the frame's: it goes false when the family is turned off in the options and
+	 *             when {@code EntityDraw} drops it mid session after a failed draw, and the image
+	 *             has nothing left to be for in either case
 	 */
-	void forgetPreHand() {
+	void forgetPreHand(boolean held) {
 		this.preHandWritten = false;
+
+		if (!held) {
+			this.preHand = close(this.preHand);
+			this.preHandBroken = false;
+		}
 	}
 
 	/**
@@ -338,7 +368,9 @@ final class PackDepth {
 	 * for it.
 	 *
 	 * @return false when there is nothing to draw into, in which case {@code depthtex2} falls back
-	 *         to the opaque world's image, which is the hand short of the one thing it excludes
+	 *         to whatever the reading pass answers a depth copy with: the opaque world's image after
+	 *         the deferred stage, which carries the one thing the name excludes, and the far plane
+	 *         on the hand's own solid pass, which carries nothing
 	 */
 	private boolean ensurePreHand(int width, int height) {
 		if (this.preHandBroken) {

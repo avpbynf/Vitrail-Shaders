@@ -192,6 +192,24 @@ public final class HandDraw {
 		return wanted && !failed && PackChain.entities() != null;
 	}
 
+	/**
+	 * Whether a hand is really drawn by this engine on THIS frame, which is {@link #diverted} and
+	 * the game's own tests together.
+	 * <p>
+	 * The two are different questions and what separates them is a frame rather than a load.
+	 * {@link #diverted} says the family is this engine's to draw at all; this says one is drawn.
+	 * Third person, a hidden interface, a sleeping player, a spectator and a panorama capture all
+	 * answer yes to the first and no to this, so anything paid per frame FOR the hand has to ask
+	 * this one and not that one: {@link #shows} carries which tests those are and whose they are.
+	 */
+	public static boolean draws() {
+		Minecraft minecraft = Minecraft.getInstance();
+		GameRenderState state = minecraft.gameRenderer.gameRenderState();
+
+		return diverted() && minecraft.player != null
+				&& shows(minecraft, state, state.levelRenderState.cameraRenderState);
+	}
+
 	/** Whether the hand is being drawn at this instant, which is what tells its draws from a mob's. */
 	static boolean drawing() {
 		return half != null;
@@ -271,7 +289,7 @@ public final class HandDraw {
 	}
 
 	private static void draw(Half which) {
-		if (!diverted()) {
+		if (!draws()) {
 			return;
 		}
 
@@ -332,7 +350,9 @@ public final class HandDraw {
 		GameRenderer gameRenderer = minecraft.gameRenderer;
 		GameRenderState state = gameRenderer.gameRenderState();
 		CameraRenderState camera = state.levelRenderState.cameraRenderState;
-		if (player == null || !shows(minecraft, state, camera)) {
+		// The state was settled by draws() before this was reached; what is left here is the type,
+		// the submission below taking a player and not a player or nothing.
+		if (player == null) {
 			return;
 		}
 

@@ -1126,8 +1126,9 @@ public final class PackChain {
 		// The depth taken before the hand is a per frame fact too, and the only one of the three
 		// images that is not refilled at a fixed point of every frame: it is taken while the engine
 		// draws the hand and nowhere else, so left standing it would serve the last frame that drew
-		// one to every frame that did not.
-		this.targets.depth().forgetPreHand();
+		// one to every frame that did not. The image itself is handed back with the family rather
+		// than with the frame, which is what the argument is.
+		this.targets.depth().forgetPreHand(HandDraw.diverted());
 
 		// The seed's kept depth is a per frame fact like the four above and belongs with them, the
 		// image itself outliving the frame only because nobody frees a texture every frame.
@@ -1406,16 +1407,24 @@ public final class PackChain {
 	 * pack reads as {@code depthtex2}. Called from the event the hand's solid half is drawn at and
 	 * one line ahead of it.
 	 * <p>
-	 * The moment is Iris's and so is the reason: {@code beginHand} copies the depth and then draws
-	 * the solid hand ({@code mixin/MixinLevelRenderer.java:277-281}), one step before the
-	 * {@code beginTranslucents} that copies {@code depthtex1}, so {@code depthtex2} is the only depth
-	 * of the pair the hand is missing from. A pack reads it to see what the hand it is holding stands
-	 * in front of, and served the image with the hand in it that read finds the hand.
+	 * The moment is Iris's and so is the reason. Its {@code beginHand} copies the depth and draws
+	 * nothing ({@code pipeline/IrisRenderingPipeline.java:1050-1057}); the solid hand is drawn on the
+	 * line after the call to it, by the mixin ({@code mixin/MixinLevelRenderer.java:279-280}); and the
+	 * {@code beginTranslucents} that copies {@code depthtex1} comes one step behind both. So
+	 * {@code depthtex2} is the only depth of the pair the hand is missing from. A pack reads it to
+	 * see what the hand it is holding stands in front of, and served the image with the hand in it
+	 * that read finds the hand.
 	 * <p>
-	 * <strong>Only on the frames this engine really draws the hand.</strong> The hand's solid pass is
-	 * the one thing between this moment and the opaque image {@link #drawEarly} takes, so with the
-	 * hand left to the game the two are the same image to the bit and {@code depthtex2} is answered
-	 * from the pair. {@link PackDepth} carries what that saves.
+	 * <strong>Only on the frames this engine really draws a hand</strong>, which is
+	 * {@link HandDraw#draws} and not {@link HandDraw#diverted}: the hand's solid pass is the one
+	 * thing between this moment and the opaque image {@link #drawEarly} takes, so on every frame
+	 * that pass draws nothing - the game keeping its own hand, third person, a hidden interface, a
+	 * panorama - the two are the same image to the bit and {@code depthtex2} is answered from the
+	 * pair. The frame's test and not the load's, because the load's would pay a full screen image
+	 * and a conversion for that identical copy on every frame the player spent looking at himself,
+	 * and would take a panorama capture through the 4096 square allocation {@link PackDepth} says is
+	 * the one that fails. Iris pays it unconditionally instead, having the copy already in hand as a
+	 * blit; here it is a draw. {@link PackDepth} carries what that saves.
 	 * <p>
 	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes, for the reason
 	 * {@link #markGeometryDepth} is not: nothing here warms a pipeline, prepares a target or clears
@@ -1426,7 +1435,7 @@ public final class PackChain {
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Minecraft minecraft = Minecraft.getInstance();
 		if (disabled || chain == null || device == null || minecraft == null || !chainWanted
-				|| !HandDraw.diverted()) {
+				|| !HandDraw.draws()) {
 			return;
 		}
 
