@@ -225,10 +225,12 @@ The interception point that works for ordinary geometry does not work here, beca
 renderer opens its own render passes, with its own pipelines and vertex buffers built once. Clouds
 are outside that class again, and the last section says how far outside.
 
-Worse, the sky is not one vertex format. Three formats serve the six pieces, and between them they
+Worse, the sky is not one vertex format. Four formats serve the eight pieces, and between them they
 carry position, colour and texture coordinates and nothing else: no normal, no lightmap, no
 overlay. So the vertex elements a translated program must declare are the answer of the *pass*, not
-of the family.
+of the family. The End's own sky is the piece that makes the point: it is the only one whose mesh
+carries a texture coordinate *and* a colour, so it is the only one that would be refused outright by
+a program written against the sun's format.
 
 That is forced by how vertex inputs bind. The match is by name and asymmetric in both directions: a
 name the stage declares that the bound format does not carry makes the program refused, while a
@@ -259,6 +261,13 @@ and carries the format, topology and blending of the game's pipeline alongside i
 Beyond that, a uniform tells the shader which stage of rendering is running. That uniform is the
 only way a pack can distinguish the sky disc, the dark plane under the world, the sunrise band, the
 stars, the sun and the moon, since two files serve all six.
+
+The End's two pieces answer that uniform with the *custom sky* stage, and that is read off the
+reference rather than chosen. The reference sets a stage at the head of each overworld method of the
+sky renderer and sets none in either End method; what it does set, once, is the custom-sky stage at
+the head of the whole sky pass, as a heuristic for sky mods drawing before the game does. The End
+branch never reaches a method that replaces it, so custom sky is what a pack reads there - for the
+End's own sky and for the dragon's flash alike.
 
 ### The pass matrix is the body's position
 
@@ -301,20 +310,24 @@ pack's own target like any other. Before that, such a program drew onto the atta
 opened its own pass with, where nothing of the chain collected it: a pack whose cloud program says
 nothing had no clouds at all, at any setting, and nothing said why.
 
-It is then all six or none. If any piece the game still draws would stay behind, the whole sky keeps
-the game's target, because the layer is the only road left to a piece that stayed on it and the
+It is then all eight or none. If any piece the game still draws would stay behind, the whole sky
+keeps the game's target, because the layer is the only road left to a piece that stayed on it and the
 pieces that write outright cut the layer where they land. A pack serving no program for the basic
 sky and one for the textured one (which the format allows) would otherwise get a sky whose
 disc marks the whole frame and whose sun and moon are cut out of it.
+
+All eight and not the branch in hand, which costs one thing worth naming: a place serving one branch
+and not the other holds the served branch back too, though the two are never drawn together. Every
+pack of the corpus answers both sky programs in the End, so nothing pays for it there today.
 
 Because the sky is drawn before the world, the sky stage is more often than not what opens the
 frame. Not always: `sky=off` in the options stops it, so does a pack that serves no sky program at
 all, and so does the Nether, whose skybox is none and which opens no sky pass whatever. In those
 cases the terrain opens the frame, as it always did.
 
-The End is the case to be careful with. It opens sky passes of its own (it has its own sky, its own
-flash, and a vertex format neither of the others uses) but it draws no **disc**, which is the piece
-the pieces above are keyed to and the one the horizon cone rides in.
+The End is the case to be careful with. Its two passes are served like the rest, but it draws no
+**disc**, and the disc is the piece the horizon cone rides in: there is no band under the End's
+horizon to close, and nothing there gates itself on the directive that gates the cone.
 
 ### The sun's path is tilted for the bodies as well as for the light
 
@@ -382,7 +395,7 @@ that pass's pipeline state, topology and depth convention.
 
 Two conditions come with it, and neither is optional. The cone rides in the disc's pass, so it is
 drawn only where the disc is: a pack that refuses the disc has drawn its own, and the Nether and
-the End open no such pass at all. And it is drawn only where the world's opaque geometry marks the
+the End draw no disc at all. And it is drawn only where the world's opaque geometry marks the
 pixels it wrote: the cone stands over the whole of the ground rather than over the sky, and marking
 a pixel cuts the full-screen layer there, so a cone drawn while the world still reaches the pack's
 target through that layer would cut the ground out of the picture. On the first frame of a world
