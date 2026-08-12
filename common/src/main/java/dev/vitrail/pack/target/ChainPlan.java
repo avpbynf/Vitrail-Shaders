@@ -106,9 +106,9 @@ public final class ChainPlan {
 	 */
 	private static final List<NamedProgram> NAMED_PROGRAMS = Stream.concat(
 			// None of the sky's three is counted, the clouds included, and the reason is the same for
-			// all three: the branch of the game's sky pass this engine hooks is not taken below the
-			// overworld, and neither is its cloud pass. It is spelled out, with what it was measured
-			// to cost, where the verdicts are handed their map.
+			// all three: the game opens no sky pass at all in the Nether, and no cloud pass below the
+			// overworld. It is spelled out, with what it was measured to cost, where the verdicts are
+			// handed their map.
 			SKY_PROGRAMS.stream()
 					.map(program -> new NamedProgram(program, CLOUD_PROGRAM.equals(program),
 							false, NOT_EVERYWHERE)),
@@ -484,15 +484,13 @@ public final class ChainPlan {
 		// the two places the format reserves for the Nether and the End.
 		//
 		// Three families fail that question however options.txt is written, and each fails it
-		// differently. The sky's two and the clouds are the branch of the game's own sky pass this
-		// engine hooks, and it is not taken below the overworld: a place whose skybox is NONE opens no
-		// sky pass at all and the End takes the other branch, two methods nothing here hooks
-		// (LevelRenderer.addSkyPass: the Skybox.NONE gate at :337, the End branch at :344-348). Iris
-		// hooks that branch and serves it with the pack's own program, RenderPipelines.END_SKY being
-		// assigned gbuffers_skytextured (IrisPipelines.java:69), and nothing makes that impossible
-		// here, SkyVertex already carrying the END_SKY format: it is a gap and not a choice, and
-		// until it lands the End's sky is drawn by the game's shader and carried in flat.
-		// The weather is drawn only where the level has weather,
+		// differently. The sky's two and the clouds hang off the game's own sky pass, and a place
+		// whose skybox is NONE opens none at all: that is the Nether (LevelRenderer.addSkyPass, the
+		// Skybox.NONE gate at :337). Both branches of that pass are served now, the End's two methods
+		// as much as the overworld's six, RenderPipelines.END_SKY being assigned gbuffers_skytextured
+		// as Iris assigns it (IrisPipelines.java:69). So what keeps the sky out of this count is one
+		// place and no longer two, and the clouds are held out by their own pass, which the game
+		// draws in the overworld alone. The weather is drawn only where the level has weather,
 		// which the weather renderer decides on its own; what is certain here is that it is not every
 		// place.
 		//
@@ -508,12 +506,12 @@ public final class ChainPlan {
 		// three are true. Counting the weather rewrites the colortex12 note of both Complementary in
 		// all three of theirs, which makes it true in world0 and makes it name, in the other two, a
 		// program that will never run there: four lines lost against two gained. Holding the three out
-		// keeps the true notes and pays one false one per family in the overworld, which is the
-		// cheaper half of both trades and the one this engine takes.
+		// keeps the true notes and pays one false one per family in every place that family really
+		// draws, which is the cheaper half of both trades and the one this engine takes.
 		//
-		// WHAT IT LEAVES OPEN, said rather than hidden: those overworld notes stay wrong, and the
-		// only honest way to close them is a per place answer rather than a per name one, which this
-		// record cannot carry.
+		// WHAT IT LEAVES OPEN, said rather than hidden: those notes stay wrong, and the only honest
+		// way to close them is a per place answer rather than a per name one, which this record
+		// cannot carry. The End's sky widened that by one place the day it was served.
 		// AND, on the near side, only where the draw is really taken. A family whose FIRST output
 		// reaches the pack's picture through the scene seed takes over a pass the renderer opened
 		// with one attachment of its own, so it can only be redirected when that output is the seed's

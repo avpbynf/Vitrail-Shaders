@@ -38,13 +38,17 @@ import java.util.function.Supplier;
  * the piece is drawn into. The two answers are taken on one call of one wrap and cannot part
  * company: a pipeline carries one colour state per attachment the descriptor names, and setting one
  * against a pass built for the other throws by name in the middle of the sky. The two arguments
- * dropped along the way are the clear colour and the clear depth, and all six methods pass both
+ * dropped along the way are the clear colour and the clear depth, and all eight methods pass both
  * empty.
  * <p>
  * <strong>An element is recognised by the label the game gives its own pass</strong>, which is the
- * first argument of the call wrapped below. That is what lets one wrap serve six methods without a
+ * first argument of the call wrapped below. That is what lets one wrap serve eight methods without a
  * table of method names to keep in step with the game: a method whose label this engine has no
  * element for prepares nothing and draws exactly as it did.
+ * <p>
+ * <strong>The eight are two branches and not one list.</strong> {@code LevelRenderer.addSkyPass}
+ * draws the End's two or the overworld's six and never both, so a place reaches at most one half of
+ * what is wrapped here, and the four methods a place never calls cost it nothing.
  * <p>
  * <strong>One of the pack's answers is not a shader at all.</strong> Two of these pieces, the sun
  * and the moon, can be refused outright in {@code shaders.properties}, and a refusal is cancelled at
@@ -145,7 +149,7 @@ public abstract class SkyRendererMixin {
 	 */
 	@WrapOperation(
 			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
-					"renderMoon"},
+					"renderMoon", "renderEndFlash"},
 			at = @At(value = "INVOKE",
 					target = "Lnet/minecraft/client/renderer/DynamicUniforms;writeTransform("
 							+ "Lorg/joml/Matrix4f;"
@@ -159,9 +163,32 @@ public abstract class SkyRendererMixin {
 		return original.call(uniforms, modelView, colour);
 	}
 
+	/**
+	 * The same for the End's sky, which is the one pass of the eight that names no colour.
+	 * <p>
+	 * A wrap of its own and not another name on the one above, because the call is a different
+	 * overload: {@code renderEndSky} passes a matrix alone, and {@code DynamicUniforms} fills the
+	 * modulator in with its own opaque white. Written out here rather than left at whatever the last
+	 * pass wrote, because the modulator is what a pack reads as {@code gl_Color} where the mesh
+	 * carries none and half of it where the mesh carries one, and this mesh carries one.
+	 */
+	@WrapOperation(
+			method = "renderEndSky",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/renderer/DynamicUniforms;writeTransform("
+							+ "Lorg/joml/Matrix4f;"
+							+ ")Lcom/mojang/blaze3d/buffers/GpuBufferSlice;"))
+	private GpuBufferSlice vitrail$endTransform(DynamicUniforms uniforms, Matrix4f modelView,
+			Operation<GpuBufferSlice> original) {
+		this.vitrail$modelView = modelView;
+		this.vitrail$colour = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
+
+		return original.call(uniforms, modelView);
+	}
+
 	@WrapOperation(
 			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
-					"renderMoon"},
+					"renderMoon", "renderEndSky", "renderEndFlash"},
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/CommandEncoder;createRenderPass("
 							+ "Ljava/util/function/Supplier;"
@@ -186,7 +213,7 @@ public abstract class SkyRendererMixin {
 
 	@WrapOperation(
 			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
-					"renderMoon"},
+					"renderMoon", "renderEndSky", "renderEndFlash"},
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/RenderPass;setPipeline("
 							+ "Lcom/mojang/blaze3d/pipeline/RenderPipeline;)V"))
@@ -199,9 +226,14 @@ public abstract class SkyRendererMixin {
 	 * Lets the game bind its own texture and keeps what it bound. The pack's program declares its
 	 * own name for the same image, and the descriptor flush walks the layout of the pipeline that is
 	 * bound, so the game's binding costs nothing and the name it used is not the one that is read.
+	 * <p>
+	 * Four passes and not two, and the End's two do not bind the same image as each other: the flash
+	 * is a sprite of the celestial atlas, as the sun and the moon are, while the End's sky is a
+	 * texture of its own. Which is exactly why the image is taken from the call rather than looked
+	 * up.
 	 */
 	@WrapOperation(
-			method = {"renderSun", "renderMoon"},
+			method = {"renderSun", "renderMoon", "renderEndSky", "renderEndFlash"},
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/RenderPass;bindTexture("
 							+ "Ljava/lang/String;"
@@ -248,7 +280,7 @@ public abstract class SkyRendererMixin {
 	 */
 	@WrapOperation(
 			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
-					"renderMoon"},
+					"renderMoon", "renderEndSky", "renderEndFlash"},
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/RenderPass;setVertexBuffer("
 							+ "ILcom/mojang/blaze3d/buffers/GpuBufferSlice;)V"))

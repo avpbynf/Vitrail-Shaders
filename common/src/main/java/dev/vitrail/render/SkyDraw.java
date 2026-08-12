@@ -73,9 +73,14 @@ public final class SkyDraw {
 	 *                 where the sun and the moon are. The disc pushes nothing and is drawn under the
 	 *                 camera's, so it is handed none and reads the frame's, which is the same matrix
 	 *                 by another road and the one it has already been seen to draw right under
-	 * @param stage    what a pack is told it is drawing. Iris sets one per method of the renderer and
-	 *                 these are its six, one for one: {@code renderSkyDisc} is {@code SKY},
-	 *                 {@code renderDarkDisc} is {@code VOID}, and the other four carry their own name
+	 * @param stage    what a pack is told it is drawing. Iris sets one per method of the renderer for
+	 *                 the overworld's six, one for one: {@code renderSkyDisc} is {@code SKY},
+	 *                 {@code renderDarkDisc} is {@code VOID}, and the other four carry their own name.
+	 *                 The End's two are the exception and are read the same way: Iris sets no phase in
+	 *                 either method, so what a pack reads there is the one the sky pass opened with,
+	 *                 {@code CUSTOM_SKY} at {@code MixinLevelRenderer.java:213-214}, the phase
+	 *                 {@code MixinSkyRenderer.java:29} would have replaced had the End branch called
+	 *                 {@code renderSkyDisc}
 	 * @param directive the line of {@code shaders.properties} that takes this piece out of the frame
 	 *                  altogether, spelled as the file spells it, or "" for the four pieces nothing
 	 *                  takes out. Only the sun and the moon carry one, and {@link #draws} says why the
@@ -94,16 +99,18 @@ public final class SkyDraw {
 	}
 
 	/**
-	 * The six elements of the overworld sky, which is all of them but the two the End draws.
+	 * The eight elements of the game's sky: the overworld's six, then the End's two, which are the
+	 * other branch of the same pass and never drawn in the same place.
 	 * <p>
 	 * The formats, the topologies and the blends are the game's own, read off
 	 * {@code RenderPipelines} one by one rather than guessed at from a family: {@code SKY} is a
 	 * triangle fan over {@code POSITION} that blends nothing, {@code STARS} is quads over the same
 	 * format blended as an overlay, {@code SUNRISE_SUNSET} is a translucent fan over
-	 * {@code POSITION_COLOR}, and {@code CELESTIAL} is quads over {@code POSITION_TEX}, overlaid.
-	 * Any of them getting one of these wrong is a pipeline the pass refuses to bind, by name and in
-	 * the middle of the world, and getting the FORMAT wrong is worse: it shifts the location of
-	 * every element after the one that differs, without a word.
+	 * {@code POSITION_COLOR}, {@code CELESTIAL} is quads over {@code POSITION_TEX}, overlaid, and
+	 * {@code END_SKY} is translucent quads over {@code POSITION_TEX_COLOR}. Any of them getting one
+	 * of these wrong is a pipeline the pass refuses to bind, by name and in the middle of the world,
+	 * and getting the FORMAT wrong is worse: it shifts the location of every element after the one
+	 * that differs, without a word.
 	 */
 	private static final Map<String, Element> ELEMENTS = new LinkedHashMap<>();
 
@@ -130,6 +137,19 @@ public final class SkyDraw {
 		put(new Element("Sky moon", "gbuffers_skytextured", "moon", DefaultVertexFormat.POSITION_TEX,
 				PrimitiveTopology.QUADS, Optional.of(BlendFunction.OVERLAY), true,
 				RenderStage.MOON, "moon"));
+		// The End's cube of sky is the one element whose mesh carries a colour of its own AND a
+		// texture coordinate. It is drawn under the frame's own matrix as the disc is, renderEndSky
+		// writing its transform from getModelViewMatrixCopy without pushing anything of its own, so
+		// it is handed no matrix here and reads the frame's.
+		put(new Element("End sky", "gbuffers_skytextured", "endsky",
+				DefaultVertexFormat.POSITION_TEX_COLOR, PrimitiveTopology.QUADS,
+				Optional.of(BlendFunction.TRANSLUCENT), false, RenderStage.CUSTOM_SKY, ""));
+		// The dragon's flash, which the game draws with the celestial pipeline and the celestial
+		// atlas: same format, same topology and same blend as the sun and the moon, and rotated like
+		// them, renderEndFlash pushing a model view of its own before it writes its transform.
+		put(new Element("End flash", "gbuffers_skytextured", "endflash",
+				DefaultVertexFormat.POSITION_TEX, PrimitiveTopology.QUADS,
+				Optional.of(BlendFunction.OVERLAY), true, RenderStage.CUSTOM_SKY, ""));
 	}
 
 	private static void put(Element element) {
@@ -294,8 +314,8 @@ public final class SkyDraw {
 	 * no label of its own: the two answers are one answer, and a piece named twice is a chance for
 	 * them to differ. They have to be one, because the pipeline carries a colour state per attachment
 	 * this names and setting it against a pass built for anything else throws by name in the middle
-	 * of the sky. Nothing of the game's pass is lost by replacing it, since every one of the six opens
-	 * with the main target's colour and depth and clears neither.
+	 * of the sky. Nothing of the game's pass is lost by replacing it, since every one of the eight
+	 * opens with the main target's colour and depth and clears neither.
 	 *
 	 * @param colour the colour view the renderer was going to draw into, which stays attachment
 	 *               nought wherever the pack's own targets do not take it
@@ -388,16 +408,25 @@ public final class SkyDraw {
 	}
 
 	/**
-	 * Reads the pack for all six pieces at once, at the first of them the game draws, and settles
+	 * Reads the pack for all eight pieces at once, at the first of them the game draws, and settles
 	 * where every one of them is drawn.
 	 * <p>
-	 * All six and not the one being asked for, which is what this used to do. The game reaches four
-	 * of these pieces at moments of its own choosing and three of those moments are conditions of the
+	 * All eight and not the one being asked for, which is what this used to do. The game reaches five
+	 * of these pieces at moments of its own choosing and four of those moments are conditions of the
 	 * sky itself: the band is skipped until its alpha passes a thousandth, the stars until their
-	 * brightness leaves nought, and the void plane until the eye goes under the world's horizon. Read
-	 * one at a time, the pack was opened, expanded and translated inside the frame the sun first
-	 * neared the horizon, on the render thread and in the middle of the world. The compiling is not
-	 * moved with it and still falls where the piece is first drawn, one module a piece.
+	 * brightness leaves nought, the void plane until the eye goes under the world's horizon, and the
+	 * End's flash until the dragon sets one off. Read one at a time, the pack was opened, expanded and
+	 * translated inside the frame the sun first neared the horizon, on the render thread and in the
+	 * middle of the world. The compiling is not moved with it and still falls where the piece is first
+	 * drawn, one module a piece.
+	 * <p>
+	 * The two branches of the game's sky pass are read together and neither waits for the other, which
+	 * costs a translation of the overworld's programs in the End and of the End's in the overworld.
+	 * That is the same trade the paragraph above takes for the four conditional pieces, and it is the
+	 * one shape of it that touches the picture: {@link #behind} weighs every piece the pack still
+	 * draws, so a place serving one branch and not the other would hold the served branch back. No
+	 * pack of the August 2026 corpus reaches that - all eight answer both sky programs in
+	 * {@code world1}, Body Camera through the fallback tree rather than with a file of its own.
 	 */
 	private void read() {
 		this.read = true;
@@ -425,8 +454,9 @@ public final class SkyDraw {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadSky(this.packPath, this.place,
 					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
 
-			// Asked once per PROGRAM and not once per piece: four of the six are drawn with
-			// gbuffers_skybasic, and the plan would answer for that one four times over.
+			// Asked once per PROGRAM and not once per piece: four of the eight are drawn with
+			// gbuffers_skybasic and the other four with gbuffers_skytextured, and the plan would
+			// answer for each of the two four times over.
 			Map<String, List<ChainPlan.Attachment>> byProgram = new LinkedHashMap<>();
 			ELEMENTS.values()
 					.forEach(element -> byProgram.computeIfAbsent(element.program(), this::writes));
