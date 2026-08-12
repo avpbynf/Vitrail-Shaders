@@ -1411,8 +1411,7 @@ public final class EntityDraw {
 				continue;
 			}
 
-			Half half = new Half(servedBy(one),
-					element.hand() ? element.afterDeferred() : element.blended());
+			Half half = new Half(servedBy(one), sideOf(element), element.shadow());
 			if (byFile.containsKey(half)) {
 				continue;
 			}
@@ -1430,8 +1429,26 @@ public final class EntityDraw {
 				.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
 						loaded.get(element.element()), element, this.values, this.load,
 						byFile.get(new Half(servedBy(loaded.get(element.element())),
-								element.hand() ? element.afterDeferred() : element.blended())),
+								sideOf(element), element.shadow())),
 						this.chainTargets, this.targets, this.chainRuns)));
+	}
+
+	/**
+	 * Which side of the deferred stage a piece's PASS is drawn on, which is not always what its own
+	 * pipeline blends.
+	 * <p>
+	 * One question and three answers. An entity row is asked of its pipeline, the game sorting its
+	 * own submissions that way. A hand row is asked of its row, a hand pass being drawn wholly on one
+	 * side whatever its rows blend. A shadow row is neither: the map is filled before the stage has
+	 * run at all, so the whole of that table is on the early side, and asking its pipeline would put
+	 * its translucent rows on a side of the frame the map never reaches.
+	 */
+	private static boolean sideOf(Element element) {
+		if (element.shadow()) {
+			return false;
+		}
+
+		return element.hand() ? element.afterDeferred() : element.blended();
 	}
 
 	/**
@@ -1439,8 +1456,13 @@ public final class EntityDraw {
 	 * file may serve both halves, and the two answers are on opposite sides of every target. The
 	 * hand's water pass is a blended half like any other here, {@code gbuffers_hand_water} falling
 	 * back on {@code gbuffers_hand} with the two answers apart.
+	 *
+	 * @param shadow whether this half fills the shadow map rather than the picture. Part of the key
+	 *               and not a detail: a shadow half is asked nothing of the plan and owes nothing to
+	 *               the scene seed, and without it here one file that serves both would answer for
+	 *               the map with the picture's attachments
 	 */
-	private record Half(String servedBy, boolean blended) {
+	private record Half(String servedBy, boolean blended, boolean shadow) {
 	}
 
 	/**
@@ -1485,6 +1507,16 @@ public final class EntityDraw {
 	 * translucent particles with it.
 	 */
 	private List<ChainPlan.Attachment> writes(Half half) {
+		// A shadow half writes the map and nothing else. GeometryProgram gives a shadow pass no slots
+		// at all, so the list is never read for one, and asking the plan for it would ask about a
+		// name the plan's geometry table has no row for. Answered empty rather than left to fall
+		// through, because the two paragraphs below would both give it the wrong answer: the seed has
+		// nothing to do with a draw buffer nought that is shadowcolor0, and refusing there would take
+		// every moving caster out of the map the moment somebody wrote seed=off.
+		if (half.shadow()) {
+			return List.of();
+		}
+
 		// Before the plan is even asked, because it is not the plan's to answer: the scene seed is
 		// the ONLY road the opaque half's first output has into the pack's picture, so a run with the
 		// seed switched off would write every other draw buffer and no albedo at all. What that
