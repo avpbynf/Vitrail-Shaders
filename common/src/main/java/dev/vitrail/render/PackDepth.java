@@ -25,8 +25,9 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * The world's depth in the window the pack reads depth in: two images, the one taken before the
- * world's translucents and the one taken after.
+ * The world's depth in the window the pack reads depth in: the image taken before the world's
+ * translucents, the one taken after, and a third taken before the player's own hand on the frames
+ * the engine draws that hand itself.
  * <p>
  * <strong>The conversion is here and not in the shader, and that is the whole point of the
  * class.</strong> The game rasterises with a reversed Z over zero to one and a pack is written for
@@ -46,14 +47,23 @@ import java.util.Optional;
  * Nothing is lost against what the shader used to compute. The operation is the same one, in the
  * same place in the order, applied before any filtering: {@code |readA|} is one, the image is bound
  * NEAREST, and a {@code textureGather} or a {@code texelFetch} therefore comes back bit for bit
- * what it came back before. What is spent is memory, two full screen images of one float instead of
- * one copy of the depth.
+ * what it came back before. What is spent is memory, a full screen image of one float per moment
+ * the pack can ask about instead of one copy of the depth.
  * <p>
- * Two images and not one, because the pack asks two different questions. {@code depthtex1} and
+ * More than one image, because the pack asks more than one question. {@code depthtex1} and
  * {@code depthtex2} are the opaque world, taken before anything translucent is drawn;
  * {@code depthtex0} is the depth as it stands, which for a deferred is that same opaque world and
  * for a composite is the whole scene. Served from one image the second half of the frame would blur
  * and fog straight through water without anything failing.
+ * <p>
+ * The third image is the same rule applied one step earlier: {@code depthtex2} is the opaque world
+ * WITHOUT the hand, so that a pack can read what the hand it is holding stands in front of, and
+ * only {@link #takeOpaque}'s image carries the hand. <strong>It is allocated with the hand and not
+ * with the pair</strong>, and that is not a divergence from Iris, which keeps a third texture for
+ * every session: nothing between the two moments writes the game's depth except the hand's own solid
+ * pass, so with the hand left to the game the two images would be the same one to the bit, and
+ * {@code depthtex2} is answered from the pair instead. What the difference costs is one full screen
+ * image and one conversion a frame, both of which arrive and go with {@code hand=on}.
  */
 final class PackDepth {
 
@@ -122,6 +132,9 @@ final class PackDepth {
 	private TargetSurface opaque;
 	private TargetSurface scene;
 
+	/** Null until a frame that draws the hand asks for it; see the class comment. */
+	private TargetSurface preHand;
+
 	/**
 	 * Whether anything has written each image since it was allocated.
 	 * <p>
@@ -132,7 +145,20 @@ final class PackDepth {
 	private boolean opaqueWritten;
 	private boolean sceneWritten;
 
+	/**
+	 * The same for the third image, except that it is cleared at the end of every frame rather than
+	 * held for the load; {@link #forgetPreHand} says why.
+	 */
+	private boolean preHandWritten;
+
 	private boolean broken;
+
+	/**
+	 * The same latch for the third image alone, so that a refusal there does not take the pair down
+	 * with it. It needs no size of its own: it is only ever raised at the size the pair is already
+	 * allocated at, and the resize that would lift it goes through {@link #release}.
+	 */
+	private boolean preHandBroken;
 
 	/**
 	 * The screen the allocation failed at, so that the refusal is about that screen and not about the
@@ -179,6 +205,29 @@ final class PackDepth {
 	}
 
 	/**
+	 * Converts the depth of the world as it stood before the player's own hand was drawn, which the
+	 * pack reads as {@code depthtex2}. Must run on the render thread and outside any render pass.
+	 * <p>
+	 * The caller has to take it before the hand's solid pass and may only take it on the frames that
+	 * pass really runs: an image taken on a frame the game drew its own hand is the opaque world's
+	 * over again, and paying a conversion for it would buy nothing.
+	 *
+	 * @param live the game's depth as it stands, with the world's opaque features in it and the hand
+	 *             not yet
+	 */
+	boolean takePreHand(CommandEncoder encoder, GpuDevice device, GpuBuffer quad, GpuTextureView live,
+			int width, int height) {
+		if (!ensure(width, height) || !ensurePreHand(width, height)
+				|| !fill(encoder, device, quad, live, this.preHand)) {
+			return false;
+		}
+
+		this.preHandWritten = true;
+
+		return true;
+	}
+
+	/**
 	 * The opaque world's depth, or null while nothing has filled it. Looked up at every use like
 	 * every other view of a place: a resize destroys and recreates it.
 	 */
@@ -192,18 +241,43 @@ final class PackDepth {
 	}
 
 	/**
-	 * Frees both images. The views go with them, since {@link TargetSurface} closes the two
+	 * The opaque world's depth without the hand, or null on a frame that did not take one, which
+	 * every caller has to read as "the opaque world's image answers this name".
+	 */
+	GpuTextureView preHand() {
+		return this.preHandWritten ? this.preHand.view() : null;
+	}
+
+	/**
+	 * Forgets this frame's pre-hand image while keeping the memory it lives in.
+	 * <p>
+	 * Per frame, where the other two are per load, and the difference is the one thing that makes
+	 * this image safe. They are refilled at a fixed point of every frame; this one is only filled
+	 * while the engine draws the hand itself, so a flag left standing would go on serving the last
+	 * frame that drew a hand to every frame that did not, which is a depth one frame of camera
+	 * movement out of date and nothing that would report it.
+	 */
+	void forgetPreHand() {
+		this.preHandWritten = false;
+	}
+
+	/**
+	 * Frees every image. The views go with them, since {@link TargetSurface} closes the two
 	 * together.
 	 */
 	void release() {
 		this.opaque = close(this.opaque);
 		this.scene = close(this.scene);
+		this.preHand = close(this.preHand);
 		this.opaqueWritten = false;
 		this.sceneWritten = false;
+		this.preHandWritten = false;
+		this.preHandBroken = false;
 	}
 
 	/**
-	 * Makes both images exist at the size of the screen, reallocating when it moved.
+	 * Makes the pair every frame needs exist at the size of the screen, reallocating when it moved.
+	 * The third image is {@link #ensurePreHand}'s and rides on the {@link #release} this one does.
 	 *
 	 * @return false when there is nothing to draw into, in which case every depth lookup of the pack
 	 *         falls back to the far plane
@@ -254,6 +328,47 @@ final class PackDepth {
 		Vitrail.logger().info("The world's depth is converted into the pack's window in two images at "
 				+ "{}x{}, {} MiB", width, height,
 				(this.opaque.bytes() + this.scene.bytes()) / (1024L * 1024L));
+
+		return true;
+	}
+
+	/**
+	 * Makes the third image exist, at the size {@link #ensure} has just settled and never at another
+	 * one. Called only from {@link #takePreHand}, so a session that never draws the hand never pays
+	 * for it.
+	 *
+	 * @return false when there is nothing to draw into, in which case {@code depthtex2} falls back
+	 *         to the opaque world's image, which is the hand short of the one thing it excludes
+	 */
+	private boolean ensurePreHand(int width, int height) {
+		if (this.preHandBroken) {
+			return false;
+		}
+
+		if (this.preHand != null && this.preHand.width() == width
+				&& this.preHand.height() == height) {
+			return true;
+		}
+
+		try {
+			this.preHand = close(this.preHand);
+			this.preHand =
+					new TargetSurface("Vitrail depth before the hand", FORMAT, false, width, height);
+		} catch (RuntimeException e) {
+			this.preHandBroken = true;
+			this.preHand = close(this.preHand);
+			Vitrail.logger().error("Vitrail could not allocate the depth image the pack reads past the "
+					+ "hand with at {}x{}, so depthtex2 reads the world with the hand in it until the "
+					+ "screen is another size", width, height, e);
+
+			return false;
+		}
+
+		// Said out loud like the pair above, and worth saying apart from them: this one is the cost
+		// of hand=on and of nothing else.
+		Vitrail.logger().info("The depth before the hand is converted into the pack's window in one "
+				+ "more image at {}x{}, {} MiB", width, height,
+				this.preHand.bytes() / (1024L * 1024L));
 
 		return true;
 	}

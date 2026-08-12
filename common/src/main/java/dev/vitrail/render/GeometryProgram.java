@@ -956,7 +956,7 @@ final class GeometryProgram {
 		// same way, and the two have to move together.
 		return switch (binding.kind()) {
 			case COLORTEX -> colortex(binding);
-			case DEPTH -> depth();
+			case DEPTH -> depth(sampler);
 			case SHADOW_DEPTH -> shadowDepth(binding.sampler());
 			case SHADOW_COLOUR -> shadowColour(binding.index());
 			case NOISE -> this.targets.noise();
@@ -978,7 +978,7 @@ final class GeometryProgram {
 	/**
 	 * The shadow map, or white for the far plane.
 	 * <p>
-	 * White, and the same white {@link #depth()} falls back to, for the same reason: a
+	 * White, and the same white {@link #depth(String)} falls back to, for the same reason: a
 	 * {@code shadowtex} lookup is never rewritten, so what is stored is what the pack reads, and the
 	 * map stores the forward window where one is the far plane. A shadow lookup that finds nothing
 	 * has to say "nothing between here and the light".
@@ -1017,19 +1017,33 @@ final class GeometryProgram {
 	/**
 	 * What a depth sampler reads, which depends on which side of the frame this pass stands.
 	 * <p>
-	 * The translucent pass gets the opaque world's image, whatever the sampler is called. At that
-	 * point of the frame depthtex0, depthtex1 and depthtex2 are one depth, the opaque world's, and
-	 * that image is exactly it; the live depth cannot be the answer for any of them, being an
-	 * attachment of this very pass, and sampling an attachment is a thing Vulkan gives no meaning
-	 * to. This is what BSL's water fog and refraction read.
+	 * The translucent pass gets the opaque world's image. At that point of the frame depthtex0 and
+	 * depthtex1 are one depth, the opaque world's, and that image is exactly it; the live depth
+	 * cannot be the answer for either of them, being an attachment of this very pass, and sampling an
+	 * attachment is a thing Vulkan gives no meaning to. This is what BSL's water fog and refraction
+	 * read.
+	 * <p>
+	 * depthtex2 is that same depth from before the hand was drawn, which is a second image on the
+	 * frames this engine draws the hand and the same one on every other. Answered here and not only
+	 * in the chain, because Iris hands its gbuffers programs the same three names off one table
+	 * ({@code IrisSamplers.addWorldDepthSamplers}), the pre-hand copy included, and a name that read
+	 * two different depths between one half of the frame and the other is a difference nothing would
+	 * ever explain.
 	 * <p>
 	 * The solid and cutout passes stay on the constant. They draw before the image of THIS frame is
 	 * taken, so the only one in existence at that moment holds the previous frame's, and handing
 	 * them that would be the exact shape of picture this project refuses: plausible, and wrong by
 	 * one frame of camera movement.
 	 */
-	private GpuTextureView depth() {
+	private GpuTextureView depth(String sampler) {
 		if (this.pass.afterDeferred()) {
+			if (SamplerPlan.preHandCopy(sampler)) {
+				GpuTextureView preHand = this.targets.depth().preHand();
+				if (preHand != null) {
+					return preHand;
+				}
+			}
+
 			GpuTextureView opaque = this.targets.depth().opaque();
 			if (opaque != null) {
 				return opaque;

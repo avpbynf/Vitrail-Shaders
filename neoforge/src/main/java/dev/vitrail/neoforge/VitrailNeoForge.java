@@ -138,12 +138,15 @@ public final class VitrailNeoForge {
 		// world's translucents or, once the level returns, the screen.
 		EntityDraw.opaqueFeatures(false);
 
-		// Then the hand's solid half, and the order of these two lines is the whole of where it
-		// belongs in the frame: after the game's own opaque features, which the window above has just
-		// closed, and BEFORE the deferred stage the next line runs. That is exactly where Iris puts
-		// it: renderSolid runs first, before beginTranslucents and the translucent features behind it
-		// (mixin/MixinLevelRenderer.java:277-283, pipeline/IrisRenderingPipeline.java:1060-1073).
+		// Then the depth the pack reads past the hand with, which has to be taken while the hand is
+		// still not in it, and the hand's solid half. The order of these three lines is the whole of
+		// where the hand belongs in the frame: after the game's own opaque features, which the window
+		// above has just closed, and BEFORE the deferred stage the last line runs. That is exactly
+		// where Iris puts it, copyPreHandDepth included: beginHand copies, renderSolid draws, and
+		// beginTranslucents then runs the deferreds behind both
+		// (mixin/MixinLevelRenderer.java:277-283, pipeline/IrisRenderingPipeline.java:1051-1073).
 		// Drawn after the deferreds instead, the hand would write gbuffers nothing would ever read.
+		PackChain.markPreHandDepth();
 		HandDraw.drawSolid();
 		PackChain.drawBeforeTranslucents();
 		PackChain.openFeatures();

@@ -116,20 +116,25 @@ public final class SamplerPlan {
 	}
 
 	/**
-	 * The two depth copies of the OptiFine model, as opposed to the live depth. {@code depthtex1}
-	 * is taken before the world's translucents and {@code depthtex2} before the hand, and this
-	 * engine answers both with ONE copy, which is a divergence once the hand draws. What Iris does:
-	 * it copies a pre-hand depth of its own before the solid hand is drawn
-	 * ({@code IrisRenderingPipeline.copyPreHandDepth}, called from {@code beginHand} before
-	 * {@code renderSolid}), so its {@code depthtex2} excludes the hand and its {@code depthtex1}
-	 * includes it. What stops the same here: the one copy is taken after the solid hand for
-	 * {@code depthtex1}'s sake, and a second image would be a second copy pass, not yet built. The
-	 * cost: with {@code hand=on}, a pack reading {@code depthtex2} to see past the hand sees the
-	 * hand's depth in it; with the line off, the two moments hold the same image and the copy is
-	 * exact.
+	 * The two depth copies of the OptiFine model, as opposed to the live depth. Both hold the world
+	 * without its translucents; what separates them is the hand, which {@code depthtex1} carries and
+	 * {@code depthtex2} does not, and {@link #preHandCopy} is that second question.
 	 */
 	public static boolean depthCopy(String name) {
 		return name.equals("depthtex1") || name.equals("depthtex2");
+	}
+
+	/**
+	 * Whether a name reads the copy taken before the player's own hand was drawn, which is
+	 * {@code depthtex2} and nothing else.
+	 * <p>
+	 * Iris copies that depth in {@code beginHand}, one line before it draws the solid hand and one
+	 * step before the {@code beginTranslucents} that copies {@code depthtex1}
+	 * ({@code IrisRenderingPipeline.copyPreHandDepth}), which is what lets a pack read past the hand
+	 * it is holding. This engine takes the same copy at the same moment.
+	 */
+	public static boolean preHandCopy(String name) {
+		return name.equals("depthtex2");
 	}
 
 	/** What a name becomes once the translation has moved it onto a file the pack ships. */

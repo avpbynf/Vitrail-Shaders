@@ -570,10 +570,23 @@ final class PackPass {
 	 * scene. {@code depthtex1} and {@code depthtex2} are the opaque world whichever half asks, and
 	 * they fall back to the half's own image rather than to a constant while nothing has filled
 	 * them: the wrong moment of the right image, over the far plane everywhere.
+	 * <p>
+	 * The two part company over the hand, and only over the hand: {@code depthtex2} is taken one step
+	 * earlier, before the hand's solid pass, so that a pack can read what the hand stands in front
+	 * of. On every frame the game drew its own hand there is no such image and none is needed, the
+	 * two moments holding the same depth, and the fall through below is that answer rather than a
+	 * gap.
 	 */
 	private static GpuTextureView depth(String sampler, ColorTargets targets,
 			GpuTextureView depthView) {
 		if (SamplerPlan.depthCopy(sampler)) {
+			if (SamplerPlan.preHandCopy(sampler)) {
+				GpuTextureView preHand = targets.depth().preHand();
+				if (preHand != null) {
+					return preHand;
+				}
+			}
+
 			GpuTextureView opaque = targets.depth().opaque();
 			if (opaque != null) {
 				return opaque;

@@ -1123,6 +1123,12 @@ public final class PackChain {
 		this.seeded = false;
 		this.sceneDepth = false;
 
+		// The depth taken before the hand is a per frame fact too, and the only one of the three
+		// images that is not refilled at a fixed point of every frame: it is taken while the engine
+		// draws the hand and nowhere else, so left standing it would serve the last frame that drew
+		// one to every frame that did not.
+		this.targets.depth().forgetPreHand();
+
 		// The seed's kept depth is a per frame fact like the four above and belongs with them, the
 		// image itself outliving the frame only because nobody frees a texture every frame.
 		if (this.seed != null) {
@@ -1387,6 +1393,52 @@ public final class PackChain {
 		// through an event handler and comes back on the very next frame.
 		try {
 			chain.seed.capture(device.createCommandEncoder(), device, chain.quad(device),
+					main.getDepthTextureView(), main.width, main.height);
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
+	}
+
+	/**
+	 * Keeps the world's depth as it stands before the player's own hand is drawn, which is what the
+	 * pack reads as {@code depthtex2}. Called from the event the hand's solid half is drawn at and
+	 * one line ahead of it.
+	 * <p>
+	 * The moment is Iris's and so is the reason: {@code beginHand} copies the depth and then draws
+	 * the solid hand ({@code mixin/MixinLevelRenderer.java:277-281}), one step before the
+	 * {@code beginTranslucents} that copies {@code depthtex1}, so {@code depthtex2} is the only depth
+	 * of the pair the hand is missing from. A pack reads it to see what the hand it is holding stands
+	 * in front of, and served the image with the hand in it that read finds the hand.
+	 * <p>
+	 * <strong>Only on the frames this engine really draws the hand.</strong> The hand's solid pass is
+	 * the one thing between this moment and the opaque image {@link #drawEarly} takes, so with the
+	 * hand left to the game the two are the same image to the bit and {@code depthtex2} is answered
+	 * from the pair. {@link PackDepth} carries what that saves.
+	 * <p>
+	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes, for the reason
+	 * {@link #markGeometryDepth} is not: nothing here warms a pipeline, prepares a target or clears
+	 * anything, all of which belong to the moment the chain runs.
+	 */
+	public static void markPreHandDepth() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		Minecraft minecraft = Minecraft.getInstance();
+		if (disabled || chain == null || device == null || minecraft == null || !chainWanted
+				|| !HandDraw.diverted()) {
+			return;
+		}
+
+		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+		if (main == null) {
+			return;
+		}
+
+		// Caught like every other point the game calls this engine back at: an exception here reaches
+		// the game through an event handler and comes back on the very next frame.
+		try {
+			chain.targets.depth().takePreHand(device.createCommandEncoder(), device, chain.quad(device),
 					main.getDepthTextureView(), main.width, main.height);
 		} catch (RuntimeException e) {
 			disabled = true;
@@ -2029,12 +2081,22 @@ public final class PackChain {
 				"are declared under a type this backend cannot bind, and should have gone with "
 						+ "their pass");
 
-		List<String> copies = byKind.getOrDefault(SamplerPlan.Kind.DEPTH, Set.of()).stream()
-				.filter(SamplerPlan::depthCopy)
+		Set<String> depths = byKind.getOrDefault(SamplerPlan.Kind.DEPTH, Set.of());
+		List<String> copies = depths.stream()
+				.filter(name -> SamplerPlan.depthCopy(name) && !SamplerPlan.preHandCopy(name))
 				.toList();
 		if (!copies.isEmpty()) {
 			Vitrail.logger().info("{} read the depth of the world as it stood before its "
 					+ "translucents", copies);
+		}
+
+		// Named apart, because the two are one image whenever the hand is left to the game and two
+		// whenever it is not, and which of the two a pack is reading is the whole of what it asked
+		// for by writing depthtex2.
+		List<String> pastTheHand = depths.stream().filter(SamplerPlan::preHandCopy).toList();
+		if (!pastTheHand.isEmpty()) {
+			Vitrail.logger().info("{} read that same depth from before the hand was drawn, which is "
+					+ "an image of its own only while this engine draws the hand", pastTheHand);
 		}
 	}
 
