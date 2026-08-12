@@ -130,9 +130,11 @@ Aliasing the pre-translucent copy onto the ordinary depth is a mistake with no v
 the effect still appears, still has the right shape, and reads the wrong distance.
 
 The pre-hand copy is the same mistake at a smaller scale, and it only exists where the engine draws
-the hand at all: with the hand left to the game, nothing is drawn between the two moments and the
-two copies are the same image, so only one is allocated and only one conversion is paid for. Turning
-the hand on is what adds the second image and the second conversion.
+the hand itself. With the hand left to the game it is drawn after the whole chain has run, so
+nothing at all comes between the two moments, the two copies are the same image, and only one is
+allocated and converted. Turning the hand on is what adds the second image; the second conversion is
+paid only on the frames a hand is really on screen, which rules out third person, a hidden
+interface, a sleeping player, a spectator and a panorama capture.
 
 The scene copies are converted from the reversed-Z convention the game renders with into the legacy
 convention packs expect. The world itself keeps being drawn in reversed Z, so its depth precision is

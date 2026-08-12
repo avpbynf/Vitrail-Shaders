@@ -117,8 +117,13 @@ public final class SamplerPlan {
 
 	/**
 	 * The two depth copies of the OptiFine model, as opposed to the live depth. Both hold the world
-	 * without its translucents; what separates them is the hand, which {@code depthtex1} carries and
-	 * {@code depthtex2} does not, and {@link #preHandCopy} is that second question.
+	 * without its translucents; what CAN separate them is the player's own hand, which
+	 * {@code depthtex1} carries and {@code depthtex2} does not, and {@link #preHandCopy} is that
+	 * second question.
+	 * <p>
+	 * Can, and only where this engine draws the hand itself. Left to the game, which is what it is
+	 * unless the pack's own hand programs are turned on, the hand is drawn after the whole chain has
+	 * run and neither copy carries it, the two being one image.
 	 */
 	public static boolean depthCopy(String name) {
 		return name.equals("depthtex1") || name.equals("depthtex2");
@@ -128,10 +133,17 @@ public final class SamplerPlan {
 	 * Whether a name reads the copy taken before the player's own hand was drawn, which is
 	 * {@code depthtex2} and nothing else.
 	 * <p>
-	 * Iris copies that depth in {@code beginHand}, one line before it draws the solid hand and one
-	 * step before the {@code beginTranslucents} that copies {@code depthtex1}
-	 * ({@code IrisRenderingPipeline.copyPreHandDepth}), which is what lets a pack read past the hand
-	 * it is holding. This engine takes the same copy at the same moment.
+	 * Iris takes that copy in {@code RenderTargets.copyPreHandDepth}
+	 * ({@code targets/RenderTargets.java:234}), called from a {@code beginHand} that draws nothing
+	 * ({@code pipeline/IrisRenderingPipeline.java:1050-1057}). The solid hand is drawn on the line
+	 * after the call to it ({@code mixin/MixinLevelRenderer.java:279-280}) and the
+	 * {@code beginTranslucents} that copies {@code depthtex1} comes one step behind both, which is
+	 * the order that lets a pack read past the hand it is holding.
+	 * <p>
+	 * This engine takes the copy at the same point of the frame, and not as often. Iris copies on
+	 * every frame, a hand drawn or not; this copies on the frames it really draws one, the two
+	 * moments holding the same depth on all the others. {@code render/PackDepth} carries what that
+	 * saves and what it leaves standing.
 	 */
 	public static boolean preHandCopy(String name) {
 		return name.equals("depthtex2");
