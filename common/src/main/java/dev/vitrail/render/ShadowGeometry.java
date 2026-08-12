@@ -89,8 +89,15 @@ public final class ShadowGeometry {
 	 * @param casters which families the pack asked for
 	 */
 	public static void draw(Matrix4f light, Vec3 camera, ShadowCasters casters) {
+		// The entity switch and not one of its own, which is the convention: what enters the map here
+		// is the same geometry that door serves, read from the same tables, and a family does not take
+		// a second switch without a reason. It is also what keeps the walk honest when the switch is
+		// off: the door would refuse every draw, and refusing inside this walk means dropping it, so
+		// the walk would cost a full extraction and a submission to draw nothing and say so sixteen
+		// times.
 		Minecraft minecraft = Minecraft.getInstance();
-		if (minecraft == null || minecraft.level == null || !casters.anyFeature()) {
+		if (minecraft == null || minecraft.level == null || !EntityDraw.wanted()
+				|| !casters.anyFeature()) {
 			return;
 		}
 
