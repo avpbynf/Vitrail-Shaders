@@ -117,6 +117,33 @@ attachment's actual format, and the axis that bites is the **channel count** rat
 depth. A state naming four channels against the single-channel buffer a pack asked for is the
 pipeline refused outright, by name and in the middle of the world.
 
+### What moves is submitted a second time, for the light
+
+The terrain reaches the map through the chunk renderer's own lists. Everything that moves - mobs,
+the player, and the block entities a section carries beside its mesh - does not: the game clears
+both lists on the line after it submits them, and the shadow stage stands at the end of the frame,
+so by the time it runs there is nothing left to read. The map is therefore filled from a second
+walk of the world, with its own submission storage and its own feature dispatcher, which is also
+what Iris does and for a reason that holds here too: the camera's lists were culled against the
+camera, and what belongs in a shadow map is mostly what the camera cannot see.
+
+Those pieces are drawn with one program for the lot, `shadow_entities`, whatever the camera would
+have used for them. A chest and a mob are submitted through the same pipelines, so the mark that
+buys a block entity its own program against the camera buys nothing against the light. Every row
+discards at a tenth and none of them blends: what a map wants of a translucent surface is the depth
+that surface stands at, not that depth mixed with the one behind it.
+
+**A piece this engine has no shadow row for is dropped rather than handed back**, and that is a
+divergence. Iris binds its shadow framebuffer for the whole of its stage, so a pipeline its table
+has no key for keeps the game's own shader and still writes the map. Here the target is chosen per
+draw, and steering the game's own pipeline onto the map's attachments is refused by format in the
+middle of the draw, so there is nothing to hand back to. What it costs is a caster that casts no
+shadow; the alternative costs worse, the pass open at that moment carrying the finished picture, so
+the caster would be painted across the frame the player is looking at.
+
+The ground oval under a mob is left out on purpose, as Iris leaves it out. Served, it would lay a
+flat disc of occluder under every mob in the map.
+
 ### Culling for the light
 
 The map should only contain what the light can see, which means a second visibility walk per frame,
