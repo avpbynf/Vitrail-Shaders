@@ -97,6 +97,10 @@ public final class ShaderProperties {
 	private static final Pattern SHADOW_CASTER = Pattern.compile(
 			"^\\s*(shadowTerrain|shadowTranslucent|shadowEntities|shadowPlayer|shadowBlockEntities"
 					+ "|shadowLightBlockEntities)\\s*=\\s*(.*)$");
+	// Whether the terrain's ambient occlusion is kept out of the vertex colour, read on the live
+	// lines for the reason the note above gives. Six packs of the corpus write it and all six ask
+	// for true, so this is the one directive of the family whose answer moves the picture today.
+	private static final Pattern SEPARATE_AO = Pattern.compile("^\\s*separateAo\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
 	// The fifth word of that family, kept apart because it is the one that takes neither a yes nor a
@@ -350,6 +354,11 @@ public final class ShaderProperties {
 		// see that it was not understood.
 		Matcher caster = SHADOW_CASTER.matcher(line);
 		if (caster.matches() && truth(caster.group(2).trim()) != null) {
+			return;
+		}
+
+		Matcher separateAo = SEPARATE_AO.matcher(line);
+		if (separateAo.matches() && truth(separateAo.group(1).trim()) != null) {
 			return;
 		}
 
@@ -1159,6 +1168,32 @@ public final class ShaderProperties {
 
 		return new ShadowCasters(terrain, translucent, entities, player, blockEntities,
 				lightBlockEntities);
+	}
+
+	/**
+	 * Whether the pack asked for the terrain's ambient occlusion to be kept out of the vertex
+	 * colour, live lines only, off unless it says otherwise.
+	 * <p>
+	 * A pack that asks for it reads the block's own tint in {@code gl_Color.rgb} and the occlusion
+	 * in {@code gl_Color.a}, instead of the tint with the occlusion already multiplied into it.
+	 * Six packs of the corpus ask for it, and it is a property of the MESH: what answers it is the
+	 * chunk vertex encoder, not anything the translator writes.
+	 * <p>
+	 * Read through {@link #live} like the rest of the family, and {@link #RAIN_DEPTH}'s own note
+	 * says why that is what the reference does as well. The last live line wins, which is how Iris
+	 * reads it: its parser walks the file in order and each match overwrites the one before,
+	 * {@code shaderpack/properties/ShaderProperties.java:211}.
+	 */
+	public boolean separateAo(Map<String, String> defines) {
+		boolean asked = false;
+		for (Matcher line : live(SEPARATE_AO, defines)) {
+			Boolean value = truth(line.group(1).trim());
+			if (value != null) {
+				asked = value;
+			}
+		}
+
+		return asked;
 	}
 
 	/** Each profile's unexpanded body, in the order the pack declares them. */

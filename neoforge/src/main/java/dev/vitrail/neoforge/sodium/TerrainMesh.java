@@ -8,6 +8,7 @@ import dev.vitrail.Vitrail;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
+import net.caffeinemc.mods.sodium.api.util.ColorABGR;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkMeshFormats;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexEncoder;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType;
@@ -19,11 +20,15 @@ import java.util.Arrays;
 /**
  * The chunk mesh with the elements a pack reads and Sodium does not carry, appended after its own.
  * <p>
- * <strong>Not one byte of Sodium's own twenty is written here.</strong> Sodium is under the PolyForm
+ * <strong>Sodium's own twenty bytes are not packed here.</strong> Sodium is under the PolyForm
  * Shield licence and this project is under the LGPL, so its encoder is called as a black box and
- * only the four bytes after each vertex are ours. Reimplementing the packing would be a plain copy
- * of code this project may not take, and it would also be a second thing to keep in step with every
- * release.
+ * the bytes after each vertex are ours. Reimplementing the packing would be a plain copy of code
+ * this project may not take, and it would also be a second thing to keep in step with every release.
+ * <p>
+ * One word of those twenty is written again all the same, and only where a pack asked: the colour,
+ * under {@code separateAo}. It is not repacked, it is replaced, out of the same two fields the
+ * encoder was handed and through Sodium's own published {@code ColorABGR}. {@link #separating} says
+ * what that means and why the encoder cannot be left to answer it.
  * <p>
  * The cost of that is one shuffle. Sodium's encoder lays four vertices out at its own stride, so the
  * three after the first land where this format does not want them and are moved up, backwards and
@@ -58,6 +63,31 @@ public final class TerrainMesh implements ChunkVertexType {
 
 	/** The answer in force, which only {@link #settle()} moves. */
 	private static boolean carrying;
+
+	/**
+	 * Whether the ambient occlusion is being kept out of the vertex colour, {@code separateAo} in a
+	 * pack's {@code shaders.properties}. Read from {@code TerrainDraw.separateAo} and moved only by
+	 * {@link #settle()}, like {@link #carrying} and for the same reason.
+	 * <p>
+	 * <strong>Iris makes this a property of the MESH and so does this</strong>,
+	 * {@code XHFPTerrainVertex.java:152}: it writes {@code ColorABGR.withAlpha(color, ao)} where it
+	 * otherwise writes {@code ColorARGB.mulRGB(color, ao)}, so the pack reads the block's own tint
+	 * in {@code gl_Color.rgb} and the occlusion in {@code gl_Color.a} rather than the two already
+	 * multiplied together. Six packs of the corpus ask for it. Left unread, the occlusion goes into
+	 * the albedo and is then reflected, exposed and graded by everything downstream of it, which is
+	 * an image that looks right and is not.
+	 * <p>
+	 * Per settle and not per quad because the answer must not move under the chunk builder: workers
+	 * mesh sections over many frames, and a flag that turned in the middle would leave one region's
+	 * alpha meaning the occlusion and its neighbour's meaning one. A load that moves it asks for the
+	 * world to be built again, {@code TerrainDraw.separateAoSettled}, and that rebuild is what runs
+	 * this method.
+	 * <p>
+	 * Volatile where {@link #carrying} is not, and the difference is who reads them: that one is
+	 * only ever read inside this class's synchronized methods, this one is read by every chunk
+	 * builder worker in the encoder.
+	 */
+	private static volatile boolean separating;
 
 	/**
 	 * Whether the answer has ever been said out loud. Kept apart from {@link #carrying} because the
@@ -104,18 +134,41 @@ public final class TerrainMesh implements ChunkVertexType {
 	 */
 	private static final float FLATTENED = 1.0E-20F;
 
+	/** What Sodium calls the element the block's tint rides in, and {@link SodiumVertex} with it. */
+	private static final String COLOUR = "a_Color";
+
 	private final ChunkVertexType inner = ChunkMeshFormats.COMPACT;
 	private final ChunkVertexEncoder innerEncoder = this.inner.getEncoder();
 	private final ChunkVertexEncoder encoder = this::encode;
 	private final int innerStride = this.inner.getVertexFormat().getVertexSize();
 	private final VertexFormat format = extend(this.inner.getVertexFormat());
 	private final int stride = this.format.getVertexSize();
+	private final int colour = colourOffset(this.inner.getVertexFormat());
 
 	private TerrainMesh() {
 		if (this.innerStride % Integer.BYTES != 0) {
 			throw new IllegalStateException("The chunk mesh is " + this.innerStride + " bytes, which "
 					+ "is not a whole number of words, and this engine moves it a word at a time");
 		}
+	}
+
+	/**
+	 * Where the colour sits in Sodium's own vertex, taken from the format rather than written down.
+	 * <p>
+	 * A number in the source would be a second copy of a fact only Sodium holds, and one that no
+	 * build would catch moving. Refused rather than guessed when the name is not there, which
+	 * {@link #settle()} turns into a game that goes on running on Sodium's own mesh: writing the
+	 * wrong word of a vertex is a world drawn out of the position or the light map.
+	 */
+	private static int colourOffset(VertexFormat base) {
+		for (VertexFormatElement element : base.getElements()) {
+			if (element.name().equals(COLOUR) && element.format().blockSize() == Integer.BYTES) {
+				return element.offset();
+			}
+		}
+
+		throw new IllegalStateException("The chunk mesh carries no four byte " + COLOUR + ", so this "
+				+ "engine cannot say where a pack's separateAo would put the ambient occlusion");
 	}
 
 	/**
@@ -159,6 +212,18 @@ public final class TerrainMesh implements ChunkVertexType {
 				Vitrail.logger().error("This engine cannot extend the chunk mesh, so the terrain keeps "
 						+ "Sodium's own and no pack will draw it", e);
 			}
+		}
+
+		// Ahead of the guard below and not after it, because the two answers do not move together: a
+		// pack swapped for another that also wants the terrain leaves the format exactly where it
+		// was and can still turn this over.
+		boolean apart = asked && TerrainDraw.separateAo();
+		if (separating != apart) {
+			separating = apart;
+			Vitrail.logger().info("The terrain's ambient occlusion {}",
+					apart ? "rides in the alpha of the vertex colour rather than multiplied into it, "
+							+ "which is what a pack's separateAo asks for"
+							: "is multiplied into the vertex colour again, as the game does it");
 		}
 
 		if (said && asked == carrying) {
@@ -309,6 +374,14 @@ public final class TerrainMesh implements ChunkVertexType {
 			long to = pointer + (long) at * this.stride;
 			for (int word = this.innerStride - Integer.BYTES; word >= 0; word -= Integer.BYTES) {
 				MemoryUtil.memPutInt(to + word, MemoryUtil.memGetInt(from + word));
+			}
+
+			// After the move and not before it, so that what is written stands whether this vertex was
+			// the source of the next move or not. The occlusion goes in the alpha and the tint comes
+			// back out of the albedo undivided, which is Iris's own pair of writes.
+			if (separating) {
+				MemoryUtil.memPutInt(to + this.colour,
+						ColorABGR.withAlpha(vertices[at].color, vertices[at].ao));
 			}
 
 			long extra = to + this.innerStride;

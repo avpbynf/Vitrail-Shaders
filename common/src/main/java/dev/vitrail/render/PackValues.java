@@ -70,6 +70,7 @@ public final class PackValues {
 	 */
 	private ShadowCasters shadowCasters = ShadowCasters.DEFAULT;
 
+	private boolean separateAo;
 	private Optional<String> particleOrdering = Optional.empty();
 	private NoiseTexture.Image noiseImage;
 	private PackImages packImages = PackImages.none();
@@ -112,6 +113,7 @@ public final class PackValues {
 			values.weather = properties.weather(settings.globalDefines(options));
 			values.rainDepth = properties.rainDepth(settings.globalDefines(options));
 			values.shadowCasters = properties.shadowCasters(settings.globalDefines(options));
+			values.separateAo = properties.separateAo(settings.globalDefines(options));
 			values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
 			values.declare(properties, settings.globalDefines(options));
 			values.readNoise(properties, source);
@@ -319,6 +321,15 @@ public final class PackValues {
 	 */
 	public ShadowCasters shadowCasters() {
 		return this.shadowCasters;
+	}
+
+	/**
+	 * Whether this pack asked for the terrain's ambient occlusion to be kept out of the vertex
+	 * colour and put in its alpha instead. What answers it is the chunk mesh, so a change here is
+	 * worth a rebuilt world; {@code TerrainDraw.separateAoSettled} is the side that asks for one.
+	 */
+	public boolean separateAo() {
+		return this.separateAo;
 	}
 
 	/**

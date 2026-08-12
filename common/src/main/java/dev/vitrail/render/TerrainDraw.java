@@ -84,6 +84,14 @@ public final class TerrainDraw {
 	private static volatile boolean shadowWanted;
 
 	/**
+	 * What {@link #separateAo()} answered when the last load ended, kept for no other purpose than
+	 * to tell a load that moved it from one that did not. It is not what the mesh is carrying: that
+	 * is taken from the derived answer at the instant the mesh is settled, and the two part company
+	 * between a mid-session failure and the load that follows it.
+	 */
+	private static volatile boolean separated;
+
+	/**
 	 * Whether the renderer is drawing the shadow map rather than the world at this instant.
 	 * <p>
 	 * A flag and not an argument because the three doors below are the renderer's own calls and it
@@ -168,6 +176,57 @@ public final class TerrainDraw {
 	/** Whether the shadow map is drawn, from the loaded options. */
 	static void shadowWanted(boolean asked) {
 		shadowWanted = asked;
+	}
+
+	/**
+	 * Whether the pack now drawing asked for the terrain's ambient occlusion to be kept out of the
+	 * vertex colour, {@code separateAo} in its {@code shaders.properties}.
+	 * <p>
+	 * Iris answers the same question from {@code WorldRenderingSettings.INSTANCE}, set from the
+	 * pack's directives where a pipeline is built and back to false where the vanilla one is
+	 * ({@code IrisRenderingPipeline.java:446} and {@code VanillaRenderingPipeline.java:30}), and
+	 * {@code XHFPTerrainVertex.java:152} is what reads it. This is derived and not latched so that
+	 * the second half of that comes for nothing: every road that stops a pack drawing, a program
+	 * that threw and a pack put away among them, takes {@link PackChain#terrain} to null and this
+	 * answers no on its own. Nothing has to remember to say so.
+	 * <p>
+	 * Read where the mesh is settled and not per quad, for the reason {@link #asked()} gives about
+	 * the format: a section is meshed by workers over many frames, and an answer that moved under
+	 * them would leave one region's alpha meaning one thing and its neighbour's another.
+	 */
+	public static boolean separateAo() {
+		TerrainDraw self = PackChain.terrain();
+
+		return wanted && self != null && self.values.separateAo();
+	}
+
+	/**
+	 * Takes the answer a load left behind, and has the world built again when it moved.
+	 * <p>
+	 * A load is the one road that moves it without moving anything else: two packs can both want
+	 * the terrain and disagree about this, and then the format is the same, nothing else asks for a
+	 * rebuild, and the sections standing carry an alpha the pack now drawing does not read the way
+	 * the pack that meshed them did. What that looks like is a world with no ambient occlusion at
+	 * all, or one occluded twice, and neither says anything about a directive.
+	 * <p>
+	 * Called from a finally, so every road out of a load passes through it, the refusals and the
+	 * throw included. That is the whole reason it takes no argument: the answer is derived from what
+	 * is drawing at the instant the load ended, whatever the load did to get there.
+	 * <p>
+	 * Silent, where {@link #wanted(boolean)} says what it did. The rebuild it asks for is what makes
+	 * the mesh read the answer again, and the mesh is the side that says what it now carries.
+	 */
+	static void separateAoSettled() {
+		boolean asked = separateAo();
+		if (separated == asked) {
+			return;
+		}
+
+		separated = asked;
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft != null && minecraft.level != null) {
+			minecraft.levelExtractor.allChanged();
+		}
 	}
 
 	/**

@@ -14,9 +14,12 @@ import java.util.Set;
  * twenty bits each, split so that the top ten bits of x, y and z sit at bits 0, 10 and 20 of its
  * first component and the bottom ten at the same places of its second; a coordinate counts
  * thirty-two blocks over its full range and starts eight blocks before the section, which is the
- * reach a mesh needs for the faces of its neighbours. {@code a_Color} is the block tint already
- * multiplied by the ambient occlusion. {@code a_TexCoord} keeps fifteen bits of texture coordinate
- * per axis and spends its top bit on which side of the sprite the corner lies. {@code a_LightAndData}
+ * reach a mesh needs for the faces of its neighbours. {@code a_Color} is the block tint with the
+ * ambient occlusion already multiplied into it, unless the pack wrote {@code separateAo}, and then
+ * the tint is untouched and the occlusion is in the alpha instead; the encoder settles which of the
+ * two a mesh carries and nothing here has to know. {@code a_TexCoord} keeps fifteen bits of texture
+ * coordinate per axis and spends its top bit on which side of the sprite the corner lies.
+ * {@code a_LightAndData}
  * holds the block light, the sky light, a byte of material bits and the index of the draw command,
  * one per byte. Everything past the twentieth is this engine's own, five elements of four bytes.
  * <p>

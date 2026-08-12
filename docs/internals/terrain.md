@@ -58,6 +58,16 @@ program will ever produce "flat unlit albedo" as long as vertex colour comes fro
 sides are darker than the tops" is true before any normal exists and therefore proves nothing about
 one. Any test of a normal has to be an A/B on the same scene from the same camera.
 
+**Unless the pack asked for the two apart.** `separateAo=true` in `shaders.properties` says the pack
+wants the occlusion where it can see it: the tint goes into the colour untouched and the coefficient
+into the alpha, which is free because block geometry never uses that alpha for anything else. Six of
+the eight packs of the test corpus write the line, and it is the reference's behaviour and not an
+option of this engine's. It is a property of the MESH, so the answer is taken where the chunk
+renderer is built and a pack that moves it has the world built again: two packs can both draw the
+terrain and disagree about this, and nothing else about the format would have changed. Read
+otherwise, the occlusion lands in the albedo and is then reflected, exposed and graded by everything
+downstream, which is a picture that looks plausible and is wrong in a way no screenshot shows.
+
 **Light arrives raw, and the scale belongs to the texture matrix.** The pair is carried as the game
 stores it, a level times sixteen per channel, and the smooth pipeline interpolates between those, so
 it is a number from nought to two hundred and forty and not a texture coordinate. What turns it into
