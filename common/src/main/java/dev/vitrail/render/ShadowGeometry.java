@@ -18,6 +18,7 @@ import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.TickRateManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -87,25 +88,41 @@ public final class ShadowGeometry {
 	private static int gathered;
 	private static int gatheredBlocks;
 
+	/**
+	 * What each arm of {@link #visible} dropped on the last walk, what was last said of the pair, and
+	 * how many walks ago.
+	 * <p>
+	 * <strong>A PROBE, and it goes out with the blink it was written for.</strong> Two explanations
+	 * of that blink have been written and both were wrong, the second while the first was still
+	 * believed, so what goes in next is a measurement.
+	 */
+	private static int outsideLight;
+	private static int unbuilt;
+	private static int saidOutside = -1;
+	private static int saidUnbuilt = -1;
+	private static long walks;
+	private static long said = -20;
+
 	private ShadowGeometry() {
 	}
 
 	/**
-	 * Works out what the light can see, BEFORE the light's own walk of the sections runs.
+	 * Works out what the light can see, before the light's own walk of the sections runs.
 	 * <p>
-	 * <strong>The order is the whole of this method's existence.</strong> A caster is kept or dropped
-	 * by {@code LevelRenderer.isSectionCompiledAndVisible}, which ends in
-	 * {@code getVisibility(Util.getMillis()) >= 0.3F} - a FADE in time, not a yes or no. Run after
-	 * the light's walk has called {@code finalizeRenderLists} for its own viewport, that fade
-	 * answers about the light's sections and not the camera's, so the two disagree on every frame
-	 * the player is moving and agree the moment they stand still. Seen in game on 12 August 2026:
-	 * the shadows of mobs and of the player blinked while walking and were steady at rest, with the
-	 * terrain's own shadows untouched throughout.
+	 * <strong>The order settles nothing, and the sentence that used to stand here was wrong.</strong>
+	 * A caster is kept or dropped by {@code LevelRenderer.isSectionCompiledAndVisible}
+	 * ({@code LevelRenderer.java:975-984}), which ends in
+	 * {@code getVisibility(Util.getMillis()) >= 0.3F}. That reads
+	 * {@code (now - uploadedTime) / fadeDuration} off the section itself
+	 * ({@code chunk/SectionRenderDispatcher.java:223-225}): a fade since the section's own upload, in
+	 * which no viewport, no list and no frustum appears, and which {@code finalizeRenderLists} never
+	 * touches. Asked before or after the light's walk it answers the same thing to within the
+	 * microseconds between the two, and the shadows of mobs went on blinking at a walk when this
+	 * moved. It stays here because it is the plainer place to ask, not because it fixes anything.
 	 * <p>
-	 * Iris carries the same test ({@code shadows/ShadowRenderer.java:703-705}) and does not have the
-	 * problem, because its shadow render happens where the camera's section state is still the one
-	 * that was settled for this frame. This engine draws its map at the END of the frame, so the
-	 * only way to ask the same question is to ask it earlier.
+	 * Iris carries the same test ({@code shadows/ShadowRenderer.java:703-705}). What the blink really
+	 * is has not been established; {@link #visible} carries what has been ruled out and counts what
+	 * is left.
 	 *
 	 * @param light   the light's own view projection, the matrix the terrain is culled against
 	 * @param camera  where the frame was drawn from, which the map is built around
@@ -115,6 +132,9 @@ public final class ShadowGeometry {
 		STATE.reset();
 		gathered = 0;
 		gatheredBlocks = 0;
+		outsideLight = 0;
+		unbuilt = 0;
+		walks++;
 
 		// The entity switch and not one of its own, which is the convention: what enters the map here
 		// is the same geometry that door serves, read from the same tables, and a family does not take
@@ -149,6 +169,28 @@ public final class ShadowGeometry {
 
 		gathered = extractEntities(minecraft, view, frustum, casters);
 		gatheredBlocks = extractBlockEntities(minecraft, renderer, casters);
+		probe();
+	}
+
+	/**
+	 * Says which arm of {@link #visible} is dropping casters, and goes out with the blink.
+	 * <p>
+	 * Printed on a change of the pair rather than every walk, and no oftener than one line in
+	 * twenty, because what is being looked for is an OSCILLATION and not a level: a shadow that
+	 * blinks at a walk and holds at rest is one of these two numbers moving while the other stands
+	 * still. A per frame line would say the same thing and bury it.
+	 */
+	private static void probe() {
+		if ((outsideLight == saidOutside && unbuilt == saidUnbuilt) || walks - said < 20) {
+			return;
+		}
+
+		said = walks;
+		saidOutside = outsideLight;
+		saidUnbuilt = unbuilt;
+		Vitrail.logger().info("The light's walk kept {} casters, dropped {} outside the light's own "
+				+ "frustum and {} standing in a section the game has not finished showing",
+				gathered, outsideLight, unbuilt);
 	}
 
 	/**
@@ -257,21 +299,20 @@ public final class ShadowGeometry {
 	private static int extractEntities(Minecraft minecraft, Camera view, Frustum frustum,
 			ShadowCasters casters) {
 		EntityRenderDispatcher entities = minecraft.levelRenderer.entityRenderDispatcher();
+		TickRateManager ticks = minecraft.level.tickRateManager();
 		DeltaTracker delta = minecraft.getDeltaTracker();
 		Vec3 at = view.position();
 
 		if (casters.entities()) {
 			for (Entity entity : minecraft.level.entitiesForRendering()) {
 				if (visible(minecraft, entities, entity, frustum, at)) {
-					STATE.entityRenderStates.add(entities.extractEntity(entity,
-							delta.getGameTimeDeltaPartialTick(true)));
+					STATE.entityRenderStates.add(extract(entities, delta, ticks, entity));
 				}
 			}
 		} else if (casters.player()) {
 			Player player = minecraft.player;
 			if (player != null && !player.isSpectator() && !player.isInvisible()) {
-				STATE.entityRenderStates.add(entities.extractEntity(player,
-						delta.getGameTimeDeltaPartialTick(false)));
+				STATE.entityRenderStates.add(extract(entities, delta, ticks, player));
 			}
 		}
 
@@ -279,23 +320,70 @@ public final class ShadowGeometry {
 	}
 
 	/**
-	 * The same test the game makes of its own camera, made of the light instead. A spectator is left
-	 * out for the reason Iris leaves it out: it is not in the world to be lit.
+	 * Extracts one caster the way the game and Iris both extract it, which is two things this walk
+	 * was getting wrong.
+	 * <p>
+	 * <strong>The old position is settled first, on the frame an entity is born.</strong> A state is
+	 * built by interpolating {@code xOld} towards where the entity stands, and one that has never
+	 * ticked carries an old position nothing ever set, so its shadow is laid somewhere else for a
+	 * frame. The game does this ({@code extract/LevelExtractor.java:244-248}) and so does Iris
+	 * ({@code shadows/ShadowRenderer.java:706-710}).
+	 * <p>
+	 * <strong>And the partial tick is the entity's own.</strong> Both ask
+	 * {@code getGameTimeDeltaPartialTick(!isEntityFrozen(entity))}, per caster, because a frozen
+	 * entity stands still and one interpolated as though it ran drags its shadow off it. This walk
+	 * passed a constant, and not the same constant on its two branches: the player was extracted one
+	 * way where the pack allowed the entities and the other way where it allowed only the player.
+	 */
+	private static EntityRenderState extract(EntityRenderDispatcher entities, DeltaTracker delta,
+			TickRateManager ticks, Entity entity) {
+		if (entity.tickCount == 0) {
+			entity.xOld = entity.getX();
+			entity.yOld = entity.getY();
+			entity.zOld = entity.getZ();
+		}
+
+		return entities.extractEntity(entity,
+				delta.getGameTimeDeltaPartialTick(!ticks.isEntityFrozen(entity)));
+	}
+
+	/**
+	 * The same test the game makes of its own camera, made of the light instead: {@code shouldRender}
+	 * against a frustum, then the section behind it ({@code extract/LevelExtractor.java:259-269}).
+	 * The passenger arm is the game's and Iris's alike: what carries the player is kept even where
+	 * the frustum refuses it, or the boat under a player casting a shadow would cast none. A
+	 * spectator is left out for the reason Iris leaves it out: it is not in the world to be lit.
+	 * <p>
+	 * <strong>The frustum is the only term that differs from the game's own, and that is what
+	 * narrows the blink.</strong> Both tests end on the same {@code blockPosition}, so for a caster
+	 * the player can see on screen the section arm is true by construction, and it is true of the
+	 * player itself, which stands in its own section. A shadow blinking under a body that does not
+	 * can therefore only be blinking on {@code shouldRender} against the light. That is a deduction
+	 * and not a measurement, which is why each arm is counted.
 	 */
 	private static boolean visible(Minecraft minecraft, EntityRenderDispatcher entities, Entity entity,
 			Frustum frustum, Vec3 at) {
-		if (entity instanceof Player player && player.isSpectator()) {
+		if (entity instanceof Player spectator && spectator.isSpectator()) {
 			return false;
 		}
 
-		if (!entities.shouldRender(entity, frustum, at.x, at.y, at.z)) {
+		Player player = minecraft.player;
+		if (!entities.shouldRender(entity, frustum, at.x, at.y, at.z)
+				&& (player == null || !entity.hasIndirectPassenger(player))) {
+			outsideLight++;
+
 			return false;
 		}
 
 		BlockPos block = entity.blockPosition();
+		if (minecraft.level.isOutsideBuildHeight(block.getY())
+				|| minecraft.levelRenderer.isSectionCompiledAndVisible(block)) {
+			return true;
+		}
 
-		return minecraft.level.isOutsideBuildHeight(block.getY())
-				|| minecraft.levelRenderer.isSectionCompiledAndVisible(block);
+		unbuilt++;
+
+		return false;
 	}
 
 	/**

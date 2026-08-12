@@ -249,7 +249,7 @@ public final class TerrainDraw {
 
 	/**
 	 * Whether a shadow pass may run at all: the pack's own geometry has to be drawing, or the map
-	 *would be filled by the game's chunk shader, which writes the world's colours into it.
+	 * would be filled by the game's chunk shader, which writes the world's colours into it.
 	 */
 	public static boolean shadows() {
 		return wanted && shadowWanted && PackChain.terrain() != null;
