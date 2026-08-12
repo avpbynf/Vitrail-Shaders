@@ -2588,7 +2588,7 @@ public final class GlslTranslator {
 				this.parameterLookups, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
 				List.copyOf(this.conflicts), comparedSamplers(), List.copyOf(this.storageBlocks),
-				this.volumeLookups, this.volumesLeftAlone);
+				this.volumeLookups, this.volumesLeftAlone, this.trigCalls);
 	}
 
 	/**

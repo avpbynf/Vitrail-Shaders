@@ -104,6 +104,11 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 *                           that were therefore not moved at all, declaration included. Zero on
 	 *                           the corpus: it is what would say a pack had started doing otherwise,
 	 *                           and the program it happens to stays refused meanwhile
+	 * @param trigCalls          calls to {@code sin} and {@code cos} sent through the reduced
+	 *                           argument helpers this unit carries instead of to the builtin. Counted
+	 *                           because the substitution is whole file and silent otherwise: a pack
+	 *                           declaring a sine of its own is left alone and lands here as a lower
+	 *                           count rather than as a refusal
 	 */
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
@@ -112,6 +117,6 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames, List<String> comparedSamplers, List<String> storageBlocks,
-			int volumeLookups, int volumesLeftAlone) {
+			int volumeLookups, int volumesLeftAlone, int trigCalls) {
 	}
 }
