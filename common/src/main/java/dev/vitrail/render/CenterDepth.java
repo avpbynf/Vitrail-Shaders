@@ -47,10 +47,23 @@ import java.util.Optional;
  * <p>
  * The mixing factor is worked out here rather than in the shader, from
  * {@link Smoothed#blend}, so that the one place that knows what a half life in deciseconds means is
- * the one place both this and a pack's own {@code smooth()} read it from. The first draw after an
- * allocation takes the depth outright, a factor of one, which is what stops a fresh texture's
- * contents from reaching the pack at all; Iris carries a test for a NaN in its fragment stage for
- * the same reason, and that test only catches the shapes of rubbish that happen to be NaN.
+ * the one place both this and a pack's own {@code smooth()} read it from.
+ * <p>
+ * <strong>Two ways in for a NaN, and Iris closes the first of them.</strong> A fresh texture holds
+ * whatever the driver left, and no choice of factor writes that out of the accumulator:
+ * {@code mix(x, y, 1.0)} is {@code x * 0.0 + y}, and a NaN times nought is still a NaN, so one bad
+ * decode would poison every frame after it. The fragment stage therefore carries Iris's own test,
+ * taken every frame rather than only the first, and the factor of one that the first draw uses
+ * covers the rubbish that happens not to be NaN, which Iris leaves standing.
+ * <p>
+ * The other way in is the factor itself, and there the arithmetic runs out on both sides. A half
+ * life of nought gives an infinite decay constant, the frame clock quantises a duration to the
+ * whole millisecond, and an infinity times a nought is a NaN: a pack that asks for no smoothing at
+ * all turns the texel to NaN on every frame shorter than a millisecond, and the test above cannot
+ * pull it back out, since the factor is NaN again the frame after. Iris works the same factor out
+ * in its own fragment stage and has nothing there for that case. Folded with a factor of nought
+ * here instead, which holds the accumulator where it stands and is the answer
+ * {@link Smoothed#updateAndGet} already gives the values accumulated on this side.
  */
 final class CenterDepth {
 
@@ -97,6 +110,9 @@ final class CenterDepth {
 	 * whole, so the one fragment this pass ever has sits at the middle of it and interpolates to a
 	 * half in both directions. Iris writes the half out, having a full sized attachment underneath and
 	 * a viewport of one texel over it.
+	 * <p>
+	 * The test on the accumulator is Iris's own, and the class javadoc says why the factor cannot
+	 * stand in for it.
 	 */
 	private static final String FRAGMENT = """
 			#version 460 core
@@ -115,6 +131,11 @@ final class CenterDepth {
 			void main() {
 				float here = texture(InSampler, ofTexCoord).r;
 				float before = texture(PrevSampler, ofTexCoord).r;
+
+				if (isnan(before)) {
+					before = here;
+				}
+
 				ofFragData0 = vec4(mix(before, here, of_CenterBlend));
 			}
 			""";
@@ -176,10 +197,7 @@ final class CenterDepth {
 		}
 
 		int into = 1 - this.current;
-		// A factor of one on the first draw, so the rubbish a fresh texture holds is written over
-		// rather than mixed in. Afterwards it is the pack's own half life, on the frame that has just
-		// been drawn.
-		float blend = this.primed ? Smoothed.blend(halfLife, seconds) : 1.0F;
+		float blend = blend(halfLife, seconds);
 
 		// Written through the game's own builder rather than into the buffer by hand, which is what
 		// every other block of this engine does: one float is a layout too, and the two would drift.
@@ -209,6 +227,21 @@ final class CenterDepth {
 		this.primed = true;
 
 		return true;
+	}
+
+	/**
+	 * How far this draw moves the texel towards the depth it has just been handed, between nought
+	 * and one. See the class javadoc for the two cases that are not the pack's half life.
+	 *
+	 * @param halfLife the pack's {@code centerDepthHalflife}, in deciseconds
+	 * @param seconds  the previous frame's duration
+	 */
+	private float blend(float halfLife, float seconds) {
+		if (!this.primed) {
+			return 1.0F;
+		}
+
+		return seconds > 0.0F ? Smoothed.blend(halfLife, seconds) : 0.0F;
 	}
 
 	/** Frees the pair and the buffer behind the factor. The accumulator goes with them. */
