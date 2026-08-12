@@ -1023,27 +1023,29 @@ final class GeometryProgram {
 	 * attachment is a thing Vulkan gives no meaning to. This is what BSL's water fog and refraction
 	 * read.
 	 * <p>
-	 * depthtex2 is that same depth from before the hand was drawn, which is a second image on the
-	 * frames this engine draws the hand and the same one on every other. Answered here and not only
-	 * in the chain, because Iris hands its gbuffers programs the same three names off one table
-	 * ({@code IrisSamplers.addWorldDepthSamplers}), the pre-hand copy included, and a name that read
-	 * two different depths between one half of the frame and the other is a difference nothing would
-	 * ever explain.
+	 * The solid and cutout passes stay on the constant for those two. They draw before the image of
+	 * THIS frame is taken, so the only one in existence at that moment holds the previous frame's,
+	 * and handing them that would be the exact shape of picture this project refuses: plausible, and
+	 * wrong by one frame of camera movement.
 	 * <p>
-	 * The solid and cutout passes stay on the constant. They draw before the image of THIS frame is
-	 * taken, so the only one in existence at that moment holds the previous frame's, and handing
-	 * them that would be the exact shape of picture this project refuses: plausible, and wrong by
-	 * one frame of camera movement.
+	 * <strong>depthtex2 is asked before that test and not inside it.</strong> It is the one copy
+	 * taken in the middle of the world rather than at the edge of a half:
+	 * {@link PackChain#markPreHandDepth} fills it one line before the hand's solid pass is drawn, so
+	 * {@code gbuffers_hand}, the program it is taken for, stands on the near side of the test and
+	 * would read the far plane if the test came first. Iris hands the pre-hand depth to every
+	 * gbuffers program off one table ({@code samplers/IrisSamplers.java:220-226}). No stale image
+	 * comes in by the same door: the copy is forgotten at the end of every frame, so a pass drawn
+	 * BEFORE the moment it is taken finds nothing and falls through to the paragraphs above.
 	 */
 	private GpuTextureView depth(String sampler) {
-		if (this.pass.afterDeferred()) {
-			if (SamplerPlan.preHandCopy(sampler)) {
-				GpuTextureView preHand = this.targets.depth().preHand();
-				if (preHand != null) {
-					return preHand;
-				}
+		if (SamplerPlan.preHandCopy(sampler)) {
+			GpuTextureView preHand = this.targets.depth().preHand();
+			if (preHand != null) {
+				return preHand;
 			}
+		}
 
+		if (this.pass.afterDeferred()) {
 			GpuTextureView opaque = this.targets.depth().opaque();
 			if (opaque != null) {
 				return opaque;
@@ -1099,7 +1101,9 @@ final class GeometryProgram {
 	 * Whether this name is answered with something the frame really drew, rather than one pixel. A
 	 * colour target counts even when it is empty at this point of the frame: it is the pack's own
 	 * image and what it holds is a question about the order of the frame, not about the binding. A
-	 * depth sampler counts only on the translucent pass, where the copy answers it.
+	 * depth sampler counts only on the translucent pass, where the copy answers it, and depthtex2 on
+	 * the hand's solid pass as well, the copy that name reads being taken one line before that pass
+	 * is drawn.
 	 */
 	private boolean readsATexture(String sampler) {
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
@@ -1108,7 +1112,9 @@ final class GeometryProgram {
 		return ATLAS.contains(sampler) || LIGHTMAP.equals(sampler)
 				|| kind == SamplerPlan.Kind.COLORTEX
 				|| kind == SamplerPlan.Kind.NOISE
-				|| (kind == SamplerPlan.Kind.DEPTH && this.pass.afterDeferred())
+				|| (kind == SamplerPlan.Kind.DEPTH && (this.pass.afterDeferred()
+						|| (SamplerPlan.preHandCopy(sampler)
+								&& this.pass.stage() == RenderStage.HAND_SOLID)))
 				// The map exists from the first frame, but a pass that draws it reads its own
 				// attachment and is answered with a constant like everything else that collides.
 				|| (!this.pass.shadow() && kind == SamplerPlan.Kind.SHADOW_DEPTH
