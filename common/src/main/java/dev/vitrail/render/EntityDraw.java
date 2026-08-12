@@ -912,8 +912,37 @@ public final class EntityDraw {
 	 *
 	 * @return whether this engine drew it, in which case the caller must not
 	 */
-	@SuppressWarnings("ReferenceEquality")
 	public static boolean draw(PreparedRenderType prepared, StagedVertexBuffer.ExecuteInfo info) {
+		if (served(prepared, info)) {
+			return true;
+		}
+
+		// <strong>Inside the light's walk there is no such thing as handing a draw back.</strong>
+		// Every no above ends with the caller drawing it itself, on the target its render type names,
+		// and that target at the end of a frame is the finished picture: the caster would be painted
+		// across the image the player is looking at, once per frame, for as long as the reason lasts.
+		// So a no becomes a drop here, whatever the reason was and not only for a pipeline the table
+		// has no row for. What it costs is written in ShadowGeometry: that caster casts no shadow,
+		// which is a hole in the map rather than a mark on the screen.
+		if (shadowFeatures) {
+			EntityDraw draw = PackChain.entities();
+			if (draw != null) {
+				draw.dropped(prepared.pipeline());
+			}
+
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * The answer before the light's walk has its say: whether this engine really recorded the draw.
+	 *
+	 * @return whether it was drawn, false meaning nobody drew it yet
+	 */
+	@SuppressWarnings("ReferenceEquality")
+	private static boolean served(PreparedRenderType prepared, StagedVertexBuffer.ExecuteInfo info) {
 		EntityDraw draw = PackChain.entities();
 		if (draw == null) {
 			return false;
@@ -931,17 +960,6 @@ public final class EntityDraw {
 			draw.end();
 			if (wanted && element == null && translucentFeatures) {
 				draw.withheld(prepared.pipeline());
-			}
-
-			// Inside the light's walk, no is not the same answer, and the class comment of
-			// ShadowGeometry carries the divergence in full. Handing this back would have the game
-			// open its own pass on the target it named, which at this point in the frame carries the
-			// finished picture: the caster would be painted across the image the player is looking
-			// at. Dropped instead, so the caster casts no shadow and nothing else is harmed.
-			if (shadowFeatures) {
-				draw.dropped(prepared.pipeline());
-
-				return true;
 			}
 
 			return false;
@@ -1169,8 +1187,13 @@ public final class EntityDraw {
 	 */
 	private boolean refuse(Element element, String reason, boolean lasting, String why) {
 		if (this.refused.add(reason)) {
-			Vitrail.logger().warn("A draw of the {} went back to the game's own shader because {}. {}",
-					element.family(), why, lasting
+			// What happens next is not the same in the light's walk, and saying the wrong one is
+			// worse than saying nothing: a reader told the game took over goes looking for geometry
+			// lit by the wrong engine, where what is really there is geometry missing from the map.
+			Vitrail.logger().warn("A draw of the {} {} because {}. {}", element.family(),
+					element.shadow() ? "was dropped out of the shadow map"
+							: "went back to the game's own shader",
+					why, lasting
 							? "It is settled for as long as this pack is loaded, so this geometry is "
 									+ "drawn by the game on every frame until the pack is read again, "
 									+ "steadily rather than as a flicker"
@@ -1196,12 +1219,28 @@ public final class EntityDraw {
 	 * different place from a wrongly lit mob.
 	 */
 	private void dropped(RenderPipeline pipeline) {
-		if (this.refused.add("shadow:" + pipeline.getLocation())) {
-			Vitrail.logger().warn("This engine has no shadow row for {}, so what the game draws with "
-					+ "it casts no shadow. It cannot be handed back inside the light's walk: the game "
-					+ "would open its own pass on the target it named, which at that point in the "
-					+ "frame carries the finished picture", pipeline.getLocation());
+		if (!this.refused.add("shadow:" + pipeline.getLocation())) {
+			return;
 		}
+
+		// The deliberate one is named apart from the rest, because reporting a parity choice as a
+		// fault is how a reader is sent hunting something that is working. Iris assigns
+		// ENTITY_SHADOW in its main table and nowhere in its shadow one, so a mob's ground oval
+		// keeps the game's shader there; serving it would lay a flat disc of occluder under every
+		// mob. The walk also submits name tags, text and other geometry no shadow table anywhere
+		// has a row for, and those are the same silence the camera's table gives them.
+		if (pipeline == RenderPipelines.ENTITY_SHADOW) {
+			Vitrail.logger().info("The ground oval under a mob is left out of the shadow map, which "
+					+ "is what Iris does: served, it would be a flat disc of occluder lying under "
+					+ "every mob in the map");
+
+			return;
+		}
+
+		Vitrail.logger().warn("This engine has no shadow row for {}, so what the game draws with it "
+				+ "casts no shadow. It is dropped rather than handed back: inside the light's walk "
+				+ "the game would open its own pass on the target its render type names, which at "
+				+ "that point in the frame carries the finished picture", pipeline.getLocation());
 	}
 
 	/**
