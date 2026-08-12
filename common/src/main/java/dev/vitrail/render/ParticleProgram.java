@@ -97,7 +97,10 @@ final class ParticleProgram implements DumpedProgram {
 				// transparent and claiming every pixel it spans. The opaque half is the entities'
 				// case: it is drawn over pixels the seed is going to repaint anyway, and marking one
 				// would only take the game's own picture away from whatever is drawn there next.
-				false, element.afterDeferred(), game.getPrimitiveTopology(), game.isCull(),
+				// claimed: no sibling marks these pixels for them. The opaque half is drawn with
+				// RenderPipelines.OPAQUE_PARTICLE, which blends nothing, so the question does not
+				// arise there either.
+				false, false, element.afterDeferred(), game.getPrimitiveTopology(), game.isCull(),
 				game.getDepthStencilState(), element.stage(),
 				// Nothing of the game's bound beside the mesh, unlike the clouds: a particle carries
 				// its whole geometry in the vertex buffer the renderer fills.

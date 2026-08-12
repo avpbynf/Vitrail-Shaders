@@ -90,8 +90,9 @@ final class CloudProgram implements DumpedProgram {
 				// What the game's own two cloud pipelines blend with, both of them.
 				Optional.of(BlendFunction.TRANSLUCENT),
 				// No coverage mask. The clouds are drawn after the main pass and therefore after the
-				// scene seed has run, so there is nothing left for a mask to keep off them.
-				false, true, PrimitiveTopology.QUADS,
+				// scene seed has run, so there is nothing left for a mask to keep off them, and
+				// nothing to claim their pixels for them either.
+				false, false, true, PrimitiveTopology.QUADS,
 				// The game's answer and not a taste: RenderPipelines.CLOUDS takes the builder's
 				// default, which is to cull, and FLAT_CLOUDS names withCull(false). Culling the flat
 				// cloud would leave the sky empty from underneath, which is where it is looked at.

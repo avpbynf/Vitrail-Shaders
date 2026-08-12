@@ -75,7 +75,10 @@ public final class TerrainProgram implements DumpedProgram {
 				pass.shadow(),
 				// The translucent half blends over the world, the two opaque ones write outright.
 				pass.blended() ? Optional.of(BlendFunction.TRANSLUCENT) : Optional.<BlendFunction>empty(),
-				pass.covers(), pass.afterDeferred(),
+				// claimed: no sibling of this family marks a chunk pass's pixels for it. The opaque
+				// halves ask for the mask themselves, which covers answers and GeometryProgram can
+				// still turn down, and the translucent one is drawn after the seed.
+				pass.covers(), false, pass.afterDeferred(),
 				// Sodium's own, taken from ShaderChunkRenderer.createShader: the pass this is bound
 				// into was opened for that pipeline and a difference of topology would be a
 				// difference nobody declared.

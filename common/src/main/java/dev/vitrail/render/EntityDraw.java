@@ -1529,14 +1529,13 @@ public final class EntityDraw {
 	/**
 	 * One file serving one half of the family, which is what the plan has to be asked by: the same
 	 * file may serve both halves, and the two answers are on opposite sides of every target. The
-	 * hand's water pass is a blended half like any other here, {@code gbuffers_hand_water} falling
+	 * hand's water pass is a half drawn after the stage like any other here, {@code gbuffers_hand_water} falling
 	 * back on {@code gbuffers_hand} with the two answers apart.
 	 *
 	 * @param afterStage which side of the deferred stage the PASS this half belongs to is drawn on,
 	 *               which is {@code Element.afterStage} and not the pipeline's blend. Named for the
-	 *               question rather than for the answer one family gives it: it was called
-	 *               {@code blended} while both writers already filled it from the row, which is a
-	 *               third spelling of the very confusion this key exists to settle
+	 *               question rather than for the answer one family gives it, the two parting company
+	 *               on every hand row whose blend disagrees with its pass
 	 * @param shadow whether this half fills the shadow map rather than the picture. Part of the key
 	 *               and not a detail: a shadow half is asked nothing of the plan and owes nothing to
 	 *               the scene seed, and without it here one file that serves both would answer for
@@ -1579,12 +1578,14 @@ public final class EntityDraw {
 	 * buffer that is not the one it paints would have that output carried into a target the pack did
 	 * not ask for, which is a pack's albedo read as its normals.
 	 * <p>
-	 * <strong>The blending half needs no seed and is not a relaxation of the rule but the other side
-	 * of it.</strong> It is drawn after the deferred stage, onto a colour target the chain has
-	 * already composed, so its pass blends and {@code GeometryProgram} gives a blending pass its own
-	 * draw buffer nought: the output goes to the pack outright rather than making the trip through
-	 * the game's eight bit target. That is the position the world's own water is in, and the
-	 * translucent particles with it.
+	 * <strong>The half drawn after the stage needs no seed and is not a relaxation of the rule but
+	 * the other side of it.</strong> It is drawn onto a colour target the chain has already
+	 * composed, so {@code GeometryProgram} gives it its own draw buffer nought: the output goes to
+	 * the pack outright rather than making the trip through the game's eight bit target. That is the
+	 * position the world's own water is in, and the translucent particles with it. The side of the
+	 * stage and not the blend is what earns it, and the hand is where the two part company: its
+	 * solid pass blends and is drawn one line before the seed, so it keeps draw buffer nought on the
+	 * game's target like the opaque halves.
 	 */
 	private List<ChainPlan.Attachment> writes(Half half) {
 		// A shadow half writes the map and nothing else. GeometryProgram gives a shadow pass no slots

@@ -135,11 +135,20 @@ points at.
 it.** The game draws the hand after the whole chain has finished, so with `hand=off` it is not
 merely lit by the game, it is painted onto an image the pack had already completed: nothing the pack
 does to the world reaches it, and nothing it draws reaches a composite. With `hand=on` it is drawn
-inside the level instead, in two passes, and served by `gbuffers_hand` and `gbuffers_hand_water` as
-the reference serves them. The engine squeezes the hand's depth the way the reference does, and a
-pack that divides it back out with `MC_HAND_DEPTH` gets the same eighth it expects. What blends in
-the hand goes through the water pass with the arm, a held translucent block included, so both are
-the pack's.
+inside the level instead, in two passes, and served by `gbuffers_hand` and `gbuffers_hand_water`.
+The engine squeezes the hand's depth the way the reference does, and a pack that divides it back out
+with `MC_HAND_DEPTH` gets the same eighth it expects. What blends in the hand goes through the water
+pass with the arm, a held translucent block included, so both are the pack's.
+
+**Where the SOLID hand pass is not what the reference makes of it**, the water pass being unaffected:
+its colour reaches the pack's picture through the same road everything the game draws takes, rather
+than being written into the pack's target directly. What that looks like: colour banding on a hand
+held against a smooth gradient; a sleeve or any half-transparent layer tinted by the fog colour
+rather than by what is behind it; a held banner's pattern missing over ground the pack drew; and a
+pack that writes a normal or a specular map from `gbuffers_hand` unable to light the hand from them
+anywhere the pack's own terrain stands behind it. A `gbuffers_hand` that samples scene depth is
+handed a constant rather than a depth image. The hand is lit and it moves with the pack's world;
+what a pack cannot do here is treat it as material of its own.
 
 **Nothing named in this section CASTS a shadow** - not the rain, not the snow, not the particles,
 not the mobs, not the block entities, not the hand - because none of them is drawn into the shadow

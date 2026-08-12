@@ -245,6 +245,40 @@ half of the world, and keeping it on the game's target survives only as a **demo
 cases where there is nowhere else to send it: no chain running, no answer in the plan, or an opaque
 half that could not be given a coverage mask.
 
+There is a fourth, and it is about a pass that blends. Blending used to be the whole of what earned
+the first draw buffer, on the footing that a pass which blends is drawn over a picture the seed has
+already put there. That holds for the world's water, the weather, the clouds and everything else
+drawn after the seed; it does not hold for a pass drawn before it. The sky is the one family that
+blends before the seed and keeps the buffer all the same, because it draws opaque pieces of its own -
+the disc, and the horizon cone with it - that mark those pixels against the seed. Not everywhere: the
+cone comes with two conditions of its own, set out under
+[the horizon gap](sky-and-shadows.md#the-horizon-gap), and where it is not drawn the seed repaints
+whatever stands in the band it would have closed - the lower half of the stars, the sunrise, a rising
+or setting sun. The hand's solid pass has no such sibling at all, and no mask could stand in for one:
+the seed's cut asks whether the depth moved closer since the pack's geometry was finished with it,
+and the hand is drawn with its clip depth squeezed into a band of its own, so the answer is yes at
+every pixel it covers. Its first draw buffer therefore stays on the game's target and reaches the
+picture through the seed.
+
+That last one is a **divergence**, and it is the seed's price rather than a reading of Iris: Iris
+binds every gbuffers program to the pack's own draw buffers, the hand included, so the hand's colour
+never leaves the pack's target there. Here it makes the trip through the game's eight-bit target,
+which is a quantisation and not a loss of the picture. Three things do cost the picture, and none of
+them shows up as an error: a half-transparent hand pixel blends against the game's target, which
+holds no world while the chain is running, so it is tinted by the clear rather than by what stands
+behind it; a hand piece drawn with a pipeline that writes no depth, with nothing of its own pass
+writing depth under it, is discarded by the seed's cut where the mask is set rather than carried in;
+and the hand's *other* draw buffers still go straight to the pack, where the seed empties the ones
+its terrain program shares - so a pack whose hand program writes a normal or a specular map cannot
+light the hand from them over its own terrain.
+
+**And it is not forced**, which is worth writing down rather than discovering twice. The reference's
+only constraint is that the hand precede the deferred stage; the seed is this engine's own and has
+no counterpart there, so drawing the hand's solid pass *between* the seed and the deferred stage
+would keep the reference's moment and let the pack own the first draw buffer, at none of the three
+costs above. That is a change to the order of the frame rather than to this rule, and it has not
+been made.
+
 ## Reading the plan before running it
 
 The chain is decided at load, from the pack's declarations, and it can be recomputed outside the

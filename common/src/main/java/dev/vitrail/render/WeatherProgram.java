@@ -99,8 +99,9 @@ final class WeatherProgram implements DumpedProgram {
 				// No coverage mask, and the sky's rule is the one that decides it: the mask is written
 				// whatever the blend, so a curtain of rain that is a hundred parts transparent to one
 				// part water would claim every pixel it spans. It is also drawn long after the seed,
-				// which is what the mask exists to cut.
-				false, true, game.getPrimitiveTopology(), game.isCull(),
+				// which is what the mask exists to cut. Nothing claims these pixels for it either, and
+				// nothing needs to: a pass drawn after the seed answers that question by itself.
+				false, false, true, game.getPrimitiveTopology(), game.isCull(),
 				game.getDepthStencilState(), element.stage(),
 				// Nothing of the game's bound beside the mesh, unlike the clouds: the curtain is a
 				// vertex buffer the renderer fills, and this program declares no name of its own.

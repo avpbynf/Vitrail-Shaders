@@ -108,6 +108,30 @@ final class GeometryProgram {
 	 *                     world. Empty for a pass that writes outright
 	 * @param covers       whether this pass is one of the opaque halves that write the mask the scene
 	 *                     seed is cut with
+	 * @param claimed      whether this family draws opaque pieces of its OWN over the pixels its
+	 *                     blending pieces span, which is the sky and nothing else: its disc writes
+	 *                     outright and marks what it covers, and {@link HorizonCone}, drawn inside
+	 *                     the disc's own pass and sharing its mask, carries that mark down over the
+	 *                     lower hemisphere. So the stars, the sunrise, the sun and the moon blend
+	 *                     onto a target the seed leaves alone although none of them marks a pixel of
+	 *                     its own. Asked only of a blending pass drawn before the seed, and it is
+	 *                     what separates the sky from the hand, which has no such sibling at all.
+	 *                     <p>
+	 *                     <strong>It records how a family is PUT TOGETHER and is not a per frame
+	 *                     guarantee</strong>, and the difference is not a quibble: what marks those
+	 *                     pixels is answered per program and per frame, and this is answered once at
+	 *                     the load. Two ways the marking can be absent leave the blending pieces
+	 *                     claiming all the same, and they do not cost the same. The cone is drawn
+	 *                     only for {@link TerrainDraw.Mask#WRITTEN}
+	 *                     ({@code render/HorizonCone.java:152}) and only while the pack serves a sky
+	 *                     at all, and then what the seed repaints is what stands in the band the
+	 *                     cone would have closed: the lower half of the stars, the sunrise fan, a
+	 *                     rising or setting sun or moon. Or the disc's own mask is turned down,
+	 *                     which is {@code covers} below, and then nothing of the sky marks anything
+	 *                     and the seed repaints the whole of it. Both were already true before this
+	 *                     field existed, the blend alone having granted the same pixels: a defect it
+	 *                     records rather than one it introduces, and what the field buys is that it
+	 *                     is written down somewhere
 	 * @param afterDeferred whether the pass is drawn after the deferred stage, which is what decides
 	 *                     that a depth sampler can be answered with the opaque world's image
 	 * @param topology     how the mesh is assembled, which is the game's answer and not a choice:
@@ -134,7 +158,7 @@ final class GeometryProgram {
 	 *                     pipeline that did not declare them would be handed neither
 	 */
 	record Pass(String family, String name, String namespace, Set<String> answered, boolean shadow,
-			Optional<BlendFunction> blend, boolean covers, boolean afterDeferred,
+			Optional<BlendFunction> blend, boolean covers, boolean claimed, boolean afterDeferred,
 			PrimitiveTopology topology, boolean cull, DepthStencilState depth, RenderStage stage,
 			BindGroupLayout bindings) {
 
@@ -219,6 +243,13 @@ final class GeometryProgram {
 
 	/** Whether this pass writes the mask the scene seed is cut with. Opaque halves only. */
 	private final boolean covers;
+
+	/**
+	 * Whether this pass blends and lost draw buffer nought all the same, which is the one demotion
+	 * that is a decision rather than the absence of anywhere to send it. Kept as a field because it
+	 * is answered where {@code owns} is in scope and said where it is not.
+	 */
+	private final boolean demoted;
 	private final ColorTargets targets;
 	private final ShadowTargets shadow;
 	private final PackProgram.Loaded loaded;
@@ -294,12 +325,15 @@ final class GeometryProgram {
 		// encoded normal to be read back as the albedo. So the opaque halves write their target
 		// outright, and the coverage mask below is what keeps the seed off the pixels they wrote.
 		//
-		// Three demotions, all back to the game's target. When the chain is not running there is no
-		// final to bring a colortex to the screen, so anything sent there would simply vanish; when
-		// the plan had no answer there is nowhere else to send it; and when an opaque half could not
-		// be given a mask, the seed would repaint the whole target and take the terrain with it.
-		// Either way the pass draws where Sodium would have, which is also what keeps the pipeline's
-		// one state the pass's.
+		// Everything that lands back on the game's target, and it is a list of reasons rather than a
+		// count. When the chain is not running there is no final to bring a colortex to the screen,
+		// so anything sent there would simply vanish; when the plan had no answer there is nowhere
+		// else to send it; when a half that ASKED for a mask could not be given one, the seed would
+		// repaint the whole target and take the terrain with it; when a half never asked for one,
+		// which is the entities and the opaque particles, the seed carries it in by design; and the
+		// last is what the statement after next is about, a blending pass drawn before the seed with
+		// nothing marking the pixels it blends onto. Either way the pass draws where Sodium would
+		// have, which is also what keeps the pipeline's one state the pass's.
 		//
 		// Whether the mask was really written is the translation's answer and not a second reading
 		// of the same rule: the stage that could not be given one says so, and an engine that
@@ -307,7 +341,55 @@ final class GeometryProgram {
 		boolean owns = chainRuns && !writes.isEmpty();
 		this.covers = owns && pass.covers() && notes.coverage() == 1 && writes.size() <= outputs
 				&& outputs < ColorTargetState.MAX_COLOR_TARGETS;
-		this.ownsFirst = owns && (pass.blended() || this.covers);
+		// A blending pass may take draw buffer nought outright only where the seed will not repaint
+		// the pixels it blended onto, and blending is not that question: it was read as though it
+		// were, and every family answered the same either way until the hand arrived.
+		//
+		// Three ways the seed is kept off, and the hand has none of them. The pass is drawn AFTER
+		// the seed, which is the world's water, the weather, the clouds, the translucent particles,
+		// the blending half of the entities and the hand's own water pass. It writes the mask
+		// itself, which is what covers above answers. Or the family draws opaque pieces of its own
+		// over the same pixels, which is the sky alone and which claimed carries, with the two
+		// places it does not hold named where that field is declared.
+		//
+		// The hand's solid pass has none of the three, and no mask could give it the second: the
+		// seed's cut asks whether the depth moved closer since the pack's geometry was finished with
+		// it, and the hand is drawn with its clip depth squeezed into the band 0.4375 to 0.5625
+		// (render/HandDraw.java:93,362), which is not the depth of anything it stands in front of.
+		// A hand row that WRITES depth therefore answers that question yes at every pixel it drew,
+		// whatever mask is written there, so the seed repaints those pixels and a hand that owned
+		// draw buffer nought would have its colour painted over by a frame that never drew it.
+		//
+		// WHAT THIS COSTS AGAINST IRIS, AND IT IS NOT FORCED. Iris binds every gbuffers program to a
+		// framebuffer over the pack's own declared draw buffers, the hand included
+		// (pipeline/IrisRenderingPipeline.java:686-687; the four keys its hand passes ask for are at
+		// pipeline/IrisPipelines.java:192,204,216), so its hand colour is written to the pack's
+		// target and never leaves it. Here it goes to the game's target and reaches the pack through
+		// the seed, which costs three things. The trip through eight bits a channel, which is the
+		// quantisation the Bliss paragraph above measured on the terrain. The blend, which now
+		// happens against the game's target: with the chain running the world is in the PACK's
+		// target, so a hand pixel of alpha under one blends against the clear rather than against
+		// what stands behind it. And a row that writes no depth with nothing of its own pass writing
+		// depth under it - a held banner's pattern is the reachable one (BANNER_PATTERN,
+		// RenderPipelines.java:318) - which the cut then answers no for and discards where the mask
+		// is set.
+		//
+		// WHAT WOULD COST NOTHING, and it is not done here: draw the hand's solid pass BETWEEN the
+		// seed and the deferred stage. Iris's constraint is only that the hand precede the deferreds
+		// (mixin/MixinLevelRenderer.java:280, deferredRenderer.renderAll at
+		// pipeline/IrisRenderingPipeline.java:1073), and the seed is ours and has no counterpart
+		// there, so that position keeps Iris's moment AND lets the pack own draw buffer nought. It
+		// is a change to the order of the frame rather than to this statement, so it is named here
+		// and not taken: what this file can decide is where nought goes given when the pass is drawn.
+		this.ownsFirst = owns && (this.covers || pass.afterDeferred()
+				|| (pass.blended() && pass.claimed()));
+		// The demotion just above and none of the ones before it, which is why owns and the side are
+		// both in it: without owns this would answer yes for every blending pass in a place where
+		// the chain does not run or the plan had no attachments to give, and then say of the water,
+		// the clouds and the weather that they are drawn before a seed they are drawn after - or
+		// before a seed that is never painted at all. Nothing tests the shadow map here because
+		// nothing needs to: every shadow pass is built with an empty blend.
+		this.demoted = owns && !this.ownsFirst && pass.blended() && !pass.afterDeferred();
 		this.extra = this.ownsFirst
 				? List.copyOf(writes)
 				: writes.size() < 2 ? List.of() : List.copyOf(writes.subList(1, writes.size()));
@@ -1145,6 +1227,17 @@ final class GeometryProgram {
 					this.extra.stream()
 							.map(one -> TargetName.canonical(one.target()) + " " + one.side())
 							.toList());
+		}
+
+		// Said outside the chain above, because neither branch that lands here names draw buffer
+		// nought and this is the one case where its going to the game's target is a decision rather
+		// than the ordinary answer. What it costs is a trip through eight bits a channel, a blend
+		// against the game's target instead of the world, and the rows that write no depth being
+		// discarded by the seed's cut - none of which a silent log would show.
+		if (this.demoted) {
+			Vitrail.logger().info("It blends and draw buffer nought still goes to the game's own "
+					+ "target: this pass is drawn before the scene seed and nothing marks the pixels "
+					+ "it blends onto, so the seed would paint the game's picture back over them");
 		}
 
 		// Said because nothing on screen would. A pack declaring sampler2DShadow asks the hardware

@@ -82,7 +82,23 @@ final class SkyProgram implements DumpedProgram {
 		// same way, and the translucent one answers it no.
 		return new SkyProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY, element.element(),
 				NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, element.blend(),
-				element.blend().isEmpty(), false, element.topology(),
+				// claimed, and the sky is the one family that answers it yes: it draws opaque pieces
+				// of its own, the disc and the dark, over the pixels the four that blend span - the
+				// stars, the sunrise, the sun and the moon - so those four blend onto a target the
+				// seed leaves alone although none of them marks a pixel of its own. Answered no,
+				// they would go to the game's target and the seed would discard at exactly those
+				// pixels, on the mask their own siblings wrote: no stars, no sun and no moon.
+				//
+				// WHAT IT DOES NOT COVER, and the repository already knew: the game draws the dark
+				// disc only while the eye is under the world's horizon height and not underwater,
+				// and the top disc stops at atan(16/512) over the horizontal, so nothing of the
+				// game's marks the band that the lower half of the stars, the sunrise fan and a
+				// rising or setting sun stand in. What marks it is ours, HorizonCone, which shares
+				// the disc's pass and its mask - and which is drawn only for a pack whose world
+				// writes the colour target rather than reaching it through the seed. There, and
+				// over the whole sky wherever the disc's own mask is turned down, the four are
+				// repainted, exactly as they were before this field existed.
+				element.blend().isEmpty(), true, false, element.topology(),
 				// None of the six sky pipelines names a culling of its own, so all six take the
 				// builder's default, which is to cull.
 				true, null, element.stage(),

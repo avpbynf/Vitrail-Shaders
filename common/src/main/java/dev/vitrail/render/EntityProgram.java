@@ -116,10 +116,12 @@ final class EntityProgram implements DumpedProgram {
 	 *               at
 	 * @param writes where this piece's outputs belong, in draw buffer order and each on the side the
 	 *               schedule gives it, the first one INCLUDED whichever half this is.
-	 *               {@code GeometryProgram} is what decides where that first one really goes, off the
-	 *               blend: the game's target for a writing piece and the pack's for a blending one.
-	 *               {@link EntityDraw} settles the list and refuses a whole half where the first one
-	 *               could not reach the pack
+	 *               {@code GeometryProgram} is what decides where that first one really goes, off
+	 *               the side of the stage and no longer off the blend: the pack's target for a piece
+	 *               drawn after the seed, the game's for one drawn before it, which is both entity
+	 *               writing rows and the whole of the hand's solid pass, the arm included although
+	 *               it blends. {@link EntityDraw} settles the list and refuses a whole half where
+	 *               the first one could not reach the pack
 	 */
 	static EntityProgram of(PackProgram.Loaded loaded, EntityDraw.Element element, PackValues values,
 			int load, List<ChainPlan.Attachment> writes, TargetPlan chainTargets,
@@ -158,13 +160,22 @@ final class EntityProgram implements DumpedProgram {
 				// what it wants of a translucent surface is the depth that surface stands at, not
 				// that depth mixed with the one behind it.
 				shadow ? Optional.<BlendFunction>empty() : game.getColorTargetState().blendFunction(),
-				// covers: no coverage mask on either half. On the writing one that is the same
-				// decision as leaving draw buffer nought on the game's target and not a second one:
-				// the two are tied together in GeometryProgram, and marking a pixel the seed is
-				// going to repaint anyway would only take the game's own picture away from whatever
-				// is drawn there next. On the blending one the question does not arise, the mask
-				// being cut against the seed and the seed having run long before.
-				false,
+				// covers: no coverage mask on any of these passes. On a piece drawn before the seed,
+				// marking a pixel the seed is going to repaint anyway would only take the game's own
+				// picture away from whatever is drawn there next. On one drawn after it the question
+				// does not arise, the mask being cut against the seed and the seed having run long
+				// before. The two used to be one decision with draw buffer nought and are no longer:
+				// GeometryProgram asks the side of the stage first, so a pass can keep nought on the
+				// game's target for a reason that has nothing to do with a mask, which is what the
+				// hand's solid pass now does.
+				//
+				// claimed: no opaque piece of this family stands over these pixels, and for the hand
+				// that is the whole of why its solid pass leaves draw buffer nought on the game's
+				// target although it blends. The sky's blending pieces have the disc and the horizon
+				// cone under them; the arm has no such sibling, and no mask could stand in for one -
+				// the seed's cut is a depth comparison and the hand's depth is squeezed into a band
+				// that answers it yes at every pixel a row writing depth drew.
+				false, false,
 				// afterDeferred: which side of the stage this piece is drawn on, which decides the
 				// half of every target it reads and whether a depth sampler may be answered with the
 				// opaque world's image. Asked of the row, Element.afterStage saying why that is not
