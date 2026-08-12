@@ -83,21 +83,83 @@ public final class ShadowGeometry {
 	 */
 	private static int counted = -1;
 
+	/** What the last {@link #gather} found, held across the light's own walk of the sections. */
+	private static int gathered;
+	private static int gatheredBlocks;
+
 	private ShadowGeometry() {
 	}
 
 	/**
-	 * Submits and draws everything that moves into the map, between the two chunk groups.
+	 * Works out what the light can see, BEFORE the light's own walk of the sections runs.
+	 * <p>
+	 * <strong>The order is the whole of this method's existence.</strong> A caster is kept or dropped
+	 * by {@code LevelRenderer.isSectionCompiledAndVisible}, which ends in
+	 * {@code getVisibility(Util.getMillis()) >= 0.3F} - a FADE in time, not a yes or no. Run after
+	 * the light's walk has called {@code finalizeRenderLists} for its own viewport, that fade
+	 * answers about the light's sections and not the camera's, so the two disagree on every frame
+	 * the player is moving and agree the moment they stand still. Seen in game on 12 August 2026:
+	 * the shadows of mobs and of the player blinked while walking and were steady at rest, with the
+	 * terrain's own shadows untouched throughout.
+	 * <p>
+	 * Iris carries the same test ({@code shadows/ShadowRenderer.java:703-705}) and does not have the
+	 * problem, because its shadow render happens where the camera's section state is still the one
+	 * that was settled for this frame. This engine draws its map at the END of the frame, so the
+	 * only way to ask the same question is to ask it earlier.
 	 *
-	 * @param light  the light's own view projection, the matrix the terrain was just culled against
-	 * @param camera where the frame was drawn from, which the light's own walk measures against as
-	 *               well: the map is built around the camera and the submissions are posed relative
-	 *               to it, exactly as the game poses its own
+	 * @param light   the light's own view projection, the matrix the terrain is culled against
+	 * @param camera  where the frame was drawn from, which the map is built around
 	 * @param casters which families the pack asked for
 	 */
-	public static void draw(Matrix4f light, Vec3 camera, ShadowCasters casters) {
+	public static void gather(Matrix4f light, Vec3 camera, ShadowCasters casters) {
+		STATE.reset();
+		gathered = 0;
+		gatheredBlocks = 0;
+
+		// The entity switch and not one of its own, which is the convention: what enters the map here
+		// is the same geometry that door serves, read from the same tables, and a family does not take
+		// a second switch without a reason. It is also what keeps the walk honest when the switch is
+		// off: the door would refuse every draw, and refusing inside this walk means dropping it, so
+		// the walk would cost a full extraction and a submission to draw nothing and say so sixteen
+		// times.
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft == null || minecraft.level == null || !EntityDraw.wanted()
+				|| !casters.anyFeature()) {
+			return;
+		}
+
+		LevelRenderer renderer = minecraft.levelRenderer;
+		Camera view = minecraft.gameRenderer.mainCamera();
+		if (renderer == null || view == null) {
+			return;
+		}
+
+		// The light's frustum, prepared about the camera because that is what the whole map is built
+		// around: the terrain is culled against this very matrix, and an entity measured against
+		// another one would be dropped out of a map its own shadow belongs in.
+		Frustum frustum = new Frustum(new Matrix4f(), light);
+		frustum.prepare(camera.x, camera.y, camera.z);
+
+		// The frame's own, borrowed rather than built: it carries where the camera stands and which
+		// way it faces, and the submissions are posed against it. The level renderer takes it from
+		// the same place (LevelRenderer.java:151), and building a second one here would give the
+		// feature renderers a camera the frame was not drawn from.
+		STATE.cameraRenderState =
+				minecraft.gameRenderer.gameRenderState().levelRenderState.cameraRenderState;
+
+		gathered = extractEntities(minecraft, view, frustum, casters);
+		gatheredBlocks = extractBlockEntities(minecraft, renderer, casters);
+	}
+
+	/**
+	 * Submits and draws what {@link #gather} found, between the two chunk groups of the map.
+	 *
+	 * @param camera where the frame was drawn from. The submissions are posed relative to it,
+	 *               exactly as the game poses its own
+	 */
+	public static void draw(Vec3 camera) {
 		try {
-			walk(light, camera, casters);
+			walk(camera);
 		} finally {
 			// <strong>The frame of this family's own buffers ends here whether anything was drawn or
 			// not</strong>, and it is not tidiness: {@code RenderBuffers.endFrame} is the ONLY path
@@ -128,47 +190,14 @@ public final class ShadowGeometry {
 		}
 	}
 
-	private static void walk(Matrix4f light, Vec3 camera, ShadowCasters casters) {
-		// The entity switch and not one of its own, which is the convention: what enters the map here
-		// is the same geometry that door serves, read from the same tables, and a family does not take
-		// a second switch without a reason. It is also what keeps the walk honest when the switch is
-		// off: the door would refuse every draw, and refusing inside this walk means dropping it, so
-		// the walk would cost a full extraction and a submission to draw nothing and say so sixteen
-		// times.
+	private static void walk(Vec3 camera) {
 		Minecraft minecraft = Minecraft.getInstance();
-		if (minecraft == null || minecraft.level == null || !EntityDraw.wanted()
-				|| !casters.anyFeature()) {
-			return;
-		}
-
-		LevelRenderer renderer = minecraft.levelRenderer;
-		Camera view = minecraft.gameRenderer.mainCamera();
-		if (renderer == null || view == null || !ensure(minecraft)) {
-			return;
-		}
-
-		// The light's frustum, prepared about the camera because that is what the whole map is built
-		// around: the terrain was culled against this very matrix a few lines earlier, and an entity
-		// measured against another one would be dropped out of a map its own shadow belongs in.
-		Frustum frustum = new Frustum(new Matrix4f(), light);
-		frustum.prepare(camera.x, camera.y, camera.z);
-
-		STATE.reset();
-		// The frame's own, borrowed rather than built: it carries where the camera stands and which
-		// way it faces, and the submissions are posed against it. The level renderer takes it from
-		// the same place (LevelRenderer.java:151), and building a second one here would give the
-		// feature renderers a camera the frame was not drawn from.
-		STATE.cameraRenderState =
-				minecraft.gameRenderer.gameRenderState().levelRenderState.cameraRenderState;
-
-		int entities = extractEntities(minecraft, view, frustum, casters);
-		int blockEntities = extractBlockEntities(minecraft, renderer, view, casters);
-		if (entities == 0 && blockEntities == 0) {
+		if (minecraft == null || (gathered == 0 && gatheredBlocks == 0) || !ensure(minecraft)) {
 			return;
 		}
 
 		submit(minecraft, camera);
-		say(entities, blockEntities);
+		say(gathered, gatheredBlocks);
 
 		EntityDraw.shadowFeatures(true);
 		try {
@@ -278,7 +307,7 @@ public final class ShadowGeometry {
 	 * takes the same list ({@code shadows/ShadowRenderer.java:667}, through the level renderer's own
 	 * extraction). What it costs is a chest behind the camera casting no shadow, on both engines.
 	 */
-	private static int extractBlockEntities(Minecraft minecraft, LevelRenderer renderer, Camera view,
+	private static int extractBlockEntities(Minecraft minecraft, LevelRenderer renderer,
 			ShadowCasters casters) {
 		if (!casters.blockEntities()) {
 			return 0;

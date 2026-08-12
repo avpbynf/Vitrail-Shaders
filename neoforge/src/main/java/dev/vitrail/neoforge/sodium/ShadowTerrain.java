@@ -143,6 +143,14 @@ public final class ShadowTerrain {
 
 		int seen = sections(manager.getRenderLists());
 
+		// What the light can see is worked out HERE, before the walk below replaces the section
+		// state it is measured against. The test that keeps or drops a caster is a fade in time over
+		// the CAMERA's sections, so asked after finalizeRenderLists it answers about the light's and
+		// the two disagree on every frame the player moves. Seen in game on 12 August 2026 as the
+		// shadow of a mob or of the player blinking at a walk and steady at rest.
+		ShadowCasters casters = TerrainDraw.shadowCasters();
+		ShadowGeometry.gather(light, camera, casters);
+
 		// The frame counter first, and it is the piece the three failed designs before this one
 		// were missing: the per region lists only reset themselves for the first walk of a frame,
 		// so a second walk under the same number appends to the camera's lists until it overflows
@@ -192,9 +200,7 @@ public final class ShadowTerrain {
 
 		ShadowCasters casters = TerrainDraw.shadowCasters();
 
-		// Refused by the pack rather than skipped for cheapness, and the two chunk groups are the
-		// only halves a pack can take out one at a time here: the walk above still happens, because
-		// it is what the block entities below are gathered from.
+		// Refused by the pack rather than skipped for cheapness.
 		if (casters.terrain()) {
 			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.OPAQUE,
 					matrices, camera.x, camera.y, camera.z, sampler));
@@ -205,7 +211,7 @@ public final class ShadowTerrain {
 		// after: shadowtex1 is the map WITHOUT the translucent half, and a mob belongs in it. Drawn
 		// after the copy, every caster that moves would be missing from the one name half the corpus
 		// reads its shadows through.
-		ShadowGeometry.draw(light, camera, casters);
+		ShadowGeometry.draw(camera);
 
 		// Between the translucent group and everything else, and nowhere else: this is the one moment
 		// shadowtex0 and shadowtex1 hold different things, and what separates them is exactly the
