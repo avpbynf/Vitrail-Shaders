@@ -125,8 +125,9 @@ what makes a pack's misspelled key visible - correct to ignore, wrong to lose.
 ### The shadow caster directives, and the two that are not flags
 
 `shadowTerrain`, `shadowTranslucent`, `shadowEntities`, `shadowPlayer`, `shadowBlockEntities` and
-`shadowLightBlockEntities` say which families a pack wants drawn into its shadow map. The first four
-of that list default to on, the last two to off.
+`shadowLightBlockEntities` say which families a pack wants drawn into its shadow map. Four of them
+default to on; the two that default to off are `shadowPlayer` and `shadowLightBlockEntities`, which
+are also the two that are not flags.
 
 **`shadowPlayer` is not a flag that adds the player to the others.** It is what is left when the
 others are refused: where `shadowEntities` is on, the player is one of the entities and is drawn

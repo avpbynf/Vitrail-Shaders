@@ -653,9 +653,9 @@ public final class EntityDraw {
 	 * {@code ENTITY_SHADOW} is assigned in the main table and appears nowhere in the shadow one, so a
 	 * mob's dark oval keeps the game's own shader when the map is drawn. What serving it would add is
 	 * not an occluder: the pipeline writes no depth at all
-	 * ({@code RenderPipelines.java:375}, {@code DepthStencilState(GREATER_THAN_OR_EQUAL, false)}) and
-	 * blends, so what it would put into the map is colour in {@code shadowcolor0} and nothing in the
-	 * depth a pack reads its shadows from.
+	 * ({@code RenderPipelines.java:375}, {@code DepthStencilState(GREATER_THAN_OR_EQUAL, false)}),
+	 * and this table keeps the write exactly, so nothing of it would reach the depth a pack reads its
+	 * shadows from.
 	 * <p>
 	 * <strong>Every row discards at a tenth and none of them blends</strong>, both read rather than
 	 * chosen: the key carries {@code ONE_TENTH_ALPHA} whatever threshold its main twin had, and every
@@ -1246,8 +1246,8 @@ public final class EntityDraw {
 		if (pipeline == RenderPipelines.ENTITY_SHADOW) {
 			Vitrail.logger().info("The ground oval under a mob is left out of the shadow map, which "
 					+ "is what Iris does: it has no shadow row for that pipeline either, and the "
-					+ "pipeline writes no depth, so what a row would add to the map is colour rather "
-					+ "than an occluder");
+					+ "pipeline writes no depth, so a row for it would put nothing into the depth a "
+					+ "pack reads its shadows from");
 
 			return;
 		}

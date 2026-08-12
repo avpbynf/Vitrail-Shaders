@@ -164,16 +164,19 @@ final class EntityProgram implements DumpedProgram {
 				// blends among its translucent features. A shadow row is on neither side of a stage
 				// that has not run when it draws.
 				!shadow && element.blended(),
-				// The piece's own on both sides of the map, and NOT the chunk passes' answer, which
-				// really do drop the cull: that is about a wall meshed one side only, and a mob is
-				// closed geometry with no such back to leak through. Iris says two things about this
-				// and neither source settles the other. It brackets its whole shadow stage with
-				// _disableCull() and _enableCull() (shadows/ShadowRenderer.java:501 and :615), and it
-				// also re-applies each pipeline's own cull, but only inside the branch for the passes
-				// it opens itself (mixin/MixinGlCommandEncoder.java:137-141, under the test at :101),
-				// which a geometry draw does not enter. What the piece's own costs if the bracket is
-				// the one that wins is the back faces of an open caster, a banner or a cape, missing
-				// from the map where Iris has them.
+				// The piece's own on both sides of the map, which is what Iris ends up drawing with
+				// too, and NOT the chunk passes' answer: those really do drop the cull, and that is
+				// about a wall meshed one side only, where a mob is closed geometry with no such back
+				// to leak through.
+				//
+				// Iris looks like it says otherwise and does not. It brackets its shadow stage with
+				// _disableCull() and _enableCull() (shadows/ShadowRenderer.java:501 and :615), but
+				// its hook into the encoder is @Inject at the HEAD of trySetup, cancellable, and it
+				// only cancels inside the branch for the passes it opens itself
+				// (mixin/MixinGlCommandEncoder.java:92 and :101). A geometry draw is not one of them,
+				// so the vanilla setup runs to the end for it and applies the pipeline's own cull,
+				// over the bracket. The bracket is what its full screen passes see.
+
 				game.getPrimitiveTopology(), game.isCull(),
 				// The piece's own, TURNED ROUND rather than replaced. See intoMap.
 				shadow ? intoMap(game.getDepthStencilState()) : game.getDepthStencilState(),

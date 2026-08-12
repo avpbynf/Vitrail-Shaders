@@ -141,9 +141,14 @@ public final class ShadowGeometry {
 		// off: the door would refuse every draw, and refusing inside this walk means dropping it, so
 		// the walk would cost a full extraction and a submission to draw nothing and say so once per
 		// row of the shadow table.
+		// The player is in the guard because the extraction below dereferences it without one
+		// (Camera.java:124), and what an exception here costs is out of all proportion to the frame
+		// that threw it: ShadowTerrain hands it to TerrainDraw.shadowStageFailed, which lowers the
+		// stage for the whole session. One frame drawn before the player exists would end the
+		// shadows for the rest of the run.
 		Minecraft minecraft = Minecraft.getInstance();
-		if (minecraft == null || minecraft.level == null || !EntityDraw.wanted()
-				|| !casters.anyFeature()) {
+		if (minecraft == null || minecraft.level == null || minecraft.player == null
+				|| !EntityDraw.wanted() || !casters.anyFeature()) {
 			return;
 		}
 
@@ -169,9 +174,24 @@ public final class ShadowGeometry {
 		// overwritten on the two matrices that make it a camera at all, the view rotation with the
 		// light's model view (:418) and the projection with the light's ortho (:431). The rest of
 		// the state stays the camera's, position and orientation included, because that is what the
-		// submissions are posed relative to. Aliasing the frame's object instead handed the feature
-		// renderers the CAMERA's view rotation and projection: anything oriented from those faces
-		// the player inside the map and swings as the player turns, and the alias outlived the frame.
+		// submissions are posed relative to.
+		//
+		// WHAT IT FIXES TODAY IS THE ALIAS AND NOT THE MATRICES. The old line assigned the frame's
+		// own object, which then outlived the frame it was borrowed from. The two matrices are
+		// nobody's business at this moment: in 26.2 the only readers of viewRotationMatrix and
+		// projectionMatrix are LevelRenderer and GameRenderer, and no entity, block entity or feature
+		// renderer touches either. They are written to Iris's shape so that a reader added later
+		// finds the light's answer rather than the camera's.
+		//
+		// The z sense is the one thing to know before adding such a reader: the game fills that field
+		// from Projection.getMatrix, which SWAPS the two planes (Projection.java:70-71) and so hands
+		// out a reversed volume, while what goes in here is the pack's shadow pair as it is published,
+		// a forward ortho. A consumer that assumes the field's usual convention would read this one
+		// inside out.
+		//
+		// The partial tick is the camera's own accessor, which is what the game passes for this same
+		// extraction (GameRenderer.java:391); Iris passes its captured tick delta. It reaches only the
+		// hurt and death timers of the camera entity's state (Camera.java:143-144).
 		view.extractRenderState(STATE.cameraRenderState,
 				view.getCameraEntityPartialTicks(minecraft.getDeltaTracker()));
 		if (!TerrainDraw.drawnShadowPair(STATE.cameraRenderState.viewRotationMatrix,
@@ -201,11 +221,17 @@ public final class ShadowGeometry {
 	 * Sodium redirects to an empty method ({@code mixin/core/render/world/LevelExtractorMixin}, a
 	 * {@code @Redirect} on {@code applyFrustum}, read at the shipped 0.9.1 jar). Walked, it yields
 	 * nothing, once, for ever, and the count printed beside it reads as a world with no chests in it.
-	 * Iris is NOT in that position and never was: it calls the game's
-	 * {@code extractVisibleBlockEntities} ({@code shadows/ShadowRenderer.java:668}), which the same
-	 * Sodium mixin cancels at head and serves from {@code SodiumWorldRenderer.extractBlockEntities},
-	 * off the render lists of whatever walk last filled them. That is the door taken here, and inside
-	 * the light's scope it is the light's sections it hands back.
+	 * Iris is NOT in that position and never was: it asks the game for them
+	 * ({@code shadows/ShadowRenderer.java:668}, through an invoker on the game's own
+	 * {@code extractVisibleBlockEntities}), and Sodium cancels that method at head and answers it from
+	 * {@code SodiumWorldRenderer.extractBlockEntities}, off the render lists of whatever walk last
+	 * filled them. Which class carries that cancel moved between the two versions, so it is the same
+	 * behaviour rather than the same mixin. This walk asks the same object directly, and inside the
+	 * light's scope what it hands back is the light's sections.
+	 * <p>
+	 * <strong>Asked once per stage, and nothing enforces that but the call site.</strong> The door
+	 * appends and never clears, so a second call would put every block entity in the map twice. The
+	 * flag is lowered here rather than at the next {@link #gather} for that reason.
 	 *
 	 * @param walk the platform's way to that door. Held open rather than called from here, this module
 	 *             naming no Sodium type
@@ -216,6 +242,7 @@ public final class ShadowGeometry {
 			return;
 		}
 
+		blockEntitiesAsked = false;
 		walk.into(STATE, minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false));
 		if (emittersOnly) {
 			keepEmitters(minecraft.level);
@@ -255,8 +282,8 @@ public final class ShadowGeometry {
 			// and it is not tidiness: RenderBuffers.endFrame is the ONLY path that recycles what
 			// StagedVertexBuffer took, so without it every frame's acquire misses the pool and falls
 			// through to a fresh device allocation that nothing ever hands back. The cost is per
-			// FRAME and not per caster, so it is paid in full by a world holding two entities, and
-			// it was measured on this machine as an order of magnitude off the frame rate.
+			// FRAME and not per caster, so a world holding two entities pays it in full, and it is
+			// large enough to be the first thing seen rather than something to look for.
 			// HandDraw.drawTranslucent ends its own on both paths for the same reason.
 			if (buffers != null) {
 				buffers.endFrame();
@@ -440,20 +467,25 @@ public final class ShadowGeometry {
 	 * The passenger arm is the game's and Iris's alike: what carries the player is kept even where
 	 * the frustum refuses it, or the boat under a player casting a shadow would cast none.
 	 * <p>
-	 * <strong>Two of the game's arms are deliberately not here and one is added.</strong> Its walk
-	 * also drops whatever the camera is riding and the local player when the camera is not on it
-	 * ({@code extract/LevelExtractor.java:241-243}), both of which are about not drawing the thing
-	 * the world is being looked out of; in a map drawn from the sun the player is a caster like any
-	 * other, and Iris keeps it too. What is added is the spectator, left out for the reason Iris
-	 * leaves it out: it is not in the world to be lit.
+	 * <strong>One of the game's arms is deliberately not here and one is added.</strong> Its walk
+	 * also drops whatever the camera is mounted on ({@code extract/LevelExtractor.java:242}), which is
+	 * about not drawing the thing the world is being looked out of; in a map drawn from the sun that
+	 * body is a caster like any other, and Iris keeps it too. Its third arm ({@code :243}) is a
+	 * NeoForge patch that KEEPS the local player rather than dropping it, so there is nothing there to
+	 * diverge from. What is added is the spectator, left out for the reason Iris leaves it out
+	 * ({@code shadows/ShadowRenderer.java:701}): it is not in the world to be lit.
 	 * <p>
-	 * <strong>The pack's own reach is a second bound and not a second shape.</strong> Iris builds a
-	 * whole shadow frustum for the casters that move where the pack asked for one, at the shadow
-	 * distance times {@code entityShadowDistanceMul} ({@code shadows/ShadowRenderer.java:536-541}),
-	 * and keeps the terrain's where it did not. Here the light's frustum is kept in both cases and
-	 * the reach alone is cut, about the camera, which is what a multiplier of a distance means. What
-	 * it costs against Iris is a caster inside the box but outside its frustum: kept there and here
-	 * alike, since both bounds are the light's own beyond this one.
+	 * <strong>The pack's own reach is a bound of a DIFFERENT SHAPE from Iris's, and that is an open
+	 * gap rather than a workaround.</strong> Where the pack asked for one, Iris rebuilds a whole
+	 * second shadow frustum for the casters that move, at a shorter distance
+	 * ({@code shadows/ShadowRenderer.java:536-541}), and tests the caster's bounding box against it
+	 * ({@code :703}); where it did not, the entity frustum is the terrain's ({@code :537}). Here the
+	 * light's frustum is kept in both cases and the reach alone is cut, as an axis-aligned box about
+	 * the camera measured on the caster's POSITION. The two keep-sets are not nested, so the
+	 * difference runs both ways: a caster inside the light's frustum and inside the box but outside
+	 * that narrower frustum is kept here and dropped there, and one whose bounding box grazes Iris's
+	 * bound while its position stands outside ours is the reverse. Nothing makes Iris's shape
+	 * impossible here.
 	 */
 	private static boolean visible(Minecraft minecraft, EntityRenderDispatcher entities, Entity entity,
 			Frustum frustum, Vec3 at) {
@@ -501,8 +533,18 @@ public final class ShadowGeometry {
 	/**
 	 * Says once what the light's walk found, beside the line the terrain's own cull prints. Two
 	 * counts and not one: they are gathered by two different walks and a pack can refuse either.
+	 * <p>
+	 * <strong>A frame that found no block entity does not get to be the one that speaks.</strong>
+	 * The count is a sample of one frame and the line is said once per block table, so the first
+	 * frame to qualify would fix a zero for the whole load - which is exactly the reading this walk
+	 * printed for a session while nothing reached the map at all, and the reader has no way to tell
+	 * the two apart. The terrain's own cull line guards the same way, for the same reason.
 	 */
 	private static void say(int entities, int blockEntities) {
+		if (blockEntities == 0 && TerrainDraw.shadowCasters().anyBlockEntity()) {
+			return;
+		}
+
 		if (counted != BlockStateIds.generation()) {
 			counted = BlockStateIds.generation();
 			Vitrail.logger().info("The light's walk submitted {} entities and {} block entities into "

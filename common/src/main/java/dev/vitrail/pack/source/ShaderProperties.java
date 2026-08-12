@@ -1122,7 +1122,9 @@ public final class ShaderProperties {
 	 * the thing it names casts nothing by default: the player is one of the entities and a lamp is
 	 * one of the block entities, so the wider word carries it. Each narrow word is consulted only
 	 * where its wider one is off, and there it is the whole of what is drawn. Read as additive flags
-	 * they would keep the player out of every default shadow map there is.
+	 * they get both readings wrong in opposite directions: the player would be kept out of every
+	 * default shadow map there is, and a pack asking for its lamps alone would have every chest and
+	 * every sign in its map beside them.
 	 *
 	 * @param defines the pack's settings, which decide which lines of the file are alive at all
 	 */
@@ -1146,7 +1148,12 @@ public final class ShaderProperties {
 				case "shadowEntities" -> entities = value;
 				case "shadowPlayer" -> player = value;
 				case "shadowBlockEntities" -> blockEntities = value;
-				default -> lightBlockEntities = value;
+				case "shadowLightBlockEntities" -> lightBlockEntities = value;
+				// Named one by one rather than letting the last word be the catch-all, which is what
+				// this switch used to do: a seventh alternative added to the pattern without its own
+				// arm would have been written into the sixth family in silence, and a caster read
+				// into the wrong family is a caster in a map the pack asked to keep it out of.
+				default -> { }
 			}
 		}
 
