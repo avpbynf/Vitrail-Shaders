@@ -644,7 +644,7 @@ public final class EntityDraw {
 	 * Whether this draw really lands on the game's main target, asked of what its output target
 	 * RESOLVES to rather than of which target object it names.
 	 * <p>
-	 * <strong>The difference is not pedantry and it cost this family two rows.</strong> Three of the
+	 * <strong>The difference is not pedantry and it cost this family two rows.</strong> Two of the
 	 * four output targets exist only while the game's improved transparency is on, and
 	 * {@code OutputTarget.getRenderTarget} resolves an absent one to the main target
 	 * ({@code rendertype/OutputTarget.java:24-27}); the render type keeps naming it either way. Read
@@ -725,7 +725,7 @@ public final class EntityDraw {
 		if (!onMainTarget(prepared)) {
 			draw.end();
 
-			return draw.refuse("elsewhere:" + prepared.outputTarget(), "the game sends it to "
+			return draw.refuse("elsewhere:" + prepared.outputTarget(), true, "the game sends it to "
 					+ prepared.outputTarget() + ", which it composes itself afterwards, and the pack's "
 					+ "colour targets cannot be attached beside a picture this engine has not got. It "
 					+ "is the game's improved transparency that allocates those targets, and Iris "
