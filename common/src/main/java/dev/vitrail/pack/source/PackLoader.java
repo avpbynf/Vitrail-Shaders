@@ -71,7 +71,7 @@ public final class PackLoader {
 				}
 			});
 
-			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			IncludeExpander expander = new IncludeExpander(source, settings);
 			ExpansionStats expansion = ExpansionStats.NONE;
 			int expanded = 0;
 			for (ProgramSet.ProgramKey key : programs.keys()) {

@@ -1,6 +1,5 @@
 package dev.vitrail.pack.target;
 
-import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.SettingSet;
 import dev.vitrail.pack.program.ProgramSet;
 import dev.vitrail.pack.program.ProgramStage;
@@ -111,15 +110,15 @@ public final class PackDirectives {
 	 * condition: the directory has to EXIST, and an empty one is read as empty rather than sending
 	 * the read back to the root.
 	 */
-	public static PackDirectives read(ShaderPackSource source, OptionIndex options,
-			SettingSet settings, String dimension) throws IOException {
+	public static PackDirectives read(ShaderPackSource source, SettingSet settings, String dimension)
+			throws IOException {
 		ProgramSet programs = ProgramSet.enumerate(source, DimensionSet.discover(source));
 		boolean present = !dimension.equals(ProgramSet.ROOT)
 				&& source.topLevelDirectories().contains(dimension);
 		List<ProgramSet.ProgramKey> entries =
 				fragmentsOf(programs, present ? dimension : ProgramSet.ROOT);
 
-		IncludeExpander expander = new IncludeExpander(source, options, settings);
+		IncludeExpander expander = new IncludeExpander(source, settings);
 		Builder builder = builder();
 
 		for (ProgramSet.ProgramKey key : sorted(entries)) {

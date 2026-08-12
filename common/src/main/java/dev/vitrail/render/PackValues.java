@@ -106,7 +106,7 @@ public final class PackValues {
 			SettingSet settings =
 					SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
 
-			values.state.directives(PackDirectives.read(source, options, settings, dimension));
+			values.state.directives(PackDirectives.read(source, settings, dimension));
 			values.state.endFlashShadows(properties.endFlashShadows());
 			values.skyElements = properties.skyElements(settings.globalDefines(options));
 			values.weather = properties.weather(settings.globalDefines(options));

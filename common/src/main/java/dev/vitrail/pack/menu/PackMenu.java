@@ -4,11 +4,8 @@ import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.option.PackOption;
 import dev.vitrail.pack.source.PackLang;
-import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
 
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -147,14 +144,6 @@ public final class PackMenu {
 		}
 
 		return new PackMenu(packName, pages, options, profiles, lang, warnings);
-	}
-
-	/** Opens the pack, reads the three of them, closes it. */
-	public static PackMenu read(Path packPath, String languageCode) throws IOException {
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			return build(source.packName(), OptionIndex.build(source), ShaderProperties.parse(source),
-					PackLang.read(source, languageCode));
-		}
 	}
 
 	private static Map<String, String> expand(ShaderProperties properties, String name) {

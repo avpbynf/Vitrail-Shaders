@@ -177,7 +177,9 @@ A setting is applied by rewriting its declaration line **where it stands**, not 
 of defines at the top of the unit. The reason is positional: a define moved to the header changes
 the result of any conditional that sits before the original declaration.
 
-Only names the pack declares nowhere are emitted as header defines. The rewrite rules are
+A name the pack declares nowhere is not applied at all, and no header define is emitted for it: the
+same positional reason bites harder there, since a header define would be a word nobody offered as a
+setting landing on top of whatever the pack uses that word for. The rewrite rules are
 asymmetric on purpose - a true boolean uncomments the define, a false boolean comments it out, a
 value rewrites the define's value, and a value on a constant rewrites only its right-hand side. A
 boolean lands on a constant in one of two ways: on a `const bool` it is written out as `true` or
@@ -190,8 +192,8 @@ trailing value-list comment are preserved.
 
 The table used to preprocess `shaders.properties` carries the engine's defines, the default of
 every non-constant uncommented setting, and the variant overrides. The per-unit table carries the
-engine's defines and only those overrides the pack never declares - the pack's own defaults enter
-as expansion walks over its define lines, like a real preprocessor.
+engine's defines alone - the pack's own defaults and the overrides applied to them enter as
+expansion walks over its define lines, like a real preprocessor.
 
 Unifying them is a mistake, and the asymmetry is the whole point: the properties table has to be
 complete before its first line is read, because that file may test any setting, while a source file

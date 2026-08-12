@@ -168,8 +168,14 @@ profile named in `vitrail/options.txt` is a layer, and it behaves like every oth
 file: it decides what is drawn and never what is written.
 
 The `options.txt` layer wins in both orders and is deliberately global. It is how a pass is proved
-to run, it may name a setting no pack declares at all, and it is edited by hand while the game is
+to run, it applies to whatever pack is loaded, and it is edited by hand while the game is
 running. It decides what is drawn and never what is written.
+
+What it can force is a setting the loaded pack **declares**. A line naming anything else - a typo, or
+a setting another pack has - forces nothing: the pack keeps its own default and the load says so by
+name, one line per word. A setting is applied where the pack declares it, so a word with no
+declaration has nowhere to be applied; writing it into the shaders instead is how a pack that uses
+that word for something of its own stops compiling altogether.
 
 ## What is greyed out, and why
 

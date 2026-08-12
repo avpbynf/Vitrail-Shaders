@@ -149,10 +149,15 @@ The table used for `shaders.properties` carries the engine's symbols, the defaul
 the pack does not ship commented out, and the player's choices on top. That file may test any
 setting, so every setting has to be present before the first line is read.
 
-The table a source file starts with carries the engine's symbols and **only the choices the pack
-declares nowhere**. The pack's own settings enter as the expander walks past their declarations, in
-file order, exactly as a preprocessor would. A file that tests a setting above the line declaring it
-has to see it undefined, because that is what the compiler will see later.
+The table a source file starts with carries **the engine's symbols and nothing else**. The pack's own
+settings enter as the expander walks past their declarations, in file order, exactly as a
+preprocessor would. A file that tests a setting above the line declaring it has to see it undefined,
+because that is what the compiler will see later.
+
+A chosen name the pack declares nowhere therefore reaches no unit at all. It has no declaration to
+rewrite, and writing it into the head of the unit instead is the one thing that must not happen: a
+settings name is an identifier, and a pack uses identifiers for its own things. The load names every
+such value instead of applying it.
 
 Under both sits the engine's own table, and three readers have to be handed the same one: the
 preprocessor deciding which branch is live, the translator writing those symbols back out, and the

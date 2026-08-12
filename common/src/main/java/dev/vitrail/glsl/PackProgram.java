@@ -281,7 +281,7 @@ public final class PackProgram {
 					? Map.of()
 					: properties.expandProfile(profile);
 			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			IncludeExpander expander = new IncludeExpander(source, settings);
 
 			Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
 
@@ -329,7 +329,7 @@ public final class PackProgram {
 					? Map.of()
 					: properties.expandProfile(profile);
 			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			IncludeExpander expander = new IncludeExpander(source, settings);
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
 			PackTextures textures = textures(source, properties, options, settings);
 
@@ -427,7 +427,7 @@ public final class PackProgram {
 					? Map.of()
 					: properties.expandProfile(profile);
 			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			IncludeExpander expander = new IncludeExpander(source, settings);
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
 			PackTextures textures = textures(source, properties, options, settings);
 
@@ -496,7 +496,7 @@ public final class PackProgram {
 					? Map.of()
 					: properties.expandProfile(profile);
 			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			IncludeExpander expander = new IncludeExpander(source, settings);
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
 			PackTextures textures = textures(source, properties, options, settings);
 
@@ -587,7 +587,7 @@ public final class PackProgram {
 					? Map.of()
 					: properties.expandProfile(profile);
 			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			IncludeExpander expander = new IncludeExpander(source, settings);
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
 			PackTextures textures = textures(source, properties, options, settings);
 
@@ -699,7 +699,7 @@ public final class PackProgram {
 					? Map.of()
 					: properties.expandProfile(profile);
 			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, options, settings);
+			IncludeExpander expander = new IncludeExpander(source, settings);
 
 			TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimension, filter);
 			String place = targets.place();

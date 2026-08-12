@@ -338,7 +338,7 @@ public final class TargetPlan {
 
 	private static void read(ShaderPackSource source, OptionIndex options, SettingSet settings,
 			ShaderProperties properties, List<ProgramSet.ProgramKey> entries, Draft draft) {
-		IncludeExpander expander = new IncludeExpander(source, options, settings);
+		IncludeExpander expander = new IncludeExpander(source, settings);
 		TargetDirectives.Builder builder = TargetDirectives.builder();
 		long began = System.nanoTime();
 

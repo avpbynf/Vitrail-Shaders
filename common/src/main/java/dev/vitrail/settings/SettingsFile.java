@@ -233,11 +233,10 @@ public final class SettingsFile {
 	 * <p>
 	 * {@link #PROFILE_KEY} is dropped, and only {@link #migrate} ever does anything else with it.
 	 * Nothing writes it any more, and kept it would stop being the name of a set of values and
-	 * become a value: {@code SettingSet.headerDefines} writes every name of this file into the head
-	 * of each compiled unit, so the pack would be built with {@code #define profile ULTRA} and a
-	 * name it never declared. What that costs is a pack declaring an option literally called
-	 * {@code profile}, which would be silently dropped; no pack of the corpus does, and the name is
-	 * this format's own.
+	 * become one: it would go down with the settings, and a pack declaring an option literally
+	 * called {@code profile} would have that declaration rewritten to the profile's name. What
+	 * dropping it costs is the same pack, whose {@code profile} setting can then not be chosen from
+	 * this file; no pack of the corpus declares one, and the name is this format's own.
 	 */
 	public static Stored read(Path file) throws IOException {
 		Map<String, String> values = new LinkedHashMap<>(lines(file, StandardCharsets.ISO_8859_1));

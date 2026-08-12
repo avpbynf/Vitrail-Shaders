@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -106,6 +107,11 @@ public final class OptionIndex {
 
 	public Collection<PackOption> all() {
 		return this.byName.values();
+	}
+
+	/** Every name the pack declares, for a caller that only has to tell declared from not. */
+	public Set<String> names() {
+		return this.byName.keySet();
 	}
 
 	public int count() {

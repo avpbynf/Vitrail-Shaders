@@ -19,14 +19,14 @@ import java.util.Set;
  * declares.
  * <p>
  * They are kept together, and taken out of the pack's settings in one place, because a name left in
- * would be written into the head of every translated unit as {@code #define screen settings}, which
- * is a plausible identifier in somebody's GLSL. None of the thirteen collides with a setting any pack
- * of the corpus declares, and what keeps that true is thinner than it looks: several of these words
- * really are declared by packs, {@code CLOUDS}, {@code WEATHER}, {@code ENTITIES} and
- * {@code SHADOW} among them. What holds them apart is the case alone - the names here are lowercase
- * and the comparison is not - so a word added here in the spelling a pack uses would be swallowed
- * before the pack ever saw it. No count is given on purpose: one taken by hand goes stale at the
- * next pack read, and nothing here measures it.
+ * would be offered to the pack as a setting of its own: where the pack happens to declare that word,
+ * {@code screen=settings} would rewrite its declaration and this engine would lose the line as well.
+ * None of the thirteen collides with a setting any pack of the corpus declares, and what keeps that
+ * true is thinner than it looks: several of these words really are declared by packs,
+ * {@code CLOUDS}, {@code WEATHER}, {@code ENTITIES} and {@code SHADOW} among them. What holds them
+ * apart is the case alone - the names here are lowercase and the comparison is not - so a word added
+ * here in the spelling a pack uses would be swallowed before the pack ever saw it. No count is given
+ * on purpose: one taken by hand goes stale at the next pack read, and nothing here measures it.
  * <p>
  * Every one of them answers a question the picture cannot: which passes ran, which half a target
  * was read from, whether the values a program was handed were the right numbers. A word that is
@@ -306,27 +306,43 @@ final class EngineOptions {
 	}
 
 	/**
-	 * What {@code options.txt} holds, split in two. The reserved lines are counted apart rather than
-	 * with the rest: a line calling {@code passes} a setting of the pack would send whoever reads
-	 * the log looking through the pack for a setting it never had.
+	 * What {@code options.txt} holds, split in three. The reserved lines are counted apart rather
+	 * than with the rest: a line calling {@code passes} a setting of the pack would send whoever
+	 * reads the log looking through the pack for a setting it never had.
+	 * <p>
+	 * The third are the lines that are neither: a word this engine does not answer for and that the
+	 * loaded pack declares nowhere either. They force nothing, so they are said one by one and named
+	 * rather than counted with the settings that do. A count that included them would be the log's
+	 * own version of the fault, promising a setting was forced when the pack has no such setting to
+	 * force, and a name is what a typo is fixed from.
 	 */
 	static void announceForced(Path gameDirectory, PackSession opened) {
+		Path file = SettingsLayers.file(gameDirectory);
 		List<String> settings = opened.forced().keySet().stream()
-				.filter(name -> !RESERVED.contains(name))
+				.filter(name -> !RESERVED.contains(name) && opened.declared().contains(name))
 				.toList();
 		List<String> reserved = opened.forced().keySet().stream()
 				.filter(RESERVED::contains)
 				.toList();
+		List<String> unknown = opened.forced().keySet().stream()
+				.filter(name -> !RESERVED.contains(name) && !opened.declared().contains(name))
+				.toList();
 
 		if (!settings.isEmpty()) {
-			Vitrail.logger().info("Forcing {} pack settings from {}: {}", settings.size(),
-					SettingsLayers.file(gameDirectory), settings);
+			Vitrail.logger().info("Forcing {} pack settings from {}: {}", settings.size(), file,
+					settings);
 		}
 
 		if (!reserved.isEmpty()) {
 			Vitrail.logger().info("{} lines of {} name this engine rather than a setting of the "
-					+ "pack: {}", reserved.size(), SettingsLayers.file(gameDirectory), reserved);
+					+ "pack: {}", reserved.size(), file, reserved);
 		}
+
+		unknown.forEach(name -> Vitrail.logger().warn("'{}={}' in {} names neither a line this engine"
+				+ " reads nor a setting {} declares, so it forces nothing and the pack keeps its own"
+				+ " defaults. A setting is applied where the pack declares it, and this one has no"
+				+ " declaration to apply it to", name, opened.forced().get(name).asText(), file,
+				opened.packFileName()));
 	}
 
 	/**

@@ -16,10 +16,14 @@ import java.util.Set;
  * {@code vitrail/options.txt} forces, then the pack's own file, then that same file over
  * everything.
  * <p>
- * The last layer is deliberately last and deliberately global. It proves a pass runs, it may name
- * a setting no pack declares, and it is edited by hand while the game runs. What it holds is
- * reported so that the screen can grey those settings out instead of letting a click lose to them
- * in silence.
+ * The last layer is deliberately last and deliberately global. It proves a pass runs, it applies to
+ * whatever pack is loaded, and it is edited by hand while the game runs. What it holds is reported
+ * so that the screen can grey those settings out instead of letting a click lose to them in silence.
+ * <p>
+ * Global is not the same as unconditional. A line of it forces a setting the loaded pack
+ * <em>declares</em>, and one naming anything else keeps the pack's own defaults and is said so at
+ * the load: a settings name is an identifier, and defining a word the pack uses for something of its
+ * own is how a whole pack comes to fail on a word nobody offered as a setting.
  * <p>
  * Only the top two layers are resolved here. The two below belong to the pack: a value nobody
  * chose is the one written in its source, and a profile is expanded by
@@ -53,6 +57,9 @@ public final class SettingsLayers {
 	 * on one of the pack's own features settles it without touching the pack or writing a test
 	 * shader that proves only itself. That is why it stays a file edited by hand, why it applies to
 	 * whatever pack is loaded, and why it wins over the screen rather than the other way round.
+	 * <p>
+	 * One of the pack's OWN features, and the emphasis is the whole of the rule: what this file can
+	 * force is a setting the loaded pack declares, since that is where a setting is applied.
 	 */
 	public static Map<String, OptionValue> forced(Path gameDirectory) throws IOException {
 		Path file = file(gameDirectory);

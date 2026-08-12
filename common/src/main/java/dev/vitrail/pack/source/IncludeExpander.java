@@ -1,6 +1,5 @@
 package dev.vitrail.pack.source;
 
-import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.OptionRewriter;
 import dev.vitrail.pack.option.SettingSet;
 
@@ -65,22 +64,15 @@ public final class IncludeExpander {
 	private static final Pattern VERSION = Pattern.compile("^\\s*#\\s*version\\s+(.*)$");
 
 	private final ShaderPackSource source;
-	private final OptionIndex index;
 	private final SettingSet settings;
 
-	public IncludeExpander(ShaderPackSource source, OptionIndex index, SettingSet settings) {
+	public IncludeExpander(ShaderPackSource source, SettingSet settings) {
 		this.source = source;
-		this.index = index;
 		this.settings = settings;
 	}
 
 	public ExpandedUnit expand(Path entry) throws IOException {
-		State state = new State(this.settings.unitDefines(this.index));
-
-		for (Map.Entry<String, String> define : this.settings.headerDefines(this.index).entrySet()) {
-			state.emit("#define " + define.getKey()
-					+ (define.getValue().isEmpty() ? "" : " " + define.getValue()), true);
-		}
+		State state = new State(this.settings.unitDefines());
 
 		expandFile(entry, 0, state);
 

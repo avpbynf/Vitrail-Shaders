@@ -1,6 +1,7 @@
 package dev.vitrail.pack.option;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -13,6 +14,10 @@ import java.util.Map;
  * the pack's as it reads past their declarations, exactly as a preprocessor would: a file that
  * tests a setting above the line declaring it must see it undefined, because that is what the
  * compiler will see later.
+ * <p>
+ * Both tables answer for the settings the pack DECLARES and for no others. A chosen name the pack
+ * declares nowhere moves nothing at all; {@link #undeclared} is what names it, so that the load can
+ * say so rather than let a value be lost without a word.
  */
 public final class SettingSet {
 
@@ -72,33 +77,30 @@ public final class SettingSet {
 	}
 
 	/**
-	 * What a source file starts with: the engine's symbols, plus only those choices the pack
-	 * declares nowhere. Those have no declaration to rewrite, so the header is the only place
-	 * they can be said.
+	 * What a source file starts with, and it is the engine's own symbols alone. A choice is applied
+	 * where the pack declares it and nowhere else, so a name the pack declares nowhere is applied
+	 * nowhere.
 	 */
-	public Map<String, String> unitDefines(OptionIndex index) {
-		Map<String, String> defines = new LinkedHashMap<>(this.engine);
-		defines.putAll(headerDefines(index));
-
-		return defines;
+	public Map<String, String> unitDefines() {
+		return this.engine;
 	}
 
-	public Map<String, String> headerDefines(OptionIndex index) {
-		Map<String, String> defines = new LinkedHashMap<>();
-
-		for (Map.Entry<String, OptionValue> entry : this.chosen.entrySet()) {
-			if (index.contains(entry.getKey())) {
-				continue;
-			}
-
-			OptionValue value = entry.getValue();
-			if (!value.isBoolean()) {
-				defines.put(entry.getKey(), value.text());
-			} else if (value.asBoolean()) {
-				defines.put(entry.getKey(), "");
-			}
-		}
-
-		return defines;
+	/**
+	 * The chosen names this pack declares nowhere, in the order they were chosen, for the caller
+	 * that has to say what it is dropping.
+	 * <p>
+	 * They are dropped rather than written into the head of each unit, which is what this engine
+	 * used to do and what Iris has never done: {@code MutableOptionValues.addAll} walks the options
+	 * the PACK declares and looks each one up in the values it was handed
+	 * ({@code shaderpack/option/values/MutableOptionValues.java:49-90}), so a name no option carries
+	 * is never read at all.
+	 * <p>
+	 * Writing it was worse than useless. A settings name is an identifier, and a pack uses
+	 * identifiers for its own things: {@code hand=on} defines {@code hand} to nothing, BSL's
+	 * composite stages declare a local {@code float hand}, and the whole pack then fails to compile
+	 * on a word its author never offered as a setting.
+	 */
+	public List<String> undeclared(OptionIndex index) {
+		return this.chosen.keySet().stream().filter(name -> !index.contains(name)).toList();
 	}
 }

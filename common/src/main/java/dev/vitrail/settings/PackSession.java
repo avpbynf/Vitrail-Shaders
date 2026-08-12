@@ -1,7 +1,11 @@
 package dev.vitrail.settings;
 
 import dev.vitrail.pack.menu.PackMenu;
+import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.source.PackLang;
+import dev.vitrail.pack.source.ShaderPackSource;
+import dev.vitrail.pack.source.ShaderProperties;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -10,6 +14,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * One reading of one pack: what is loaded right now, and what a screen may show and change about
@@ -22,17 +27,36 @@ import java.util.Map;
  * cheap to: twenty five to eighty eight milliseconds on the corpus, against the half second the
  * translation costs.
  *
- * @param carried what became of the file this engine kept before the settings moved, which the
- *                caller reports and nothing else acts on. It is the only load where the values on
- *                screen were somewhere else a moment ago
+ * @param carried  what became of the file this engine kept before the settings moved, which the
+ *                 caller reports and nothing else acts on. It is the only load where the values on
+ *                 screen were somewhere else a moment ago
+ * @param declared every name the pack declares, which is not the same question as what its menu
+ *                 shows and is the one the layers are judged against: a chosen name that is not in
+ *                 here changes nothing about the pack, so the load has to say it is being dropped
  */
 public record PackSession(Path gameDirectory, Path packPath, String packFileName, PackMenu menu,
-		SettingsFile.Carried carried, SettingsFile.Stored saved, Map<String, OptionValue> forced) {
+		Set<String> declared, SettingsFile.Carried carried, SettingsFile.Stored saved,
+		Map<String, OptionValue> forced) {
+
+	public PackSession {
+		declared = Set.copyOf(declared);
+	}
 
 	public static PackSession read(Path gameDirectory, Path packPath, String languageCode)
 			throws IOException {
 		String packFileName = packPath.getFileName().toString();
-		PackMenu menu = PackMenu.read(packPath, languageCode);
+
+		PackMenu menu;
+		Set<String> declared;
+		// One opening for both, the index being what the menu is built from anyway. Read here rather
+		// than left to the loader further down because the layers are resolved before a program is
+		// translated, and a value dropped has to be named at the moment it is dropped.
+		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
+			OptionIndex index = OptionIndex.build(source);
+			declared = index.names();
+			menu = PackMenu.build(source.packName(), index, ShaderProperties.parse(source),
+					PackLang.read(source, languageCode));
+		}
 
 		// Before the reading and never after it: what it writes is what the reading then finds, so
 		// there is one answer and not a first load that behaves unlike every later one.
@@ -53,7 +77,7 @@ public record PackSession(Path gameDirectory, Path packPath, String packFileName
 			carried = new SettingsFile.Carried(SettingsFile.Carry.FAILED, "", SettingsFile.legacy(gameDirectory, packFileName));
 		}
 
-		return new PackSession(gameDirectory, packPath, packFileName, menu, carried,
+		return new PackSession(gameDirectory, packPath, packFileName, menu, declared, carried,
 				SettingsFile.read(SettingsFile.of(gameDirectory, packFileName)),
 				SettingsLayers.forced(gameDirectory));
 	}
@@ -75,11 +99,10 @@ public record PackSession(Path gameDirectory, Path packPath, String packFileName
 	 * They are reported and nothing more. They stay in the file, which is the point of one file per
 	 * pack: a player who tries a new version of a pack and goes back finds their settings where
 	 * they left them, rather than deleted the way Iris deletes them. They also stay in what the
-	 * pack is built with, because the authority on what a pack declares is its
-	 * {@code OptionIndex}, read further down by {@code SettingSet.headerDefines}, and a name that
-	 * index does not know is written into the head of each unit exactly as a line of
-	 * {@code options.txt} is. Dropping a value here on the weaker evidence of a menu would cost a
-	 * setting the pack still declares but no longer puts on a page.
+	 * pack is built with, because the authority on what a pack declares is {@link #declared} and not
+	 * a menu: a setting can be declared and simply no longer be on a page, and dropping a value here
+	 * on the weaker evidence would cost it. A name neither of the two knows reaches the pack's
+	 * source and finds no declaration to rewrite, which is where it stops.
 	 */
 	public List<String> stale() {
 		List<String> stale = new ArrayList<>();
