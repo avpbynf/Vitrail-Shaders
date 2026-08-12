@@ -61,10 +61,27 @@ import org.joml.Matrix4fc;
  * the whole depth buffer before it draws the hand, which it can afford because nothing of its own
  * reads that depth afterwards; here the chain has already read it and the composites will read it
  * again, so clearing is not available. Iris's answer is the one reproduced: scale the clip depth by
- * {@code 0.125} so the hand occupies the sliver of the depth range that only geometry closer than
- * about half a block reaches, which is what keeps an arm from being cut in half by the wall it is
- * held against. Packs know the number as {@code MC_HAND_DEPTH} and divide it back out; Bliss and
- * Reverie both do.
+ * {@code 0.125} so the hand occupies a band of the depth range that only geometry closer than
+ * about a tenth of a block reaches, which is what keeps an arm from being cut in half by the wall
+ * it is held against. Packs know the number as {@code MC_HAND_DEPTH} and divide it back out; Bliss
+ * and Reverie both do.
+ * <p>
+ * <strong>Scaling the clip depth is Iris's formula and NOT ours, because this backend rasterises
+ * the other way up.</strong> Iris runs against an OpenGL clip volume, z from minus one to one with
+ * the near plane at minus one, where multiplying clip z by an eighth lands the hand in the window
+ * depths between {@code 0.4375} and {@code 0.5625}. Minecraft 26.2 rasterises with a reversed z
+ * over zero to one, near at ONE, which {@link dev.vitrail.uniform.ClipSpace} sets out: the same
+ * multiplication there divides the hand's depth by eight and lands it where geometry EIGHT TIMES
+ * FARTHER sits, so the world draws over it. Measured in game on 12 August 2026, and it looks
+ * exactly like what it is: the item shows against the sky and is cut away by any ground or water
+ * within a few blocks.
+ * <p>
+ * The translation between the two conventions is {@code w_reversed = 1 - w_opengl}, and carrying
+ * Iris's formula through it gives {@code z' = 0.125 z + 0.4375 w} rather than {@code z' = 0.125 z}.
+ * That is not an approximation of his answer, it is his answer written in this volume: the band it
+ * rasterises into is the same {@code 0.4375} to {@code 0.5625}, and the matrix a pack is handed
+ * comes out identical once {@code ClipSpace} has converted it back to the OpenGL form, the term in
+ * {@code w} included.
  */
 public final class HandDraw {
 
@@ -338,7 +355,12 @@ public final class HandDraw {
 		// reads the hand's depth afterwards.
 		this.perspective.setupPerspective(NEAR, camera.depthFar, camera.hudFov,
 				state.windowRenderState.width, state.windowRenderState.height);
-		this.volume.scaling(1.0F, 1.0F, DEPTH).mul(this.perspective.getMatrix(this.head));
+		// The squeeze, in the volume this backend really rasterises in rather than in the one Iris
+		// writes it for. The class comment carries the conversion and why a bare scaling puts the
+		// hand BEHIND the world here; what it comes to is that the term in w moves the squeezed band
+		// back to the middle of the range, where a reversed z keeps everything the camera can see.
+		this.volume.translation(0.0F, 0.0F, (1.0F - DEPTH) / 2.0F).scale(1.0F, 1.0F, DEPTH)
+				.mul(this.perspective.getMatrix(this.head));
 		this.drawn.set(this.volume).mul(CameraBob.pose());
 
 		RenderSystem.backupProjectionMatrix();
