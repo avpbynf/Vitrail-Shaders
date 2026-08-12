@@ -105,9 +105,14 @@ import java.util.stream.Stream;
  * {@link FeatureLayer} carries it, with what Iris does instead and what it costs the image.
  * <p>
  * <strong>What is still the game's inside this window</strong>, and therefore still goes to that
- * layer, is the eyes ({@code EYES} and {@code ENTITY_TRANSLUCENT_EMISSIVE}), the beacon beam, and
- * the text of a name plate or a sign. The shadow map is a family of its own and is NOT in either
- * window, a pass of its own that neither bracket reaches.
+ * layer, is the beacon beam, the lightning, and the text of a name plate or a sign. All three of
+ * those families bind a mesh this door cannot decode, which {@link #decodable} says and which is why
+ * none of them is a row here. The shadow map is a family of its own and is NOT in either window, a
+ * pass of its own that neither bracket reaches.
+ * <p>
+ * <strong>The eyes were among them and are not any more</strong>: they alone of the four bind
+ * {@code DefaultVertexFormat.ENTITY}, so they come in by this door with a table of their own,
+ * {@link #FIXED}, which says why it is not the mob table.
  * <p>
  * <strong>An enchantment's glint comes in by this same door and is alone in it</strong>, in two ways
  * that are one: it is the only piece served here that is not drawn from an entity mesh, and the only
@@ -473,6 +478,12 @@ public final class EntityDraw {
 	private static final String BLOCK_TRANSLUCENT = "gbuffers_block_translucent";
 
 	/**
+	 * What the glowing eyes of a mob ask for, and the one name of this class that answers whatever
+	 * else is going on.
+	 */
+	private static final String SPIDER_EYES = "gbuffers_spidereyes";
+
+	/**
 	 * What a cutout entity discards at, which is a tenth and not the half the terrain uses. Named
 	 * here so that the table below reads as a table.
 	 */
@@ -518,8 +529,9 @@ public final class EntityDraw {
 	 * {@code ENTITY_TRANSLUCENT_EMISSIVE} ({@code :287-297}) bind that format and blend, and both are
 	 * the EYES family, which Iris serves with {@code gbuffers_spidereyes} through
 	 * {@code ENTITIES_EYES} and {@code ENTITIES_EYES_TRANS}
-	 * ({@code pipeline/IrisPipelines.java:52,53}). That family is not here yet, so the game draws it
-	 * and {@link FeatureLayer} carries it in. Each row that is here is a piece of
+	 * ({@code pipeline/IrisPipelines.java:52,53}). They are served here too and are in {@link #FIXED}
+	 * rather than in this table, because a row here is a row that gets a block entity twin and two
+	 * hand twins and theirs must get none. Each row that is here is a piece of
 	 * its own even where two ask for the same program at the same threshold, which is how the sky is
 	 * six pieces out of three files: they differ in what {@link Element} reads off them, and a piece
 	 * is one compiled module.
@@ -896,6 +908,53 @@ public final class EntityDraw {
 	}
 
 	/**
+	 * The pieces whose program does not depend on what else is going on, which is the eyes and
+	 * nothing else so far.
+	 * <p>
+	 * <strong>A table of its own because Iris keys these rows differently, and the difference is
+	 * exactly what a twin would destroy.</strong> Every row of {@link #ELEMENTS} reaches Iris through
+	 * {@code getSolid}, {@code getCutout} or {@code getTranslucent}, which is why each of them has a
+	 * block entity twin and two hand twins: those three functions test the hand, then the block entity
+	 * phase, then fall through ({@code pipeline/IrisPipelines.java:188-222}). The two rows below reach
+	 * a CONSTANT instead, {@code p -> ShaderKey.ENTITIES_EYES} and
+	 * {@code p -> ShaderKey.ENTITIES_EYES_TRANS} ({@code pipeline/IrisPipelines.java:52,53}), which
+	 * consults nothing. Derived into the other three tables they would ask for
+	 * {@code gbuffers_block_translucent} inside a chest's draw and {@code gbuffers_hand_water} inside
+	 * the hand's, and Iris asks for neither: an eye is an eye wherever it is drawn.
+	 * <p>
+	 * Both keys are {@code ProgramId.SpiderEyes}
+	 * ({@code pipeline/programs/ShaderKey.java:44,45}), so both ask for one name and differ only in
+	 * what they discard at, {@code NON_ZERO_ALPHA} for the plain eyes and {@code ONE_TENTH_ALPHA} for
+	 * the emissive one. That tenth is the game's own {@code ALPHA_CUTOUT} for that pipeline
+	 * ({@code RenderPipelines.java:290}) and the plain eyes pipeline declares none
+	 * ({@code :351-364}), so here the two authorities agree row for row.
+	 * <p>
+	 * <strong>Both blend, so both belong to the translucent window</strong>, the game declaring
+	 * {@code BlendFunction.TRANSLUCENT} on each ({@code RenderPipelines.java:360,293}). What they are
+	 * blended WITH is not the game's answer though, and that is the one thing about this family that
+	 * is not read off the pipeline: Iris hangs an additive override on the program name itself, which
+	 * {@link EntityProgram} takes from {@code ProgramFallbacks} rather than from the pipeline.
+	 * <p>
+	 * <strong>Both bind {@code DefaultVertexFormat.ENTITY}</strong> ({@code RenderPipelines.java:361}
+	 * and the {@code ENTITY_EMISSIVE_SNIPPET} at {@code :64}), which is why this family could be
+	 * served at all and the four beside it could not: the door decodes that one format.
+	 * <p>
+	 * Neither render type carries a layering transform or a texture transform
+	 * ({@code rendertype/RenderTypes.java:190-198,242-244}), so there is no depth nudge to reproduce
+	 * and no animation to read out of the game's own transforms, which the last two rows of
+	 * {@link #ELEMENTS} do need.
+	 */
+	private static final Map<RenderPipeline, Element> FIXED = new LinkedHashMap<>();
+
+	static {
+		FIXED.put(RenderPipelines.EYES, new Element(RenderPipelines.EYES, "eyes", SPIDER_EYES,
+				AlphaTest.NON_ZERO));
+		FIXED.put(RenderPipelines.ENTITY_TRANSLUCENT_EMISSIVE,
+				new Element(RenderPipelines.ENTITY_TRANSLUCENT_EMISSIVE, "eyes_emissive", SPIDER_EYES,
+						CUTOUT));
+	}
+
+	/**
 	 * Which piece answers for a draw of this pipeline, which is the block entity one only where the
 	 * draw came from a block entity renderer AND that pipeline has one. Null for a pipeline this
 	 * engine does not serve at all, which is most of them.
@@ -913,6 +972,14 @@ public final class EntityDraw {
 	 * chest had just been submitted must not be given the block program, and no more must a glint.
 	 * After the hand, because which of its four pieces answers is a question about the MOMENT, and
 	 * the hand's two passes are two of the four moments.
+	 * <p>
+	 * <strong>{@link #FIXED} is asked before all three, and that is the same fidelity read from the
+	 * other end.</strong> Those rows are constants in Iris's own table rather than calls into the
+	 * three functions that test anything ({@code pipeline/IrisPipelines.java:52,53}), so no mark of
+	 * ours may reach them either. Asked after the hand, an eye drawn while the arm was up would be
+	 * served {@code gbuffers_hand_water}; asked after the block entity mark, an eye on a mob standing
+	 * where a chest had just been submitted would be served {@code gbuffers_block_translucent}. Iris
+	 * answers {@code gbuffers_spidereyes} to both.
 	 */
 	@SuppressWarnings("ReferenceEquality")
 	private static Element element(RenderPipeline pipeline) {
@@ -922,8 +989,18 @@ public final class EntityDraw {
 		// map. Iris has no such order to keep, its shadow table being a second table consulted
 		// instead of the main one rather than a branch inside it (pipeline/IrisPipelines.java:85-134
 		// against :25-83).
+		//
+		// Ahead of FIXED as well, and for that same reason rather than against it: FIXED is a row of
+		// the MAIN table, and under Iris the main table is not the one consulted while the map is
+		// drawn. The marks FIXED stands in front of are ours and are the hand's and the block
+		// entity's; the shadow table is a table and not a mark.
 		if (shadowFeatures) {
 			return SHADOW_ELEMENTS.get(pipeline);
+		}
+
+		Element fixed = FIXED.get(pipeline);
+		if (fixed != null) {
+			return fixed;
 		}
 
 		if (HandDraw.drawing()) {
@@ -1194,7 +1271,16 @@ public final class EntityDraw {
 		// entities live inside the two windows the level's features are drawn in; the hand is
 		// submitted by this engine itself, twice, and both of those moments fall outside the
 		// windows. Each family is guarded by its own switch and neither borrows the other's.
-		boolean inMoment = HandDraw.drawing() ? HandDraw.wanted()
+		//
+		// Asked of the ROW and no longer of the moment, which is what carrying a fixed table costs:
+		// an eyes row is the answer even inside a hand pass, and it is not a hand row, so it may not
+		// take the hand's switch. What it does take is its own window, and inside a hand pass that
+		// window is shut, so the game keeps that draw. Iris would serve it, gbuffers_spidereyes being
+		// its constant there too; the obstacle is that this engine binds a piece to one side of the
+		// deferred stage at the LOAD, and an eyes row is bound to the side its window is on. No
+		// renderer of the game can reach it: the four callers of the eyes render type are the ender
+		// dragon and the ender, phantom and spider eye layers, none of which draws in a hand pass.
+		boolean inMoment = (element != null && element.hand()) ? HandDraw.wanted()
 				: wanted && element != null && inWindow(element);
 		if (!inMoment || device == null || element == null) {
 			draw.end();
@@ -1626,6 +1712,15 @@ public final class EntityDraw {
 					.toList();
 			groups.add(family.stream().filter(element -> !element.afterStage()).toList());
 			groups.add(family.stream().filter(Element::afterStage).toList());
+
+			// A group of its own and not part of the blending half above, for the reason the
+			// particles are two groups: what stands or falls together is what shares a picture. The
+			// eyes ask for a name of their own that walks its own chain, gbuffers_spidereyes through
+			// the textured pair, so it commonly resolves to a different file with different draw
+			// buffers; put in with the entities, a place that could not answer for that one file
+			// would take every mob and every chest down with it. Apart, the worst it can paint is a
+			// mob the pack lit wearing eyes the game drew, which is the smaller of the two pictures.
+			groups.add(fixed());
 		}
 
 		if (HandDraw.wanted()) {
@@ -1696,6 +1791,13 @@ public final class EntityDraw {
 	 * picture and reads its texture coordinates out of the light map. Two formats come in by this door
 	 * now, the entity mesh and the glint's two elements, so the claim is the piece's and the check is
 	 * against the game's own binding.
+	 * <p>
+	 * It is also what keeps the three families beside the eyes out of these tables, and that is a
+	 * fact about this engine rather than about them: the beacon beam binds
+	 * {@code DefaultVertexFormat.BLOCK}, the lightning and the dragon rays {@code POSITION_COLOR} and
+	 * the world text {@code POSITION_TEX_LIGHTMAP_COLOR}, and {@code VertexInputs} has a decoder for
+	 * none of the three. A row added for any of them would be caught here and reported, rather than
+	 * drawn out of the wrong offsets.
 	 */
 	private static boolean decodable(Element element) {
 		VertexFormat format = element.pipeline().getVertexFormatBinding(0);
@@ -1721,6 +1823,11 @@ public final class EntityDraw {
 				.map(element -> table.get(element.pipeline()))
 				.filter(Objects::nonNull)
 				.toList();
+	}
+
+	/** The fixed rows this engine can decode the mesh of, which today is both of them. */
+	private static List<Element> fixed() {
+		return FIXED.values().stream().filter(EntityDraw::decodable).toList();
 	}
 
 	/**

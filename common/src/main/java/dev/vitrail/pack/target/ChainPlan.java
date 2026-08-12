@@ -144,6 +144,17 @@ public final class ChainPlan {
 					// blending name falls back on this very file, and that entry counts it; three
 					// packs of the corpus are in that case and this entry moves nothing for them.
 					new NamedProgram("gbuffers_entities", true, false, NOT_EVERYWHERE),
+					// The glowing eyes of a mob, drawn among the translucent features beside the two
+					// above and on the same side of the stage. One entry and not two: its two
+					// pipelines ask for the one name, both blend, and neither is ever drawn before
+					// the deferreds.
+					//
+					// Not counted, and it is the hand's reason rather than the entities': the line
+					// being on does not put a spider, an enderman, a phantom or the dragon in front
+					// of the camera, and nothing else in the game draws with these pipelines. A
+					// verdict that took the eyes for drawn would report targets as written in every
+					// place a plan is built for, which is every place those four mobs are not.
+					new NamedProgram("gbuffers_spidereyes", true, false, NOT_EVERYWHERE),
 					// The hand's two passes, which straddle the stage as the particles do and for the
 					// same kind of reason: the solid one is drawn among the game's opaque features and
 					// the blending one at the end of the level. Not counted, and not by a switch:
