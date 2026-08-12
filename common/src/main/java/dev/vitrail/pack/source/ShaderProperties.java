@@ -77,13 +77,20 @@ public final class ShaderProperties {
 	// Which of the world's five families are drawn into the shadow map. One pattern for the lot,
 	// because the five are read together and answered together: a caster the pack asked to keep out
 	// and that casts anyway is worse than no shadow at all, so they are served as a set or not.
-	// Live lines only, and here that is not a nicety. Five packs of the eight write at least one of
+	// Live lines only, and here that is not a nicety. Two packs of the eight tested write one of
 	// these words twice with two different values, both Complementary packs writing shadowPlayer
-	// true and then false: read flat, the answer is whichever line the file happens to end with.
+	// true and then false in the two arms of one conditional: read flat, the answer is whichever
+	// line the file happens to end with. BSL is the sharper case and it is not a repeat at all - it
+	// writes shadowEntities and shadowBlockEntities once each, under an #ifndef its own settings
+	// file defines, so both lines are dead and a flat read turns the most used pack of the corpus
+	// into one with no entity shadows.
 	private static final Pattern SHADOW_CASTER = Pattern.compile(
 			"^\\s*(shadowTerrain|shadowTranslucent|shadowEntities|shadowPlayer|shadowBlockEntities)"
 					+ "\\s*=\\s*(.*)$");
-	// shadow.culling is deliberately NOT read, and it is the one word of this family that is not.
+	// shadow.culling is deliberately NOT read. It is not the only word of this family left unread -
+	// Iris parses a sixth caster directive, shadowLightBlockEntities (PackShadowDirectives.java:92,
+	// honoured at shadows/ShadowRenderer.java:576-577), which no pack of the corpus writes and which
+	// this engine does not read either. This one is the deliberate refusal rather than the gap.
 	// Six of the eight packs write it, so leaving it among the keys nothing reads is a line each of
 	// them gets, and that is the honest state: its four answers are not four ways of walking the
 	// same frustum. They pick between a box culler at the shadow distance, a box culler at the VOXEL
@@ -1120,11 +1127,11 @@ public final class ShaderProperties {
 	 * @param defines the pack's settings, which decide which lines of the file are alive at all
 	 */
 	public ShadowCasters shadowCasters(Map<String, String> defines) {
-		boolean terrain = true;
-		boolean translucent = true;
-		boolean entities = true;
-		boolean player = false;
-		boolean blockEntities = true;
+		boolean terrain = ShadowCasters.DEFAULT.terrain();
+		boolean translucent = ShadowCasters.DEFAULT.translucent();
+		boolean entities = ShadowCasters.DEFAULT.entities();
+		boolean player = ShadowCasters.DEFAULT.player();
+		boolean blockEntities = ShadowCasters.DEFAULT.blockEntities();
 
 		for (Matcher line : live(SHADOW_CASTER, defines)) {
 			Boolean value = truth(line.group(2).trim());

@@ -68,7 +68,7 @@ public final class PackValues {
 	 * alone until it says otherwise. The defaults are Iris's and {@code ShaderProperties} carries why
 	 * the player one is not the flag it looks like.
 	 */
-	private ShadowCasters shadowCasters = new ShadowCasters(true, true, true, false, true);
+	private ShadowCasters shadowCasters = ShadowCasters.DEFAULT;
 
 	private Optional<String> particleOrdering = Optional.empty();
 	private NoiseTexture.Image noiseImage;

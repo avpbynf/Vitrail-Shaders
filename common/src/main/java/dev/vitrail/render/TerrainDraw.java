@@ -242,9 +242,11 @@ public final class TerrainDraw {
 		return self == null ? -1.0F : self.values.entityShadowDistance();
 	}
 
-	/** What a frame with no pack loaded answers, which is Iris's own set of defaults. */
-	private static final ShadowCasters DEFAULT_CASTERS =
-			new ShadowCasters(true, true, true, false, true);
+	/**
+	 * What a frame with no pack loaded answers, taken from the reading rather than spelled again:
+	 * one directive has one default, and two literals of it are two answers waiting to disagree.
+	 */
+	private static final ShadowCasters DEFAULT_CASTERS = ShadowCasters.DEFAULT;
 
 	/**
 	 * Whether the shadow map is drawn at all, asked of the LOAD rather than of this frame.

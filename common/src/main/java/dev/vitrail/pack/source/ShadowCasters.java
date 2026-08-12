@@ -21,6 +21,15 @@ public record ShadowCasters(boolean terrain, boolean translucent, boolean entiti
 		boolean blockEntities) {
 
 	/**
+	 * What a pack asks for by saying nothing, which is Iris's own set
+	 * ({@code shaderpack/properties/PackShadowDirectives.java:87-91}). Spelled once and read from
+	 * here by everything that needs it, the reading included: a default written twice is two answers
+	 * waiting to disagree, and the one that drifted would put a family into a map the pack asked to
+	 * keep it out of.
+	 */
+	public static final ShadowCasters DEFAULT = new ShadowCasters(true, true, true, false, true);
+
+	/**
 	 * Whether anything submitted through the feature renderers is drawn into the map at all, which
 	 * is what decides whether the second walk of the world is worth making.
 	 */

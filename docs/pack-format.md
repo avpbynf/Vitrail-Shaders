@@ -139,6 +139,9 @@ two arms of one conditional, and some write a word whose value the pack's own se
 contradicts. Read flat, the answer is whichever line the file happens to end with, and the most
 used packs of the corpus lose their entity shadows to a line their settings had already killed.
 
+A sixth word of the family, `shadowLightBlockEntities`, is parsed by Iris and is not read here. No
+pack seen so far writes it.
+
 `shadow.culling` is recognised as a word this engine does not act on, and is reported among the keys
 nothing reads rather than half-honoured. Its values do not pick between ways of walking one frustum:
 they pick between different cullers with different distance directives behind them, and reading the
