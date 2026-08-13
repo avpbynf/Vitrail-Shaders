@@ -294,9 +294,12 @@ public final class TerrainMesh implements ChunkVertexType {
 		 * into the other three, which is what a pack's {@code separateAo} asks to read as its vertex
 		 * colour.
 		 * <p>
-		 * <strong>Iris writes that pair over Sodium's own colour word</strong> and chooses per
-		 * vertex which of the two goes there, {@code XHFPTerrainVertex.java:152} picking between
-		 * {@code ColorABGR.withAlpha(color, ao)} and {@code ColorARGB.mulRGB(color, ao)}. Here it is
+		 * <strong>Iris writes that pair over Sodium's own colour word</strong>, picking between
+		 * {@code ColorABGR.withAlpha(color, ao)} and {@code ColorARGB.mulRGB(color, ao)} on one
+		 * global, {@code WorldRenderingSettings.INSTANCE.shouldUseSeparateAo()}
+		 * ({@code XHFPTerrainVertex.java:152}). It sits inside the loop over the four vertices and
+		 * nothing about it varies from one vertex to the next: what it reads is the pack's directive,
+		 * which is settled long before a quad reaches that encoder. Here it is
 		 * an element BESIDE that word and never instead of it, for the reason the class comment
 		 * gives: the game's own shader draws this mesh too and reads the word. Iris has no such
 		 * window to cover, nothing of its own warming up over several frames.
@@ -446,12 +449,19 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * Takes the normal's own direction out of the tangent, so that what a pack reads is at a right
 	 * angle to {@code gl_Normal} on every quad and not only where the mapping happens to be affine.
 	 * <p>
-	 * <strong>Iris does this to every tangent it packs</strong>, {@code NormalHelper.packDiamondByte}
-	 * lines 489 to 510: it subtracts {@code n * dot(n, tangent)}, and what it stores is an angle in
-	 * the plane that leaves, which its own patched vertex stage turns back into
-	 * {@code normalize(p.x * t1 + p.y * t2)} of a basis built from the normal
-	 * ({@code SodiumTransformer} lines 191 to 198). A pack under Iris therefore always reads a unit
-	 * vector exactly perpendicular to the normal, and <strong>it is the tangent itself, not the
+	 * <strong>Iris does this to every tangent of the chunk mesh, and to that mesh
+	 * alone</strong>: {@code NormalHelper.packDiamondByte} lines 489 to 510 subtracts
+	 * {@code n * dot(n, tangent)}, and what it stores is an angle in the plane that leaves, which its
+	 * own patched vertex stage turns back into {@code normalize(p.x * t1 + p.y * t2)} of a basis built
+	 * from the normal ({@code SodiumTransformer} lines 191 to 198). That packing is reached through
+	 * {@code NormalHelper.encodeNormalTangent} lines 512 to 520 and through nothing else, and its
+	 * only callers are {@code XHFPTerrainVertex} lines 26 and 132. The entity, text and glyph
+	 * tangents take the other road, {@code NormalHelper.computeTangent} straight into
+	 * {@code NormI8.pack} ({@code NormalHelper.java:246}, {@code :333} and {@code :414}), which
+	 * stores the direction the mapping gave and never projects it onto the normal's plane at all.
+	 * <p>
+	 * A pack reading the terrain under Iris therefore always reads a unit vector exactly
+	 * perpendicular to the normal, and <strong>it is the tangent itself, not the
 	 * bitangent, that carries the defect</strong>: the first column of the frame a normal map is
 	 * read through is {@code at_tangent.xyz}, and the packs that normalise it normalise its length
 	 * and not its direction. A vector leaning towards the normal is still leaning afterwards, and it

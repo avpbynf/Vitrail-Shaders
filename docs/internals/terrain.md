@@ -74,8 +74,9 @@ one program a frame and the world is drawn by the game meanwhile. That shader mu
 colour into the texture and then alpha tests the product, so an occlusion left sitting in the alpha
 of the word it reads punches holes through every cutout block on screen. Two words on the vertex,
 each side reading its own, and neither has to know which of the two is drawing. The reference writes
-one word and chooses per vertex, which it can afford because nothing of its own warms up over
-several frames.
+one word and fills it from the tint or from the pair according to that same directive, read once per
+vertex out of a global its encoder consults, which it can afford because nothing of its own warms up
+over several frames.
 
 So the directive is not a property of the mesh here, and nothing about it is worth a rebuilt world.
 Every vertex carries both colours whether the pack asked or not; what the directive decides is the
@@ -165,7 +166,9 @@ refuses none at all, and a sum of absolute components before normalising where I
 zero after. The quad then gets an axis taken from its own face normal, and keeps whatever handedness
 one of its triangles managed to measure, or the majority answer when neither did. The gap is
 narrower than it sounds, because Iris strips the normal's component out of every tangent it packs
-and substitutes an axis of its own when nothing is left; but it is real, and it runs both ways,
+into a chunk mesh - that projection is on the chunk road alone, its entity and text tangents being
+stored as the mapping gave them - and substitutes an axis of its own when nothing is left of the
+tangent; but it is real, and it runs both ways,
 since this answer depends on the quad alone where that one depends on the order its bucket was
 filled in, and the two substituted axes are not the same axis. Nothing in the graphics API forces
 any of it.
