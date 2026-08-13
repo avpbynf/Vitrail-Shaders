@@ -134,6 +134,74 @@ public final class LegacyGlsl {
 	public static final Map<String, String> CORE_MATRICES = coreMatrices();
 
 	/**
+	 * The name the game binds its own per draw transforms under, which is therefore the name the
+	 * block has to be declared with. The members below are ours to name; this one is not.
+	 */
+	public static final String GAME_TRANSFORMS = "DynamicTransforms";
+
+	/**
+	 * What {@code gl_TextureMatrix[0]} becomes wherever the game's block is bound, and the one member
+	 * of it anything here reads.
+	 * <p>
+	 * Iris makes the same substitution, {@code iris_transforms.TextureMat} at
+	 * {@code transform/transformer/VanillaTransformer.java:163} and
+	 * {@code VanillaCoreTransformer.java:86}. What that matrix holds is the render type's own
+	 * {@code TextureTransform.createMatrix()}, written into the draw's transforms by
+	 * {@code rendertype/RenderType.java:76}.
+	 * <p>
+	 * <strong>Iris substitutes it on every program it patches as vanilla and this engine only on the
+	 * entity family.</strong> What that leaves out falls in two, and only one of the two is harmless.
+	 * <p>
+	 * <strong>The sky, the clouds, the weather and the particles differ in route and not in
+	 * value.</strong> They are vanilla programs under Iris and read the game's matrix there; here they
+	 * keep the identity of {@link dev.vitrail.uniform.values.GeometryValues}. What makes the two the
+	 * same number is measured rather than assumed: a render setup starts at
+	 * {@code TextureTransform.DEFAULT_TEXTURING}, which is {@code Matrix4f::new}
+	 * ({@code rendertype/RenderSetup.java:131} and {@code rendertype/TextureTransform.java:15}), and
+	 * the whole game calls {@code setTextureTransform} six times, at
+	 * {@code rendertype/RenderTypes.java:251,259,267,274,524,536}. None of the six is drawn by any of
+	 * those four families.
+	 * <p>
+	 * <strong>The glint is the other half, and it is a hole rather than a route.</strong> Four of
+	 * those six sites are its render types, and it is NOT in this set: {@code RenderPipelines.GLINT}
+	 * binds {@code DefaultVertexFormat.POSITION_TEX} and a pack answers it with
+	 * {@code gbuffers_armor_glint}, whose fallback parent is {@code gbuffers_textured}
+	 * ({@code pack/program/ProgramFallbacks.java:76}) and never an entity root, so
+	 * {@link #drawsEntities} is false for it. Nothing pays today, and for a reason that is not this
+	 * file's doing: no door of this engine asks for that program at all, so the game draws the glint
+	 * itself. <strong>Whoever serves it has to widen this question with it</strong>, or the glint will
+	 * be drawn frozen on one frame of its animation, which looks like an image rather than like an
+	 * absence.
+	 */
+	public static final String GAME_TEXTURE_MATRIX = "of_GameTextureMatrix";
+
+	/**
+	 * The game's transforms block, declared exactly as the game fills it.
+	 * <p>
+	 * All four members and not the one that is read, because std140 matches by OFFSET: the texture
+	 * matrix sits at ninety six bytes, behind a {@code mat4}, a {@code vec4} and a {@code vec3}, and a
+	 * block declaring only the last of the four would read the model view instead. The order is
+	 * {@code DynamicUniforms.Transform.write} at {@code renderer/DynamicUniforms.java:84}, and the
+	 * same four in the same order are what Iris declares at
+	 * {@code transform/transformer/VanillaTransformer.java:52-57}.
+	 * <p>
+	 * The other three are named rather than padded so that a reader meets the reason they are here.
+	 * Nothing reads them and nothing should: for a draw the game prepares from a render type the
+	 * modulator is always white and the offset always nought
+	 * ({@code rendertype/RenderType.java:76} reaching the two argument
+	 * {@code DynamicUniforms.writeTransform}, {@code renderer/DynamicUniforms.java:48-50}), and the
+	 * model view is answered from the pass instead, which is where the depth nudge of a layered piece
+	 * is applied.
+	 */
+	public static final List<String> GAME_TRANSFORMS_BLOCK = List.of(
+			"layout(std140) uniform " + GAME_TRANSFORMS + " {",
+			"\tmat4 of_GameModelView;",
+			"\tvec4 of_GameColorModulator;",
+			"\tvec3 of_GameModelOffset;",
+			"\t" + "mat4 " + GAME_TEXTURE_MATRIX + ";",
+			"};");
+
+	/**
 	 * The roots of the fallback tree whose programs are drawn from a mesh that carries an entity's
 	 * identity, and so are served {@link #ENTITY_UNIFORMS}.
 	 * <p>

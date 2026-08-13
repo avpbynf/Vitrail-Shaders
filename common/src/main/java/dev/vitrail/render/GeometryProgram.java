@@ -43,6 +43,7 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.resources.Identifier;
 
@@ -305,6 +306,14 @@ final class GeometryProgram {
 	 */
 	private final boolean entityMesh;
 
+	/**
+	 * Whether this program reads {@code gl_TextureMatrix[0]} out of the game's own per draw
+	 * transforms, which is what puts a second bind group on the pipeline.
+	 *
+	 * @see dev.vitrail.glsl.PackProgram.Loaded#readsGameTransforms
+	 */
+	private final boolean gameTransforms;
+
 	private MappableRingBuffer block;
 	private TextureTarget black;
 	private TextureTarget white;
@@ -341,6 +350,7 @@ final class GeometryProgram {
 		this.pass = pass;
 		this.path = loaded.path();
 		this.entityMesh = DefaultVertexFormat.ENTITY.equals(format);
+		this.gameTransforms = loaded.readsGameTransforms();
 		this.blockLabel = () -> "Vitrail " + pass.family() + " OfGlobals";
 		this.passLabel = () -> "Vitrail " + pass.family();
 		TranslatedUnit.Notes notes = loaded.program().stages().get(ProgramStage.FRAGMENT).notes();
@@ -525,6 +535,13 @@ final class GeometryProgram {
 		// contents by name, so the names have to be the ones it binds. Only the clouds have one.
 		if (pass.bindings() != null) {
 			builder.withBindGroupLayout(pass.bindings());
+		}
+
+		// And the game's per draw transforms, for a program that reads a texture matrix out of them.
+		// The game's own object again, and for the same reason: what is bound into it is bound by the
+		// name the layout carries, so a copy built here would have to spell DynamicTransforms anyway.
+		if (this.gameTransforms) {
+			builder.withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS);
 		}
 
 		// No binding at all where the family binds no mesh, which is the clouds and only them: their
@@ -898,6 +915,17 @@ final class GeometryProgram {
 	 */
 	boolean plain() {
 		return this.slots.size() == 1 && this.slots.get(0).bound() == Bound.GAME;
+	}
+
+	/**
+	 * Whether the draw about to be recorded owes this program the game's own transforms, which the
+	 * door that has them binds itself.
+	 * <p>
+	 * Answered here and bound there because the buffer belongs to the DRAW: one run of draws is one
+	 * uniform block of this engine's, and two breezes in the same run hold two texture matrices.
+	 */
+	boolean readsGameTransforms() {
+		return this.gameTransforms;
 	}
 
 	/**

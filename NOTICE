@@ -391,6 +391,19 @@ GNU Lesser General Public License version 3
   at all, which is what a pack expects. One family is answered the identity here instead, and the
   file names that as a divergence.
 
+  common/src/main/java/dev/vitrail/glsl/GlslTranslator.java sends a read of gl_TextureMatrix[0] to
+  the game's own per draw transforms on the entity family, which is where
+  net.irisshaders.iris.pipeline.transform.transformer.VanillaTransformer sends it, line 163, and
+  VanillaCoreTransformer, line 86. What is taken is the rule that unit nought means the matrix that
+  draw was prepared with rather than a value of the engine's, which is what makes an animated texture
+  animate at all. Iris substitutes it on every program it patches as vanilla and this engine on the
+  entity family alone; LegacyGlsl.GAME_TEXTURE_MATRIX names the two shapes that leaves out, the
+  families whose number is the same either way and the one family whose number is not. The four
+  members the block is declared with in
+  common/src/main/java/dev/vitrail/glsl/LegacyGlsl.java are the game's own layout, read off
+  net.minecraft.client.renderer.DynamicUniforms and not off Iris, and the two agree because both
+  describe the same buffer.
+
   common/src/main/java/dev/vitrail/uniform/UniformGaps.java registers the uniforms this engine
   cannot answer, and one of its entries is Iris's answer rather than an absence: entityColor under a
   full screen pass is the constant net.irisshaders.iris.uniforms.CommonUniforms gives it, line 163.

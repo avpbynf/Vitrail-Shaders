@@ -109,6 +109,12 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 *                           because the substitution is whole file and silent otherwise: a pack
 	 *                           declaring a sine of its own is left alone and lands here as a lower
 	 *                           count rather than as a refusal
+	 * @param gameTextureMatrix  reads of {@code gl_TextureMatrix[0]} sent to the game's own per draw
+	 *                           transforms rather than to the block this engine writes. Not only a
+	 *                           measure: above nought is what declares that block and what asks the
+	 *                           pipeline for its bind group, and
+	 *                           {@link PackProgram.Loaded#readsGameTransforms} says why that has to
+	 *                           be one answer
 	 */
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
@@ -117,6 +123,6 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames, List<String> comparedSamplers, List<String> storageBlocks,
-			int volumeLookups, int volumesLeftAlone, int trigCalls) {
+			int volumeLookups, int volumesLeftAlone, int trigCalls, int gameTextureMatrix) {
 	}
 }

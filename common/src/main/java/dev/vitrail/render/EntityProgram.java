@@ -311,6 +311,16 @@ final class EntityProgram implements DumpedProgram {
 		this.body.bind(pass);
 	}
 
+	/**
+	 * Whether this program reads the game's own per draw transforms, and so whether the draw about to
+	 * be recorded has to bind them.
+	 *
+	 * @see GeometryProgram#readsGameTransforms
+	 */
+	boolean readsGameTransforms() {
+		return this.body.readsGameTransforms();
+	}
+
 	/** @see GeometryProgram#decoded */
 	@Override
 	public String decoded(WorldState world) {

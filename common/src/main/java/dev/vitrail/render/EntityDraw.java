@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.glsl.LegacyGlsl;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.VertexInputs;
 import dev.vitrail.pack.option.OptionValue;
@@ -398,28 +399,27 @@ public final class EntityDraw {
 	 * {@code OffsetTextureTransform} built afresh per frame from the offsets the breeze and the swirl
 	 * are animated by ({@code rendertype/RenderTypes.java:524,536}); every other render type of this
 	 * family leaves it at {@code DEFAULT_TEXTURING}. That matrix is what a pack multiplies
-	 * {@code gl_MultiTexCoord0} by, and Iris hands the real one over on everything the game draws as
-	 * a render type ({@code transform/transformer/VanillaCoreTransformer.java:86}), while this engine
-	 * answers unit nought with the identity ({@code uniform/values/GeometryValues.java:169-180}).
-	 * Served, the wind and the swirl would be drawn frozen on their first frame, which is a picture
-	 * rather than an absence and is why they are named here instead.
+	 * {@code gl_MultiTexCoord0} by, and it is one of the six sites in the whole game that set one,
+	 * the four glints being the others.
 	 * <p>
-	 * <strong>Reading the real one back is not a line of work, and that is what settles it.</strong>
-	 * {@code RenderType.prepare} writes the matrix straight into the dynamic transforms buffer
-	 * ({@code rendertype/RenderType.java:70-77}) and {@code PreparedRenderType} keeps only the
-	 * {@code GpuBufferSlice}, so nothing the door is handed carries it. It also belongs to the DRAW
-	 * and not to the run, two breezes on screen holding two offsets, where this engine writes one
-	 * uniform block per run of draws. The glint lives on the same matrix and is a family of its own;
-	 * whatever pays for it there pays for these two.
+	 * <strong>The matrix is no longer what withholds them.</strong> A pack's
+	 * {@code gl_TextureMatrix[0]} is answered from the game's own transforms, per draw, which is
+	 * Iris's answer as well ({@code transform/transformer/VanillaCoreTransformer.java:86}), so a
+	 * breeze served today would be animated rather than frozen and two breezes on screen would hold
+	 * their own offsets. What is left is the row, and it is not one row.
 	 * <p>
 	 * <strong>They are not one row when they come back.</strong> The breeze is a {@code getTranslucent}
 	 * row ({@code pipeline/IrisPipelines.java:56}), so it belongs with the six below; the swirl is
 	 * pinned to {@code ENTITIES_CUTOUT} ({@code :60}), which is {@code ProgramId.Entities}, so it asks
 	 * for the OPAQUE {@code gbuffers_entities} even though the game blends it. Whoever serves it will
-	 * be adding a blending row that asks for the writing half's name, which no row here does.
+	 * be adding a blending row that asks for the writing half's name, which no row here does. That is
+	 * work not done, and it is the whole of what these two are still waiting on.
 	 */
-	private static final Set<RenderPipeline> WITHHELD =
-			Set.of(RenderPipelines.BREEZE_WIND, RenderPipelines.ENERGY_SWIRL);
+	private static final Map<RenderPipeline, String> WITHHELD = Map.of(
+			RenderPipelines.BREEZE_WIND, "it would be an ordinary translucent row, which is what Iris "
+					+ "makes of it, and that row has simply not been written",
+			RenderPipelines.ENERGY_SWIRL, "it needs a row no other one here has, asking for the "
+					+ "writing half's program while the game blends it, which is what Iris does with it");
 
 	/**
 	 * Every pipeline the game draws entity geometry with, and nothing else.
@@ -1105,6 +1105,16 @@ public final class EntityDraw {
 		this.open.setPipeline(this.bound);
 		scissor(prepared.scissorState());
 		program.bind(this.open);
+
+		// The game's own transforms, for the same reason the image above is set again per draw and
+		// with a sharper one: what a pack reads as gl_TextureMatrix[0] is the matrix its render type
+		// was PREPARED with, and two breezes on screen carry two of them inside one run. Bound from
+		// the slice rather than rebuilt, which is what Iris does as well: it declares the same block
+		// (transform/transformer/VanillaTransformer.java:52-57) and registers the game's buffer under
+		// this very name (pipeline/programs/ExtendedShader.java:107).
+		if (program.readsGameTransforms()) {
+			this.open.setUniform(LegacyGlsl.GAME_TRANSFORMS, prepared.dynamicTransforms());
+		}
 		this.open.setVertexBuffer(0, info.vertexBuffer().slice());
 		this.open.setIndexBuffer(info.indexBuffer(), info.indexType());
 		this.open.drawIndexed(info.indexCount(), 1, info.firstIndex(), info.baseVertex(), 0);
@@ -1308,13 +1318,13 @@ public final class EntityDraw {
 	 * asked about and answered no.
 	 */
 	private void withheld(RenderPipeline pipeline) {
-		if (WITHHELD.contains(pipeline) && this.refused.add("withheld:" + pipeline.getLocation())) {
+		String reason = WITHHELD.get(pipeline);
+		if (reason != null && this.refused.add("withheld:" + pipeline.getLocation())) {
 			Vitrail.logger().warn("The game keeps its own shader for {}, which this engine leaves to "
-					+ "it: the render type behind it animates by moving its texture matrix every frame, "
-					+ "and this engine answers a pack's gl_TextureMatrix[0] with the identity. Served, "
-					+ "it would be drawn frozen on one frame of its animation, which looks like an "
-					+ "image rather than like an absence. It holds for as long as this pack is loaded",
-					pipeline.getLocation());
+					+ "it: {}. What it costs is that this geometry is lit by the game inside the "
+					+ "window the pack is drawing, so it carries none of the pack's material and its "
+					+ "colour makes one more trip through eight bits. It holds for as long as this "
+					+ "pack is loaded", pipeline.getLocation(), reason);
 		}
 	}
 

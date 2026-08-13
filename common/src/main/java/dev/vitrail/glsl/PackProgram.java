@@ -107,6 +107,32 @@ public final class PackProgram {
 		}
 
 		/**
+		 * Whether any stage of this program reads the game's own per draw transforms, and therefore
+		 * whether the pipeline has to carry the bind group that block is bound through.
+		 * <p>
+		 * <strong>This is the one answer, and everything about the block is asked of it.</strong> The
+		 * text declares the block, the pipeline layout carries the group and the draw binds the slice,
+		 * and a stage declaring a block its layout has not got is a draw that throws by name in the
+		 * middle of the world. Tabulating any of the three beside the translation would be the same
+		 * answer written twice, and the copy that drifted would be that throw.
+		 * <p>
+		 * <strong>What can turn it on is the whole entity family and not only its roots.</strong>
+		 * {@link LegacyGlsl#drawsEntities} walks the fallback CHAIN, so eleven names pass it: the five
+		 * roots and six more under them. Seven of the eleven are drawn, and all seven by one door,
+		 * {@code EntityDraw.record}, which is where the slice comes from. The other four are asked for
+		 * by nobody - {@code shadow_block}, which is a root the shadow table has no row for,
+		 * {@code gbuffers_entities_glowing}, {@code gbuffers_lightning} and {@code shadow_lightning} -
+		 * and a name nobody asks for is a program nobody builds a pipeline out of.
+		 * <p>
+		 * Both stages at once, for {@link #storageBlocks}'s reason: a bind group belongs to the
+		 * pipeline and not to the stage that named it.
+		 */
+		public boolean readsGameTransforms() {
+			return this.program.stages().values().stream()
+					.anyMatch(stage -> stage.notes().gameTextureMatrix() > 0);
+		}
+
+		/**
 		 * The same program bound against another plan, with the reader's own step handed in.
 		 * <p>
 		 * The chunk passes need both halves of that. They are loaded against a plan of their own,

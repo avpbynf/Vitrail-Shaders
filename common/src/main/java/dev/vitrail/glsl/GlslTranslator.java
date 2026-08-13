@@ -266,6 +266,15 @@ public final class GlslTranslator {
 
 	/** Calls to {@code sin} or {@code cos} sent through the reduced-argument helpers. */
 	private int trigCalls;
+
+	/**
+	 * Reads of {@code gl_TextureMatrix[0]} sent to the game's own per draw block instead of to the
+	 * uniform block this engine writes.
+	 *
+	 * @see dev.vitrail.glsl.PackProgram.Loaded#readsGameTransforms
+	 */
+	private int gameTextureMatrix;
+
 	private int strippedExtensions;
 	private boolean depthEpilogue;
 	private boolean terrainPrologue;
@@ -701,6 +710,11 @@ public final class GlslTranslator {
 				continue;
 			}
 
+			if (name.equals("gl_TextureMatrix") && LegacyGlsl.drawsEntities(this.program)
+					&& rewriteGameTextureMatrix(index)) {
+				continue;
+			}
+
 			String fixed = LegacyGlsl.FIXED_FUNCTION.get(name);
 			if (fixed != null) {
 				replace(index, fixed);
@@ -800,6 +814,57 @@ public final class GlslTranslator {
 		for (int at : closings) {
 			this.tokens.add(at, new Token(Kind.RAW, ")", null));
 		}
+	}
+
+	/**
+	 * Sends one read of {@code gl_TextureMatrix[0]} to the game's own block, which is where the
+	 * matrix that draw was really prepared with lives.
+	 * <p>
+	 * <strong>Unit nought and no other, which is the whole shape of it.</strong> The one thing the
+	 * fixed function pipeline put in unit nought is what a render type animates its texture by, and
+	 * six of the game's render types set one that is not the identity: the four glints, the breeze's
+	 * wind and the energy swirl ({@code rendertype/RenderTypes.java:251,259,267,274,524,536}, the last
+	 * two an offset built afresh per draw). Unit one is the light map's and is answered from this
+	 * engine's own table, which is Iris's split as well: {@code gl_TextureMatrix[1]} goes to
+	 * {@code iris_LightmapTextureMatrix} beside the line that sends nought to the block
+	 * ({@code VanillaTransformer.java:163-164}).
+	 * <p>
+	 * Only where the pass draws the entity family, which is what {@link LegacyGlsl#drawsEntities}
+	 * answers and what {@link LegacyGlsl#GAME_TEXTURE_MATRIX} weighs against Iris's wider reach.
+	 * <p>
+	 * The three bracket tokens are blanked rather than kept, because what replaces the name is a
+	 * matrix and not an array: leaving {@code [0]} standing would read its first COLUMN. Any other
+	 * index, and any index that is not a literal, is left alone and reaches the array as before,
+	 * <strong>which for unit nought means the identity beside a neighbour that reads the real
+	 * matrix</strong>. The corpus writes the name two hundred and fifty seven times, all of them
+	 * {@code [0]} or {@code [1]} and none of them computed, so nothing rests on that today; it is
+	 * written down because a pack that computes an index has to keep working rather than read a
+	 * column, and because two answers for one unit inside one file is the kind of thing that is only
+	 * ever noticed if it was said in advance.
+	 *
+	 * @return whether this was a read of unit nought, false leaving the name to the ordinary rename
+	 */
+	private boolean rewriteGameTextureMatrix(int index) {
+		int open = significantAfter(index);
+		if (open < 0 || !this.tokens.get(open).operator("[")) {
+			return false;
+		}
+
+		int unit = significantAfter(open);
+		int close = matchingBracket(open);
+		if (unit < 0 || close < 0 || significantAfter(unit) != close
+				|| !this.tokens.get(unit).text().equals("0")) {
+			return false;
+		}
+
+		inject(index, LegacyGlsl.GAME_TEXTURE_MATRIX);
+		blank(open);
+		blank(unit);
+		blank(close);
+		this.injectedNames.add(LegacyGlsl.GAME_TEXTURE_MATRIX);
+		this.gameTextureMatrix++;
+
+		return true;
 	}
 
 	private boolean rewriteFtransform(int index) {
@@ -2613,6 +2678,13 @@ public final class GlslTranslator {
 			lines.add("};");
 		}
 
+		// The game's own block, beside ours and never merged into it: this one is filled by the game
+		// once per draw and ours is written once per run, which is the whole reason a matrix that
+		// changes with the draw is read from over there.
+		if (this.gameTextureMatrix > 0) {
+			lines.addAll(LegacyGlsl.GAME_TRANSFORMS_BLOCK);
+		}
+
 		// The texel centerDepthSmooth was moved onto. Declared here and not left in the body, because
 		// the member was taken out of a statement that may still declare other names of the pack's
 		// own. Iris puts its own before the declarations for the same reason.
@@ -2832,7 +2904,7 @@ public final class GlslTranslator {
 				this.parameterLookups, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
 				List.copyOf(this.conflicts), comparedSamplers(), List.copyOf(this.storageBlocks),
-				this.volumeLookups, this.volumesLeftAlone, this.trigCalls);
+				this.volumeLookups, this.volumesLeftAlone, this.trigCalls, this.gameTextureMatrix);
 	}
 
 	/**

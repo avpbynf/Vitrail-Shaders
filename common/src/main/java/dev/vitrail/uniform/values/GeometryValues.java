@@ -182,6 +182,20 @@ public final class GeometryValues {
 		// (gl_TextureMatrix[1] * gl_MultiTexCoord1).xy, and with the identity that lands at 240 on
 		// both axes, which the sampler clamps to the corner of the light map: full block light and
 		// full sky light, on every surface, whatever the world is doing.
+		//
+		// A LITERAL READ OF UNIT NOUGHT DOES NOT REACH THIS TABLE ON THE ENTITY FAMILY. What a pack
+		// means by it is the matrix that draw was prepared with, which belongs to the draw and not to
+		// the run this block is written for, so the translation sends the read to the game's own
+		// transforms instead (glsl/LegacyGlsl.GAME_TEXTURE_MATRIX). A read of unit nought through an
+		// index that is not that literal still lands here, and on the identity below; the rewrite says
+		// so and no pack of the corpus writes one.
+		//
+		// The identity below is what is left, and the two halves of that are not alike. On the terrain
+		// it is Iris's own answer, mat4(1.0) at SodiumTransformer.java:31. On the sky, the clouds, the
+		// weather and the particles it is not: those are vanilla programs under Iris and read the
+		// game's matrix at VanillaTransformer.java:163. They come out at the same number all the same,
+		// every render type of theirs leaving the transform at DEFAULT_TEXTURING, which is the
+		// identity; LegacyGlsl.GAME_TEXTURE_MATRIX carries the measure and what would end it.
 		builder.add("of_TextureMatrix", UniformShape.MAT4, new UniformSource() {
 
 			@Override
