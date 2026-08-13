@@ -4,6 +4,7 @@ import dev.vitrail.pack.source.IncludeExpander;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * Which colour attachments a program says it writes.
@@ -79,6 +80,36 @@ public final class DrawBuffers {
 		}
 
 		return List.copyOf(slots);
+	}
+
+	/**
+	 * Which {@code shadowcolor} each output of a program drawn from the light lands in, in output
+	 * order, given what {@link #parse} read and how many of those buffers exist.
+	 * <p>
+	 * Iris's rule and not a reading of the directive: a declaration naming a buffer past the ones
+	 * that exist is thrown away WHOLE and rebuilt as {@code {0, 1}}, on the grounds that a pack
+	 * writing one is relying on OptiFine ignoring the directive in the shadow pass altogether
+	 * ({@code shadows/ShadowRenderTargets.java:296-306}, whose comment says exactly that). The same
+	 * pair answers a program that declares nothing, from the other end of the same call
+	 * ({@code pipeline/programs/SodiumPrograms.java:137-139}).
+	 * <p>
+	 * Reverie is the one pack of the corpus this changes anything for, with
+	 * {@code RENDERTARGETS:0,2,1}, and it is refused at load here for a reason of its own. Keeping
+	 * its rank as an empty slot instead was the shape this had first, and it is wrong twice over:
+	 * Iris never produces that mapping, and an empty slot at rank nought is a shadow stage that
+	 * throws in the middle of a frame rather than drawing.
+	 *
+	 * @param existing how many shadow colour targets this engine has at all, which is the ceiling
+	 *                 Iris compares a declared index against ({@code targets.length}, returned by
+	 *                 {@code shadows/ShadowRenderTargets.java:112}) and not how many are in use
+	 */
+	public static List<Integer> shadowColours(List<Integer> declared, int existing) {
+		List<Integer> pair = IntStream.range(0, existing).boxed().toList();
+		if (declared.isEmpty()) {
+			return pair;
+		}
+
+		return declared.stream().anyMatch(index -> index >= existing) ? pair : List.copyOf(declared);
 	}
 
 	/**

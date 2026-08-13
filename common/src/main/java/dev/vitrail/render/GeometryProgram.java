@@ -7,6 +7,7 @@ import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.target.ChainPlan;
+import dev.vitrail.pack.target.DrawBuffers;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.texture.TextureStage;
@@ -58,7 +59,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
-import java.util.stream.IntStream;
+import java.util.stream.Collectors;
 
 /**
  * One program the pack draws a pass of the world's own geometry with, in place of the shader the
@@ -245,11 +246,26 @@ final class GeometryProgram {
 	 * Which {@code shadowcolor} each output of a shadow pass lands in, in output order. Empty for
 	 * every pass drawn from the camera.
 	 * <p>
-	 * The list is the program's own draw buffers, which follow the branches the settings took, and
-	 * {@code {0, 1}} where it declares none, which is Iris's answer to the same silence
-	 * ({@code pipeline/SodiumPrograms.java:137-139}). An entry past the pair this engine allocates
-	 * keeps its rank as an unused slot rather than being dropped: dropping it would slide every
-	 * output after it one buffer down, and Reverie declares {@code RENDERTARGETS:0,2,1}.
+	 * The rule is {@link DrawBuffers#shadowColours}, which is Iris's. What is decided here is the
+	 * length: no more attachments than the fragment stage declares outputs.
+	 * <p>
+	 * <strong>That cut is a DIVERGENCE, and it is here because Vulkan and GL do not agree on what an
+	 * attachment no fragment writes holds.</strong> Vulkan leaves it undefined for the whole draw;
+	 * the GL these packs were written against leaves it standing, and what a pack reads out of an
+	 * untouched shadow buffer is the white a coloured shadow multiplies by. Four packs of the corpus
+	 * ship a shadow program with one output and no directive at all - BSL, Bliss, Body Camera and
+	 * Sildur's - so the pair Iris opens for them would attach a second buffer nothing writes.
+	 * <p>
+	 * What it costs is measured and it is nothing today: of those four, only Bliss reads
+	 * {@code shadowcolor1} at all, at {@code shaders/dimensions/final.fsh:114}, behind
+	 * {@code DEBUG_VIEW == debug_SHADOWMAP} which its own {@code lib/settings.glsl:784} leaves off.
+	 * So no pack of the corpus can tell the two apart, and the reason for cutting is the rule and
+	 * not a picture anyone has seen.
+	 * <p>
+	 * The floor of one below is the same argument left unserved, and deliberately: a program that
+	 * writes NO output still has {@code shadowcolor0} attached, because a pass with no colour at all
+	 * is one the encoder takes on its depth while the pipeline substitutes a state of its own.
+	 * Mellow is that program, and nothing of Mellow reads a shadow colour back.
 	 */
 	private final List<Integer> shadowColours;
 
@@ -416,8 +432,22 @@ final class GeometryProgram {
 				? List.copyOf(writes)
 				: writes.size() < 2 ? List.of() : List.copyOf(writes.subList(1, writes.size()));
 		this.slots = pass.shadow() ? List.of() : attachments(targets, outputs);
+		// Never fewer than one, whatever the fragment stage declares. Mellow's shadow program writes
+		// no output at all - its whole body is one discard test, so the count is nought - and a pass
+		// with no colour attachment is one the encoder accepts on the strength of its depth while
+		// the pipeline substitutes a state of its own, which is the mismatch this file refuses by
+		// name elsewhere. It draws into the map and into nought, exactly as before this rule.
+		//
+		// And never more than a pipeline holds states for. The builder writes them into an array of
+		// that length, so one rank past it is an index out of bounds where the program is built
+		// rather than a refusal that names it. A directive can reach it: the indices run together
+		// and DRAWBUFFERS:000000000 parses.
 		this.shadowColours = pass.shadow()
-				? shadowColours(loaded.program().stages().get(ProgramStage.FRAGMENT).drawBuffers())
+				? DrawBuffers.shadowColours(
+						loaded.program().stages().get(ProgramStage.FRAGMENT).drawBuffers(),
+						ShadowTargets.COLOURS).stream()
+						.limit(Math.clamp(outputs, 1, ColorTargetState.MAX_COLOR_TARGETS))
+						.toList()
 				: List.of();
 
 		// Said here rather than in announce(), because it is a property of the text and not of a
@@ -521,12 +551,8 @@ final class GeometryProgram {
 			// state naming four channels against a one channel attachment is the pipeline refusing
 			// to bind.
 			for (int slot = 0; slot < this.shadowColours.size(); slot++) {
-				int index = this.shadowColours.get(slot);
-				if (index >= ShadowTargets.COLOURS) {
-					builder.withUnusedColorTargetState(slot);
-				} else {
-					builder.withColorTargetState(slot, state(targets.shadowFormat(index)));
-				}
+				builder.withColorTargetState(slot,
+						state(targets.shadowFormat(this.shadowColours.get(slot))));
 			}
 		} else {
 			for (int slot = 0; slot < this.slots.size(); slot++) {
@@ -903,13 +929,17 @@ final class GeometryProgram {
 
 		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> SHADOW_LABEL);
 		for (int index : this.shadowColours) {
-			// One attachment per state the pipeline carries, and in the same order: the two counts
-			// are settled together at load, so an unused rank here is the one the pipeline left
-			// unused as well.
-			GpuTextureView colour = index >= ShadowTargets.COLOURS ? null : this.shadow.colour(index);
+			// One attachment per state the pipeline carries, and in the same order. The images are
+			// allocated together with the depth, so this is null only where the depth above is, and
+			// the test is kept all the same because the two failures are not equal: a pass short of
+			// an attachment the pipeline names is setPipeline refusing in the middle of the world,
+			// where a null descriptor out of this method is the shadow stage not opening at all.
+			// Neither is safe here - openShadowStage settles that question outside the pass, and
+			// TerrainDraw.shown says what a refusal from the light would cost - so this line is the
+			// second lock on a door the stage already holds shut.
+			GpuTextureView colour = this.shadow.colour(index);
 			if (colour == null) {
-				descriptor.withUnusedColorAttachment();
-				continue;
+				return null;
 			}
 
 			descriptor.withColorAttachment(colour);
@@ -919,17 +949,6 @@ final class GeometryProgram {
 				.withDepthAttachment(depth)
 				.withRenderArea(new RenderPass.RenderArea(0, 0, this.shadow.resolution(),
 						this.shadow.resolution()));
-	}
-
-	/**
-	 * Which {@code shadowcolor} each output of a shadow program lands in. See the field this fills.
-	 */
-	private static List<Integer> shadowColours(List<Integer> declared) {
-		if (declared.isEmpty()) {
-			return IntStream.range(0, ShadowTargets.COLOURS).boxed().toList();
-		}
-
-		return declared.stream().limit(ColorTargetState.MAX_COLOR_TARGETS).toList();
 	}
 
 	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */
@@ -1398,15 +1417,24 @@ final class GeometryProgram {
 			Vitrail.logger().info("It draws into the shadow map, {}x{}, storing the forward depth "
 					+ "window, and into {}", this.shadow.resolution(), this.shadow.resolution(),
 					this.shadowColours.stream()
-							.map(index -> index >= ShadowTargets.COLOURS
-									? "nothing, this engine allocating " + ShadowTargets.COLOURS
-											+ " shadow colour targets"
-									: "shadowcolor" + index)
-							.toList());
+							.map(index -> "shadowcolor" + index)
+							.collect(Collectors.joining(", ")));
 			if (outputs > this.shadowColours.size()) {
-				Vitrail.logger().warn("{} declares {} fragment outputs and its draw buffers name {}, "
-						+ "so the ones past the last are written nowhere", this.path, outputs,
+				Vitrail.logger().warn("{} declares {} fragment outputs and its draw buffers name {} "
+						+ "of the light's colour targets, so the outputs past the {} are written "
+						+ "nowhere", this.path, outputs, this.shadowColours.size(),
 						this.shadowColours.size());
+			}
+
+			// Said apart, because it is a different thing and the count above cannot show it: a
+			// directive naming a target this engine does not allocate is thrown away WHOLE, so the
+			// program draws into the pair instead of into what it asked for.
+			List<Integer> declared = fragment.drawBuffers();
+			if (declared.stream().anyMatch(index -> index >= ShadowTargets.COLOURS)) {
+				Vitrail.logger().warn("{} asks for {}, and this engine draws the light into {} colour "
+						+ "targets, so the whole list is set aside and the first {} are drawn into "
+						+ "instead, as the reference does with it", this.path, declared,
+						ShadowTargets.COLOURS, this.shadowColours.size());
 			}
 		} else if (this.ownsFirst) {
 			// Nought included, and the log says the sides because they are the whole fix: a write on

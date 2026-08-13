@@ -275,12 +275,12 @@ public final class PackValues {
 	}
 
 	/**
-	 * What the pack asks of each {@code shadowcolor} the light draws into: its format, and what
+	 * What the pack asks of each {@code shadowcolor} the light may draw into: its format, and what
 	 * emptying it means. One entry a buffer, in order, and a buffer the pack said nothing about
 	 * carries Iris's own defaults rather than being left out.
 	 */
-	public List<PackDirectives.ShadowColour> shadowColours(int count) {
-		return IntStream.range(0, count)
+	public List<PackDirectives.ShadowColour> shadowColours() {
+		return IntStream.range(0, ShadowTargets.COLOURS)
 				.mapToObj(index -> this.state.directives().shadowColour(index))
 				.toList();
 	}

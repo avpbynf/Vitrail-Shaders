@@ -305,11 +305,11 @@ public final class TargetPlan {
 	 *                       reading {@code ChainPlan} refuses in as many words. What Iris does with a
 	 *                       shadow program that declares nothing is NOT to infer one target: it takes
 	 *                       the unknown as {@code {0, 1}} and binds both shadow colour buffers,
-	 *                       {@code pipeline/programs/ShaderCreator.java:331}. This engine binds
-	 *                       shadowcolor0 alone whatever the pack declares
-	 *                       ({@code render/GeometryProgram.java:392}), which is a divergence of its
-	 *                       own and older than this walk: a pack counting on shadowcolor1 loses it,
-	 *                       and nothing here would say so
+	 *                       {@code pipeline/programs/ShaderCreator.java:331}. This engine reads the
+	 *                       same silence the same way and then attaches no more of the pair than the
+	 *                       program declares outputs, which {@code render/GeometryProgram.java} owns
+	 *                       and gives its reason for; the rule itself is
+	 *                       {@link DrawBuffers#shadowColours} and nothing decided here
 	 */
 	private static List<Integer> writesOf(String name, boolean shadowGeometry, Draft draft) {
 		// The final writes the game's own target, never a colortex, so it flips nothing however

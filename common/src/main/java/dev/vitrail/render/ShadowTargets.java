@@ -13,27 +13,29 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * The shadow map: one depth image the world is drawn into from the light, and the colour targets
  * beside it.
  * <p>
- * <strong>Two colour targets and not one, which is Iris's own default.</strong> It opens
- * {@code {0, 1}} for a shadow program whose draw buffers it cannot read
- * ({@code pipeline/programs/SodiumPrograms.java:137-139}) and allocates the pair whatever the pack
- * declares ({@code shadows/ShadowRenderTargets.java:45}, sized from
- * {@code shaderpack/properties/PackShadowDirectives.java:19-20}). Serving nought alone was not a
- * saving, it was a picture: Complementary writes its light shaft tint into {@code shadowcolor1}
- * ({@code program/shadow.glsl:208-209}, under {@code SHADOW_QUALITY >= 1}, which holds at its own
- * defaults) and its volumetric light reads that name for the density of every ray crossing something
- * translucent ({@code lib/atmospherics/volumetricLight/volumetricLight.glsl:191-194}). Handed the
- * white stand-in instead, the pack read {@code pow2(1.0 * 4.0)}, sixteen where its own tint gives at
- * most about one and a half, and every body of water filled with milk - the whole screen from under
- * the surface, the lake alone from the bank.
+ * <strong>More than one colour target, which is Iris's own count.</strong> It sizes the shadow
+ * colour targets at two, eight where a pack asks for {@code HIGHER_SHADOWCOLOR}
+ * ({@code shadows/ShadowRenderTargets.java:46}, from
+ * {@code shaderpack/properties/PackShadowDirectives.java:19-20}), and opens {@code {0, 1}} for a
+ * shadow program whose draw buffers it cannot read
+ * ({@code pipeline/programs/SodiumPrograms.java:137-139}). When each of them is built differs here,
+ * and the field they live in says why.
+ * <p>
+ * Serving nought alone was not a saving, it was a picture: Complementary writes its light shaft
+ * tint into {@code shadowcolor1} ({@code program/shadow.glsl:208-209}, under
+ * {@code SHADOW_QUALITY >= 1}, which holds at its own defaults) and its volumetric light reads that
+ * name for the density of every ray crossing something translucent
+ * ({@code lib/atmospherics/volumetricLight/volumetricLight.glsl:191-194}). Handed the white stand-in
+ * instead, the pack read {@code pow2(1.0 * 4.0)}, sixteen, where the tint its own shadow program
+ * writes for plain glass is {@code vec3(0.3)} and gives {@code pow2(1.2)}, one and a half
+ * ({@code program/shadow.glsl:189}). Eleven times the density on that one material, and every body
+ * of water filled with milk: the whole screen from under the surface, the lake alone from the bank.
  * <p>
  * Square, at the resolution the pack asked for and at no other, which is the one number about this
  * stage that cannot be chosen here. A pack picks its filter radius in texels of its own map, so a
@@ -60,10 +62,10 @@ final class ShadowTargets {
 	private static final int MAX_RESOLUTION = 16384;
 
 	/**
-	 * How many colour targets the light draws into. Iris's own number, and its ceiling of eight is
-	 * reached only by a pack asking for {@code HIGHER_SHADOWCOLOR}, a feature nothing here declares:
-	 * a pack that asks for it is being told the eight are not there, so allocating them would be
-	 * memory nothing can address.
+	 * How many colour targets the light may draw into. Iris's number for a pack that does not ask
+	 * for {@code HIGHER_SHADOWCOLOR}, and the only pack of the corpus that does ask
+	 * ({@code Reverie Beta v0.9}, {@code shaders/shaders.properties:10}) is refused at load here for
+	 * a reason of its own, so eight would be memory no program of this place could name.
 	 */
 	static final int COLOURS = 2;
 
@@ -86,6 +88,19 @@ final class ShadowTargets {
 	 * Every colour past nought, which the depth cannot share a {@link TextureTarget} with: that class
 	 * carries one colour attachment and one depth, so the rest are images of their own, attached
 	 * beside it by whoever opens the pass.
+	 * <p>
+	 * <strong>All of them are made with the map, where Iris builds each one the first time a
+	 * framebuffer names it</strong> ({@code shadows/ShadowRenderTargets.java:127,136}). That is a
+	 * difference in when memory is taken and in nothing a pack can read: a buffer no program writes
+	 * holds its clear colour either way, and a sampler for one reads exactly that.
+	 * <p>
+	 * What it costs is one image at the map's own resolution for a pack that writes only nought,
+	 * which on this corpus is Mellow, and Mellow asks for 512 texels: one mebibyte. What it buys is
+	 * that nothing has to keep an order between an image and the program that names it, and the
+	 * shadow programs are NOT all built before the first frame is drawn - the terrain's are read
+	 * inside a frame ({@code TerrainDraw:625-634}) and the entities' from inside the light's own
+	 * walk ({@code EntityDraw:1069-1070}), so a set filled from the programs would have to be
+	 * answered by a pass already recording, where nothing may allocate.
 	 */
 	private final TargetSurface[] rest = new TargetSurface[COLOURS - 1];
 
@@ -161,19 +176,20 @@ final class ShadowTargets {
 		}
 
 		try {
-			// One object for both, so that the colour and the depth cannot part company on a size:
-			// they are attachments of one render pass and one render pass has one render area.
+			// One object for the first colour and the depth, so that they cannot part company on a
+			// size: they are attachments of one render pass and one render pass has one area.
 			this.target = new TextureTarget("Vitrail shadow", this.resolution, this.resolution, true,
 					this.formats.get(0));
+			this.unstarted[0] = true;
 			for (int index = 1; index < COLOURS; index++) {
 				this.rest[index - 1] = new TargetSurface("Vitrail shadowcolor" + index,
 						this.formats.get(index), false, this.resolution, this.resolution);
+				this.unstarted[index] = true;
 			}
 
-			Arrays.fill(this.unstarted, true);
 			clear(RenderSystem.getDevice().createCommandEncoder());
-			Vitrail.logger().info("Shadow map allocated at {}x{}, depth and {} colour targets: {}",
-					this.resolution, this.resolution, COLOURS, describe());
+			Vitrail.logger().info("Shadow map allocated at {}x{}, storing the forward depth window, "
+					+ "with {}", this.resolution, this.resolution, describe());
 
 			return true;
 		} catch (RuntimeException e) {
@@ -249,10 +265,15 @@ final class ShadowTargets {
 
 	/** Each colour target's format and whether the pack keeps it, for the allocation's own line. */
 	private String describe() {
-		return IntStream.range(0, COLOURS)
-				.mapToObj(index -> "shadowcolor" + index + " as " + this.formats.get(index)
-						+ (this.asked.get(index).clear() ? "" : ", which the pack keeps between frames"))
-				.collect(Collectors.joining(", "));
+		StringBuilder text = new StringBuilder();
+		for (int index = 0; index < COLOURS; index++) {
+			text.append(index == 0 ? "" : " and ")
+					.append("shadowcolor").append(index)
+					.append(" as ").append(this.formats.get(index))
+					.append(this.asked.get(index).clear() ? "" : ", which the pack keeps between frames");
+		}
+
+		return text.toString();
 	}
 
 	/**
@@ -322,7 +343,13 @@ final class ShadowTargets {
 		return this.resolution;
 	}
 
-	/** What a colour is allocated in, known from the directives before anything is allocated. */
+	/**
+	 * What a colour is allocated in, read off the directives and settled before any image exists.
+	 * A pipeline names the format of the attachment it will be bound against and is built where the
+	 * program is, which can be earlier in the session than the first {@link #ensure}, so this
+	 * answers whether or not anything has been allocated - and for no index the light cannot draw
+	 * into, the caller taking its own from {@code DrawBuffers.shadowColours}.
+	 */
 	GpuFormat format(int index) {
 		return this.formats.get(index);
 	}

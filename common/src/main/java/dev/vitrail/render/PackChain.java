@@ -250,7 +250,7 @@ public final class PackChain {
 		// runs while the client is still starting up, off the render thread.
 		this.targets = new ColorTargets(chain.targets(), values.noiseResolution(),
 				values.noiseImage(), values.packImages(), values.shadowResolution(),
-				values.shadowColours(ShadowTargets.COLOURS));
+				values.shadowColours());
 		this.seed = chain.chain().seed()
 				.filter(where -> this.targets.has(where.target()))
 				.map(where -> new SceneSeed(where, this.targets.format(where.target()),
