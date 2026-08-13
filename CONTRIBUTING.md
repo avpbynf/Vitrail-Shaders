@@ -6,8 +6,11 @@
 onto `main` and fast-forward. The history is linear and carries no merge commit at all. There is no
 release branch.
 
-Nothing has been released and there are no tags yet, so there is no naming convention to
-follow. The target Minecraft version is in the artifact name.
+A tag is `v` followed by whatever `mod_version` in `gradle.properties` holds, and that line
+is where the version lives. Nothing derives one from the other: a human types the tag, and
+the release workflow refuses it when the two disagree rather than publishing a jar named
+after one and built from the other. The target Minecraft version is in the artifact name
+and comes from the same file.
 
 ## Commits
 
@@ -117,6 +120,25 @@ pushes.
 
 ## Publishing
 
-Not set up yet. When it is, it will need the Modrinth and CurseForge project ids, a
-changelog and the tag convention to generate it from, and a check that the built jar
-declares the right Minecraft and loader ranges.
+Pushing a tag is what publishes. Bump `mod_version` in `gradle.properties`, land that
+commit on `main` the way every other commit lands, push `main`, then tag that commit
+`v` plus the same version and push the tag. The order matters: a tag push carries its
+own objects and nothing else, so tagging before the branch is pushed publishes a commit
+that is on no branch.
+
+`.github/workflows/release.yml` takes it from there. It runs the same `gradlew build`
+anyone runs, then creates a GitHub release under the tag's own name and attaches the jar
+that build produced, so what is downloaded is what this history compiles rather than what
+a machine had lying in `build/libs`.
+
+A version carrying an identifier after a dash, `0.2.0-rc.1` and the like, is published
+as a pre-release. One without is published as a release.
+
+The release body is GitHub's own generated notes, which list merged pull requests and
+new contributors and end on a changelog link. This history is rebased and fast-forwarded
+rather than merged through pull requests, so those lists are usually empty, and the first
+release has no earlier one to compare against and gets a link over the whole history
+instead. Which is to say: a release worth reading is one whose body was written by hand
+afterwards.
+
+Nothing else is automated, and nothing is uploaded anywhere else.
