@@ -2,20 +2,23 @@
 # a failure here is reproducible in one command rather than something only the runner knows how to
 # provoke.
 #
-# It does not run on its own yet. The check is local for now, before a push rather than after one,
-# and this stays here to be launched by hand and to be ready the day the remote should have the
-# say as well: uncomment the two triggers below and it takes over.
+# The local check comes first and always did: a contributor runs the build before pushing, and this
+# is the same one. What the remote adds is the case the local check cannot cover, a pull request from
+# somebody whose machine nobody here has seen.
 #
-# The first run will be slow whenever that happens, since ModDevGradle has to fetch Minecraft and
-# decompile it before a single source file is compiled. The cache the setup step keeps makes the
-# later ones ordinary.
+# A tag does not come through here. release.yml runs the same build itself, before it publishes, so
+# routing tags through this file as well would build the same tree twice.
+#
+# The first run on a fresh cache is slow, since ModDevGradle has to fetch Minecraft and decompile it
+# before a single source file is compiled. The cache the setup step keeps makes the later ones
+# ordinary.
 
 name: build
 
 on:
-  # push:
-  #   branches: [main]
-  # pull_request:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:

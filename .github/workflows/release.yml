@@ -1,0 +1,106 @@
+# A tag is the only thing here that publishes anything, and it publishes what this history builds
+# rather than what a machine happened to have in build/libs.
+#
+# The version lives in one place, mod_version in gradle.properties, which neoforge.mods.toml
+# interpolates. A tag name repeats it, because a human types it, and the run compares the two and
+# stops before anything is uploaded when they disagree: that is the one mistake that would otherwise
+# ship a jar under a version number nothing inside it agrees with.
+#
+# The jar is found rather than named. Its name is built out of archivesName and archiveVersion in
+# neoforge/build.gradle, and spelling it a second time here would be a second home for it, out of
+# step from whichever of the two moved first.
+
+name: release
+
+on:
+  push:
+    tags:
+      # A digit after the v, so that a marker tag beginning with that letter is refused here rather
+      # than by the check below, which would have queued a runner and checked the tree out first.
+      - "v[0-9]*"
+
+# Creating a release and attaching a file to it is a write, and it is the only one asked for.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Read out of gradle.properties rather than asked of Gradle, so that a tag that disagrees
+      # fails before Minecraft is decompiled rather than after.
+      - name: Check the tag against the version
+        id: version
+        run: |
+          # Spaces around the separator and a colon in place of the equals are both legal in a
+          # properties file and both accepted by Gradle, so reading only one spelling would report
+          # a line that is right there as missing.
+          version="$(sed -n 's/^[[:space:]]*mod_version[[:space:]]*[=:][[:space:]]*//p' \
+            gradle.properties | tr -d '[:space:]')"
+          tagged="${GITHUB_REF_NAME#v}"
+
+          # Told apart from a mismatch on purpose: an empty answer means the line was renamed,
+          # commented out or moved, and reporting that as a bad tag sends whoever reads it to the
+          # wrong file.
+          if [ -z "$version" ]; then
+            echo "::error::gradle.properties has no mod_version line"
+            exit 1
+          fi
+
+          if [ "$tagged" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME names $tagged and gradle.properties names $version"
+            exit 1
+          fi
+
+          # What marks a release as a pre-release is the version itself: an identifier after a dash
+          # is what 0.1.0-alpha.1 has and what a finished version does not.
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # The same gradlew build a contributor runs. What it refuses is whatever build.gradle refuses
+      # on the day this runs.
+      - run: ./gradlew build
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          glob="build/libs/vitrail-neoforge-*.jar"
+          shopt -s nullglob
+          jars=($glob)
+          if [ ${#jars[@]} -ne 1 ]; then
+            # Naming the pattern and listing the directory, because the way this fails is a rename
+            # in neoforge/build.gradle, and "found 0" beside a folder that visibly holds a jar sends
+            # whoever reads it looking for a build that did not happen.
+            echo "::error::$glob matched ${#jars[@]} files, and build/libs holds: $(ls build/libs)"
+            exit 1
+          fi
+
+          # Creating refuses a tag that already carries a release, so a re-run of a job that died
+          # after the release was made would have no way back other than deleting a public release.
+          # Uploading over it is that way back, and the edit is what finishes the job the dead run
+          # left half done: creating with an asset makes the release a draft and publishes it only
+          # once the upload lands, so without this line a re-run would end green on a release
+          # nobody can see. It costs nothing on a release that is already published.
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${jars[0]}" --clobber
+            gh release edit "$GITHUB_REF_NAME" --draft=false
+          else
+            gh release create "$GITHUB_REF_NAME" "${jars[0]}" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes \
+              --prerelease="$PRERELEASE"
+          fi
