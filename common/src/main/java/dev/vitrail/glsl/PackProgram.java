@@ -322,11 +322,20 @@ public final class PackProgram {
 	 * @param inputs which of the two terrain contracts the stages are written against, which is
 	 *               where the pack's {@code separateAo} lands. Handed in rather than read off the
 	 *               properties here: the caller already holds the pack's own reading of that
-	 *               directive, and two readings of one directive are two answers waiting to disagree
+	 *               directive, and two readings of one directive are two answers waiting to disagree.
+	 *               It has to be one of the two, and that is checked rather than trusted: a constant
+	 *               of another family would translate all six chunk passes against a prologue built
+	 *               for another mesh, which declares other names and would be found out by nothing
+	 *               short of the picture
 	 */
 	public static Map<TerrainPass, Loaded> loadTerrain(Path packPath, String place,
 			Map<String, OptionValue> chosen, String profile, VertexInputs inputs)
 			throws IOException {
+		if (!inputs.terrain()) {
+			throw new IllegalArgumentException("The chunk passes are drawn from Sodium's own mesh, so "
+					+ inputs + " is not one of the contracts they may be written against");
+		}
+
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
 			ShaderProperties properties = ShaderProperties.parse(source);
