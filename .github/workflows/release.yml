@@ -9,6 +9,12 @@
 # The jar is found rather than named. Its name is built out of archivesName and archiveVersion in
 # neoforge/build.gradle, and spelling it a second time here would be a second home for it, out of
 # step from whichever of the two moved first.
+#
+# **CurseForge is mirrored from HERE and not from a workflow of its own**, and that is not a matter
+# of taste. A release this job creates is authored by the token the job runs under, and a release
+# published by that token starts no further workflow at all, so a file listening for the release
+# event would never wake. The other half of the reason is cheaper: one job means one build, and what
+# CurseForge serves is then the same bytes GitHub serves.
 
 name: release
 
@@ -18,6 +24,14 @@ on:
       # A digit after the v, so that a marker tag beginning with that letter is refused here rather
       # than by the check below, which would have queued a runner and checked the tree out first.
       - "v[0-9]*"
+  # For a release already out. The changelog CurseForge is given is the release body as it stands
+  # when the run starts, so a body written by hand after the tag was pushed reaches CurseForge by
+  # running this again on that tag, and by no other road.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of a release already out, to build and send again
+        required: true
 
 # Creating a release and attaching a file to it is a write, and it is the only one asked for.
 permissions:
@@ -28,7 +42,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Settle which tag is being released
+        id: which
+        env:
+          DISPATCHED: ${{ inputs.tag }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$DISPATCHED"
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.which.outputs.tag }}
 
       - uses: actions/setup-java@v4
         with:
@@ -41,13 +69,15 @@ jobs:
       # fails before Minecraft is decompiled rather than after.
       - name: Check the tag against the version
         id: version
+        env:
+          TAG: ${{ steps.which.outputs.tag }}
         run: |
           # Spaces around the separator and a colon in place of the equals are both legal in a
           # properties file and both accepted by Gradle, so reading only one spelling would report
           # a line that is right there as missing.
           version="$(sed -n 's/^[[:space:]]*mod_version[[:space:]]*[=:][[:space:]]*//p' \
             gradle.properties | tr -d '[:space:]')"
-          tagged="${GITHUB_REF_NAME#v}"
+          tagged="${TAG#v}"
 
           # Told apart from a mismatch on purpose: an empty answer means the line was renamed,
           # commented out or moved, and reporting that as a bad tag sends whoever reads it to the
@@ -58,7 +88,7 @@ jobs:
           fi
 
           if [ "$tagged" != "$version" ]; then
-            echo "::error::tag $GITHUB_REF_NAME names $tagged and gradle.properties names $version"
+            echo "::error::tag $TAG names $tagged and gradle.properties names $version"
             exit 1
           fi
 
@@ -73,10 +103,8 @@ jobs:
       # on the day this runs.
       - run: ./gradlew build
 
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+      - name: Find the jar
+        id: jar
         run: |
           glob="build/libs/vitrail-neoforge-*.jar"
           shopt -s nullglob
@@ -89,18 +117,77 @@ jobs:
             exit 1
           fi
 
+          echo "path=${jars[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish on GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          TAG: ${{ steps.which.outputs.tag }}
+          JAR: ${{ steps.jar.outputs.path }}
+        run: |
           # Creating refuses a tag that already carries a release, so a re-run of a job that died
           # after the release was made would have no way back other than deleting a public release.
           # Uploading over it is that way back, and the edit is what finishes the job the dead run
           # left half done: creating with an asset makes the release a draft and publishes it only
           # once the upload lands, so without this line a re-run would end green on a release
-          # nobody can see. It costs nothing on a release that is already published.
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${jars[0]}" --clobber
-            gh release edit "$GITHUB_REF_NAME" --draft=false
+          # nobody can see. It costs nothing on a release that is already published, and it is the
+          # path a dispatched run ordinarily takes. Ordinarily and not always: dispatched on a tag
+          # that carries no release, this makes one, which is the same thing the tag push would
+          # have done and is why it is not guarded against.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$JAR" --clobber
+            gh release edit "$TAG" --draft=false
           else
-            gh release create "$GITHUB_REF_NAME" "${jars[0]}" \
-              --title "$GITHUB_REF_NAME" \
+            gh release create "$TAG" "$JAR" \
+              --title "$TAG" \
               --generate-notes \
               --prerelease="$PRERELEASE"
           fi
+
+          # Read back rather than remembered, so that a dispatched run sends whatever the body says
+          # now instead of what it said when the tag went out.
+          gh release view "$TAG" --json body --jq .body > changelog.md
+
+      - name: Is the mirror configured
+        id: mirror
+        env:
+          CURSEFORGE_ID: ${{ secrets.CURSEFORGE_ID }}
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          if [ -z "$CURSEFORGE_ID" ] || [ -z "$CURSEFORGE_TOKEN" ]; then
+            echo "::notice::CURSEFORGE_ID or CURSEFORGE_TOKEN is not set, so nothing is mirrored"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Every flag the uploaded file needs is given rather than left to be inferred. The two that
+      # were learned the hard way on another mod of this account, each added in a commit of its own
+      # after a first upload had gone out without them, are `environment` and `java`.
+      #
+      # Two are left to the action on purpose, and both read the jar rather than this file.
+      #
+      # The version type: the action takes the version out of the jar's own metadata, falling back
+      # to its file name, and tells an alpha from a beta from a release there. A rule written here
+      # would have to keep that vocabulary in step by hand, and the string it reads is the one this
+      # job already checked the tag against.
+      #
+      # The dependencies: given no list, the action reads one out of the jar's own
+      # neoforge.mods.toml, so Sodium and Chloride go up as relations of the FILE as well, beside
+      # whatever Default Relations the project itself carries. Their names there are the mod ids,
+      # and a name CurseForge does not know is dropped after a failed attempt rather than failing
+      # the upload, which is why the project's own relations are the ones to rely on.
+      - name: Mirror to CurseForge
+        if: steps.mirror.outputs.configured == 'true'
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          curseforge-id: ${{ secrets.CURSEFORGE_ID }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: ${{ steps.jar.outputs.path }}
+          name: ${{ steps.which.outputs.tag }}
+          changelog-file: changelog.md
+          loaders: neoforge
+          game-versions: "26.2"
+          environment: client
+          java: 25

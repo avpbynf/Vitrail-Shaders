@@ -132,6 +132,25 @@ anyone runs, then creates a GitHub release under the tag's own name and attaches
 that build produced, so what is downloaded is what this history compiles rather than what
 a machine had lying in `build/libs`.
 
+The same job then mirrors it to CurseForge, which is why there is no second workflow: a
+release this one creates is authored by the token it runs under, and such a release starts
+no further workflow, so a file listening for it would never wake. The mirror needs two
+secrets set in the repository settings, `CURSEFORGE_ID` and `CURSEFORGE_TOKEN`, and without
+either it says so and ends green rather than failing a release over it. The id is not a
+secret in any real sense - it is on the project's own page - and it lives there only so that
+both halves of the same configuration are found in the same place.
+
+The release body is what CurseForge is given as the changelog, read back at the moment the
+run reaches it. A body written by hand after the tag went out therefore reaches CurseForge
+by running the workflow again on that tag, from the Actions tab, and by no other road.
+
+**Run it once for a given tag.** A second run rebuilds the same tag, and the archives here
+are built to be reproducible, so it offers CurseForge a file whose hash it already holds;
+CurseForge rejects a duplicate at processing while the run itself still ends green, which
+means a changelog corrected on the second attempt quietly never lands. On the GitHub side
+the same run replaces the asset rather than adding one, which resets what the old asset had
+counted.
+
 A version carrying an identifier after a dash, `0.2.0-rc.1` and the like, is published
 as a pre-release. One without is published as a release.
 
@@ -142,4 +161,4 @@ the link alone: the first release came out that way. Which is to say: a release 
 reading is one whose body is written by hand afterwards, which the release page takes
 without rebuilding anything.
 
-Nothing else is automated, and nothing is uploaded anywhere else.
+GitHub and CurseForge are the two places a build goes, and nothing else is automated.
