@@ -209,7 +209,8 @@ final class ColorTargets {
 	 * disagrees with itself, and that shows as a plausible picture rather than as an error.
 	 */
 	ColorTargets(TargetPlan plan, int noiseResolution, NoiseTexture.Image noiseImage,
-			PackImages packImages, int shadowResolution, PackDirectives.ShadowColour shadowColour) {
+			PackImages packImages, int shadowResolution,
+			List<PackDirectives.ShadowColour> shadowColours) {
 		this.plan = plan;
 		this.packImages = packImages;
 		// The pack asks for it by directive and 256 is the default. Held rather than looked up at
@@ -219,7 +220,7 @@ final class ColorTargets {
 		// The image wins over the directive when the pack ships both: the directive sizes the
 		// generated field, and the image is uploaded as it stands, which is Iris's rule.
 		this.noiseImage = noiseImage;
-		this.shadowMap = new ShadowTargets(shadowResolution, shadowColour);
+		this.shadowMap = new ShadowTargets(shadowResolution, shadowColours);
 		this.doubled = Set.copyOf(plan.schedule().doubled());
 
 		// The format and the starting colour are read once and kept. Neither moves while a pack
@@ -475,12 +476,12 @@ final class ColorTargets {
 	}
 
 	/**
-	 * The format {@code shadowcolor0} is allocated in, which the pack may have chosen. Read by the
+	 * The format one {@code shadowcolor} is allocated in, which the pack may have chosen. Read by the
 	 * shadow pipelines: dynamic rendering wants the colour state of a pipeline to name the format of
 	 * the attachment it is bound against, so a pack asking for R8 moves both or neither.
 	 */
-	GpuFormat shadowFormat() {
-		return this.shadowMap.format();
+	GpuFormat shadowFormat(int index) {
+		return this.shadowMap.format(index);
 	}
 
 	int screenWidth() {

@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 /**
  * Everything one pack is answered with, assembled once when the pack is read.
@@ -273,9 +274,15 @@ public final class PackValues {
 				: this.state.directives().shadowDistance() * multiplier;
 	}
 
-	/** What the pack asks of {@code shadowcolor0}: its format, and what emptying it means. */
-	public PackDirectives.ShadowColour shadowColour() {
-		return this.state.directives().shadowColour(0);
+	/**
+	 * What the pack asks of each {@code shadowcolor} the light draws into: its format, and what
+	 * emptying it means. One entry a buffer, in order, and a buffer the pack said nothing about
+	 * carries Iris's own defaults rather than being left out.
+	 */
+	public List<PackDirectives.ShadowColour> shadowColours(int count) {
+		return IntStream.range(0, count)
+				.mapToObj(index -> this.state.directives().shadowColour(index))
+				.toList();
 	}
 
 	/**

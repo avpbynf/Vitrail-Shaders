@@ -13,9 +13,27 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
 /**
- * The shadow map: one depth image the world is drawn into from the light, and one colour target
+ * The shadow map: one depth image the world is drawn into from the light, and the colour targets
  * beside it.
+ * <p>
+ * <strong>Two colour targets and not one, which is Iris's own default.</strong> It opens
+ * {@code {0, 1}} for a shadow program whose draw buffers it cannot read
+ * ({@code pipeline/programs/SodiumPrograms.java:137-139}) and allocates the pair whatever the pack
+ * declares ({@code shadows/ShadowRenderTargets.java:45}, sized from
+ * {@code shaderpack/properties/PackShadowDirectives.java:19-20}). Serving nought alone was not a
+ * saving, it was a picture: Complementary writes its light shaft tint into {@code shadowcolor1}
+ * ({@code program/shadow.glsl:208-209}, under {@code SHADOW_QUALITY >= 1}, which holds at its own
+ * defaults) and its volumetric light reads that name for the density of every ray crossing something
+ * translucent ({@code lib/atmospherics/volumetricLight/volumetricLight.glsl:191-194}). Handed the
+ * white stand-in instead, the pack read {@code pow2(1.0 * 4.0)}, sixteen where its own tint gives at
+ * most about one and a half, and every body of water filled with milk - the whole screen from under
+ * the surface, the lake alone from the bank.
  * <p>
  * Square, at the resolution the pack asked for and at no other, which is the one number about this
  * stage that cannot be chosen here. A pack picks its filter radius in texels of its own map, so a
@@ -41,20 +59,35 @@ final class ShadowTargets {
 	/** Past this the pack is asking for more than any device here will give it. */
 	private static final int MAX_RESOLUTION = 16384;
 
+	/**
+	 * How many colour targets the light draws into. Iris's own number, and its ceiling of eight is
+	 * reached only by a pack asking for {@code HIGHER_SHADOWCOLOR}, a feature nothing here declares:
+	 * a pack that asks for it is being told the eight are not there, so allocating them would be
+	 * memory nothing can address.
+	 */
+	static final int COLOURS = 2;
+
 	private final int resolution;
-	private final PackDirectives.ShadowColour asked;
-	private final GpuFormat format;
-	private final Vector4fc clearColour;
+	private final List<PackDirectives.ShadowColour> asked;
+	private final List<GpuFormat> formats;
+	private final List<Vector4fc> clearColours;
 
 	/**
-	 * Whether the colour has yet to be emptied once. A pack that turns its own clear off is asking
+	 * Whether each colour has yet to be emptied once. A pack that turns its own clear off is asking
 	 * to keep what the shadow stage wrote from one frame to the next, not to read whatever the
 	 * allocation left in the image, and Iris says the same on the directive: the clear colour is
 	 * still what the buffer starts life holding.
 	 */
-	private boolean unstarted;
+	private final boolean[] unstarted = new boolean[COLOURS];
 
 	private TextureTarget target;
+
+	/**
+	 * Every colour past nought, which the depth cannot share a {@link TextureTarget} with: that class
+	 * carries one colour attachment and one depth, so the rest are images of their own, attached
+	 * beside it by whoever opens the pass.
+	 */
+	private final TargetSurface[] rest = new TargetSurface[COLOURS - 1];
 
 	/**
 	 * The map as it stood before anything translucent was drawn into it, which the OptiFine model
@@ -79,7 +112,7 @@ final class ShadowTargets {
 
 	private boolean broken;
 
-	ShadowTargets(int resolution, PackDirectives.ShadowColour asked) {
+	ShadowTargets(int resolution, List<PackDirectives.ShadowColour> asked) {
 		// Clamped rather than refused: a directive that survived a setting nobody expanded can be
 		// any number at all, and a shadow map is not worth taking the pack down for.
 		this.resolution = Math.clamp(resolution, 1, MAX_RESOLUTION);
@@ -88,17 +121,20 @@ final class ShadowTargets {
 					+ "this engine will allocate, so it is drawn at {}", resolution, this.resolution);
 		}
 
-		this.asked = asked;
-		this.format = GpuFormats.of(asked.format().used());
-		TargetDirectives.Colour colour = asked.clearColour();
+		this.asked = List.copyOf(asked);
+		this.formats = this.asked.stream().map(one -> GpuFormats.of(one.format().used())).toList();
 		// The same correction the colour targets make, and it stops where theirs stops: a format
 		// that gained an alpha channel on the way to the device starts opaque, because in GL the
 		// three component texture the pack wrote against always sampled as one and the promoted
 		// image returns what is really there - but a pack that named a clear colour itself wrote
 		// four components and is handed the four it wrote. Forcing the alpha over the pack's own
 		// value would be this engine overruling it on a channel it was explicit about.
-		this.clearColour = new Vector4f(colour.r(), colour.g(), colour.b(),
-				asked.format().alphaAdded() && !asked.declaresClearColour() ? 1.0F : colour.a());
+		this.clearColours = this.asked.stream().map(one -> {
+			TargetDirectives.Colour colour = one.clearColour();
+
+			return (Vector4fc) new Vector4f(colour.r(), colour.g(), colour.b(),
+					one.format().alphaAdded() && !one.declaresClearColour() ? 1.0F : colour.a());
+		}).toList();
 	}
 
 	/**
@@ -128,12 +164,16 @@ final class ShadowTargets {
 			// One object for both, so that the colour and the depth cannot part company on a size:
 			// they are attachments of one render pass and one render pass has one render area.
 			this.target = new TextureTarget("Vitrail shadow", this.resolution, this.resolution, true,
-					this.format);
-			this.unstarted = true;
+					this.formats.get(0));
+			for (int index = 1; index < COLOURS; index++) {
+				this.rest[index - 1] = new TargetSurface("Vitrail shadowcolor" + index,
+						this.formats.get(index), false, this.resolution, this.resolution);
+			}
+
+			Arrays.fill(this.unstarted, true);
 			clear(RenderSystem.getDevice().createCommandEncoder());
-			Vitrail.logger().info("Shadow map allocated at {}x{}, depth and shadowcolor0 as {}{}",
-					this.resolution, this.resolution, this.format,
-					this.asked.clear() ? "" : ", which the pack keeps between frames");
+			Vitrail.logger().info("Shadow map allocated at {}x{}, depth and {} colour targets: {}",
+					this.resolution, this.resolution, COLOURS, describe());
 
 			return true;
 		} catch (RuntimeException e) {
@@ -173,15 +213,46 @@ final class ShadowTargets {
 			return;
 		}
 
-		if (this.asked.clear() || this.unstarted) {
-			this.unstarted = false;
-			encoder.clearColorAndDepthTextures(this.target.getColorTexture(), this.clearColour,
+		// Each buffer takes its own directive, which is why this is a loop and not one test: Mellow
+		// asks for nought to be kept between frames and says nothing about one, and a pack may say
+		// the opposite. The depth rides on nought because they are one object here, and it is
+		// emptied whichever way that directive reads.
+		if (wanted(0)) {
+			encoder.clearColorAndDepthTextures(this.target.getColorTexture(), this.clearColours.get(0),
 					this.target.getDepthTexture(), FAR);
-
-			return;
+		} else {
+			encoder.clearDepthTexture(this.target.getDepthTexture(), FAR);
 		}
 
-		encoder.clearDepthTexture(this.target.getDepthTexture(), FAR);
+		for (int index = 1; index < COLOURS; index++) {
+			TargetSurface surface = this.rest[index - 1];
+			if (surface != null && wanted(index)) {
+				encoder.clearColorTexture(surface.texture(), this.clearColours.get(index));
+			}
+		}
+	}
+
+	/**
+	 * Whether this buffer is emptied on this frame: because the pack asks for it every frame, or
+	 * because nothing has ever written it and what a fresh allocation holds is not a value a pack
+	 * asked to keep.
+	 */
+	private boolean wanted(int index) {
+		if (this.asked.get(index).clear() || this.unstarted[index]) {
+			this.unstarted[index] = false;
+
+			return true;
+		}
+
+		return false;
+	}
+
+	/** Each colour target's format and whether the pack keeps it, for the allocation's own line. */
+	private String describe() {
+		return IntStream.range(0, COLOURS)
+				.mapToObj(index -> "shadowcolor" + index + " as " + this.formats.get(index)
+						+ (this.asked.get(index).clear() ? "" : ", which the pack keeps between frames"))
+				.collect(Collectors.joining(", "));
 	}
 
 	/**
@@ -228,21 +299,32 @@ final class ShadowTargets {
 	}
 
 	/**
-	 * A shadow colour target, or null. Only nought exists; the rest are named so that a pack reading
-	 * {@code shadowcolor1} is answered with a constant and said out loud rather than being handed
-	 * nought's image, which would be a picture that is plausible and wrong.
+	 * A shadow colour target, or null past the pair this engine allocates. Never nought's image under
+	 * another name: a pack reading a buffer nothing filled has to read the clear colour, which is
+	 * white and which it multiplies by, where nought's image would be a picture that is plausible and
+	 * wrong.
 	 */
 	GpuTextureView colour(int index) {
-		return index == 0 && this.target != null ? this.target.getColorTextureView() : null;
+		if (index < 0 || index >= COLOURS) {
+			return null;
+		}
+
+		if (index == 0) {
+			return this.target == null ? null : this.target.getColorTextureView();
+		}
+
+		TargetSurface surface = this.rest[index - 1];
+
+		return surface == null ? null : surface.view();
 	}
 
 	int resolution() {
 		return this.resolution;
 	}
 
-	/** What the colour is allocated in, known from the directives before anything is allocated. */
-	GpuFormat format() {
-		return this.format;
+	/** What a colour is allocated in, known from the directives before anything is allocated. */
+	GpuFormat format(int index) {
+		return this.formats.get(index);
 	}
 
 	void release() {
@@ -250,6 +332,13 @@ final class ShadowTargets {
 		if (this.target != null) {
 			this.target.destroyBuffers();
 			this.target = null;
+		}
+
+		for (int index = 1; index < COLOURS; index++) {
+			if (this.rest[index - 1] != null) {
+				this.rest[index - 1].close();
+				this.rest[index - 1] = null;
+			}
 		}
 
 		if (this.noTranslucentsView != null) {

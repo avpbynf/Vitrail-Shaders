@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
 /**
  * One program the pack draws a pass of the world's own geometry with, in place of the shader the
@@ -240,6 +241,18 @@ final class GeometryProgram {
 	 */
 	private final List<Slot> slots;
 
+	/**
+	 * Which {@code shadowcolor} each output of a shadow pass lands in, in output order. Empty for
+	 * every pass drawn from the camera.
+	 * <p>
+	 * The list is the program's own draw buffers, which follow the branches the settings took, and
+	 * {@code {0, 1}} where it declares none, which is Iris's answer to the same silence
+	 * ({@code pipeline/SodiumPrograms.java:137-139}). An entry past the pair this engine allocates
+	 * keeps its rank as an unused slot rather than being dropped: dropping it would slide every
+	 * output after it one buffer down, and Reverie declares {@code RENDERTARGETS:0,2,1}.
+	 */
+	private final List<Integer> shadowColours;
+
 	/** Whether draw buffer nought goes to the pack rather than to the game. The constructor says why. */
 	private final boolean ownsFirst;
 
@@ -403,6 +416,9 @@ final class GeometryProgram {
 				? List.copyOf(writes)
 				: writes.size() < 2 ? List.of() : List.copyOf(writes.subList(1, writes.size()));
 		this.slots = pass.shadow() ? List.of() : attachments(targets, outputs);
+		this.shadowColours = pass.shadow()
+				? shadowColours(loaded.program().stages().get(ProgramStage.FRAGMENT).drawBuffers())
+				: List.of();
 
 		// Said here rather than in announce(), because it is a property of the text and not of a
 		// frame, and because what it costs is invisible: the pass then draws exactly as it did
@@ -500,11 +516,18 @@ final class GeometryProgram {
 		// form writes slot nought every time, so three calls would leave one state and a pipeline
 		// the pass refuses to bind, by name and in the middle of the world.
 		if (pass.shadow()) {
-			// One attachment, shadowcolor0, whatever the pack's draw buffers say. A shadow program
-			// writing more than that has its later outputs written nowhere, which announce() says.
-			// The format is the map's own and not a constant: Mellow asks for R8 there, and a state
-			// naming four channels against a one channel attachment is the pipeline refusing to bind.
-			builder.withColorTargetState(0, state(targets.shadowFormat()));
+			// One state per shadowcolor the program's own draw buffers name, in their order. The
+			// format is each buffer's own and not a constant: Mellow asks for R8 on nought, and a
+			// state naming four channels against a one channel attachment is the pipeline refusing
+			// to bind.
+			for (int slot = 0; slot < this.shadowColours.size(); slot++) {
+				int index = this.shadowColours.get(slot);
+				if (index >= ShadowTargets.COLOURS) {
+					builder.withUnusedColorTargetState(slot);
+				} else {
+					builder.withColorTargetState(slot, state(targets.shadowFormat(index)));
+				}
+			}
 		} else {
 			for (int slot = 0; slot < this.slots.size(); slot++) {
 				Slot one = this.slots.get(slot);
@@ -873,17 +896,40 @@ final class GeometryProgram {
 	 * the shadow programs writing over the world.
 	 */
 	private RenderPassDescriptor shadowDescriptor() {
-		GpuTextureView colour = this.shadow.colour(0);
 		GpuTextureView depth = this.shadow.depth();
-		if (colour == null || depth == null) {
+		if (depth == null) {
 			return null;
 		}
 
-		return RenderPassDescriptor.create(() -> SHADOW_LABEL)
-				.withColorAttachment(colour)
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> SHADOW_LABEL);
+		for (int index : this.shadowColours) {
+			// One attachment per state the pipeline carries, and in the same order: the two counts
+			// are settled together at load, so an unused rank here is the one the pipeline left
+			// unused as well.
+			GpuTextureView colour = index >= ShadowTargets.COLOURS ? null : this.shadow.colour(index);
+			if (colour == null) {
+				descriptor.withUnusedColorAttachment();
+				continue;
+			}
+
+			descriptor.withColorAttachment(colour);
+		}
+
+		return descriptor
 				.withDepthAttachment(depth)
 				.withRenderArea(new RenderPass.RenderArea(0, 0, this.shadow.resolution(),
 						this.shadow.resolution()));
+	}
+
+	/**
+	 * Which {@code shadowcolor} each output of a shadow program lands in. See the field this fills.
+	 */
+	private static List<Integer> shadowColours(List<Integer> declared) {
+		if (declared.isEmpty()) {
+			return IntStream.range(0, ShadowTargets.COLOURS).boxed().toList();
+		}
+
+		return declared.stream().limit(ColorTargetState.MAX_COLOR_TARGETS).toList();
 	}
 
 	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */
@@ -1350,12 +1396,17 @@ final class GeometryProgram {
 
 		if (this.pass.shadow()) {
 			Vitrail.logger().info("It draws into the shadow map, {}x{}, storing the forward depth "
-					+ "window, and into shadowcolor0", this.shadow.resolution(),
-					this.shadow.resolution());
-			if (outputs > 1) {
-				Vitrail.logger().warn("{} declares {} fragment outputs and this engine gives the "
-						+ "shadow pass one, so all but the first are written nowhere", this.path,
-						outputs);
+					+ "window, and into {}", this.shadow.resolution(), this.shadow.resolution(),
+					this.shadowColours.stream()
+							.map(index -> index >= ShadowTargets.COLOURS
+									? "nothing, this engine allocating " + ShadowTargets.COLOURS
+											+ " shadow colour targets"
+									: "shadowcolor" + index)
+							.toList());
+			if (outputs > this.shadowColours.size()) {
+				Vitrail.logger().warn("{} declares {} fragment outputs and its draw buffers name {}, "
+						+ "so the ones past the last are written nowhere", this.path, outputs,
+						this.shadowColours.size());
 			}
 		} else if (this.ownsFirst) {
 			// Nought included, and the log says the sides because they are the whole fix: a write on
