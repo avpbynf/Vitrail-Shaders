@@ -17,8 +17,9 @@
 </p>
 
 <p align="center">
-  <b>This is experimental.</b> The Vulkan backend is marked experimental by the game itself, and
-  Vitrail does not yet draw the whole frame through your pack.<br>
+  <b>An experiment, and a side project by one person.</b> The Vulkan backend is marked
+  experimental by the game itself, and Vitrail does not yet draw the whole frame through your
+  pack.<br>
   Packs load and run; they do not yet look entirely like themselves.
 </p>
 
@@ -50,6 +51,12 @@ that renderer.
 Vitrail keeps the two sides compatible while that changes. It loads existing
 OptiFine-format packs, unmodified, on the Vulkan backend, so that turning Vulkan
 on does not mean giving up the packs you already use.
+
+It is a side project by one person, and it started as a question: whether packs
+written for OpenGL over more than a decade could be made to run, untouched, on the
+renderer that now ships with the game. The answer turned out to be yes, well enough
+to play with. Take it in that spirit - a working experiment, not a product with a
+team behind it.
 
 ## Status
 
@@ -203,9 +210,9 @@ dies on the first frame. This is not something Vitrail can work around.
 
 ## Contributing
 
-Open an issue before writing anything substantial. The work is ordered by risk,
-and code that lands ahead of what can be verified is hard to accept however
-good it is.
+Open an issue before writing anything substantial. I order the work by risk, and
+code that lands ahead of what can be verified is hard to accept however good it
+is.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the rest and is short. Two of its rules
 bite people who skip it: files are UTF-8 without a BOM everywhere, because a BOM
