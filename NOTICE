@@ -184,9 +184,8 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/pack/target/SamplerPlan.java is where depthtex2 is told from
   depthtex1 for it.
   Three things in this entry are not transcriptions, and the files write each of them out. The
-  image is allocated with the hand family, which is off by default here where Iris draws the hand
-  inside the level for every pack it loads, so on a default install nothing below is ever paid at
-  all. It is handed back with that family, and it is filled only on the frames a hand is really
+  image is allocated with the hand family and handed back with it, so a session that switches the
+  family off pays nothing for it at all. It is filled only on the frames a hand is really
   drawn rather than on every frame; a frame that draws none leaves the two
   moments holding the same depth, and depthtex2 is answered from the opaque copy instead. Iris
   rebuilds its own on a resize or a depth format change, net.irisshaders.iris.targets.RenderTargets

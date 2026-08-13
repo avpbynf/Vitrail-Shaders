@@ -56,13 +56,13 @@ which covers the mobs and the block entities alike, and the player's own hand. A
 settings screen reads the pack's own menu layout, and a resource pack's normal
 and specular maps are served beside the blocks they belong to.
 
-Two limits ride with the last two of those. Entity geometry reaches the pack
-with no material id of its own, so a pack that sorts its pixels by material can
-read a mob as something else; and a hand holding a translucent block draws that
-block with a blending pipeline this engine serves for no family yet, so the arm
-becomes the pack's while the block it holds stays the game's. The hand is also
-still drawn at the moment the game gives it, which is after the pack's chain,
-so it is lit by the pack and painted over an image the pack has finished.
+Two limits ride with the last two of those. Entity geometry reaches the pack with
+its identifiers held constant - the material id, and the ones naming a mob type, a
+block entity type or the item in hand - so a pack that branches on any of them takes
+the same branch for every draw and can read a mob as something else entirely. And a
+hand holding a translucent block draws that block with a blending pipeline this
+engine serves for no family yet, so the arm becomes the pack's while the block it
+holds stays the game's.
 
 The End's sky has no answer at all: the overworld's own elements go through the
 pack and the End's do not. Neither do the smaller families that stay the game's

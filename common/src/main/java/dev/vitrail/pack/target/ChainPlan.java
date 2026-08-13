@@ -325,7 +325,7 @@ public final class ChainPlan {
 	 * moved on its own and everything else left at its default: read as defaults instead,
 	 * {@code terrain=off} leaves
 	 * twenty-five true notes unsaid, {@code particles=off} nine and {@code seed=off} six, and
-	 * {@code entities=on} holds out of the map a family that really draws, which no pack of the
+	 * {@code entities=off} keeps in the map a family that no longer draws, which no pack of the
 	 * corpus is caught by and which is therefore the same failure waiting rather than a second one.
 	 *
 	 * @param terrain   whether the pack's own terrain program draws the world's opaque chunks. Off,
@@ -440,7 +440,7 @@ public final class ChainPlan {
 		// alone, and asking the line rather than its default is why this method is handed the
 		// switches at all. Measured on the corpus, each line moved on its own: reading the defaults
 		// instead leaves twenty-five true notes unsaid under terrain=off, nine under particles=off
-		// and six under seed=off, and holds the entities out of the map wherever entities=on is
+		// and six under seed=off, and keeps the entities in the map wherever entities=off is
 		// written, which no pack of the corpus is caught by.
 		//
 		// It is measured rather than argued, and the measurement is a trade rather than a clean win.

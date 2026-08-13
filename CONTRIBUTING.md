@@ -120,11 +120,12 @@ pushes.
 
 ## Publishing
 
-Pushing a tag is what publishes. Bump `mod_version` in `gradle.properties`, land that
-commit on `main` the way every other commit lands, push `main`, then tag that commit
-`v` plus the same version and push the tag. The order matters: a tag push carries its
-own objects and nothing else, so tagging before the branch is pushed publishes a commit
-that is on no branch.
+Pushing a tag is what publishes. Rewrite the pack table at the head of
+[docs/compatibility.md](docs/compatibility.md) against whatever has been seen since the
+last one, bump `mod_version` in `gradle.properties`, land those commits on `main` the way
+every other commit lands, push `main`, then tag that commit `v` plus the same version and
+push the tag. The order matters: a tag push carries its own objects and nothing else, so
+tagging before the branch is pushed publishes a commit that is on no branch.
 
 `.github/workflows/release.yml` takes it from there. It runs the same `gradlew build`
 anyone runs, then creates a GitHub release under the tag's own name and attaches the jar
@@ -136,7 +137,9 @@ as a pre-release. One without is published as a release.
 
 The release body is GitHub's own generated notes, which list merged pull requests and
 new contributors and end on a changelog link. This history is rebased and fast-forwarded
-rather than merged through pull requests, so those lists are usually empty. Which is to
-say: a release worth reading is one whose body was written by hand afterwards.
+rather than merged through pull requests, so those lists are empty and the body arrives as
+the link alone: the first release came out that way. Which is to say: a release worth
+reading is one whose body is written by hand afterwards, which the release page takes
+without rebuilding anything.
 
 Nothing else is automated, and nothing is uploaded anywhere else.

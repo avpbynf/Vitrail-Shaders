@@ -168,8 +168,11 @@ already been through all of that once.
 
 **The seeded image has no geometry information.** There is no normal and no material id behind
 those pixels, only colour. Passes that classify pixels by material read whatever the clear left in
-those channels, which is why a mob can be treated as a surface to fog by a pack whose water
-composites work that way.
+those channels, which is why a family that comes in this way can be treated as a surface to fog by
+a pack whose water composites work that way. That is the seed's own version of the symptom, and it
+applies to a family only for as long as the seed is its road in - a mob served by the pack's own
+program takes a different one, with a fault of its own described in
+[pack compatibility](compatibility.md).
 
 **A pixel the pack's own terrain has covered must not be seeded over.** That is what the coverage
 mask is for: it is compared against the depth left by the pack's own geometry, so a pixel the pack
@@ -185,10 +188,10 @@ trip through eight bits a channel for the albedo, and what it buys is every othe
 is where a pack keeps the normal and the material it lights an entity by.
 
 So a flat, unlit mob is not a mask bug, and before reading it as one, check which of two things you
-are looking at. The commoner by far is that the family is **off by default**: it is turned on with
-`entities=on` in `vitrail/options.txt`, and with it off every entity comes straight from the
-game's shader. With it on, an entity that still looks flat is one the pack's own program did not
-reach - the log names the reason at the moment it happens. Neither case is the coverage mask.
+are looking at. The family goes through the pack out of the box, so the first question is whether
+somebody wrote `entities=off` in `vitrail/options.txt`, which hands every entity straight back to
+the game's shader. Failing that, an entity that still looks flat is one the pack's own program did
+not reach - the log names the reason at the moment it happens. Neither case is the coverage mask.
 
 Which target is seeded is the first draw buffer of the pass that draws the terrain, resolved through
 the fallback tree, and it is not always target zero: one pack of the corpus serves its terrain
@@ -212,7 +215,7 @@ paints it straight onto the finished, tone mapped image. No seam catches it, bec
 seam left. A layer of the kind above cannot help either - what it would catch is a hand that has
 already been lit by the game's shader over an image the pack finished.
 
-So with `hand=on` the engine does not intercept the hand, it **moves** it. The game's own submission
+So the engine does not intercept the hand, it **moves** it. The game's own submission
 is suppressed and the hand is submitted twice from inside the level: the solid pass among the game's
 opaque features, before the deferred stage, and the blending pass at the end of the world, before
 the composites. Where each lands is what decides which half of every target it writes, and both are

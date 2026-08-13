@@ -1,5 +1,27 @@
 # Pack compatibility
 
+## The packs this engine is measured against
+
+These are the packs development runs against, and this table says what has actually been seen with
+each rather than what is expected of it. **A pack that is not here is not thereby unsupported**: it
+is a pack nobody here has loaded, and the format is the format. Nothing in this table is a judgement
+of the pack; every line is a note about this engine.
+
+**A row that says nobody has looked means exactly that, and never means it works.** Rewriting this
+table is one of the steps of cutting a release, which is the only thing that keeps it from going
+quietly stale.
+
+| Pack | What has been seen |
+| --- | --- |
+| BSL v10.1.3 | Drawn whole, and the one watched most closely. Terrain, water, shadow map, sky, clouds, weather, particles, mobs and the held hand all go through it. |
+| Complementary Unbound r5.8.1 | Drawn whole, and watched as closely. Its colour targets, its deferred chain and its shadow map all come up; the log prints how many targets it allocated and at what size. |
+| Complementary Reimagined r5.8.1 | Loads. Not looked at recently. |
+| Bliss v2.1.2 | Drawn, and its terrain in the End was right when last looked at - the sky there is the game's for every pack, so it says nothing about this one. One thing seen wrong: **mobs and the held arm come out in flat wrong colours**, which is the shape of a pack branching on an identifier this engine holds constant. See [anything that moves](#anything-that-moves). Its water is a separate open case, and it was the pack the [dark terrain](#terrain-that-is-too-dark) section was written for. |
+| Sildur's Vibrant Extreme v2.01 | Loads, and it is the pack that exercises the paths least travelled here: it keeps the overworld's programs at the root of `shaders/` and gives the other two dimensions folders of their own, several families reach its textured program through the fallback tree rather than shipping one, and the target its terrain writes first is not target zero. Not looked at in game recently. |
+| Mellow v3.3 | Loads, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. Not looked at in game recently. |
+| Body Camera v1.6.1 | Loads. It is one of the packs that branches on the star flag in the sky, so it is worth reading [the sky goes flat](#the-sky-goes-flat) alongside. Not looked at in game recently. |
+| Reverie Beta v0.9 | **Refused at load, and the log names what it asked for.** It declares features it cannot be drawn without, and this engine serves no feature flag at all, so it refuses every such declaration whatever it names rather than half drawing the pack. That is a gap here and not a fault of the pack: Iris draws it. See [the pack was refused](#the-pack-was-refused). |
+
 Start from what you are seeing. Each symptom below names its cause, and says how to confirm it
 rather than guess.
 
@@ -10,7 +32,7 @@ rather than guess.
 | Blocks have no relief, however smooth the pack promises | [Everything is flat](#everything-is-flat) |
 | Water is missing, or looks like the game's | [The water](#the-water) |
 | A hard straight line across the sky near the horizon | [The horizon line](#the-horizon-line) |
-| Mobs or the held item look flat and unlit | [Anything that moves](#anything-that-moves) |
+| Something that moves looks flat, unlit, or the wrong colour | [Anything that moves](#anything-that-moves) |
 | The sky turns into a flat grey sheet at sunrise | [The sky goes flat](#the-sky-goes-flat) |
 | Blocks wave, glow or cast wrong shadows after switching packs | [You just changed packs](#you-just-changed-packs) |
 | The terrain is uniformly too dark | [Terrain that is too dark](#terrain-that-is-too-dark) |
@@ -135,27 +157,30 @@ The full mechanism is in [Sky and shadows](sky-and-shadows.md#the-horizon-gap).
 
 ## Anything that moves
 
-**The held item and every mob look flat, unlit, and out of place against the terrain.** They are
-drawn by the game and composited in, already tone mapped, carrying the game's own lighting rather
-than the pack's.
+**Something that moves looks flat, unlit, and out of place against the terrain.** It is one of the
+families still drawn by the game and composited in, already tone mapped, carrying the game's own
+lighting rather than the pack's. Which families those are has shrunk milestone by milestone, and the
+engine names the ones left in the log when a place first draws rather than on this page, which would
+go out of date between two of them. What follows is what each family that IS served costs.
 
 **The rain, the snow and the quad particles are no longer among them.** They go through the pack's
 own programs out of the box, both halves of the particles, and `weather=off` or `particles=off` in
 `vitrail/options.txt` hands either family back to the game if you need to compare.
 
-**The mobs and the block entities are the one family still waiting, and they are off until you ask
-for it.** With `entities=on`, the opaque half of them - the body of a mob, a chest, a conduit, an
-armour piece - is drawn with the pack's own program: it is lit as the pack lights the world, and the
-shadows the terrain casts fall on it. What stays behind there is everything that blends, and the
-player's own body is in that half, so third person still shows the symptom this section describes.
-What is left is named in the log rather than on this page, by the line the close of this section
-points at.
+**The mobs and the block entities go through the pack out of the box.** The opaque half of them -
+the body of a mob, a chest, a conduit, an armour piece - is drawn with the pack's own program: it is
+lit as the pack lights the world, and the shadows the terrain casts fall on it. What stays behind is
+everything that blends, and the player's own body is in that half, so third person still shows the
+symptom this section describes. `entities=off` in `vitrail/options.txt` hands the whole family back
+to the game if you need to compare. What is left is named in the log rather than on this page, by
+the line the close of this section points at.
 
-**The hand you are holding has a switch of its own, and turning it on moves it as well as lighting
-it.** The game draws the hand after the whole chain has finished, so with `hand=off` it is not
-merely lit by the game, it is painted onto an image the pack had already completed: nothing the pack
-does to the world reaches it, and nothing it draws reaches a composite. With `hand=on` it is drawn
-inside the level instead, in two passes, and served by `gbuffers_hand` and `gbuffers_hand_water`.
+**The hand you are holding has a switch of its own, and it goes through the pack out of the box
+too.** It is drawn inside the level, in two passes, served by `gbuffers_hand` and
+`gbuffers_hand_water`. With `hand=off` it goes back where the game draws it, which is after the
+whole chain has finished: not merely lit by the game but painted onto an image the pack had already
+completed, so nothing the pack does to the world reaches it and nothing it draws reaches a
+composite.
 The engine squeezes the hand's depth the way the reference does, and a pack that divides it back out
 with `MC_HAND_DEPTH` gets the same eighth it expects. What blends in the hand goes through the water
 pass with the arm, a held translucent block included, so both are the pack's.
@@ -170,12 +195,13 @@ anywhere the pack's own terrain stands behind it. A `gbuffers_hand` that samples
 handed a constant rather than a depth image. The hand is lit and it moves with the pack's world;
 what a pack cannot do here is treat it as material of its own.
 
-**Nothing named in this section CASTS a shadow** - not the rain, not the snow, not the particles,
-not the mobs, not the block entities, not the hand - because none of them is drawn into the shadow
-map. Receiving
-and casting are two different things here: a mob with `entities=on` has the pack's light on it and
-no shadow under it. The reference draws the mobs and the block entities into its own map; this is a
-gap and not a choice.
+**The mobs and the block entities are drawn into the pack's own shadow map**, so they cast as well
+as receive, and the log names the shadow passes one by one when a place first draws. Two things
+take that back: a pack can ask for fewer casters than the default and is given what it asks for,
+and a draw whose pipeline this engine has no shadow row for is left out of the map rather than
+guessed at - the log says so, by name, for each one. **The rain, the snow, the particles and the
+hand are never in it**: they have the pack's light on them and nothing under them. Receiving and
+casting are two different things here, and the second is the shorter list.
 
 **Turn the game's improved transparency off if the rain or the translucent particles do not change.**
 It is a video setting of its own, which the Fabulous preset turns on everywhere except macOS. With
@@ -184,13 +210,19 @@ engine hands them back rather than attach the pack's targets beside an image it 
 log says so in those words, once for the rain and once for the particles. The entities are
 unaffected.
 
-**The held item has no answer at all yet.**
+Two consequences follow from how that geometry reaches the pack, and both are worth recognising
+rather than reporting as separate bugs:
 
-Two consequences follow, and both are worth recognising rather than reporting as separate bugs:
-
-- That geometry arrives with **no normal and no material id**, so passes that classify pixels by
-  material misread it. On packs whose water composites work that way, an entity can be treated as a
-  surface to fog.
+- **The identifiers a pack reads off it are constants rather than this entity's own**: the material
+  id it carries, and the ones a pack compares against a mob type, a block entity type or the item
+  in hand. A pack that branches on any of them takes the same branch for every draw, and what that
+  looks like is entirely the pack's business:
+  where the water composites sort by material, an entity can be treated as a surface to fog; on
+  Bliss, mobs and the held arm come out in flat wrong colours, oranges and greens that belong
+  nowhere in the scene. Which of them a given pack lands on is not established here, and they are
+  all the same lot to close. The held hand shows whatever the mobs show, since it arrives by the
+  same door and in the same vertex format, with the identifier that names what is held among the
+  constants too.
 - A pack can allocate a colour target for a family that is not drawn through it. BSL allocates one
   for glowing entities alone, and its deferred pass samples that target - so the chain reads a clear
   across a whole target.
@@ -233,23 +265,25 @@ before investigating anything else.
 
 ## Terrain that is too dark
 
-One open case worth naming, because it is easy to misattribute. Packs can set a directive asking
-that ambient occlusion be delivered separately from vertex colour. Where that directive is not
-read, ambient occlusion ends up inside the albedo, and is then reflected, exposed and moved by the
-whole chain - a plausible image that is uniformly too dark. Bliss is the pack where this shows.
+One cause worth naming, because it used to be the answer here and is no longer. Packs can set a
+directive asking that ambient occlusion be delivered separately from vertex colour. Left unread it
+puts occlusion inside the albedo, which the whole chain then reflects, exposes and moves - a
+plausible image that is uniformly too dark, and Bliss was the pack it showed on. **The directive is
+read now**, and the mesh keeps occlusion out of the colour where a pack asks for it.
 
-It is diagnosed by comparing two builds at the same camera and the same world time on a corner
-where occlusion is strong, not by toggling settings: switching shadows off makes it worse rather
-than better.
+So terrain that is still uniformly too dark is worth reporting rather than attributing to this. It
+is diagnosed by comparing two builds at the same camera and the same world time on a corner where
+occlusion is strong, not by toggling settings: switching shadows off makes it worse rather than
+better.
 
 ## What packs ask for that is unusual
 
 A short reference, if you are writing a pack or wondering why yours is treated differently.
 
-- **Where a pack keeps its programs is not fixed.** Sildur's keeps them at the root of `shaders/`
-  rather than in a dimension folder. A dimension folder *replaces* the base set rather than layering
-  over it - the full rule, including what an empty folder means, is in
-  [the pack format](pack-format.md).
+- **Where a pack keeps its programs is not fixed, and it need not be uniform inside one pack.**
+  Sildur's keeps the overworld's at the root of `shaders/` and gives the Nether and the End folders
+  of their own. A dimension folder *replaces* the base set rather than layering over it - the full
+  rule, including what an empty folder means, is in [the pack format](pack-format.md).
 - **A pack need not ship the program a family asks for.** Sildur's ships no terrain, lit-textured,
   entity or hand program; those reach its textured program through the fallback tree, several
   levels deep. BSL ships no lit-textured, particle, item, line or lightning program.

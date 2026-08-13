@@ -136,12 +136,16 @@ final class EngineOptions {
 	 * work not done, and once a family is drawn and judged in game, leaving it behind a setting makes
 	 * the picture a reader sees on cloning a picture nobody ships.
 	 * <p>
-	 * <strong>What it still costs is real and is named rather than counted.</strong> Entity geometry
-	 * arrives with no normal and no material id, so a pack that classifies its pixels by material
-	 * reads an entity as something else and can fog it as though it were water. That gap is measured
-	 * in this engine's own log, which names {@code mc_Entity} and {@code entityColor} at every load,
-	 * and closing it is a lot of its own. What a player sees meanwhile is a mob the pack lights, which
-	 * is what this line is for, with a material read that may be wrong on a pack that branches on one.
+	 * <strong>What it still costs is real and is named rather than counted.</strong> The normal is
+	 * carried, {@code DefaultVertexFormat.ENTITY} holding one and the prologue publishing it. What a
+	 * pack reads as a constant rather than as this entity's own are the identifiers: {@code mc_Entity},
+	 * which an entity mesh has no room to carry and the prologue answers with a constant, and the three
+	 * {@link dev.vitrail.uniform.UniformGaps} holds still, {@code entityId}, {@code blockEntityId} and
+	 * {@code currentRenderedItemId}. A pack that branches
+	 * on any of them takes the same branch for every draw, which reads on screen as anything from a
+	 * mob fogged like water to a mob in a colour that belongs nowhere. Beside them and not among them,
+	 * {@code entityColor} is held too, and what that costs is narrow and knowable: a hurt mob does not
+	 * flash. The log names every one of them at each load, and closing it is a lot of its own.
 	 * <p>
 	 * Iris routes the same geometry with nothing to switch,
 	 * {@code shaderpack/loading/ProgramId.java:40-41}, so this line is no longer a divergence from it
@@ -155,16 +159,20 @@ final class EngineOptions {
 	 * pack's own {@code gbuffers_hand} and {@code gbuffers_hand_water}. On, with the entities.
 	 * <p>
 	 * It was off for the entities' reason and for one of its own. The entities' reason is above and
-	 * has not changed: the hand comes in by the same door and through the same vertex format, so it
-	 * arrives with no normal and no material id. Its own is what a reader should expect to see: the
+	 * has not changed: the hand comes in by the same door and through the same vertex format, so the
+	 * identifiers above reach a pack as constants here too, {@code currentRenderedItemId} among them,
+	 * which is the one that names what is being held. Its own is what a reader should expect to see: the
 	 * half that blends is served for the ARM alone, so a hand holding a translucent block draws that
 	 * block with a blending pipeline this engine serves for no family yet, and the block stays the
 	 * game's while the arm holding it is the pack's.
 	 * <p>
-	 * <strong>What it does NOT yet carry is the position.</strong> The hand keeps the moment the game
-	 * gives it, which is after the chain, so it is lit by the pack and still painted over an image the
-	 * pack has finished; the pass that moves it between the scene seed and the deferreds is written
-	 * and waiting. Turning this line on buys the shading, not the moment.
+	 * <strong>It carries the position as well as the shading, and that is what changed.</strong> The
+	 * solid half is drawn where the reference draws it, after the game's own opaque features and
+	 * before the deferred stage, with the depth taken past it first; the blending half goes in ahead
+	 * of the chain rather than after it, so what it draws is in the picture the composites read. Off,
+	 * the hand goes back to the game's late call, which is after the whole chain has finished: painted
+	 * over an image the pack had already composed, absent from every gbuffer and from every depth a
+	 * composite reads.
 	 */
 	private static final String HAND_KEY = "hand";
 

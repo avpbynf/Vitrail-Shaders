@@ -132,18 +132,17 @@ public final class SamplerPlan {
 	 * second question.
 	 * <p>
 	 * Can, and only where this engine draws the hand itself, which is the {@code hand} line of
-	 * {@code vitrail/options.txt} and not anything a pack asks for. Left to the game, which is what
-	 * the default still is, the hand is drawn after the whole chain has run and NEITHER copy carries
-	 * it, the two being one image.
+	 * {@code vitrail/options.txt} and not anything a pack asks for. That line is on unless somebody
+	 * writes it off, and written off the hand goes back to the game's late call, after the whole
+	 * chain has run, where NEITHER copy carries it, the two being one image.
 	 * <p>
-	 * That default is a divergence and not a property of the model. Iris draws the hand inside the
-	 * level for any pack it loads ({@code pathways/HandRenderer.java:95-98} from
+	 * At the default the two engines agree. Iris draws the hand inside the level for any pack it
+	 * loads ({@code pathways/HandRenderer.java:95-98} from
 	 * {@code mixin/MixinLevelRenderer.java:280}), on the frames the game would have drawn one and
-	 * whose hand has a solid half at all, so on those frames its {@code depthtex1} carries the hand
-	 * where neither of ours does. Two hands holding translucent blocks are the exception on its side
-	 * too: the solid guard turns it away and the whole hand goes to the translucent call, which is
-	 * behind the copy. What holds it off here is the switch alone and nothing about this engine's
-	 * API:
+	 * whose hand has a solid half at all, and so does this. Two hands holding translucent blocks are
+	 * the exception on its side too: the solid guard turns it away and the whole hand goes to the
+	 * translucent call, which is behind the copy. What can still hold the family off here is the
+	 * switch alone and nothing about this engine's API:
 	 * {@code EngineOptions} carries the default and {@code EngineOptions.announceHandOff} writes out
 	 * what it costs, once per load, for the player looking at the picture it produced.
 	 */
