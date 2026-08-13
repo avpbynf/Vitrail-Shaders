@@ -129,61 +129,42 @@ final class EngineOptions {
 	private static final String SKY_KEY = "sky";
 
 	/**
-	 * Draws the game's own entity geometry with the pack's own program. <strong>Off</strong>, with
-	 * the hand below and with nothing else here.
+	 * Draws the game's own entity geometry with the pack's own program. On, like the rest of them.
 	 * <p>
-	 * <strong>It is not a convention and it is not a taste.</strong> It used to say it was the shape
-	 * every family still to come would land under, and the clouds landed on instead. What a line at
-	 * off really names is work not done, standing behind a setting: the file has to be able to stay
-	 * empty, because what a reader sees on cloning is what this engine gets judged on.
+	 * <strong>It was off, and what turned it on is the rule rather than the gap closing.</strong>
+	 * Every line here that is supported is on, and only a disabling is explicit: a line at off names
+	 * work not done, and once a family is drawn and judged in game, leaving it behind a setting makes
+	 * the picture a reader sees on cloning a picture nobody ships.
 	 * <p>
-	 * What holds this one is one thing and it is not incompleteness. Entity geometry arrives with no
-	 * normal and no material id, so a pack that classifies its pixels by material reads an entity as
-	 * something else and can fog it as though it were water. That is a family damaging its
-	 * neighbours rather than falling short, and it is the whole of the argument. The two other gaps -
-	 * a colour target BSL allocates for a family nothing draws through, and the blending half with
-	 * the player's own body in it - are visible and corrupt nothing.
+	 * <strong>What it still costs is real and is named rather than counted.</strong> Entity geometry
+	 * arrives with no normal and no material id, so a pack that classifies its pixels by material
+	 * reads an entity as something else and can fog it as though it were water. That gap is measured
+	 * in this engine's own log, which names {@code mc_Entity} and {@code entityColor} at every load,
+	 * and closing it is a lot of its own. What a player sees meanwhile is a mob the pack lights, which
+	 * is what this line is for, with a material read that may be wrong on a pack that branches on one.
 	 * <p>
-	 * The day the first of those lands, this line goes to on <em>and disappears</em>, along with
-	 * everything that documents it. Leaving it behind would turn the debt into a preference, which
-	 * is exactly how it got called a convention.
-	 * <p>
-	 * <strong>It is a divergence from Iris, and a CHOICE rather than a constraint</strong>, so it is
-	 * written out in full rather than left to be discovered.
-	 * <ul>
-	 * <li><em>What Iris does</em>: it routes the game's entities to the pack's program with nothing
-	 * to switch, {@code shaderpack/loading/ProgramId.java:40-41}, where {@code Entities} falls back
-	 * on {@code TexturedLit} and {@code EntitiesTrans} falls back on {@code Entities}. There is no
-	 * line of any file of its own that turns them off.</li>
-	 * <li><em>What stops this engine matching it</em>: nothing of the API, and it has to be said
-	 * plainly. {@code render/EntityDraw} draws them, and drawing them is one word in this file. What
-	 * holds the word at off is the gap above, and the rule this engine works to: a family's line goes
-	 * to on once it has been judged in game, and this one has not been. That is a decision about when
-	 * to ship a family, not an obstacle.</li>
-	 * <li><em>What it costs the image</em>: the game draws its entities with its own shader, already
-	 * lit and already tone mapped, and the scene seed carries them into the pack's picture flat. A
-	 * mob is then vanilla lit inside a pack lit world, it takes none of the pack's shading, and the
-	 * pack's own entity program never runs.</li>
-	 * </ul>
+	 * Iris routes the same geometry with nothing to switch,
+	 * {@code shaderpack/loading/ProgramId.java:40-41}, so this line is no longer a divergence from it
+	 * at the default; it stays a line because turning a family off in one word is what tells a wrong
+	 * picture from a wrong family, without a rebuild.
 	 */
 	private static final String ENTITIES_KEY = "entities";
 
 	/**
 	 * Takes the player's own hand out of the game's late call and draws it inside the level, with the
-	 * pack's own {@code gbuffers_hand} and {@code gbuffers_hand_water}. <strong>Off</strong>, with the
-	 * entities.
+	 * pack's own {@code gbuffers_hand} and {@code gbuffers_hand_water}. On, with the entities.
 	 * <p>
-	 * It is off for the entities' reason and for one of its own. The entities' reason first: the hand
-	 * comes in by the same door and through the same vertex format, so it arrives with no normal and
-	 * no material id, and a pack that classifies its pixels by material reads the arm as something
-	 * else. Its own second, and it is what a reader turning this on should expect to see: the half
-	 * that blends is served for the ARM alone. A hand holding a translucent block is drawn with a
-	 * blending pipeline, which this engine serves for no family yet, so the block stays the game's
-	 * while the arm holding it becomes the pack's.
+	 * It was off for the entities' reason and for one of its own. The entities' reason is above and
+	 * has not changed: the hand comes in by the same door and through the same vertex format, so it
+	 * arrives with no normal and no material id. Its own is what a reader should expect to see: the
+	 * half that blends is served for the ARM alone, so a hand holding a translucent block draws that
+	 * block with a blending pipeline this engine serves for no family yet, and the block stays the
+	 * game's while the arm holding it is the pack's.
 	 * <p>
-	 * Off also means the hand keeps the position in the frame the game gives it, which is after the
-	 * chain: what a player sees is then an arm lit by the game over an image lit by the pack, and that
-	 * is what this line turns off rather than a shader swap alone.
+	 * <strong>What it does NOT yet carry is the position.</strong> The hand keeps the moment the game
+	 * gives it, which is after the chain, so it is lit by the pack and still painted over an image the
+	 * pack has finished; the pass that moves it between the scene seed and the deferreds is written
+	 * and waiting. Turning this line on buys the shading, not the moment.
 	 */
 	private static final String HAND_KEY = "hand";
 
@@ -298,8 +279,8 @@ final class EngineOptions {
 				asked(chosen.remove(CHAIN_KEY), CHAIN_KEY, true),
 				asked(chosen.remove(SHADOW_KEY), SHADOW_KEY, true),
 				asked(chosen.remove(SKY_KEY), SKY_KEY, true),
-				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, false),
-				asked(chosen.remove(HAND_KEY), HAND_KEY, false),
+				asked(chosen.remove(ENTITIES_KEY), ENTITIES_KEY, true),
+				asked(chosen.remove(HAND_KEY), HAND_KEY, true),
 				asked(chosen.remove(CLOUDS_KEY), CLOUDS_KEY, true),
 				asked(chosen.remove(WEATHER_KEY), WEATHER_KEY, true),
 				asked(chosen.remove(PARTICLES_KEY), PARTICLES_KEY, true));
@@ -346,24 +327,23 @@ final class EngineOptions {
 	}
 
 	/**
-	 * Said once when the entities are off, which is the default, because nothing else would say the
-	 * line exists.
+	 * Said when the entities are off, which is now the clouds' case rather than its own: this line is
+	 * on by default, so reaching here means somebody wrote {@code entities=off} and knows they did.
 	 * <p>
-	 * The other lines that take a yes or a no are on unless somebody asks - the hand's excepted,
-	 * which is off with its reasons written beside it - so their line is a thing the reader wrote
-	 * and knows about. This one is the opposite: the picture with it off is
-	 * the picture without this mod having heard of entities at all, and a reader who never sees the
-	 * name has no reason to look for it.
+	 * It is said all the same, and for the reason the clouds' line is: what off costs here does not
+	 * announce itself on the screen the way the terrain's does. A mob keeps being drawn, lit and tone
+	 * mapped by the game and carried in flat by the scene seed, which reads as a pack that lights mobs
+	 * oddly rather than as a family nobody served.
 	 */
 	static void announceEntitiesOff(Path gameDirectory) {
 		Vitrail.logger().info("{}=off, so the game draws its own entities and the scene seed carries "
-				+ "them in, already lit and already tone mapped. Write '{}=on' in {} to have the pack "
-				+ "draw them", ENTITIES_KEY, ENTITIES_KEY, SettingsLayers.file(gameDirectory));
+				+ "them in, already lit and already tone mapped. Remove that line from {} to have the "
+				+ "pack draw them, which is the default", ENTITIES_KEY,
+				SettingsLayers.file(gameDirectory));
 	}
 
 	/**
-	 * The same for the hand, which is the entities' case rather than the clouds': this line is off by
-	 * default too, so a reader who never sees the name has no reason to look for it.
+	 * The same for the hand, and the same case: on by default, so this line is a thing somebody wrote.
 	 * <p>
 	 * What it costs is worth two sentences rather than one, because half of it is not a shader. Off,
 	 * the hand is drawn where the game draws it, which is after the pack's whole chain has run: it is
@@ -373,9 +353,9 @@ final class EngineOptions {
 	static void announceHandOff(Path gameDirectory) {
 		Vitrail.logger().info("{}=off, so the player's own hand stays where the game draws it, after "
 				+ "the pack's chain: painted over the finished image by the game's own shader, absent "
-				+ "from every gbuffer and from every depth a composite reads. Write '{}=on' in {} to "
-				+ "have it drawn inside the level with the pack's two hand programs", HAND_KEY,
-				HAND_KEY, SettingsLayers.file(gameDirectory));
+				+ "from every gbuffer and from every depth a composite reads. Remove that line from {} "
+				+ "to have it drawn inside the level with the pack's two hand programs, which is the "
+				+ "default", HAND_KEY, SettingsLayers.file(gameDirectory));
 	}
 
 	/**
