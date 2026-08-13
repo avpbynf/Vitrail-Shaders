@@ -417,6 +417,29 @@ GNU Lesser General Public License version 3
   leaves, and unpacks it in a patched vertex stage, where this engine writes the vector itself in
   three bytes and has no patched text to unpack an angle in.
 
+  common/src/main/java/dev/vitrail/render/PbrMap.java,
+  common/src/main/java/dev/vitrail/render/PbrAtlas.java and
+  common/src/main/java/dev/vitrail/render/PbrAtlases.java build the normal and specular maps a
+  resource pack ships, and four of their answers are Iris's, read in August 2026. The layout, one
+  companion image per atlas with each map at the base sprite's own x and y, is that of
+  net.irisshaders.iris.pbr.loader.AtlasPBRLoader, lines 55 to 74, with the suffixes and the two
+  values a sprite with no map of its own reads taken from net.irisshaders.iris.pbr.texture.PBRType,
+  lines 7 and 8. The plain per channel average the mipmap is taken by is
+  net.irisshaders.iris.pbr.mipmap.LinearBlendFunction through its ChannelMipmapGenerator, and the
+  three thresholds the specular map is averaged inside instead, along with the rule that ties go to
+  the first of the four, are net.irisshaders.iris.pbr.format.LabPBRTextureFormat lines 13 to 18 and
+  net.irisshaders.iris.pbr.mipmap.DiscreteBlendFunction lines 17 to 26. Resolving the maps from the
+  albedo texture the draw has bound, rather than from the family of the pass, is
+  net.irisshaders.iris.pipeline.IrisRenderingPipeline.onSetAlbedoTex, lines 849 to 871, which is
+  also where the same file chooses between the atlas's own filtering and a nearest one on the same
+  question, lines 860 to 867.
+  Three things in this entry are not transcriptions. The maps are not animated here, where Iris
+  gives its companion sprites animation states and ticks them with the atlas,
+  net.irisshaders.iris.pbr.texture.PBRAtlasTexture lines 289 to 309. Iris loads a texture's maps
+  lazily, on the frame after the texture is first bound as albedo, where these are built when the
+  atlas is stitched. And the border of replicated texels the stitcher gives every sprite is written
+  out term for term here, where Iris inherits it by reusing the game's own blit path.
+
   Nothing else in Vitrail is derived from Iris. Of its GLSL transformation machinery, which links
   against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that
   code is here, and the translator in dev.vitrail.glsl is this project's own.

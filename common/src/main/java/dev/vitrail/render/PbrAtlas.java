@@ -40,8 +40,8 @@ import java.util.Optional;
  * ({@code pbr/texture/PBRAtlasTexture.java:289-309}); only the first frame of a map is uploaded
  * here. The cost is a flowing or ticking block whose surface map stands still while its albedo
  * moves. <strong>Nothing in 26.2 forbids the rest, so this is a gap and not a contournement</strong>
- * - the honest name for work not done - and it is written up in {@code docs/textures.md} rather
- * than dressed as a decision.
+ * - the honest name for work not done - and it is written up in
+ * {@code docs/internals/material-maps.md} rather than dressed as a decision.
  */
 final class PbrAtlas implements AutoCloseable {
 

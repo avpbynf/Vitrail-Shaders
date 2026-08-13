@@ -32,6 +32,7 @@ the traps that were paid for once already.
 | Drawing terrain on a mesh the engine does not own | [Terrain](internals/terrain.md) |
 | Serving uniforms, and how a value is proved correct | [Uniforms](internals/uniforms.md) |
 | Textures a pack supplies, and treating its paths as untrusted | [Pack textures](internals/pack-textures.md) |
+| The normal and specular maps a resource pack ships | [Material maps](internals/material-maps.md) |
 | What the game's graphics API offers and closes | [The game's graphics API](internals/game-graphics-api.md) |
 
 ## The one idea the whole project rests on

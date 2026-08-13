@@ -74,6 +74,25 @@ full-screen darkening on BSL is not exposure, and the sun disc you see is the ga
 the engine prints when the pack loads. If forcing a setting changes nothing in that listing,
 settings have stopped reaching the pack, which is a different and more serious problem.
 
+## Everything is flat
+
+**Blocks that should have relief are perfectly smooth, and turning the pack's advanced materials on
+changes nothing.** Relief does not come from the shader pack. It comes from the **resource pack**,
+which has to ship a `bricks_n.png` beside its `bricks.png`, and most resource packs ship none. A
+pack asking for a normal map that nobody supplies reads a perfectly valid flat one and never
+complains.
+
+**How to confirm:** the engine names what it found when a world loads, one line per atlas and per
+map, saying how many of its sprites answered. No line at all means no resource pack in the stack
+ships either map, and no shader pack setting can change that.
+
+Two more places relief goes missing even with a material pack installed. **Nothing that moves has
+one**: an entity skin is a texture of its own rather than a sprite in an atlas, so mobs, armour and
+the held item read the flat value. And **an animated block's map does not animate**: flowing water
+keeps a moving surface and a fixed normal, because only the first frame of a map is uploaded.
+
+How the maps are built is [Material maps](internals/material-maps.md).
+
 ## The water
 
 Water has two distinct failure shapes, and they look nothing alike.
