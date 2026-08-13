@@ -136,9 +136,7 @@ as a pre-release. One without is published as a release.
 
 The release body is GitHub's own generated notes, which list merged pull requests and
 new contributors and end on a changelog link. This history is rebased and fast-forwarded
-rather than merged through pull requests, so those lists are usually empty, and the first
-release has no earlier one to compare against and gets a link over the whole history
-instead. Which is to say: a release worth reading is one whose body was written by hand
-afterwards.
+rather than merged through pull requests, so those lists are usually empty. Which is to
+say: a release worth reading is one whose body was written by hand afterwards.
 
 Nothing else is automated, and nothing is uploaded anywhere else.

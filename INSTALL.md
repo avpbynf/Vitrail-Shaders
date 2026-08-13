@@ -3,6 +3,14 @@
 Vitrail is a client-only mod. It does nothing on a server and does not need to be
 installed on one.
 
+## Getting the jar
+
+Built jars are attached to the [releases](https://github.com/avpbynf/Vitrail-Shaders/releases),
+one per tag, built by the tag itself rather than uploaded by hand. A version
+carrying an identifier after a dash is marked as a pre-release, which is what it
+is. Building from source is below and gives the same thing for whatever commit you
+are on.
+
 ## Requirements
 
 | Component | Version |
@@ -41,11 +49,11 @@ Some of Chloride's own settings decide what reaches this engine, in
 keys of their own. `tileEntities`, `entities` and `monsters`, under `[culling]`,
 decide on their own which block entities and which mobs are drawn at all, by
 distance: what they take out is never handed to the pack, so a chest, a sign or a
-mob that is not there is those settings rather than anything the pack does. The
-first two are on when Chloride writes that file; the third is not. `chests` and
-`beds`, under `[fastBlocks]`, are written off and are worth leaving off: they draw
-those blocks by a path this engine's final pass then covers over, so they go
-invisible with no other symptom.
+mob that is not there is those settings rather than anything the pack does.
+`chests` and `beds`, under `[fastBlocks]`, draw those blocks by a path this
+engine's final pass then covers over, so they go invisible with no other symptom.
+Which of the five a given Chloride writes on is its own business and changes with
+its versions, which is why none of them is described here as on or off.
 
 There is nothing to go looking for by hand. Vitrail reads that file at startup
 and, in the log, names each of them that is on with what it costs and what to set
@@ -61,11 +69,12 @@ gradlew.bat build
 ```
 
 The first build decompiles Minecraft and takes a couple of minutes. After that it
-is a few seconds. The jar lands in two places, they are identical:
+is a few seconds. The jar lands in two places, they are identical, and it is named
+for the version in `gradle.properties` and the Minecraft version beside it:
 
 ```
-build/libs/vitrail-neoforge-0.1.0+mc26.2.jar
-neoforge/build/libs/vitrail-neoforge-0.1.0+mc26.2.jar
+build/libs/vitrail-neoforge-<version>+mc<minecraft>.jar
+neoforge/build/libs/vitrail-neoforge-<version>+mc<minecraft>.jar
 ```
 
 To run the mod in a development client instead of installing it:
