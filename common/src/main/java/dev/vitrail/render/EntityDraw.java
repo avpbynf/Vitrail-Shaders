@@ -105,9 +105,9 @@ import java.util.stream.Stream;
  * {@link FeatureLayer} carries it, with what Iris does instead and what it costs the image.
  * <p>
  * <strong>What is still the game's inside this window</strong>, and therefore still goes to that
- * layer, is the eyes ({@code EYES} and {@code ENTITY_TRANSLUCENT_EMISSIVE}), the beacon beam, the
- * text of a name plate or a sign, and the two pipelines {@link #WITHHELD} names. The shadow map is a
- * family of its own and is NOT in either window, a pass of its own that neither bracket reaches.
+ * layer, is the eyes ({@code EYES} and {@code ENTITY_TRANSLUCENT_EMISSIVE}), the beacon beam, and
+ * the text of a name plate or a sign. The shadow map is a family of its own and is NOT in either
+ * window, a pass of its own that neither bracket reaches.
  * <p>
  * <strong>An enchantment's glint comes in by this same door and is alone in it</strong>, in two ways
  * that are one: it is the only piece served here that is not drawn from an entity mesh, and the only
@@ -479,34 +479,31 @@ public final class EntityDraw {
 	private static final AlphaTest CUTOUT = AlphaTest.ONE_TENTH;
 
 	/**
-	 * The two pipelines of the blending half this engine leaves to the game, and the one reason it
-	 * leaves them.
+	 * The three pipelines Iris assigns a program to OUTRIGHT rather than through one of the three
+	 * functions the block entity and hand phases are read inside, and which therefore keep the entity
+	 * program whatever is being drawn.
 	 * <p>
-	 * Both are drawn with a render type carrying a {@code TextureTransform} of the game's own, an
-	 * {@code OffsetTextureTransform} built afresh per frame from the offsets the breeze and the swirl
-	 * are animated by ({@code rendertype/RenderTypes.java:524,536}); every other render type of this
-	 * family leaves it at {@code DEFAULT_TEXTURING}. That matrix is what a pack multiplies
-	 * {@code gl_MultiTexCoord0} by, and it is one of the six sites in the whole game that set one,
-	 * the four glints being the others.
+	 * {@code pipeline/IrisPipelines.java:60,61,62}, all three {@code ShaderKey.ENTITIES_CUTOUT}. It is
+	 * the assignment being a CONSTANT that pins them: {@code getSolid}, {@code getCutout} and
+	 * {@code getTranslucent} are where the phase is consulted ({@code :191-218}), and a row that never
+	 * reaches one of the three cannot be moved by a phase. Two of them draw block entities in this
+	 * game, the end crystal beam and the offset cutout, and the third is the energy swirl.
 	 * <p>
-	 * <strong>The matrix is no longer what withholds them.</strong> A pack's
-	 * {@code gl_TextureMatrix[0]} is answered from the game's own transforms, per draw, which is
-	 * Iris's answer as well ({@code transform/transformer/VanillaCoreTransformer.java:86}), so a
-	 * breeze served today would be animated rather than frozen and two breezes on screen would hold
-	 * their own offsets. What is left is the row, and it is not one row.
+	 * <strong>Read as a list here and not as a blend, and the swirl is why.</strong> It is the one row
+	 * of the table that blends and still asks for the writing half's name; asking the blend first,
+	 * which is what {@link #blockTwin} used to do, would give it {@code gbuffers_block_translucent}
+	 * where Iris keeps {@code gbuffers_entities}.
 	 * <p>
-	 * <strong>They are not one row when they come back.</strong> The breeze is a {@code getTranslucent}
-	 * row ({@code pipeline/IrisPipelines.java:56}), so it belongs with the six below; the swirl is
-	 * pinned to {@code ENTITIES_CUTOUT} ({@code :60}), which is {@code ProgramId.Entities}, so it asks
-	 * for the OPAQUE {@code gbuffers_entities} even though the game blends it. Whoever serves it will
-	 * be adding a blending row that asks for the writing half's name, which no row here does. That is
-	 * work not done, and it is the whole of what these two are still waiting on.
+	 * <strong>The hand does not read this list, and that is a divergence this engine already
+	 * had.</strong> Iris's hand override lives in the same three functions, so a pinned row keeps the
+	 * entity program in a hand pass too, where {@link #twins} gives every row a hand program. Nothing
+	 * of it reaches the screen: none of the three can be submitted by the hand, which carries the arm
+	 * and what it holds, so those twins are compiled modules nobody selects.
 	 */
-	private static final Map<RenderPipeline, String> WITHHELD = Map.of(
-			RenderPipelines.BREEZE_WIND, "it would be an ordinary translucent row, which is what Iris "
-					+ "makes of it, and that row has simply not been written",
-			RenderPipelines.ENERGY_SWIRL, "it needs a row no other one here has, asking for the "
-					+ "writing half's program while the game blends it, which is what Iris does with it");
+	private static final Set<RenderPipeline> PINNED = Set.of(
+			RenderPipelines.END_CRYSTAL_BEAM,
+			RenderPipelines.ENTITY_CUTOUT_Z_OFFSET,
+			RenderPipelines.ENERGY_SWIRL);
 
 	/**
 	 * Every pipeline the game draws entity geometry with, and nothing else.
@@ -520,8 +517,7 @@ public final class EntityDraw {
 	 * the EYES family, which Iris serves with {@code gbuffers_spidereyes} through
 	 * {@code ENTITIES_EYES} and {@code ENTITIES_EYES_TRANS}
 	 * ({@code pipeline/IrisPipelines.java:52,53}). That family is not here yet, so the game draws it
-	 * and {@link FeatureLayer} carries it in. {@link #WITHHELD} names the other two left out, for a
-	 * reason of their own. Each row that is here is a piece of
+	 * and {@link FeatureLayer} carries it in. Each row that is here is a piece of
 	 * its own even where two ask for the same program at the same threshold, which is how the sky is
 	 * six pieces out of three files: they differ in what {@link Element} reads off them, and a piece
 	 * is one compiled module.
@@ -556,7 +552,12 @@ public final class EntityDraw {
 	 * is clipped where it crosses it. Iris clips it too, and a pack writing its own
 	 * {@code alphaTest} directive settles it for both.
 	 * <p>
-	 * <strong>Two rows Iris serves are missing on purpose</strong> and are named in {@link #WITHHELD}.
+	 * <strong>The last two rows of that run are the only ones whose texture matrix is not the
+	 * identity</strong>, and they were withheld until it could be answered: the breeze's wind and the
+	 * energy swirl are animated by an {@code OffsetTextureTransform} built afresh per draw
+	 * ({@code rendertype/RenderTypes.java:524,536}), which is now read out of the game's own
+	 * transforms rather than replaced by an identity that would freeze them. The swirl is also the one
+	 * row here that blends and asks for the writing half's program, which {@link #PINNED} carries.
 	 * <p>
 	 * <strong>{@code ITEM_TRANSLUCENT} and {@code ENTITY_TRANSLUCENT_CULL} are here and are not
 	 * corner cases</strong>, though both of the game's render types for them name
@@ -596,6 +597,16 @@ public final class EntityDraw {
 		// for what it is rather than after that type: this class already draws into a shadow map, and
 		// an element called shadow would read as a piece of it in the log and in the identifier.
 		put(new Element(RenderPipelines.ENTITY_SHADOW, "ground_shadow", ENTITIES_TRANSLUCENT, CUTOUT));
+		// The wind a breeze throws, an ordinary row of this run: Iris sends it through the same
+		// getTranslucent as the six above (pipeline/IrisPipelines.java:56).
+		put(new Element(RenderPipelines.BREEZE_WIND, "breeze_wind", ENTITIES_TRANSLUCENT, CUTOUT));
+		// The swirl over a charged creeper or an armoured wither, and THE ONE ROW OF THIS TABLE THAT
+		// BLENDS AND ASKS FOR THE WRITING HALF'S PROGRAM. Iris pins it to ENTITIES_CUTOUT, which is
+		// ProgramId.Entities, rather than sending it through getTranslucent like its neighbours
+		// (pipeline/IrisPipelines.java:60), so the name is the opaque one while the pass is the
+		// blending one. Nothing here has to be told that twice: the side is read off the pipeline,
+		// which blends, and the name is what the row says.
+		put(new Element(RenderPipelines.ENERGY_SWIRL, "energy_swirl", ENTITIES, CUTOUT));
 	}
 
 	/**
@@ -672,27 +683,27 @@ public final class EntityDraw {
 	 * program and the tenth that comes with it. The phase itself is not a row of any table and does
 	 * not vary: it is what the origin of the draw says.
 	 * <p>
-	 * <strong>The blending run has no exception at all</strong>, and that is Iris's shape rather than
-	 * a simplification of it. Its three rows pinned to {@code ENTITIES_CUTOUT} whatever the phase are
-	 * the energy swirl, the end crystal beam and the offset cutout
-	 * ({@code pipeline/IrisPipelines.java:60,61,62}); the first of those three is withheld here and
-	 * the other two are opaque, so none of them is a blending row of ours. Every row that does reach
-	 * {@code getTranslucent} answers {@code BE_TRANSLUCENT} under the phase without the pipeline
-	 * being consulted at all ({@code pipeline/IrisPipelines.java:212-222}). So a blending twin is
-	 * always {@code gbuffers_block_translucent}, and the tenth is already what its mob row carries.
+	 * <strong>Three rows keep the entity program whatever the phase, and the blend has nothing to do
+	 * with which three.</strong> That is Iris's shape rather than a simplification of it: the energy
+	 * swirl, the end crystal beam and the offset cutout are assigned {@code ENTITIES_CUTOUT} outright
+	 * ({@code pipeline/IrisPipelines.java:60,61,62}), which is a constant and not one of the three
+	 * functions the phase is read inside, so no phase can move them. The swirl is the one of the
+	 * three that blends, which is why the test below is a list and not the blend: asking the blend
+	 * first would have given it {@code gbuffers_block_translucent} where Iris keeps
+	 * {@code gbuffers_entities}. Every row that does reach {@code getTranslucent} answers
+	 * {@code BE_TRANSLUCENT} under the phase without the pipeline being consulted at all
+	 * ({@code pipeline/IrisPipelines.java:212-222}), so every other blending twin is
+	 * {@code gbuffers_block_translucent} and the tenth is already what its mob row carries.
 	 */
 	@SuppressWarnings("ReferenceEquality")
 	private static Element blockTwin(Element mob) {
-		if (mob.blended()) {
-			return new Element(mob.pipeline(), "block_" + mob.element(), BLOCK_TRANSLUCENT, CUTOUT,
-					RenderStage.BLOCK_ENTITIES, false);
+		if (PINNED.contains(mob.pipeline())) {
+			return new Element(mob.pipeline(), "block_" + mob.element(), mob.program(),
+					mob.alphaTest(), RenderStage.BLOCK_ENTITIES, false);
 		}
 
-		boolean ownProgram = mob.pipeline() != RenderPipelines.END_CRYSTAL_BEAM
-				&& mob.pipeline() != RenderPipelines.ENTITY_CUTOUT_Z_OFFSET;
-
 		return new Element(mob.pipeline(), "block_" + mob.element(),
-				ownProgram ? BLOCK : mob.program(), ownProgram ? CUTOUT : mob.alphaTest(),
+				mob.blended() ? BLOCK_TRANSLUCENT : BLOCK, CUTOUT,
 				RenderStage.BLOCK_ENTITIES, false);
 	}
 
@@ -807,12 +818,11 @@ public final class EntityDraw {
 	 * <p>
 	 * Iris keys it on a CONSTANT, {@code p -> ShaderKey.GLINT}
 	 * ({@code pipeline/IrisPipelines.java:50}), where almost every row of {@link #ELEMENTS} reaches a
-	 * function that tests the hand and then the block entity phase. Two of them are pinned as well,
-	 * the end crystal beam and the offset cutout ({@code pipeline/IrisPipelines.java:61,62}), and
-	 * {@link #blockTwin} says what that costs them; what those two are pinned to is the key an entity
-	 * row reaches anyway, so the pin only keeps the phase off them. The glint's names a program no
-	 * other row of that table can reach. So a glint is a glint on a mob, on a chest and in the hand
-	 * alike, and the four pieces below differ in the MOMENT and never in the name.
+	 * function that tests the hand and then the block entity phase. Three of them are pinned as well,
+	 * which {@link #PINNED} names and {@link #blockTwin} reads; what those three are pinned to is the
+	 * key an entity row reaches anyway, so the pin only keeps the phase off them. The glint's names a
+	 * program no other row of that table can reach. So a glint is a glint on a mob, on a chest and in
+	 * the hand alike, and the four pieces below differ in the MOMENT and never in the name.
 	 */
 	private static final String ARMOR_GLINT = "gbuffers_armor_glint";
 
@@ -1185,9 +1195,6 @@ public final class EntityDraw {
 				: wanted && element != null && inWindow(element);
 		if (!inMoment || device == null || element == null) {
 			draw.end();
-			if (wanted && element == null && translucentFeatures) {
-				draw.withheld(prepared.pipeline());
-			}
 
 			return false;
 		}
@@ -1528,27 +1535,6 @@ public final class EntityDraw {
 				+ "dropped rather than handed back: inside the light's walk the game would open its "
 				+ "own pass on the target its render type names, which at that point in the frame "
 				+ "carries the finished picture", pipeline.getLocation());
-	}
-
-	/**
-	 * Says once, when one of the two pipelines {@link #WITHHELD} names is really drawn, that this
-	 * engine left it to the game and why.
-	 * <p>
-	 * Here and not at the load, because the load cannot know: a breeze and a guardian beam are things
-	 * a world may or may not contain, and a line said at every load about geometry nobody will meet
-	 * is a line a reader learns to skip. The rest of the table is silent on a miss for the opposite
-	 * reason, the game having a hundred pipelines this family was never asked about; these two were
-	 * asked about and answered no.
-	 */
-	private void withheld(RenderPipeline pipeline) {
-		String reason = WITHHELD.get(pipeline);
-		if (reason != null && this.refused.add("withheld:" + pipeline.getLocation())) {
-			Vitrail.logger().warn("The game keeps its own shader for {}, which this engine leaves to "
-					+ "it: {}. What it costs is that this geometry is lit by the game inside the "
-					+ "window the pack is drawing, so it carries none of the pack's material and its "
-					+ "colour makes one more trip through eight bits. It holds for as long as this "
-					+ "pack is loaded", pipeline.getLocation(), reason);
-		}
 	}
 
 	/**
