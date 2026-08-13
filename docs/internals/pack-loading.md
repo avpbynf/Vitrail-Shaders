@@ -171,7 +171,7 @@ A profile that names a word its own pack declares nowhere is dropped in silence,
 is nearly as quiet. Four of the forms its parser takes name a setting, and it looks only one of them
 up before using it, the bare positive one, which is where it warns. The `!NAME`, `NAME=value` and
 `NAME:value` forms go through unchecked, and over the eight test packs those three are 423 tokens of
-the 440 the four carry. Here none of the four is checked. What the difference costs is a pack
+the 440 the four carry. Here nothing is looked up on any form. What the difference costs is a pack
 author's own typo staying invisible in one form of four; it costs the picture nothing, since neither
 engine applies the word anywhere.
 
