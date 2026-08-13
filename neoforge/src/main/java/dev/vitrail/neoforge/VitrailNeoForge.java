@@ -4,11 +4,13 @@ import dev.vitrail.neoforge.sodium.ShadowTerrain;
 import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.HandDraw;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.render.PbrAtlases;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
 import dev.vitrail.Vitrail;
 
+import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -17,6 +19,7 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.FrameGraphSetupEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.client.event.TextureAtlasStitchedEvent;
 import net.neoforged.neoforge.client.event.lifecycle.ClientStoppingEvent;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
@@ -37,6 +40,13 @@ public final class VitrailNeoForge {
 		MenuEntry.register();
 
 		modBus.addListener(FMLClientSetupEvent.class, this::onClientSetup);
+
+		// Posted at the end of TextureAtlas.upload, once per atlas and once per resource reload,
+		// with the stitched texture already made and no render pass open. It is where the sprites of
+		// an atlas can be walked, which is the one thing the material maps need and the one thing
+		// vanilla exposes nowhere: getTextures is NeoForge's own addition to TextureAtlas, so the
+		// walk stays on this side of the module boundary and the common module is handed the result.
+		modBus.addListener(TextureAtlasStitchedEvent.class, this::onAtlasStitched);
 
 		// The frame graph event no longer carries a pass of ours, only a reading: the shadow map is
 		// drawn at the end of the frame, for the next one, and what the stage needs from here is
@@ -96,6 +106,18 @@ public final class VitrailNeoForge {
 		// The report of the pack goes with the reading of it, in PackChain, where which pack is
 		// being drawn is known.
 		PackChain.load(Vitrail.platform().gameDirectory());
+	}
+
+	/**
+	 * Reads what the resource pack ships beside the sprites of an atlas the game has just stitched.
+	 * <p>
+	 * Everything the maps need is pulled apart here rather than passed along whole, and the reason is
+	 * the module boundary: {@code getTextures} is NeoForge's own addition to {@code TextureAtlas} and
+	 * the common module compiles against vanilla alone, so it could not walk the sprites itself.
+	 */
+	private void onAtlasStitched(TextureAtlasStitchedEvent event) {
+		TextureAtlas atlas = event.getAtlas();
+		PbrAtlases.stitched(atlas.location(), atlas.getTexture(), atlas.getTextures().values());
 	}
 
 	private void onFrameGraphSetup(FrameGraphSetupEvent event) {
@@ -200,5 +222,9 @@ public final class VitrailNeoForge {
 		// map is filled from a submission of its own, so it carries its own dispatcher and its own
 		// buffers, and they go back here rather than with any pack.
 		ShadowGeometry.close();
+
+		// And the material maps, which belong to the resource pack rather than to any shader pack:
+		// nothing in a pack's lifetime touches them, so nothing but the end of the session does.
+		PbrAtlases.close();
 	}
 }
