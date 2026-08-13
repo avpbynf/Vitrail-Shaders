@@ -128,9 +128,12 @@ public final class SamplerPlan {
 	 * <p>
 	 * That default is a divergence and not a property of the model. Iris draws the hand inside the
 	 * level for any pack it loads ({@code pathways/HandRenderer.java:95-98} from
-	 * {@code mixin/MixinLevelRenderer.java:280}), on the same frames the game would have drawn one
-	 * and no others, so on those frames its {@code depthtex1} carries the hand where neither of ours
-	 * does. What holds it off here is the switch alone and nothing about this engine's API:
+	 * {@code mixin/MixinLevelRenderer.java:280}), on the frames the game would have drawn one and
+	 * whose hand has a solid half at all, so on those frames its {@code depthtex1} carries the hand
+	 * where neither of ours does. Two hands holding translucent blocks are the exception on its side
+	 * too: the solid guard turns it away and the whole hand goes to the translucent call, which is
+	 * behind the copy. What holds it off here is the switch alone and nothing about this engine's
+	 * API:
 	 * {@code EngineOptions} carries the default and {@code EngineOptions.announceHandOff} writes out
 	 * what it costs, once per load, for the player looking at the picture it produced.
 	 */

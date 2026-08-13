@@ -263,12 +263,16 @@ final class PackDepth {
 	 * {@code GeometryProgram} counts on to keep the terrain and the shadow map off it.
 	 * <p>
 	 * The rest are failures. A refused allocation of this image alone leaves the pair standing, so
-	 * {@code depthtex2} reads the world WITH the hand everywhere the chain reads it and the far plane
-	 * on the hand's own pass; {@link #ensurePreHand} logs that. A refused pair ({@link #ensure}) and
-	 * a refused conversion ({@link #pipeline(GpuDevice)}) each take all three images down together,
-	 * so every depth lookup of the pack reads the far plane, and each has a line of its own. Only
-	 * {@link #fill}'s guards against a device with no view to give are silent, and they are the shape
-	 * of failure where nothing at all is being drawn anyway.
+	 * {@code depthtex2} falls exactly where {@code depthtex1} falls: the world WITH the hand wherever
+	 * the opaque image answers, and the far plane wherever it does not. {@link #ensurePreHand} logs
+	 * that. A refused pair ({@link #ensure}) leaves nothing allocated at all, and a refused
+	 * conversion ({@link #pipeline(GpuDevice)}) leaves all three allocated and none of them written,
+	 * which comes to the same thing for a reader: every depth lookup of the pack reads the far plane.
+	 * Each of those two says so on its own line, once.
+	 * <p>
+	 * Three ways in are silent, and all three are a screen rather than a pack: a window with no
+	 * width, a refusal already logged at this size and being met again, and {@link #fill} finding no
+	 * device to draw with. None of them is a state a line would add anything to.
 	 */
 	GpuTextureView preHand() {
 		return this.preHandWritten ? this.preHand.view() : null;
@@ -403,9 +407,10 @@ final class PackDepth {
 			this.preHandBroken = true;
 			this.preHand = close(this.preHand);
 			Vitrail.logger().error("Vitrail could not allocate the depth image the pack reads past the "
-					+ "hand with at {}x{}, so until the screen is another size depthtex2 reads the world "
-					+ "with the hand in it everywhere the chain reads it, and the far plane on the "
-					+ "hand's own pass, which is the one program it was taken for", width, height, e);
+					+ "hand with at {}x{}, so until the screen is another size depthtex2 answers "
+					+ "exactly as depthtex1 does: the world with the hand in it where that one is "
+					+ "served, and the far plane elsewhere, the hand's own pass included",
+					width, height, e);
 
 			return false;
 		}

@@ -1036,28 +1036,29 @@ final class GeometryProgram {
 	 * copy is forgotten at the end of every frame, so a pass drawn BEFORE the moment it is taken
 	 * finds nothing and falls through to the paragraphs above.
 	 * <p>
-	 * <strong>That last sentence is a divergence, and this is the whole of it.</strong>
-	 * <p>
-	 * What Iris does: it binds {@code depthtex2} to a texture that always exists, off the one table
-	 * every terrain, gbuffers and shadow program is built with
+	 * <strong>That is a gap against Iris, it is older than this class's third image, and nothing
+	 * here pays for it.</strong> Iris binds {@code depthtex2} to a texture that always exists, off
+	 * the one table every terrain, gbuffers and shadow program is built with
 	 * ({@code samplers/IrisSamplers.java:220-226}, reached from
 	 * {@code pipeline/IrisRenderingPipeline.java:380} and {@code :763}), and refills it once a frame
 	 * whether a hand is drawn or not, its {@code beginHand} standing ahead of the guards that decide
 	 * that ({@code mixin/MixinLevelRenderer.java:279-280} against
-	 * {@code pathways/HandRenderer.java:95-98}). A program drawn before that moment therefore reads
-	 * the copy of the PREVIOUS frame.
+	 * {@code pathways/HandRenderer.java:95-98}). A program drawn before that moment reads the copy of
+	 * the PREVIOUS frame there and one everywhere here, "nothing in front".
 	 * <p>
-	 * What stops the same here: the copy is not a copy. Iris moves depth to depth and can pay it
-	 * every frame; this backend has to convert the reversed z into the window the pack reads, so
-	 * {@link PackDepth#takePreHand} is a full screen draw and {@link PackChain#markPreHandDepth}
-	 * only spends it on the frames a hand is really drawn. An image kept across frames would then be
-	 * older than the one frame Iris's is - as old as the last frame that drew a hand, which is
-	 * unbounded - so {@link PackDepth#forgetPreHand} drops it at the end of every frame instead.
+	 * <strong>It is not a contournement and it is not written up as one.</strong> Nothing in 26.2
+	 * forbids taking the copy on every frame the chain runs; what argues against it is cost, since
+	 * this backend has to convert the reversed z and {@link PackDepth#takePreHand} is therefore a
+	 * full screen draw where Iris moves depth to depth. That is a preference, so it does not make a
+	 * divergence admissible, and the honest name for it is an unpaid gap.
 	 * <p>
-	 * What it costs the picture: a terrain or shadow program reading {@code depthtex2} gets one
-	 * everywhere, "nothing in front", where Iris gives it a depth one frame old. Measured on the
-	 * eight pack corpus: three packs read that name and all three read it from a deferred or a
-	 * composite, none from a gbuffers or a shadow program.
+	 * What holds it at that: the same passes read the same far plane on {@code main}, this class
+	 * having answered every depth copy with the constant ahead of the deferred stage long before
+	 * there was a third image; the range that added the image changed nothing for them. And no pack
+	 * of the eight measured reads the name from a program drawn there - the readers are BSL's
+	 * composites, Bliss's composite, deferred and final, and Sildur's deferreds, composite and
+	 * final, with no gbuffers and no shadow program among them. Iris's own table carries a comment
+	 * asking whether those programs should be served it at all.
 	 */
 	private GpuTextureView depth(String sampler) {
 		if (SamplerPlan.preHandCopy(sampler)) {

@@ -1426,8 +1426,10 @@ public final class PackChain {
 	 * through the 4096 square allocation {@link ColorTargets} says a machine can fail at. Iris pays
 	 * it unconditionally instead, its copy moving depth to depth where this one is a draw
 	 * ({@code gl/texture/DepthCopyStrategy.java:15-31} takes {@code glCopyImageSubData} wherever the
-	 * entry point is there, and a framebuffer path where it is not). {@link PackDepth} carries what
-	 * that saves.
+	 * entry point is there and a framebuffer path where it is not, and the first copy after a resize
+	 * goes straight through {@code copyTexImage2D}, {@code targets/RenderTargets.java:235-239}).
+	 * {@link PackDepth} carries what that saves, and {@code GeometryProgram.depth} what it leaves
+	 * owing.
 	 * <p>
 	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes, for the reason
 	 * {@link #markGeometryDepth} is not: nothing here warms a pipeline, prepares a target or clears
