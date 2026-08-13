@@ -272,7 +272,8 @@ final class PackDepth {
 	 * <p>
 	 * Three ways in are silent, and all three are a screen rather than a pack: a window with no
 	 * width, a refusal already logged at this size and being met again, and {@link #fill} finding no
-	 * device to draw with. None of them is a state a line would add anything to.
+	 * quad, no live depth or no image to draw into. None of them is a state a line would add
+	 * anything to.
 	 */
 	GpuTextureView preHand() {
 		return this.preHandWritten ? this.preHand.view() : null;

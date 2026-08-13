@@ -1055,10 +1055,11 @@ final class GeometryProgram {
 	 * What holds it at that: the same passes read the same far plane on {@code main}, this class
 	 * having answered every depth copy with the constant ahead of the deferred stage long before
 	 * there was a third image; the range that added the image changed nothing for them. And no pack
-	 * of the eight measured reads the name from a program drawn there - the readers are BSL's
-	 * composites, Bliss's composite, deferred and final, and Sildur's deferreds, composite and
-	 * final, with no gbuffers and no shadow program among them. Iris's own table carries a comment
-	 * asking whether those programs should be served it at all.
+	 * of the eight measured reads the name from a program drawn there - the readers are BSL's two
+	 * composites, Bliss's deferred, and Sildur's two deferreds, its composite and its final, with no
+	 * gbuffers and no shadow program among them; two more files of Bliss declare the sampler and
+	 * never fetch it. Iris's own table carries a comment asking whether those programs should be
+	 * served the name at all.
 	 */
 	private GpuTextureView depth(String sampler) {
 		if (SamplerPlan.preHandCopy(sampler)) {
