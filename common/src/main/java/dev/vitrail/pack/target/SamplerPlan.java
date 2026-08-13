@@ -121,9 +121,14 @@ public final class SamplerPlan {
 	 * {@code depthtex1} carries and {@code depthtex2} does not, and {@link #preHandCopy} is that
 	 * second question.
 	 * <p>
-	 * Can, and only where this engine draws the hand itself. Left to the game, which is what it is
-	 * unless the pack's own hand programs are turned on, the hand is drawn after the whole chain has
-	 * run and neither copy carries it, the two being one image.
+	 * Can, and only where this engine draws the hand itself, which is the {@code hand} line of
+	 * {@code vitrail/options.txt} and not anything a pack asks for. Left to the game, which is what
+	 * the default still is, the hand is drawn after the whole chain has run and NEITHER copy carries
+	 * it, the two being one image. That is a divergence and not a property of the model: Iris draws
+	 * the hand inside the level for any pack it loads
+	 * ({@code pathways/HandRenderer.java:95-98} from {@code mixin/MixinLevelRenderer.java:280}), so
+	 * its {@code depthtex1} always carries the hand and its {@code depthtex2} never does. What holds
+	 * it here is the switch, and {@code EngineOptions.announceHandOff} is where its cost is written.
 	 */
 	public static boolean depthCopy(String name) {
 		return name.equals("depthtex1") || name.equals("depthtex2");

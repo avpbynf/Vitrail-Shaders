@@ -179,18 +179,22 @@ GNU Lesser General Public License version 3
   August 2026: the texture it names Depth / Before Hand, line 73, refilled by its copyPreHandDepth,
   line 234, which net.irisshaders.iris.pipeline.IrisRenderingPipeline calls from beginHand, lines
   1050 to 1057, one line ahead of the solid hand and one step ahead of the beginTranslucents that
-  takes depthtex1, net.irisshaders.iris.mixin.MixinLevelRenderer lines 279 to 280. That order is
+  takes depthtex1, net.irisshaders.iris.mixin.MixinLevelRenderer lines 279 to 282. That order is
   what common/src/main/java/dev/vitrail/render/PackChain.java keeps, and
   common/src/main/java/dev/vitrail/pack/target/SamplerPlan.java is where depthtex2 is told from
-  depthtex1 for it. Which programs are served from the image is Iris's answer as well: one table
-  hands depthtex0, depthtex1 and depthtex2 together to the gbuffers, the shadow and the terrain
-  programs alike, net.irisshaders.iris.samplers.IrisSamplers lines 220 to 226.
-  Two things in this entry are not transcriptions. The image is allocated with the hand family and
-  handed back with it, where Iris holds one for the whole session, and it is filled only on the
+  depthtex1 for it.
+  Three things in this entry are not transcriptions, and the files write each of them out. The
+  image is allocated with the hand family and handed back with it, and it is filled only on the
   frames a hand is really drawn rather than on every frame; a frame that draws none leaves the two
-  moments holding the same depth, and depthtex2 is answered from the opaque copy instead. And the
-  window each image is stored in is this backend's inverted z turned round once, where Iris copies
-  a depth it can hand over as it stands. Both are written out in the files.
+  moments holding the same depth, and depthtex2 is answered from the opaque copy instead. Iris
+  rebuilds its own on a resize or a depth format change, net.irisshaders.iris.targets.RenderTargets
+  lines 172 to 178, and otherwise carries it whether a hand was drawn or not. Second, Iris serves
+  depthtex2 to every program off one table, terrain, gbuffers and shadow alike,
+  net.irisshaders.iris.samplers.IrisSamplers lines 220 to 226 reached from IrisRenderingPipeline
+  lines 380 and 763, so a program drawn before the copy reads the previous frame's; here a pass
+  drawn before the copy is taken finds no image at all and reads the far plane. Third, the window
+  each image is stored in is this backend's inverted z turned round once, where Iris copies a depth
+  it can hand over as it stands.
 
   common/src/main/java/dev/vitrail/render/ParticleDraw.java draws the game's particles with the
   pack's programs, and three of its answers are Iris's, read in August 2026. The alpha test of one

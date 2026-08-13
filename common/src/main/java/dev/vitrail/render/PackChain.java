@@ -1417,14 +1417,16 @@ public final class PackChain {
 	 * <p>
 	 * <strong>Only on the frames this engine really draws a hand</strong>, which is
 	 * {@link HandDraw#draws} and not {@link HandDraw#diverted}: the hand's solid pass is the one
-	 * thing between this moment and the opaque image {@link #drawEarly} takes, so on every frame
-	 * that pass draws nothing - the game keeping its own hand, third person, a hidden interface, a
-	 * panorama - the two are the same image to the bit and {@code depthtex2} is answered from the
-	 * pair. The frame's test and not the load's, because the load's would pay a full screen image
-	 * and a conversion for that identical copy on every frame the player spent looking at himself,
-	 * and would take a panorama capture through the 4096 square allocation {@link PackDepth} says is
-	 * the one that fails. Iris pays it unconditionally instead, having the copy already in hand as a
-	 * blit; here it is a draw. {@link PackDepth} carries what that saves.
+	 * thing between this moment and the opaque image {@link #drawEarly} takes, so on every frame that
+	 * pass draws nothing - the hand left to the game, and every test {@link HandDraw#shows} carries,
+	 * which is the only list of them that cannot go stale - the two are the same image to the bit and
+	 * {@code depthtex2} is answered from the pair. The frame's test and not the load's, because the
+	 * load's would pay a full screen image and a conversion for that identical copy on every frame
+	 * the player spent looking at himself, and would take a panorama capture through the 4096 square
+	 * allocation {@link ColorTargets} says a machine can fail at. Iris pays it unconditionally
+	 * instead, its copy being a texture to texture one and not a draw
+	 * ({@code gl/texture/DepthCopyStrategy.java:15-31} picks {@code glCopyImageSubData} wherever the
+	 * entry point is there). {@link PackDepth} carries what that saves.
 	 * <p>
 	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes, for the reason
 	 * {@link #markGeometryDepth} is not: nothing here warms a pipeline, prepares a target or clears
@@ -2104,8 +2106,8 @@ public final class PackChain {
 		// for by writing depthtex2.
 		List<String> pastTheHand = depths.stream().filter(SamplerPlan::preHandCopy).toList();
 		if (!pastTheHand.isEmpty()) {
-			Vitrail.logger().info("{} read that same depth from before the hand was drawn, which is "
-					+ "an image of its own only while this engine draws the hand", pastTheHand);
+			Vitrail.logger().info("{} read the depth of the world from before the hand was drawn, "
+					+ "which is an image of its own only while this engine draws the hand", pastTheHand);
 		}
 	}
 

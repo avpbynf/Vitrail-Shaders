@@ -573,10 +573,13 @@ final class PackPass {
 	 * <p>
 	 * The two part company over the hand, and only over the hand: {@code depthtex2} is taken one step
 	 * earlier, before the hand's solid pass, so that a pack can read what the hand stands in front
-	 * of. On every frame no hand of this engine's was drawn - the game keeping its own, which is
-	 * what it does unless the pack's hand programs are on, or nothing being on screen to draw -
-	 * there is no such image and none is needed, the two moments holding the same depth, and the
-	 * fall through below is that answer rather than a gap.
+	 * of. On every frame no hand of this engine's was drawn - the game keeping its own, which is what
+	 * the {@code hand} line of {@code vitrail/options.txt} still leaves it doing by default, or
+	 * nothing being on screen to draw - there is no such image and none is needed, the two moments
+	 * holding the same depth, and the fall through below is that answer rather than a gap. It is
+	 * also reached when an image was wanted and could not be had, which is not the same thing and is
+	 * not silent: {@link PackDepth#preHand} carries the cases apart and each failure has its own
+	 * line in the log.
 	 */
 	private static GpuTextureView depth(String sampler, ColorTargets targets,
 			GpuTextureView depthView) {

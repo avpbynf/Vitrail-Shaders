@@ -60,9 +60,12 @@ import java.util.Optional;
  * WITHOUT the hand, so that a pack can read what the hand it is holding stands in front of, and
  * only {@link #takeOpaque}'s image carries the hand.
  * <p>
- * <strong>It is allocated with the hand and not with the pair</strong>, where Iris keeps a third
- * texture for every session ({@code targets/RenderTargets.java:73}) and refills it on every frame
- * ({@code targets/RenderTargets.java:234}). What a pack reads is the same either way, and that is
+ * <strong>It is allocated with the hand and not with the pair</strong>, where Iris builds a third
+ * texture beside the other two ({@code targets/RenderTargets.java:73}), rebuilds it on a resize or
+ * a depth format change like the pair ({@code targets/RenderTargets.java:172-178}) and refills it
+ * once a frame, its copy being called unconditionally
+ * ({@code targets/RenderTargets.java:234} from {@code pipeline/IrisRenderingPipeline.java:1056}).
+ * What a pack reads is the same either way, and that is
  * the whole of why the difference is allowed to stand: nothing between the two moments writes the
  * game's depth except the hand's own solid pass, so on a frame that draws no hand the two images
  * would be the same one to the bit, and {@code depthtex2} is answered from the pair instead. What
@@ -175,9 +178,10 @@ final class PackDepth {
 	private int brokenHeight;
 
 	/**
-	 * Converts the depth of the opaque world, which the pack reads as {@code depthtex1} and
-	 * {@code depthtex2}, and as {@code depthtex0} for as long as the deferred stage is the present
-	 * half. Must run on the render thread and outside any render pass.
+	 * Converts the depth of the opaque world, which the pack reads as {@code depthtex1}, as
+	 * {@code depthtex0} for as long as the deferred stage is the present half, and as
+	 * {@code depthtex2} on every frame {@link #takePreHand} has no image of its own for. Must run on
+	 * the render thread and outside any render pass.
 	 *
 	 * @param live the game's depth as it stands, which the caller has to take before anything
 	 *             translucent is drawn
@@ -249,14 +253,21 @@ final class PackDepth {
 	/**
 	 * The opaque world's depth without the hand, or null while this frame has none.
 	 * <p>
-	 * Null covers three cases and a caller cannot tell them apart, which is deliberate: the answer
-	 * to all three is the same, fall back to whatever the pass would have read for a depth copy
-	 * without this class. Only the first of the three is exact. A frame that drew no hand of ours
-	 * really has nothing to give, the two moments holding one image. A refused allocation and a
-	 * conversion that could not be drawn both leave the reader a depth with the hand in it, which is
-	 * the very thing the name asks to be spared; both are said out loud where they happen rather
-	 * than here, {@link #ensurePreHand} at the allocation and {@link #pipeline(GpuDevice)} at the
-	 * conversion.
+	 * Null covers more than one case and a caller cannot tell them apart, which is deliberate: the
+	 * answer to all of them is the same, fall back to whatever the pass would have read for a depth
+	 * copy without this class.
+	 * <p>
+	 * Two of them are exact and are the ordinary answer. A frame that drew no hand of ours really has
+	 * nothing to give, the two moments holding one image. And a pass drawn earlier in the frame than
+	 * {@link PackChain#markPreHandDepth} is asking before the image exists, which is what
+	 * {@code GeometryProgram} counts on to keep the terrain and the shadow map off it.
+	 * <p>
+	 * The other two are failures, and each is said out loud where it happens rather than here. A
+	 * refused allocation leaves the pair standing, so {@code depthtex2} reads the world WITH the hand
+	 * from the deferreds on and the far plane on the hand's own pass; {@link #ensurePreHand} is where
+	 * that is logged. A conversion that could not be drawn is {@link #pipeline(GpuDevice)} refusing,
+	 * and that takes the pair down with it, so every depth lookup of the pack reads the far plane and
+	 * its own line says so.
 	 */
 	GpuTextureView preHand() {
 		return this.preHandWritten ? this.preHand.view() : null;
@@ -275,7 +286,8 @@ final class PackDepth {
 	 * The memory outlives the frame and not the family, which is what makes the class comment's cost
 	 * true both ways. It is deliberately NOT freed on the frames that simply drew no hand - third
 	 * person, a hidden interface - since those come back within a keystroke and an image freed and
-	 * built again at every one of them would trade a megabyte for an allocation a frame.
+	 * built again at every one of them would trade one full screen image, whose real size
+	 * {@link #ensurePreHand} prints, for an allocation a frame.
 	 *
 	 * @param held whether the hand is still this engine's to draw, which is the load's answer and
 	 *             not the frame's: it goes false when the family is turned off in the options and
@@ -390,8 +402,9 @@ final class PackDepth {
 			this.preHandBroken = true;
 			this.preHand = close(this.preHand);
 			Vitrail.logger().error("Vitrail could not allocate the depth image the pack reads past the "
-					+ "hand with at {}x{}, so depthtex2 reads the world with the hand in it until the "
-					+ "screen is another size", width, height, e);
+					+ "hand with at {}x{}, so until the screen is another size depthtex2 reads the world "
+					+ "with the hand in it from the deferred stage on, and the far plane on the hand's "
+					+ "own pass, which is the one program it was taken for", width, height, e);
 
 			return false;
 		}

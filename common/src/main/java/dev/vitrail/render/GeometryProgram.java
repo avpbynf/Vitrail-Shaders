@@ -1032,10 +1032,21 @@ final class GeometryProgram {
 	 * taken in the middle of the world rather than at the edge of a half:
 	 * {@link PackChain#markPreHandDepth} fills it one line before the hand's solid pass is drawn, so
 	 * {@code gbuffers_hand}, the program it is taken for, stands on the near side of the test and
-	 * would read the far plane if the test came first. Iris hands the pre-hand depth to every
-	 * gbuffers program off one table ({@code samplers/IrisSamplers.java:220-226}). No stale image
-	 * comes in by the same door: the copy is forgotten at the end of every frame, so a pass drawn
-	 * BEFORE the moment it is taken finds nothing and falls through to the paragraphs above.
+	 * would read the far plane if the test came first. No stale image comes in by the same door: the
+	 * copy is forgotten at the end of every frame, so a pass drawn BEFORE the moment it is taken
+	 * finds nothing and falls through to the paragraphs above.
+	 * <p>
+	 * <strong>That last sentence is a divergence, and this is the whole of it.</strong> Iris binds
+	 * {@code depthtex2} to a texture that always exists, off the one table every terrain, gbuffers
+	 * and shadow program is built with ({@code samplers/IrisSamplers.java:220-226}, reached from
+	 * {@code pipeline/IrisRenderingPipeline.java:380} and {@code :763}), so a program drawn before
+	 * its {@code beginHand} reads the copy of the PREVIOUS frame. Here the same program reads the far
+	 * plane, because this engine has no image standing at that moment to give it. What stops the
+	 * copy being carried over is the rule this class is built on, one line up: an image taken on
+	 * another frame is the wrong moment of the right picture, and this project would rather answer
+	 * "nothing in front" than answer plausibly and be one frame of camera movement wrong. The cost
+	 * is a terrain or shadow program reading {@code depthtex2} as one everywhere; no pack of the
+	 * corpus does.
 	 */
 	private GpuTextureView depth(String sampler) {
 		if (SamplerPlan.preHandCopy(sampler)) {
@@ -1098,12 +1109,16 @@ final class GeometryProgram {
 	}
 
 	/**
-	 * Whether this name is answered with something the frame really drew, rather than one pixel. A
-	 * colour target counts even when it is empty at this point of the frame: it is the pack's own
-	 * image and what it holds is a question about the order of the frame, not about the binding. A
-	 * depth sampler counts only on the translucent pass, where the copy answers it, and depthtex2 on
-	 * the hand's solid pass as well, the copy that name reads being taken one line before that pass
-	 * is drawn.
+	 * Whether the plan answers this name with an image rather than with one pixel. A colour target
+	 * counts even when it is empty at this point of the frame: it is the pack's own image and what
+	 * it holds is a question about the order of the frame, not about the binding. A depth sampler
+	 * counts only on the translucent pass, where the copy answers it, and depthtex2 on the hand's
+	 * solid pass as well, the copy that name reads being taken one line before that pass is drawn.
+	 * <p>
+	 * The plan's answer and not a frame's, and that is the whole of what it is for: this feeds a line
+	 * said once at the load, where no frame has run. A screen too big to allocate an image at leaves
+	 * every one of these names on the constant and says so at the moment it happens, in
+	 * {@link PackDepth}, which is where a reader has to go to know what a frame really did.
 	 */
 	private boolean readsATexture(String sampler) {
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
