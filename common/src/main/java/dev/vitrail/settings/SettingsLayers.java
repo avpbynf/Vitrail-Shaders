@@ -20,10 +20,11 @@ import java.util.Set;
  * whatever pack is loaded, and it is edited by hand while the game runs. What it holds is reported
  * so that the screen can grey those settings out instead of letting a click lose to them in silence.
  * <p>
- * Global is not the same as unconditional. A line of it forces a setting the loaded pack
- * <em>declares</em>, and one naming anything else keeps the pack's own defaults and is said so at
- * the load: a settings name is an identifier, and defining a word the pack uses for something of its
- * own is how a whole pack comes to fail on a word nobody offered as a setting.
+ * Global is not the same as unconditional. Past the engine's own reserved lines, which this file
+ * carries too and which {@code EngineOptions.RESERVED} names, a line of it forces a setting the
+ * loaded pack <em>declares</em>; one naming anything else keeps the pack's own defaults and is said
+ * so at the load, by name. A settings name is an identifier, and defining a word the pack uses for
+ * something of its own is how a whole pack comes to fail on a word nobody offered as a setting.
  * <p>
  * Only the top two layers are resolved here. The two below belong to the pack: a value nobody
  * chose is the one written in its source, and a profile is expanded by
@@ -58,8 +59,10 @@ public final class SettingsLayers {
 	 * shader that proves only itself. That is why it stays a file edited by hand, why it applies to
 	 * whatever pack is loaded, and why it wins over the screen rather than the other way round.
 	 * <p>
-	 * One of the pack's OWN features, and the emphasis is the whole of the rule: what this file can
-	 * force is a setting the loaded pack declares, since that is where a setting is applied.
+	 * One of the pack's own features, and that word carries the rule: a setting is applied by
+	 * rewriting the line that declares it, so what this file can force of a pack is what the pack
+	 * declares. Its other job, the reserved lines that name this engine rather than a pack, goes
+	 * through {@code EngineOptions.take} and never reaches a pack at all.
 	 */
 	public static Map<String, OptionValue> forced(Path gameDirectory) throws IOException {
 		Path file = file(gameDirectory);

@@ -31,8 +31,10 @@ import java.util.Set;
  *                 caller reports and nothing else acts on. It is the only load where the values on
  *                 screen were somewhere else a moment ago
  * @param declared every name the pack declares, which is not the same question as what its menu
- *                 shows and is the one the layers are judged against: a chosen name that is not in
- *                 here changes nothing about the pack, so the load has to say it is being dropped
+ *                 shows and is what the forced layer is judged against: a chosen name that is not
+ *                 in here changes nothing about the pack, so the load has to say it is being
+ *                 dropped. {@link #stale} judges the pack's own file against the menu instead, and
+ *                 says there why
  */
 public record PackSession(Path gameDirectory, Path packPath, String packFileName, PackMenu menu,
 		Set<String> declared, SettingsFile.Carried carried, SettingsFile.Stored saved,
@@ -107,8 +109,9 @@ public record PackSession(Path gameDirectory, Path packPath, String packFileName
 	public List<String> stale() {
 		List<String> stale = new ArrayList<>();
 		for (String name : this.saved.values().keySet()) {
-			// A name in options.txt is deliberate, never stale: it is how a setting no pack
-			// declares is forced in the first place.
+			// A name options.txt also carries is left out, and it is the only exclusion here: that
+			// file is answered for word by word by EngineOptions.announceForced, which knows
+			// whether the pack declares it, and two lines about one word read as two words.
 			if (this.menu.option(name).isEmpty() && !this.forced.containsKey(name)) {
 				stale.add(name);
 			}

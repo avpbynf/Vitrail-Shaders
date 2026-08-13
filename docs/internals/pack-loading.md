@@ -109,8 +109,9 @@ case sensitively - which it is, because GLSL identifiers are - but they are the 
 that behaves differently as a folder and as an archive.
 
 The index has a second job beyond listing settings: it is the only way to tell **a name the pack owns
-from a name it never declared**. Header defines and the program-toggle language both ask it that
-question, and both give a different answer for an unknown name than for a declared one.
+from a name it never declared**. The program-toggle language asks it that question, and so does the
+load before it reports what a forced line did or did not move; both give a different answer for an
+unknown name than for a declared one.
 
 ## Applying a setting where it stands
 
@@ -132,8 +133,9 @@ The rewrite rules are asymmetric on purpose:
   as an expression rather than tested for existence, so commenting it out would leave the name
   undeclared where it is used, and skipping it would drop the player's choice silently.
 
-Only names the pack declares **nowhere** are emitted as defines in the unit's header. They have no
-declaration to rewrite, so the header is the only place they can be said at all.
+A name the pack declares **nowhere** is not applied at all, and nothing is emitted for it in the
+unit's header. There is nowhere to apply it: the section below carries why that is the answer rather
+than an omission.
 
 Two consequences for anyone editing the expander. The define table is updated **from the rewritten
 line**, not the original, so a later conditional sees what the compiler will see; and when a rewrite
@@ -156,8 +158,14 @@ because that is what the compiler will see later.
 
 A chosen name the pack declares nowhere therefore reaches no unit at all. It has no declaration to
 rewrite, and writing it into the head of the unit instead is the one thing that must not happen: a
-settings name is an identifier, and a pack uses identifiers for its own things. The load names every
-such value instead of applying it.
+settings name is an identifier, and a pack uses identifiers for its own things.
+
+Which of those names the load says out loud depends on where the name came from, and the difference
+is who typed it. A line of `vitrail/options.txt` is named word by word, because a person edits that
+file by hand and a typo there is worth a line. A name in the pack's own settings file is named too,
+with the ones its menu no longer shows. A profile that names a word its own pack declares nowhere is
+dropped in silence, which is a pack's own bug rather than a player's, and which is what the
+reference does with it as well.
 
 Under both sits the engine's own table, and three readers have to be handed the same one: the
 preprocessor deciding which branch is live, the translator writing those symbols back out, and the

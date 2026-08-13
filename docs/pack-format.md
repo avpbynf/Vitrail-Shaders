@@ -177,10 +177,12 @@ A setting is applied by rewriting its declaration line **where it stands**, not 
 of defines at the top of the unit. The reason is positional: a define moved to the header changes
 the result of any conditional that sits before the original declaration.
 
-A name the pack declares nowhere is not applied at all, and no header define is emitted for it: the
-same positional reason bites harder there, since a header define would be a word nobody offered as a
-setting landing on top of whatever the pack uses that word for. The rewrite rules are
-asymmetric on purpose - a true boolean uncomments the define, a false boolean comments it out, a
+A name the pack declares nowhere is not applied at all, and no header define is emitted for it
+either. The reason is a different one, and it is worse: with no declaration anywhere there is no
+position to argue about, and a header define would simply be a word nobody offered as a setting
+landing on top of whatever the pack uses that word for.
+
+The rewrite rules are asymmetric on purpose - a true boolean uncomments the define, a false boolean comments it out, a
 value rewrites the define's value, and a value on a constant rewrites only its right-hand side. A
 boolean lands on a constant in one of two ways: on a `const bool` it is written out as `true` or
 `false`, since a constant is read as an expression rather than tested for existence and commenting
