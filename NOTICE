@@ -420,7 +420,7 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/render/PbrMap.java,
   common/src/main/java/dev/vitrail/render/PbrAtlas.java and
   common/src/main/java/dev/vitrail/render/PbrAtlases.java build the normal and specular maps a
-  resource pack ships, and six of their answers are Iris's, read in August 2026. The layout, one
+  resource pack ships, and the following answers are Iris's, read in August 2026. The layout, one
   companion image per atlas with each map at the base sprite's own x and y, is that of
   net.irisshaders.iris.pbr.loader.AtlasPBRLoader, lines 55 to 74, with the suffixes and the two
   values a sprite with no map of its own reads taken from net.irisshaders.iris.pbr.texture.PBRType,

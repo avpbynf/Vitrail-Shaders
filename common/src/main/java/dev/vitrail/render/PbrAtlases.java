@@ -70,7 +70,7 @@ public final class PbrAtlases {
 	 * is created, which is what an ordinary install without a material pack pays.
 	 * <p>
 	 * Not gated on a shader pack being loaded, where Iris builds nothing until one is and asks for
-	 * the two names ({@code pipeline/IrisRenderingPipeline.java:854} off
+	 * the two names ({@code pipeline/IrisRenderingPipeline.java:855} off
 	 * {@code samplers/IrisSamplers.hasPBRSamplers}). What that gate would buy is measured and small:
 	 * all eight packs of the corpus declare at least one of the names, so it only ever spares the
 	 * player who has a material resource pack and no shader pack running at all. What it would cost

@@ -92,6 +92,17 @@ enum PbrMap {
 		return this.sampler;
 	}
 
+	/** Which map a sampler name asks for, on the name alone, or null for every other name. */
+	static PbrMap named(String sampler) {
+		for (PbrMap map : values()) {
+			if (map.sampler.equals(sampler)) {
+				return map;
+			}
+		}
+
+		return null;
+	}
+
 	/** What is appended to a sprite's own path to find this map beside it. */
 	String suffix() {
 		return this.suffix;

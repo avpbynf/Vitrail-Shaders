@@ -931,24 +931,29 @@ final class GeometryProgram {
 	 * Which of the two material maps a name asks for, or null for every other name and for a name
 	 * the pack has taken over.
 	 * <p>
-	 * The pack wins, and that is Iris's order rather than a courtesy: it wraps the sampler holder in
+	 * The pack wins, and Iris does that on one of its two roads and not on the other. The one that
+	 * serves the terrain wraps the sampler holder in
 	 * {@code ProgramSamplers.customTextureSamplerInterceptor} before the level samplers are added at
-	 * all ({@code samplers/ProgramSamplers.java:50-56}), so a {@code texture.gbuffers.normals} line
-	 * takes the name from underneath them. Nothing in the corpus writes one, measured across the
-	 * eight packs' properties files, so this decides nothing today and is here because the day it
-	 * decides something the wrong answer is a pack reading the block atlas's relief where it asked
-	 * for its own file.
+	 * all ({@code gl/program/ProgramSamplers.java:50-56} from
+	 * {@code pipeline/IrisRenderingPipeline.java:379} and {@code :584}), so a
+	 * {@code texture.gbuffers.normals} line takes the name from underneath them. The one that serves
+	 * the entities, the particles, the sky and the hand hands over the raw holder instead
+	 * ({@code IrisRenderingPipeline.java:762}), and there the line does not take it. Iris disagrees
+	 * with itself, so this follows the half that gives the pack what it asked for.
+	 * <p>
+	 * Nothing in the corpus writes such a line, measured across the eight packs' properties files, so
+	 * this decides nothing today. It is here because the day it decides something, the wrong answer
+	 * is a pack reading the block atlas's relief where it asked for a file of its own.
 	 */
 	private PbrMap material(String sampler) {
-		for (PbrMap map : PbrMap.values()) {
-			if (map.sampler().equals(sampler)) {
-				return this.loaded.samplers().binding(sampler).kind() == SamplerPlan.Kind.PACK_TEXTURE
-						? null
-						: map;
-			}
+		PbrMap named = PbrMap.named(sampler);
+		if (named == null) {
+			return null;
 		}
 
-		return null;
+		return this.loaded.samplers().binding(sampler).kind() == SamplerPlan.Kind.PACK_TEXTURE
+				? null
+				: named;
 	}
 
 	private int blockBytes() {
@@ -1215,6 +1220,12 @@ final class GeometryProgram {
 	 * {@link PackDepth}, which is where a reader has to go to know what a frame really did.
 	 */
 	private boolean readsATexture(String sampler) {
+		// Asked of the pack first, on the same order the bind above follows: a name the pack supplied
+		// a file for is that file, and whether it is a real image is a question about the file.
+		if (material(sampler) == null && PbrMap.named(sampler) != null) {
+			return this.targets.packTexture(TextureStage.GBUFFERS, sampler) != null;
+		}
+
 		PbrMap material = material(sampler);
 		if (material != null) {
 			// The session's answer and deliberately not this pass's, which is the one thing here that

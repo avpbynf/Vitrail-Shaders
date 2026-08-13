@@ -223,7 +223,10 @@ final class PbrAtlas implements AutoCloseable {
 		// nothing validates it: calculateFrameSize hands back a declared width and height without
 		// ever comparing them to the image. Left to throw, one badly written file took the whole
 		// atlas down with it - both maps, every sprite - and every block in the world went flat.
-		// Iris refuses the same sprite on the same question, at AtlasPBRLoader.java:121-125.
+		// Iris refuses the same UNIT, one sprite and one map, on a narrower question: its test is
+		// that the image is a whole number of frames (AtlasPBRLoader.java:121-125), so a file that
+		// declares a frame smaller than itself but not a divisor of it is refused there and cropped
+		// here. What that costs is a map read from the first frame instead of not read at all.
 		if (frame.width() > image.getWidth() || frame.height() > image.getHeight()
 				|| frame.width() <= 0 || frame.height() <= 0) {
 			Vitrail.logger().warn("{} declares a frame of {}x{} and is {}x{}, so its sprite keeps "
