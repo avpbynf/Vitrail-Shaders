@@ -8,6 +8,7 @@ import dev.vitrail.render.PbrAtlases;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
+import dev.vitrail.HostReport;
 import dev.vitrail.Vitrail;
 
 import net.minecraft.client.renderer.texture.TextureAtlas;
@@ -100,8 +101,16 @@ public final class VitrailNeoForge {
 	}
 
 	private void onClientSetup(FMLClientSetupEvent event) {
-		Vitrail.logger().info("Client setup reached, Sodium is {}",
+		// The backend rides on the line that was already here rather than taking one of its own. It
+		// is the first question any report about a missing picture is answered by, and the game says
+		// it far higher up in a log this line is what somebody searches for.
+		Vitrail.logger().info("Client setup reached on the {} backend, Sodium is {}",
+				HostReport.backend(),
 				Vitrail.platform().isModLoaded("sodium") ? "present" : "missing");
+
+		// And what an install decides that this mod cannot, said before the pack is read so that it
+		// stands above whatever the pack has to say for itself.
+		HostReport.say(Vitrail.platform().gameDirectory());
 
 		// The report of the pack goes with the reading of it, in PackChain, where which pack is
 		// being drawn is known.
