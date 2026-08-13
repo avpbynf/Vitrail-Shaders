@@ -67,7 +67,11 @@ public final class Smoothed {
 	 * @param halfLife how long the accumulator takes to cover half the distance, in deciseconds. A
 	 *                 nought gives an infinite decay constant, hence a factor of one, hence no
 	 *                 smoothing, which falls out of the arithmetic rather than needing a case
-	 * @param dt       the frame's duration in seconds
+	 * @param dt       the frame's duration in seconds, and it must be more than nought. The two
+	 *                 edges meet there: an infinite decay constant times a duration of nought is a
+	 *                 NaN, and a frame clock that quantises to the millisecond hands out a nought
+	 *                 often enough for a caller to meet it. Both callers hold the accumulator where
+	 *                 it stands on such a frame rather than folding anything into it
 	 */
 	public static float blend(float halfLife, float dt) {
 		return 1.0F - (float) Math.exp(-decayConstant(halfLife) * dt);

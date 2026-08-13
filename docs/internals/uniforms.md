@@ -124,7 +124,17 @@ Three details decide the result and none of them is obvious:
 - There is no smoothing at all on the first value, which is set outright. Otherwise a fresh
   accumulator would spend its first seconds climbing out of zero.
 - A half-life of zero gives an infinite decay constant, hence a factor of one, hence no smoothing.
-  That falls out of the arithmetic rather than needing a case.
+  That falls out of the arithmetic rather than needing a case. It needs a frame that lasted,
+  though: the same arithmetic on a duration of zero is an infinity times a nought, which is a NaN,
+  and a frame clock quantising to the millisecond hands out zeroes. A frame that measures nothing
+  therefore holds every accumulator where it stands instead of folding into it.
+
+**One smoothed value is not accumulated on this side at all.** `centerDepthSmooth` is the depth at
+the middle of the screen, and it lives in a one-texel image on the card: a pass of the engine's own
+folds this frame's depth into it, and the translation turns the pack's declaration of the name into
+a lookup in that texel. Only the factor above is computed here, from the same half-life reading, so
+that a value fading on the card and a value fading in a table cannot come to disagree about what a
+decisecond is. `docs/translation.md` describes the rewrite.
 
 The accumulators outlive the frame state, since the value table is built once for the process while
 the frame state is built per pack. They are therefore dropped explicitly on a pack load and on a

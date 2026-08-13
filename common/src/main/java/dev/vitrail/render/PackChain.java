@@ -1666,6 +1666,21 @@ public final class PackChain {
 		this.targets.depth().takeOpaque(device.createCommandEncoder(), device, this.quad,
 				ready.depthView(), ready.main().width, ready.main().height);
 
+		// Here and not after the deferreds, because here is Iris's beginHand: it is called at the
+		// head of iris$beginTranslucents, MixinLevelRenderer.java:277-279, which is before the solid
+		// hand, before the world's translucents and before beginTranslucents runs the deferred
+		// stage. So the depth it folds is the opaque world's, the image this line has just taken,
+		// and the deferreds below read the value of THIS frame rather than of the one before.
+		// Outside any render pass, since it opens one.
+		//
+		// The begins and the prepares are in the range below too, so they read this frame's texel
+		// where under Iris they would read the previous frame's: it runs both before beginHand,
+		// IrisRenderingPipeline.java:1022 and :1033, the prepares from inside renderShadows and so
+		// before the opaque world exists at all. That difference is where this chain runs its begins
+		// and prepares and not what this line decides, and no pack of the corpus declares the name
+		// in either family.
+		sampleCenterDepth(device);
+
 		int end = deferredEnd();
 		if (!this.split) {
 			this.split = true;
@@ -1723,12 +1738,6 @@ public final class PackChain {
 					+ "earlier in this frame");
 		}
 
-		// Where Iris samples it, beginHand: after the world and its translucents, before the hand.
-		// That moment is what decides which frame a program reads: the deferred stage has already been
-		// drawn above and reads what the previous frame left in the texel, and the composites below
-		// read the value this line has just folded. Outside any render pass, since it opens one.
-		sampleCenterDepth(device);
-
 		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene());
 
 		// Outside any pass, and after the last one. Only the targets the pack keeps between frames
@@ -1741,9 +1750,17 @@ public final class PackChain {
 	 * Folds this frame's centre depth into the texel the pack reads it out of, on the packs that read
 	 * it at all.
 	 * <p>
+	 * The opaque world's depth, and Iris reads the same image: what it hands
+	 * {@code CenterDepthSampler} is the live depth attachment, sampled at a moment when nothing
+	 * translucent and no hand has been drawn into it yet. The scene's depth would put the surface of
+	 * water and glass under the focus point, so a pack looking through either would focus on the
+	 * pane rather than on what is behind it.
+	 * <p>
 	 * Skipped where nothing reads the name, which is Iris's own rule rather than a saving of ours:
 	 * {@code CenterDepthSampler.sampleCenterDepth} returns without drawing once it has seen that no
-	 * program asked for the sampler. Five packs of the corpus skip it at their own defaults.
+	 * program asked for the sampler. Most of the corpus meets that road at its own defaults, the
+	 * name being written behind a depth of field the pack ships switched off;
+	 * {@link PackPass#readsCenterDepth} says what this side keys on and where Iris keys on less.
 	 */
 	private void sampleCenterDepth(GpuDevice device) {
 		if (!this.centerDepthRead) {
@@ -1752,7 +1769,7 @@ public final class PackChain {
 
 		WorldState world = this.values.world();
 		this.targets.centerDepth().sample(device.createCommandEncoder(), device, this.quad,
-				this.targets.depth().scene(), world.centerDepthHalfLife(), world.frameTime());
+				this.targets.depth().opaque(), world.centerDepthHalfLife(), world.frameTime());
 	}
 
 	/**

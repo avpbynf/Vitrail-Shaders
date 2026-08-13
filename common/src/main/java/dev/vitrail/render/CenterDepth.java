@@ -53,8 +53,12 @@ import java.util.Optional;
  * whatever the driver left, and no choice of factor writes that out of the accumulator:
  * {@code mix(x, y, 1.0)} is {@code x * 0.0 + y}, and a NaN times nought is still a NaN, so one bad
  * decode would poison every frame after it. The fragment stage therefore carries Iris's own test,
- * taken every frame rather than only the first, and the factor of one that the first draw uses
- * covers the rubbish that happens not to be NaN, which Iris leaves standing.
+ * taken every frame there as here. What the first draw does with the rest is where the two part:
+ * Iris has no case for it and folds with its ordinary factor, so how much of a fresh texel holding
+ * a finite value survives is whatever that factor happens to be, while the factor of one used here
+ * writes it out outright. Only a finite one, though: an infinity multiplied by nought is a NaN as
+ * well, so a texel decoding to an infinity costs that first frame and is pulled back by the test
+ * on the second.
  * <p>
  * The other way in is the factor itself, and there the arithmetic runs out on both sides. A half
  * life of nought gives an infinite decay constant, the frame clock quantises a duration to the
@@ -89,6 +93,9 @@ final class CenterDepth {
 	/** One float a texel, like the depth images this reads from. Iris stores R32F too. */
 	private static final GpuFormat FORMAT = GpuFormat.R32_FLOAT;
 
+	/** Two and not one, for the reason the class javadoc gives: a pass cannot sample its target. */
+	private static final int SURFACES = 2;
+
 	private static final String LABEL = "Vitrail centre depth";
 
 	private static final String VERTEX = """
@@ -108,8 +115,10 @@ final class CenterDepth {
 	/**
 	 * The coordinate is the centre of the screen because the target is one texel: the quad covers it
 	 * whole, so the one fragment this pass ever has sits at the middle of it and interpolates to a
-	 * half in both directions. Iris writes the half out, having a full sized attachment underneath and
-	 * a viewport of one texel over it.
+	 * half in both directions. Iris writes the half out rather than interpolating to it, and its
+	 * target is one texel too: both of its colour textures are made {@code 1x1}
+	 * ({@code CenterDepthSampler.setupColorTexture}) and the framebuffer's one attachment is one of
+	 * them, the viewport of a single texel over it agreeing rather than cutting anything down.
 	 * <p>
 	 * The test on the accumulator is Iris's own, and the class javadoc says why the factor cannot
 	 * stand in for it.
@@ -150,7 +159,15 @@ final class CenterDepth {
 
 	private RenderPipeline pipeline;
 
-	/** Said once and not per frame, so that a driver that will not have this shader is readable. */
+	/**
+	 * That this pass is not going to draw at all, whether the pair or the pipeline is what failed.
+	 * <p>
+	 * Read by both, so that a driver that will not have this is said once and not per frame. There
+	 * is nothing here for the size of the screen to lift, which is where this differs from
+	 * {@link PackDepth}: its images are the size of the window and a resize is a real second chance
+	 * at an allocation, while this pair is one texel and would ask for the same eight bytes again
+	 * every frame for the rest of the session.
+	 */
 	private boolean refused;
 
 	private TargetSurface[] texels;
@@ -173,27 +190,24 @@ final class CenterDepth {
 	/**
 	 * Draws this frame's value. Must run on the render thread and outside any render pass.
 	 * <p>
-	 * Where it is called from is the whole of what it means: Iris samples at {@code beginHand}, after
-	 * the world and its translucents and before the hand, so the deferred stage of a frame reads what
-	 * the previous frame left and the composites read this frame's. Called from the same place in the
-	 * order here.
+	 * Where it is called from is the whole of what it means, and {@code PackChain} says which moment
+	 * of Iris's frame that is. A frame that draws nothing here leaves the accumulator where it
+	 * stands, so the pack reads what it read before rather than a nought.
 	 *
-	 * @param scene    the whole scene's depth, already converted into the pack's own window. Null on a
-	 *                 frame that kept none, which leaves the accumulator standing rather than folding
-	 *                 a far plane into it
+	 * @param opaque   the depth of the opaque world, already converted into the pack's own window.
+	 *                 Null on a frame that kept none
 	 * @param halfLife the pack's {@code centerDepthHalflife}, in deciseconds
 	 * @param seconds  the previous frame's duration
-	 * @return false when nothing was drawn, in which case the pack reads what it read before
 	 */
-	boolean sample(CommandEncoder encoder, GpuDevice device, GpuBuffer quad, GpuTextureView scene,
+	void sample(CommandEncoder encoder, GpuDevice device, GpuBuffer quad, GpuTextureView opaque,
 			float halfLife, float seconds) {
-		if (quad == null || scene == null || !ensure()) {
-			return false;
+		if (quad == null || opaque == null || !ensure()) {
+			return;
 		}
 
 		RenderPipeline compiled = pipeline(device);
 		if (compiled == null) {
-			return false;
+			return;
 		}
 
 		int into = 1 - this.current;
@@ -216,7 +230,7 @@ final class CenterDepth {
 			pass.setVertexBuffer(0, quad.slice());
 			// NEAREST on both, as Iris binds both: one is read at its own centre and the other is one
 			// texel wide, so there is nothing for a filter to average either way.
-			pass.bindTexture(SCENE, scene,
+			pass.bindTexture(SCENE, opaque,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.bindTexture(BEFORE, this.texels[this.current].view(),
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
@@ -225,8 +239,6 @@ final class CenterDepth {
 
 		this.current = into;
 		this.primed = true;
-
-		return true;
 	}
 
 	/**
@@ -270,15 +282,22 @@ final class CenterDepth {
 	 * so unlike every other surface of this engine they are allocated once and kept across a resize.
 	 */
 	private boolean ensure() {
+		if (this.refused) {
+			return false;
+		}
+
 		if (this.texels != null) {
 			return true;
 		}
 
 		try {
-			this.texels = new TargetSurface[] {
-				new TargetSurface("Vitrail centre depth", FORMAT, false, 1, 1),
-				new TargetSurface("Vitrail centre depth, the frame before", FORMAT, false, 1, 1),
-			};
+			// Into the field one at a time, and not through an array expression: that evaluates both
+			// constructors before anything holds either, so a second one that throws leaks the first
+			// past a release() that has nothing to look at.
+			this.texels = new TargetSurface[SURFACES];
+			this.texels[0] = new TargetSurface("Vitrail centre depth", FORMAT, false, 1, 1);
+			this.texels[1] = new TargetSurface("Vitrail centre depth, the frame before", FORMAT,
+					false, 1, 1);
 			// Three buffers and a fence per turn, so a frame never writes over what the previous one
 			// is still being read for.
 			this.factor = new MappableRingBuffer(() -> LABEL,
@@ -316,6 +335,11 @@ final class CenterDepth {
 			return this.pipeline;
 		}
 
+		// Released and not merely refused, which is what makes the line below true. A compile is
+		// re-asked every frame, so this road is reached after frames have drawn: the pair would
+		// otherwise stand primed and every read would go on answering the last value folded, frozen
+		// for the session, while this says the reads stand at the far plane.
+		release();
 		this.refused = true;
 		this.pipeline = null;
 		Vitrail.logger().error("The centre depth pass did not compile, so every read of "
