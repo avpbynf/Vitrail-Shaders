@@ -268,10 +268,18 @@ final class PackPass {
 	}
 
 	/**
-	 * Whether this program reads the smoothed centre depth, which is what decides that the pass
-	 * drawing it is worth running at all. Iris asks the same question and for the same reason, in
-	 * {@code CenterDepthSampler.setUsage}. Two packs of the corpus never write the name at all, and
-	 * three more only declare it under a setting that is off by default.
+	 * Whether this program declares the sampler the smoothed centre depth was moved onto, which is
+	 * what decides that the pass drawing that texel is worth running at all.
+	 * <p>
+	 * Iris asks for the same reason and asks a NARROWER question, and the difference costs a draw
+	 * rather than a pixel. What sets its flag is the return of {@code addDynamicSampler}, which is
+	 * true only where {@code glGetUniformLocation} finds the name ACTIVE in the linked program
+	 * ({@code gl/program/ProgramSamplers.java:189-194}), so a sampler the pack declares and never
+	 * reads is optimised out by the driver and answers no there. This side has no linked program to
+	 * ask when the chain is built, so what it keys on is the declaration surviving the translation.
+	 * A pack that declares the name in a program whose reader is switched off therefore has the one
+	 * texel folded every frame here where Iris folds it once. Two packs of the corpus never write
+	 * the name at all.
 	 */
 	boolean readsCenterDepth() {
 		return this.samplers.contains(SamplerPlan.centerDepth());
@@ -664,10 +672,9 @@ final class PackPass {
 					+ "the " + PUSH_DESCRIPTORS + " a device commonly allows pushed at once");
 		}
 
-		// What the block could not be given, said as the three different things it is rather than
-		// as one number. A name the pack declares for itself is ours to resolve and the reason is
-		// a line above this one; a name waiting on machinery nobody runs is not a hole in the
-		// catalogue; and only what is left is a value this engine owes.
+		// What the block could not be given, said as the two different things it is rather than as
+		// one number. A name the pack declares for itself is ours to resolve and the reason is a
+		// line above this one; only what is left is a value this engine owes.
 		PackValues.Gaps gaps = this.values.classify(this.uniforms.unsupplied());
 		if (!gaps.engine().isEmpty()) {
 			this.notes.add(this.path + " reads " + gaps.engine().size() + " values written as "
@@ -680,12 +687,7 @@ final class PackPass {
 					+ "declarations survived: " + gaps.pack());
 		}
 
-		if (!gaps.awaited().isEmpty()) {
-			this.notes.add(this.path + " reads " + gaps.awaited().size() + " values that wait on a "
-					+ "pass that does not run yet: " + gaps.awaited());
-		}
-
-		// Underneath the three, the members that count as supplied and are not: a zero that
+		// Underneath the two, the members that count as supplied and are not: a zero that
 		// arrived through a registered source is the one failure a screenshot can never show.
 		// False, and it is the whole of what this pass is: a full screen program draws no mesh at
 		// all, so the names Iris answers from the entity mesh are answered here with the constant

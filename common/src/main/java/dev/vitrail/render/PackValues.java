@@ -370,28 +370,23 @@ public final class PackValues {
 	}
 
 	/**
-	 * Sorts the names a program's block could not be given into the three things they can mean.
-	 * They read as one list today and they are not one problem: a name the pack declares is ours
-	 * to resolve, a name that waits on a pass is nobody's fault yet, and only what is left is a
-	 * value the engine owes.
+	 * Sorts the names a program's block could not be given into the two things they can mean. They
+	 * read as one list otherwise and they are not one problem: a name the pack declares for itself
+	 * is ours to resolve, and what is left is a value the engine owes.
 	 */
 	public Gaps classify(List<String> unanswered) {
 		List<String> engine = new ArrayList<>();
 		List<String> pack = new ArrayList<>();
-		List<String> awaited = new ArrayList<>();
 
 		for (String name : unanswered) {
-			String waiting = UniformGaps.awaited(name);
 			if (this.declared.contains(name)) {
 				pack.add(name);
-			} else if (waiting != null) {
-				awaited.add(name + " (" + waiting + ")");
 			} else {
 				engine.add(name);
 			}
 		}
 
-		return new Gaps(List.copyOf(engine), List.copyOf(pack), List.copyOf(awaited));
+		return new Gaps(List.copyOf(engine), List.copyOf(pack));
 	}
 
 	/**
@@ -466,10 +461,9 @@ public final class PackValues {
 	/**
 	 * The names nothing answers, sorted by what is missing behind each.
 	 *
-	 * @param engine  names the engine owes and does not answer
-	 * @param pack    names the pack declares itself, whose declaration did not survive
-	 * @param awaited names that wait on machinery that does not run, each with the reason
+	 * @param engine names the engine owes and does not answer
+	 * @param pack   names the pack declares itself, whose declaration did not survive
 	 */
-	public record Gaps(List<String> engine, List<String> pack, List<String> awaited) {
+	public record Gaps(List<String> engine, List<String> pack) {
 	}
 }

@@ -7,13 +7,11 @@ import java.util.Map;
  * What the engine knows it is not answering properly, and why, said in one place so that the log
  * can be read rather than counted.
  * <p>
- * A block member has three ways of being wrong and only one of them is visible from the block
+ * A block member has two ways of being wrong and only one of them is visible from the block
  * itself. It can be a name nothing in the table answers, which {@link UniformBlock#unanswered()}
- * already reports. It can be a name the table answers with a stand-in, which reports as supplied
+ * already reports. Or it can be a name the table answers with a stand-in, which reports as supplied
  * and is the dangerous one: a zero that arrived through a registered source looks exactly like a
- * measured value. And it can be a name that waits on machinery that does not exist yet, which is
- * neither a gap in the catalogue nor a mistake by the pack, and which reading a count cannot tell
- * apart from either.
+ * measured value.
  * <p>
  * Nothing here is guessed, and nothing here is in the table merely because it is a constant.
  * {@code renderStage} was in that sentence and has left it: the passes that draw the world and the
@@ -45,18 +43,6 @@ public final class UniformGaps {
 	/** The same, for a pass drawn from the entity mesh alone. See the class comment. */
 	private static final Map<String, String> ENTITY_MESH = entityMesh();
 
-	/**
-	 * Not registered at all, because what would answer them does not run.
-	 * <p>
-	 * Empty, and that is the state it is meant to be found in: a name enters it when the engine
-	 * starts owing a value it cannot yet draw, and leaves it the day the machinery lands.
-	 * {@code centerDepthSmooth} was the last one out. A full screen pass no longer carries it in its
-	 * block at all, the translation having moved it onto a sampler the way Iris does; a geometry
-	 * program that declares it keeps a member nothing answers, which is a zero here and a zero under
-	 * Iris, since Iris makes the value available to the full screen stages and to no other.
-	 */
-	private static final Map<String, String> AWAITED = Map.of();
-
 	private UniformGaps() {
 	}
 
@@ -73,11 +59,6 @@ public final class UniformGaps {
 		String reason = STAND_INS.get(name);
 
 		return reason != null || !entityMesh ? reason : ENTITY_MESH.get(name);
-	}
-
-	/** Why nothing answers this name yet, or null when it is not one the engine means to answer. */
-	public static String awaited(String name) {
-		return AWAITED.get(name);
 	}
 
 	private static Map<String, String> standIns() {
