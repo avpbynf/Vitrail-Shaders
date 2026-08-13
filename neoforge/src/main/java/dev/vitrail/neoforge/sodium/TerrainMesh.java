@@ -127,6 +127,18 @@ public final class TerrainMesh implements ChunkVertexType {
 			throw new IllegalStateException("The chunk mesh is " + this.innerStride + " bytes, which "
 					+ "is not a whole number of words, and this engine moves it a word at a time");
 		}
+
+		// What holds the layout and the encoder together. Both take their offsets from
+		// Extra.offset(), which spends one word per element, and the encoder writes each of them
+		// with a single memPutInt. An element of any other width would put the two on different
+		// bytes without either of them saying so, and the pack would read the neighbour's.
+		for (Extra extra : Extra.values()) {
+			if (extra.format().blockSize() != Integer.BYTES) {
+				throw new IllegalStateException(extra.attribute() + " takes "
+						+ extra.format().blockSize() + " bytes, and this engine lays out and writes "
+						+ "one word for each of the elements it appends");
+			}
+		}
 	}
 
 	/**
@@ -211,6 +223,10 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * Each one is placed at the offset it already had rather than laid out again from zero, so that
 	 * any padding Sodium leaves between two of them survives. The builder refuses a size that is not
 	 * a whole number of words, which is what makes the id four bytes wide where two would do.
+	 * <p>
+	 * Ours are placed at {@code Extra.offset()}, which is where the encoder writes them as well: the
+	 * two used to be a walk over the sizes here and six literal offsets there, and they agreed
+	 * because every element happens to be one word and for no other reason.
 	 */
 	private static VertexFormat extend(VertexFormat base) {
 		VertexFormat.Builder builder = VertexFormat.builder(base.getStepRate());
@@ -221,8 +237,8 @@ public final class TerrainMesh implements ChunkVertexType {
 
 		int at = base.getVertexSize();
 		for (Extra extra : Extra.values()) {
-			builder.addAttribute(extra.attribute(), at, extra.format().blockSize(), extra.format(), 1);
-			at += extra.format().blockSize();
+			builder.addAttribute(extra.attribute(), at + extra.offset(), extra.format().blockSize(),
+					extra.format(), 1);
 		}
 
 		return builder.build();
@@ -306,6 +322,15 @@ public final class TerrainMesh implements ChunkVertexType {
 		GpuFormat format() {
 			return this.format;
 		}
+
+		/**
+		 * Where this element starts, counted from the end of Sodium's own bytes. One word each,
+		 * which the constructor checks against the widths declared above, and the single list both
+		 * the layout and the encoder place these from.
+		 */
+		int offset() {
+			return ordinal() * Integer.BYTES;
+		}
 	}
 
 	/**
@@ -330,9 +355,13 @@ public final class TerrainMesh implements ChunkVertexType {
 		int normal = packAxis(frame[0], frame[1], frame[2], 0.0F);
 		int tangent = packAxis(frame[3], frame[4], frame[5], frame[6]);
 
-		// Backwards: every vertex moves up, so the one that has not been moved yet is always the
-		// source of the next move. Word by word and from the top of each vertex for the same reason,
-		// the two ranges overlapping for all but the last vertex of a quad.
+		// Backwards over the vertices, because a vertex moves up by the difference of the two strides
+		// times its own index, and one that has not been moved yet is the source of the move before
+		// it: at twenty-four bytes of difference the second vertex lands on [44, 64) and the third is
+		// still to be read from [40, 60). Word by word from the top of each vertex costs nothing and
+		// is what keeps the move right at any pair of strides, where at this pair a vertex's own two
+		// ranges are twenty-four bytes apart and never meet at all, the first being copied onto
+		// itself.
 		for (int at = vertices.length - 1; at >= 0; at--) {
 			long from = pointer + (long) at * this.innerStride;
 			long to = pointer + (long) at * this.stride;
@@ -341,16 +370,16 @@ public final class TerrainMesh implements ChunkVertexType {
 			}
 
 			long extra = to + this.innerStride;
-			MemoryUtil.memPutInt(extra,
+			MemoryUtil.memPutInt(extra + Extra.BLOCK_ID.offset(),
 					((TerrainVertex) vertices[at]).vitrailBlockId() & BlockStateIds.PACKED_MASK);
-			MemoryUtil.memPutInt(extra + Integer.BYTES, middle);
-			MemoryUtil.memPutInt(extra + 2L * Integer.BYTES, midBlock(vertices[at]));
-			MemoryUtil.memPutInt(extra + 3L * Integer.BYTES, normal);
-			MemoryUtil.memPutInt(extra + 4L * Integer.BYTES, tangent);
+			MemoryUtil.memPutInt(extra + Extra.MID_TEX_COORD.offset(), middle);
+			MemoryUtil.memPutInt(extra + Extra.MID_BLOCK.offset(), midBlock(vertices[at]));
+			MemoryUtil.memPutInt(extra + Extra.NORMAL.offset(), normal);
+			MemoryUtil.memPutInt(extra + Extra.TANGENT.offset(), tangent);
 			// The two fields the encoder was handed, kept apart instead of multiplied together, out
 			// of Sodium's own published helper. Sodium's word beside it keeps the product, so this
 			// one is read by a pack that asked for it and by nothing else.
-			MemoryUtil.memPutInt(extra + 5L * Integer.BYTES,
+			MemoryUtil.memPutInt(extra + Extra.TINT_AND_AO.offset(),
 					ColorABGR.withAlpha(vertices[at].color, vertices[at].ao));
 		}
 
