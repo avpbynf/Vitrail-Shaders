@@ -2051,6 +2051,18 @@ public final class GlslTranslator {
 	 * the same reason: {@code TransformPatcher} sends {@code Patch.COMPUTE} to
 	 * {@code CommonTransformer} alone and past this transformer entirely.
 	 * <p>
+	 * Neither of those two families reaches this on the pack road, and both lines are written for
+	 * the one reader that does meet them: {@code PackProgram} reads a vertex, a geometry and a
+	 * fragment stage and no other, so a compute unit is never translated at all, and
+	 * {@code TargetPlan} puts a shadow composite aside before the list of running programs is
+	 * built. What is left is the harness, which translates a unit on its own with no plan around it.
+	 * <p>
+	 * The third refusal is a pack that {@code #define}s the name itself: the lookup would be
+	 * expanded by its own macro and the declaration is not the pack's meaning of the word. It is
+	 * taken from the macros the unit collects rather than from the live lines, so a definition in a
+	 * branch that is not taken stops the move as well - wider than it needs to be, and no pack of
+	 * the corpus writes it either way.
+	 * <p>
 	 * <strong>A shadow composite is out too, and there the reason is ours.</strong> Iris injects the
 	 * sampler there like anywhere else and never binds it: {@code ShadowCompositeRenderer} does not
 	 * name {@code CenterDepthSampler} once, so what the declaration reads is texture unit nought and
@@ -2061,17 +2073,22 @@ public final class GlslTranslator {
 	 * <p>
 	 * The member comes out of its declaration rather than the declaration out of the file, which is
 	 * what lets a name declared beside others be moved: {@code uniform float a, centerDepthSmooth;}
-	 * keeps its {@code a}. Iris detaches the member in exactly the same way and injects its sampler
-	 * before the declarations; here the sampler is registered like any other opaque uniform and the
-	 * header writes it, since the lifting has already been given a statement that no longer names it.
+	 * keeps its {@code a}. Where the name sits in the list makes no difference, the type being
+	 * looked for at the head of the list rather than in front of the name alone; Iris detaches the
+	 * {@code DeclarationMember} wherever it sits too, and injects its sampler before the
+	 * declarations. Here the sampler is registered like any other opaque uniform and the header
+	 * writes it, since the lifting has already been given a statement that no longer names it.
 	 * <p>
-	 * A declaration of the name under anything but {@code uniform float} leaves the whole unit as it
-	 * stands, reads included, and that is the one refusal left. It is Iris's answer too: its matcher
-	 * takes {@code uniform float name;} and nothing else, so a unit where the name is a local, a
-	 * parameter or a global of the pack's own is not rewritten on either side. Both Complementary
-	 * packs write the shape that reaches it, the uniform in one branch of an {@code #if} and an
-	 * ordinary {@code float} of the same name in the other; at their own defaults neither branch is
-	 * live, so what they meet is the empty unit above and not this.
+	 * A declaration of the name under anything but {@code uniform float} is left exactly where it
+	 * is, and it neither moves this unit nor stops it. That is Iris's shape: its matcher takes
+	 * {@code uniform float name;} and nothing else, so a unit where the name is only a local, a
+	 * parameter or a global of the pack's own is not rewritten on either side, while a unit that
+	 * declares the uniform as well is rewritten around the other declaration. Every read goes to
+	 * the lookup there, the local's own reads included, which is what
+	 * {@code CompositeDepthTransformer.java:50} does over the whole tree. Both Complementary packs
+	 * write the shape, the uniform in one branch of an {@code #if} and an ordinary {@code float} of
+	 * the same name in the other; at their own defaults neither branch is live, so what they meet
+	 * is the empty unit above.
 	 */
 	private void moveCenterDepth() {
 		if (this.stage == ProgramStage.COMPUTE || !movesCenterDepth()
@@ -2090,20 +2107,12 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			// A built-in type in front of the name is what makes this a declaration rather than a
-			// read, and it has to be the type set rather than any identifier: this lexer has no
-			// keyword, so {@code return centerDepthSmooth;} puts an identifier there too.
-			int type = significantBefore(index);
-			if (type < 0 || !LegacyGlsl.TYPE_NAMES.contains(this.tokens.get(type).text())) {
+			int type = declarationType(index);
+			if (type < 0) {
 				reads.add(index);
-				continue;
+			} else if (uniformFloat(type)) {
+				members.add(index);
 			}
-
-			if (!uniformFloat(type)) {
-				return;
-			}
-
-			members.add(index);
 		}
 
 		// A unit that reads the name without declaring it as a uniform is left alone, which is the
@@ -2130,6 +2139,52 @@ public final class GlslTranslator {
 
 		return !this.program.isEmpty() && !ProgramNames.geometry(family)
 				&& !ProgramNames.shadowComposite(family);
+	}
+
+	/**
+	 * The type token of the declaration this name is a declarator of, or -1 when the name is read
+	 * rather than declared.
+	 * <p>
+	 * A built-in type in front of the name is what makes it a declaration, and it has to be the
+	 * type set rather than any identifier: this lexer has no keyword, so
+	 * {@code return centerDepthSmooth;} puts an identifier there too. The type is not always in
+	 * front of the name, though, and the walk back over the declarators before it is what finds it
+	 * where it is not: without that walk {@code uniform float a, centerDepthSmooth;} reads as a use
+	 * of the name, no member is found, and the whole unit is left standing with a member nothing
+	 * answers.
+	 * <p>
+	 * The walk gives up on anything that is not a bare declarator, and that is what keeps a read
+	 * out of the members: the comma of {@code f(a, centerDepthSmooth)} is reached the same way and
+	 * stops on the bracket in front of {@code a}.
+	 */
+	private int declarationType(int name) {
+		int cursor = name;
+		while (cursor > 0) {
+			int before = significantBefore(cursor);
+			if (before < 0) {
+				return -1;
+			}
+
+			Token token = this.tokens.get(before);
+			if (LegacyGlsl.TYPE_NAMES.contains(token.text())) {
+				return before;
+			}
+
+			if (!token.operator(",")) {
+				return -1;
+			}
+
+			// The declarator this comma binds to the list. Anything else there, an initialiser or a
+			// closing bracket, is an expression and not a list this pass knows how to read.
+			int previous = significantBefore(before);
+			if (previous < 0 || this.tokens.get(previous).kind() != Kind.IDENTIFIER) {
+				return -1;
+			}
+
+			cursor = previous;
+		}
+
+		return -1;
 	}
 
 	/**

@@ -79,6 +79,18 @@ to a function, or written with a compound assignment, cannot be rewritten where 
 are counted rather than guessed at. What the translator never rewrites at all is a **lookup through
 a sampler**. Those are served by converting the *image* instead, once, when the depth is taken.
 
+**One uniform becomes a sampler, because its value never comes back from the card.**
+`centerDepthSmooth` is the depth at the middle of the screen, faded by the pack's own half-life,
+and it is what a depth of field focuses on. It is accumulated in a one-texel image that a pass of
+the engine's own draws each frame, so it cannot be a member of the uniform block: the declaration
+is taken off its statement, a one-texel sampler is declared in its place, and every use of the name
+becomes a lookup at the middle of that texel. The declaration alone moves, so a statement that
+declares other names beside it keeps them. This is the reference's own answer, and it is limited
+the same way: only a program drawn over a full screen quad is rewritten, so a geometry program that
+declares the name reads a zero. Under the reference that zero is what a uniform nothing ever writes
+comes to; here the value table answers the name with it deliberately, which is the same bytes and
+keeps it out of the list of names the engine failed to supply.
+
 That is not a shortcut, it is the only thing that works. A lookup can only be rewritten if it can be
 found, and it can only be found
 by the name of its sampler - so a pack helper taking `sampler2D depth` as a parameter and called
@@ -231,12 +243,12 @@ exists, its value is defined, and the shortfall is announced rather than left to
 memory.
 
 The announcement is split into separate buckets rather than counted, because a program can be short
-in several different ways at once and each line says which. Three of them are names the block could
-not be given: one this engine owes, one the pack declared for itself and none of whose declarations
-survived, and one waiting on machinery that does not run yet. Underneath those sits the dangerous
-one, which is not a gap at all: a name the table answers with a **stand-in**, which counts as
-supplied everywhere else. A zero that arrived through a registered source looks exactly like a
-measured value, and no screenshot will ever show it.
+in several different ways at once and each line says which. Two of them are names the block could
+not be given: one this engine owes, and one the pack declared for itself and none of whose
+declarations survived. Underneath those sits the dangerous one, which is not a gap at all: a name
+the table answers with a **stand-in**, which counts as supplied everywhere else. A zero that
+arrived through a registered source looks exactly like a measured value, and no screenshot will
+ever show it.
 
 Packs can also define their own uniforms as expressions over others. Those form a dependency graph
 that is validated: a cycle is refused by naming the uniforms involved, a broken uniform withdraws
