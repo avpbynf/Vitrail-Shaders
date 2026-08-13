@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.SodiumVertex;
+import dev.vitrail.glsl.VertexInputs;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.target.ChainPlan;
@@ -123,8 +124,15 @@ public final class TerrainProgram implements DumpedProgram {
 			VertexFormat format, ChainPlan plan, TargetPlan chainTargets, boolean chainRuns,
 			ColorTargets targets) {
 		try {
+			// Which of the two colours the three vertex stages read, settled here because this is
+			// where the pack's own reading of separateAo is held. It is not a property of the mesh:
+			// every vertex carries both, so a pack that asks replacing one that does not costs a
+			// second reading of the programs and nothing else.
+			VertexInputs inputs = values.separateAo()
+					? VertexInputs.TERRAIN_SEPARATE_AO
+					: VertexInputs.TERRAIN;
 			Map<TerrainPass, PackProgram.Loaded> loaded =
-					PackProgram.loadTerrain(packPath, place, chosen, profile);
+					PackProgram.loadTerrain(packPath, place, chosen, profile, inputs);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().warn("{} serves no terrain program with both stages in {}, so the "
 						+ "world keeps the game's own shader", packPath.getFileName(),

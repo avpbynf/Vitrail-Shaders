@@ -59,23 +59,34 @@ sides are darker than the tops" is true before any normal exists and therefore p
 one. Any test of a normal has to be an A/B on the same scene from the same camera.
 
 **Unless the pack asked for the two apart.** `separateAo=true` in `shaders.properties` says the pack
-wants the occlusion where it can see it: the tint goes into the colour untouched and the coefficient
-into the alpha, which is free because block geometry never uses that alpha for anything else. Six of
-the eight packs of the test corpus write the line, and it is the reference's behaviour and not an
-option of this engine's. Read otherwise, the occlusion lands in the albedo and is then reflected,
-exposed and graded by everything downstream, which is a picture that looks plausible and is wrong in
-a way no screenshot shows.
+wants the occlusion where it can see it: the tint reaches the program undivided and the coefficient
+arrives in the alpha of the vertex colour instead. Six of the eight packs of the test corpus write
+the line, and it is the reference's behaviour and not an option of this engine's. Read otherwise, the
+occlusion lands in the albedo and is then reflected, exposed and graded by everything downstream,
+which is a picture that looks plausible and is wrong in a way no screenshot shows.
 
-It is a property of the MESH, and that has a consequence worth stating plainly: **a colour written
-that way can only be read by a program of the pack's own.** The game's own chunk shader multiplies
-the vertex colour into the texture and then alpha tests the product, so an occlusion left sitting in
-that alpha punches holes through every cutout block on screen. So the answer is not simply "what the
-pack asked for": it is "what the pack asked for, while this engine is really the one drawing the
-terrain". The warm-up is what makes the difference matter, a chain warming one program a frame after
-every load and every resource reload, and the game draws the world during it. The answer is
-therefore polled on the client tick, and the tick it moves on has every section built again - which
-is also what covers two packs that both draw the terrain and disagree about the directive, where
-nothing else about the format would have changed.
+**That colour is carried in an element of this engine's own, beside the renderer's word and never
+over it.** The reason is that the renderer's own chunk shader goes on drawing this mesh. It draws it
+on every road where the engine hands a pass back - a program that would not compile, a pass the pack
+ships nothing for, targets that could not be opened this frame - and, more often than any of those,
+throughout the warm-up that follows every load and every resource reload, where the chain compiles
+one program a frame and the world is drawn by the game meanwhile. That shader multiplies the vertex
+colour into the texture and then alpha tests the product, so an occlusion left sitting in the alpha
+of the word it reads punches holes through every cutout block on screen. Two words on the vertex,
+each side reading its own, and neither has to know which of the two is drawing. The reference writes
+one word and chooses per vertex, which it can afford because nothing of its own warms up over
+several frames.
+
+So the directive is not a property of the mesh here, and nothing about it is worth a rebuilt world.
+Every vertex carries both colours whether the pack asked or not; what the directive decides is the
+one line of the translated vertex stage that fills `gl_Color`, and a pack that moves the directive is
+a pack whose programs are read again anyway. Two packs that both draw the terrain and disagree about
+it are then no different from any other change of pack. The price is four bytes a vertex on every
+mesh, which is the same bargain the appended elements below already make, and one of the two colour
+elements is declared but never read whichever way the choice falls. That second half is not free: an
+input a stage never reads can be dropped from the compiled module, and dropping one shifts the
+locations after it - the silent failure described in
+[vertex inputs are matched by name](#vertex-inputs-are-matched-by-name-and-one-direction-is-silent).
 
 **Light arrives raw, and the scale belongs to the texture matrix.** The pair is carried as the game
 stores it, a level times sixteen per channel, and the smooth pipeline interpolates between those, so
@@ -102,8 +113,10 @@ for, alongside the depth-conversion constant.
 
 What the format does not carry is the interesting half: **no normal, no block id, no mid texture
 coordinate, no mid block, no tangent.** Packs declare all five as a matter of course, so none of them
-is an optional extra, and the engine appends an element for each. The mesh therefore doubles: twenty
-bytes the renderer packs and twenty this engine adds after them.
+is an optional extra, and the engine appends an element for each. A sixth carries the separated
+colour described above, which answers no name of the pack's own but a second shape for one it already
+reads. The vertex therefore more than doubles: twenty bytes the renderer packs and twenty-four this
+engine adds after them.
 
 One further difference to keep in mind when comparing images: the chunk renderer samples the
 lightmap at the vertex, while a pack handed a lightmap coordinate samples it at the fragment. That

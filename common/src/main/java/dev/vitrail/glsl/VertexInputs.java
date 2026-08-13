@@ -10,6 +10,13 @@ import java.util.List;
  * decides one thing and it decides it silently, which is why it is an enum rather than a flag:
  * attributes are matched by name against the elements of the vertex format, and a stage that
  * declares a name the format has not got shifts the location of every name after it without a word.
+ * <p>
+ * <strong>Two constants may name one format and still be two contracts.</strong> The chunk mesh
+ * carries two colours, Sodium's own word and the pair a pack's {@code separateAo} asks to read, and
+ * which of them a stage takes its vertex colour from is settled when the stage is written and not
+ * when it is drawn. That is where a vertex stage takes its inputs from, which is what this enum is
+ * for: the same file under the other constant declares the same names, binds the same buffer and
+ * reads a different element, and nothing downstream of the translation could tell the two apart.
  */
 public enum VertexInputs {
 
@@ -24,9 +31,19 @@ public enum VertexInputs {
 
 	/**
 	 * Sodium's chunk mesh: four attributes in twenty bytes, out of which the six names a pack reads
-	 * are made. {@link SodiumVertex} carries the decode and says what it cannot make.
+	 * are made. {@link SodiumVertex} carries the decode and says what it cannot make. The vertex
+	 * colour is Sodium's own {@code a_Color}, the tint with the ambient occlusion multiplied in.
 	 */
 	TERRAIN,
+
+	/**
+	 * The same mesh read by a pack that wrote {@code separateAo}: the vertex colour comes from
+	 * {@link SodiumVertex#TINT_AND_AO} instead, which keeps the tint undivided and puts the
+	 * occlusion in the alpha. Same elements, same order, same stride, so the format and the
+	 * declarations are the ones {@link #TERRAIN} gets and only the line that fills the colour
+	 * differs.
+	 */
+	TERRAIN_SEPARATE_AO,
 
 	/**
 	 * The game's own entity mesh: the six elements of {@code DefaultVertexFormat.ENTITY}, out of
@@ -74,6 +91,19 @@ public enum VertexInputs {
 		return this != WORLD;
 	}
 
+	/** Whether this is Sodium's chunk mesh, under either of the two colours it may be read with. */
+	public boolean terrain() {
+		return this == TERRAIN || this == TERRAIN_SEPARATE_AO;
+	}
+
+	/**
+	 * Whether the vertex colour comes from this engine's own element rather than from Sodium's
+	 * word, which is a pack's {@code separateAo} and nothing else.
+	 */
+	public boolean separateAo() {
+		return this == TERRAIN_SEPARATE_AO;
+	}
+
 	/**
 	 * The names the head declares for itself, which the pack may therefore not use for anything of
 	 * its own.
@@ -98,7 +128,7 @@ public enum VertexInputs {
 	public List<String> elements() {
 		return switch (this) {
 			case FULLSCREEN -> LegacyGlsl.FULLSCREEN_ELEMENTS;
-			case TERRAIN -> SodiumVertex.ATTRIBUTES;
+			case TERRAIN, TERRAIN_SEPARATE_AO -> SodiumVertex.ATTRIBUTES;
 			case ENTITY -> EntityVertex.ATTRIBUTES;
 			case PARTICLE -> ParticleVertex.ATTRIBUTES;
 			case SKY -> SkyVertex.ATTRIBUTES;

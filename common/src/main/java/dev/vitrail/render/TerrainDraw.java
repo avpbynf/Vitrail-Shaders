@@ -84,14 +84,6 @@ public final class TerrainDraw {
 	private static volatile boolean shadowWanted;
 
 	/**
-	 * What {@link #separateAo()} answered when the last load ended, kept for no other purpose than
-	 * to tell a load that moved it from one that did not. It is not what the mesh is carrying: that
-	 * is taken from the derived answer at the instant the mesh is settled, and the two part company
-	 * between a mid-session failure and the load that follows it.
-	 */
-	private static volatile boolean separated;
-
-	/**
 	 * Whether the renderer is drawing the shadow map rather than the world at this instant.
 	 * <p>
 	 * A flag and not an argument because the three doors below are the renderer's own calls and it
@@ -176,77 +168,6 @@ public final class TerrainDraw {
 	/** Whether the shadow map is drawn, from the loaded options. */
 	static void shadowWanted(boolean asked) {
 		shadowWanted = asked;
-	}
-
-	/**
-	 * Whether the pack now drawing asked for the terrain's ambient occlusion to be kept out of the
-	 * vertex colour, {@code separateAo} in its {@code shaders.properties}.
-	 * <p>
-	 * Iris answers the same question from {@code WorldRenderingSettings.INSTANCE}, set from the
-	 * pack's directives where a pipeline is built and back to false where the vanilla one is
-	 * ({@code IrisRenderingPipeline.java:446} and {@code VanillaRenderingPipeline.java:30}), and
-	 * {@code XHFPTerrainVertex.java:152} is what reads it. This is derived and not latched so that
-	 * the second half of that comes for nothing: every road that stops a pack drawing, a program
-	 * that threw and a pack put away among them, takes {@link PackChain#terrain} to null and this
-	 * answers no on its own. Nothing has to remember to say so.
-	 * <p>
-	 * <strong>{@link #shown()} is part of the question and not a detail of it.</strong> A colour
-	 * written this way is only readable by a program of the pack's, and the road that hands the mesh
-	 * back to the game's own shader without a word is exactly the one the warm up takes: a chain
-	 * warms one program a frame, so after every load and every resource reload there are frames
-	 * where this engine refuses the terrain and Sodium draws it. Sodium's own shader multiplies the
-	 * vertex colour into the texture and then alpha tests the product, so an occlusion sitting in
-	 * that alpha punches holes through every cutout block on screen. Answering no until the chain
-	 * really draws costs one more rebuild of the world per load and is what keeps the two sides
-	 * telling the same story. The answer only ever moves one way inside a load, a chain counting its
-	 * warmed programs upwards and resetting them only on a reload, so this cannot oscillate.
-	 * <p>
-	 * Read where the mesh is settled and not per quad, for the reason {@link #asked()} gives about
-	 * the format: a section is meshed by workers over many frames, and an answer that moved under
-	 * them would leave one region's alpha meaning one thing and its neighbour's another. Iris reads
-	 * its own flag per vertex instead, which it can afford: no pipeline of its own warms up over
-	 * several frames, so it has no window where the game's shader draws a separated mesh.
-	 */
-	public static boolean separateAo() {
-		TerrainDraw self = PackChain.terrain();
-
-		return wanted && self != null && self.values.separateAo() && self.shown();
-	}
-
-	/**
-	 * Has the world built again whenever {@link #separateAo()} has moved since the last look.
-	 * <p>
-	 * The two answers can part without anything else parting with them: two packs can both want the
-	 * terrain and disagree about this, and then the format is the same, nothing else asks for a
-	 * rebuild, and the sections standing carry an alpha the pack now drawing does not read the way
-	 * the pack that meshed them did. What that looks like is a world with no ambient occlusion at
-	 * all, or one occluded twice, and neither says anything about a directive.
-	 * <p>
-	 * <strong>Called on the client tick, and the moment is the whole of why this is a poll.</strong>
-	 * Every road that stops a pack drawing has to reach this, the throw inside a frame and the
-	 * program that would not compile among them, and those roads are taken in the middle of the
-	 * level being drawn, where asking the renderer to drop every section is not something to do.
-	 * A tick is outside all of it. Polling rather than being told also means no new road has to
-	 * remember: the answer is derived, so a road that did not exist when this was written is covered
-	 * the moment it changes what is drawing.
-	 * <p>
-	 * Idempotent and free when nothing moved, which is what lets it be called that often: two static
-	 * reads and a comparison.
-	 * <p>
-	 * Silent, where {@link #wanted(boolean)} says what it did. The rebuild it asks for is what makes
-	 * the mesh read the answer again, and the mesh is the side that says what it now carries.
-	 */
-	public static void separateAoSettled() {
-		boolean asked = separateAo();
-		if (separated == asked) {
-			return;
-		}
-
-		separated = asked;
-		Minecraft minecraft = Minecraft.getInstance();
-		if (minecraft != null && minecraft.level != null) {
-			minecraft.levelExtractor.allChanged();
-		}
 	}
 
 	/**

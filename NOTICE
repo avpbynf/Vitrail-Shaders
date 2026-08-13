@@ -415,10 +415,7 @@ GNU Lesser General Public License version 3
   that method; what is reused here is Iris's use of it, so that a pack reads the same frame under
   both. What is NOT reused is the storage: Iris spends one byte on an angle in the plane that basis
   leaves, and unpacks it in a patched vertex stage, where this engine writes the vector itself in
-  three bytes and has no patched text to unpack an angle in. The vertex colour this file writes
-  under a pack's separateAo is the pair of writes of
-  net.irisshaders.iris.vertices.sodium.terrain.XHFPTerrainVertex, line 152, reached through the same
-  published Sodium helpers rather than through any packing of Iris's own.
+  three bytes and has no patched text to unpack an angle in.
 
   Nothing else in Vitrail is derived from Iris. Of its GLSL transformation machinery, which links
   against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that

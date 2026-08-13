@@ -1487,7 +1487,7 @@ public final class GlslTranslator {
 		// attributes alive. An input the shader declares and never reads may be dropped from the
 		// SPIR-V, and rebind only counts the ones that survived, so a dropped attribute shifts the
 		// location of every one after it.
-		boolean terrain = this.inputs == VertexInputs.TERRAIN;
+		boolean terrain = this.inputs.terrain();
 		boolean depth = namesClipPosition();
 		if (!terrain && !depth) {
 			return;
@@ -2628,7 +2628,8 @@ public final class GlslTranslator {
 					lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
 					lines.addAll(VertexPrologue.tail(this.used, this.synthesized));
 				}
-				case TERRAIN -> lines.addAll(SodiumVertex.prologue(this.used, this.synthesized));
+				case TERRAIN, TERRAIN_SEPARATE_AO -> lines.addAll(
+						SodiumVertex.prologue(this.used, this.synthesized, this.inputs.separateAo()));
 				case ENTITY -> lines.addAll(EntityVertex.prologue(this.used, this.synthesized));
 				case PARTICLE -> lines.addAll(ParticleVertex.prologue(this.used, this.synthesized));
 				case SKY -> lines.addAll(SkyVertex.prologue(this.bound, this.used, this.synthesized));

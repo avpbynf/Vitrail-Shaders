@@ -15,13 +15,12 @@ import java.util.Set;
  * first component and the bottom ten at the same places of its second; a coordinate counts
  * thirty-two blocks over its full range and starts eight blocks before the section, which is the
  * reach a mesh needs for the faces of its neighbours. {@code a_Color} is the block tint with the
- * ambient occlusion already multiplied into it, unless the pack wrote {@code separateAo}, and then
- * the tint is untouched and the occlusion is in the alpha instead; the encoder settles which of the
- * two a mesh carries and nothing here has to know. {@code a_TexCoord} keeps fifteen bits of texture
- * coordinate per axis and spends its top bit on which side of the sprite the corner lies.
+ * ambient occlusion already multiplied into it, on every mesh and whatever the pack asked: it is
+ * Sodium's own word and nothing of this engine writes it. {@code a_TexCoord} keeps fifteen bits of
+ * texture coordinate per axis and spends its top bit on which side of the sprite the corner lies.
  * {@code a_LightAndData}
  * holds the block light, the sky light, a byte of material bits and the index of the draw command,
- * one per byte. Everything past the twentieth is this engine's own, five elements of four bytes.
+ * one per byte. Everything past the twentieth is this engine's own, six elements of four bytes.
  * <p>
  * <strong>Sodium is under the PolyForm Shield licence, which this project cannot take code
  * from.</strong> So what is written below is this engine's own reading of that layout and not a
@@ -30,9 +29,10 @@ import java.util.Set;
  * <p>
  * <strong>Every name a pack reads of this geometry is now in the mesh.</strong> The block id, the
  * middle of the sprite, the offset to the middle of the block, the normal and the tangent are five
- * elements of this engine's own, and they are what doubles the mesh: twenty bytes of Sodium's and
- * twenty of ours. The facing that used to stand in for a normal, in the spare bits of the material
- * byte, is gone with the last thing that read it.
+ * elements of this engine's own; {@link #TINT_AND_AO} is a sixth, and the one that answers no name
+ * of the pack's but the shape of a name it already reads. Twenty bytes of Sodium's, twenty-four of
+ * ours. The facing that used to stand in for a normal, in the spare bits of the material byte, is
+ * gone with the last thing that read it.
  * <p>
  * The region offset arrives through push constants, which is the one thing here that has to be got
  * right or nothing else matters. blaze3d never declares a push constant range; Sodium adds one, and
@@ -98,12 +98,38 @@ public final class SodiumVertex {
 	public static final String TANGENT = "a_Tangent";
 
 	/**
+	 * The block's tint undivided, with the ambient occlusion in the fourth component rather than
+	 * multiplied into the other three. What a pack that wrote {@code separateAo} reads as its vertex
+	 * colour, and the one element here that carries no name of the pack's: it is a second shape for
+	 * {@code gl_Color}, and {@link #prologue} is where one of the two is chosen.
+	 * <p>
+	 * <strong>An element of ours and not Sodium's own word rewritten.</strong> {@code a_Color} keeps
+	 * the product on every mesh, so the game's own chunk shader draws a correct colour through this
+	 * format whatever this engine is doing - and it draws through it often, a chain warming one
+	 * program a frame after every load and every resource reload. That shader alpha tests the
+	 * product of the vertex colour and the texture, so an occlusion sitting in the alpha it reads
+	 * would punch holes through every cutout block. Iris writes the pair over that word instead,
+	 * {@code XHFPTerrainVertex.java:152}, and can: nothing of its own warms up over several frames.
+	 * <p>
+	 * <strong>The cost is that one colour element goes unread whichever way the choice falls</strong>,
+	 * and an input a stage declares and never reads may be dropped from the compiled module, where
+	 * {@code rebind} counts only the survivors and a drop shifts every location after it. Under
+	 * {@code separateAo} the unread one is {@code a_Color}, second of ten. It is not a new kind of
+	 * risk - four of the appended elements already go unread for a pack that names none of them -
+	 * but it is the first to reach one of Sodium's own four, where a drop takes the texture
+	 * coordinate and the light map down with it. The answer is the one the entity family already
+	 * uses, reading the compiled module of every corpus program back and checking the variables are
+	 * still there, and it is owed here rather than assumed.
+	 */
+	public static final String TINT_AND_AO = "a_TintAndAo";
+
+	/**
 	 * The elements of the chunk mesh, in order. The format must carry these and no more, and the
 	 * order after {@code a_LightAndData} is the one {@code TerrainMesh.Extra} lays out.
 	 */
 	public static final List<String> ATTRIBUTES =
 			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID, MID_TEX_COORD,
-					MID_BLOCK, NORMAL, TANGENT);
+					MID_BLOCK, NORMAL, TANGENT, TINT_AND_AO);
 
 	/**
 	 * The ones of {@link VertexPrologue#SYNTHESIZED} this mesh answers for real, out of an element
@@ -130,8 +156,13 @@ public final class SodiumVertex {
 	 *                    pack that never asks
 	 * @param synthesized the vertex inputs the pack declared for itself and that were taken out of
 	 *                    the body, by name and with the type the pack gave them
+	 * @param separateAo  whether the pack asked for the terrain's ambient occlusion to be kept out
+	 *                    of its vertex colour, which decides which of the two colour elements this
+	 *                    stage reads. A property of the PACK and not of the mesh: every vertex
+	 *                    carries both, so nothing is rebuilt when it moves
 	 */
-	public static List<String> prologue(Set<String> used, Map<String, String> synthesized) {
+	public static List<String> prologue(Set<String> used, Map<String, String> synthesized,
+			boolean separateAo) {
 		List<String> lines = new ArrayList<>();
 
 		for (String attribute : ATTRIBUTES) {
@@ -183,7 +214,11 @@ public final class SodiumVertex {
 		lines.add("\tvec3 ofLocal = vec3(ofAxis(0u), ofAxis(10u), ofAxis(20u));");
 		lines.add("\tof_Vertex = vec4(ofLocal + of_RegionOffset"
 				+ " + ofSectionOrigin(a_LightAndData.w), 1.0);");
-		lines.add("\tof_Color = a_Color;");
+		// Sodium's own word holds the tint with the occlusion multiplied into it; ours holds the two
+		// apart, and separateAo is the pack saying it means to see them apart. Both are on every
+		// vertex, so this line is the whole of what the directive decides and no mesh is rebuilt
+		// for it. The word left unread here is the one the game's own shader goes on reading.
+		lines.add("\tof_Color = " + (separateAo ? TINT_AND_AO : "a_Color") + ";");
 		// The top bit of each texture coordinate says which side of its sprite this corner is on,
 		// and the coordinate is pulled that way by a fraction of a texel. Leaving it out is not
 		// invisible: a corner that lands exactly on a sprite's edge picks up the neighbouring sprite
@@ -332,7 +367,7 @@ public final class SodiumVertex {
 		return switch (attribute) {
 			case "a_Position", "a_TexCoord", MID_TEX_COORD -> "uvec2";
 			case MID_BLOCK -> "ivec4";
-			case NORMAL, TANGENT -> "vec4";
+			case NORMAL, TANGENT, TINT_AND_AO -> "vec4";
 			case "a_LightAndData" -> "uvec4";
 			case BLOCK_ID -> "uint";
 			default -> "vec4";

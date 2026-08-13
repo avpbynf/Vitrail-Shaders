@@ -325,8 +325,11 @@ public final class PackValues {
 
 	/**
 	 * Whether this pack asked for the terrain's ambient occlusion to be kept out of the vertex
-	 * colour and put in its alpha instead. What answers it is the chunk mesh, so a change here is
-	 * worth a rebuilt world; {@code TerrainDraw.separateAoSettled} is the side that asks for one.
+	 * colour and put in its alpha instead. What answers it is the TRANSLATION and not the mesh: the
+	 * chunk vertex carries both colours whatever any pack asked, and this only decides which of the
+	 * two a terrain vertex stage is written to read, {@code VertexInputs.TERRAIN_SEPARATE_AO}. So
+	 * nothing is built again when it moves - a pack that moves it is a pack whose programs are read
+	 * again anyway.
 	 */
 	public boolean separateAo() {
 		return this.separateAo;

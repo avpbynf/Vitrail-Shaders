@@ -619,12 +619,7 @@ public final class PackChain {
 			lastError = "Could not prepare this pack: " + e;
 			Vitrail.logger().error("Vitrail could not prepare a pack's chain", e);
 		}
-
-		// Nothing settles the terrain's separated colour here, and that is deliberate: the answer is
-		// no until the chain really draws, which is several frames after this method returns.
-		// TerrainDraw.separateAoSettled polls it on the client tick instead.
 	}
-
 
 	/** The file naming the pack to draw, written by the settings screen and edited by hand. */
 	public static Path packFile(Path gameDirectory) {

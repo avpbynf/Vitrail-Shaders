@@ -317,11 +317,16 @@ public final class PackProgram {
 	 * keeps the game's own shader for it. That is a normal thing for a pack to do rather than a
 	 * failure: nothing in the format obliges a pack to ship a {@code gbuffers_water}.
 	 *
-	 * @param place where the entry points are read from, {@code world0} or the root, already settled
-	 *              by the chain
+	 * @param place  where the entry points are read from, {@code world0} or the root, already
+	 *               settled by the chain
+	 * @param inputs which of the two terrain contracts the stages are written against, which is
+	 *               where the pack's {@code separateAo} lands. Handed in rather than read off the
+	 *               properties here: the caller already holds the pack's own reading of that
+	 *               directive, and two readings of one directive are two answers waiting to disagree
 	 */
 	public static Map<TerrainPass, Loaded> loadTerrain(Path packPath, String place,
-			Map<String, OptionValue> chosen, String profile) throws IOException {
+			Map<String, OptionValue> chosen, String profile, VertexInputs inputs)
+			throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);
 			ShaderProperties properties = ShaderProperties.parse(source);
@@ -358,9 +363,8 @@ public final class PackProgram {
 				// The pass's own program and not the file that serves it, for the reason the alpha
 				// test is taken that way: what the engine supplies belongs to what is being drawn.
 				loaded.put(pass, bind(source.packName(), path,
-						ProgramTranslator.translate(units, VertexInputs.TERRAIN,
-								VertexInputs.TERRAIN.elements(), alphaTest, pass.covers(),
-								pass.program(), textures.volumes()),
+						ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest,
+								pass.covers(), pass.program(), textures.volumes()),
 						targets, alphaTest, textures));
 			}
 
