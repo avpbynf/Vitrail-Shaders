@@ -577,9 +577,8 @@ final class PackPass {
 	 * the {@code hand} line of {@code vitrail/options.txt} still leaves it doing by default, or
 	 * nothing being on screen to draw - there is no such image and none is needed, the two moments
 	 * holding the same depth, and the fall through below is that answer rather than a gap. It is
-	 * also reached when an image was wanted and could not be had, which is not the same thing and is
-	 * not silent: {@link PackDepth#preHand} carries the cases apart and each failure has its own
-	 * line in the log.
+	 * also reached when an image was wanted and could not be had, which is not the same thing:
+	 * {@link PackDepth#preHand} carries the cases apart and says which of them reach the log.
 	 */
 	private static GpuTextureView depth(String sampler, ColorTargets targets,
 			GpuTextureView depthView) {

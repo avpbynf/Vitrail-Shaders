@@ -262,12 +262,13 @@ final class PackDepth {
 	 * {@link PackChain#markPreHandDepth} is asking before the image exists, which is what
 	 * {@code GeometryProgram} counts on to keep the terrain and the shadow map off it.
 	 * <p>
-	 * The other two are failures, and each is said out loud where it happens rather than here. A
-	 * refused allocation leaves the pair standing, so {@code depthtex2} reads the world WITH the hand
-	 * from the deferreds on and the far plane on the hand's own pass; {@link #ensurePreHand} is where
-	 * that is logged. A conversion that could not be drawn is {@link #pipeline(GpuDevice)} refusing,
-	 * and that takes the pair down with it, so every depth lookup of the pack reads the far plane and
-	 * its own line says so.
+	 * The rest are failures. A refused allocation of this image alone leaves the pair standing, so
+	 * {@code depthtex2} reads the world WITH the hand everywhere the chain reads it and the far plane
+	 * on the hand's own pass; {@link #ensurePreHand} logs that. A refused pair ({@link #ensure}) and
+	 * a refused conversion ({@link #pipeline(GpuDevice)}) each take all three images down together,
+	 * so every depth lookup of the pack reads the far plane, and each has a line of its own. Only
+	 * {@link #fill}'s guards against a device with no view to give are silent, and they are the shape
+	 * of failure where nothing at all is being drawn anyway.
 	 */
 	GpuTextureView preHand() {
 		return this.preHandWritten ? this.preHand.view() : null;
@@ -403,8 +404,8 @@ final class PackDepth {
 			this.preHand = close(this.preHand);
 			Vitrail.logger().error("Vitrail could not allocate the depth image the pack reads past the "
 					+ "hand with at {}x{}, so until the screen is another size depthtex2 reads the world "
-					+ "with the hand in it from the deferred stage on, and the far plane on the hand's "
-					+ "own pass, which is the one program it was taken for", width, height, e);
+					+ "with the hand in it everywhere the chain reads it, and the far plane on the "
+					+ "hand's own pass, which is the one program it was taken for", width, height, e);
 
 			return false;
 		}

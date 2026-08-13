@@ -124,11 +124,15 @@ public final class SamplerPlan {
 	 * Can, and only where this engine draws the hand itself, which is the {@code hand} line of
 	 * {@code vitrail/options.txt} and not anything a pack asks for. Left to the game, which is what
 	 * the default still is, the hand is drawn after the whole chain has run and NEITHER copy carries
-	 * it, the two being one image. That is a divergence and not a property of the model: Iris draws
-	 * the hand inside the level for any pack it loads
-	 * ({@code pathways/HandRenderer.java:95-98} from {@code mixin/MixinLevelRenderer.java:280}), so
-	 * its {@code depthtex1} always carries the hand and its {@code depthtex2} never does. What holds
-	 * it here is the switch, and {@code EngineOptions.announceHandOff} is where its cost is written.
+	 * it, the two being one image.
+	 * <p>
+	 * That default is a divergence and not a property of the model. Iris draws the hand inside the
+	 * level for any pack it loads ({@code pathways/HandRenderer.java:95-98} from
+	 * {@code mixin/MixinLevelRenderer.java:280}), on the same frames the game would have drawn one
+	 * and no others, so on those frames its {@code depthtex1} carries the hand where neither of ours
+	 * does. What holds it off here is the switch alone and nothing about this engine's API:
+	 * {@code EngineOptions} carries the default and {@code EngineOptions.announceHandOff} writes out
+	 * what it costs, once per load, for the player looking at the picture it produced.
 	 */
 	public static boolean depthCopy(String name) {
 		return name.equals("depthtex1") || name.equals("depthtex2");

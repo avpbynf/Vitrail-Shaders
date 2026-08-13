@@ -1418,15 +1418,16 @@ public final class PackChain {
 	 * <strong>Only on the frames this engine really draws a hand</strong>, which is
 	 * {@link HandDraw#draws} and not {@link HandDraw#diverted}: the hand's solid pass is the one
 	 * thing between this moment and the opaque image {@link #drawEarly} takes, so on every frame that
-	 * pass draws nothing - the hand left to the game, and every test {@link HandDraw#shows} carries,
-	 * which is the only list of them that cannot go stale - the two are the same image to the bit and
-	 * {@code depthtex2} is answered from the pair. The frame's test and not the load's, because the
-	 * load's would pay a full screen image and a conversion for that identical copy on every frame
-	 * the player spent looking at himself, and would take a panorama capture through the 4096 square
-	 * allocation {@link ColorTargets} says a machine can fail at. Iris pays it unconditionally
-	 * instead, its copy being a texture to texture one and not a draw
-	 * ({@code gl/texture/DepthCopyStrategy.java:15-31} picks {@code glCopyImageSubData} wherever the
-	 * entry point is there). {@link PackDepth} carries what that saves.
+	 * pass draws nothing - the hand left to the game, and everything {@link HandDraw#draws} asks
+	 * beyond that, which is the only list of those that cannot go stale - the two are the same image
+	 * to the bit and {@code depthtex2} is answered from the pair. The frame's test and not the
+	 * load's, because the load's would pay a full screen image and a conversion for that identical
+	 * copy on every frame the player spent looking at himself, and would take a panorama capture
+	 * through the 4096 square allocation {@link ColorTargets} says a machine can fail at. Iris pays
+	 * it unconditionally instead, its copy moving depth to depth where this one is a draw
+	 * ({@code gl/texture/DepthCopyStrategy.java:15-31} takes {@code glCopyImageSubData} wherever the
+	 * entry point is there, and a framebuffer path where it is not). {@link PackDepth} carries what
+	 * that saves.
 	 * <p>
 	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes, for the reason
 	 * {@link #markGeometryDepth} is not: nothing here warms a pipeline, prepares a target or clears
