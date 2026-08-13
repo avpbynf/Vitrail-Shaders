@@ -112,8 +112,8 @@ public final class MenuValues {
 	 * some page places, plus the profile, which greys the selector.
 	 * <p>
 	 * The rest of that file is left out rather than counted with them. Some of its lines name this
-	 * engine rather than the pack, {@code EngineOptions.RESERVED} being the list of those, and any
-	 * other name is a setting no page places, which is exactly
+	 * engine rather than the pack, which is {@code EngineOptions.RESERVED} without the profile the
+	 * line above already counts, and any other name is a setting no page places, which is exactly
 	 * what that file exists to reach. Neither kind has a widget, so counting them would send a
 	 * player looking for greyed settings that were never drawn.
 	 * <p>

@@ -164,14 +164,16 @@ Which of those names the load says out loud depends on where the name came from,
 is who typed it. A line of `vitrail/options.txt` is named word by word, because a person edits that
 file by hand and a typo there is worth a line. A name in the pack's own settings file is named too,
 in the line that reports what the menu no longer shows - which is a wider question, and that line
-therefore also carries names the pack still declares and still applies.
+therefore also carries names the pack still declares and still applies. A word both files hold is
+left to the first line rather than counted twice.
 
 A profile that names a word its own pack declares nowhere is dropped in silence, and the reference
-is nearly as quiet. It checks the index on one of the three forms a profile can write, the bare
-positive one, and warns there; the `NAME=value` and `!NAME` forms go through unchecked, and over the
-eight test packs those two are 423 tokens of 440. Here none of the three is checked. What the
-difference costs is a pack author's own typo staying invisible in one form out of three; it costs
-the picture nothing, since neither engine applies the word anywhere.
+is nearly as quiet. Four of the forms its parser takes name a setting, and it looks only one of them
+up before using it, the bare positive one, which is where it warns. The `!NAME`, `NAME=value` and
+`NAME:value` forms go through unchecked, and over the eight test packs those three are 423 tokens of
+the 440 the four carry. Here none of the four is checked. What the difference costs is a pack
+author's own typo staying invisible in one form of four; it costs the picture nothing, since neither
+engine applies the word anywhere.
 
 Under both sits the engine's own table, and three readers have to be handed the same one: the
 preprocessor deciding which branch is live, the translator writing those symbols back out, and the

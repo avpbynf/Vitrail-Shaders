@@ -24,14 +24,16 @@ import java.util.Map;
  * nowhere is in that line, along with names that are merely off a page and still apply.
  * <p>
  * A profile naming a word its own pack declares nowhere is dropped without a word, and Iris is
- * nearly as quiet. It checks the index on one of the three forms a profile can write, the bare
- * positive, and warns {@code Invalid pack option} there
- * ({@code shaderpack/option/ProfileSet.java:78-81}); {@code NAME=value} and {@code !NAME} go
- * through unchecked at {@code :70-74}. Measured over the eight pack corpus, that is 17 tokens of
- * 440 against 402 and 21. Here nothing is checked on any of the three,
+ * nearly as quiet. Four of the six forms its parser takes name a setting
+ * ({@code shaderpack/option/ProfileSet.java:57-82}), and it looks only ONE of the four up before
+ * using it: the bare positive, warned as {@code Invalid pack option} at {@code :78-81}, and looked
+ * up in the boolean half of the index rather than in the whole of it. {@code !NAME},
+ * {@code NAME=value} and {@code NAME:value} go through unchecked at {@code :70-77}. Measured over
+ * the eight pack corpus, the checked form is 17 tokens of the 440 those four carry, against 402 for
+ * {@code NAME=value} and 21 for {@code !NAME}. Here none of the four is checked,
  * {@code ShaderProperties.expandProfile} taking a bare token as an on without a lookup. What the
- * difference costs is a pack author's own typo staying invisible in one form out of three; what it
- * costs the picture is nothing, both engines applying the word nowhere.
+ * difference costs is a pack author's own typo staying invisible in one form of four; what it costs
+ * the picture is nothing, both engines applying the word nowhere.
  */
 public final class SettingSet {
 
