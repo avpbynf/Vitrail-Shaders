@@ -1180,20 +1180,26 @@ public final class ShaderProperties {
 	 * chunk vertex encoder, not anything the translator writes.
 	 * <p>
 	 * Read through {@link #live} like the rest of the family, and {@link #RAIN_DEPTH}'s own note
-	 * says why that is what the reference does as well. The last live line wins, which is how Iris
-	 * reads it: its parser walks the file in order and each match overwrites the one before,
-	 * {@code shaderpack/properties/ShaderProperties.java:211}.
+	 * says why that is what the reference does as well. <strong>The last live line decides, and it
+	 * decides even when it carries a word this cannot read</strong>, which is what Iris does: it
+	 * loads the preprocessed file into an {@code OrderBackedProperties} and walks the MAP rather
+	 * than the file ({@code shaderpack/properties/ShaderProperties.java:143-152}), so a key written
+	 * twice keeps its last value and {@code :211} runs once for it, on that value alone. Its
+	 * {@code handleBooleanDirective} takes {@code true}, {@code 1}, {@code false} and {@code 0} and
+	 * warns at anything else without touching the field ({@code :636-648}).
+	 * <p>
+	 * That is the whole of the difference an earlier reading here would have made, and it takes a
+	 * pack writing the key twice to see it: on {@code separateAo=true} followed by
+	 * {@code separateAo=yes}, keeping the last line this can read answers true where the reference
+	 * leaves its default standing and answers false.
 	 */
 	public boolean separateAo(Map<String, String> defines) {
-		boolean asked = false;
+		Boolean asked = null;
 		for (Matcher line : live(SEPARATE_AO, defines)) {
-			Boolean value = truth(line.group(1).trim());
-			if (value != null) {
-				asked = value;
-			}
+			asked = truth(line.group(1).trim());
 		}
 
-		return asked;
+		return Boolean.TRUE.equals(asked);
 	}
 
 	/** Each profile's unexpanded body, in the order the pack declares them. */
