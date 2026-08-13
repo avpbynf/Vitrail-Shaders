@@ -1192,10 +1192,17 @@ final class GeometryProgram {
 	private boolean readsATexture(String sampler) {
 		PbrMap material = material(sampler);
 		if (material != null) {
-			// Asked of the plan like everything else here, except that the plan for these two is the
-			// resource pack rather than the shader pack: a name nothing ships a file for reads the
-			// flat texel, and there is no frame in which that changes.
-			return PbrAtlases.view(this.atlas, material) != null;
+			// The session's answer and deliberately not this pass's, which is the one thing here that
+			// cannot be asked once. This program may be drawn with several images in one frame, and
+			// the atlas field holds none of them yet at the moment this line is printed: the shadow
+			// stage prepares its three chunk programs with no image in hand, and the sky, the
+			// particles, the weather and the entities are all handed theirs per draw, after the
+			// prepare. Asked of the pass, the line printed the answer for whichever image happened to
+			// be in the field, once, for the session.
+			//
+			// So it says what a latched line can say without lying: whether anything fills the name
+			// at all. Which atlases really answer is said exactly, one line each, as they are built.
+			return PbrAtlases.supplies(material);
 		}
 
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);

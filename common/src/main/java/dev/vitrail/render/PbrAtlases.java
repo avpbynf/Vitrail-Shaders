@@ -111,6 +111,26 @@ public final class PbrAtlases {
 	}
 
 	/**
+	 * Whether the resource pack fills one of the two names for any atlas at all.
+	 * <p>
+	 * A coarser question than {@link #view}, and it exists because the report a program prints once
+	 * at load cannot ask the finer one. Four families choose their image per DRAW and not per
+	 * program - the particles alone come off the block atlas, the item atlas and the particle atlas
+	 * inside one pass - so there is no single answer a latched line could give. What that line can
+	 * say without lying is whether anything fills the name this session; which atlases really answer
+	 * is said exactly, once each, by {@link PbrAtlas} as they are built.
+	 */
+	static boolean supplies(PbrMap map) {
+		for (PbrAtlas built : ATLASES.values()) {
+			if (built.view(map) != null) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Whether the resource pack declares the labPBR convention, which decides how the specular map is
 	 * reduced and how it is filtered. Read once per stitch and answered from there.
 	 */
