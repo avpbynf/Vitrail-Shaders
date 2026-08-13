@@ -82,10 +82,11 @@ a finished picture, and expect them to shrink release by release.
 
 Put the Vitrail jar in `mods/` next to Sodium and Chloride, and switch the game
 to Vulkan: `preferredGraphicsBackend:"vulkan"` in `options.txt`, or Options, then
-Video Settings, in game. That switch is the one nothing enforces, so
-[INSTALL.md](INSTALL.md) has what its absence looks like, along with the Chloride
-settings to turn off. Shader packs go in `shaderpacks/`, as they always have, and
-are selected in game from Vitrail's settings screen.
+Video Settings, in game. Nothing enforces that switch, though the mod says at
+startup which backend the game came up on, and says so as an error when it is not
+Vulkan; [INSTALL.md](INSTALL.md) has what its absence looks like, along with the
+Chloride settings to turn off. Shader packs go in `shaderpacks/`, as they always
+have, and are selected in game from Vitrail's settings screen.
 
 Client only: it does nothing on a server and does not need to be installed on
 one. Keep Sodium on 0.9.x, and do not run another shader engine alongside.

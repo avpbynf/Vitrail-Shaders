@@ -25,19 +25,32 @@ OpenGL and the Vulkan surface fails at boot with `GLFW error 65540 ... requires
 the window to have the client API set to GLFW_NO_API`. Chloride is what makes
 that window Vulkan capable.
 
-Worth knowing because the failure hides itself: a Vulkan boot that fails
-downgrades `preferredGraphicsBackend` to `default`, and the dying process writes
-`options.txt` on the way out, after and over any edit you made. The game then
-starts in OpenGL and Vitrail loads and compiles without drawing the world's
-passes. If the picture is unchanged, check the backend in the log before
-anything else.
+Worth knowing because the failure hides itself, and it hides itself twice over.
+Asked for Vulkan and unable to bring it up, the game falls back to OpenGL within
+the same run and keeps your setting, so `options.txt` goes on saying `vulkan`
+while the session is not on it: the file cannot answer the question. And a game
+that dies before it reaches the title screen leaves a mark that the *next* start
+reads, which sets `preferredGraphicsBackend` back to `default` and saves over
+whatever you had written. Either way Vitrail loads without drawing the world's
+passes. It says which backend it came up on at startup, and says it as an error
+when that backend is not Vulkan, so a picture that did not change is answered by
+the log rather than by the file.
 
-Some of Chloride's own settings have to come off in `config/chloride-client.toml`,
-and they are entries inside its tables rather than keys of their own. `chests` and
-`beds`, under `[fastBlocks]`, draw those blocks by a path this engine's final pass
-then covers over, so they go invisible with no other symptom; `tileEntities`,
-under `[culling]`, decides on its own which block entities are drawn at all, and
-comes off with them.
+Some of Chloride's own settings decide what reaches this engine, in
+`config/chloride-client.toml`, and they are entries inside its tables rather than
+keys of their own. `tileEntities`, `entities` and `monsters`, under `[culling]`,
+decide on their own which block entities and which mobs are drawn at all, by
+distance: what they take out is never handed to the pack, so a chest, a sign or a
+mob that is not there is those settings rather than anything the pack does. The
+first two are on when Chloride writes that file; the third is not. `chests` and
+`beds`, under `[fastBlocks]`, are written off and are worth leaving off: they draw
+those blocks by a path this engine's final pass then covers over, so they go
+invisible with no other symptom.
+
+There is nothing to go looking for by hand. Vitrail reads that file at startup
+and, in the log, names each of them that is on with what it costs and what to set
+it to, names any it could not find, and says so when the file itself is not
+there.
 
 Fabric is not supported. The module exists in the build but is empty.
 
@@ -104,8 +117,8 @@ next load.
 None of these files has to exist, and without them nothing is drawn: a pack is
 loaded once one is picked, in the screen or in `pack.txt`, and never before.
 What is picked is then drawn whole. `options.txt` is there to take a stage back
-out again, which is how a wrong picture is bisected without a rebuild. It reads
-twelve names:
+out again, which is how a wrong picture is bisected without a rebuild. The names
+it reads:
 
 ```
 terrain=off      hands the chunk passes back to the game's own shader
@@ -116,8 +129,10 @@ clouds=off       hands the clouds back too, and with them the pack's own
 weather=off      hands the rain and the snow back to the game's own shader,
                  and with them the pack's own weather directive
 particles=off    hands the quad particles back too, both halves of them
-entities=on      draws the opaque entities with the pack's own program.
-                 The one line here that is OFF unless it is written
+entities=off     hands the mobs and the block entities back, lit by the game
+                 and carried in flat by the scene seed
+hand=off         leaves the player's own hand where the game draws it, after
+                 the whole chain has run
 chain=off        stops the composites and the final from drawing at all
 seed=off         stops the game's finished frame being painted in under the chain
 passes=N         cuts the chain to its first N passes, or to a list of names
@@ -125,17 +140,16 @@ dump=NAME        prints the values one program was handed, decoded
 screen=settings  opens the settings screen on the pack rather than on the list
 ```
 
-Nine of these twelve are a yes or a no, and eight of the nine are on until they
-are taken out: what this engine can serve, it serves. `entities` is the one that
-is the other way round and does nothing unless the line is written. The last
-three are values rather than switches and do nothing unless written either.
+Every one of those that is a yes or a no is on until it is taken out: what this
+engine can serve it serves, and only a disabling is written down. The last three
+are values rather than switches and do nothing unless written.
 
 One more name is held back rather than handed to the pack as a setting:
 `profile=NAME` picks a whole profile the pack declares, and the settings screen
 greys its own profile selector out for as long as that line is there. Everything
 else in the file is a setting of the pack, by its own name.
 
-Each of the first nine is a stage that can be taken in or out on its own, which
+Each of the switches is a stage that can be taken in or out on its own, which
 is what tells a wrong gbuffer from a wrong composite. `dump=` is the one that
 answers what no picture can, since a value can be non zero, plausible and wrong.
 
@@ -162,8 +176,10 @@ the root of the instance:
 preferredGraphicsBackend:"vulkan"
 ```
 
-The same setting is reachable in game under Options, Video Settings; either way the
-change only takes effect on the next start.
+The same setting is reachable in game under Options, Video Settings, where it is
+called Graphics API and the entry to pick reads "Prefer Vulkan (Experimental)".
+Either way the change only takes effect on the next start, which the game says
+itself when you pick it.
 
 ## Going back
 
