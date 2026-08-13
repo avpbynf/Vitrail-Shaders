@@ -172,8 +172,9 @@ the body of a mob, a chest, a conduit, an armour piece - is drawn with the pack'
 lit as the pack lights the world, and the shadows the terrain casts fall on it. What stays behind is
 everything that blends, and the player's own body is in that half, so third person still shows the
 symptom this section describes. `entities=off` in `vitrail/options.txt` hands the whole family back
-to the game if you need to compare. What is left is named in the log rather than on this page, by
-the line the close of this section points at.
+to the game if you need to compare, and with it the glint an enchantment puts over what a mob holds
+or wears. What is left is named in the log rather than on this page, by the line the close of this
+section points at.
 
 **The hand you are holding has a switch of its own, and it goes through the pack out of the box
 too.** It is drawn inside the level, in two passes, served by `gbuffers_hand` and
@@ -199,9 +200,12 @@ what a pack cannot do here is treat it as material of its own.
 as receive, and the log names the shadow passes one by one when a place first draws. Two things
 take that back: a pack can ask for fewer casters than the default and is given what it asks for,
 and a draw whose pipeline this engine has no shadow row for is left out of the map rather than
-guessed at - the log says so, by name, for each one. **The rain, the snow, the particles and the
-hand are never in it**: they have the pack's light on them and nothing under them. Receiving and
-casting are two different things here, and the second is the shorter list.
+guessed at - the log says so, by name, for each one. **The rain, the snow, the particles, the hand
+and the glint of an enchantment are never in it**: they have the pack's light on them and nothing
+under them. The glint is the one of the five where the reference does the same thing for its own
+reason, cancelling the foil while the map is filled, so what is missing there is a tint on a shadow
+whose shape the item already casts. Receiving and casting are two different things here, and the
+second is the shorter list.
 
 **Turn the game's improved transparency off if the rain or the translucent particles do not change.**
 It is a video setting of its own, which the Fabulous preset turns on everywhere except macOS. With

@@ -348,6 +348,19 @@ public final class ViewMatrices implements ViewSource {
 		return this.passSet ? this.passModelView : this.modelView;
 	}
 
+	/**
+	 * The bob on its own, which is the left factor {@link #passModelView(Matrix4fc)} multiplies every
+	 * pass matrix onto.
+	 * <p>
+	 * The same field that multiplication reads, so the two cannot say different things: a shader
+	 * forming {@code cameraBob() * m} gets exactly what handing {@code m} in would have stored, which
+	 * is the whole point of publishing it.
+	 */
+	@Override
+	public Matrix4fc cameraBob() {
+		return this.bob;
+	}
+
 	@Override
 	public Matrix4fc passModelViewInverse() {
 		return this.passSet ? this.passModelViewInverse : this.modelViewInverse;

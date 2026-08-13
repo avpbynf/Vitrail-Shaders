@@ -345,9 +345,10 @@ final class EngineOptions {
 	 */
 	static void announceEntitiesOff(Path gameDirectory) {
 		Vitrail.logger().info("{}=off, so the game draws its own entities and the scene seed carries "
-				+ "them in, already lit and already tone mapped. Remove that line from {} to have the "
-				+ "pack draw them, which is the default", ENTITIES_KEY,
-				SettingsLayers.file(gameDirectory));
+				+ "them in, already lit and already tone mapped. The glint an enchantment puts over "
+				+ "what they hold or wear goes back with them, this switch carrying the two halves of "
+				+ "it that are drawn in the world. Remove that line from {} to have the pack draw "
+				+ "them, which is the default", ENTITIES_KEY, SettingsLayers.file(gameDirectory));
 	}
 
 	/**
@@ -361,9 +362,10 @@ final class EngineOptions {
 	static void announceHandOff(Path gameDirectory) {
 		Vitrail.logger().info("{}=off, so the player's own hand stays where the game draws it, after "
 				+ "the pack's chain: painted over the finished image by the game's own shader, absent "
-				+ "from every gbuffer and from every depth a composite reads. Remove that line from {} "
-				+ "to have it drawn inside the level with the pack's two hand programs, which is the "
-				+ "default", HAND_KEY, SettingsLayers.file(gameDirectory));
+				+ "from every gbuffer and from every depth a composite reads, and the glint over what "
+				+ "it holds with it. Remove that line from {} to have it drawn inside the level with "
+				+ "the pack's two hand programs, which is the default", HAND_KEY,
+				SettingsLayers.file(gameDirectory));
 	}
 
 	/**

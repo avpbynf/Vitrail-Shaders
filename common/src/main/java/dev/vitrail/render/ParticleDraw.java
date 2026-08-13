@@ -98,7 +98,8 @@ public final class ParticleDraw {
 
 		/** What the pack has to be read for to serve this half, in terms the translation knows. */
 		private PackProgram.GeometryElement asked() {
-			return new PackProgram.GeometryElement(this.element, this.program, CUTOUT);
+			return new PackProgram.GeometryElement(this.element, this.program, CUTOUT,
+					VertexInputs.PARTICLE);
 		}
 
 		/**
@@ -451,8 +452,7 @@ public final class ParticleDraw {
 
 		try {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(this.packPath, this.place,
-					VertexInputs.PARTICLE, ELEMENTS.values().stream().map(Element::asked).toList(),
-					this.chosen, this.profile);
+					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the particles, so the game keeps its "
 						+ "own shader for them", this.packPath.getFileName(),

@@ -100,7 +100,8 @@ public final class WeatherDraw {
 
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
 		private PackProgram.GeometryElement asked() {
-			return new PackProgram.GeometryElement(this.element, PROGRAM, CUTOUT);
+			return new PackProgram.GeometryElement(this.element, PROGRAM, CUTOUT,
+					VertexInputs.PARTICLE);
 		}
 	}
 
@@ -420,8 +421,7 @@ public final class WeatherDraw {
 
 		try {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(this.packPath, this.place,
-					VertexInputs.PARTICLE, ELEMENTS.values().stream().map(Element::asked).toList(),
-					this.chosen, this.profile);
+					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the weather, so the game keeps its "
 						+ "own shader for the rain and the snow", this.packPath.getFileName(),

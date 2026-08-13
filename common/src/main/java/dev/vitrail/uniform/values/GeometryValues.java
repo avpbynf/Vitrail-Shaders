@@ -1,5 +1,6 @@
 package dev.vitrail.uniform.values;
 
+import dev.vitrail.glsl.LegacyGlsl;
 import dev.vitrail.uniform.UniformCatalog;
 import dev.vitrail.uniform.UniformShape;
 import dev.vitrail.uniform.UniformSource;
@@ -131,6 +132,20 @@ public final class GeometryValues {
 		// own zero because the two are the same bytes and only one of them says why: unanswered,
 		// the name is reported as a value this engine owes, which it does not.
 		builder.add("centerDepthSmooth", UniformShape.FLOAT, (_, out) -> out.set(0.0F));
+
+		// The whole of a glint's vertex colour, and answered here rather than in the engine table
+		// because only a family drawn over the world has a glint: it is a name no full screen pass can
+		// reach. What multiplies it in Iris is the draw's colour modulator, which is white for every
+		// draw the game prepares from a render type, so the product is this number
+		// (VanillaTransformer.java:134, against LegacyGlsl.GAME_TRANSFORMS_BLOCK).
+		builder.add(LegacyGlsl.GLINT_ALPHA, UniformShape.FLOAT,
+				(world, out) -> out.set(world.glintAlpha()));
+
+		// The left factor of every pass model view of the frame, published for the one pass that has
+		// to form that product in the shader rather than read it ready made. Here for the same reason
+		// as the line above: a full screen pass has no model view to build.
+		builder.add(LegacyGlsl.CAMERA_BOB, UniformShape.MAT4,
+				(world, out) -> out.set(world.cameraBob()));
 
 		// The colour the game modulates a whole draw by, which for the sky is where its colour is:
 		// the mesh of a sky disc carries a position and nothing else, and the mesh of the sunrise

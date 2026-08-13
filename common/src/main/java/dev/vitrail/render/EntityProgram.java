@@ -92,14 +92,16 @@ final class EntityProgram implements DumpedProgram {
 	private static final String NAMESPACE = Vitrail.MOD_ID;
 
 	/**
-	 * The names the entity mesh really carries under the spelling a pack writes, which is none of
-	 * them.
+	 * The names the mesh really carries under the spelling a pack writes, which is none of them.
 	 * <p>
 	 * Empty and not an oversight: {@code EntityVertex} answers every fixed function name out of the
 	 * six elements of the format, and there is no room in those six for anything a pack declares for
 	 * itself. {@code mc_Entity} is the one worth naming, since the chunk mesh does carry it: an
 	 * entity is not a block state and has no id to travel on, so a pack branching on it here is
 	 * branching on a constant, and the log says so at every load.
+	 * <p>
+	 * The glint's mesh answers the same, and with room to spare: it carries two elements, and
+	 * {@code GlintVertex} makes every other name out of a constant.
 	 */
 	private static final Set<String> ANSWERED = Set.of();
 
@@ -207,7 +209,7 @@ final class EntityProgram implements DumpedProgram {
 				// Nothing of the game's bound beside the mesh: an entity pipeline carries samplers
 				// and transforms, and this program declares none of their names.
 				null),
-				bound, values, load, DefaultVertexFormat.ENTITY, writes, targets, chainRuns));
+				bound, values, load, element.format(), writes, targets, chainRuns));
 	}
 
 	/**

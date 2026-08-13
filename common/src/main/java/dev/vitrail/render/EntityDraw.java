@@ -106,10 +106,14 @@ import java.util.stream.Stream;
  * {@link FeatureLayer} carries it, with what Iris does instead and what it costs the image.
  * <p>
  * <strong>What is still the game's inside this window</strong>, and therefore still goes to that
- * layer, is the eyes ({@code EYES} and {@code ENTITY_TRANSLUCENT_EMISSIVE}), the glint, the beacon
- * beam, the text of a name plate or a sign, and the two pipelines {@link #WITHHELD} names. The
- * shadow map is a family of its own and is NOT in either window, a pass of its own that neither
- * bracket reaches.
+ * layer, is the eyes ({@code EYES} and {@code ENTITY_TRANSLUCENT_EMISSIVE}), the beacon beam, the
+ * text of a name plate or a sign, and the two pipelines {@link #WITHHELD} names. The shadow map is a
+ * family of its own and is NOT in either window, a pass of its own that neither bracket reaches.
+ * <p>
+ * <strong>An enchantment's glint comes in by this same door and is alone in it</strong>, in two ways
+ * that are one: it is the only piece served here that is not drawn from an entity mesh, and the only
+ * one whose pipeline carries more than one render type's worth of answers. {@link #GLINT_EARLY}
+ * carries what that costs it, which is four pieces where every other family has one per table.
  * <p>
  * <strong>The hand comes in by this same door and is not one of those.</strong> {@link HandDraw}
  * moves it off the game's late call and submits it twice, and both submissions are
@@ -263,10 +267,47 @@ public final class EntityDraw {
 			return SHADOW_ENTITIES.equals(this.program);
 		}
 
-		/** One word for the log, which has to say which of the three families a line is about. */
+		/**
+		 * Whether this piece is an enchantment's glint, asked of the PIPELINE where {@link #shadow}
+		 * asks of the program, and the difference is not a taste: what a glint answers differently is
+		 * mostly what its MESH is, and the mesh belongs to the pipeline. Asked of the program instead,
+		 * a row that ever kept this pipeline under another name would claim the entity format and
+		 * declare six inputs against a buffer carrying two.
+		 * <p>
+		 * It is the answer to three other questions here, all three from that one fact: which format
+		 * the pass binds, which window the row belongs in, and what the log calls it.
+		 */
+		@SuppressWarnings("ReferenceEquality")
+		boolean glint() {
+			return this.pipeline == RenderPipelines.GLINT;
+		}
+
+		/**
+		 * The game's format this piece is drawn from, which is the entity mesh for every row but the
+		 * glint's four.
+		 * <p>
+		 * Derived from {@link #glint} rather than tabulated beside it, so that the two cannot drift: a
+		 * row whose format did not match the pipeline it names would declare the wrong inputs and read
+		 * its texture coordinates off whatever the format really carries, without a word being said.
+		 * {@link #decodable} is where the claim is checked against the pipeline in hand.
+		 */
+		VertexFormat format() {
+			return glint() ? DefaultVertexFormat.POSITION_TEX : DefaultVertexFormat.ENTITY;
+		}
+
+		/** Where the vertex stage of this piece takes its inputs from, which is the same answer. */
+		VertexInputs inputs() {
+			return glint() ? VertexInputs.GLINT : VertexInputs.ENTITY;
+		}
+
+		/** One word for the log, which has to say which of the four families a line is about. */
 		String family() {
 			if (shadow()) {
 				return "entities in the shadow map";
+			}
+
+			if (glint()) {
+				return "glint";
 			}
 
 			return hand() ? "hand" : "entities";
@@ -292,18 +333,26 @@ public final class EntityDraw {
 		 * in the other. The arm blends and is drawn in the solid pass, so it read and wrote the far
 		 * half of every target it touches; a water row built from a pipeline that does not blend was
 		 * bound the other way round.
+		 * <p>
+		 * <strong>A glint row is asked of its row like a hand row, and for a reason of its own.</strong>
+		 * Its pipeline blends and that says nothing about the moment: what carries the glint decides
+		 * which half the game executes it in, and an enchanted book goes to the SOLID features, the
+		 * sort looking at the item's own quads and not at the foil hung on them
+		 * ({@code SubmitNodeCollection.java:325}). So one glint row is drawn before the deferred stage
+		 * although it blends, which is the arm's position exactly.
 		 */
 		boolean afterStage() {
 			if (shadow()) {
 				return false;
 			}
 
-			return hand() ? this.afterDeferred : blended();
+			return (hand() || glint()) ? this.afterDeferred : blended();
 		}
 
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
 		private PackProgram.GeometryElement asked() {
-			return new PackProgram.GeometryElement(this.element, this.program, this.alphaTest);
+			return new PackProgram.GeometryElement(this.element, this.program, this.alphaTest,
+					inputs());
 		}
 
 		/**
@@ -719,6 +768,92 @@ public final class EntityDraw {
 	}
 
 	/**
+	 * What an enchantment's glint asks for, and the one name of this class that answers whatever else
+	 * is going on.
+	 * <p>
+	 * Iris keys it on a CONSTANT, {@code p -> ShaderKey.GLINT}
+	 * ({@code pipeline/IrisPipelines.java:50}), where almost every row of {@link #ELEMENTS} reaches a
+	 * function that tests the hand and then the block entity phase. Two of them are pinned as well,
+	 * the end crystal beam and the offset cutout ({@code pipeline/IrisPipelines.java:61,62}), and
+	 * {@link #blockTwin} says what that costs them; what those two are pinned to is the key an entity
+	 * row reaches anyway, so the pin only keeps the phase off them. The glint's names a program no
+	 * other row of that table can reach. So a glint is a glint on a mob, on a chest and in the hand
+	 * alike, and the four pieces below differ in the MOMENT and never in the name.
+	 */
+	private static final String ARMOR_GLINT = "gbuffers_armor_glint";
+
+	/**
+	 * The four moments an enchantment's glint reaches this door in, which are four compiled pieces of
+	 * one program name.
+	 * <p>
+	 * <strong>Four and not one, because the side of the deferred stage is baked into a piece and the
+	 * glint arrives on both.</strong> A piece is bound against a schedule step, which decides the half
+	 * of every target it reads and whether its first output goes to the pack's target or to the
+	 * game's; a single piece would be right in one window and quietly wrong in the other. It is the
+	 * hand's shape, whose two passes are two programs for the same reason, and here the two picture
+	 * windows need it too: what carries the glint decides which half the game executes it in, and the
+	 * two halves are on opposite sides of the stage.
+	 * <p>
+	 * <strong>Which carrier goes where is the game's sort and not a guess.</strong> An enchanted book
+	 * is submitted among the SOLID features, foil and all, {@code submitItem} looking at the item's
+	 * own quads and never at the glint hung on them ({@code SubmitNodeCollection.java:325} reaching
+	 * {@code ItemFeatureRenderer.Submit.hasTranslucency}); an enchanted armour piece, a trident and a
+	 * shield are submitted through {@code submitModel} with a blending render type
+	 * ({@code entity/layers/EquipmentLayerRenderer.java:105},
+	 * {@code entity/ThrownTridentRenderer.java:38}, {@code special/ShieldSpecialRenderer.java:77}) and
+	 * land among the translucent ones.
+	 * <p>
+	 * <strong>None of the four is a twin and none may be derived into the other tables.</strong> A
+	 * block entity twin would ask for {@code gbuffers_block_translucent} inside a chest's draw and a
+	 * hand twin for {@code gbuffers_hand_water} inside the hand's, and Iris asks for neither.
+	 * <p>
+	 * <strong>What the two picture pieces do NOT reproduce is the phase, and it is work not done
+	 * rather than a choice</strong>: nothing here makes it impossible, so it is named rather than
+	 * argued for. They carry {@code NONE}, so a glint submitted through {@code submitModel} from a
+	 * block entity renderer is told it is drawing nothing in particular where Iris would have the
+	 * block entity phase up, that phase being posed around the submission rather than read off the
+	 * table. It does not touch the case this family exists for: an item's glint is filled from a
+	 * buffer of {@code ItemFeatureRenderer}'s own rather than submitted, so it reaches none of the
+	 * four sites Iris marks ({@code mixin/entity_render_context/MixinModelStorageTrigger.java:39,48,57}
+	 * and {@code MixinGlyphRenderType.java:19}) and a held book's glint is {@code NONE} on both sides.
+	 * What it costs is a pack branching on {@code MC_RENDER_STAGE_BLOCK_ENTITIES} inside its glint.
+	 * <p>
+	 * The threshold is Iris's and not the pipeline's, which declares none: its glint key carries
+	 * {@code NON_ZERO_ALPHA} ({@code pipeline/programs/ShaderKey.java:71}).
+	 */
+	private static final Element GLINT_EARLY = glint("glint", RenderStage.NONE, false);
+
+	private static final Element GLINT_LATE = glint("glint_late", RenderStage.NONE, true);
+
+	private static final Element GLINT_HAND = glint("hand_glint", RenderStage.HAND_SOLID, false);
+
+	private static final Element GLINT_HAND_WATER =
+			glint("hand_water_glint", RenderStage.HAND_TRANSLUCENT, true);
+
+	/**
+	 * One of those four: the game's own glint pipeline, under the phase of the pass it is drawn in and
+	 * on the side of the deferred stage that pass falls.
+	 * <p>
+	 * <strong>No layering transform, and here that is not the same claim as everywhere else in this
+	 * class.</strong> Every other row carries the nudge its render type applies, because one pipeline
+	 * of theirs is one render type family and so one nudge. This pipeline is four render types and TWO
+	 * nudges: {@code ARMOR_ENTITY_GLINT} sets {@code VIEW_OFFSET_Z_LAYERING} so that it lands on the
+	 * armour it covers, and the other three set none
+	 * ({@code rendertype/RenderTypes.java:252} against {@code :255,263,270}). No column here could
+	 * hold both, so the nudge is not held here at all: a glint reads the model view the game prepared
+	 * that draw with, out of the game's own block, which {@link LegacyGlsl#GAME_MODEL_VIEW} sets out
+	 * and which is what Iris does for every vanilla program.
+	 * <p>
+	 * What this row's own matrix still answers is the pass's, which is what the derived uniforms are
+	 * built from - the normal matrix and the two inverses - and Iris keeps those on its own CPU side
+	 * answer as well, unlayered.
+	 */
+	private static Element glint(String element, RenderStage stage, boolean afterDeferred) {
+		return new Element(RenderPipelines.GLINT, element, ARMOR_GLINT, AlphaTest.NON_ZERO,
+				LayeringTransform.NO_LAYERING, stage, afterDeferred);
+	}
+
+	/**
 	 * Which piece answers for a draw of this pipeline, which is the block entity one only where the
 	 * draw came from a block entity renderer AND that pipeline has one. Null for a pipeline this
 	 * engine does not serve at all, which is most of them.
@@ -729,7 +864,15 @@ public final class EntityDraw {
 	 * order: the two marks can be up at once. A hand holding a chest submits through the very calls
 	 * that raise the block entity mark, and asked the other way round that arm's chest would be drawn
 	 * with {@code gbuffers_block} in the middle of a hand pass.
+	 * <p>
+	 * <strong>The glint is asked before the block entity mark and after the hand, and neither half of
+	 * that is arbitrary.</strong> Before the mark, because Iris's row for it is a constant that
+	 * consults nothing ({@code pipeline/IrisPipelines.java:50}): an eye on a mob standing where a
+	 * chest had just been submitted must not be given the block program, and no more must a glint.
+	 * After the hand, because which of its four pieces answers is a question about the MOMENT, and
+	 * the hand's two passes are two of the four moments.
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	private static Element element(RenderPipeline pipeline) {
 		// Asked before the other two and not after, because both of their marks can be up inside it:
 		// the walk for the light submits block entities, which raises the block entity mark, and a
@@ -742,7 +885,19 @@ public final class EntityDraw {
 		}
 
 		if (HandDraw.drawing()) {
+			if (pipeline == RenderPipelines.GLINT) {
+				return HandDraw.drawingSolid() ? GLINT_HAND : GLINT_HAND_WATER;
+			}
+
 			return (HandDraw.drawingSolid() ? HAND_ELEMENTS : HAND_WATER_ELEMENTS).get(pipeline);
+		}
+
+		// The window decides which of the two picture pieces answers, and it is the only place in this
+		// class where a window is read to CHOOSE a row rather than to refuse one. It has to be: the two
+		// differ in the side of the deferred stage they are bound against, and nothing about a glint
+		// draw says which of the game's two halves it was submitted into.
+		if (pipeline == RenderPipelines.GLINT) {
+			return translucentFeatures ? GLINT_LATE : GLINT_EARLY;
 		}
 
 		// One table or the other and no falling between them: the block table is built from every row
@@ -875,13 +1030,19 @@ public final class EntityDraw {
 		}
 	}
 
-	/** Whether the window this piece is drawn in is the one that is open. */
+	/**
+	 * Whether the window this piece is drawn in is the one that is open.
+	 * <p>
+	 * Asked of {@code Element.afterStage} and not of the blend, which is the same answer for every row
+	 * whose pipeline decides its half and the right one for the glint, whose pipeline does not: a
+	 * glint blends and is executed in whichever window its carrier was submitted into.
+	 */
 	private static boolean inWindow(Element element) {
 		if (element.shadow()) {
 			return shadowFeatures;
 		}
 
-		return element.blended() ? translucentFeatures : opaqueFeatures;
+		return element.afterStage() ? translucentFeatures : opaqueFeatures;
 	}
 
 	/**
@@ -1009,7 +1170,13 @@ public final class EntityDraw {
 		if (!element.shadow() && !onMainTarget(prepared)) {
 			draw.end();
 
-			return draw.refuse(element, "elsewhere:" + prepared.outputTarget(), true, "the game sends it to "
+			// The FAMILY is in the key beside the target and the piece is not, because two families now
+			// name one target: the glint's translucent render type is addressed to ITEM_ENTITY_TARGET
+			// like six of the entity ones, so a key on the target alone would let whichever came first
+			// speak for both and the log would never say the glint went back too. Keying on the piece
+			// instead would say it once per row, which is six lines for the one thing that happened.
+			return draw.refuse(element, "elsewhere:" + (element.glint() ? "glint" : "entity") + ":"
+					+ prepared.outputTarget(), true, "the game sends it to "
 					+ prepared.outputTarget() + ", which it composes itself afterwards, and the pack's "
 					+ "colour targets cannot be attached beside a picture this engine has not got. It "
 					+ "is the game's improved transparency that allocates those targets, and Iris "
@@ -1025,13 +1192,14 @@ public final class EntityDraw {
 			// state can throw in its turn, and the second throw would carry away the only line that
 			// says what went wrong first.
 			//
-			// Both families go down together, and that is not caution: they come in by one door with
+			// All three go down together, and that is not caution: they come in by one door with
 			// one set of tables, so whatever this door failed at will fail again on the next draw of
 			// either. Leaving the hand on would keep the same throw coming, once a frame, with the
 			// line that explains it printed only the first time.
 			wanted = false;
 			HandDraw.wanted(false);
-			Vitrail.logger().error("Vitrail stopped drawing the entities and the hand after an error",
+			Vitrail.logger().error("Vitrail stopped drawing the entities, the hand and the glint after "
+							+ "an error",
 					e);
 			draw.end();
 
@@ -1171,7 +1339,12 @@ public final class EntityDraw {
 			// of the family are usually two files, so one key would name whichever failed first and
 			// leave the other silent. Not by piece either, or a file that will not compile would say
 			// so once per piece it serves, which is ten lines for one fault.
-			return refuse(element, "prepare:" + element.program(), true,
+			//
+			// The glint is the exception and takes the piece, because its four are ONE name: they are
+			// four compiled modules against four different sets of attachments, so the argument above
+			// runs the other way and one key would hide three failures behind the first.
+			return refuse(element, "prepare:" + (element.glint() ? element.element() : element.program()),
+					true,
 					"the " + element.element() + " program refused to prepare, which it says on its "
 							+ "own line above");
 		}
@@ -1296,6 +1469,27 @@ public final class EntityDraw {
 			return;
 		}
 
+		// The second deliberate one, and it is nearly a match rather than the gap it first reads as.
+		// Iris carries a shadow row for the glint (pipeline/IrisPipelines.java:111) and then cancels
+		// the foil while the map is filled (mixin/ItemStackMixin.java:14-17, whose comment is that a
+		// glint is not visible in a shadow anyway). That cancel is on ItemStack.hasFoil, and it
+		// reaches further than the name suggests: Iris's light walks the world a second time and
+		// EXTRACTS and submits every render state inside the pass it brackets
+		// (shadows/ShadowRenderer.java:396 and :638 around :684 and :713), so the reads that decide a
+		// foil are inside it and answered no. What escapes is a foil decided somewhere other than the
+		// stack, which is the thrown trident, reading its own entity data. So the row Iris carries is
+		// reached by almost nothing, and what this engine leaves out is what that row would have
+		// drawn.
+		if (pipeline == RenderPipelines.GLINT) {
+			Vitrail.logger().info("An enchantment's glint is left out of the shadow map. Iris has a "
+					+ "row for it and cancels the foil while the map is filled, so almost nothing "
+					+ "reaches that row there either; what this leaves out is the little it would "
+					+ "have drawn, and what it costs is a foil quad missing from a map the item under "
+					+ "it already fills, so a shadow keeps its shape and loses a tint");
+
+			return;
+		}
+
 		// The reason is NOT asserted here, and that took a review to see: every no from served ends
 		// up on this line, a missing device and a refused program among them, and each of those has
 		// already said what it was on a line of its own. Naming the table as the cause would send a
@@ -1390,24 +1584,12 @@ public final class EntityDraw {
 	private void read() {
 		this.read = true;
 
-		// Measured rather than assumed, and it is the one assumption of this family that would fail
-		// in silence. The prologue declares the six elements of DefaultVertexFormat.ENTITY by name,
-		// and an element the stage does not declare shifts the location of every one after it without
-		// a word: the picture stays a picture and reads its texture coordinates out of the light map.
-		List<Element> served = ELEMENTS.values().stream()
-				.filter(element -> {
-					VertexFormat format = element.pipeline().getVertexFormatBinding(0);
-					if (DefaultVertexFormat.ENTITY.equals(format)) {
-						return true;
-					}
+		List<Element> served = ELEMENTS.values().stream().filter(EntityDraw::decodable).toList();
 
-					Vitrail.logger().warn("The game draws the {} of an entity with {} and this engine "
-							+ "decodes the entity format, so the game keeps its own shader for it",
-							element.element(), format);
-
-					return false;
-				})
-				.toList();
+		// Asked once for the four pieces that share the glint's one pipeline, and only where a switch
+		// asked for one of them: four answers would be four lines about one format, and an answer
+		// nobody asked for would blame a pack for a family that is off.
+		boolean glint = (wanted || HandDraw.wanted()) && decodable(GLINT_EARLY);
 
 		// The block entity half of each served piece, and the two hand halves, added here rather than
 		// filtered again: all four tables share the pipelines of the first, so a format this engine
@@ -1424,13 +1606,31 @@ public final class EntityDraw {
 			List<Element> family = Stream.concat(served.stream(),
 							served.stream().map(element -> BLOCK_ELEMENTS.get(element.pipeline())))
 					.toList();
-			groups.add(family.stream().filter(element -> !element.blended()).toList());
-			groups.add(family.stream().filter(Element::blended).toList());
+			groups.add(family.stream().filter(element -> !element.afterStage()).toList());
+			groups.add(family.stream().filter(Element::afterStage).toList());
 		}
 
 		if (HandDraw.wanted()) {
 			groups.add(twinsOf(served, HAND_ELEMENTS));
 			groups.add(twinsOf(served, HAND_WATER_ELEMENTS));
+		}
+
+		// A group of its own for each glint piece, and NOT a row added to the four above it.
+		//
+		// A group stands or falls together, and the reason that holds inside the entity family is that
+		// those programs write into one picture: a piece whose answer could not be settled is drawn by
+		// the game, and a chest lit by the game beside a mob lit by the pack is a disagreement about
+		// what lights them. A glint is not beside anything. It is drawn ON TOP of a piece, so a glint
+		// left to the game over an item the pack drew is what every frame looks like today, and taking
+		// the mobs down with it would trade one family for four.
+		if (wanted && glint) {
+			groups.add(List.of(GLINT_EARLY));
+			groups.add(List.of(GLINT_LATE));
+		}
+
+		if (HandDraw.wanted() && glint) {
+			groups.add(List.of(GLINT_HAND));
+			groups.add(List.of(GLINT_HAND_WATER));
 		}
 
 		// One group for the whole shadow table, where the picture takes two: the map has no deferred
@@ -1453,12 +1653,11 @@ public final class EntityDraw {
 
 		try {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(this.packPath, this.place,
-					VertexInputs.ENTITY, asked.stream().map(Element::asked).toList(), this.chosen,
-					this.profile);
+					asked.stream().map(Element::asked).toList(), this.chosen, this.profile);
 			if (loaded.isEmpty()) {
-				Vitrail.logger().info("{} serves nothing in {} for the entities or the hand, so the "
-						+ "game keeps its own shader for them", this.packPath.getFileName(),
-						this.place.isEmpty() ? "its root" : this.place);
+				Vitrail.logger().info("{} serves nothing in {} for the entities, the hand or the "
+						+ "glint, so the game keeps its own shader for them",
+						this.packPath.getFileName(), this.place.isEmpty() ? "its root" : this.place);
 
 				return;
 			}
@@ -1468,6 +1667,28 @@ public final class EntityDraw {
 			Vitrail.logger().error("Could not prepare the entity programs of "
 					+ this.packPath.getFileName() + ", so the game keeps its own shader for them", e);
 		}
+	}
+
+	/**
+	 * Whether the pipeline this piece names really binds the format the piece claims, which is the one
+	 * assumption of this door that would otherwise fail in silence.
+	 * <p>
+	 * The vertex head declares the elements of that format BY NAME, and an element the stage does not
+	 * declare shifts the location of every one after it without a word being said: the picture stays a
+	 * picture and reads its texture coordinates out of the light map. Two formats come in by this door
+	 * now, the entity mesh and the glint's two elements, so the claim is the piece's and the check is
+	 * against the game's own binding.
+	 */
+	private static boolean decodable(Element element) {
+		VertexFormat format = element.pipeline().getVertexFormatBinding(0);
+		if (element.format().equals(format)) {
+			return true;
+		}
+
+		Vitrail.logger().warn("The game draws the {} with {} and this engine decodes {} for it, so the "
+				+ "game keeps its own shader for it", element.element(), format, element.format());
+
+		return false;
 	}
 
 	/**

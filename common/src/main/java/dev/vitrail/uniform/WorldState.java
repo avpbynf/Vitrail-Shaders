@@ -32,6 +32,12 @@ public interface WorldState extends ViewSource {
 
 	long gameTime();
 
+	/**
+	 * How strong an enchantment's glint is drawn, from the frame's own snapshot of the player's
+	 * accessibility setting. One where nothing has said otherwise.
+	 */
+	float glintAlpha();
+
 	// viewport
 
 	float viewWidth();

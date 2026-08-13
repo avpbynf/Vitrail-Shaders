@@ -115,6 +115,7 @@ public final class FrameState implements WorldState {
 	private float frameTimeCounter;
 	private float partialTick;
 	private long gameTime;
+	private float glintAlpha = 1.0F;
 	private float viewWidth;
 	private float viewHeight;
 
@@ -324,6 +325,11 @@ public final class FrameState implements WorldState {
 		CameraRenderState cameraState = renderer.gameRenderState().levelRenderState.cameraRenderState;
 		this.partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
 		this.gameTime = renderer.gameRenderState().levelRenderState.gameTime;
+		// The frame's own snapshot of the setting and not a second reading of the option: this is the
+		// very field the game hands its globals block for its own glint shader
+		// (renderer/GameRenderer.java:419 out of :623), so a pack's glint fades with the slider on the
+		// same frame the game's would have.
+		this.glintAlpha = (float) renderer.gameRenderState().optionsRenderState.glintStrength;
 
 		RenderTarget main = renderer.mainRenderTarget();
 		if (main != null) {
@@ -1002,6 +1008,11 @@ public final class FrameState implements WorldState {
 		return this.gameTime;
 	}
 
+	@Override
+	public float glintAlpha() {
+		return this.glintAlpha;
+	}
+
 	// viewport
 
 	@Override
@@ -1610,6 +1621,11 @@ public final class FrameState implements WorldState {
 	@Override
 	public Matrix4fc passModelView() {
 		return this.view.passModelView();
+	}
+
+	@Override
+	public Matrix4fc cameraBob() {
+		return this.view.cameraBob();
 	}
 
 	@Override

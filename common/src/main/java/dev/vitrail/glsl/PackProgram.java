@@ -116,9 +116,10 @@ public final class PackProgram {
 		 * middle of the world. Tabulating any of the three beside the translation would be the same
 		 * answer written twice, and the copy that drifted would be that throw.
 		 * <p>
-		 * <strong>What can turn it on is the whole entity family and not only its roots.</strong>
-		 * {@link LegacyGlsl#drawsEntities} walks the fallback CHAIN, so eleven names pass it: the five
-		 * roots and six more under them. Seven of the eleven are drawn, and all seven by one door,
+		 * <strong>What can turn it on is a whole family and not only its roots.</strong>
+		 * {@link LegacyGlsl#bindsGameTransforms} walks the fallback CHAIN, so twelve names pass it:
+		 * the five entity roots, six more under them, and the glint, which is a root of its own for
+		 * the reason that predicate gives. Eight of the twelve are drawn, and all eight by one door,
 		 * {@code EntityDraw.record}, which is where the slice comes from. The other four are asked for
 		 * by nobody - {@code shadow_block}, which is a root the shadow table has no row for,
 		 * {@code gbuffers_entities_glowing}, {@code gbuffers_lightning} and {@code shadow_lightning} -
@@ -129,7 +130,8 @@ public final class PackProgram {
 		 */
 		public boolean readsGameTransforms() {
 			return this.program.stages().values().stream()
-					.anyMatch(stage -> stage.notes().gameTextureMatrix() > 0);
+					.anyMatch(stage -> stage.notes().gameTextureMatrix() > 0
+							|| stage.notes().gameModelView() > 0);
 		}
 
 		/**
@@ -570,15 +572,19 @@ public final class PackProgram {
 	/**
 	 * One piece of geometry the game hands over as a render pipeline, as a pack has to be read for it.
 	 * <p>
-	 * There is no list of bound elements here, unlike {@link SkyElement}, and that is the whole
-	 * difference between the sky and every other family: the sky binds four formats between its
-	 * passes, while the entities all bind {@code DefaultVertexFormat.ENTITY} and the particles and
-	 * the weather all bind {@code DefaultVertexFormat.PARTICLE}, so one family is one format and the
-	 * elements to declare are the {@link VertexInputs} constant's. <strong>The entities are the one
-	 * family whose door checks that claim against the pipeline in hand</strong>, reading the format
-	 * off the binding rather than trusting the constant; the particles and the weather trust it, so a
-	 * pipeline of theirs that ever bound something else would read its attributes off the wrong
-	 * offsets in silence.
+	 * There is no list of bound elements here, unlike {@link SkyElement}, and the difference is that
+	 * the sky's pieces do not part company on the format the way they part company on the program:
+	 * the game's own sky renderer binds several between its passes, so which elements a stage
+	 * declares is settled per pass and there is nowhere else to put it. Here every piece names its
+	 * own format below, so the elements to declare are that constant's.
+	 * <p>
+	 * <strong>The format belongs to the piece and not to the family asking</strong>, because one door
+	 * serves two: the entity door draws its own rows from {@code DefaultVertexFormat.ENTITY} and an
+	 * enchantment's glint from {@code DefaultVertexFormat.POSITION_TEX}, six elements against two.
+	 * <strong>That door checks each piece's claim against the pipeline in hand</strong>,
+	 * reading the format off the binding rather than trusting the constant; the particles and the
+	 * weather trust it, so a pipeline of theirs that ever bound something else would read its
+	 * attributes off the wrong offsets in silence.
 	 *
 	 * @param element   what the caller calls this piece, one word, and the key it gets its answer back
 	 *                  under. Several pieces are commonly one program under one format, and they are
@@ -589,8 +595,11 @@ public final class PackProgram {
 	 *                  the game's own pipeline was built with. A pack overrides it with
 	 *                  {@code alphaTest.<program>}, written under the file that really serves the
 	 *                  piece, exactly as the chunk passes read it
+	 * @param inputs    where this piece's vertex stage takes its inputs from, which is the format the
+	 *                  pipeline drawing it binds
 	 */
-	public record GeometryElement(String element, String program, AlphaTest alphaTest) {
+	public record GeometryElement(String element, String program, AlphaTest alphaTest,
+			VertexInputs inputs) {
 	}
 
 	/**
@@ -611,12 +620,11 @@ public final class PackProgram {
 	 * its own shader for it. The fallback tree is walked like everywhere else, so a pack shipping only
 	 * {@code gbuffers_basic} still serves every entity it has.
 	 *
-	 * @param inputs where the vertex stage takes its inputs from, which is the family's one format.
-	 *               Handed in rather than worked out from the names asked for: the caller is the door
-	 *               that read the format off the game's own pipeline, and a second answer here would
-	 *               be a second chance for the two to differ
+	 * @param elements the pieces to read, each carrying the format its own pipeline binds. Carried on
+	 *                 the piece rather than handed in for the family: the caller is the door that read
+	 *                 the format off the game's own pipeline, and one door now serves two formats
 	 */
-	public static Map<String, Loaded> loadGeometry(Path packPath, String place, VertexInputs inputs,
+	public static Map<String, Loaded> loadGeometry(Path packPath, String place,
 			List<GeometryElement> elements, Map<String, OptionValue> chosen, String profile)
 			throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
@@ -669,16 +677,27 @@ public final class PackProgram {
 				// same program, and keying by name would expand, translate and compile that file
 				// twice there, which is the one thing reading them all at once exists to avoid.
 				//
-				// The one thing a program NAME reaches the translation through is
-				// LegacyGlsl.drawsEntities, which decides whether the entity uniforms are declared, so
-				// that answer is in the key and the name itself is not.
+				// A program NAME reaches the translation through two answers, and both are in the key
+				// while the name itself is not: LegacyGlsl.drawsEntities decides whether the entity
+				// uniforms are declared, and LegacyGlsl.bindsGameTransforms whether a read of
+				// gl_TextureMatrix[0] goes to the game's own block.
 				//
-				// It changes nothing today and is not there for today: the table is call-local, so no
-				// two families can share an entry, and inside any one call every element answers this
-				// alike - both entity names are roots of that tree and none of the other three is. It
-				// is there for the family that asks for two names that differ on it, which is the one
-				// shape that would silently hand a stage the wrong set of uniforms out of one file.
-				String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program());
+				// THE GLINT IS WHAT MAKES THEM TWO ANSWERS RATHER THAN ONE: its mesh carries no entity
+				// and its draw is still one the game prepared, so it is the first name asked for here
+				// that answers the two differently. The shape that would cost something is a pack
+				// shipping no gbuffers_armor_glint: it and gbuffers_entities then walk to one
+				// gbuffers_textured, one file serving both, and a key without this answer would hand
+				// whichever was translated second the other one's uniforms without a word. Both are
+				// written out all the same rather than left to the two lines below to imply, because
+				// what saves that case today is that the glint is also the only element carrying its
+				// format and its threshold, and neither of those is a fact about the uniforms.
+				//
+				// The format is in the key for the same reason and a harder one: it decides which
+				// names the vertex head declares as inputs, and two stages built from one text against
+				// two formats are two different modules.
+				VertexInputs inputs = element.inputs();
+				String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program())
+						+ "|" + LegacyGlsl.bindsGameTransforms(element.program()) + "|" + inputs;
 				translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
 						ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest, false,
 								element.program(), textures.volumes()),

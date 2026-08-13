@@ -123,6 +123,7 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames, List<String> comparedSamplers, List<String> storageBlocks,
-			int volumeLookups, int volumesLeftAlone, int trigCalls, int gameTextureMatrix) {
+			int volumeLookups, int volumesLeftAlone, int trigCalls, int gameTextureMatrix,
+			int gameModelView) {
 	}
 }

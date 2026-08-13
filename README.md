@@ -77,10 +77,17 @@ hand holding a translucent block draws that block with a blending pipeline this
 engine serves for no family yet, so the arm becomes the pack's while the block it
 holds stays the game's.
 
+The glint an enchantment puts over an entity or a held item goes through the
+pack as well, with two limits of its own. It is left out of the shadow map, so
+what an enchanted thing casts keeps its shape and loses the foil's tint. And
+with the game's improved transparency on, the foil of an item that draws one
+with blending is handed back to the game, the way the rain and the translucent
+particles are.
+
 The End's sky has no answer at all: the overworld's own elements go through the
 pack and the End's do not. Neither do the smaller families that stay the game's
-inside the entity window, the eyes, the glint, the beacon beam and the text of a
-name plate. Until all of it goes through the pack, packs run but do not yet look
+inside the entity window, the eyes, the beacon beam and the text of a name
+plate. Until all of it goes through the pack, packs run but do not yet look
 entirely like themselves. Expect visible differences and rough edges rather than
 a finished picture, and expect them to shrink release by release.
 

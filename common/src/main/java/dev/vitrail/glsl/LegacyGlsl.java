@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * What the OptiFine dialect says and what Vulkan GLSL says instead.
@@ -140,8 +142,8 @@ public final class LegacyGlsl {
 	public static final String GAME_TRANSFORMS = "DynamicTransforms";
 
 	/**
-	 * What {@code gl_TextureMatrix[0]} becomes wherever the game's block is bound, and the one member
-	 * of it anything here reads.
+	 * What {@code gl_TextureMatrix[0]} becomes wherever the game's block is bound, and the first of
+	 * the two members of it anything here reads, {@link #GAME_MODEL_VIEW} being the other.
 	 * <p>
 	 * Iris makes the same substitution, {@code iris_transforms.TextureMat} at
 	 * {@code transform/transformer/VanillaTransformer.java:163} and
@@ -149,53 +151,126 @@ public final class LegacyGlsl {
 	 * {@code TextureTransform.createMatrix()}, written into the draw's transforms by
 	 * {@code rendertype/RenderType.java:76}.
 	 * <p>
-	 * <strong>Iris substitutes it on every program it patches as vanilla and this engine only on the
-	 * entity family.</strong> What that leaves out falls in two, and only one of the two is harmless.
+	 * <strong>Iris substitutes it on every program it patches as vanilla and this engine only where
+	 * {@link #bindsGameTransforms} is true</strong>, which is every pass the entity door records: the
+	 * entity family, the block entities, the hand, the casters of the shadow map and the glint.
 	 * <p>
-	 * <strong>The sky, the clouds, the weather and the particles differ in route and not in
-	 * value.</strong> They are vanilla programs under Iris and read the game's matrix there; here they
-	 * keep the identity of {@link dev.vitrail.uniform.values.GeometryValues}. What makes the two the
-	 * same number is measured rather than assumed: a render setup starts at
+	 * <strong>What is left out is the sky, the clouds, the weather and the particles, and they differ
+	 * in route and not in value.</strong> They are vanilla programs under Iris and read the game's
+	 * matrix there; here they keep the identity of
+	 * {@link dev.vitrail.uniform.values.GeometryValues}. What makes the two the same number is
+	 * measured rather than assumed: a render setup starts at
 	 * {@code TextureTransform.DEFAULT_TEXTURING}, which is {@code Matrix4f::new}
 	 * ({@code rendertype/RenderSetup.java:131} and {@code rendertype/TextureTransform.java:15}), and
 	 * the whole game calls {@code setTextureTransform} six times, at
 	 * {@code rendertype/RenderTypes.java:251,259,267,274,524,536}. None of the six is drawn by any of
 	 * those four families.
 	 * <p>
-	 * <strong>The glint is the other half, and it is a hole rather than a route.</strong> Four of
-	 * those six sites are its render types, and it is NOT in this set: {@code RenderPipelines.GLINT}
-	 * binds {@code DefaultVertexFormat.POSITION_TEX} and a pack answers it with
-	 * {@code gbuffers_armor_glint}, whose fallback parent is {@code gbuffers_textured}
-	 * ({@code pack/program/ProgramFallbacks.java:76}) and never an entity root, so
-	 * {@link #drawsEntities} is false for it. Nothing pays today, and for a reason that is not this
-	 * file's doing: no door of this engine asks for that program at all, so the game draws the glint
-	 * itself. <strong>Whoever serves it has to widen this question with it</strong>, or the glint will
-	 * be drawn frozen on one frame of its animation, which looks like an image rather than like an
-	 * absence.
+	 * <strong>Four of those six sites are the glint's, and that is why it is in the set although its
+	 * mesh carries no entity.</strong> Without the matrix a glint is drawn frozen on one frame of its
+	 * animation, which looks like an image rather than like an absence; the remaining two are the
+	 * breeze's wind and the energy swirl, which no door asks for yet.
 	 */
 	public static final String GAME_TEXTURE_MATRIX = "of_GameTextureMatrix";
 
 	/**
+	 * How strong an enchantment's glint is drawn, which is a setting of the player's and the one
+	 * thing a glint's vertex colour is made of.
+	 * <p>
+	 * <strong>A member of this engine's own block and not of the game's, and there Iris does the
+	 * opposite.</strong> The number sits in the game's globals block
+	 * ({@code renderer/GlobalSettingsUniform.java:29}), and Iris reads it there: its vanilla
+	 * transformer declares that very block as {@code iris_Globals}
+	 * ({@code transform/transformer/VanillaTransformer.java:65-72}) and writes
+	 * {@code iris_globalInfo.GlintAlpha} into the colour ({@code :134}).
+	 * <p>
+	 * <strong>The difference is a route and not a value</strong>, which is the same shape the texture
+	 * matrix's own note carries: what fills the game's member is
+	 * {@code gameRenderState.optionsRenderState.glintStrength} ({@code renderer/GameRenderer.java:419}
+	 * out of {@code :623}), and that is the field this engine's value store reads, on the same frame.
+	 * What it buys is a bind group: reading the block would put a third one on every pipeline of this
+	 * family for one float, where the block this engine already writes has room for it.
+	 * <p>
+	 * Declared for a glint stage that reads a colour and for nothing else, which
+	 * {@code GlslTranslator.ownBlock} settles on the vertex inputs. Other meshes have no colour
+	 * either - the sky's four formats do not all carry one - but they are answered from what the pass
+	 * was set up with rather than from a setting of the player's, so the name would mean nothing to
+	 * them.
+	 */
+	public static final String GLINT_ALPHA = "of_GlintAlpha";
+
+	/**
+	 * The model view the game prepared that draw with, which is the second member of its block that
+	 * anything here reads and the one place a per draw answer is not optional.
+	 * <p>
+	 * <strong>Read by the glint alone, and never on its own: what a glint reads is
+	 * {@link #CAMERA_BOB} times this. The reason for reading it at all is the depth nudge.</strong>
+	 * Every other family
+	 * this engine serves is answered from the pass, {@code dev.vitrail.uniform.ViewSource#passModelView},
+	 * with whatever nudge its row carries; that works because one pipeline of theirs carries one
+	 * nudge. The glint's one pipeline carries two: {@code ARMOR_ENTITY_GLINT} sets
+	 * {@code LayeringTransform.VIEW_OFFSET_Z_LAYERING} and the other three set none
+	 * ({@code rendertype/RenderTypes.java:252} against {@code :255,263,270}). Its depth test is
+	 * {@code EQUAL} and it writes no depth ({@code RenderPipelines.java:434}), so a glint drawn under
+	 * the other one's nudge does not z-fight, it VANISHES: enchanted armour would simply stop
+	 * glinting, which is a piece served with the wrong answer rather than a piece not served.
+	 * <p>
+	 * Iris meets none of this because it reads the model view here for every vanilla program it
+	 * patches, glint included: {@code gl_ModelViewMatrix} becomes
+	 * {@code (iris_transforms.ModelViewMat * _iris_internal_translate(iris_transforms.ModelOffset))}
+	 * ({@code transform/transformer/VanillaTransformer.java:355-366}, the second factor always built
+	 * because {@code hasChunkOffset} is unconditionally true and said to be at {@code :344}, and
+	 * always the identity here because the offset of a prepared draw is nought), and
+	 * {@code gl_ModelViewProjectionMatrix} is rewritten as the product of that and the projection
+	 * ({@code :340-341}) rather than being a matrix of its own.
+	 * <p>
+	 * <strong>IT IS NOT READ ON ITS OWN HERE, AND THAT IS THE WHOLE OF THE TRANSLATION.</strong> Both
+	 * engines agree the walk bob belongs in the model view and disagree about WHERE to put it there.
+	 * Iris moves it on the game's own matrices, its {@code mixin/MixinModelViewBobbing.java:68-76}
+	 * swallowing the multiplication into the projection and {@code :101} doing
+	 * {@code modelViewMatrix.mulLocal(bobStack)} instead, so the per draw matrix it later reads out of
+	 * this block already carries the bob and one factor is enough.
+	 * {@link dev.vitrail.render.CameraBob} leaves the game's matrices exactly as they are and splits
+	 * them only where a pack reads them, so the matrix the game wrote for this draw has no bob in it
+	 * and neither has the projection a pack is handed. The product a glint needs is therefore
+	 * {@link #CAMERA_BOB} times this, and a copy of Iris's line would be a glint that stands still
+	 * while everything under it walks - and, the depth test being {@code EQUAL}, one that vanishes
+	 * rather than one that is a hair off.
+	 */
+	public static final String GAME_MODEL_VIEW = "of_GameModelView";
+
+	/**
+	 * The walk bob and the three effects beside it, as their own matrix, for the one pass that has to
+	 * multiply them by something the shader alone knows.
+	 * <p>
+	 * Every other family is handed {@code bob * view} already multiplied, under
+	 * {@code of_ModelViewMatrix}, because the right hand factor belongs to the RUN there. The glint's
+	 * belongs to the DRAW, {@link #GAME_MODEL_VIEW} saying why, so the two have to meet in the shader
+	 * and the left one has to be a name of its own. It is the very matrix
+	 * {@code dev.vitrail.render.ViewMatrices#passModelView} multiplies by, published rather than
+	 * rebuilt, so that a glint and the piece it covers cannot end up with two different bobs.
+	 */
+	public static final String CAMERA_BOB = "of_CameraBob";
+
+	/**
 	 * The game's transforms block, declared exactly as the game fills it.
 	 * <p>
-	 * All four members and not the one that is read, because std140 matches by OFFSET: the texture
+	 * All four members and not the two that are read, because std140 matches by OFFSET: the texture
 	 * matrix sits at ninety six bytes, behind a {@code mat4}, a {@code vec4} and a {@code vec3}, and a
 	 * block declaring only the last of the four would read the model view instead. The order is
 	 * {@code DynamicUniforms.Transform.write} at {@code renderer/DynamicUniforms.java:84}, and the
 	 * same four in the same order are what Iris declares at
 	 * {@code transform/transformer/VanillaTransformer.java:52-57}.
 	 * <p>
-	 * The other three are named rather than padded so that a reader meets the reason they are here.
+	 * The other two are named rather than padded so that a reader meets the reason they are here.
 	 * Nothing reads them and nothing should: for a draw the game prepares from a render type the
 	 * modulator is always white and the offset always nought
 	 * ({@code rendertype/RenderType.java:76} reaching the two argument
-	 * {@code DynamicUniforms.writeTransform}, {@code renderer/DynamicUniforms.java:48-50}), and the
-	 * model view is answered from the pass instead, which is where the depth nudge of a layered piece
-	 * is applied.
+	 * {@code DynamicUniforms.writeTransform}, {@code renderer/DynamicUniforms.java:48-50}).
 	 */
 	public static final List<String> GAME_TRANSFORMS_BLOCK = List.of(
 			"layout(std140) uniform " + GAME_TRANSFORMS + " {",
-			"\tmat4 of_GameModelView;",
+			"\tmat4 " + GAME_MODEL_VIEW + ";",
 			"\tvec4 of_GameColorModulator;",
 			"\tvec3 of_GameModelOffset;",
 			"\t" + "mat4 " + GAME_TEXTURE_MATRIX + ";",
@@ -214,6 +289,28 @@ public final class LegacyGlsl {
 	private static final Set<String> ENTITY_ROOTS = Set.of(
 			"gbuffers_entities", "gbuffers_block", "gbuffers_hand",
 			"shadow_entities", "shadow_block");
+
+	/**
+	 * The roots of the fallback tree whose programs are drawn from a draw the game itself prepared,
+	 * and so are handed the game's own transforms.
+	 * <p>
+	 * <strong>Not the same question as {@link #ENTITY_ROOTS}, and the glint is where the two part
+	 * company.</strong> That set answers what the MESH carries, and an entity mesh carries an
+	 * identity; this one answers who PREPARED the draw, and the door that records the glint is the
+	 * same one that records a mob, so it binds the same slice for both
+	 * ({@code render/EntityDraw.record}). A glint mesh has no entity in it and takes none of
+	 * {@link #ENTITY_UNIFORMS}; it is drawn from a render type all the same, and the matrix that
+	 * render type was prepared with is the whole of its animation.
+	 * <p>
+	 * The glint is the one name here that is not already under an entity root, and it enters as a
+	 * root rather than through the tree because its parent is {@code gbuffers_textured}
+	 * ({@code pack/program/ProgramFallbacks.java:76}), which a sky pass reaches as well. A pack that
+	 * serves both out of one file is read twice, once per answer, which is what the translation key
+	 * of {@code PackProgram.loadGeometry} carries.
+	 */
+	private static final Set<String> GAME_DRAW_ROOTS =
+			Stream.concat(ENTITY_ROOTS.stream(), Stream.of("gbuffers_armor_glint"))
+					.collect(Collectors.toUnmodifiableSet());
 
 	/**
 	 * What a full screen pass gets instead of vertex inputs of its own.
@@ -335,6 +432,25 @@ public final class LegacyGlsl {
 	 */
 	public static boolean drawsEntities(String program) {
 		return ProgramFallbacks.chain(program).stream().anyMatch(ENTITY_ROOTS::contains);
+	}
+
+	/**
+	 * Whether the pass this program is wanted for is drawn from a draw the game prepared, and so is
+	 * handed {@link #GAME_TRANSFORMS} to read {@link #GAME_TEXTURE_MATRIX} out of.
+	 * <p>
+	 * Asked of the program the pass wants and never of the file that answers for it, for the reason
+	 * {@link #drawsEntities} gives: one file commonly serves a pass of this kind and a pass of
+	 * another, and only the first of the two has a prepared draw behind it.
+	 * <p>
+	 * The runtime asks a narrower question under a name of its own: {@code readsGameTransforms} is
+	 * whether the translated program really named the block, which is what decides that a draw binds
+	 * it. This one is whether it was allowed to.
+	 *
+	 * @param program the bare name, {@code gbuffers_armor_glint}, or empty where the caller is
+	 *                measuring a file and no pass is named
+	 */
+	public static boolean bindsGameTransforms(String program) {
+		return ProgramFallbacks.chain(program).stream().anyMatch(GAME_DRAW_ROOTS::contains);
 	}
 
 	/**

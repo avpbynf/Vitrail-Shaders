@@ -139,9 +139,11 @@ weather=off      hands the rain and the snow back to the game's own shader,
                  and with them the pack's own weather directive
 particles=off    hands the quad particles back too, both halves of them
 entities=off     hands the mobs and the block entities back, lit by the game
-                 and carried in flat by the scene seed
+                 and carried in flat by the scene seed, and with them the glint
+                 an enchantment puts over anything they hold or wear
 hand=off         leaves the player's own hand where the game draws it, after
-                 the whole chain has run
+                 the whole chain has run, and the glint over what it holds
+                 with it
 chain=off        stops the composites and the final from drawing at all
 seed=off         stops the game's finished frame being painted in under the chain
 passes=N         cuts the chain to its first N passes, or to a list of names

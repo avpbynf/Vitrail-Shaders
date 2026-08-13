@@ -137,6 +137,14 @@ public final class GlslTranslator {
 	/** What the engine declares in place of a value it keeps in a texture. */
 	private static final String SAMPLER_2D = "sampler2D";
 
+	/**
+	 * The model view a glint reads, written once and spelled into three rewrites so that they cannot
+	 * drift: the bob this engine publishes in the model view, times the matrix the game prepared that
+	 * draw with. {@link #rewriteGameModelView} carries the whole argument.
+	 */
+	private static final String DRAW_MODEL_VIEW =
+			"(" + LegacyGlsl.CAMERA_BOB + " * " + LegacyGlsl.GAME_MODEL_VIEW + ")";
+
 	/** The one call a volume lookup may be written as, and the number of arguments it takes. */
 	private static final String LOOKUP = "texture";
 	private static final int LOOKUP_ARGUMENTS = 2;
@@ -274,6 +282,14 @@ public final class GlslTranslator {
 	 * @see dev.vitrail.glsl.PackProgram.Loaded#readsGameTransforms
 	 */
 	private int gameTextureMatrix;
+
+	/**
+	 * Reads of the model view sent to that same block, which is the glint alone and covers all three
+	 * spellings of it: the matrix, the combined one and {@code ftransform()}.
+	 *
+	 * @see LegacyGlsl#GAME_MODEL_VIEW
+	 */
+	private int gameModelView;
 
 	private int strippedExtensions;
 	private boolean depthEpilogue;
@@ -587,6 +603,24 @@ public final class GlslTranslator {
 			}
 		}
 
+		// The two names the glint alone reads: the strength its vertex colour is made of, and the bob
+		// its model view is made of. Asked of the inputs and not of the program name, unlike
+		// everything above: what these answer for belongs to the MESH and to the draw behind it, and
+		// the same gbuffers_textured serves a glint under this constant and a sky pass under another.
+		// Each stage adds what it names and the union hands both to both, the block being the
+		// program's rather than the stage's.
+		if (this.inputs == VertexInputs.GLINT) {
+			if (this.used.contains("of_Color")) {
+				block.add(TranslatedUnit.Uniform.of(LegacyGlsl.GLINT_ALPHA,
+						"float " + LegacyGlsl.GLINT_ALPHA));
+			}
+
+			if (this.used.contains(LegacyGlsl.CAMERA_BOB)) {
+				block.add(TranslatedUnit.Uniform.of(LegacyGlsl.CAMERA_BOB,
+						"mat4 " + LegacyGlsl.CAMERA_BOB));
+			}
+		}
+
 		block.addAll(asUniforms(this.blockMembers));
 
 		return block;
@@ -710,8 +744,12 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			if (name.equals("gl_TextureMatrix") && LegacyGlsl.drawsEntities(this.program)
+			if (name.equals("gl_TextureMatrix") && LegacyGlsl.bindsGameTransforms(this.program)
 					&& rewriteGameTextureMatrix(index)) {
+				continue;
+			}
+
+			if (this.inputs == VertexInputs.GLINT && rewriteGameModelView(index, name)) {
 				continue;
 			}
 
@@ -829,8 +867,9 @@ public final class GlslTranslator {
 	 * {@code iris_LightmapTextureMatrix} beside the line that sends nought to the block
 	 * ({@code VanillaTransformer.java:163-164}).
 	 * <p>
-	 * Only where the pass draws the entity family, which is what {@link LegacyGlsl#drawsEntities}
-	 * answers and what {@link LegacyGlsl#GAME_TEXTURE_MATRIX} weighs against Iris's wider reach.
+	 * Only where the pass is drawn from a draw the game prepared, which is what
+	 * {@link LegacyGlsl#bindsGameTransforms} answers and what {@link LegacyGlsl#GAME_TEXTURE_MATRIX}
+	 * weighs against Iris's wider reach.
 	 * <p>
 	 * The three bracket tokens are blanked rather than kept, because what replaces the name is a
 	 * matrix and not an array: leaving {@code [0]} standing would read its first COLUMN. Any other
@@ -867,6 +906,71 @@ public final class GlslTranslator {
 		return true;
 	}
 
+	/**
+	 * Sends a glint's model view to the game's own block, with the bob put back on the front.
+	 * <p>
+	 * <strong>The one family whose nudge cannot be tabulated</strong>, and
+	 * {@link LegacyGlsl#GAME_MODEL_VIEW} carries why: one pipeline, two render types, two nudges, and
+	 * a depth test of {@code EQUAL} that turns the wrong one into a glint nobody sees.
+	 * <p>
+	 * <strong>The bob is the half that is not Iris's line</strong>, and leaving it out is a glint that
+	 * stands still while the world walks: this engine leaves the game's matrices alone and splits them
+	 * only where a pack reads them, so the matrix the game wrote for this draw has no bob in it and
+	 * the projection a pack is handed has none either. {@link LegacyGlsl#CAMERA_BOB} is the factor
+	 * that puts it back, and the product is exactly what {@link dev.vitrail.uniform.ViewSource#passModelView}
+	 * would have held for this draw. {@link LegacyGlsl#GAME_MODEL_VIEW} carries where Iris does the
+	 * same move instead.
+	 * <p>
+	 * <strong>Every spelling of the product, because the fallback tree makes any of them reachable.</strong>
+	 * {@code ftransform()} is the one the corpus's glints really write, and the two named matrices
+	 * reach the same place: whichever a pack chose, a glint left on the pass's matrix is a glint on
+	 * the wrong nudge. The core profile spelling {@code modelViewMatrix} is here for the same reason
+	 * and is the only one a pack may also DECLARE, the {@code gl_} prefix being reserved:
+	 * {@link LegacyGlsl#CORE_MATRICES} exists because OptiFine's core mode writes it.
+	 *
+	 * @return whether the name was one this rewrites, false leaving it to the ordinary rename
+	 */
+	private boolean rewriteGameModelView(int index, String name) {
+		if (name.equals("gl_ModelViewMatrix")) {
+			inject(index, DRAW_MODEL_VIEW);
+		} else if (name.equals("modelViewMatrix")) {
+			// The one name here a pack may declare for itself, the {@code gl_} prefix being reserved,
+			// so the one that has to tell a use from a declaration. Without this the declarator is
+			// rewritten too and the unit reads "uniform mat4 (of_CameraBob * of_GameModelView);",
+			// which costs the whole family and says only that a program would not compile: this loop
+			// runs long before the uniforms are lifted, so nothing downstream would catch it.
+			// The declaration is left standing and lifted like any other; what it declares is then a
+			// member nobody reads, since every USE below has gone to the game's block.
+			if (declaring(index)) {
+				return false;
+			}
+
+			inject(index, DRAW_MODEL_VIEW);
+		} else if (name.equals("gl_ModelViewProjectionMatrix")) {
+			inject(index, "(of_ProjectionMatrix * " + DRAW_MODEL_VIEW + ")");
+			this.injectedNames.add("of_ProjectionMatrix");
+		} else {
+			return false;
+		}
+
+		this.injectedNames.add(LegacyGlsl.CAMERA_BOB);
+		this.injectedNames.add(LegacyGlsl.GAME_MODEL_VIEW);
+		this.gameModelView++;
+
+		return true;
+	}
+
+	/**
+	 * Whether the identifier at this position is being DECLARED rather than read, which is the same
+	 * test {@code collectDeclarations} makes: an identifier straight after a built-in type name is
+	 * being named, anywhere else it is being used.
+	 */
+	private boolean declaring(int index) {
+		int before = significantBefore(index);
+
+		return before >= 0 && LegacyGlsl.TYPE_NAMES.contains(this.tokens.get(before).text());
+	}
+
 	private boolean rewriteFtransform(int index) {
 		int open = callOpener(index);
 		int close = matchingBracket(open);
@@ -874,8 +978,20 @@ public final class GlslTranslator {
 			return false;
 		}
 
-		inject(index, "(of_ModelViewProjectionMatrix * of_Vertex)");
-		this.injectedNames.add("of_ModelViewProjectionMatrix");
+		// The glint takes the draw's model view here too, and it has to: this is the spelling the
+		// corpus really uses for a glint, and a pack writing ftransform() would otherwise get the
+		// pass's matrix back through the door rewriteGameModelView closed.
+		if (this.inputs == VertexInputs.GLINT) {
+			inject(index, "(of_ProjectionMatrix * " + DRAW_MODEL_VIEW + " * of_Vertex)");
+			this.injectedNames.add("of_ProjectionMatrix");
+			this.injectedNames.add(LegacyGlsl.CAMERA_BOB);
+			this.injectedNames.add(LegacyGlsl.GAME_MODEL_VIEW);
+			this.gameModelView++;
+		} else {
+			inject(index, "(of_ModelViewProjectionMatrix * of_Vertex)");
+			this.injectedNames.add("of_ModelViewProjectionMatrix");
+		}
+
 		this.injectedNames.add("of_Vertex");
 		blank(open);
 		blank(close);
@@ -2681,7 +2797,7 @@ public final class GlslTranslator {
 		// The game's own block, beside ours and never merged into it: this one is filled by the game
 		// once per draw and ours is written once per run, which is the whole reason a matrix that
 		// changes with the draw is read from over there.
-		if (this.gameTextureMatrix > 0) {
+		if (this.gameTextureMatrix > 0 || this.gameModelView > 0) {
 			lines.addAll(LegacyGlsl.GAME_TRANSFORMS_BLOCK);
 		}
 
@@ -2703,6 +2819,7 @@ public final class GlslTranslator {
 				case TERRAIN, TERRAIN_SEPARATE_AO -> lines.addAll(
 						SodiumVertex.prologue(this.used, this.synthesized, this.inputs.separateAo()));
 				case ENTITY -> lines.addAll(EntityVertex.prologue(this.used, this.synthesized));
+				case GLINT -> lines.addAll(GlintVertex.prologue(this.used, this.synthesized));
 				case PARTICLE -> lines.addAll(ParticleVertex.prologue(this.used, this.synthesized));
 				case SKY -> lines.addAll(SkyVertex.prologue(this.bound, this.used, this.synthesized));
 				case CLOUDS -> lines.addAll(CloudVertex.prologue(this.used, this.synthesized));
@@ -2904,7 +3021,8 @@ public final class GlslTranslator {
 				this.parameterLookups, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
 				List.copyOf(this.conflicts), comparedSamplers(), List.copyOf(this.storageBlocks),
-				this.volumeLookups, this.volumesLeftAlone, this.trigCalls, this.gameTextureMatrix);
+				this.volumeLookups, this.volumesLeftAlone, this.trigCalls, this.gameTextureMatrix,
+				this.gameModelView);
 	}
 
 	/**

@@ -60,6 +60,14 @@ public enum VertexInputs {
 	PARTICLE,
 
 	/**
+	 * The mesh an enchantment's glint is drawn from: the two elements of
+	 * {@code DefaultVertexFormat.POSITION_TEX} and nothing else. It comes in by the entity door like
+	 * the entity mesh and is not that mesh, which is the whole reason this constant exists:
+	 * {@link GlintVertex} carries what the two elements answer for and what is a constant.
+	 */
+	GLINT,
+
+	/**
 	 * The game's own sky meshes. Alone among these, it is not one format: {@code SkyRenderer} binds
 	 * four between its eight passes, so the elements to declare come from the pass rather than from
 	 * this constant. {@link SkyVertex} carries the renaming and says what the sky has not got.
@@ -130,6 +138,7 @@ public enum VertexInputs {
 			case FULLSCREEN -> LegacyGlsl.FULLSCREEN_ELEMENTS;
 			case TERRAIN, TERRAIN_SEPARATE_AO -> SodiumVertex.ATTRIBUTES;
 			case ENTITY -> EntityVertex.ATTRIBUTES;
+			case GLINT -> GlintVertex.ATTRIBUTES;
 			case PARTICLE -> ParticleVertex.ATTRIBUTES;
 			case SKY -> SkyVertex.ATTRIBUTES;
 			case CLOUDS -> CloudVertex.ATTRIBUTES;

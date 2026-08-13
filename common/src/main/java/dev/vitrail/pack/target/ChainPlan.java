@@ -140,6 +140,19 @@ public final class ChainPlan {
 					// unanswered, which is the silence the head of this list is about.
 					new NamedProgram("gbuffers_hand", false, NOT_EVERYWHERE),
 					new NamedProgram("gbuffers_hand_water", true, NOT_EVERYWHERE),
+					// An enchantment's glint, which straddles the stage for a reason of its own: what
+					// CARRIES it decides which half the game executes it in. An enchanted book is
+					// submitted among the solid features, foil and all, since the sort looks at the
+					// item's own quads and not at its glint (SubmitNodeCollection.java:325), while an
+					// enchanted armour piece is submitted among the translucent ones. So both sides are
+					// walked, as the hand's two are, and for the same reason: one key in and the other
+					// side of the same file unanswered is the silence the head of this list is about.
+					//
+					// Not counted, and on the hand's argument rather than the weather's: a glint is
+					// drawn where somebody is holding or wearing something enchanted, which is a per
+					// frame answer no per place map may carry.
+					new NamedProgram("gbuffers_armor_glint", false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_armor_glint", true, NOT_EVERYWHERE),
 					// Drawn, and still not counted: the game draws no rain and no snow where there is
 					// no weather, which is every place but the overworld.
 					new NamedProgram("gbuffers_weather", true, NOT_EVERYWHERE),
@@ -405,10 +418,13 @@ public final class ChainPlan {
 		// shared table that now guarantees it rather than each family's own bookkeeping.
 		Map<Key, Pass> attachments = new LinkedHashMap<>();
 		Map<TerrainPass, Key> terrainKeys = terrainKeysOf(plan, resolver, notes, attachments);
-		Map<String, Key> namedKeys = namedKeysOf(plan, resolver, notes, attachments);
+		Map<NamedProgram, Key> namedKeys = namedKeysOf(plan, resolver, notes, attachments);
 		Map<String, Key> skyKeys = new LinkedHashMap<>();
-		SKY_PROGRAMS.stream().filter(namedKeys::containsKey)
-				.forEach(program -> skyKeys.put(program, namedKeys.get(program)));
+		namedKeys.forEach((named, key) -> {
+			if (SKY_PROGRAMS.contains(named.program())) {
+				skyKeys.put(named.program(), key);
+			}
+		});
 
 		Seed seed = seedOf(plan, resolver, notes);
 		// Where the seed is painted is one question and whether it is painted is another, and only
@@ -492,7 +508,7 @@ public final class ChainPlan {
 		}
 
 		for (NamedProgram named : NAMED_PROGRAMS) {
-			Key key = named.everywhere().test(families) ? namedKeys.get(named.program()) : null;
+			Key key = named.everywhere().test(families) ? namedKeys.get(named) : null;
 			Pass drawing = key == null ? null : attachments.get(key);
 			if (drawing != null && drawing.size().equals(TargetSize.ofScreen())
 					&& (named.afterDeferred() || leadsWithSeed(painted, drawing))) {
@@ -575,7 +591,7 @@ public final class ChainPlan {
 
 	/**
 	 * The same walk for every geometry program asked for by name, which is the sky's three, the four
-	 * entity names, the weather and the two particle halves.
+	 * entity names, the hand's two, the glint on both sides, the weather and the two particle halves.
 	 * <p>
 	 * The names are the OptiFine split and they are not ours to choose: untextured sky geometry goes
 	 * to {@code gbuffers_skybasic}, the sun and the moon to {@code gbuffers_skytextured}, the clouds
@@ -595,15 +611,17 @@ public final class ChainPlan {
 	 * dead half of the ping pong, and nothing says so - the pass runs, the program draws, the final
 	 * composes from the other half and the sky comes back empty.
 	 * <p>
-	 * The map it answers is by the name that was ASKED FOR and not by the program that answered, which
-	 * is what the two callers of it need: the sky asks by the name it wanted rather than by the
-	 * program it got, and the verdicts ask which of these families this engine really draws, which is
-	 * a property of the family and not of the file the tree landed on. Every other reader is served
-	 * through {@link #geometryOf}, and what this walk owes them is the entry in the shared table.
+	 * The map it answers is by the ENTRY of the list above and not by the name it asks for, which is
+	 * one key finer than it reads: a name may be in that list twice, once per side, and the glint is,
+	 * so a map by name would hold one row where the walk made two and the second would overwrite the
+	 * first without a word. Both callers want the finer key anyway - the sky asks by the name it
+	 * wanted rather than by the program it got, and the verdicts ask which SIDE of a family this
+	 * engine really fills. Every other reader is served through {@link #geometryOf}, and what this
+	 * walk owes them is the entry in the shared table.
 	 */
-	private static Map<String, Key> namedKeysOf(TargetPlan plan, ProgramResolver resolver,
+	private static Map<NamedProgram, Key> namedKeysOf(TargetPlan plan, ProgramResolver resolver,
 			List<String> notes, Map<Key, Pass> into) {
-		Map<String, Key> keys = new LinkedHashMap<>();
+		Map<NamedProgram, Key> keys = new LinkedHashMap<>();
 
 		// Computed once per serving FILE AND SIDE and not once per program, the same reason the
 		// geometry walk gives above: the fallback tree sends skybasic to gbuffers_basic and both
@@ -620,7 +638,7 @@ public final class ChainPlan {
 
 			Key key = new Key(served.get(), named.afterDeferred());
 			if (answer(plan, key, notes, into) != null) {
-				keys.put(named.program(), key);
+				keys.put(named, key);
 			}
 		}
 
