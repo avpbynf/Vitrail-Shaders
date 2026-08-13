@@ -111,8 +111,9 @@ public final class MenuValues {
 	 * How many settings {@code options.txt} holds down that a screen actually greys out: the ones
 	 * some page places, plus the profile, which greys the selector.
 	 * <p>
-	 * The rest of that file is left out rather than counted with them. Four of its lines name this
-	 * engine rather than the pack, and any other name is a setting no page places, which is exactly
+	 * The rest of that file is left out rather than counted with them. Some of its lines name this
+	 * engine rather than the pack, {@code EngineOptions.RESERVED} being the list of those, and any
+	 * other name is a setting no page places, which is exactly
 	 * what that file exists to reach. Neither kind has a widget, so counting them would send a
 	 * player looking for greyed settings that were never drawn.
 	 * <p>

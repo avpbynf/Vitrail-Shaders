@@ -166,11 +166,12 @@ file by hand and a typo there is worth a line. A name in the pack's own settings
 in the line that reports what the menu no longer shows - which is a wider question, and that line
 therefore also carries names the pack still declares and still applies.
 
-A profile that names a word its own pack declares nowhere is dropped in silence, and that one is a
-gap and not a rule. The reference warns on exactly that token where a profile writes it bare, and
-here any bare token in a profile is taken as an on without being checked against the index at all.
-It costs a pack author's own typo staying invisible; it costs the picture nothing, since neither
-engine applies the word anywhere.
+A profile that names a word its own pack declares nowhere is dropped in silence, and the reference
+is nearly as quiet. It checks the index on one of the three forms a profile can write, the bare
+positive one, and warns there; the `NAME=value` and `!NAME` forms go through unchecked, and over the
+eight test packs those two are 423 tokens of 440. Here none of the three is checked. What the
+difference costs is a pack author's own typo staying invisible in one form out of three; it costs
+the picture nothing, since neither engine applies the word anywhere.
 
 Under both sits the engine's own table, and three readers have to be handed the same one: the
 preprocessor deciding which branch is live, the translator writing those symbols back out, and the

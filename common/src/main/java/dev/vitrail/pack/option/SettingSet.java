@@ -19,15 +19,19 @@ import java.util.Map;
  * caller's, not this class's, because only the caller knows which layer the name came off, and the
  * three layers are not answered alike. {@code EngineOptions.announceForced} says it word by word for
  * {@code vitrail/options.txt}, where a player types and a typo is worth a line.
- * {@code PackSession.stale} reports the pack's own file against the MENU, so a name declared
+ * {@code PackSession.stale} reports the pack's own file against the MENU, unless
+ * {@code vitrail/options.txt} names the same word and the line above has it: so a name declared
  * nowhere is in that line, along with names that are merely off a page and still apply.
  * <p>
- * A profile naming a word its own pack declares nowhere is dropped without a word, and that one is a
- * gap rather than a rule: Iris warns on exactly that token, {@code Invalid pack option}
- * ({@code shaderpack/option/ProfileSet.java:78-81}), for the bare form a profile writes most, while
- * {@code ShaderProperties.expandProfile} takes any bare token here as an on with no check against
- * the index. What it costs is a pack author's own typo staying invisible; what it does not cost is
- * the picture, both engines applying the word nowhere.
+ * A profile naming a word its own pack declares nowhere is dropped without a word, and Iris is
+ * nearly as quiet. It checks the index on one of the three forms a profile can write, the bare
+ * positive, and warns {@code Invalid pack option} there
+ * ({@code shaderpack/option/ProfileSet.java:78-81}); {@code NAME=value} and {@code !NAME} go
+ * through unchecked at {@code :70-74}. Measured over the eight pack corpus, that is 17 tokens of
+ * 440 against 402 and 21. Here nothing is checked on any of the three,
+ * {@code ShaderProperties.expandProfile} taking a bare token as an on without a lookup. What the
+ * difference costs is a pack author's own typo staying invisible in one form out of three; what it
+ * costs the picture is nothing, both engines applying the word nowhere.
  */
 public final class SettingSet {
 

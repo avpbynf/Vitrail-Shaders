@@ -179,10 +179,11 @@ uses that word for something of its own stops compiling altogether.
 
 The reserved lines are the exception, and they are the reason the file exists: they name this engine
 and not a pack, and they are taken out before any pack is read. Those are what proves a pass runs.
-The load names the ones it found on their own line, apart from the settings, so that nobody goes
-looking through a pack for a setting it never had - and that line, not a list written here, is where
-to see which ones this build has. The one that is not an engine switch is `profile`, which names a
-profile of the loaded pack and is expanded underneath everything else.
+They are `seed`, `passes`, `screen`, `dump`, `terrain`, `chain`, `shadow`, `sky`, `entities`,
+`hand`, `clouds`, `weather`, `particles`, and `profile`, which is the one that is not an engine
+switch: it names a profile of the loaded pack and is expanded underneath everything else. The load
+prints the ones it found on their own line, apart from the settings, so that nobody goes looking
+through a pack for a setting it never had.
 
 ## What is greyed out, and why
 
