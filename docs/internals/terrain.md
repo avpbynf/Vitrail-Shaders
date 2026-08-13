@@ -62,11 +62,20 @@ one. Any test of a normal has to be an A/B on the same scene from the same camer
 wants the occlusion where it can see it: the tint goes into the colour untouched and the coefficient
 into the alpha, which is free because block geometry never uses that alpha for anything else. Six of
 the eight packs of the test corpus write the line, and it is the reference's behaviour and not an
-option of this engine's. It is a property of the MESH, so the answer is taken where the chunk
-renderer is built and a pack that moves it has the world built again: two packs can both draw the
-terrain and disagree about this, and nothing else about the format would have changed. Read
-otherwise, the occlusion lands in the albedo and is then reflected, exposed and graded by everything
-downstream, which is a picture that looks plausible and is wrong in a way no screenshot shows.
+option of this engine's. Read otherwise, the occlusion lands in the albedo and is then reflected,
+exposed and graded by everything downstream, which is a picture that looks plausible and is wrong in
+a way no screenshot shows.
+
+It is a property of the MESH, and that has a consequence worth stating plainly: **a colour written
+that way can only be read by a program of the pack's own.** The game's own chunk shader multiplies
+the vertex colour into the texture and then alpha tests the product, so an occlusion left sitting in
+that alpha punches holes through every cutout block on screen. So the answer is not simply "what the
+pack asked for": it is "what the pack asked for, while this engine is really the one drawing the
+terrain". The warm-up is what makes the difference matter, a chain warming one program a frame after
+every load and every resource reload, and the game draws the world during it. The answer is
+therefore polled on the client tick, and the tick it moves on has every section built again - which
+is also what covers two packs that both draw the terrain and disagree about the directive, where
+nothing else about the format would have changed.
 
 **Light arrives raw, and the scale belongs to the texture matrix.** The pair is carried as the game
 stores it, a level times sixteen per channel, and the smooth pipeline interpolates between those, so

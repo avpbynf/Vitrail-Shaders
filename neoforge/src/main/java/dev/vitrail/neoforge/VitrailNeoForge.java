@@ -15,6 +15,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.FrameGraphSetupEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.lifecycle.ClientStoppingEvent;
@@ -87,6 +88,11 @@ public final class VitrailNeoForge {
 		// Stopping, not Stopped: the latter is posted after the renderer has been shut down,
 		// and the targets have to be released while the device is still alive.
 		NeoForge.EVENT_BUS.addListener(ClientStoppingEvent.class, this::onClientStopping);
+
+		// A tick and not a frame, because what this may ask for is that every section of the world
+		// be built again, and the roads that move its answer are taken in the middle of the level
+		// being drawn. Free on the ticks where nothing moved, which is all of them but two a load.
+		NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, _ -> TerrainDraw.separateAoSettled());
 	}
 
 	private void onClientSetup(FMLClientSetupEvent event) {

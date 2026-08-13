@@ -97,9 +97,9 @@ public final class ShaderProperties {
 	private static final Pattern SHADOW_CASTER = Pattern.compile(
 			"^\\s*(shadowTerrain|shadowTranslucent|shadowEntities|shadowPlayer|shadowBlockEntities"
 					+ "|shadowLightBlockEntities)\\s*=\\s*(.*)$");
-	// Whether the terrain's ambient occlusion is kept out of the vertex colour, read on the live
-	// lines for the reason the note above gives. Six packs of the corpus write it and all six ask
-	// for true, so this is the one directive of the family whose answer moves the picture today.
+	// Whether the terrain's ambient occlusion is kept out of the vertex colour. Read on the live
+	// lines like every other directive of this file, and the note on RAIN_DEPTH says why that is
+	// what the reference does too.
 	private static final Pattern SEPARATE_AO = Pattern.compile("^\\s*separateAo\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");

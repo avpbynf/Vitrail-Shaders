@@ -79,9 +79,10 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * <p>
 	 * Per settle and not per quad because the answer must not move under the chunk builder: workers
 	 * mesh sections over many frames, and a flag that turned in the middle would leave one region's
-	 * alpha meaning the occlusion and its neighbour's meaning one. A load that moves it asks for the
-	 * world to be built again, {@code TerrainDraw.separateAoSettled}, and that rebuild is what runs
-	 * this method.
+	 * alpha meaning the occlusion and its neighbour's meaning one. What keeps that promise is that
+	 * {@link #settle()} is reached only through a rebuild of the whole world, and
+	 * {@code TerrainDraw.separateAoSettled} is what asks for one: it polls the answer on the client
+	 * tick and, on the tick it moves, has every section built again.
 	 * <p>
 	 * Volatile where {@link #carrying} is not, and the difference is who reads them: that one is
 	 * only ever read inside this class's synchronized methods, this one is read by every chunk

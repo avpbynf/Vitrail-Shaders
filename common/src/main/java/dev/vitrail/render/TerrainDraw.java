@@ -190,33 +190,53 @@ public final class TerrainDraw {
 	 * that threw and a pack put away among them, takes {@link PackChain#terrain} to null and this
 	 * answers no on its own. Nothing has to remember to say so.
 	 * <p>
+	 * <strong>{@link #shown()} is part of the question and not a detail of it.</strong> A colour
+	 * written this way is only readable by a program of the pack's, and the road that hands the mesh
+	 * back to the game's own shader without a word is exactly the one the warm up takes: a chain
+	 * warms one program a frame, so after every load and every resource reload there are frames
+	 * where this engine refuses the terrain and Sodium draws it. Sodium's own shader multiplies the
+	 * vertex colour into the texture and then alpha tests the product, so an occlusion sitting in
+	 * that alpha punches holes through every cutout block on screen. Answering no until the chain
+	 * really draws costs one more rebuild of the world per load and is what keeps the two sides
+	 * telling the same story. The answer only ever moves one way inside a load, a chain counting its
+	 * warmed programs upwards and resetting them only on a reload, so this cannot oscillate.
+	 * <p>
 	 * Read where the mesh is settled and not per quad, for the reason {@link #asked()} gives about
 	 * the format: a section is meshed by workers over many frames, and an answer that moved under
-	 * them would leave one region's alpha meaning one thing and its neighbour's another.
+	 * them would leave one region's alpha meaning one thing and its neighbour's another. Iris reads
+	 * its own flag per vertex instead, which it can afford: no pipeline of its own warms up over
+	 * several frames, so it has no window where the game's shader draws a separated mesh.
 	 */
 	public static boolean separateAo() {
 		TerrainDraw self = PackChain.terrain();
 
-		return wanted && self != null && self.values.separateAo();
+		return wanted && self != null && self.values.separateAo() && self.shown();
 	}
 
 	/**
-	 * Takes the answer a load left behind, and has the world built again when it moved.
+	 * Has the world built again whenever {@link #separateAo()} has moved since the last look.
 	 * <p>
-	 * A load is the one road that moves it without moving anything else: two packs can both want
-	 * the terrain and disagree about this, and then the format is the same, nothing else asks for a
+	 * The two answers can part without anything else parting with them: two packs can both want the
+	 * terrain and disagree about this, and then the format is the same, nothing else asks for a
 	 * rebuild, and the sections standing carry an alpha the pack now drawing does not read the way
 	 * the pack that meshed them did. What that looks like is a world with no ambient occlusion at
 	 * all, or one occluded twice, and neither says anything about a directive.
 	 * <p>
-	 * Called from a finally, so every road out of a load passes through it, the refusals and the
-	 * throw included. That is the whole reason it takes no argument: the answer is derived from what
-	 * is drawing at the instant the load ended, whatever the load did to get there.
+	 * <strong>Called on the client tick, and the moment is the whole of why this is a poll.</strong>
+	 * Every road that stops a pack drawing has to reach this, the throw inside a frame and the
+	 * program that would not compile among them, and those roads are taken in the middle of the
+	 * level being drawn, where asking the renderer to drop every section is not something to do.
+	 * A tick is outside all of it. Polling rather than being told also means no new road has to
+	 * remember: the answer is derived, so a road that did not exist when this was written is covered
+	 * the moment it changes what is drawing.
+	 * <p>
+	 * Idempotent and free when nothing moved, which is what lets it be called that often: two static
+	 * reads and a comparison.
 	 * <p>
 	 * Silent, where {@link #wanted(boolean)} says what it did. The rebuild it asks for is what makes
 	 * the mesh read the answer again, and the mesh is the side that says what it now carries.
 	 */
-	static void separateAoSettled() {
+	public static void separateAoSettled() {
 		boolean asked = separateAo();
 		if (separated == asked) {
 			return;

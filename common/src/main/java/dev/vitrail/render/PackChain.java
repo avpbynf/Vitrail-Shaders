@@ -618,13 +618,11 @@ public final class PackChain {
 			disabled = true;
 			lastError = "Could not prepare this pack: " + e;
 			Vitrail.logger().error("Vitrail could not prepare a pack's chain", e);
-		} finally {
-			// Every road out of this method and not the one that succeeds, which is what the finally
-			// buys: the answer is derived from whatever is drawing by now, so a refusal and a throw
-			// take it back down without a line of their own. TerrainDraw.wanted above is the one that
-			// cannot be done this way, being read from the options rather than from a loaded pack.
-			TerrainDraw.separateAoSettled();
 		}
+
+		// Nothing settles the terrain's separated colour here, and that is deliberate: the answer is
+		// no until the chain really draws, which is several frames after this method returns.
+		// TerrainDraw.separateAoSettled polls it on the client tick instead.
 	}
 
 
