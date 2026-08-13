@@ -182,8 +182,9 @@ either. The reason is a different one, and it is worse: with no declaration anyw
 position to argue about, and a header define would simply be a word nobody offered as a setting
 landing on top of whatever the pack uses that word for.
 
-The rewrite rules are asymmetric on purpose - a true boolean uncomments the define, a false boolean comments it out, a
-value rewrites the define's value, and a value on a constant rewrites only its right-hand side. A
+The rewrite rules are asymmetric on purpose - a true boolean uncomments the define, a false boolean
+comments it out, a value rewrites the define's value, and a value on a constant rewrites only its
+right-hand side. A
 boolean lands on a constant in one of two ways: on a `const bool` it is written out as `true` or
 `false`, since a constant is read as an expression rather than tested for existence and commenting
 the line out would leave the name undeclared; on a constant holding a number it is ignored and the

@@ -163,9 +163,14 @@ settings name is an identifier, and a pack uses identifiers for its own things.
 Which of those names the load says out loud depends on where the name came from, and the difference
 is who typed it. A line of `vitrail/options.txt` is named word by word, because a person edits that
 file by hand and a typo there is worth a line. A name in the pack's own settings file is named too,
-with the ones its menu no longer shows. A profile that names a word its own pack declares nowhere is
-dropped in silence, which is a pack's own bug rather than a player's, and which is what the
-reference does with it as well.
+in the line that reports what the menu no longer shows - which is a wider question, and that line
+therefore also carries names the pack still declares and still applies.
+
+A profile that names a word its own pack declares nowhere is dropped in silence, and that one is a
+gap and not a rule. The reference warns on exactly that token where a profile writes it bare, and
+here any bare token in a profile is taken as an on without being checked against the index at all.
+It costs a pack author's own typo staying invisible; it costs the picture nothing, since neither
+engine applies the word anywhere.
 
 Under both sits the engine's own table, and three readers have to be handed the same one: the
 preprocessor deciding which branch is live, the translator writing those symbols back out, and the

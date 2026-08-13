@@ -22,8 +22,8 @@ import java.util.Set;
  * <p>
  * Global is not the same as unconditional. Past the engine's own reserved lines, which this file
  * carries too and which {@code EngineOptions.RESERVED} names, a line of it forces a setting the
- * loaded pack <em>declares</em>; one naming anything else keeps the pack's own defaults and is said
- * so at the load, by name. A settings name is an identifier, and defining a word the pack uses for
+ * loaded pack <em>declares</em>; one naming neither keeps the pack's own defaults and is said so at
+ * the load, by name. A settings name is an identifier, and defining a word the pack uses for
  * something of its own is how a whole pack comes to fail on a word nobody offered as a setting.
  * <p>
  * Only the top two layers are resolved here. The two below belong to the pack: a value nobody
@@ -61,8 +61,10 @@ public final class SettingsLayers {
 	 * <p>
 	 * One of the pack's own features, and that word carries the rule: a setting is applied by
 	 * rewriting the line that declares it, so what this file can force of a pack is what the pack
-	 * declares. Its other job, the reserved lines that name this engine rather than a pack, goes
-	 * through {@code EngineOptions.take} and never reaches a pack at all.
+	 * declares. Its other job is the reserved lines, which name this engine rather than a pack.
+	 * Thirteen of those are read and taken out by {@code EngineOptions.take} and reach no pack at
+	 * all; the fourteenth is {@code profile}, which is this layer's own and which {@link #resolve}
+	 * takes out here to expand underneath the rest.
 	 */
 	public static Map<String, OptionValue> forced(Path gameDirectory) throws IOException {
 		Path file = file(gameDirectory);

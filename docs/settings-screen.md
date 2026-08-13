@@ -177,11 +177,12 @@ says so by name, one line per word. A setting is applied where the pack declares
 no declaration has nowhere to be applied; writing it into the shaders instead is how a pack that
 uses that word for something of its own stops compiling altogether.
 
-The reserved lines are the exception, and they are the reason the file exists: `passes`, `dump`, the
-view the screen opens on and the family switches name this engine and not a pack, so they are taken
-out before any pack is read and no pack ever sees them. Those are what proves a pass runs. The load
-names the ones it found on their own line, apart from the settings, so that nobody goes looking
-through a pack for a setting it never had.
+The reserved lines are the exception, and they are the reason the file exists: they name this engine
+and not a pack, and they are taken out before any pack is read. Those are what proves a pass runs.
+The load names the ones it found on their own line, apart from the settings, so that nobody goes
+looking through a pack for a setting it never had - and that line, not a list written here, is where
+to see which ones this build has. The one that is not an engine switch is `profile`, which names a
+profile of the loaded pack and is expanded underneath everything else.
 
 ## What is greyed out, and why
 
