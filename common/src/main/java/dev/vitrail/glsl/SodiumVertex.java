@@ -117,9 +117,10 @@ public final class SodiumVertex {
 	 * {@code separateAo} the unread one is {@code a_Color}, second of ten. It is not a new kind of
 	 * risk - four of the appended elements already go unread for a pack that names none of them -
 	 * but it is the first to reach one of Sodium's own four, where a drop takes the texture
-	 * coordinate and the light map down with it. The answer is the one the entity family already
-	 * uses, reading the compiled module of every corpus program back and checking the variables are
-	 * still there, and it is owed here rather than assumed.
+	 * coordinate and the light map down with it. So it is measured rather than assumed, the way the
+	 * entity family measures it: the off-game harness compiles every chunk program of the corpus
+	 * under BOTH colours and reads the module back, checking that each of the ten is still there and
+	 * still at the location its place in the format gives it.
 	 */
 	public static final String TINT_AND_AO = "a_TintAndAo";
 
