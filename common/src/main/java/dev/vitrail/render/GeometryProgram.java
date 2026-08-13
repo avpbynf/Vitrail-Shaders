@@ -51,8 +51,10 @@ import org.joml.Vector4fc;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -278,6 +280,13 @@ final class GeometryProgram {
 	private TextureTarget black;
 	private TextureTarget white;
 	private TextureTarget grey;
+
+	/**
+	 * One texel per material map, for a sprite the resource pack ships nothing for and for every
+	 * family drawn with no atlas at all. Their values are not a taste: they are the ones Iris falls
+	 * back on, and each of them reads as the absence of what its map describes.
+	 */
+	private final Map<PbrMap, TextureTarget> flatMaps = new EnumMap<>(PbrMap.class);
 	private GpuTextureView atlas;
 
 	/** The matrix the game pushed for this pass, or null for the frame's camera. */
@@ -671,6 +680,22 @@ final class GeometryProgram {
 			return this.atlasSampler;
 		}
 
+		PbrMap material = material(name);
+		if (material != null) {
+			// The atlas's own sampler, because these images ARE the atlas: the same size, the same
+			// chain, and the same sprite under the same texture coordinate, so anything read
+			// differently would be read at a different place than the albedo beside it.
+			//
+			// Except the specular map under labPBR, where a filter that blends two texels produces a
+			// material that is in neither of them. Iris takes the same two branches at the same
+			// question (pipeline/IrisRenderingPipeline.java:860-867).
+			if (this.atlasSampler != null && material.interpolates(PbrAtlases.labPbr())) {
+				return this.atlasSampler;
+			}
+
+			return RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST, true);
+		}
+
 		if (LIGHTMAP.equals(name)) {
 			return RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
 		}
@@ -886,7 +911,20 @@ final class GeometryProgram {
 		this.black = release(this.black);
 		this.white = release(this.white);
 		this.grey = release(this.grey);
+		this.flatMaps.values().forEach(TextureTarget::destroyBuffers);
+		this.flatMaps.clear();
 		this.cleared = false;
+	}
+
+	/** Which of the two material maps a name asks for, or null for every other name. */
+	private static PbrMap material(String sampler) {
+		for (PbrMap map : PbrMap.values()) {
+			if (map.sampler().equals(sampler)) {
+				return map;
+			}
+		}
+
+		return null;
 	}
 
 	private int blockBytes() {
@@ -915,6 +953,11 @@ final class GeometryProgram {
 			this.black = new TextureTarget("Vitrail terrain black", 1, 1, false, CONSTANT_FORMAT);
 			this.white = new TextureTarget("Vitrail terrain white", 1, 1, false, CONSTANT_FORMAT);
 			this.grey = new TextureTarget("Vitrail terrain grey", 1, 1, false, CONSTANT_FORMAT);
+			for (PbrMap map : PbrMap.values()) {
+				this.flatMaps.put(map, new TextureTarget("Vitrail terrain " + map.sampler(), 1, 1,
+						false, CONSTANT_FORMAT));
+			}
+
 			this.cleared = false;
 		}
 
@@ -924,10 +967,23 @@ final class GeometryProgram {
 			encoder.clearColorTexture(this.black.getColorTexture(), OPAQUE_BLACK);
 			encoder.clearColorTexture(this.white.getColorTexture(), OPAQUE_WHITE);
 			encoder.clearColorTexture(this.grey.getColorTexture(), MID_GREY);
+			this.flatMaps.forEach((map, target) ->
+					encoder.clearColorTexture(target.getColorTexture(), map.missing()));
 		}
 	}
 
 	private GpuTextureView view(String sampler) {
+		PbrMap material = material(sampler);
+		if (material != null) {
+			// The map that follows THIS pass's own image, which is how the block atlas, the particle
+			// atlas and every entity texture answer for themselves without this step knowing which of
+			// them it is drawing. Iris resolves it from the bound albedo for the same reason
+			// (pipeline/IrisRenderingPipeline.java:849-871).
+			GpuTextureView served = PbrAtlases.view(this.atlas, material);
+
+			return served == null ? this.flatMaps.get(material).getColorTextureView() : served;
+		}
+
 		if (ATLAS.contains(sampler)) {
 			// One pixel where the pass has no atlas of its own, which is every pass of the sky and
 			// every cloud: a name bound to nothing at all throws at the bind.
@@ -1134,6 +1190,14 @@ final class GeometryProgram {
 	 * {@link PackDepth}, which is where a reader has to go to know what a frame really did.
 	 */
 	private boolean readsATexture(String sampler) {
+		PbrMap material = material(sampler);
+		if (material != null) {
+			// Asked of the plan like everything else here, except that the plan for these two is the
+			// resource pack rather than the shader pack: a name nothing ships a file for reads the
+			// flat texel, and there is no frame in which that changes.
+			return PbrAtlases.view(this.atlas, material) != null;
+		}
+
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 		SamplerPlan.Kind kind = binding.kind();
 
@@ -1233,8 +1297,10 @@ final class GeometryProgram {
 		List<String> flat = this.samplers.stream().filter(name -> !readsATexture(name)).toList();
 		Vitrail.logger().info("{} samplers of this program read a real texture: {}", real.size(), real);
 		if (!flat.isEmpty()) {
-			// What is left is what nothing draws yet: the shadow map, and the depth on the passes
-			// that draw before the copy of this frame is taken.
+			// What is left is what nothing fills for this pass: the shadow map, the depth on the
+			// passes that draw before the copy of this frame is taken, and the two material maps
+			// wherever the RESOURCE pack ships no file beside the sprites of this pass's atlas. The
+			// last of the three is the one a reader can act on, and it is not a shader pack's doing.
 			Vitrail.logger().warn("{} read one pixel, because nothing fills them yet: {}",
 					flat.size(), flat);
 		}
