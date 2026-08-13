@@ -406,6 +406,20 @@ GNU Lesser General Public License version 3
   title, the apply, reload and reset buttons, the pack list and its own title, and the profile pair.
   The rest is the game's vocabulary or this project's.
 
+  neoforge/src/main/java/dev/vitrail/neoforge/sodium/TerrainMesh.java squares the terrain's tangent
+  against its normal the way net.irisshaders.iris.vertices.NormalHelper.packDiamondByte does, read in
+  August 2026: the normal's own component is subtracted from the tangent, and where that leaves
+  nothing the substitute is the first axis of the orthonormal basis its onbFromUnitNormal builds,
+  written out term for term along with the epsilon of ten to the minus twenty compared on the
+  squared length rather than on the length. The basis construction is Frisvad's, which Iris cites at
+  that method; what is reused here is Iris's use of it, so that a pack reads the same frame under
+  both. What is NOT reused is the storage: Iris spends one byte on an angle in the plane that basis
+  leaves, and unpacks it in a patched vertex stage, where this engine writes the vector itself in
+  three bytes and has no patched text to unpack an angle in. The vertex colour this file writes
+  under a pack's separateAo is the pair of writes of
+  net.irisshaders.iris.vertices.sodium.terrain.XHFPTerrainVertex, line 152, reached through the same
+  published Sodium helpers rather than through any packing of Iris's own.
+
   Nothing else in Vitrail is derived from Iris. Of its GLSL transformation machinery, which links
   against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that
   code is here, and the translator in dev.vitrail.glsl is this project's own.

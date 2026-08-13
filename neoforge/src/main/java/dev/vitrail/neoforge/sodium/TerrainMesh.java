@@ -461,14 +461,19 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * the plane that leaves, which its own patched vertex stage turns back into
 	 * {@code normalize(p.x * t1 + p.y * t2)} of a basis built from the normal
 	 * ({@code SodiumTransformer} lines 191 to 198). A pack under Iris therefore always reads a unit
-	 * vector exactly perpendicular to the normal, and the idiom seven of the eight packs write,
-	 * {@code cross(at_tangent.xyz, gl_Normal.xyz) * at_tangent.w}, comes out unit as they assume.
-	 * Packed raw, that cross product is short by the sine of the angle between the two and points
-	 * along a bitangent the pack never asked for.
+	 * vector exactly perpendicular to the normal, and <strong>it is the tangent itself, not the
+	 * bitangent, that carries the defect</strong>: the first column of the frame a normal map is
+	 * read through is {@code at_tangent.xyz}, and the packs that normalise it normalise its length
+	 * and not its direction. A vector leaning towards the normal is still leaning afterwards, and it
+	 * tilts the whole frame with it.
 	 * <p>
-	 * The direction of that cross product does not move: what is subtracted is a multiple of the
-	 * normal, and the normal crossed with itself is nought. So this lengthens the bitangent back to
-	 * one and leaves the handedness bit meaning what {@link #handedness} says it means.
+	 * The bitangent is not the argument, and it is worth saying because it looks as though it should
+	 * be. Four packs write {@code cross(at_tangent.xyz, gl_Normal.xyz) * at_tangent.w} word for word,
+	 * measured over the eight, and all four wrap it in a {@code normalize}, so none of them depends
+	 * on its length. Nor does this change its direction: what is subtracted is a multiple of the
+	 * normal, and the normal crossed with itself is nought. What the normalising here does is give
+	 * that cross product a length of one as well, and the handedness bit goes on meaning what
+	 * {@link #handedness} says it means.
 	 * <p>
 	 * <strong>What is left of the difference is the quantisation.</strong> Iris spends one byte on an
 	 * angle in a plane, so its tangent is perpendicular to the last bit; this spends three on the
@@ -670,15 +675,18 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * The position is the section's own, which is what the mesh is written in and what
 	 * {@link TerrainVertex#pack} reduced the block's world position to.
 	 * <p>
-	 * <strong>Iris subtracts from the WORLD position and gets the same byte</strong>, which is worth
-	 * writing down so that nobody closes a gap that is not one.
-	 * {@code MixinChunkMeshBuildTask.iris$onRenderModel} hands {@code blockPos.getX()} straight in,
-	 * {@code ExtendedDataHelper.computeMidBlock} masks it to sixteen bits, and Sodium's vertex is
-	 * section local, so the difference it carries is a whole number of blocks. Sixty-four times a
-	 * whole number of sixteens is a whole number of two hundred and fifty-sixes, and the mask to a
-	 * byte at the end of the packing takes it away. What does not survive is the last bit of
-	 * precision: a float holds {@code 65535.5} exactly and then loses half a unit at the multiply,
-	 * so far from the origin Iris's own answer can land one sixty-fourth off where this one does not.
+	 * <strong>Iris subtracts from the WORLD position, and the two agree on the whole blocks and NOT
+	 * on the rounding.</strong> {@code MixinChunkMeshBuildTask.iris$onRenderModel} hands
+	 * {@code blockPos.getX()} straight in, {@code ExtendedDataHelper.computeMidBlock} masks it to
+	 * sixteen bits, and Sodium's vertex is section local, so the difference the two arguments carry
+	 * is a whole number of sixteens; sixty-four times that is a whole number of two hundred and
+	 * fifty-sixes, and the mask to a byte takes it away. What the difference does NOT survive is the
+	 * cast. Iris's argument is a large positive number, so its {@code (int)} truncates downwards,
+	 * while the offset from a block's own middle is small and is negative for half the corners of
+	 * every block, and there truncating towards zero rounds the other way. The two answers then part
+	 * by one sixty-fourth on every corner whose offset is negative and is not a whole sixty-fourth,
+	 * which is every model that is not a cube. Floored here for that reason, and the floor is what
+	 * makes the paragraph above true rather than nearly true.
 	 */
 	private static int midBlock(ChunkVertexEncoder.Vertex vertex) {
 		int origin = ((TerrainVertex) vertex).vitrailBlockOrigin();
@@ -689,9 +697,13 @@ public final class TerrainMesh implements ChunkVertexType {
 				| (TerrainVertex.emission(origin) << 24);
 	}
 
-	/** One axis of that offset, from the corner of the block to the vertex, in sixty-fourths. */
+	/**
+	 * One axis of that offset, from the corner of the block to the vertex, in sixty-fourths. Floored
+	 * and not truncated, which is the rounding Iris's own cast performs on its own argument; the
+	 * javadoc above says why the two are not the same operation here.
+	 */
 	private static int offset(int block, float vertex) {
-		return (int) ((block + 0.5F - vertex) * 64.0F);
+		return (int) Math.floor((block + 0.5F - vertex) * 64.0F);
 	}
 
 	/**
