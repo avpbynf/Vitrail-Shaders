@@ -39,9 +39,9 @@ import java.util.Optional;
  * {@code SpriteContents} with their own animation states, ticked with the atlas
  * ({@code pbr/texture/PBRAtlasTexture.java:289-309}); only the first frame of a map is uploaded
  * here. The cost is a flowing or ticking block whose surface map stands still while its albedo
- * moves. <strong>Nothing in 26.2 forbids the rest, so this is a gap and not a contournement</strong>
- * - the honest name for work not done - and it is written up in
- * {@code docs/internals/material-maps.md} rather than dressed as a decision.
+ * moves. <strong>Nothing in 26.2 forbids the rest</strong> - those animation states are public and
+ * the game drives its own atlases through them - so this is work not done and is written up as that
+ * in {@code docs/internals/material-maps.md}.
  */
 final class PbrAtlas implements AutoCloseable {
 
@@ -189,28 +189,46 @@ final class PbrAtlas implements AutoCloseable {
 			return null;
 		}
 
-		NativeImage image;
+		NativeImage image = null;
 		FrameSize frame;
-		try (InputStream stream = resource.get().open()) {
-			image = NativeImage.read(stream);
-		} catch (IOException e) {
+		try {
+			try (InputStream stream = resource.get().open()) {
+				image = NativeImage.read(stream);
+			}
+
+			// The first frame and not the image: a map beside an animated sprite is as tall as its
+			// albedo is, and the whole strip scaled onto one sprite would be a smear of every frame.
+			Optional<AnimationMetadataSection> animation = resource.get().metadata()
+					.getSection(AnimationMetadataSection.TYPE);
+			NativeImage read = image;
+			frame = animation
+					.map(section -> section.calculateFrameSize(read.getWidth(), read.getHeight()))
+					.orElseGet(() -> new FrameSize(read.getWidth(), read.getHeight()));
+		} catch (IOException | RuntimeException e) {
+			// The whole read in one try, the close of the stream included: a failure between the
+			// decode and the metadata used to leave the image allocated with nothing holding it, and
+			// native memory nothing points at is not memory anything gets back.
+			if (image != null) {
+				image.close();
+			}
+
 			Vitrail.logger().warn("{} could not be read, so its sprite keeps the flat {} value",
 					location, map.sampler(), e);
 
 			return null;
 		}
 
-		try {
-			// The first frame and not the image: a map beside an animated sprite is as tall as its
-			// albedo is, and the whole strip scaled onto one sprite would be a smear of every frame.
-			Optional<AnimationMetadataSection> animation = resource.get().metadata()
-					.getSection(AnimationMetadataSection.TYPE);
-			frame = animation
-					.map(section -> section.calculateFrameSize(image.getWidth(), image.getHeight()))
-					.orElseGet(() -> new FrameSize(image.getWidth(), image.getHeight()));
-		} catch (IOException | RuntimeException e) {
-			Vitrail.logger().warn("The metadata beside {} could not be read, so its sprite keeps "
-					+ "the flat {} value", location, map.sampler(), e);
+		// A frame the file cannot hold is refused here rather than at the first pixel read out of
+		// bounds, and the sprite is the unit refused. A .mcmeta beside a map is written by hand and
+		// nothing validates it: calculateFrameSize hands back a declared width and height without
+		// ever comparing them to the image. Left to throw, one badly written file took the whole
+		// atlas down with it - both maps, every sprite - and every block in the world went flat.
+		// Iris refuses the same sprite on the same question, at AtlasPBRLoader.java:121-125.
+		if (frame.width() > image.getWidth() || frame.height() > image.getHeight()
+				|| frame.width() <= 0 || frame.height() <= 0) {
+			Vitrail.logger().warn("{} declares a frame of {}x{} and is {}x{}, so its sprite keeps "
+					+ "the flat {} value", location, frame.width(), frame.height(), image.getWidth(),
+					image.getHeight(), map.sampler());
 			image.close();
 
 			return null;
@@ -267,8 +285,8 @@ final class PbrAtlas implements AutoCloseable {
 		String path = sprite.getPath() + map.suffix() + ".png";
 
 		// A sprite outside textures/ says so in its own path, and CIT Resewn is the one that puts
-		// sprites there. Iris carries the same exception and for the same reason
-		// ({@code pbr/loader/AtlasPBRLoader.java:171-178}).
+		// sprites there. Iris carries the same exception and for the same reason,
+		// pbr/loader/AtlasPBRLoader.java:171-178.
 		if (path.startsWith("optifine/cit/")) {
 			return Identifier.fromNamespaceAndPath(sprite.getNamespace(), path);
 		}
@@ -394,7 +412,7 @@ final class PbrAtlas implements AutoCloseable {
 	 * its slot.
 	 * <p>
 	 * The game builds the same border by drawing each sprite over the padded rectangle with its
-	 * texture coordinates clamped ({@code texture/TextureAtlas.java:183-198} through
+	 * texture coordinates clamped ({@code TextureAtlas.uploadInitialContents} through
 	 * {@code TextureAtlasSprite.uploadSpriteUbo}), and this is that clamp written out. Left at the
 	 * flat value instead, the border would pull a map back towards flat at the edge of every sprite
 	 * wherever the sampler reaches past the texel it is centred on, which is any grazing angle with
@@ -424,8 +442,11 @@ final class PbrAtlas implements AutoCloseable {
 	 * mip level already padded to the slot.
 	 * <p>
 	 * The corner is the slot's and not the sprite's, border included, and every level of it is
-	 * reached by shifting: the stitcher places a slot on a multiple of the chain's length and drops
-	 * the chain rather than break that ({@code texture/SpriteLoader.java:71-79}).
+	 * reached by shifting. Two rules together make that shift exact rather than nearly right: the
+	 * stitcher rounds every slot up to a multiple of the chain's length
+	 * ({@code Stitcher.smallestFittingMinTexel}, called at {@code Stitcher.java:47-48}), and the
+	 * chain is dropped to whatever the smallest sprite dimension allows rather than breaking that
+	 * ({@code SpriteLoader.java:71-79}).
 	 */
 	private record Sprite(int x, int y, NativeImage[] levels) {
 

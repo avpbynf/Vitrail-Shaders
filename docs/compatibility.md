@@ -7,6 +7,7 @@ rather than guess.
 | --- | --- |
 | Nothing of the pack is drawn, the world looks vanilla | [The pack was refused](#the-pack-was-refused) |
 | An effect does nothing at all | [The effect never ran](#the-effect-never-ran) |
+| Blocks have no relief, however smooth the pack promises | [Everything is flat](#everything-is-flat) |
 | Water is missing, or looks like the game's | [The water](#the-water) |
 | A hard straight line across the sky near the horizon | [The horizon line](#the-horizon-line) |
 | Mobs or the held item look flat and unlit | [Anything that moves](#anything-that-moves) |
@@ -82,16 +83,16 @@ which has to ship a `bricks_n.png` beside its `bricks.png`, and most resource pa
 pack asking for a normal map that nobody supplies reads a perfectly valid flat one and never
 complains.
 
-**How to confirm:** the engine names what it found when a world loads, one line per atlas and per
-map, saying how many of its sprites answered. No line at all means no resource pack in the stack
-ships either map, and no shader pack setting can change that.
+**How to confirm:** the engine names what it found **at every resource load** - at startup, and
+again after F3+T - one line per atlas and per map, saying how many of its sprites answered. Look
+near the top of the log rather than around world load. No line means either that no resource pack in
+the stack ships a map, or that building them failed, and the failure says so on its own line just
+above.
 
-Two more places relief goes missing even with a material pack installed. **Nothing that moves has
-one**: an entity skin is a texture of its own rather than a sprite in an atlas, so mobs, armour and
-the held item read the flat value. And **an animated block's map does not animate**: flowing water
-keeps a moving surface and a fixed normal, because only the first frame of a map is uploaded.
-
-How the maps are built is [Material maps](internals/material-maps.md).
+Two more places relief goes missing even with a material pack installed: **mobs and armour have
+none**, and **an animated block's map does not animate**. Both are named work not done, with what
+they cost, in [Material maps](internals/material-maps.md#what-is-not-done) - which is also where the
+rest of the mechanism lives.
 
 ## The water
 

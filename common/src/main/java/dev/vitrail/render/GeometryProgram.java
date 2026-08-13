@@ -686,9 +686,20 @@ final class GeometryProgram {
 			// chain, and the same sprite under the same texture coordinate, so anything read
 			// differently would be read at a different place than the albedo beside it.
 			//
-			// Except the specular map under labPBR, where a filter that blends two texels produces a
-			// material that is in neither of them. Iris takes the same two branches at the same
-			// question (pipeline/IrisRenderingPipeline.java:860-867).
+			// Except the specular map under labPBR, where a filter that blends two texels of it
+			// produces a material that is in neither of them. Iris asks the same question here
+			// (pipeline/IrisRenderingPipeline.java:860-867) and answers it with
+			// GlSampler.MIPPED_NEAREST_NEAREST, which is NEAREST inside a level AND between levels.
+			//
+			// THIS ONLY GETS HALF OF IT, and the half it misses is an obstacle of the API rather
+			// than a preference. What comes back here is nearest inside a level and LINEAR between
+			// them: the backend sets the mip mode from the sampler's maximum lod alone,
+			// VulkanGpuSampler:47 taking LINEAR for anything above a quarter, and the cache offers
+			// no way to ask for the other one - a sampler built with no mipmaps caps the lod at that
+			// quarter and gives up the chain entirely, which is worse. Making one by hand does not
+			// help either, GpuDevice.createSampler reaching the same constructor.
+			// What it costs: on a distant surface, where two levels are blended, the thresholds are
+			// crossed after all. Close up, where a level is read whole, they are not.
 			if (this.atlasSampler != null && material.interpolates(PbrAtlases.labPbr())) {
 				return this.atlasSampler;
 			}
@@ -916,11 +927,24 @@ final class GeometryProgram {
 		this.cleared = false;
 	}
 
-	/** Which of the two material maps a name asks for, or null for every other name. */
-	private static PbrMap material(String sampler) {
+	/**
+	 * Which of the two material maps a name asks for, or null for every other name and for a name
+	 * the pack has taken over.
+	 * <p>
+	 * The pack wins, and that is Iris's order rather than a courtesy: it wraps the sampler holder in
+	 * {@code ProgramSamplers.customTextureSamplerInterceptor} before the level samplers are added at
+	 * all ({@code samplers/ProgramSamplers.java:50-56}), so a {@code texture.gbuffers.normals} line
+	 * takes the name from underneath them. Nothing in the corpus writes one, measured across the
+	 * eight packs' properties files, so this decides nothing today and is here because the day it
+	 * decides something the wrong answer is a pack reading the block atlas's relief where it asked
+	 * for its own file.
+	 */
+	private PbrMap material(String sampler) {
 		for (PbrMap map : PbrMap.values()) {
 			if (map.sampler().equals(sampler)) {
-				return map;
+				return this.loaded.samplers().binding(sampler).kind() == SamplerPlan.Kind.PACK_TEXTURE
+						? null
+						: map;
 			}
 		}
 
@@ -985,8 +1009,9 @@ final class GeometryProgram {
 		}
 
 		if (ATLAS.contains(sampler)) {
-			// One pixel where the pass has no atlas of its own, which is every pass of the sky and
-			// every cloud: a name bound to nothing at all throws at the bind.
+			// One pixel where the pass has no atlas of its own, which is every cloud and the sky's
+			// own disc: a name bound to nothing at all throws at the bind. The sky's textured
+			// elements do have one, handed to them per draw by SkyProgram.texture.
 			//
 			// WHITE and not black, which is Iris's answer for the same case and is the one that
 			// leaves a picture. A pack multiplies the atlas into its albedo, so white is the neutral

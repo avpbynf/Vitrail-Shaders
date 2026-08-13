@@ -23,13 +23,25 @@ import java.util.Properties;
  * <p>
  * The lookup is by the image a pass is really drawing with rather than by the family of the pass,
  * and that is Iris's rule rather than a simplification of it: it resolves the maps from the albedo
- * texture the draw has bound ({@code pipeline/IrisRenderingPipeline.java:849-871}), so the entity
- * atlas, the particle atlas and the block atlas each answer for themselves without anything having
+ * texture the draw has bound ({@code pipeline/IrisRenderingPipeline.java:849-871}), so the block
+ * atlas, the item atlas and the particle atlas each answer for themselves without anything having
  * to know which is which.
  * <p>
- * Only the geometry programs are served, and that too is Iris's shape: {@code normals} and
- * {@code specular} are added by {@code IrisSamplers.addLevelSamplers} and by nothing else, so a
- * composite that declares one of the names reads a flat texel there as it does here.
+ * <strong>A texture that is not an atlas gets nothing, and that is a divergence.</strong> Iris
+ * registers a second loader for a plain texture
+ * ({@code pbr/loader/PBRTextureLoaderRegistry.java:15} onto
+ * {@code pbr/loader/SimplePBRLoader.java:19-31}), resolved per bound albedo at
+ * {@code pbr/texture/PBRTextureManager.java:126-138}, so an entity skin and an armour layer read
+ * their own {@code _n} and {@code _s} there. Here nothing but a stitched atlas is a door, so those
+ * read the flat value: a mob stays matte while the terrain around it has relief. Nothing in 26.2
+ * forbids the second door - the game hands out plain textures by name like any other - so this is
+ * work not done rather than a wall, and it is the honest name for it.
+ * <p>
+ * Only the geometry programs are served, which is Iris's shape: {@code normals} and
+ * {@code specular} are added by {@code IrisSamplers.addLevelSamplers} and by nothing else
+ * ({@code samplers/IrisSamplers.java:215-216}). What a composite declaring one of the names reads
+ * is NOT the same on both sides and this file does not claim it is: here it reads a flat texel,
+ * where Iris leaves the sampler unassigned and it falls to whatever texture unit nought holds.
  */
 public final class PbrAtlases {
 
@@ -54,8 +66,16 @@ public final class PbrAtlases {
 	 * that atlas before.
 	 * <p>
 	 * Called for every atlas and not only the block one. An atlas that no pack ships a map for costs
-	 * one lookup per sprite and nothing else: no image is decoded and no texture is created, which is
-	 * what an ordinary install without a material pack pays.
+	 * two lookups per sprite, one for each map, and nothing else: no image is decoded and no texture
+	 * is created, which is what an ordinary install without a material pack pays.
+	 * <p>
+	 * Not gated on a shader pack being loaded, where Iris builds nothing until one is and asks for
+	 * the two names ({@code pipeline/IrisRenderingPipeline.java:854} off
+	 * {@code samplers/IrisSamplers.hasPBRSamplers}). What that gate would buy is measured and small:
+	 * all eight packs of the corpus declare at least one of the names, so it only ever spares the
+	 * player who has a material resource pack and no shader pack running at all. What it would cost
+	 * is a question this side cannot answer at the moment it is asked - an atlas is stitched during
+	 * the resource reload, before any pack is chosen for the place being entered.
 	 *
 	 * @param atlas   what the atlas is called
 	 * @param texture the texture the game stitched
@@ -152,8 +172,11 @@ public final class PbrAtlases {
 	 * <p>
 	 * Only the name of the format is read and the version after the slash is not: the two versions
 	 * differ in what the channels mean to the PACK, which is the pack's business, and not in
-	 * anything this engine does with them. Iris reads the version, keeps it, and asks nothing of it
-	 * either ({@code pbr/format/LabPBRTextureFormat.java}).
+	 * anything this engine does with them. Iris keeps the version and asks one thing of it, which
+	 * this engine has no use for: {@code LabPBRTextureFormat.equals} compares it
+	 * ({@code pbr/format/LabPBRTextureFormat.java:34-44}) and
+	 * {@code pbr/format/TextureFormatLoader.java:28-32} reloads the whole pack when it changes,
+	 * where here a resource reload restitches the atlases and rebuilds these anyway.
 	 */
 	static boolean labPbr(ResourceManager resources) {
 		Optional<Resource> resource = resources.getResource(FORMAT);

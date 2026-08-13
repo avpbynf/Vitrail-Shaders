@@ -420,7 +420,7 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/render/PbrMap.java,
   common/src/main/java/dev/vitrail/render/PbrAtlas.java and
   common/src/main/java/dev/vitrail/render/PbrAtlases.java build the normal and specular maps a
-  resource pack ships, and four of their answers are Iris's, read in August 2026. The layout, one
+  resource pack ships, and six of their answers are Iris's, read in August 2026. The layout, one
   companion image per atlas with each map at the base sprite's own x and y, is that of
   net.irisshaders.iris.pbr.loader.AtlasPBRLoader, lines 55 to 74, with the suffixes and the two
   values a sprite with no map of its own reads taken from net.irisshaders.iris.pbr.texture.PBRType,
@@ -433,12 +433,26 @@ GNU Lesser General Public License version 3
   net.irisshaders.iris.pipeline.IrisRenderingPipeline.onSetAlbedoTex, lines 849 to 871, which is
   also where the same file chooses between the atlas's own filtering and a nearest one on the same
   question, lines 860 to 867.
-  Three things in this entry are not transcriptions. The maps are not animated here, where Iris
-  gives its companion sprites animation states and ticks them with the atlas,
-  net.irisshaders.iris.pbr.texture.PBRAtlasTexture lines 289 to 309. Iris loads a texture's maps
-  lazily, on the frame after the texture is first bound as albedo, where these are built when the
-  atlas is stitched. And the border of replicated texels the stitcher gives every sprite is written
-  out term for term here, where Iris inherits it by reusing the game's own blit path.
+  Six things in this entry are not transcriptions, and the files write each of them out. The maps
+  are not animated here, where Iris gives its companion sprites animation states and ticks them with
+  the atlas, net.irisshaders.iris.pbr.texture.PBRAtlasTexture lines 289 to 309. Nothing but a
+  stitched atlas gets maps here, where Iris has a second loader for a plain texture,
+  net.irisshaders.iris.pbr.loader.SimplePBRLoader lines 19 to 31, so entity skins and armour layers
+  read theirs there and read the flat value here. Iris loads a texture's maps lazily, on the frame
+  after the texture is first bound as albedo, where these are built when the atlas is stitched, and
+  it builds none at all until a shader pack asks for the names. The border of replicated texels the
+  stitcher gives every sprite is written out term for term here, where Iris inherits it by reusing
+  the game's own blit path.
+  The last two are places where following Iris exactly is not possible or not right, and both are
+  argued in the files. The specular map is read with a filter that is nearest inside a mip level and
+  interpolates between levels, where Iris asks for nearest in both: the backend takes the mode
+  between levels from the sampler's maximum lod alone and the game's cache offers no way to ask for
+  the other one. And the three labPBR thresholds are applied to the channels the format defines them
+  on, where Iris's own runtime exchanges its red and blue functions by unpacking an ARGB pixel
+  through Sodium's ColorABGR, net.irisshaders.iris.pbr.mipmap.ChannelMipmapGenerator lines 19 to 50
+  against net.irisshaders.iris.pbr.mipmap.AbstractMipmapGenerator lines 22 to 27; the exchange
+  cancels for the image and not for the functions, so its smoothness is thresholded as if it were
+  porosity.
 
   Nothing else in Vitrail is derived from Iris. Of its GLSL transformation machinery, which links
   against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that

@@ -34,6 +34,22 @@ import java.util.function.IntUnaryOperator;
  * {@link PbrAtlases#labPbr(net.minecraft.server.packs.resources.ResourceManager)}: with no
  * declaration Iris falls back to the plain average for both maps
  * ({@code pbr/loader/AtlasPBRLoader.java:188-198}).
+ * <p>
+ * <strong>Those three thresholds sit on the channels labPBR puts them on, and that is a divergence
+ * from what Iris DOES rather than from what Iris says.</strong> Its
+ * {@code LabPBRTextureFormat.java:13-18} passes them in the order red, green, blue, alpha, and
+ * {@code ChannelMipmapGenerator.java:19-50} then unpacks and repacks every one of them through
+ * Sodium's {@code ColorABGR} while {@code AbstractMipmapGenerator.java:22-27} feeds it
+ * {@code NativeImage.getPixel}, which is ARGB on both 26.1 and 26.2. Red and blue are therefore
+ * exchanged on the way in and exchanged back on the way out, so nothing lands in the wrong channel
+ * of the image - but the FUNCTIONS do: smoothness is thresholded at 65 as if it were porosity, and
+ * porosity is averaged across the boundary the threshold exists to protect. Here they are the way
+ * round the format defines, which is what a pack author reads when writing the file.
+ * <p>
+ * What it costs, and it is why this is worth a paragraph rather than a silent correction: on a
+ * labPBR pack the two engines disagree on every mip level of the specular map, so a distant surface
+ * is smoother or rougher here than under Iris. Nothing at the base level moves, which is every
+ * surface close enough to look at.
  */
 enum PbrMap {
 

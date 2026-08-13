@@ -208,9 +208,10 @@ final class PackImages {
 	 * Read once here, where Iris re-asks the texture manager at every bind, so a resource pack
 	 * swapped under a running client is not followed until the shader pack is read again. Two cases
 	 * Iris serves this cannot serve at all, and both are named rather than given something
-	 * plausible: an ATLAS, which is stitched at runtime and is no file of any resource pack, and a
-	 * normal or specular map, which Iris reaches through a PBR manager this engine has no equivalent
-	 * of.
+	 * plausible. An ATLAS, which is stitched at runtime and is no file of any resource pack. And a
+	 * normal or specular map reached from a texture NAME, which is a different door from the one
+	 * {@link PbrAtlases} opens: the maps that follow the atlases are built there, off the sprites
+	 * the game stitched, where this method is asked for a path a pack wrote in its own properties.
 	 */
 	private static Image gameResource(PackTexture texture, List<String> notes) {
 		String path = texture.path();

@@ -19,25 +19,28 @@ That is not an optimisation, it is the only shape that works. The coordinates a 
 are atlas coordinates, computed by the stitcher for the albedo; there is no second set. Anything but
 an exact copy of the layout would read a different block's material.
 
-The companions are built when an atlas is stitched, which is once per atlas per resource reload. An
-atlas the resource pack ships nothing for costs one lookup per sprite and no memory at all: **no
-image is decoded and no texture is created**, so an install with no material pack pays nothing. When
-maps are found, the log names the atlas and how many of its sprites answered.
+The companions are built when an atlas is stitched, which is once per atlas per resource reload -
+at startup and again after every resource reload, F3+T included, and never at world load. An atlas
+the resource pack ships nothing for costs two lookups per sprite, one per map, and no memory at all:
+**no image is decoded and no texture is created**, so an install with no material pack pays nothing.
+When maps are found, the log names the atlas and how many of its sprites answered.
 
 ## What is read at draw time, and what is not
 
 The two names are bound off **the image the pass is really drawing with**, not off the family of the
-pass. That is what lets the block atlas, the item atlas, the particle atlas and every entity texture
-answer for themselves: the terrain reads the block atlas's companions, a particle reads whichever
-atlas that layer came off, and neither has to be told which it is.
+pass. That is what lets the block atlas, the item atlas and the particle atlas each answer for
+themselves: the terrain reads the block atlas's companions, a particle reads whichever atlas that
+layer came off, and neither has to be told which it is.
 
-Only the geometry programs are served. A composite that declares `normals` reads a flat texel, which
-is what it does under Iris too - the two names are added to the world's programs and to nothing else.
+Only the geometry programs are served, which is what Iris does too. What a composite declaring one
+of the names reads is not the same on both sides: here it reads a flat texel, where Iris leaves the
+sampler unassigned and it falls to whatever texture unit nought holds.
 
 A sprite the resource pack ships no map for reads the same flat value the whole companion is cleared
-to: a normal pointing straight out of the face with nothing occluded, and a material that is smooth
-in nothing, reflects like an ordinary dielectric and emits nothing. Those exact values matter, and
-they are not a taste - they are the ones every pack is written to treat as "no data".
+to: a normal pointing straight out of the face with nothing occluded, and a material that is nought
+in every channel - no smoothness, no reflectance, no porosity, no emission. Those exact values
+matter, and they are not a taste: they are the ones Iris falls back on, and each reads as the
+absence of the thing it names.
 
 ## The mipmap is the one formula that had to be translated
 
@@ -48,13 +51,20 @@ brightness that the eye perceives on a curve. The companions are therefore reduc
 arithmetic average, channel by channel.
 
 The specular map goes one step further, and only where the resource pack declares the labPBR
-convention in `optifine/texture.properties`. Two of its channels change **meaning** at a threshold:
-one is a reflectance below 230 and a metal index above it, the other a porosity below 65 and a
-subsurface amount above it. Averaging across that boundary invents a material that is in neither
-class - a half-metal, or a stone that bleeds light. So those channels are averaged only among the
-texels of the class that wins the quad, and the same reasoning decides how the map is filtered: a
-sampler that blends two of its texels would do at draw time exactly what the reduction refuses to do
-at load. With no declaration, both maps take the plain average and both are filtered like the atlas.
+convention in `optifine/texture.properties`. Three of its channels change **meaning** at a
+threshold: a reflectance below 230 and a metal index above it, a porosity below 65 and a subsurface
+amount above it, and an emission that is a fraction below 255 and nothing at all at 255. Averaging
+across one of those boundaries invents a material that is in neither class - a half-metal, or a
+stone that bleeds light. So those channels are averaged only among the texels of the class that wins
+the quad. With no declaration, both maps take the plain average.
+
+The same reasoning should decide how the map is **filtered**, and here it only gets half way. A
+sampler that blends two texels of it does at draw time exactly what the reduction refuses to do at
+load, so the specular map is read with nearest filtering under labPBR. Nearest *inside* a mip level
+is all the game's sampler cache can express: the backend picks the mode between levels from the
+sampler's maximum lod alone, and the only way to ask for nearest there is to give up mipmapping
+altogether, which is worse. So a distant surface, where two levels are blended, crosses the
+thresholds after all. A surface close enough to look at does not.
 
 ## Two details that are easy to get wrong
 
@@ -70,11 +80,18 @@ the target is a whole multiple of the source and by a weighted average otherwise
 
 ## What is not done
 
-**The maps do not animate.** A sprite whose albedo has frames gets the first frame of its map, held
-still. Flowing water keeps a moving surface and a fixed normal. Nothing in the game's API forbids the
-rest - the animation states exist and are public - so this is a gap that has not been paid for, not
-a limit of the backend.
+Both of these are work not done rather than a limit of the backend, and both are things Iris does.
 
-**Textures that are not atlases have no maps.** An entity skin is a texture of its own rather than a
-sprite in an atlas, so nothing is built for it and the two names read the flat value on every entity
-program.
+**The maps do not animate.** A sprite whose albedo has frames gets the first frame of its map, held
+still, so flowing water keeps a moving surface and a fixed normal. Iris gives its companion sprites
+their own animation states and ticks them with the atlas. Nothing in the game's API forbids the same
+here - those animation states are public and the game drives its own atlases through them.
+
+**Textures that are not atlases have no maps.** An entity skin and an armour layer are textures of
+their own rather than sprites in an atlas, so nothing is built for them and the two names read the
+flat value: a mob stays matte while the terrain around it has relief. Iris has a second loader for
+exactly this case, resolved from whichever texture the draw has bound. Nothing here forbids the same
+door; it is not built yet.
+
+A held item is **not** in this second group, and it is worth saying because it looks like it should
+be: item textures are sprites in an atlas of their own, so they are served like any other sprite.
