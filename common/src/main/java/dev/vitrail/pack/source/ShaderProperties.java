@@ -357,8 +357,12 @@ public final class ShaderProperties {
 			return;
 		}
 
+		// And NOT the same rule for this one, whatever its neighbour above does: a word this cannot
+		// read is not ignored here, it is what leaves the default standing, so the line is read
+		// whether the word is one or not. Left among the keys nothing reads, it would tell its
+		// author that nothing looks at a line which had just overruled the one before it.
 		Matcher separateAo = SEPARATE_AO.matcher(line);
-		if (separateAo.matches() && truth(separateAo.group(1).trim()) != null) {
+		if (separateAo.matches()) {
 			return;
 		}
 
@@ -1179,9 +1183,9 @@ public final class ShaderProperties {
 	 * Six packs of the corpus ask for it, and it is a property of the MESH: what answers it is the
 	 * chunk vertex encoder, not anything the translator writes.
 	 * <p>
-	 * Read through {@link #live} like the rest of the family, and {@link #RAIN_DEPTH}'s own note
-	 * says why that is what the reference does as well. <strong>The last live line decides, and it
-	 * decides even when it carries a word this cannot read</strong>, which is what Iris does: it
+	 * Read through {@link #live}, and {@link #RAIN_DEPTH}'s own note says why that is what the
+	 * reference does as well. <strong>The last live line decides, and it decides even when it
+	 * carries a word this cannot read</strong>, which is what Iris does: it
 	 * loads the preprocessed file into an {@code OrderBackedProperties} and walks the MAP rather
 	 * than the file ({@code shaderpack/properties/ShaderProperties.java:143-152}), so a key written
 	 * twice keeps its last value and {@code :211} runs once for it, on that value alone. Its
@@ -1192,6 +1196,13 @@ public final class ShaderProperties {
 	 * pack writing the key twice to see it: on {@code separateAo=true} followed by
 	 * {@code separateAo=yes}, keeping the last line this can read answers true where the reference
 	 * leaves its default standing and answers false.
+	 * <p>
+	 * <strong>{@link #rainDepth} and {@link #shadowCasters} still read the older way</strong>, so
+	 * this file answers the same question two ways until they are moved with it. They are not left
+	 * behind for a reason: the reference reads all three through the one map walk and the one
+	 * boolean handler, so the same correction is owed to both, and it is a change of its own rather
+	 * than a line of this one. A reader comparing the three should expect them to part, and should
+	 * expect that to end.
 	 */
 	public boolean separateAo(Map<String, String> defines) {
 		Boolean asked = null;

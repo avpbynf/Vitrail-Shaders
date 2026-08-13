@@ -299,9 +299,9 @@ public final class TerrainMesh implements ChunkVertexType {
 		 * global, {@code WorldRenderingSettings.INSTANCE.shouldUseSeparateAo()}
 		 * ({@code XHFPTerrainVertex.java:152}). It sits inside the loop over the four vertices and
 		 * nothing about it varies from one vertex to the next: what it reads is the pack's directive,
-		 * which is settled long before a quad reaches that encoder. Here it is
-		 * an element BESIDE that word and never instead of it, for the reason the class comment
-		 * gives: the game's own shader draws this mesh too and reads the word. Iris has no such
+		 * which is settled long before a quad reaches that encoder. Here it is an element BESIDE
+		 * that word and never instead of it, for the reason the class comment gives: the game's own
+		 * shader draws this mesh too and reads the word. Iris has no such
 		 * window to cover, nothing of its own warming up over several frames.
 		 * <p>
 		 * Written for every pack, asked or not, like the five above it. The format is one answer for
