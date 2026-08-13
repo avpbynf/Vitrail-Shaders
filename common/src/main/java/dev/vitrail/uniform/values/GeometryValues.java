@@ -12,9 +12,11 @@ import org.joml.Matrix4f;
 import java.util.Set;
 
 /**
- * The fixed function state of a pass drawn over the world rather than over a quad.
+ * The fixed function state of a pass drawn over the world rather than over a quad, and the one
+ * name outside it whose answer depends on which of the two a program is.
  * <p>
- * Seven names {@link DrawValues} already answers, layered over it, plus two this family alone has.
+ * Seven names {@link DrawValues} already answers, layered over it, plus two this family alone has
+ * and one it answers with a nought.
  * The seven are answered there with the stand ins a full screen pass needs: an identity model view,
  * the matrix that carries the quad to the screen, and eight identities where the texture matrices
  * were. Handing those to a terrain program would put every block of the world inside a unit cube at
@@ -121,6 +123,14 @@ public final class GeometryValues {
 	public static void register(UniformCatalog.Builder builder) {
 		builder.add("of_TexShrink", UniformShape.VEC2, (world, out) ->
 				out.set(shrink(world.atlasWidth()), shrink(world.atlasHeight())));
+
+		// A nought, and it is the value rather than a stand-in for one. Iris makes the smoothed
+		// centre depth available to the full screen stages alone, its CompositeDepthTransformer
+		// running under Patch.COMPOSITE, so the uniform a gbuffers program declares is one nothing
+		// ever writes and reads as a zero there too. Answered here rather than left to the block's
+		// own zero because the two are the same bytes and only one of them says why: unanswered,
+		// the name is reported as a value this engine owes, which it does not.
+		builder.add("centerDepthSmooth", UniformShape.FLOAT, (_, out) -> out.set(0.0F));
 
 		// The colour the game modulates a whole draw by, which for the sky is where its colour is:
 		// the mesh of a sky disc carries a position and nothing else, and the mesh of the sunrise
