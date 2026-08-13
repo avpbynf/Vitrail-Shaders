@@ -13,7 +13,13 @@
   <img src="https://img.shields.io/badge/loader-NeoForge-1B2A6B?style=flat-square" alt="NeoForge">
   <img src="https://img.shields.io/badge/renderer-Vulkan-7B3FA0?style=flat-square" alt="Vulkan">
   <img src="https://img.shields.io/badge/licence-LGPL--3.0-F2B134?style=flat-square" alt="LGPL-3.0-only">
-  <img src="https://img.shields.io/badge/status-in%20development-6E7681?style=flat-square" alt="In development">
+  <img src="https://img.shields.io/badge/status-experimental-C1440E?style=flat-square" alt="Experimental">
+</p>
+
+<p align="center">
+  <b>This is experimental.</b> The Vulkan backend is marked experimental by the game itself, and
+  Vitrail does not yet draw the whole frame through your pack.<br>
+  Packs load and run; they do not yet look entirely like themselves.
 </p>
 
 ---
@@ -47,7 +53,7 @@ on does not mean giving up the packs you already use.
 
 ## Status
 
-In development, and moving quickly. The core is in place: point Vitrail at a
+Experimental, and moving quickly. The core is in place: point Vitrail at a
 pack and it loads it, settings and all, translates its programs once, and runs
 its frame on the Vulkan backend, in the order the format prescribes. Drawn
 through the pack's own programs today: the world's terrain and water, the shadow
@@ -70,6 +76,14 @@ inside the entity window, the eyes, the glint, the beacon beam and the text of a
 name plate. Until all of it goes through the pack, packs run but do not yet look
 entirely like themselves. Expect visible differences and rough edges rather than
 a finished picture, and expect them to shrink release by release.
+
+That list is what "experimental" means here, and it is worth taking literally: the
+picture a given pack produces changes from one release to the next, and it will keep
+changing until the whole frame goes through the pack. If what you want today is a
+finished picture, use [Iris](https://github.com/IrisShaders/Iris) on the OpenGL
+backend instead. It does that job well, and it is the reference this engine is
+checked against. Vitrail is for people who want the Vulkan backend on and will
+trade image quality for it while that list shrinks.
 
 ## Quick start
 
