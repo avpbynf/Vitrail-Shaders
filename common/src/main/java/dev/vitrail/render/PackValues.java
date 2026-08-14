@@ -188,10 +188,13 @@ public final class PackValues {
 	 * sky is the loud one: the game puts the sun, the moon and the stars where they belong by
 	 * pushing a rotation onto its own stack, so a sky pass hands that matrix in here; see
 	 * {@link dev.vitrail.uniform.ViewSource#passModelView} for what answering it with the camera's
-	 * would do. The entities are the quiet one: the pieces the game gives a layering transform are
-	 * moved a hair along the view axis so that an armour piece does not fight the skin it covers,
-	 * most towards the viewer and one away from it, and that hair is a modification of this matrix
-	 * and of nothing else.
+	 * would do. The hand is the quiet one: it is drawn under an identity model view, the whole of
+	 * its transform sitting in the projection, so the frame's camera would be the one wrong answer.
+	 * <p>
+	 * The rest of the entity door hands in nothing, and that is worth a line because it used to: what
+	 * varies with the DRAW there, the depth nudge of a render type included, is read out of the
+	 * game's own per draw block instead, {@code LegacyGlsl.readsDrawModelView} saying which passes
+	 * and why.
 	 */
 	public void modelView(Matrix4fc matrix) {
 		this.state.passModelView(matrix);
@@ -201,8 +204,8 @@ public final class PackValues {
 	 * Which projection the next block is written for: the pass's own, or null for the frame's. Set
 	 * beside the model view and answering the same kind of question.
 	 * <p>
-	 * The hand is the only family that sets one, and it is not a nudge like the entities' but a
-	 * volume of its own: a head-up field of view and a clip depth squeezed to an eighth. See
+	 * The hand is the only family that sets one, and it is a volume of its own rather than the
+	 * frame's moved: a head-up field of view and a clip depth squeezed to an eighth. See
 	 * {@link dev.vitrail.uniform.ViewSource#passProjection} for what answering it with the frame's
 	 * would do.
 	 */

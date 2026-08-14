@@ -256,11 +256,10 @@ final class EntityProgram implements DumpedProgram {
 	/**
 	 * The pipeline this entity piece is drawn with, compiled before this engine opens its own pass.
 	 *
-	 * @param modelView  the matrix the game would have drawn this piece with, which is the frame's
-	 *                   camera for most of them and null for those. A piece that carries a layering
-	 *                   transform hands in the camera with the transform applied instead, so that
-	 *                   what the game moves along the view axis is moved here too. The halves carry
-	 *                   the same ones: a twin is made from its mob row and keeps its transform
+	 * @param modelView  the matrix this pass is drawn under, which is the frame's camera for every
+	 *                   piece but the hand's and null for those. It is what the derived uniforms are
+	 *                   built from and no longer what places the geometry: {@code EntityDraw.Element}
+	 *                   says why the depth nudge of a render type is not in it
 	 * @param projection the volume the piece is drawn in, or null for the frame's. Only the hand
 	 *                   passes one, and it must: it is drawn under the head-up field of view and a
 	 *                   clip depth squeezed to an eighth, which is a matrix of its own rather than a

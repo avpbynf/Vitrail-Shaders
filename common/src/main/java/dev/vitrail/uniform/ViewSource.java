@@ -51,10 +51,11 @@ public interface ViewSource {
 	 * The walk bob on its own, which is the matrix {@link #passModelView()} is built by multiplying
 	 * the pass's own onto.
 	 * <p>
-	 * Published for one reader and it is not a convenience: a pass whose model view belongs to the
+	 * Published rather than kept, and it is not a convenience: a pass whose model view belongs to the
 	 * DRAW rather than to the run has to form the same product in the shader, and the only piece of
-	 * it that is not already there is this one. The glint is that pass, and
-	 * {@link dev.vitrail.glsl.LegacyGlsl#CAMERA_BOB} carries why.
+	 * it that is not already there is this one. Which passes those are is
+	 * {@link dev.vitrail.glsl.LegacyGlsl#readsDrawModelView}, and
+	 * {@link dev.vitrail.glsl.LegacyGlsl#CAMERA_BOB} carries why the factor has to be a name.
 	 * <p>
 	 * The identity on a frame this engine could not split, exactly as the pass matrix is then the
 	 * game's own.

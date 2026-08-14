@@ -1976,10 +1976,10 @@ public final class PackChain {
 		// this runs. Left standing, every composite of the frame would be told it was drawing the moon.
 		this.values.renderStage(RenderStage.NONE);
 
-		// And the same again for the three values a pass writes beside it. Three geometry families
-		// set a matrix of their own: the sky pushes the rotation of the day, the entities push the
-		// depth nudge the game gives an armour piece, and the hand sets a whole projection, the
-		// head-up volume with its clip depth squeezed to an eighth. Whichever drew last would
+		// And the same again for the three values a pass writes beside it. Two geometry families
+		// set a matrix of their own: the sky pushes the rotation of the day, and the hand is drawn
+		// under an identity model view and sets a whole projection besides, the head-up volume with
+		// its clip depth squeezed to an eighth. Whichever drew last would
 		// otherwise stand in for the camera in every composite of the frame - the hand's case is
 		// the worst of the three, the squeezed volume reprojecting the whole screen - and in the
 		// decoded dump beside it. The frame boundary drops them as

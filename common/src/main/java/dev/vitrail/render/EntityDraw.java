@@ -26,10 +26,8 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.StagedVertexBuffer;
-import net.minecraft.client.renderer.rendertype.LayeringTransform;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 
-import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 
 import java.io.IOException;
@@ -44,7 +42,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
@@ -217,13 +214,6 @@ public final class EntityDraw {
 	 *                  {@code ALPHA_CUTOUT} define for that pipeline, a tenth where there is one and
 	 *                  no test at all where there is none, and Iris gives the entity programs the
 	 *                  same tenth
-	 * @param layering  the depth nudge the game gives this piece before it draws it, and the one
-	 *                  thing in this record that is tabulated rather than read off the pipeline.
-	 *                  {@code RenderType.prepare} takes it from the render type and not from the
-	 *                  pipeline, and applies it to the matrix it writes into the draw's dynamic
-	 *                  transforms, which is a buffer nothing can read back. The association below is
-	 *                  therefore ours; the transform itself is the game's own constant, so what it
-	 *                  does to the matrix stays the game's answer
 	 * @param stage         what the pack is told it is drawing. {@code NONE} for a mob, which is not a
 	 *                      reading of what the pass is but Iris's answer, and {@link EntityProgram}
 	 *                      has the four places it was read from; {@code BLOCK_ENTITIES} for a block
@@ -238,17 +228,11 @@ public final class EntityDraw {
 	 *                      carries false here
 	 */
 	record Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
-			LayeringTransform layering, RenderStage stage, boolean afterDeferred) {
-
-		/** A piece the game draws where the depth says, which is most of the table below. */
-		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest) {
-			this(pipeline, element, program, alphaTest, LayeringTransform.NO_LAYERING);
-		}
+			RenderStage stage, boolean afterDeferred) {
 
 		/** A piece of the mob half, which is every row of the table above. */
-		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
-				LayeringTransform layering) {
-			this(pipeline, element, program, alphaTest, layering, RenderStage.NONE, false);
+		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest) {
+			this(pipeline, element, program, alphaTest, RenderStage.NONE, false);
 		}
 
 		/**
@@ -370,44 +354,26 @@ public final class EntityDraw {
 		}
 
 		/**
-		 * The model view the game would have handed this draw, or null for the frame's own camera.
+		 * The model view this pass is drawn under, or null for the frame's own camera.
 		 * <p>
-		 * Taken from {@code RenderSystem} and modified here exactly as {@code RenderType.prepare}
-		 * does it, rather than reproduced. The formula belongs to the projection in force and is not
-		 * one formula: under a perspective it scales the matrix by {@code 1 - bias/4096}, so about a
-		 * quarter of a per mille, and under an orthographic it TRANSLATES by {@code bias/512}. A copy
-		 * of either here would be a second answer to drift from. The stack holds the level's own view
-		 * for the whole of the level render, {@code LevelRenderer.render} pushing it before the
-		 * features are prepared and popping it after they have executed, so what is read at the draw
-		 * is what was read at the prepare.
+		 * <strong>The hand is the one piece that hands one in, and the depth nudge of a render type
+		 * is deliberately not in it.</strong> Where a piece LANDS comes from the matrix the game
+		 * wrote for that draw, nudge included, which every program here reads through
+		 * {@link LegacyGlsl#GAME_MODEL_VIEW}; what is left for this one to answer is everything
+		 * DERIVED from the model view, the inverse and the normal matrix, and Iris builds those from
+		 * {@code RenderSystem.getModelViewMatrix()} at program setup
+		 * ({@code pipeline/programs/ExtendedShader.java:181-189}), which is the stack and carries no
+		 * nudge. Putting one here would be a normal matrix a quarter of a per mille away from the
+		 * reference's for the four rows that carry a transform, bought for nothing.
 		 * <p>
-		 * What it is for: the pieces below that carry a transform are moved a hair along the view axis
-		 * so that they do not fight the skin they cover, and <strong>they do not all move the same
-		 * way</strong>.
-		 * The three that carry {@code VIEW_OFFSET_Z_LAYERING} pass a bias of {@code +1} and come
-		 * towards the viewer; {@code ENTITY_SOLID_Z_OFFSET_FORWARD} passes {@code -1} and goes away
-		 * from it, its name being about the geometry it is meant to sit behind. Without any of it,
-		 * every armour piece on every player and every mob is drawn at the depth of the body
-		 * underneath, which is the one thing in this family that is visible from across a room.
+		 * Answering null for the hand would be the one place this returns the wrong matrix rather
+		 * than a spare one: null means the frame's camera, and the hand is not drawn under the
+		 * frame's camera. What the stack holds while a hand pass runs is the identity, {@link
+		 * HandDraw} putting the whole of the hand's transform in the projection, so what is read
+		 * here is what the game itself would have read at that draw.
 		 */
 		private Matrix4fc modelView() {
-			Consumer<Matrix4f> modifier = this.layering.getModifier();
-			// A hand piece always hands one in, transform or none, and answering null there would be
-			// the one place this returns the wrong matrix rather than a spare one: null means the
-			// frame's camera, and the hand is not drawn under the frame's camera. What the stack holds
-			// while a hand pass runs is the identity, HandDraw putting the whole of the hand's
-			// transform in the projection, so what is read here is what the game itself would have
-			// read at that draw.
-			if (modifier == null && !hand()) {
-				return null;
-			}
-
-			Matrix4f matrix = RenderSystem.getModelViewMatrixCopy();
-			if (modifier != null) {
-				modifier.accept(matrix);
-			}
-
-			return matrix;
+			return hand() ? RenderSystem.getModelViewMatrixCopy() : null;
 		}
 	}
 
@@ -533,16 +499,13 @@ public final class EntityDraw {
 	static {
 		put(new Element(RenderPipelines.ENTITY_SOLID, "solid", ENTITIES, AlphaTest.OFF));
 		put(new Element(RenderPipelines.ENTITY_SOLID_Z_OFFSET_FORWARD, "solid_offset", ENTITIES,
-				AlphaTest.OFF, LayeringTransform.VIEW_OFFSET_Z_LAYERING_FORWARD));
+				AlphaTest.OFF));
 		put(new Element(RenderPipelines.ENTITY_CUTOUT, "cutout", ENTITIES, CUTOUT));
 		put(new Element(RenderPipelines.ENTITY_CUTOUT_CULL, "cutout_cull", ENTITIES, CUTOUT));
-		put(new Element(RenderPipelines.ENTITY_CUTOUT_Z_OFFSET, "cutout_offset", ENTITIES, CUTOUT,
-				LayeringTransform.VIEW_OFFSET_Z_LAYERING));
+		put(new Element(RenderPipelines.ENTITY_CUTOUT_Z_OFFSET, "cutout_offset", ENTITIES, CUTOUT));
 		put(new Element(RenderPipelines.ENTITY_CUTOUT_DISSOLVE, "cutout_dissolve", ENTITIES, CUTOUT));
-		put(new Element(RenderPipelines.ARMOR_CUTOUT_NO_CULL, "armor", ENTITIES, CUTOUT,
-				LayeringTransform.VIEW_OFFSET_Z_LAYERING));
-		put(new Element(RenderPipelines.ARMOR_DECAL_CUTOUT_NO_CULL, "armor_decal", ENTITIES, CUTOUT,
-				LayeringTransform.VIEW_OFFSET_Z_LAYERING));
+		put(new Element(RenderPipelines.ARMOR_CUTOUT_NO_CULL, "armor", ENTITIES, CUTOUT));
+		put(new Element(RenderPipelines.ARMOR_DECAL_CUTOUT_NO_CULL, "armor_decal", ENTITIES, CUTOUT));
 		put(new Element(RenderPipelines.END_CRYSTAL_BEAM, "crystal_beam", ENTITIES, CUTOUT));
 		put(new Element(RenderPipelines.ITEM_CUTOUT, "item", ENTITIES, CUTOUT));
 
@@ -553,15 +516,14 @@ public final class EntityDraw {
 		put(new Element(RenderPipelines.ENTITY_TRANSLUCENT_CULL, "translucent_cull",
 				ENTITIES_TRANSLUCENT, CUTOUT));
 		put(new Element(RenderPipelines.ARMOR_TRANSLUCENT, "armor_translucent", ENTITIES_TRANSLUCENT,
-				CUTOUT, LayeringTransform.VIEW_OFFSET_Z_LAYERING));
+				CUTOUT));
 		put(new Element(RenderPipelines.ITEM_TRANSLUCENT, "item_translucent", ENTITIES_TRANSLUCENT,
 				CUTOUT));
 		put(new Element(RenderPipelines.BANNER_PATTERN, "banner", ENTITIES_TRANSLUCENT, CUTOUT));
 		// The dark oval a mob is given on the ground, the game's own entity_shadow render type. Named
 		// for what it is rather than after that type: this class already draws into a shadow map, and
 		// an element called shadow would read as a piece of it in the log and in the identifier.
-		put(new Element(RenderPipelines.ENTITY_SHADOW, "ground_shadow", ENTITIES_TRANSLUCENT, CUTOUT,
-				LayeringTransform.VIEW_OFFSET_Z_LAYERING));
+		put(new Element(RenderPipelines.ENTITY_SHADOW, "ground_shadow", ENTITIES_TRANSLUCENT, CUTOUT));
 	}
 
 	/**
@@ -651,7 +613,7 @@ public final class EntityDraw {
 	private static Element blockTwin(Element mob) {
 		if (mob.blended()) {
 			return new Element(mob.pipeline(), "block_" + mob.element(), BLOCK_TRANSLUCENT, CUTOUT,
-					mob.layering(), RenderStage.BLOCK_ENTITIES, false);
+					RenderStage.BLOCK_ENTITIES, false);
 		}
 
 		boolean ownProgram = mob.pipeline() != RenderPipelines.END_CRYSTAL_BEAM
@@ -659,7 +621,7 @@ public final class EntityDraw {
 
 		return new Element(mob.pipeline(), "block_" + mob.element(),
 				ownProgram ? BLOCK : mob.program(), ownProgram ? CUTOUT : mob.alphaTest(),
-				mob.layering(), RenderStage.BLOCK_ENTITIES, false);
+				RenderStage.BLOCK_ENTITIES, false);
 	}
 
 	/** What the hand asks for in its solid pass, and what its blending pass asks for instead. */
@@ -711,7 +673,7 @@ public final class EntityDraw {
 			RenderStage stage, boolean afterDeferred) {
 		ELEMENTS.values().stream()
 				.map(mob -> new Element(mob.pipeline(), prefix + mob.element(), program, CUTOUT,
-						mob.layering(), stage, afterDeferred))
+						stage, afterDeferred))
 				.forEach(element -> into.put(element.pipeline(), element));
 	}
 
@@ -759,7 +721,7 @@ public final class EntityDraw {
 		ELEMENTS.values().stream()
 				.filter(mob -> mob.pipeline() != RenderPipelines.ENTITY_SHADOW)
 				.map(mob -> new Element(mob.pipeline(), "shadow_" + mob.element(), SHADOW_ENTITIES,
-						CUTOUT, mob.layering(), RenderStage.ENTITIES, false))
+						CUTOUT, RenderStage.ENTITIES, false))
 				.forEach(element -> SHADOW_ELEMENTS.put(element.pipeline(), element));
 	}
 
@@ -834,24 +796,18 @@ public final class EntityDraw {
 	 * One of those four: the game's own glint pipeline, under the phase of the pass it is drawn in and
 	 * on the side of the deferred stage that pass falls.
 	 * <p>
-	 * <strong>No layering transform, and here that is not the same claim as everywhere else in this
-	 * class.</strong> Every other row carries the nudge its render type applies, because one pipeline
-	 * of theirs is one render type family and so one nudge. This pipeline is four render types and TWO
-	 * nudges: {@code ARMOR_ENTITY_GLINT} sets {@code VIEW_OFFSET_Z_LAYERING} so that it lands on the
-	 * armour it covers, and the other three set none
-	 * ({@code rendertype/RenderTypes.java:252} against {@code :255,263,270}). No column here could
-	 * hold both, so the nudge is not held here at all.
-	 * <p>
-	 * <strong>Nothing rests on that any more, and it is worth saying because this row used to be the
-	 * exception.</strong> Every piece the door records from the camera now reads the model view the
-	 * game prepared its draw with, out of the game's own block, which
-	 * {@link LegacyGlsl#GAME_MODEL_VIEW} sets out and which is what Iris does for every vanilla
-	 * program. So the nudge reaches all of them from the same place, and the column below is what is
-	 * left for the derived uniforms alone.
+	 * <strong>No row of this class holds the depth nudge its render type applies, and this pipeline is
+	 * why no row could.</strong> Every other one is a render type family and so one nudge; this one is
+	 * four render types and TWO, {@code ARMOR_ENTITY_GLINT} setting
+	 * {@code LayeringTransform.VIEW_OFFSET_Z_LAYERING} so that it lands on the armour it covers and
+	 * the other three setting none ({@code rendertype/RenderTypes.java:252} against
+	 * {@code :255,263,270}). What settled it for the whole class is that the nudge does not need
+	 * holding: it is already in the matrix the game wrote for that draw, which every piece the door
+	 * records from the camera reads through {@link LegacyGlsl#GAME_MODEL_VIEW}.
 	 */
 	private static Element glint(String element, RenderStage stage, boolean afterDeferred) {
 		return new Element(RenderPipelines.GLINT, element, ARMOR_GLINT, AlphaTest.NON_ZERO,
-				LayeringTransform.NO_LAYERING, stage, afterDeferred);
+				stage, afterDeferred);
 	}
 
 	/**
@@ -1325,11 +1281,10 @@ public final class EntityDraw {
 		}
 
 		// The matrix belongs to the RUN and not to the draw, which is what makes it settleable here:
-		// the depth nudge is the render type's and every draw of a run is one piece of the table, so
-		// the whole run shares the one the piece carries. Written into the block a few lines down.
-		// The volume goes in beside the matrix and comes from the same place the matrix does, which is
-		// the pass being drawn: null for everything but the hand, and for the hand the one it was
-		// really submitted under. Asked of HandDraw rather than carried on the row, so that the two
+		// what varies with the draw is read out of the game's own block instead, Element.modelView
+		// saying what is left for this one. Null for everything but the hand, and written into the
+		// block a few lines down. The volume goes in beside it and comes from the same place, the
+		// pass being drawn; it is asked of HandDraw rather than carried on the row, so that the two
 		// cannot be two answers: it holds nothing between its passes.
 		RenderPipeline pipeline = program.prepare(device, element.modelView(), HandDraw.volume());
 		if (pipeline == null) {

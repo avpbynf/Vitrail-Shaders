@@ -156,10 +156,9 @@ public final class GeometryValues {
 				world.passColour().w()));
 
 		// The PASS's model view and not the frame's, and the two are one matrix for every pass but
-		// the sky's and the four entity pieces the game nudges towards the viewer. What separates
-		// them is written out in ViewSource.passModelView: the game
-		// puts the sun where it is by pushing a rotation onto its own stack, and a pack reads that
-		// rotation here while reading the camera under gbufferModelView, using both at once.
+		// the sky's and the hand's. What separates them is written out in ViewSource.passModelView:
+		// the game puts the sun where it is by pushing a rotation onto its own stack, and a pack reads
+		// that rotation here while reading the camera under gbufferModelView, using both at once.
 		//
 		// The families the entity door records from the camera no longer read this name at all: their
 		// gl_ModelViewMatrix goes to the game's own per draw block, LegacyGlsl.readsDrawModelView
