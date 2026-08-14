@@ -1,0 +1,43 @@
+# Changelog
+
+What each version changed, written for somebody who runs the mod rather than builds it. Why a
+change was made is in the commit that made it, and where it is a mechanism rather than a decision
+it is in `docs/`.
+
+A version number here, the tag that released it and the number inside the jar are one number: the
+release workflow refuses a tag that disagrees with `mod_version` in `gradle.properties` rather than
+publishing a jar named after one thing and built from another. The stores add the loader after a
+plus, because each of them files an upload per loader and has nowhere else to put the distinction.
+
+Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
+what the next one holds.
+
+## Unreleased
+
+### Added
+
+- **Fabric.** One jar per loader, carrying the same engine. Everything that draws is shared; what
+  differs is the way in, which on NeoForge is a public event and on Fabric a mixin on the very line
+  that event is posted from. Fabric API is used for the settings screen and for nothing else.
+- The stores now receive both jars, each filed under its own loader, with its own dependencies.
+- The mod is on Modrinth beside CurseForge.
+
+### Changed
+
+- The loader-independent half of the mod, which is most of it, moved into a module of its own. No
+  behaviour changes with it: the NeoForge jar carries the same classes it carried before, name for
+  name once the packages are renamed.
+- The ordered work of each stage of the frame is written once, where both loaders call into it,
+  rather than once per loader. The order of those lines is the design rather than a detail, and two
+  copies of it would drift.
+
+### Fixed
+
+- An enchanted item held in the hand is drawn by the pack's own program instead of the game's.
+- A translucent block held in the hand is served by the water pass, as it is in the reference.
+- The view matrix a draw was prepared with is read where the game prepared it, rather than
+  reconstructed.
+
+## 0.1.0-alpha.1
+
+First release. OptiFine-format shader packs on Minecraft's native Vulkan renderer, NeoForge only.

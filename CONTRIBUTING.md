@@ -25,6 +25,17 @@ and comes from the same file.
 
 A tag is pushed on `main` and on nothing else, which is what keeps the sentence above true.
 
+## Changelog
+
+`CHANGELOG.md` carries an `Unreleased` section, and a change a player would notice is written into
+it in the same commit that makes the change, not gathered from the log afterwards. Gathering
+afterwards is how a subject line ends up standing in for an entry, and the two are not the same
+thing: a subject says what the commit did to the tree, an entry says what the version does
+differently to somebody running it. A refactor that changes nothing a player sees gets no entry.
+
+Raising `mod_version` is what closes the section: `Unreleased` becomes that number, and the section
+is what the release body and both stores are handed.
+
 ## Commits
 
 One logical change per commit. Short imperative subject, no trailing period, 72 columns

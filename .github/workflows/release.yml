@@ -34,8 +34,9 @@ on:
       # than by the check below, which would have queued a runner and checked the tree out first.
       - "v[0-9]*"
   # For a release already out. The changelog the stores are given is the release body as it stands
-  # when the run starts, so a body written by hand after the tag was pushed reaches them by running
-  # this again on that tag, and by no other road.
+  # when the run starts, and on a first run that body is this version's entry in CHANGELOG.md. So a
+  # body edited by hand after the tag was pushed reaches the stores by running this again on that
+  # tag, and by no other road.
   workflow_dispatch:
     inputs:
       tag:
@@ -110,6 +111,27 @@ jobs:
             *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      # Ahead of the build, and for the reason the tag check is ahead of it: a version nobody wrote
+      # an entry for is a mistake worth reporting in seconds rather than after Minecraft has been
+      # decompiled. It is also the only thing standing between a release and an empty body, since
+      # what the stores are handed is read back off that body further down.
+      - name: Take this version's changelog entry
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Everything under this version's heading, up to the next one. sed drops the blank line
+          # the heading is followed by, which is punctuation of the file rather than content.
+          awk -v heading="## $VERSION" '
+            $0 == heading { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md | sed '/./,$!d' > changelog.md
+
+          if [ ! -s changelog.md ]; then
+            echo "::error::CHANGELOG.md carries no entry under '## $VERSION'"
+            exit 1
+          fi
+
       # The same gradlew build a contributor runs. What it refuses is whatever build.gradle refuses
       # on the day this runs.
       - run: ./gradlew build
@@ -155,9 +177,13 @@ jobs:
             gh release upload "$TAG" "$NEOFORGE_JAR" "$FABRIC_JAR" --clobber
             gh release edit "$TAG" --draft=false
           else
+            # The body is this version's changelog entry and not the API's generated list of merged
+            # pull requests. There are none to generate from here, the history being linear and
+            # pushed rather than merged, so what that flag produced was a bare compare link under a
+            # heading; and a body written by hand is the whole point of keeping the file.
             gh release create "$TAG" "$NEOFORGE_JAR" "$FABRIC_JAR" \
               --title "$TAG" \
-              --generate-notes \
+              --notes-file changelog.md \
               --prerelease="$PRERELEASE"
           fi
 
