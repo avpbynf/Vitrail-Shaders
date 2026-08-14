@@ -38,6 +38,12 @@
 <p align="center">
   <sub>BSL Shaders.</sub>
 </p>
+<p align="center">
+  <img src="docs/images/screenshot-underwater.jpg" alt="Looking up at the sun from under the sea, shafts of light spreading from the surface, rendered by Bliss Shaders on the Vulkan backend" width="830">
+</p>
+<p align="center">
+  <sub>Bliss Shaders.</sub>
+</p>
 </details>
 
 Minecraft 26.2 ships a native Vulkan renderer alongside the OpenGL one. The
