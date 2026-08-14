@@ -1,5 +1,6 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.platform.PatchedMethods;
 import dev.vitrail.render.WeatherDraw;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -13,9 +14,6 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.renderer.WeatherEffectRenderer;
 import net.minecraft.client.renderer.state.GameRenderState;
-import net.minecraft.client.renderer.state.level.LevelRenderState;
-import net.minecraft.client.renderer.state.level.WeatherRenderState;
-import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -76,12 +74,9 @@ public abstract class WeatherEffectRendererMixin {
 	 * being handed the game's on top puts two curtains in the air. Iris cancels the same method for
 	 * the same word.
 	 */
-	@Inject(method = "render(Lnet/minecraft/world/phys/Vec3;"
-			+ "Lnet/minecraft/client/renderer/state/level/WeatherRenderState;"
-			+ "Lnet/minecraft/client/renderer/state/level/LevelRenderState;)V", require = 1,
-			at = @At("HEAD"), cancellable = true)
-	private void vitrail$refuse(Vec3 cameraPos, WeatherRenderState state, LevelRenderState level,
-			CallbackInfo callback) {
+	@Inject(method = { PatchedMethods.WEATHER_RENDER, PatchedMethods.WEATHER_RENDER_WIDENED },
+			require = 1, at = @At("HEAD"), cancellable = true)
+	private void vitrail$refuse(CallbackInfo callback) {
 		if (!WeatherDraw.draws()) {
 			callback.cancel();
 		}
@@ -102,9 +97,8 @@ public abstract class WeatherEffectRendererMixin {
 	 * {@code Minecraft.useShaderTransparency} to the frame's own render state, so the target here is
 	 * not the one Iris names; what it decides is the same line of the same method.
 	 */
-	@WrapOperation(method = "render(Lnet/minecraft/world/phys/Vec3;"
-			+ "Lnet/minecraft/client/renderer/state/level/WeatherRenderState;"
-			+ "Lnet/minecraft/client/renderer/state/level/LevelRenderState;)V", require = 1,
+	@WrapOperation(method = { PatchedMethods.WEATHER_RENDER, PatchedMethods.WEATHER_RENDER_WIDENED },
+			require = 1,
 			at = @At(value = "INVOKE",
 					target = "Lnet/minecraft/client/renderer/state/GameRenderState;"
 							+ "useShaderTransparency()Z"))
@@ -118,9 +112,8 @@ public abstract class WeatherEffectRendererMixin {
 	 * @param game the pipeline the renderer picked earlier in this same method, out of which the
 	 *             blend, the depth window, the culling and the topology of ours are read
 	 */
-	@WrapOperation(method = "render(Lnet/minecraft/world/phys/Vec3;"
-			+ "Lnet/minecraft/client/renderer/state/level/WeatherRenderState;"
-			+ "Lnet/minecraft/client/renderer/state/level/LevelRenderState;)V", require = 1,
+	@WrapOperation(method = { PatchedMethods.WEATHER_RENDER, PatchedMethods.WEATHER_RENDER_WIDENED },
+			require = 1,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/CommandEncoder;createRenderPass("
 							+ "Ljava/util/function/Supplier;"
@@ -141,9 +134,8 @@ public abstract class WeatherEffectRendererMixin {
 				: encoder.createRenderPass(descriptor);
 	}
 
-	@WrapOperation(method = "render(Lnet/minecraft/world/phys/Vec3;"
-			+ "Lnet/minecraft/client/renderer/state/level/WeatherRenderState;"
-			+ "Lnet/minecraft/client/renderer/state/level/LevelRenderState;)V", require = 1,
+	@WrapOperation(method = { PatchedMethods.WEATHER_RENDER, PatchedMethods.WEATHER_RENDER_WIDENED },
+			require = 1,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/RenderPass;setPipeline("
 							+ "Lcom/mojang/blaze3d/pipeline/RenderPipeline;)V"))

@@ -1,13 +1,12 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.platform.PatchedMethods;
 import dev.vitrail.render.SkyDraw;
 
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.framegraph.FrameGraphBuilder;
+import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.level.material.FogType;
-import org.joml.Matrix4fc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -23,8 +22,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * none of the six elements is drawn, so none of the pack's sky programs runs, nothing opens its
  * colour targets and a head under water is a frame with no sky in it at all.
  * <p>
- * <strong>So that mixin is switched off in {@code neoforge.mods.toml} and this is the copy that
- * answers in its place</strong>, conditioned on which engine draws the sky. A copy and not a wrap of
+ * <strong>So that mixin is switched off in this mod's own metadata, in the {@code sodium:options}
+ * block of {@code neoforge.mods.toml} and of {@code fabric.mod.json} alike, and this is the copy
+ * that answers in its place</strong>, conditioned on which engine draws the sky. A copy and not a wrap of
  * Sodium's own: the {@code sodium:options} block is a whole feature package at a time, which is the
  * only granularity offered, and leaving it on would leave nothing here to condition. Iris takes the
  * same two steps for the same reason.
@@ -50,13 +50,10 @@ public abstract class LevelRendererSkyMixin {
 	 * game itself refuses a sky for, powder snow and lava, and the mob effect that blinds the camera.
 	 * Water is the whole of what Sodium's own answer adds to those.
 	 */
-	@Inject(method = "addSkyPass(Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder;"
-			+ "Lnet/minecraft/client/renderer/state/level/CameraRenderState;"
-			+ "Lcom/mojang/blaze3d/buffers/GpuBufferSlice;"
-			+ "Lorg/joml/Matrix4fc;)V",
-			at = @At("HEAD"), cancellable = true)
-	private void vitrail$sky(FrameGraphBuilder frame, CameraRenderState cameraState,
-			GpuBufferSlice skyFog, Matrix4fc modelView, CallbackInfo callback) {
+	@Inject(method = { PatchedMethods.SKY_PASS, PatchedMethods.SKY_PASS_WIDENED },
+			require = 1, at = @At("HEAD"), cancellable = true)
+	private void vitrail$sky(CallbackInfo callback,
+			@Local(argsOnly = true) CameraRenderState cameraState) {
 		if (cameraState.fogType != FogType.NONE && !SkyDraw.serves()) {
 			callback.cancel();
 		}

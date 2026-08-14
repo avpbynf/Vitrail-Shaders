@@ -10,6 +10,7 @@
 		"AfterLevelMixin",
 		"AtlasStitchedMixin",
 		"ClientLifecycleMixin",
+		"ClientSetupMixin",
 		"FrameGraphMixin",
 		"LevelStagesMixin"
 	]
