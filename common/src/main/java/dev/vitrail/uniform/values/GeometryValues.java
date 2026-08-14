@@ -141,9 +141,10 @@ public final class GeometryValues {
 		builder.add(LegacyGlsl.GLINT_ALPHA, UniformShape.FLOAT,
 				(world, out) -> out.set(world.glintAlpha()));
 
-		// The left factor of every pass model view of the frame, published for the one pass that has
-		// to form that product in the shader rather than read it ready made. Here for the same reason
-		// as the line above: a full screen pass has no model view to build.
+		// The left factor of every pass model view of the frame, published for the passes that form
+		// that product in the shader rather than read it ready made, which LegacyGlsl.CAMERA_BOB
+		// names. Here for the same reason as the line above: a full screen pass has no model view to
+		// build.
 		builder.add(LegacyGlsl.CAMERA_BOB, UniformShape.MAT4,
 				(world, out) -> out.set(world.cameraBob()));
 
@@ -159,6 +160,11 @@ public final class GeometryValues {
 		// them is written out in ViewSource.passModelView: the game
 		// puts the sun where it is by pushing a rotation onto its own stack, and a pack reads that
 		// rotation here while reading the camera under gbufferModelView, using both at once.
+		//
+		// The families the entity door records from the camera no longer read this name at all: their
+		// gl_ModelViewMatrix goes to the game's own per draw block, LegacyGlsl.readsDrawModelView
+		// saying which and why. What they still take from here is the inverse and the normal matrix
+		// below, which Iris also leaves on its own per pass answer.
 		builder.add("of_ModelViewMatrix", UniformShape.MAT4,
 				(world, out) -> out.set(world.passModelView()));
 		builder.add("of_ModelViewMatrixInverse", UniformShape.MAT4,

@@ -138,9 +138,10 @@ public final class GlslTranslator {
 	private static final String SAMPLER_2D = "sampler2D";
 
 	/**
-	 * The model view a glint reads, written once and spelled into three rewrites so that they cannot
-	 * drift: the bob this engine publishes in the model view, times the matrix the game prepared that
-	 * draw with. {@link #rewriteGameModelView} carries the whole argument.
+	 * The model view a pass drawn from a game prepared draw reads, written once and spelled into
+	 * three rewrites so that they cannot drift: the bob this engine publishes in the model view,
+	 * times the matrix the game prepared that draw with. {@link #rewriteGameModelView} carries the
+	 * whole argument.
 	 */
 	private static final String DRAW_MODEL_VIEW =
 			"(" + LegacyGlsl.CAMERA_BOB + " * " + LegacyGlsl.GAME_MODEL_VIEW + ")";
@@ -603,22 +604,23 @@ public final class GlslTranslator {
 			}
 		}
 
-		// The two names the glint alone reads: the strength its vertex colour is made of, and the bob
-		// its model view is made of. Asked of the inputs and not of the program name, unlike
-		// everything above: what these answer for belongs to the MESH and to the draw behind it, and
-		// the same gbuffers_textured serves a glint under this constant and a sky pass under another.
-		// Each stage adds what it names and the union hands both to both, the block being the
-		// program's rather than the stage's.
-		if (this.inputs == VertexInputs.GLINT) {
-			if (this.used.contains("of_Color")) {
-				block.add(TranslatedUnit.Uniform.of(LegacyGlsl.GLINT_ALPHA,
-						"float " + LegacyGlsl.GLINT_ALPHA));
-			}
+		// The strength a glint's vertex colour is made of. Asked of the inputs and not of the program
+		// name, unlike everything above: what it answers for belongs to the MESH, and the same
+		// gbuffers_textured serves a glint under this constant and a sky pass under another. Each
+		// stage adds what it names and the union hands both to both, the block being the program's
+		// rather than the stage's.
+		if (this.inputs == VertexInputs.GLINT && this.used.contains("of_Color")) {
+			block.add(TranslatedUnit.Uniform.of(LegacyGlsl.GLINT_ALPHA,
+					"float " + LegacyGlsl.GLINT_ALPHA));
+		}
 
-			if (this.used.contains(LegacyGlsl.CAMERA_BOB)) {
-				block.add(TranslatedUnit.Uniform.of(LegacyGlsl.CAMERA_BOB,
-						"mat4 " + LegacyGlsl.CAMERA_BOB));
-			}
+		// The bob every pass that builds its model view in the shader multiplies by, and asked of
+		// nothing but the name: it is a name no pack writes, so it is here only where this
+		// translation put it, which rewriteGameModelView does and only for the passes
+		// LegacyGlsl.readsDrawModelView answers for.
+		if (this.used.contains(LegacyGlsl.CAMERA_BOB)) {
+			block.add(TranslatedUnit.Uniform.of(LegacyGlsl.CAMERA_BOB,
+					"mat4 " + LegacyGlsl.CAMERA_BOB));
 		}
 
 		block.addAll(asUniforms(this.blockMembers));
@@ -749,7 +751,7 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			if (this.inputs == VertexInputs.GLINT && rewriteGameModelView(index, name)) {
+			if (LegacyGlsl.readsDrawModelView(this.program) && rewriteGameModelView(index, name)) {
 				continue;
 			}
 
@@ -907,26 +909,47 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Sends a glint's model view to the game's own block, with the bob put back on the front.
+	 * Sends the model view of a pass drawn from the camera to the game's own block, with the bob put
+	 * back on the front.
 	 * <p>
-	 * <strong>The one family whose nudge cannot be tabulated</strong>, and
-	 * {@link LegacyGlsl#GAME_MODEL_VIEW} carries why: one pipeline, two render types, two nudges, and
-	 * a depth test of {@code EQUAL} that turns the wrong one into a glint nobody sees.
+	 * <strong>It is what Iris does for every gbuffers program</strong>, its vanilla transformer
+	 * rewriting {@code gl_ModelViewMatrix} as
+	 * {@code (iris_transforms.ModelViewMat * _iris_internal_translate(iris_transforms.ModelOffset))}
+	 * ({@code transform/transformer/VanillaTransformer.java:355-366}), and
+	 * {@link LegacyGlsl#readsDrawModelView} carries which passes reach it here and why the shadow map
+	 * is not one of them.
 	 * <p>
-	 * <strong>The bob is the half that is not Iris's line</strong>, and leaving it out is a glint that
-	 * stands still while the world walks: this engine leaves the game's matrices alone and splits them
-	 * only where a pack reads them, so the matrix the game wrote for this draw has no bob in it and
-	 * the projection a pack is handed has none either. {@link LegacyGlsl#CAMERA_BOB} is the factor
-	 * that puts it back, and the product is exactly what {@link dev.vitrail.uniform.ViewSource#passModelView}
-	 * would have held for this draw. {@link LegacyGlsl#GAME_MODEL_VIEW} carries where Iris does the
-	 * same move instead.
+	 * <strong>What it buys is that a piece and whatever is drawn at its own depth read the same
+	 * matrix from the same place.</strong> A pass matrix is one per RUN and is built on the
+	 * processor; the game writes one per DRAW, with the render type's own nudge in it. So long as
+	 * only the glint read the second, an enchanted armour piece and the glint over it were two
+	 * matrices meant to be equal, and the glint's depth test is an EQUALITY:
+	 * {@link LegacyGlsl#GAME_MODEL_VIEW} sets out what that costs and how it was measured.
+	 * <p>
+	 * <strong>The bob is the half that is not Iris's line</strong>, and leaving it out is geometry
+	 * that stands still while the camera walks: this engine leaves the game's matrices alone and
+	 * splits them only where a pack reads them, so the matrix the game wrote for this draw has no bob
+	 * in it and the projection a pack is handed has none either. {@link LegacyGlsl#CAMERA_BOB} is the
+	 * factor that puts it back, and the product is what
+	 * {@link dev.vitrail.uniform.ViewSource#passModelView} would have held for this draw.
+	 * {@link LegacyGlsl#GAME_MODEL_VIEW} carries where Iris does the same move instead.
 	 * <p>
 	 * <strong>Every spelling of the product, because the fallback tree makes any of them reachable.</strong>
-	 * {@code ftransform()} is the one the corpus's glints really write, and the two named matrices
-	 * reach the same place: whichever a pack chose, a glint left on the pass's matrix is a glint on
-	 * the wrong nudge. The core profile spelling {@code modelViewMatrix} is here for the same reason
-	 * and is the only one a pack may also DECLARE, the {@code gl_} prefix being reserved:
+	 * {@code ftransform()} is the one the corpus's glints really write and the named matrices are what
+	 * its entity programs write; whichever a pack chose, a piece left on the pass's matrix is a piece
+	 * whose neighbour reads another. The core profile spelling {@code modelViewMatrix} is the only one
+	 * a pack may also DECLARE, the {@code gl_} prefix being reserved:
 	 * {@link LegacyGlsl#CORE_MATRICES} exists because OptiFine's core mode writes it.
+	 * <p>
+	 * <strong>What is deliberately left on the pass is everything DERIVED from the model view</strong>,
+	 * which is the inverse and the normal matrix. Iris leaves them there too, and not as an oversight
+	 * it would have tidied: {@code gl_ModelViewMatrixInverse} and {@code gl_NormalMatrix} become
+	 * {@code iris_ModelViewMatInverse} and {@code iris_NormalMat}
+	 * ({@code transform/transformer/VanillaTransformer.java:168-178}), both filled from
+	 * {@code RenderSystem.getModelViewMatrix()} at program setup
+	 * ({@code pipeline/programs/ExtendedShader.java:181-189}), which is the stack and carries no
+	 * nudge. So a pack that multiplies the matrix by its own inverse is a hair off in both engines,
+	 * by the same hair.
 	 *
 	 * @return whether the name was one this rewrites, false leaving it to the ordinary rename
 	 */
@@ -978,10 +1001,10 @@ public final class GlslTranslator {
 			return false;
 		}
 
-		// The glint takes the draw's model view here too, and it has to: this is the spelling the
-		// corpus really uses for a glint, and a pack writing ftransform() would otherwise get the
-		// pass's matrix back through the door rewriteGameModelView closed.
-		if (this.inputs == VertexInputs.GLINT) {
+		// A pass drawn from the camera takes the draw's model view here too, and it has to: this is
+		// the spelling the corpus really uses for a glint, and a pack writing ftransform() would
+		// otherwise get the pass's matrix back through the door rewriteGameModelView closed.
+		if (LegacyGlsl.readsDrawModelView(this.program)) {
 			inject(index, "(of_ProjectionMatrix * " + DRAW_MODEL_VIEW + " * of_Vertex)");
 			this.injectedNames.add("of_ProjectionMatrix");
 			this.injectedNames.add(LegacyGlsl.CAMERA_BOB);

@@ -840,13 +840,14 @@ public final class EntityDraw {
 	 * nudges: {@code ARMOR_ENTITY_GLINT} sets {@code VIEW_OFFSET_Z_LAYERING} so that it lands on the
 	 * armour it covers, and the other three set none
 	 * ({@code rendertype/RenderTypes.java:252} against {@code :255,263,270}). No column here could
-	 * hold both, so the nudge is not held here at all: a glint reads the model view the game prepared
-	 * that draw with, out of the game's own block, which {@link LegacyGlsl#GAME_MODEL_VIEW} sets out
-	 * and which is what Iris does for every vanilla program.
+	 * hold both, so the nudge is not held here at all.
 	 * <p>
-	 * What this row's own matrix still answers is the pass's, which is what the derived uniforms are
-	 * built from - the normal matrix and the two inverses - and Iris keeps those on its own CPU side
-	 * answer as well, unlayered.
+	 * <strong>Nothing rests on that any more, and it is worth saying because this row used to be the
+	 * exception.</strong> Every piece the door records from the camera now reads the model view the
+	 * game prepared its draw with, out of the game's own block, which
+	 * {@link LegacyGlsl#GAME_MODEL_VIEW} sets out and which is what Iris does for every vanilla
+	 * program. So the nudge reaches all of them from the same place, and the column below is what is
+	 * left for the derived uniforms alone.
 	 */
 	private static Element glint(String element, RenderStage stage, boolean afterDeferred) {
 		return new Element(RenderPipelines.GLINT, element, ARMOR_GLINT, AlphaTest.NON_ZERO,

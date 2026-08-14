@@ -203,17 +203,22 @@ public final class LegacyGlsl {
 	 * The model view the game prepared that draw with, which is the second member of its block that
 	 * anything here reads and the one place a per draw answer is not optional.
 	 * <p>
-	 * <strong>Read by the glint alone, and never on its own: what a glint reads is
-	 * {@link #CAMERA_BOB} times this. The reason for reading it at all is the depth nudge.</strong>
-	 * Every other family
-	 * this engine serves is answered from the pass, {@code dev.vitrail.uniform.ViewSource#passModelView},
-	 * with whatever nudge its row carries; that works because one pipeline of theirs carries one
-	 * nudge. The glint's one pipeline carries two: {@code ARMOR_ENTITY_GLINT} sets
-	 * {@code LayeringTransform.VIEW_OFFSET_Z_LAYERING} and the other three set none
-	 * ({@code rendertype/RenderTypes.java:252} against {@code :255,263,270}). Its depth test is
-	 * {@code EQUAL} and it writes no depth ({@code RenderPipelines.java:434}), so a glint drawn under
-	 * the other one's nudge does not z-fight, it VANISHES: enchanted armour would simply stop
-	 * glinting, which is a piece served with the wrong answer rather than a piece not served.
+	 * <strong>Read by every program {@link #readsDrawModelView} answers for, and never on its own:
+	 * what they read is {@link #CAMERA_BOB} times this.</strong> That is the entity family, the block
+	 * entities, the hand and the glint, which is exactly the set the entity door records from the
+	 * camera. The sky, the clouds, the weather and the particles are still answered from the pass,
+	 * {@code dev.vitrail.uniform.ViewSource#passModelView}, and the shadow map from the light.
+	 * <p>
+	 * <strong>The glint is what made this necessary, because it is the first family whose depth test
+	 * is an EQUALITY.</strong> Its depth test is {@code EQUAL} and it writes no depth
+	 * ({@code RenderPipelines.java:434}), so a glint whose vertex lands a last bit away from the
+	 * armour under it does not z-fight, it VANISHES. Two things used to put it there and both are
+	 * closed by reading this matrix on both sides. The nudge: its one pipeline carries two, since
+	 * {@code ARMOR_ENTITY_GLINT} sets {@code LayeringTransform.VIEW_OFFSET_Z_LAYERING} and the other
+	 * three set none ({@code rendertype/RenderTypes.java:252} against {@code :255,263,270}), so no
+	 * column of a table of ours could hold it. And the rounding: a product formed in the shader on
+	 * one side and on the processor on the other is the same value and not the same bits, which is
+	 * what an item lying on the ground showed, its glint carrying no nudge at all.
 	 * <p>
 	 * Iris meets none of this because it reads the model view here for every vanilla program it
 	 * patches, glint included: {@code gl_ModelViewMatrix} becomes
@@ -232,23 +237,23 @@ public final class LegacyGlsl {
 	 * this block already carries the bob and one factor is enough.
 	 * {@link dev.vitrail.render.CameraBob} leaves the game's matrices exactly as they are and splits
 	 * them only where a pack reads them, so the matrix the game wrote for this draw has no bob in it
-	 * and neither has the projection a pack is handed. The product a glint needs is therefore
-	 * {@link #CAMERA_BOB} times this, and a copy of Iris's line would be a glint that stands still
-	 * while everything under it walks - and, the depth test being {@code EQUAL}, one that vanishes
-	 * rather than one that is a hair off.
+	 * and neither has the projection a pack is handed. The product these families need is therefore
+	 * {@link #CAMERA_BOB} times this, and a copy of Iris's line would be geometry that stands still
+	 * while the camera walks.
 	 */
 	public static final String GAME_MODEL_VIEW = "of_GameModelView";
 
 	/**
-	 * The walk bob and the three effects beside it, as their own matrix, for the one pass that has to
-	 * multiply them by something the shader alone knows.
+	 * The walk bob and the three effects beside it, as their own matrix, for the passes that have to
+	 * multiply them by something only the shader knows.
 	 * <p>
-	 * Every other family is handed {@code bob * view} already multiplied, under
-	 * {@code of_ModelViewMatrix}, because the right hand factor belongs to the RUN there. The glint's
-	 * belongs to the DRAW, {@link #GAME_MODEL_VIEW} saying why, so the two have to meet in the shader
-	 * and the left one has to be a name of its own. It is the very matrix
-	 * {@code dev.vitrail.render.ViewMatrices#passModelView} multiplies by, published rather than
-	 * rebuilt, so that a glint and the piece it covers cannot end up with two different bobs.
+	 * The families {@link #readsDrawModelView} answers for take their right hand factor from the
+	 * DRAW, {@link #GAME_MODEL_VIEW} saying why, so the two have to meet in the shader and the left
+	 * one has to be a name of its own. Everything else is handed {@code bob * view} already
+	 * multiplied, under {@code of_ModelViewMatrix}, the right hand factor belonging to the run there.
+	 * <p>
+	 * It is the very matrix {@code dev.vitrail.render.ViewMatrices#passModelView} multiplies by,
+	 * published rather than rebuilt, so that the two roads cannot end up with two different bobs.
 	 */
 	public static final String CAMERA_BOB = "of_CameraBob";
 
@@ -311,6 +316,20 @@ public final class LegacyGlsl {
 	private static final Set<String> GAME_DRAW_ROOTS =
 			Stream.concat(ENTITY_ROOTS.stream(), Stream.of("gbuffers_armor_glint"))
 					.collect(Collectors.toUnmodifiableSet());
+
+	/** The two roots above whose pass is drawn from the light rather than from the camera. */
+	private static final Set<String> LIGHT_DRAW_ROOTS = Set.of("shadow_entities", "shadow_block");
+
+	/**
+	 * The roots of {@link #GAME_DRAW_ROOTS} whose pass is drawn from the CAMERA, which are the ones a
+	 * read of the model view is answered per draw for.
+	 * <p>
+	 * Derived rather than listed, so that a family added to the entity roots enters both sets at once
+	 * and only the exception has to be named.
+	 */
+	private static final Set<String> CAMERA_DRAW_ROOTS = GAME_DRAW_ROOTS.stream()
+			.filter(root -> !LIGHT_DRAW_ROOTS.contains(root))
+			.collect(Collectors.toUnmodifiableSet());
 
 	/**
 	 * What a full screen pass gets instead of vertex inputs of its own.
@@ -451,6 +470,38 @@ public final class LegacyGlsl {
 	 */
 	public static boolean bindsGameTransforms(String program) {
 		return ProgramFallbacks.chain(program).stream().anyMatch(GAME_DRAW_ROOTS::contains);
+	}
+
+	/**
+	 * Whether a read of the model view in this program is answered from the DRAW rather than from the
+	 * run, which is {@link #CAMERA_BOB} times {@link #GAME_MODEL_VIEW}.
+	 * <p>
+	 * <strong>Narrower than {@link #bindsGameTransforms} by the two shadow roots, and that is the
+	 * whole of the difference.</strong> Every program the entity door records binds the game's block
+	 * and reads its texture matrix out of it; only the ones drawn from the CAMERA read its model view
+	 * as well.
+	 * <p>
+	 * <strong>Iris patches its shadow programs as vanilla like the rest and is right to, because it
+	 * puts the light on the game's own stack.</strong> {@code ShaderCreator.java:73} sends every
+	 * gbuffers and shadow program through {@code TransformPatcher.patchVanilla}, so a shadow program
+	 * there reads {@code iris_transforms.ModelViewMat} too; what makes that the light's matrix is
+	 * {@code shadows/ShadowRenderer.java:420-421}, pushing the shadow model view onto
+	 * {@code RenderSystem.getModelViewStack()} for the whole of the walk and popping it at
+	 * {@code :640}. This engine leaves that stack alone: {@code render/ShadowGeometry.submit} poses
+	 * its submissions on a {@code PoseStack} of its own, so the matrix the game writes into a
+	 * caster's dynamic transforms is whatever the camera left there. What answers the light here is
+	 * {@code dev.vitrail.uniform.values.ShadowGeometryValues}, layered over the geometry table, and
+	 * it answers all six fixed function names from the drawn shadow pair.
+	 * <p>
+	 * <strong>So the same line means opposite things in the two engines</strong>, and a shadow
+	 * program sent down this road would draw the map from the player's eye, which is a shadow map of
+	 * exactly the wrong thing and looks like one all the same.
+	 *
+	 * @param program the bare name, {@code gbuffers_entities_translucent}, or empty where the caller
+	 *                is measuring a file and no pass is named
+	 */
+	public static boolean readsDrawModelView(String program) {
+		return ProgramFallbacks.chain(program).stream().anyMatch(CAMERA_DRAW_ROOTS::contains);
 	}
 
 	/**

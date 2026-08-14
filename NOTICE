@@ -403,6 +403,18 @@ GNU Lesser General Public License version 3
   net.minecraft.client.renderer.DynamicUniforms and not off Iris, and the two agree because both
   describe the same buffer.
 
+  The same file sends a read of gl_ModelViewMatrix to that same block, on the passes drawn from the
+  camera, which is what
+  net.irisshaders.iris.pipeline.transform.transformer.VanillaTransformer does at lines 355 to 366.
+  What is taken is the rule that the model view of a prepared draw is that draw's own, nudge
+  included, rather than a matrix the engine holds for the whole run: it is what lets a piece and
+  whatever is drawn at its exact depth agree, and an enchantment's glint is tested for equality
+  against the armour under it. Two things are ours rather than Iris's and both are named in
+  LegacyGlsl: the walk bob is multiplied back on the front, this engine keeping it out of the game's
+  matrices where Iris folds it in, and the shadow programs are left out, Iris putting the light on
+  the game's own matrix stack for its walk where this engine answers the light through a uniform
+  layer instead.
+
   common/src/main/java/dev/vitrail/uniform/UniformGaps.java registers the uniforms this engine
   cannot answer, and one of its entries is Iris's answer rather than an absence: entityColor under a
   full screen pass is the constant net.irisshaders.iris.uniforms.CommonUniforms gives it, line 163.

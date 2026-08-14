@@ -682,6 +682,11 @@ public final class PackProgram {
 				// uniforms are declared, and LegacyGlsl.bindsGameTransforms whether a read of
 				// gl_TextureMatrix[0] goes to the game's own block.
 				//
+				// A third answer, LegacyGlsl.readsDrawModelView, is NOT here and does not need to be:
+				// it differs from the second on the two shadow roots alone, and the shadow chain of
+				// ProgramFallbacks shares no name with the gbuffers one, so no file is ever asked for
+				// both ways and a key on the second already tells those two files apart.
+				//
 				// THE GLINT IS WHAT MAKES THEM TWO ANSWERS RATHER THAN ONE: its mesh carries no entity
 				// and its draw is still one the game prepared, so it is the first name asked for here
 				// that answers the two differently. The shape that would cost something is a pack
