@@ -14,13 +14,13 @@ stage alone.
 
 What the value means is decided by **how many words it holds**, not by what they say. A single word
 is the path of an image. The longer forms declare a raw blob, with its shape, its dimensions and its
-pixel format spelled out - six words for one axis, seven for two, eight for three. Any other count
+pixel format spelled out: six words for one axis, seven for two, eight for three. Any other count
 is a line nothing can honour, whatever the words in it look like.
 
 Both families are read through the pack's own preprocessor conditionals, using the same condition
 stack and evaluator the GLSL goes through, because packs do put texture declarations behind their
 own settings. Read flat, a declaration sitting in a dead branch takes a live colour target away from
-the pass that reads it - and that is not a missing texture, it is a pass reading a file where the
+the pass that reads it. That is not a missing texture, it is a pass reading a file where the
 frame expected an image the frame itself produced.
 
 ## A declared name stops meaning a render target
@@ -65,7 +65,7 @@ One detail of that road is easy to get backwards and silent when wrong. A path w
 leading slash means "relative to the shader root", and the slash has to come off **before**
 resolution rather than after: handed something that looks absolute, path resolution throws the base
 away, searches from the root of the archive and finds nothing. A texture that is not found reads
-black rather than raising, so the mistake never announces itself - and packs do write their texture
+black rather than raising, so the mistake never announces itself. And packs do write their texture
 paths in that shape.
 
 A path carrying a namespace is a different case: it names a resource the game owns and hands out
@@ -83,7 +83,7 @@ a line saying so.
 ## Matching without case, and where that fallback sits
 
 Packs are authored on filesystems where a name disagreeing with the file in case still opens. Inside
-a zip it does not, so the same pack loads as a folder and loses a file once archived - the pack is
+a zip it does not, so the same pack loads as a folder and loses a file once archived: the pack is
 not wrong in one shape and right in the other, it is the two shapes that disagree. Resolution
 therefore falls back to a case-insensitive match against the listing of the parent directory, built
 on demand and cached per directory, and the hits are counted so that a pack relying on it can be
@@ -103,7 +103,7 @@ kilobytes expands to tens of megabytes with nothing in the file announcing it.
 
 So an image is decoded in two steps rather than one. The dimensions are in the header, in the first
 bytes of the file; the pixels are the allocation. Going through a reader that exposes the header
-before the pixels is what creates a moment in which a refusal is still possible - a single call that
+before the pixels is what creates a moment in which a refusal is still possible: a single call that
 turns a file into an image offers no such moment, and that is the entire argument for the more
 awkward interface. Two bounds are applied there: a limit per side, which is what a device will
 accept, and a limit on **total texels**, which is what the memory actually is and what nothing else
@@ -113,7 +113,7 @@ in the pack states.
 
 Allocation is attempted and caught per texture. The name that fails reads one black pixel and is
 named in the log, where a catch placed around the whole set let one texture a device refused bring
-down every colour target of the pack - a black screen instead of a missing lookup table. The same
+down every colour target of the pack: a black screen instead of a missing lookup table. The same
 arbitration governs the shadow map: one feature is not worth the pack.
 
 A declaration whose file is **shorter than the length its own declaration announces** is refused,
@@ -130,7 +130,7 @@ and it was worse than either: the pack lost a colour target it had said nothing 
 The rule here that looks like a nicety and is the opposite of one.
 
 **The key claims the name; the rest of the line only decides whether anything can be put behind it.**
-Once a directive has named a sampler, no word further along that line unsays it - not a misspelled
+Once a directive has named a sampler, no word further along that line unsays it: not a misspelled
 pixel format, not a word count the format gives no meaning to, not a file that is not there.
 
 The reason is the collision described above. Hand the name back on a refusal and it falls through to
@@ -142,7 +142,7 @@ reason are named.
 Two shapes of key still claim nothing, and one of them is a rough edge rather than a design choice.
 A key too broken to name a sampler at all has no name in it to claim. But a key naming an
 **unrecognised stage** also claims nothing, even though the sampler after the dot is perfectly
-readable - it is refused whole, so the sampler name falls back to the colour target and the pass
+readable: it is refused whole, so the sampler name falls back to the colour target and the pass
 reads the scene. That is the exact failure this section exists to prevent, reached by the one door
 still open, and it is worth knowing when a declaration seems to have been ignored: check the stage
 name first.
@@ -156,7 +156,7 @@ This backend binds two-dimensional and cube samplers and nothing else, and the r
 **declared type**. That distinction is what makes the mechanism both necessary and possible.
 
 To be exact about what "two-dimensional" means here: the check is on *dimensionality*, so the
-shadow, array and multisample spellings all carry the same two dimensions and pass it - the
+shadow, array and multisample spellings all carry the same two dimensions and pass it. The
 rectangle spelling does not, whatever it reads like. **That is wider than what the device can build
 a view for**, which is a plain two-dimensional view or a cube one and nothing else. A pack declaring
 an array or multisample sampler would therefore get past the declaration check and find nothing
@@ -176,7 +176,7 @@ and mixes them. [Translation](../translation.md) covers the rewriting machinery 
 Two readers now have to agree texel for texel: the one spreading the pack's blob into the atlas, and
 the one printing the addressing arithmetic into the shader. They agree by both coming from a single
 layout computed once. Written twice, they would diverge somewhere, and a noise lookup that is wrong
-looks exactly like a noise lookup that is right - there is no observation on screen that separates
+looks exactly like a noise lookup that is right: there is no observation on screen that separates
 them.
 
 **The gutter is the part easy to leave out and impossible to see afterwards.** Each slice is laid
@@ -194,8 +194,8 @@ said. The layout is therefore checked against a limit per side and on total texe
 is served, and one that does not fit refuses the directive by name like any other refusal.
 
 **Nothing moves unless everything can.** A name reached in any way other than the plain lookup the
-helper replaces - taken as a function parameter, reached through a macro, sampled with an extra
-argument - is counted and left exactly as it stands, declaration included. The program then stays
+helper replaces (taken as a function parameter, reached through a macro, sampled with an extra
+argument) is counted and left exactly as it stands, declaration included. The program then stays
 refused with the message it already had, rather than being rewritten into something that compiles
 and reads wrong. Where one name carries more than one declaration, the first is served, since the
 first is the one whose layout was printed into the shaders; spreading a later file over the first
@@ -204,8 +204,8 @@ one's tiling produces, once again, something that looks like noise.
 **Divergence from Iris, and a deliberate one.** Iris rewrites a volume in the stage its directive
 names. Under a GL backend that suffices: the untouched three-dimensional declarations elsewhere are
 bound to nothing, which is tolerated. Vulkan refuses them, so the rename is applied in every program
-carrying the declaration, whatever stage the directive named. It invents nothing - the pack named
-exactly one file for that identifier, with its shape, size and format - and it is why a forged name
+carrying the declaration, whatever stage the directive named. It invents nothing (the pack named
+exactly one file for that identifier, with its shape, size and format), and it is why a forged name
 is answered without consulting the stage at all. Iris remains the authority on what a directive
 means; see [the note on sources](../README.md#a-note-on-sources) for how that authority is used and
 credited.

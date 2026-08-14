@@ -58,7 +58,7 @@ By family, so you can tell whether a change is in scope:
 - **Vertex input contracts**, per geometry family, checked down to the location the element
   actually occupies in the compiled SPIR-V.
 - **The uniform block.** Layout, coercion, and the depth conversion against an independent matrix
-  implementation - none of which needs a pack. The expression grammar and its dependency graph are
+  implementation: none of which needs a pack. The expression grammar and its dependency graph are
   checked the same way, then run over the declarations the corpus really contains, which does.
 - **Path confinement.** What a path written by a pack can reach.
 
@@ -74,7 +74,7 @@ shared include reaches every program that includes it; a declaration behind a de
 none. Counting files tells you neither, and the error runs in both directions.
 
 **Liveness is measured, not guessed.** A declaration behind a branch the default settings do not
-take is not a requirement, because the compiler never sees it - but it becomes one the moment a
+take is not a requirement, because the compiler never sees it, but it becomes one the moment a
 setting moves. Dormant declarations are counted in their own column: folding them in inflates the
 total, dropping them hides a future requirement.
 
@@ -85,8 +85,8 @@ without ever naming one. Only the translated text has all three.
 
 **A tool that asserts exits non-zero on the first broken invariant; a tool that only prints is not a
 check yet.** Both kinds live here, and telling them apart is the reader's job before quoting either:
-one is a gate, the other is a reading. Several of the measuring tools - the ones that report how much
-of the corpus translates, or what each target resolves to - never fail at all by design, because
+one is a gate, the other is a reading. Several of the measuring tools (the ones that report how much
+of the corpus translates, or what each target resolves to) never fail at all by design, because
 what they produce is a number to compare against the last one rather than a yes or a no. Running one
 of those and seeing no error means nothing was asserted, not that everything held.
 
@@ -124,11 +124,11 @@ category is off because it asks for a serial id on exceptions nothing serialises
 those arguments: a category is excluded when its findings *cannot be about this code*. "There are a
 lot of them" is not an argument.
 
-**Javadoc linting as errors, everything but the missing-comment category** - so references, tags,
+**Javadoc linting as errors, everything but the missing-comment category**, so references, tags,
 malformed HTML and accessibility all fail the build. This matters more here than in most projects
 because the documentation carries the design: a reference that stops resolving is a piece of the
 design lost, and nothing says so until someone goes looking. What it caught in practice was exactly
-that - a link pointing at a GLSL function name rather than the method that emits it, and orphaned
+that: a link pointing at a GLSL function name rather than the method that emits it, and orphaned
 comments stacked above the wrong member, one of which asserted the opposite of its neighbour in the
 same file. These are not cosmetic categories. They are rotten-documentation detectors.
 
@@ -136,17 +136,17 @@ There is one exemption, and it is a package: the vendored expression evaluator k
 javadoc. Bending borrowed code to this project's taste buys nothing and makes the next comparison
 with upstream harder. A contributor working in that package is not caught by this gate.
 
-**Static analysis, contributing the checks it rates as errors** - the part of the catalogue meant to
-be a bug rather than a preference - **and two of its warnings promoted to join them.** The rest are
+**Static analysis, contributing the checks it rates as errors** (the part of the catalogue meant to
+be a bug rather than a preference) **and two of its warnings promoted to join them.** The rest are
 worth reading and not worth blocking on, so a build flag prints them and lets the build through.
 
 **A promotion is argued from the whole report, and by the same test a lint category has to pass:**
 the findings have to be about this code. Two passed it, and both for the same reason, which is not
-that they found a bug - neither of them did. It is that the line as written could not tell a reader
+that they found a bug: neither of them did. It is that the line as written could not tell a reader
 which of two behaviours it wanted.
 
 `String.split` given a pattern and nothing else drops the empty fields at the *end* of a value and
-keeps the ones in the middle - and answers a value that is nothing but separators with an *empty
+keeps the ones in the middle, and answers a value that is nothing but separators with an *empty
 array*, which is the half that throws. A handful of calls here depend on that drop and lose their
 meaning without it; most are indifferent; none of them said which, because the one-argument form
 cannot. `split(x, 0)` is the dropping reading and `split(x, -1)` the keeping one, so every call
@@ -159,7 +159,7 @@ worth the gate is a condition in front of a ternary, which parses as `(a || b) ?
 
 **Know what a gate does not cover before quoting it as one.** Three holes here, and each was
 measured rather than reasoned about. The splitter check reports a call only where it can follow
-every use of the array, and goes quiet as soon as the array is handed to another method - calls
+every use of the array, and goes quiet as soon as the array is handed to another method: calls
 written that way sat in this tree and in no report, and were found by grep. And the whole analyser
 is pointed away from two packages, so a split written under `neoforge/mixin/` or under the vendored
 `uniform/expr/kroppeb/` compiles green whatever the severity says. The second of those is the
@@ -191,7 +191,7 @@ below with a friendlier face. Force the compile when the point is to read the re
 
 **A text check**, for the two things no compiler sees: a byte order mark, which reaches a GLSL
 compiler as a stray character in front of the version directive; and typographic punctuation, which
-is wider than the quotes and dashes people expect - it also takes the single-glyph ellipsis and the
+is wider than the quotes and dashes people expect: it also takes the single-glyph ellipsis and the
 non-breaking space, and those are the two that surprise. The exact set is one line of the build
 script.
 
@@ -205,8 +205,8 @@ its finding list attached.
 
 **And do not believe an empty report.** The first static-analysis run reported nothing, which was
 false: the redirection sent standard error to the terminal while the compiler writes diagnostics
-there. The result was only trusted after a planted defect - a self-assignment and a mistyped format
-string - came back flagged. A new gate is proven by a planted defect, not by a clean run.
+there. The result was only trusted after a planted defect (a self-assignment and a mistyped format
+string) came back flagged. A new gate is proven by a planted defect, not by a clean run.
 
 **Nor a report that ends on a round number.** javac prints a hundred warnings and stops, and the
 first reading of the report the two promotions came out of stopped there; the figure behind it was
@@ -224,8 +224,8 @@ Some things have no text form to check: pipeline creation and binding, texture u
 timing, the shadow region following the player, and anything the game draws rather than a pack
 program. Those are verified by running the game and reading its log.
 
-The loop is scripted end to end - write the driving files, build, install, stop, relaunch, wait,
-filter the log - and the parts worth knowing are these.
+The loop is scripted end to end (write the driving files, build, install, stop, relaunch, wait,
+filter the log), and the parts worth knowing are these.
 
 **Wait for a marker in the log, never for a fixed duration.** A duration is either too short, which
 reads as a failure, or too long, which taxes every run. And the marker must be one that every
@@ -276,7 +276,7 @@ pack went a long time without blurring anything for exactly that reason.
 
 **Silent output reordering produces a frame that looks like a frame.** A fragment stage can end up
 with two of its outputs swapped and nothing in the log about it. The mechanism, and the structural
-fix for it, are in [translation.md](translation.md) - what belongs here is that this is a failure
+fix for it, are in [translation.md](translation.md): what belongs here is that this is a failure
 mode no image will report.
 
 **Read the session log before reading the code.** The engine already announces most of what goes

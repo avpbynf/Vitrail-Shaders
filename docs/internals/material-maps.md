@@ -6,8 +6,8 @@ what the surface is made of. Neither comes from the shader pack. They come from 
 pack**, as `bricks_n.png` and `bricks_s.png` beside `bricks.png`, and a pack that declares the two
 sampler names gets whatever the resource pack happens to ship.
 
-This page is the mechanism. The symptom that sends a reader here - a wall that stays perfectly flat
-with a material pack installed - is in [Pack compatibility](../compatibility.md).
+This page is the mechanism. The symptom that sends a reader here (a wall that stays perfectly flat
+with a material pack installed) is in [Pack compatibility](../compatibility.md).
 
 ## The layout is the whole trick
 
@@ -19,7 +19,7 @@ That is not an optimisation, it is the only shape that works. The coordinates a 
 are atlas coordinates, computed by the stitcher for the albedo; there is no second set. Anything but
 an exact copy of the layout would read a different block's material.
 
-The companions are built when an atlas is stitched, which is once per atlas per resource reload -
+The companions are built when an atlas is stitched, which is once per atlas per resource reload:
 at startup and again after every resource reload, F3+T included, and never at world load. An atlas
 the resource pack ships nothing for costs two lookups per sprite, one per map, and no memory at all:
 **no image is decoded and no texture is created**, so an install with no material pack pays nothing.
@@ -38,7 +38,7 @@ sampler unassigned and it falls to whatever texture unit nought holds.
 
 A sprite the resource pack ships no map for reads the same flat value the whole companion is cleared
 to: a normal pointing straight out of the face with nothing occluded, and a material that is nought
-in every channel - no smoothness, no reflectance, no porosity, no emission. Those exact values
+in every channel: no smoothness, no reflectance, no porosity, no emission. Those exact values
 matter, and they are not a taste: they are the ones Iris falls back on, and each reads as the
 absence of the thing it names.
 
@@ -54,7 +54,7 @@ The specular map goes one step further, and only where the resource pack declare
 convention in `optifine/texture.properties`. Three of its channels change **meaning** at a
 threshold: a reflectance below 230 and a metal index above it, a porosity below 65 and a subsurface
 amount above it, and an emission that is a fraction below 255 and nothing at all at 255. Averaging
-across one of those boundaries invents a material that is in neither class - a half-metal, or a
+across one of those boundaries invents a material that is in neither class: a half-metal, or a
 stone that bleeds light. So those channels are averaged only among the texels of the class that wins
 the quad. With no declaration, both maps take the plain average.
 
@@ -85,7 +85,7 @@ Both of these are work not done rather than a limit of the backend, and both are
 **The maps do not animate.** A sprite whose albedo has frames gets the first frame of its map, held
 still, so flowing water keeps a moving surface and a fixed normal. Iris gives its companion sprites
 their own animation states and ticks them with the atlas. Nothing in the game's API forbids the same
-here - those animation states are public and the game drives its own atlases through them.
+here: those animation states are public and the game drives its own atlases through them.
 
 **Textures that are not atlases have no maps.** An entity skin and an armour layer are textures of
 their own rather than sprites in an atlas, so nothing is built for them and the two names read the

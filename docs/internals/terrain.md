@@ -20,7 +20,7 @@ state of its own:
   targets the pack's program writes instead of the single attachment the renderer would have opened;
 - the draw context, where the program's uniform block and its samplers are bound into the pass the
   renderer has just opened;
-- the sites where a quad is written into a mesh - the block renderer and the fluid renderer - and
+- the sites where a quad is written into a mesh (the block renderer and the fluid renderer) and
   the vertex object the translucent sorter copies, which together are how the block id, the block's
   position and its light emission reach the mesh at all;
 - the two pieces of section state the shadow stage walks the world with.
@@ -31,8 +31,8 @@ is how a program that compiles ends up drawing the wrong picture.
 
 Two properties of the format substitution are constraints, not details.
 
-**The format may only change where nothing holds the old one.** Every caller of the accessor - the
-section manager, the mesh builder, the per-region device resources - keeps whatever it was handed
+**The format may only change where nothing holds the old one.** Every caller of the accessor (the
+section manager, the mesh builder, the per-region device resources) keeps whatever it was handed
 when it was constructed, and the last of those three is built on demand at a region's first upload,
 so it goes on asking all through a session. A format that moved between two of those calls would let
 meshes built at one stride land in an arena sized for another, and nothing in the renderer would
@@ -67,8 +67,8 @@ which is a picture that looks plausible and is wrong in a way no screenshot show
 
 **That colour is carried in an element of this engine's own, beside the renderer's word and never
 over it.** The reason is that the renderer's own chunk shader goes on drawing this mesh. It draws it
-on every road where the engine hands a pass back - a program that would not compile, a pass the pack
-ships nothing for, targets that could not be opened this frame - and, more often than any of those,
+on every road where the engine hands a pass back (a program that would not compile, a pass the pack
+ships nothing for, targets that could not be opened this frame) and, more often than any of those,
 throughout the warm-up that follows every load and every resource reload, where the chain compiles
 one program a frame and the world is drawn by the game meanwhile. That shader multiplies the vertex
 colour into the texture and then alpha tests the product, so an occlusion left sitting in the alpha
@@ -86,7 +86,7 @@ it are then no different from any other change of pack. The price is four bytes 
 mesh, which is the same bargain the appended elements below already make, and one of the two colour
 elements is declared but never read whichever way the choice falls. That second half is not free: an
 input a stage never reads can be dropped from the compiled module, and dropping one shifts the
-locations after it - the silent failure described in
+locations after it: the silent failure described in
 [vertex inputs are matched by name](#vertex-inputs-are-matched-by-name-and-one-direction-is-silent).
 
 **Light arrives raw, and the scale belongs to the texture matrix.** The pair is carried as the game
@@ -95,7 +95,7 @@ it is a number from nought to two hundred and forty and not a texture coordinate
 one is `gl_TextureMatrix[1]`, which a pack multiplies it by itself: a scale of 1/256 puts a level on
 its own texel of a sixteen-by-sixteen lightmap and a translation of 1/32 puts it on that texel's
 centre, which matters because the map is filtered linearly. Dividing in the vertex prologue instead,
-and leaving that matrix at identity, is the mistake to avoid - it lands every level on a texel edge,
+and leaving that matrix at identity, is the mistake to avoid: it lands every level on a texel edge,
 and it hands a pack reading the coordinate without the matrix a different number from the one every
 pack is written against.
 
@@ -121,14 +121,14 @@ engine adds after them.
 
 One further difference to keep in mind when comparing images: the chunk renderer samples the
 lightmap at the vertex, while a pack handed a lightmap coordinate samples it at the fragment. That
-is not a defect - it is finer - but it means two images can differ for a reason that has nothing to
+is not a defect (it is finer) but it means two images can differ for a reason that has nothing to
 do with the change under test.
 
 ## Where the missing quantities travel, and why spare bits were not enough
 
 The instinct is to add fields to the vertex and fill them at mesh time. That means editing the
 innermost, most optimised code of another project, which is exactly the kind of coupling that breaks
-on every release. So widening something already packed is what gets tried first - and the attempt is
+on every release. So widening something already packed is what gets tried first, and the attempt is
 worth knowing, because it works for everything opaque and is quietly wrong for everything
 translucent.
 
@@ -166,8 +166,8 @@ refuses none at all, and a sum of absolute components before normalising where I
 zero after. The quad then gets an axis taken from its own face normal, and keeps whatever handedness
 one of its triangles managed to measure, or the majority answer when neither did. The gap is
 narrower than it sounds, because Iris strips the normal's component out of every tangent it packs
-into a chunk mesh - that projection is on the chunk road alone, its entity and text tangents being
-stored as the mapping gave them - and substitutes an axis of its own when nothing is left of the
+into a chunk mesh (that projection is on the chunk road alone, its entity and text tangents being
+stored as the mapping gave them) and substitutes an axis of its own when nothing is left of the
 tangent; but it is real, and it runs both ways, since this answer depends on the quad alone where
 that one depends on the order its bucket was filled in, and the two substituted axes are not the
 same axis. Nothing in the graphics API forces
@@ -191,7 +191,7 @@ zero, so any padding the renderer left between two of them survives untouched.
 
 **The new elements are last, and that is structural rather than tidy.** The renderer's own shader
 declares the four elements it knows and ignores the rest. By the rule in the next section, an
-element the stage does not declare shifts every element after it - and there is nothing after the
+element the stage does not declare shifts every element after it, and there is nothing after the
 last one. That single placement decision is what lets the renderer keep drawing through a format it
 was never told about.
 
@@ -205,8 +205,8 @@ conditional would save is small either way.
 The encoding itself matches the reference implementation term for term: the id plus one, shifted up
 by one bit, with the low bit flagging a fluid, and a default of minus one so that an unmapped block
 decodes to minus one rather than to a real number. The vertex stage declares an unsigned input and
-the translator injects the decode in whichever type the pack declared it with - see
-[Translation](../translation.md). One GLSL detail forces the shape of that injection: a global
+the translator injects the decode in whichever type the pack declared it with (see
+[Translation](../translation.md)). One GLSL detail forces the shape of that injection: a global
 initialiser must be a constant expression, so the variable is declared bare at file scope and filled
 in the prologue.
 
@@ -229,7 +229,7 @@ The cause of that silence is worth stating exactly, because it is not obvious fr
 rebinding pass advances its location counter only for attributes the stage actually declares, while
 pipeline creation advances a location for every element of the format. The two counters agree as
 long as the stage declares the whole format, which is precisely what the game's shaders and the
-chunk renderer's shaders do - so neither project can ever meet the bug. Translated pack programs
+chunk renderer's shaders do, so neither project can ever meet the bug. Translated pack programs
 declare varying subsets and would meet it constantly, and it presents as an image that is plausible
 and wrong rather than as an error.
 
@@ -246,7 +246,7 @@ compiled module, and rebinding counts only survivors.
 
 ## Three chunk passes, and why one is not enough
 
-Chunk geometry is drawn in three passes - solid, cutout and translucent - and each compiles its own
+Chunk geometry is drawn in three passes (solid, cutout and translucent) and each compiles its own
 pipeline, so each is substituted separately, on its own merits. The pack's program is looked up by
 pass; a pass the pack ships nothing for keeps the game's own shader, and so does a pass that is none
 of the three, since the pass type is a plain class rather than an enum and a mod adding one is a
@@ -258,7 +258,7 @@ A pack's program instead round-trips through the inverse model-view and back, an
 epilogue then rewrites the depth component for the depth convention packs expect. Extra matrix
 products plus an affine conversion mean two coplanar surfaces served by two different programs are
 no longer guaranteed to resolve to the same depth pixel by pixel. Since cutout geometry commonly
-sits flush against solid geometry - an overlay quad on a block face - a seam between the two is a
+sits flush against solid geometry (an overlay quad on a block face), a seam between the two is a
 seam between two different transform paths. Serving all three passes makes the comparison
 deterministic again; a depth bias would hide it without fixing it. A pack that leaves one of the
 three to the game is exactly where that seam is to be expected.
@@ -282,7 +282,7 @@ Where a terrain program's outputs land, and which half of a doubled target it wr
 
 ## Push constants belong to a namespace
 
-The game's Vulkan backend never fills the push-constant ranges of a pipeline layout - it creates the
+The game's Vulkan backend never fills the push-constant ranges of a pipeline layout: it creates the
 layout with descriptor sets only. The chunk renderer repairs that for itself, from its own patch,
 and **only for pipelines whose identifier namespace names the renderer**. It then pushes the region
 offset, the region age and the region id into whatever layout is currently bound.
@@ -290,7 +290,7 @@ offset, the region age and the region id into whatever layout is currently bound
 The consequence for a substituted pipeline is severe and easy to miss: a pipeline named outside that
 namespace receives a push into a layout that has no range for it, the region offset never arrives,
 and the entire terrain draws stacked near the world origin. The remedy costs nothing and is not
-another patch - the test is a substring, so any namespace that contains the renderer's name is
+another patch: the test is a substring, so any namespace that contains the renderer's name is
 enough.
 
 The trap has a mirror image, and it bites in the other direction. A render pass the game opened for
@@ -309,13 +309,13 @@ Anything a pack projects to screen starting from a direction then slides at the 
 cycle: a sun or moon glow that should hold still wanders, a held torch's light shifts between steps.
 A fixed effect moving with the bob is the signature of this and of nothing else.
 
-The correction is confined to what is published to the pack. Three operations in the level render -
-a multiply, a rotate and a scale - are intercepted, accumulated into a separate matrix, and then
+The correction is confined to what is published to the pack. Three operations in the level render
+(a multiply, a rotate and a scale) are intercepted, accumulated into a separate matrix, and then
 **replayed unchanged**, so the game draws with exactly the matrix it would have drawn with and
 nothing about its own image moves. What differs is only the uniforms: the projection handed to the
 pack is the clean camera projection, the model-view handed to the pack is bob times view, and the
 product of the two is the matrix the frame is actually drawn with. The order matters and is not
-interchangeable - bob times view, not view times bob.
+interchangeable: bob times view, not view times bob.
 
 That confinement is a deliberate divergence from the reference implementation, which moves the bob
 inside the game's own matrices instead. Doing it that way then forces the held item to be re-bobbed
@@ -329,7 +329,7 @@ Because the whole thing rests on having intercepted *every* operation that touch
 it carries its own witness. Each frame, the clean projection is multiplied back by the accumulated
 bob and compared against the matrix captured on its way to the device. If the game ever multiplies in
 a term the interceptions do not see, the pack would receive an amputated projection together with a
-model-view that does not compensate for it - a plausible image with wrong reprojection. Instead the
+model-view that does not compensate for it: a plausible image with wrong reprojection. Instead the
 sharing is abandoned and the log says so. It is abandoned for the **session**, not for the frame,
 and that is a decision rather than an omission: a later frame that happened to agree would publish
 the clean projection against a model-view carrying no bob, so the terms would be in neither of the
@@ -339,4 +339,4 @@ code once the defect is fixed; it is the control.
 One symptom class is worth naming because it does not look related. A screen-space occlusion test
 that reconstructs a world position from the depth buffer drifts relative to the image it is reading
 when the projection carries a term the reconstruction does not. The visible result is light bleeding
-through solid blocks - a lighting bug in appearance, a matrix bug in fact.
+through solid blocks: a lighting bug in appearance, a matrix bug in fact.

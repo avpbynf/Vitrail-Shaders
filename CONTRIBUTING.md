@@ -38,7 +38,7 @@ files with CRLF.
 Java: standard formatting, tabs for indentation to match Minecraft and Sodium sources,
 so that diffs against decompiled code stay readable.
 
-Comments in English, and there are a lot of them - the density is deliberate rather than
+Comments in English, and there are a lot of them: the density is deliberate rather than
 accidental. A class says what it is for and what goes wrong without it, a line says why it
 is where it is and what would break if it moved, and a figure says what was measured to
 arrive at it. What is not wanted is the other kind, the comment that restates the line
@@ -137,7 +137,7 @@ release this one creates is authored by the token it runs under, and such a rele
 no further workflow, so a file listening for it would never wake. The mirror needs two
 secrets set in the repository settings, `CURSEFORGE_ID` and `CURSEFORGE_TOKEN`, and without
 either it says so and ends green rather than failing a release over it. The id is not a
-secret in any real sense - it is on the project's own page - and it lives there only so that
+secret in any real sense (it is on the project's own page), and it lives there only so that
 both halves of the same configuration are found in the same place.
 
 The release body is what CurseForge is given as the changelog, read back at the moment the

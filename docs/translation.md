@@ -9,7 +9,7 @@ Every GLSL unit a pack ships is rewritten before it can draw, then handed to the
 already embeds, which produces SPIR-V and performs reflection and binding remapping itself. The
 chain's own units go at selection; the programs that draw the world and the sky are translated on
 demand, at the first frame of a place that needs them. What is translated is never *patched*
-afterwards - a setting that moves rebuilds its units from the pack's source, and so does a change of
+afterwards: a setting that moves rebuilds its units from the pack's source, and so does a change of
 dimension, which rebuilds the lot.
 
 Two properties follow, and both are load-bearing:
@@ -29,8 +29,8 @@ Every loop and every recursion whose trip count depends on pack content is bound
 is a depth limit there is a bound on **total work** beside it. Depth alone bounds nothing, and that
 is the single most important rule in the subsystem. Each part of it was learned the hard way.
 
-**The include graph is a graph, not a tree.** There is no include-once - see
-[the pack format](pack-format.md) for why there must not be - so the same file is legitimately
+**The include graph is a graph, not a tree.** There is no include-once (see
+[the pack format](pack-format.md) for why there must not be), so the same file is legitimately
 re-expanded from many sites, and only the packs' own guards limit it. Everything below follows from
 that.
 
@@ -48,7 +48,7 @@ each other overflow the stack.
 **Why bounding rather than catching.** Stack overflow and out-of-memory are errors, not runtime
 exceptions, so a catch around pack reading does not see them. The fix is to make sure the error is
 never reached, not to widen the catch. Otherwise a single malformed pack dropped in the folder can
-stop the client from starting - including a pack that was never selected, since reporting reads
+stop the client from starting, including a pack that was never selected, since reporting reads
 them all.
 
 Two smaller rules in the same family. A macro whose value is an expression is folded to its
@@ -67,14 +67,14 @@ it correctly means finding the matching close parenthesis, which means tokenisin
 function that disagree about them are a real conflict.
 
 **Names that collide with newer builtins are renamed.** A function a pack defines can collide with
-a builtin introduced after the version the pack targets, and the error does not name the collision -
+a builtin introduced after the version the pack targets, and the error does not name the collision:
 it complains about overload precision qualifiers. Renaming is triggered only on names the pack
 actually defines, so lengthening the reserved list costs nothing.
 
 **Depth reads are converted, and not by the translator.** The game renders in reversed Z; packs
 expect the legacy convention. The translated text does carry depth conversion, at three fixed sites:
 the built-in fragment depth, a write to the built-in output depth, and the clip depth in the vertex
-epilogue. Even there it is not exhaustive - a built-in reached through a subscript, or handed whole
+epilogue. Even there it is not exhaustive: a built-in reached through a subscript, or handed whole
 to a function, or written with a compound assignment, cannot be rewritten where it stands, and those
 are counted rather than guessed at. What the translator never rewrites at all is a **lookup through
 a sampler**. Those are served by converting the *image* instead, once, when the depth is taken.
@@ -93,14 +93,14 @@ keeps it out of the list of names the engine failed to supply.
 
 That is not a shortcut, it is the only thing that works. A lookup can only be rewritten if it can be
 found, and it can only be found
-by the name of its sampler - so a pack helper taking `sampler2D depth` as a parameter and called
+by the name of its sampler, so a pack helper taking `sampler2D depth` as a parameter and called
 with a colour target on one line and a depth texture two lines below cannot be served both ways
 without writing the body twice. Converting the image makes every lookup right whatever name it was
 reached through, including the ones through a macro or a local that no rewrite could ever see. The
 translator only *counts* those lookups, and the count is what turns the blind spot into a number.
 
 Note that publishing a legacy-convention matrix does not disable reversed Z for the game's own
-rasterisation - the world keeps its depth precision, and only the copy the pack reads is converted.
+rasterisation: the world keeps its depth precision, and only the copy the pack reads is converted.
 
 ## Bindings and locations are not emitted
 
@@ -126,7 +126,7 @@ rewrite becomes the identity.
 This is the correction that mattered most, and it applies twice.
 
 **Uniform blocks.** A vertex stage and a fragment stage each lift only the uniforms they use, so a
-block of the same name ends up with different members in different orders in the two stages - and
+block of the same name ends up with different members in different orders in the two stages, and
 the engine binds a buffer by name. At most one stage can then read what it thinks it reads. Both
 stages of a program therefore get a single block holding the union of their uniforms, in a
 canonical order.
@@ -136,7 +136,7 @@ the fragment declares without the vertex emitting it is refused loudly, while th
 and shifts the locations of everything after it.
 
 The two sides are reconciled in two different ways, and it is worth not confusing them. A varying
-the *engine* names - there is one, the fog coordinate - has to be declared by both stages or by
+the *engine* names (there is one, the fog coordinate) has to be declared by both stages or by
 neither, so it is decided at program assembly. The pack's own varyings are not unified that way:
 they are reconciled in the other direction, by striking from the later stage the inputs nothing
 upstream writes.
@@ -164,7 +164,7 @@ of the four are counter-intuitive:
 - **The search runs only over the lines a branch actually took.** The reference implementation is
   handed a source its preprocessor has already been over, so a branch nobody takes is simply not
   there. Here the text is still whole, so liveness has to be applied deliberately to get the same
-  answer - and the difference is not academic, because the idiom packs use is one directive per
+  answer, and the difference is not academic, because the idiom packs use is one directive per
   branch. Read them all and you take the last one *written* rather than the one that *holds*.
 
 Two spellings exist, compared by position, the later one applying; they differ in form, and only
@@ -178,7 +178,7 @@ logged.
 
 One deliberate asymmetry: the attachment list and the count of declared fragment outputs follow
 different rules. **Attachments are read on live lines only**, so a directive in a branch nobody
-takes decides nothing - while the **output count includes every branch** and knowingly
+takes decides nothing, while the **output count includes every branch** and knowingly
 over-declares. That looks inconsistent and is not, because the two failure modes are not equal: an
 attachment claimed from a dead branch sends writes to the wrong target and flips it afterwards,
 whereas an over-declared output costs nothing and an under-declared one fails to compile.
@@ -194,7 +194,7 @@ a parent and resolution walks up recursively. The tree and its transitivity are 
 reading the reference implementation, not from documentation.
 
 Which directory a program is looked up in is decided before any of that, and the three rules there
-are easy to get wrong - a dimension directory replaces the base set rather than merging with it, the
+are easy to get wrong: a dimension directory replaces the base set rather than merging with it, the
 condition is the directory's existence and not its contents, and the base set is not necessarily the
 root. They belong to the format rather than to the translator, and they are in
 [the pack format](pack-format.md).
@@ -219,13 +219,13 @@ happens to have.
 than fixed.** Two cases are worth knowing because they look like defects here and are not.
 
 The format appears to offer a pack two half-lives for wetness, one for how fast it rises and one for
-how fast it dries. Both directives land on the **rise**, and whichever is read last sets it - so a
+how fast it dries. Both directives land on the **rise**, and whichever is read last sets it, so a
 pack writing a drying time is quietly changing how fast wetness comes *on*. The fall is real and is
 a constant no pack can reach, so the two are not the same rate; they are simply not both settings.
 
 The engine matches the reference here, and the corpus says why that is not just deference. The packs
 that declare a drying time disagree with the constant in **both directions** and by wildly different
-amounts - one asks for a fall many times faster, two ask for one half again slower. Honouring the
+amounts: one asks for a fall many times faster, two ask for one half again slower. Honouring the
 declaration would change how all three look, in opposite directions, and every one of them was tuned
 against the behaviour they actually get.
 
@@ -289,7 +289,7 @@ An out-of-game check proves what **compiles**, never what **draws**. Attachment 
 conformance on trust until an image exists.
 
 And the converse: a wrong parity or a wrong layout looks like a correct image. A shifted uniform
-block does not produce a black area - it produces a plausible image in which every value stands in
+block does not produce a black area: it produces a plausible image in which every value stands in
 for another. That class of defect is caught by the layout check, not by looking at the screen.
 
 Neither instrument substitutes for the other.
@@ -298,7 +298,7 @@ Neither instrument substitutes for the other.
 
 Any map that is **iterated** must have a defined iteration order. A common immutable-map factory
 deliberately randomises iteration with a per-process salt, which makes uniform block members and
-vertex attributes come out in a different order on each launch - a defect that reproduces only
+vertex attributes come out in a different order on each launch: a defect that reproduces only
 across process boundaries, and looks like nondeterministic hardware behaviour. Tables that are
 iterated go through an insertion-ordered map; the randomising factory is for tables queried by key
 only. It also rejects null values, which matters wherever a table legitimately holds a "no parent"

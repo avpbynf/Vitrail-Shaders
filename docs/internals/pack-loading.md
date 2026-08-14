@@ -9,12 +9,12 @@ the places where the obvious implementation is the wrong one.
 
 A directory and a zip go through one class, and above that class nothing knows which of the two it
 is looking at. A directory becomes a root path; a zip is mounted as a filesystem, and that
-filesystem is **owned** - the source closes it, and nothing else may. If anything fails between
+filesystem is **owned**: the source closes it, and nothing else may. If anything fails between
 mounting the archive and finding its GLSL root, the mount is closed before the failure propagates,
 or a rejected pack leaves an archive open for the rest of the session.
 
 The GLSL root is the direct child named `shaders` when there is one. Otherwise the tree is walked to
-a bounded depth and the lexicographically smallest match is taken - bounded so a deep archive costs
+a bounded depth and the lexicographically smallest match is taken: bounded so a deep archive costs
 nothing, smallest so two runs cannot disagree. The pack's name comes from the directory name or the
 archive filename, never from anything inside.
 
@@ -41,7 +41,7 @@ hostile. Where a directive claims a length, the length on disk is asked for sepa
 that does not match its claim is refused without being read whole first.
 
 Decoding never throws. Malformed input is replaced, a leading byte-order mark is dropped, and lines
-are split on all three endings including a lone carriage return - a file with classic Mac endings
+are split on all three endings including a lone carriage return: a file with classic Mac endings
 read as one long line loses every directive in it. A pack that ships one file in the wrong encoding
 should lose that file's accented comments, not fail to load.
 
@@ -53,7 +53,7 @@ number the loader reports. The extension list is the only filter.
 
 The walk is then **sorted by pack-relative path**, and that sort is part of the contract. The
 settings index keeps the first declaration of a name and drops later ones, and packs do declare the
-same setting twice in different shapes - once as a bare switch, once carrying a list of allowed
+same setting twice in different shapes: once as a bare switch, once carrying a list of allowed
 values. Whichever is seen first decides what kind of setting the player is offered. Directory
 iteration order is unspecified, and a zip and a directory do not enumerate alike, so an unsorted walk
 gives one pack two different indexes on two machines and neither is wrong.
@@ -66,7 +66,7 @@ and has to be written down rather than inherited from the filesystem.
 There are two resolution entry points and one resolution body. A specification beginning with a
 forward slash resolves against the GLSL root; anything else resolves against the directory of the
 file that carried the directive. Both then go through the same body, and **that is where the
-confinement check lives** - in the resolution rather than in each caller, so that every road to a
+confinement check lives**: in the resolution rather than in each caller, so that every road to a
 file passes through it. Includes and the texture keys of `shaders.properties` share it for that
 reason. A pack is downloaded content; without a check that the normalised target is still inside the
 GLSL root, a specification made of dots and slashes has the engine read any file the game can reach
@@ -74,7 +74,7 @@ and hand it to a shader.
 
 One detail there is easy to get wrong and silent when wrong: **the leading slashes come off before
 the resolution, not after.** Resolving an absolute-looking path against a base discards the base, so
-the search drops to the root of the archive and finds nothing - and a texture that is not found is
+the search drops to the root of the archive and finds nothing, and a texture that is not found is
 black rather than an error. Packs do write every one of their texture paths that way.
 
 When the exact name does not exist, the parent directory is listed once, cached by directory, and
@@ -95,7 +95,7 @@ nothing to cycle through, not a switch.
 The list of allowed values is the first bracketed group anywhere in the trailing comment, not one
 required to follow the slashes immediately. Packs routinely describe the setting in words before
 offering its values, and requiring adjacency leaves exactly those settings with no choices in the
-menu - a failure that shows up as a slider the player cannot move rather than as an error.
+menu: a failure that shows up as a slider the player cannot move rather than as an error.
 
 **The scan is deliberately naive and has to stay that way.** It runs no preprocessor and skips no
 comment block, so a declaration inside a documentation block enters the index, and so does a macro
@@ -105,7 +105,7 @@ moves every total at once, leaving nothing to compare against. Filtering them is
 deliberately, together with the numbers it moves.
 
 Names that differ only by case are collected and reported. They are harmless while the index is read
-case sensitively - which it is, because GLSL identifiers are - but they are the exact shape of a pack
+case sensitively, which it is, because GLSL identifiers are, but they are the exact shape of a pack
 that behaves differently as a folder and as an archive.
 
 The index has a second job beyond listing settings: it is the only way to tell **a name the pack owns
@@ -115,8 +115,8 @@ unknown name than for a declared one.
 
 ## Applying a setting where it stands
 
-A chosen setting is applied by rewriting the line that declares it, in place. The alternative -
-gathering every setting into a block of defines at the top of the unit - is not a simplification, it
+A chosen setting is applied by rewriting the line that declares it, in place. The alternative
+(gathering every setting into a block of defines at the top of the unit) is not a simplification, it
 is a different program. A declaration's position is part of its meaning: packs test a setting with
 `#ifdef` above the line that declares it, relying on it being undefined at that point, and hoisting
 the declaration flips those tests without a word.
@@ -128,7 +128,7 @@ The rewrite rules are asymmetric on purpose:
   all satisfies.
 - A value rewrites the define's value. Indentation and the trailing list of allowed values are kept,
   so the line still declares to the menu what it declares to the compiler.
-- A switch applied to a numeric constant leaves the line alone - a switch says nothing about a number.
+- A switch applied to a numeric constant leaves the line alone: a switch says nothing about a number.
 - A switch applied to a boolean constant is written out as the word true or false. A constant is read
   as an expression rather than tested for existence, so commenting it out would leave the name
   undeclared where it is used, and skipping it would drop the player's choice silently.
@@ -163,7 +163,7 @@ settings name is an identifier, and a pack uses identifiers for its own things.
 Which of those names the load says out loud depends on where the name came from, and the difference
 is who typed it. A line of `vitrail/options.txt` is named word by word, because a person edits that
 file by hand and a typo there is worth a line. A name in the pack's own settings file is named too,
-in the line that reports what the menu no longer shows - which is a wider question, and that line
+in the line that reports what the menu no longer shows, which is a wider question, and that line
 therefore also carries names the pack still declares and still applies. A word both files hold is
 left to the first line rather than counted twice.
 
@@ -178,8 +178,8 @@ engine applies the word anywhere.
 Under both sits the engine's own table, and three readers have to be handed the same one: the
 preprocessor deciding which branch is live, the translator writing those symbols back out, and the
 settings menu testing them. A pack read against one table and compiled against another asks for
-biomes the engine cannot answer with. So there is one value for the whole process - there is one
-machine - and what the machine is arrives as an argument rather than being read where the table is
+biomes the engine cannot answer with. So there is one value for the whole process (there is one
+machine), and what the machine is arrives as an argument rather than being read where the table is
 built. That keeps the loading code free of any graphics API and makes the table buildable with no
 device at all, which is what the out-of-game checks in [Developing](../developing.md) depend on.
 
@@ -200,7 +200,7 @@ the wrong bucket is worse than not classifying it.
 
 Each level of the stack remembers three things: whether it is live, whether any branch of it has
 already been taken, and whether its parent was live. The middle one is what makes `#elif` and `#else`
-behave - once a branch has run, the rest of the chain stays dead even when its own condition is true.
+behave: once a branch has run, the rest of the chain stays dead even when its own condition is true.
 
 An `#elif` condition is evaluated **only when it can still matter**, and that is not an optimisation:
 a later branch may be nonsense once an earlier one has been taken, and evaluating it eagerly makes
@@ -209,7 +209,7 @@ fatal, because packs ship them.
 
 The same stack serves the GLSL sources and the properties files. Two implementations would eventually
 disagree about what is live, and the disagreement would appear as a program that exists in one place
-and not in the other - a defect with no visible cause.
+and not in the other: a defect with no visible cause.
 
 The two files that carry conditionals do not order their passes the same way, and the difference is
 deliberate rather than an oversight.
@@ -222,7 +222,7 @@ then never closed and the rest of the file goes dark. Packs write exactly that.
 The shader properties file does the opposite: continuations are joined over the whole text before
 it is split into lines at all, and the conditionals are then evaluated on the joined lines. What
 makes that safe there is the join rule itself, which swallows only the indentation of the following
-line and never crosses a blank one - so a continued key cannot absorb the block beneath it.
+line and never crosses a blank one, so a continued key cannot absorb the block beneath it.
 
 The expression evaluator itself is a recursive descent over C precedence, in integers rather than
 floating point, because the compiler that sees the same line later will give the C answer whatever is
@@ -230,7 +230,7 @@ decided here. Two small things bite: two-character operators are matched before 
 is read as `<` followed by `=`; and the base of a numeric literal has to be settled before a type
 suffix is stripped, since in hexadecimal `f` is a digit and taking it for a float suffix silently
 truncates the number. A division by zero, a shift by a negative or absurd amount, and the one
-overflowing division are treated as no answer rather than thrown - a condition that cannot be worked
+overflowing division are treated as no answer rather than thrown: a condition that cannot be worked
 out is not a reason to abandon the load.
 
 ## Flattening an entry file
@@ -247,19 +247,19 @@ instead of producing a unit with a hole in it at load time.
 
 Two sets are kept, and they are not the same set. One holds the files on the **current path** and
 detects a cycle; the other holds everything seen and only counts re-expansions. Merging them would
-amount to include-once, which the format rules out - see
-[the pack format](../pack-format.md) for what that would do to a pack's own guards.
+amount to include-once, which the format rules out (see
+[the pack format](../pack-format.md) for what that would do to a pack's own guards).
 
 Dead branches stay in the output verbatim, but the expander also records **which lines came from a
 branch that was taken**. That bit is what a later stage needs: a translator that lifts a declaration
 out of a branch nobody takes makes it unconditional, and packs do declare the same name as a uniform
 in one branch and as an ordinary global in the other. Conditional directives themselves count as
-taken - they are directives, never declarations. What is done with that record is
+taken: they are directives, never declarations. What is done with that record is
 [Translation](../translation.md).
 
 ## What the bounds look like here
 
-[Translation](../translation.md) states the rule - every loop whose trip count depends on pack content
+[Translation](../translation.md) states the rule: every loop whose trip count depends on pack content
 is bounded on total work, and the errors it prevents are not catchable at the call site. This is what
 that rule looks like in the loader.
 
@@ -268,14 +268,14 @@ Expansion carries three budgets at once: files expanded, lines written, and char
 The file budget is the intuitive one and it is the weakest: it is checked when a file is opened, so
 a pack that ships **one enormous file** never expands anything and never reaches it. That is why
 lines and characters are checked **on every emitted line** instead. Lines alone would not do either,
-because a line is not the cost that matters downstream - the translator that reads the unit holds
+because a line is not the cost that matters downstream: the translator that reads the unit holds
 far more per line than the line itself.
 
 When a budget runs out, one error line is written and the rest are silent: repeating the message
 turns the message itself into the runaway.
 
 The nesting budget inside the expression evaluator is shared between brackets and prefix operators,
-because a bracket limit alone bounds nothing - a long run of prefix operators costs the same stack
+because a bracket limit alone bounds nothing: a long run of prefix operators costs the same stack
 frames with no bracket in sight. Name resolution and expression evaluation are mutually recursive, so
 their budget travels through the whole nest instead of restarting at each hop; two settings defined
 in terms of each other would otherwise reach the stack limit.

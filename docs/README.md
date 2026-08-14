@@ -49,7 +49,7 @@ a program has drawn once there is no legacy GLSL behind it.
 
 Where the pauses come from is worth knowing, because "once" is not the same as "at selection". The
 chain is translated when the pack is chosen. The programs that draw the world and the sky are
-translated on demand, at the first frame that needs them - so the first frame of a place does wait
+translated on demand, at the first frame that needs them, so the first frame of a place does wait
 on one. And **changing dimension is a full reload**, because a dimension directory replaces the root
 rather than layering over it: the whole pack is read, translated and its colour targets allocated
 again. That is the hitch at the portal, and the log names it as it happens.
@@ -60,7 +60,7 @@ observe:
 - **The cost is paid at load, not per frame.** Some of it lands at selection and the rest in the
   frames just after, because pipelines are compiled one per frame on purpose rather than all at
   once. Until the last one is ready the chain draws nothing at all and the game's own image is what
-  you see - which is also what happens for a moment after every resource reload.
+  you see, which is also what happens for a moment after every resource reload.
 - **A pack that cannot be translated fails loudly**, not as a corrupt image twenty minutes later.
   When Vitrail refuses something, the log names it.
 - **Uniform and sampler binding is decided up front**, so a pack that asks for something the

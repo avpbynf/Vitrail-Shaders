@@ -16,7 +16,7 @@ quietly stale.
 | BSL v10.1.3 | Drawn whole, and the one watched most closely. Terrain, water, shadow map, sky, clouds, weather, particles, mobs and the held hand all go through it. |
 | Complementary Unbound r5.8.1 | Drawn whole, and watched as closely. Its colour targets, its deferred chain and its shadow map all come up; the log prints how many targets it allocated and at what size. |
 | Complementary Reimagined r5.8.1 | Loads. Not looked at recently. |
-| Bliss v2.1.2 | Drawn, and its terrain in the End was right when last looked at - the sky there is the game's for every pack, so it says nothing about this one. One thing seen wrong: **mobs and the held arm come out in flat wrong colours**, which is the shape of a pack branching on an identifier this engine holds constant. See [anything that moves](#anything-that-moves). Its water is a separate open case, and it was the pack the [dark terrain](#terrain-that-is-too-dark) section was written for. |
+| Bliss v2.1.2 | Drawn, and its terrain in the End was right when last looked at: the sky there is the game's for every pack, so it says nothing about this one. One thing seen wrong: **mobs and the held arm come out in flat wrong colours**, which is the shape of a pack branching on an identifier this engine holds constant. See [anything that moves](#anything-that-moves). Its water is a separate open case, and it was the pack the [dark terrain](#terrain-that-is-too-dark) section was written for. |
 | Sildur's Vibrant Extreme v2.01 | Loads, and it is the pack that exercises the paths least travelled here: it keeps the overworld's programs at the root of `shaders/` and gives the other two dimensions folders of their own, several families reach its textured program through the fallback tree rather than shipping one, and the target its terrain writes first is not target zero. Not looked at in game recently. |
 | Mellow v3.3 | Loads, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. Not looked at in game recently. |
 | Body Camera v1.6.1 | Loads. It is one of the packs that branches on the star flag in the sky, so it is worth reading [the sky goes flat](#the-sky-goes-flat) alongside. Not looked at in game recently. |
@@ -53,16 +53,16 @@ data structures will hit this.
 Of the packs used for testing, Reverie is the one in that position, and it says so itself. A pack
 can declare the features it cannot be drawn without, and Reverie declares several. That line is read
 before any of its programs is translated, so the refusal names what the pack asked for and did not
-get - the log lists them - rather than the symptom that would have come later: a storage block,
+get (the log lists them) rather than the symptom that would have come later: a storage block,
 which compiles but never enters a bind group, so the draw would go against nothing.
 
 **Any such declaration is refused, whatever it names**, and that is wider than the paragraph above:
 this engine serves no feature flag at all, so it has nothing to check a name against. It also
 defines no `IRIS_FEATURE_`, which is what a pack reads to find out whether it should take the path
-it wrote for a renderer that has none - the declaration a pack marks optional rather than required.
+it wrote for a renderer that has none: the declaration a pack marks optional rather than required.
 
 Iris draws Reverie. It refuses a required flag only when the name is unknown to it or the hardware
-cannot serve it, and it has built every one of the ones Reverie asks for - some outright, some
+cannot serve it, and it has built every one of the ones Reverie asks for: some outright, some
 wherever the driver supports them.
 
 **A single pass can be refused without the pack being refused.** If a program's fragment stage
@@ -78,7 +78,7 @@ It usually comes from a body shared between programs, so that a fragment stage e
 varying the vertex stage it was actually paired with never wrote. Where that lands on a full-screen
 pass the cut above handles it, since a quad reads none of them; where it lands on a geometry program
 that really does read one, the pass is refused. **The log names which program was refused and which
-inputs did not match** - that line, not this page, is what tells you whether a given pack is
+inputs did not match**: that line, not this page, is what tells you whether a given pack is
 affected today, and it is the only thing that will.
 
 ## The effect never ran
@@ -105,22 +105,22 @@ which has to ship a `bricks_n.png` beside its `bricks.png`, and most resource pa
 pack asking for a normal map that nobody supplies reads a perfectly valid flat one and never
 complains.
 
-**How to confirm:** the engine names what it found **at every resource load** - at startup, and
-again after F3+T - one line per atlas and per map, saying how many of its sprites answered. Look
+**How to confirm:** the engine names what it found **at every resource load** (at startup, and
+again after F3+T), one line per atlas and per map, saying how many of its sprites answered. Look
 near the top of the log rather than around world load. No line means either that no resource pack in
 the stack ships a map, or that building them failed, and the failure says so on its own line just
 above.
 
 Two more places relief goes missing even with a material pack installed: **mobs and armour have
 none**, and **an animated block's map does not animate**. Both are named work not done, with what
-they cost, in [Material maps](internals/material-maps.md#what-is-not-done) - which is also where the
+they cost, in [Material maps](internals/material-maps.md#what-is-not-done), which is also where the
 rest of the mechanism lives.
 
 ## The water
 
 Water has two distinct failure shapes, and they look nothing alike.
 
-**Water missing entirely - you see the lake bed through an empty surface.** Some packs sample a
+**Water missing entirely: you see the lake bed through an empty surface.** Some packs sample a
 colour target before shading the water and discard the fragment when that sample fails a test. If
 the read lands on a buffer that still holds the clear, every water fragment is discarded. BSL does
 this, which is why the translucent chunk pass is run on the buffers the pack's own deferred stage
@@ -167,8 +167,8 @@ go out of date between two of them. What follows is what each family that IS ser
 own programs out of the box, both halves of the particles, and `weather=off` or `particles=off` in
 `vitrail/options.txt` hands either family back to the game if you need to compare.
 
-**The mobs and the block entities go through the pack out of the box.** The opaque half of them -
-the body of a mob, a chest, a conduit, an armour piece - is drawn with the pack's own program: it is
+**The mobs and the block entities go through the pack out of the box.** The opaque half of them
+(the body of a mob, a chest, a conduit, an armour piece) is drawn with the pack's own program: it is
 lit as the pack lights the world, and the shadows the terrain casts fall on it. What stays behind is
 everything that blends, and the player's own body is in that half, so third person still shows the
 symptom this section describes. `entities=off` in `vitrail/options.txt` hands the whole family back
@@ -200,7 +200,7 @@ what a pack cannot do here is treat it as material of its own.
 as receive, and the log names the shadow passes one by one when a place first draws. Two things
 take that back: a pack can ask for fewer casters than the default and is given what it asks for,
 and a draw whose pipeline this engine has no shadow row for is left out of the map rather than
-guessed at - the log says so, by name, for each one. **The rain, the snow, the particles, the hand
+guessed at: the log says so, by name, for each one. **The rain, the snow, the particles, the hand
 and the glint of an enchantment are never in it**: they have the pack's light on them and nothing
 under them. The glint is the one of the five where the reference does the same thing for its own
 reason, cancelling the foil while the map is filled, so what is missing there is a tint on a shadow
@@ -228,12 +228,12 @@ rather than reporting as separate bugs:
   same door and in the same vertex format, with the identifier that names what is held among the
   constants too.
 - A pack can allocate a colour target for a family that is not drawn through it. BSL allocates one
-  for glowing entities alone, and its deferred pass samples that target - so the chain reads a clear
+  for glowing entities alone, and its deferred pass samples that target, so the chain reads a clear
   across a whole target.
 
 The engine names the families that still come from the game, in the log, when a place first draws.
 That line is the authority; this page does not duplicate it. A place drawn without a seed does not
-print it, and says so on a line of its own instead - and there the mobs stay with the game whatever
+print it, and says so on a line of its own instead, and there the mobs stay with the game whatever
 the switch says, the seed being the only road their colour has into the pack's picture, which the
 log also names when it happens.
 
@@ -247,7 +247,7 @@ painting the whole disc flat. Sildur's and Body Camera both do this.
 
 The engine multiplies the draw's colour modulator into the value the pack reads rather than
 substituting white, precisely so that branch is not taken by accident. All of the sunrise band's
-colour lives in that modulator - its mesh is white fading to transparent - so substituting white
+colour lives in that modulator (its mesh is white fading to transparent), so substituting white
 would both flatten the band and trip the star test.
 
 **So if you do see this, the modulator is not reaching the pack.** That is the thing to check, and
@@ -255,7 +255,7 @@ it is not something a pack setting can cause.
 
 ## You just changed packs
 
-**Blocks wave when they should not, glow, or cast a shadow that spills past them - and placing then
+**Blocks wave when they should not, glow, or cast a shadow that spills past them, and placing then
 breaking a block fixes that spot.**
 
 Block numbers travel on the vertex, and no two packs number blocks alike. Chunk sections meshed
@@ -264,14 +264,14 @@ inside the new pack's waving-foliage range. Breaking a block rebuilds that secti
 appears to fix it.
 
 The engine rebuilds the world when the table moves and says so in the log. **No image diagnosis
-after a hot pack change is worth anything until that rebuild has happened** - check for that line
+after a hot pack change is worth anything until that rebuild has happened**: check for that line
 before investigating anything else.
 
 ## Terrain that is too dark
 
 One cause worth naming, because it used to be the answer here and is no longer. Packs can set a
 directive asking that ambient occlusion be delivered separately from vertex colour. Left unread it
-puts occlusion inside the albedo, which the whole chain then reflects, exposes and moves - a
+puts occlusion inside the albedo, which the whole chain then reflects, exposes and moves: a
 plausible image that is uniformly too dark, and Bliss was the pack it showed on. **The directive is
 read now**, and the mesh keeps occlusion out of the colour where a pack asks for it.
 
@@ -286,7 +286,7 @@ A short reference, if you are writing a pack or wondering why yours is treated d
 
 - **Where a pack keeps its programs is not fixed, and it need not be uniform inside one pack.**
   Sildur's keeps the overworld's at the root of `shaders/` and gives the Nether and the End folders
-  of their own. A dimension folder *replaces* the base set rather than layering over it - the full
+  of their own. A dimension folder *replaces* the base set rather than layering over it: the full
   rule, including what an empty folder means, is in [the pack format](pack-format.md).
 - **A pack need not ship the program a family asks for.** Sildur's ships no terrain, lit-textured,
   entity or hand program; those reach its textured program through the fallback tree, several
@@ -305,7 +305,7 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   reference serves a pack that does not ask for more. A shadow program is given the buffers its own
   draw buffers name, and a directive naming a buffer past those two is thrown away whole and
   answered with the pair, which is again what the reference does. **Where a program names none, or
-  names more buffers than it writes outputs, it is given only as many as it writes** - a buffer
+  names more buffers than it writes outputs, it is given only as many as it writes**: a buffer
   short of the reference. That is deliberate: Vulkan leaves an attachment no fragment writes
   undefined for the whole draw, where the GL these packs were written against leaves it standing,
   and what a pack reads out of an untouched shadow buffer is the white a coloured shadow multiplies
@@ -313,8 +313,8 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   shafts there and reads it back for every ray that reaches through something translucent, so a
   buffer it could not write filled every body of water with white.
 - **A pack can ask the engine not to draw a piece of the sky** because it draws that piece itself,
-  inside one of its own programs. Four such requests are honoured - the sun, the moon, the stars and
-  the sky disc - and honouring the last two is a **deviation from both references**, which take out
+  inside one of its own programs. Four such requests are honoured (the sun, the moon, the stars and
+  the sky disc), and honouring the last two is a **deviation from both references**, which take out
   only the sun and the moon. It costs some packs the stars the references leave them,
   and the NOTICE says so. The fifth request in that family is not one of those four and reads the
   other way round: `clouds` takes `off`, `fast` or `fancy` rather than a boolean, and it overrules

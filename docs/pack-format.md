@@ -11,7 +11,7 @@ Once loading ends, the pack is data.
 
 The pack's name comes from the folder name, or from the archive filename without its suffix, never
 from anything inside. The GLSL root is `shaders/`, and if it is not directly at the archive root it
-is searched at bounded depth in sorted order - which is why a pack someone re-zipped with a wrapper
+is searched at bounded depth in sorted order, which is why a pack someone re-zipped with a wrapper
 folder still loads.
 
 Every path handed around afterwards is relative to `shaders/`, with forward slashes. That is the
@@ -36,10 +36,10 @@ lost if it is not read.
 
 What makes a file an entry point is its **extension** and nothing else: a shared body is a `.glsl`,
 and it never reaches the question of where it sits. No directory is excluded by name, here or in the
-reference - a folder called `lib` is not special, its contents are simply not entry points.
+reference: a folder called `lib` is not special, its contents are simply not entry points.
 
 What is left is then filtered twice: the directory has to be a dimension directory, and the base
-name has to be a program name. Both catch real cases - shared bodies parked in a subfolder carry
+name has to be a program name. Both catch real cases: shared bodies parked in a subfolder carry
 perfectly valid program names, and shared bodies parked inside a dimension folder carry names
 outside the list. Whatever is rejected is named in the log rather than dropped silently.
 
@@ -49,7 +49,7 @@ spelling means slot zero, or one of a small set of unnumbered names. One detail 
 zero to the first empty slot drops real programs.
 
 A compute program hangs a single-letter suffix off a name that has to be valid without it, and the
-suffix is recognised on the numbered families and on two of the unnumbered names - not on the
+suffix is recognised on the numbered families and on two of the unnumbered names, not on the
 geometry names. Vitrail reads those files, names them in the log and runs none of them, so what
 their order would be is the reference's business and not this engine's yet.
 
@@ -65,7 +65,7 @@ dimension. Everything else there resolves through the fallback tree *inside that
 through the root. The reference implementation states this in as many words.
 
 Two corollaries follow. The condition is the **existence** of the directory, not its contents, so an
-empty dimension directory yields an empty program set rather than falling back to the root - because
+empty dimension directory yields an empty program set rather than falling back to the root, because
 emptying a folder is the only way a pack has of saying "nothing here", and reading the base set
 instead would overrule it. A directory that is named and *absent* does fall back. And the base set
 is not necessarily the root: it is the directory bound to the catch-all entry of the dimension
@@ -74,7 +74,7 @@ mapping, and in practice most packs keep no programs at the root at all.
 ### The fallback tree
 
 When a program is missing, resolution walks up a tree where each program names a parent, and it
-substitutes one geometry kind for another - textured and line programs fall back to basic; terrain,
+substitutes one geometry kind for another: textured and line programs fall back to basic; terrain,
 items, entities, the held item, weather and particles to a lit textured program; terrain variants
 and water to terrain; and so on. This is not theoretical: packs routinely ship neither of the
 intermediate programs and get their terrain through several levels of it.
@@ -92,7 +92,7 @@ Only `=` separates a key from its value, and **there is no end-of-line comment**
 the first `=` is the value.
 
 Backslash continuations are joined before the file is split into lines, and the joining rule
-swallows the following line's indentation - but never a blank line. That boundary is the whole of
+swallows the following line's indentation, but never a blank line. That boundary is the whole of
 the rule and it is not a detail: widening it to "any whitespace" makes a continued key absorb
 whatever block follows it, and packs do end continuations on a blank line. One pack's main screen
 swallowed the commented-out block underneath when the rule was written the other way.
@@ -111,7 +111,7 @@ conditionals in this file. Read it flat and you report programs as active that t
 off.
 
 **A program toggle is looked up under one key and one only**: the relative folder path exactly as
-written, with no fallback to the bare name. The fallback would look harmless and is not - one pack
+written, with no fallback to the bare name. The fallback would look harmless and is not: one pack
 conditions `world0/composite1` and `world-1/composite1` on two different expressions, so reading the
 bare key when the qualified one is absent would run in the Nether a pass the pack switched off
 there. Deriving that key by substituting characters in the folder name misses instead, silently, on
@@ -120,7 +120,7 @@ every pack with an unusual dimension name.
 Both an empty value and a non-evaluable expression mean enabled: this file is read fail-open.
 
 **Unrecognised keys are not dropped in silence.** They are counted by prefix and printed, which is
-what makes a pack's misspelled key visible - correct to ignore, wrong to lose.
+what makes a pack's misspelled key visible: correct to ignore, wrong to lose.
 
 ### The shadow caster directives, and the two that are not flags
 
@@ -164,7 +164,7 @@ a typed constant. A commented-out declaration is still an offered setting the us
 The kind of a setting is decided by whether the rest of the declaration line is empty, not by the
 presence of a value list. Empty means a toggle; non-empty means a value; a constant is always a
 constant. A define carrying a value but no bracketed list stays a value setting with no enumerated
-choices - it is not a toggle. The allowed values come from a bracketed comment on the declaration
+choices: it is not a toggle. The allowed values come from a bracketed comment on the declaration
 line.
 
 The scan deliberately runs with no preprocessor and no comment-block removal, so declarations
@@ -182,7 +182,7 @@ either. The reason is a different one, and it is worse: with no declaration anyw
 position to argue about, and a header define would simply be a word nobody offered as a setting
 landing on top of whatever the pack uses that word for.
 
-The rewrite rules are asymmetric on purpose - a true boolean uncomments the define, a false boolean
+The rewrite rules are asymmetric on purpose: a true boolean uncomments the define, a false boolean
 comments it out, a value rewrites the define's value, and a value on a constant rewrites only its
 right-hand side. A
 boolean lands on a constant in one of two ways: on a `const bool` it is written out as `true` or
@@ -195,20 +195,20 @@ trailing value-list comment are preserved.
 
 The table used to preprocess `shaders.properties` carries the engine's defines, the default of
 every non-constant uncommented setting, and the variant overrides. The per-unit table carries the
-engine's defines alone - the pack's own defaults and the overrides applied to them enter as
+engine's defines alone: the pack's own defaults and the overrides applied to them enter as
 expansion walks over its define lines, like a real preprocessor.
 
 Unifying them is a mistake, and the asymmetry is the whole point: the properties table has to be
 complete before its first line is read, because that file may test any setting, while a source file
 has to meet the pack's own defaults where the pack wrote them. Constants are settings like any
-other and are in both tables under their declared value - the split is about *when* a default
+other and are in both tables under their declared value: the split is about *when* a default
 arrives, never about which kind of setting it is.
 
 ### Profiles
 
 A profile is a token list with four shapes: a nested profile reference, a negated name meaning
 false, a name with a value, and a bare name meaning true. They are applied in reading order, last
-one winning, and each profile is an independent variant - there is no running "current profile"
+one winning, and each profile is an independent variant: there is no running "current profile"
 accumulating across them.
 
 The profile shown to the user is **deduced, not stored**: it is the first profile, from most
@@ -226,7 +226,7 @@ there are hundreds of them in the corpus; a link opens another page; one token s
 and what is left over still has to land somewhere. Reading only the identifiers drops a third of
 what the pack wrote and takes the shape of the screen with it. A name exposed on a screen may be
 declared nowhere in the pack,
-so the screen has to tolerate an orphan name - neither crash on it nor fabricate a setting for it.
+so the screen has to tolerate an orphan name: neither crash on it nor fabricate a setting for it.
 
 ## Assembling a program's source
 
@@ -235,7 +235,7 @@ may be mixed, anything after the closing delimiter is ignored, and widening that
 the engine follow includes the reference does not.
 
 A specification starting with a forward slash resolves against `shaders/`; anything else resolves
-against **the directory of the file carrying the directive** - not the entry file's directory, and
+against **the directory of the file carrying the directive**, not the entry file's directory, and
 not the root. There is one attempt, no search path, and no implicit extension.
 
 **A missing include does not abort loading.** A literal error directive is written into the unit and
@@ -264,7 +264,7 @@ expression **keeps its value** rather than collapsing to one or zero.
 That last rung is the one that matters, and getting it wrong is subtle. A pack that defines a
 shadow resolution as a quality setting multiplied by a base size, and then compares it against a
 threshold, is comparing sizes. Reduce it to a truth value and the comparison quietly takes the
-wrong branch - with no error anywhere, because both readings are valid conditions.
+wrong branch, with no error anywhere, because both readings are valid conditions.
 
 Arithmetic is done in integers with C semantics, so the engine cannot disagree with the compiler
 that re-evaluates the same conditions on the emitted text.
@@ -280,7 +280,7 @@ counted, so an unexpected one shows up in the totals instead of vanishing.
 
 ## Textures a pack supplies itself
 
-A pack can declare its own textures under two key families - one naming a texture by name, one
+A pack can declare its own textures under two key families: one naming a texture by name, one
 naming a stage and a sampler. Both are read through the pack's conditionals, so a texture declared
 inside a disabled branch is not bound. A declared texture rebinds that sampler name to the file
 instead of to the colour target that would otherwise carry the same name.
@@ -296,7 +296,7 @@ where it previously brought down every colour target of the pack.
 
 **A refused directive must still consume the name it claims.** When a refusal let the name fall
 through, a typo in the pixel type made a sampler name resolve back onto the colour target of the
-same name - so the pack read the scene where it asked for its own lookup table. That is the exact
+same name, so the pack read the scene where it asked for its own lookup table. That is the exact
 shape of a plausible, wrong image. A key naming a stage and a sampler now takes that name whatever
 follows on the line; only an unreadable key takes nothing.
 
@@ -305,7 +305,7 @@ under a forged name, and each read replaced by a helper that reads two slices an
 This works because the backend refuses the declared type, not what actually sits behind the sampler.
 The rename is applied in every program carrying the declaration, not only in the targeted stage: the
 reference renames only in the targeted stage, which leaves an unbound three-dimensional sampler
-alive elsewhere - tolerated by the old backend, refused by this one.
+alive elsewhere: tolerated by the old backend, refused by this one.
 
 ## A pack is untrusted content
 
@@ -313,7 +313,7 @@ This is the frame to keep in mind for everything above. A shader pack is a file 
 
 **Any path a pack writes is refused if it normalises to somewhere outside `shaders/`.** Without that
 check, a pack can make the engine read an arbitrary file from the user's disk and hand it to a
-shader. That door is not only the include directive - the texture keys go through it too, which is
+shader. That door is not only the include directive: the texture keys go through it too, which is
 why they were routed through the same resolution rather than given their own.
 
 Path resolution also falls back to a case-insensitive lookup in the parent directory, cached per

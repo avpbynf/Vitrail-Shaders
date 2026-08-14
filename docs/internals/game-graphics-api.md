@@ -19,7 +19,7 @@ cheapest attachment point in the frame, and it is the one to reach for first.
 It comes with a deadline. Only a few statements later, the game clears the depth texture of the
 main target: the world's depth does not survive past that point. Anything that needs scene depth
 has to take its copy during the event, or arrange to be earlier by hooking the frame graph setup
-instead. Nothing warns about this - a pass reading a cleared depth produces an image, not an error.
+instead. Nothing warns about this: a pass reading a cleared depth produces an image, not an error.
 
 Size is the other thing to get right at the seam. The main target is resized in one place, at the
 head of the frame, when the window state differs. A hook that runs after that, in the same frame,
@@ -33,7 +33,7 @@ three; the event catches none of them correctly.
 
 The game embeds a GLSL front end and a SPIR-V cross compiler, and exposes them: the device's
 precompile entry point accepts an **arbitrary shader source** rather than only the one it would
-have loaded from resource packs, and does the rest - compilation, reflection, and the binding
+have loaded from resource packs, and does the rest: compilation, reflection, and the binding
 remapping that follows from it.
 
 The rule this produces is short: do not write a SPIR-V compiler, and do not vendor one. Everything
@@ -41,7 +41,7 @@ a shader engine needs is reachable through that one entry point, and anything bu
 have to reproduce the game's own reflection conventions exactly in order to be usable.
 
 The corresponding trap is that setting a pipeline on a pass compiles it on demand if it is not in
-the cache, using the source the *game* would have used - which for an identifier that exists in no
+the cache, using the source the *game* would have used, which for an identifier that exists in no
 resource pack means no source at all. What follows is half loud and half silent, and the halves are
 in different places. The compile writes two errors to the log: one names the stage and the
 identifier whose source could not be found, the other names the pipeline and the shader that came
@@ -57,13 +57,13 @@ identity. That has one pleasant consequence and one sharp one.
 
 **Precompiling every frame is free.** The lookup is a get-or-compute, so re-offering an unchanged
 pipeline costs a map probe. This is not an optimisation to skip: it is what keeps the engine correct
-across reloads, since the cache is emptied whenever the game reapplies its shader manager - which
+across reloads, since the cache is emptied whenever the game reapplies its shader manager, which
 includes an ordinary resource reload. Nothing may be compiled once at startup and assumed to
 survive.
 
 **A changed source under an unchanged identity is invisible.** The key does not include the shader
 text. Two different sources offered under the same identifier resolve to whichever was compiled
-first, and the second one is silently discarded - the visible symptom being a shader that behaves
+first, and the second one is silently discarded: the visible symptom being a shader that behaves
 like the previous one, with nothing logged and no compile error to look at. Identity therefore has
 to vary with whatever varies in the source; if a pack selection can change the text, the pack must
 be part of the identity.
@@ -93,7 +93,7 @@ frame where a mistake announces itself.
 The game's own post-processing pass is the model worth following for the shape of a pass: save the
 projection state, open a pass on the output target, set the pipeline, bind the default uniforms, set
 the uniform blocks, bind each input texture by name, draw a full-screen triangle, restore. Notably,
-it declares no barrier and no layout transition - which is the subject of the next section.
+it declares no barrier and no layout transition, which is the subject of the next section.
 
 ## Synchronisation: nothing to write, and a price to know
 
@@ -103,9 +103,9 @@ texture is used as a colour attachment is the same as the one passed when it is 
 per-texture layout tracking anywhere, so there is nothing that can drift out of step from one frame
 to the next.
 
-On top of that, submitting a render pass ends it with a **full memory barrier** - all commands to
-all commands, memory read and memory write. The other operations that touch textures - clearing,
-copying, uploading - end the same way.
+On top of that, submitting a render pass ends it with a **full memory barrier**: all commands to
+all commands, memory read and memory write. The other operations that touch textures (clearing,
+copying, uploading) end the same way.
 
 The practical consequence is that reading in pass N+1 what pass N wrote requires no synchronisation
 code at all: close, open, bind. But the barrier exists only if the pass is genuinely closed, since
@@ -113,7 +113,7 @@ it is closing that submits. A pass left open by an early return or an exception 
 barrier and stays open besides, so passes belong in try-with-resources without exception.
 
 The price is the part to keep in mind as a chain grows: that barrier is a complete GPU
-serialisation, once per pass, and the API offers no finer instrument - no per-resource barrier, no
+serialisation, once per pass, and the API offers no finer instrument: no per-resource barrier, no
 subpass, no way to overlap two passes that do not touch the same texture. Cost scales with the
 number of passes rather than with what they read. Note that this is a structural statement, not a
 measured one: comparing two frames rendered from different viewpoints measures nothing, so any
@@ -126,11 +126,11 @@ and off.
 textures with the same footprint pass. The backend then reinterprets the bits: the game's colour
 target and a typical pack target are the same width per pixel and hold entirely different things.
 Anything that crosses formats must go through a full-screen draw, and the copy path is only for
-exact format matches - see [the frame](../frame.md) for where that shows up in practice.
+exact format matches (see [the frame](../frame.md) for where that shows up in practice).
 
 **A texture cannot be cleared during a pass.** The standalone clear refuses to be called while a
 pass is open, and additionally demands the copy-destination usage on the texture. Clearing through
-an attachment's load operation, by contrast, costs nothing - it is a load-clear rather than work.
+an attachment's load operation, by contrast, costs nothing: it is a load-clear rather than work.
 So the practical rule is that clears are decided when a pass opens; a clear needed in the middle of
 one is really a pass boundary in disguise.
 
@@ -150,8 +150,8 @@ nothing to flip.
 
 The Vulkan viewport the game sets is **not** inverted: it starts at zero and has a positive height.
 The flip happens once, at the very last moment, in the blit to the swapchain, where the destination
-Y range is reversed while the source is not. Everything upstream of that blit - the main target and
-any target a mod owns - keeps the OpenGL orientation, origin at the bottom left.
+Y range is reversed while the source is not. Everything upstream of that blit (the main target and
+any target a mod owns) keeps the OpenGL orientation, origin at the bottom left.
 
 So a full-screen shader that maps a corner to both its texture coordinate and its clip position
 sees texture coordinate zero at the bottom left of the screen, which is exactly the convention
@@ -161,7 +161,7 @@ added "to be safe" is a defect.
 ## Samplers and uniform blocks are paired by reflection
 
 The pipeline builder has **no method for declaring a sampler**. Declarations go through a bind group
-layout instead - a named sampler, or a named uniform block with its type - which is then attached to
+layout instead (a named sampler, or a named uniform block with its type), which is then attached to
 the pipeline. Binding happens at draw time, by name, on the pass.
 
 What ties the two together is reflection over the compiled SPIR-V, and the asymmetry it creates is
@@ -178,21 +178,21 @@ direction is a generous layout. That is what makes it practical to serve a large
 without declaring it pipeline by pipeline.
 
 The asymmetry does not extend to the draw. A sampler that is declared and used, but not bound when
-the draw happens, throws - so the layout can be generous while the binding cannot be sloppy.
+the draw happens, throws, so the layout can be generous while the binding cannot be sloppy.
 
 Two constraints come with it. Names must match **character for character** between the GLSL, the
 layout declaration and the bind call; there is no normalisation anywhere along that path. And a
 sampler's dimensionality is checked against the kind of layout entry its name matched: a name
 declared as a sampler has to be two-dimensional or cube, while a name declared as a uniform with a
 format has to be a buffer, and is bound as a texel buffer rather than as an image. Three survive,
-then, but not interchangeably - and everything outside that set is rejected by name, which is why
+then, but not interchangeably, and everything outside that set is rejected by name, which is why
 several pack features are hard refusals rather than unfinished work, as
 [translation](../translation.md) explains.
 
 Finally, explicit binding and set qualifiers must not be written into the GLSL at all: the compiler
 assigns them and an intermediate module rewrites them afterwards. The same reflection machinery also
 decides how a vertex stage's outputs meet a fragment stage's inputs, with an asymmetry of its own
-that is sharper still - that one is in [translation](../translation.md).
+that is sharper still: that one is in [translation](../translation.md).
 
 ## Small things that cost a lot to rediscover
 
@@ -202,8 +202,8 @@ that is sharper still - that one is in [translation](../translation.md).
 - **The static output texture overrides are consulted by every immediate draw.** Leaving them
   pointing at a mod's textures sends the player's hand and the whole interface into them.
 - **Resizing a render target destroys and replaces its textures and views.** Any reference held
-  across a resize is dead, and opening a pass on a closed view throws - loudly, but in the middle of
-  rendering.
+  across a resize is dead, and opening a pass on a closed view throws (loudly, but in the middle of
+  rendering).
 - **Free GPU resources on the client *stopping* event, not the stopped one.** The first is posted
   while the device is still alive; the second comes after the renderer has been shut down.
 - **Clearing through the attachment costs nothing; clearing the texture is another operation

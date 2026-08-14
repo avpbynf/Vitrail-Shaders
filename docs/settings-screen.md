@@ -7,7 +7,7 @@ somebody else wrote, against a reference implementation they had in front of the
 
 That single fact decides most of what follows.
 
-Open it with the key bound in the game's controls - `I` by default - or from wherever you reached
+Open it with the key bound in the game's controls (`I` by default) or from wherever you reached
 the mod's options.
 
 ## Two views, one way back
@@ -24,7 +24,7 @@ lines.
 ## Nothing happens until you press Apply
 
 Clicking a value changes the value and nothing else on disk: nothing is written, nothing is
-recompiled, and leaving never writes - a pack read again for somebody who was only looking is a
+recompiled, and leaving never writes: a pack read again for somebody who was only looking is a
 second of hitch nobody asked for. This is the one convention of the reference's screen deliberately
 not kept: it applies on the way out.
 
@@ -86,7 +86,7 @@ packs the two are the same, every profile naming the same count; where they diff
 The reference deletes its own, and the two read back the same: a file of comments carries no value
 at all, and the reference removes it itself the next time it loads the pack. Emptying is what keeps
 the confirmation naming the file true, and lets somebody watching the file see it go blank. Reset
-also drops what is pending - a pending value is a change to the settings being discarded - and it
+also drops what is pending (a pending value is a change to the settings being discarded), and it
 does not touch `vitrail/options.txt`, so anything greyed out stays greyed out afterwards.
 
 ## The pack list refreshes itself
@@ -108,11 +108,11 @@ interface, so a page appears in Sodium's options and opens the reference's own s
 The published interface covers more than the entry: there is a builder for a page, for a group, for
 each shape of option and for the colour theme, and the reference describes its whole page through
 them. It reaches outside that once, for the formatter that labels a slider. So the answer is neither
-"no internals" nor "internals everywhere" - it is a published surface with one edge sticking out,
+"no internals" nor "internals everywhere": it is a published surface with one edge sticking out,
 which is worth knowing before planning around either extreme.
 
 **A trap worth knowing before measuring any of this yourself**: what Maven serves as Sodium's
-NeoForge artefact is a launcher shim - a few dozen classes, none of them the renderer - and the mod
+NeoForge artefact is a launcher shim (a few dozen classes, none of them the renderer), and the mod
 is a jar nested inside it. Looking for a package in the outer jar finds nothing and proves nothing.
 This project's own build script unpacks the nested jar for exactly that reason.
 
@@ -171,8 +171,8 @@ The `options.txt` layer wins in both orders and is deliberately global. It is ho
 to run, it applies to whatever pack is loaded, and it is edited by hand while the game is
 running. It decides what is drawn and never what is written.
 
-Of a pack, what it can force is a setting that pack **declares**. A line naming anything else - a
-typo, or a setting another pack has - forces nothing: the pack keeps its own default and the load
+Of a pack, what it can force is a setting that pack **declares**. A line naming anything else (a
+typo, or a setting another pack has) forces nothing: the pack keeps its own default and the load
 says so by name, one line per word. A setting is applied where the pack declares it, so a word with
 no declaration has nowhere to be applied; writing it into the shaders instead is how a pack that
 uses that word for something of its own stops compiling altogether.
@@ -198,7 +198,7 @@ Several different things, and only the first is about you being overruled.
   are the same idea: the button that would put you where you already are.
 
 A slot naming a setting the pack does not declare is not in that list, because it is not greyed at
-all - it becomes a blank. See below.
+all: it becomes a blank. See below.
 
 ## What a broken layout does
 

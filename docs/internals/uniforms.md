@@ -2,7 +2,7 @@
 
 A shader pack reads the world through named values: where the camera is, what time it is, which
 matrices the frame was drawn with, how wet the ground is. This page is about how those values reach
-a shader, and - the longer half - about how you find out whether one of them is right.
+a shader, and (the longer half) about how you find out whether one of them is right.
 
 The second half is the part worth reading even if you never touch the engine. A uniform that is
 wrong does not look wrong. It looks like a slightly different picture, and every rule below exists
@@ -30,14 +30,14 @@ further down.
 **A three component vector aligns on sixteen bytes and consumes twelve.** The member after it starts
 twelve bytes later, at its own alignment, not sixteen. The builder's own vec3 helper skips a fourth
 float on the way out, so going through it would put every member behind the first vec3 four bytes
-past where the shader reads it. That one call is therefore written out by hand - align on sixteen,
-then three floats - while the builder's padded form stays in use exactly where the stride really is
+past where the shader reads it. That one call is therefore written out by hand (align on sixteen,
+then three floats) while the builder's padded form stays in use exactly where the stride really is
 sixteen, which is a matrix column and an array element. Which of the two is right was settled by
 measuring what the compiler does with a vec3 followed by a float, not by arguing from the
 specification.
 
 Arrays are the other trap, and a worse one. The arity of an array member lives only in the
-declaration text - the type is the element type either way. A matrix array read as a single matrix
+declaration text: the type is the element type either way. A matrix array read as a single matrix
 puts everything behind it hundreds of bytes early, and what sits behind it is, among other things,
 every uniform the pack declared for itself. Each element of an array starts on a sixteen byte
 boundary, including the first, so a single element array still pays the stride; and the padding
@@ -55,7 +55,7 @@ has no builder to defer to, so it carries the alignments itself, transcribed fro
 size calculator. It is the one duplication here that cannot be removed, and running the write is
 what keeps it to arithmetic in a single class rather than a second reading of the members. Sizing a
 block by a second pass over the members is exactly how the
-two halves drift apart - one of them gains a case for a shape and the other does not - and there is
+two halves drift apart, one of them gains a case for a shape and the other does not, and there is
 nothing here to keep in step because there is only one walk. Every pass's block is then cut out of
 one buffer at its own offset with that size, so a size that disagreed with the write would either
 truncate a block or run into the next one.
@@ -92,7 +92,7 @@ world; whichever comes first opens it, and the second one finds it already open.
 The clock is quantised to the millisecond, because that is the time step every smoothed value
 integrates over and an unquantised one puts all of them slightly off the reference for no visible
 reason. The running time a pack reads accumulates those frame durations rather than sampling a wall
-clock, so it stops while the game is paused - which is what a pack driving noise from it expects.
+clock, so it stops while the game is paused, which is what a pack driving noise from it expects.
 
 A handful of values are properties of the **pass** rather than of the frame: the depth convention
 of the target being drawn into, the model view the pass draws with, the colour it modulates by, and
@@ -117,7 +117,7 @@ Three details decide the result and none of them is obvious:
 - The rise and the fall are **separate** half-lives, chosen on whether the new value is above the
   accumulator. Separate does not mean that both are the pack's. Wetness is the case to know: its
   fall is a constant here, and the pack cannot change it, because both of the directive names it
-  would write - the one that reads as the rise and the one that reads as the fall - are registered
+  would write (the one that reads as the rise and the one that reads as the fall) are registered
   against the rise, so the second one it writes only overwrites the first. That is the reference's
   behaviour, reproduced on purpose: honouring the pack's own fall directive instead would dry the
   ground several times too fast on every pack of the corpus that declares both.
@@ -149,7 +149,7 @@ and why correcting such a defect is the regression, is in [Translation](../trans
 ## The camera position is shifted, and so is the previous one
 
 Far from the origin, a single precision position stops resolving the differences a pack cares
-about, and anything driven by world position - noise, grain, triplanar mapping - visibly degrades.
+about, and anything driven by world position (noise, grain, triplanar mapping) visibly degrades.
 So the published camera position is kept inside a range a float can still resolve, by subtracting a
 shift.
 
@@ -167,11 +167,11 @@ The part that is easy to get wrong is what happens **at** a shift. When the shif
 current position and the previous frame's position both move by the same amount. A motion vector is
 a difference of the two, so the difference has to survive the shift; shifting only the current
 position leaves one frame in which the camera appears to have jumped the width of the range. That
-is a single frame of wrong reprojection - one flash of motion blur - at a threshold crossing, which
+is a single frame of wrong reprojection (one flash of motion blur) at a threshold crossing, which
 is about as hard to find by looking as a defect gets.
 
 An unshifted position exists alongside, because some values are differences taken against the
-camera - a lightning bolt's position, a vehicle's - and those are in world coordinates. The shift
+camera (a lightning bolt's position, a vehicle's) and those are in world coordinates. The shift
 advances first in the frame, before anything reads it, so those differences are taken against this
 frame's camera rather than the previous one's; otherwise both would lag, and only while the player
 moves. And the first frame after a world change has no previous position at all, so it is seeded
@@ -184,8 +184,8 @@ A pack can declare its own values as expressions over engine values and over eac
 intermediates the shader never sees; some are exposed to it. They share one namespace and may refer
 to each other in any order.
 
-That is why they are resolved as a graph rather than as a list. A declaration several levels deep -
-and real packs have them - evaluated out of order gives a plausible number rather than an error.
+That is why they are resolved as a graph rather than as a list. A declaration several levels deep
+(and real packs have them) evaluated out of order gives a plausible number rather than an error.
 The graph is resolved once at load, and evaluated once a frame in dependency order, after the
 engine values are current and before any program writes its block. Once a frame and never once per
 program, for the same reason as everything else here: a smoothing function inside an expression
@@ -205,7 +205,7 @@ stays **named** instead of turning into a permanently wrong image:
 
 A cycle is refused by naming the uniforms it runs through. This is a deliberate divergence: the
 reference throws, and a pack that writes a cycle in one line should lose that line rather than the
-frame. The same reasoning applies to an expression that throws while it is being evaluated - it and
+frame. The same reasoning applies to an expression that throws while it is being evaluated: it and
 its dependents stop being evaluated and hold their last value, both named, rather than taking the
 whole pack down for the rest of the session over one expression that fails on one frame.
 
@@ -217,8 +217,8 @@ Here is the rule the whole of this half rests on.
 distinguishes it from zero.**
 
 Zero is the easy failure. Zero is usually visible immediately: the effect is missing, the highlight
-is absent, the screen is flat. Nobody ships a zero. What ships is the neighbour - the same quantity
-in the wrong unit, in the wrong space, or off by a constant factor - and the neighbour renders an
+is absent, the screen is flat. Nobody ships a zero. What ships is the neighbour (the same quantity
+in the wrong unit, in the wrong space, or off by a constant factor), and the neighbour renders an
 image that a careful person will accept.
 
 Two consequences follow directly:
@@ -227,14 +227,14 @@ Two consequences follow directly:
   written afterwards is a description of what was seen. A value declared correct without a named
   neighbour is not closed and should be reopened.
 - **Say what a test does not close.** A test that puts the pack's sun exactly where the game's sun
-  is closes the time value, the order of the rotations and the view matrix - and it does *not* close
+  is closes the time value, the order of the rotations and the view matrix, and it does *not* close
   the sun direction uniform, if the pack recomputes its own direction rather than reading it.
   Writing that down is what stops the next reader treating it as covered.
 
 ### The three families of near miss
 
 **Wrong unit.** A half-life in seconds where the pack meant deciseconds gives a value that rises,
-that settles, that looks smoothed - and that takes ten times too long. Nothing about the image says
+that settles, that looks smoothed, and that takes ten times too long. Nothing about the image says
 "unit error"; it says "this pack is a bit sluggish". The test that catches it is a *timed* reading,
 not a look.
 
@@ -246,7 +246,7 @@ neighbour needs a test designed to catch it.
 
 **Constant factor.** The far plane a pack is told about is a quarter of the plane the game actually
 clips at. Hand over the real one and fog still saturates, still in the right shape, still smoothly
-with distance - at four times the distance. The image is entirely credible. And since every pack's
+with distance, at four times the distance. The image is entirely credible. And since every pack's
 depth linearisation is written against the reference's quarter, correcting the number here would
 make all of them wrong at once: this is a case where **matching the reference is the correct answer
 and being right is the bug**.
@@ -256,8 +256,8 @@ and being right is the bug**.
 The best in-game tests for this class of value are not measurements. They are situations where the
 neighbouring value produces the *opposite* result, not a smaller one.
 
-An effect the pack gates on far depth - a motion blur applied to the distance, a sky test that
-looks for the far plane - inverts completely under the opposite depth convention: the foreground
+An effect the pack gates on far depth (a motion blur applied to the distance, a sky test that
+looks for the far plane) inverts completely under the opposite depth convention: the foreground
 blurs and the distance stays sharp, or the sky is fogged exactly like a solid block. There is no
 threshold to read and no capture to compare. Either the horizon is blurred or the wall in front of
 you is.
@@ -274,24 +274,24 @@ program's whole block out as `name = value` text.
 It is the **same walk** that fills the buffer, sent through a sink that writes text instead of
 bytes. That is the only reason a line in it proves anything about what the shader was handed. A
 second walk written to print values would be a second reading of the value table, and it could
-disagree with the one that ran - which is precisely the class of defect being hunted. A member that
+disagree with the one that ran, which is precisely the class of defect being hunted. A member that
 reached the buffer through a type conversion is printed after that conversion. A member nothing
 supplies prints the zeroes it really writes, marked as such, because a zero that arrived through a
 registered source is the one failure no screenshot can show.
 
 **What buys that is holding the values in a block of our own.** An engine that sets each value
 through the GL entry points, one at a time, has no single walk to tee off. It is not that the values
-could not be read back - `glGetUniformfv` is there for it - it is that reading them back would be
+could not be read back (`glGetUniformfv` is there for it). It is that reading them back would be
 the second walk the paragraph above rules out. Holding them costs one class rather than a redesign.
 
-It names one program at a time, since the point is to read the file rather than to search it - and
+It names one program at a time, since the point is to read the file rather than to search it, and
 not because two programs of one frame would say the same thing. They do not. The depth convention,
 the model view the pass draws with, the colour it modulates by and the render stage are properties
 of the pass, so a terrain program and a composite answer differently on exactly the members that
 have to be told apart: one carries the world's model view where the other carries the identity.
 Taking the reading under one program and then under the other is how that pair gets compared at all.
 It is rewritten whole rather
-than appended, roughly once a second rather than once a frame, so what is in it is always now - a
+than appended, roughly once a second rather than once a frame, so what is in it is always now: a
 curve is taken by reading it repeatedly, which is exactly how a half-life is measured.
 
 What that turns into a number:
@@ -331,15 +331,15 @@ legacy-convention matrix does not switch reversed Z off for the game: the world 
 tested and stored under it, so the scene keeps its precision where the reference gives it up for
 everything the moment a pack is loaded. But the copy handed to the pack is converted forward, so
 **the pack's own linearisation is no more precise than the reference's**. The gain is real and it is
-there and nowhere else. The symptom that would confirm it - distant z-fighting appearing on one side
-and not the other - needs the reference running on this backend, which it does not.
+there and nowhere else. The symptom that would confirm it (distant z-fighting appearing on one side
+and not the other) needs the reference running on this backend, which it does not.
 
 ## Where this sits
 
-- [Translation](../translation.md) - how the block is assembled, what is written as zeroes, and why
+- [Translation](../translation.md): how the block is assembled, what is written as zeroes, and why
   the program rather than the file is the unit.
-- [The frame](../frame.md) - where in the frame each program runs, and what the depth names mean.
-- [Sky and shadows](../sky-and-shadows.md) - the matrices the shadow passes are given.
-- [Pack compatibility](../compatibility.md) - what a wrong value looks like from the player's side.
-- [Developing](../developing.md) - the general verification rules this page specialises.
+- [The frame](../frame.md): where in the frame each program runs, and what the depth names mean.
+- [Sky and shadows](../sky-and-shadows.md): the matrices the shadow passes are given.
+- [Pack compatibility](../compatibility.md): what a wrong value looks like from the player's side.
+- [Developing](../developing.md): the general verification rules this page specialises.
 - [Documentation index](../README.md).

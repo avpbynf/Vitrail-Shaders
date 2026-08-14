@@ -13,7 +13,7 @@ one onto the other looks like a lookup table and is not, because several propert
 enum force choices the pack never made.
 
 **The three-component formats are named by the game and left out here.** `GpuFormat` carries the
-plain three-channel forms - eight, sixteen and thirty-two bit, normalised, integer and float - and
+plain three-channel forms (eight, sixteen and thirty-two bit, normalised, integer and float) and
 not one of them is among the constants a target may be given. They are all but never usable as a
 colour attachment on desktop hardware, and a target the driver refuses to attach fails with nothing
 to read in the log, so a pack asking for one is given the four-channel variant. That is a promotion,
@@ -33,11 +33,11 @@ and transparent black otherwise. The shadow colour buffer answers the same way, 
 saying because it was the one place that did not: a correction meant to fill a blank is not a
 correction once it starts overruling something the pack was explicit about.
 
-**Bytes per pixel are read off a table, never recomputed from the channel widths.** A packed word -
-two-ten-ten-ten, eleven-eleven-ten - is four bytes whatever its channels suggest, so arithmetic over
+**Bytes per pixel are read off a table, never recomputed from the channel widths.** A packed word
+(two-ten-ten-ten, eleven-eleven-ten) is four bytes whatever its channels suggest, so arithmetic over
 the channels gets wrong exactly the formats a pack reaches for. In the game the figure is
 `GpuFormat.blockSize()`. The plan that estimates a pack's memory outside the game cannot call it,
-runs against no device, and carries the number beside each of its own constants instead - a second
+runs against no device, and carries the number beside each of its own constants instead: a second
 table, and the one place here where two of them have to agree by hand.
 
 The set of names a pack may write is the reference implementation's, and it includes several
@@ -65,7 +65,7 @@ the GLSL, one per target.
 The trap is that those lines are **always inside a block comment**, and necessarily so: a format
 name is not a GLSL expression, and a compiler that saw the line would reject the file. A reader
 that strips comments before scanning therefore finds no format declarations at all, allocates every
-target as eight-bit, and produces an image that is still plausible - dimmer highlights, banded
+target as eight-bit, and produces an image that is still plausible: dimmer highlights, banded
 normals, nothing that reads as an error.
 
 So the directive grammar ignores comments entirely, and must not be tightened to look more like a
@@ -97,7 +97,7 @@ Two consequences that are easy to get wrong from first principles:
   attachment directives name shadow colour targets and never scene colour targets. Their format
   declarations still count.
 
-There are also directives the reference *registers* and never dispatches - the consumer is wired up
+There are also directives the reference *registers* and never dispatches: the consumer is wired up
 but the handler behind it is empty. They look implementable from the outside and are dead in
 practice, so implementing them would create a divergence in the one direction that matters: packs
 are written against observed behaviour, not against the documented format. This is the general
@@ -112,7 +112,7 @@ one is a count of pixels.** Nothing else distinguishes them.
 
 The value is frequently not a literal at all but the name of one of the pack's own settings, so
 substitution has to happen before the value is read. Skipped, the read fails and the target
-silently falls back to full screen - the pack keeps working and its reflections are quietly at the
+silently falls back to full screen: the pack keeps working and its reflections are quietly at the
 wrong resolution.
 
 A scaled target also cannot join the game's colour target inside one render pass, because a pass
@@ -120,7 +120,7 @@ has a single render area and every attachment has to match the first (see below)
 zero is the game's target at screen size. A pack that scales a target its geometry writes therefore
 has that pass fall back to the game's target alone: the attachments the pack named for it are
 dropped as a set rather than one by one, so every draw buffer of that pass is written nowhere. The
-log names the program and says exactly that, which is the point of dropping them at load - the
+log names the program and says exactly that, which is the point of dropping them at load: the
 alternative is the encoder throwing in the middle of a frame.
 
 ## The flip convention: one set, and one place allowed to consult it
@@ -159,7 +159,7 @@ instead. They are constraints of the game's render pass API, not policies of thi
 **Attachments.** `RenderPassDescriptor` pushes attachments in order, with an explicit "unused" form
 for a hole. `CommandEncoder` refuses a descriptor with no attachment at all and asserts that the
 first one is present, so **index zero can never be a hole** and every pad goes at the tail. It also
-refuses a descriptor with no render area - there is no default, and the message says only that the
+refuses a descriptor with no render area: there is no default, and the message says only that the
 render area must be provided.
 
 **Common size.** Every attachment has to be the size of the first. This is what makes a pass mixing
@@ -170,7 +170,7 @@ scaled-target case above ends the way it does.
 descriptor's attachment count, then compares formats attachment by attachment, holes excluded. The
 mismatch message does not name either format, so it cannot tell you which of the two sides is
 wrong. On the pipeline side, states are held in a fixed array of eight and the builder's unindexed
-setter always writes slot zero - three calls in a row leave one state, and the failure surfaces as
+setter always writes slot zero: three calls in a row leave one state, and the failure surfaces as
 the count mismatch above. Use the indexed form. The builder also refuses blend functions that
 differ between targets, which is why a pack's per-target blend directive is inexpressible here and
 is named at load rather than silently ignored.
@@ -182,7 +182,7 @@ than the directive gives them targets exist, so the two counts genuinely differ.
 
 **Clears and copies.** Clearing a colour texture is refused while a pass is open and requires the
 target to carry both render-attachment and copy-destination usage. Allocation and clearing
-therefore happen outside any pass - and being outside one is the caller's job, not something the
+therefore happen outside any pass, and being outside one is the caller's job, not something the
 refusal will catch. The device hands back a **fresh encoder wrapper on every call**, over one
 backend, and the "in a render pass" guard is a field of the wrapper: an encoder taken for a clear
 knows nothing of a pass another wrapper opened. Each site here takes its own encoder, which is
@@ -215,8 +215,8 @@ declared.
 
 **The cap of eight applies to how many draw buffer entries are kept, not to how high they may
 count.** A pipeline holds eight colour target states and a ninth output has nowhere to land, so the
-list is truncated to eight entries. Filtering the entries by *value* instead - dropping those that
-name a target above some index - is a different operation and a wrong one: a pack may legitimately
+list is truncated to eight entries. Filtering the entries by *value* instead (dropping those that
+name a target above some index) is a different operation and a wrong one: a pack may legitimately
 name a high-numbered target, and removing that entry shifts every attachment declared after it by
 one.
 
@@ -225,8 +225,8 @@ increasing order, is declared in the header and called as the first statement of
 It lives in the header rather than next to the entry point because a helper written earlier in the
 file that touches an output would otherwise be the first place the compiler meets an output name,
 and would take rank zero whatever the entry point does. For the same reason, any wrapper the engine
-adds around the pack's entry point - the alpha test epilogue, for instance, which reads the alpha
-of output zero - has to be emitted **after** both the declarations and the ordering function. A
+adds around the pack's entry point (the alpha test epilogue, for instance, which reads the alpha
+of output zero) has to be emitted **after** both the declarations and the ordering function. A
 wrapper emitted above them reorders every attachment in the program, and the result is a complete,
 convincing, wrong image.
 
@@ -235,12 +235,12 @@ convincing, wrong image.
 Two caches sit behind a pass, they are keyed differently, and only one of them is safe by
 construction.
 
-**The shader module cache is keyed by identifier, stage and defines - never by source.** Two loads
+**The shader module cache is keyed by identifier, stage and defines: never by source.** Two loads
 that ask for the same identifier get the first one's SPIR-V back, with nothing recompiled and
 nothing logged. That is silent whenever the two programs declare the same samplers, which is the
 common case, and it bites precisely during the hot reload that this area is developed with. So
 identifiers carry the load they belong to. They also carry the pass: the same pack file can serve
-two passes whose translated text differs - one carrying a discard the other does not - and one
+two passes whose translated text differs (one carrying a discard the other does not), and one
 identifier for two texts serves the second whatever the first compiled.
 
 **The pipeline cache is keyed by instance**, not by the identifier a pipeline was built with. Two
@@ -262,8 +262,8 @@ pipelines and modules wait for the next resource reload.
 
 ## See also
 
-- [The frame](../frame.md) - pass ordering, the read rule, clear colours, the seed
-- [Translation](../translation.md) - how a pack's GLSL becomes what these passes run
-- [The pack format](../pack-format.md) - where declarations come from and how programs are resolved
-- [Sky and shadows](../sky-and-shadows.md) - the shadow targets, which follow their own conventions
-- [Developing](../developing.md) - what can be measured outside the game, and what cannot
+- [The frame](../frame.md): pass ordering, the read rule, clear colours, the seed
+- [Translation](../translation.md): how a pack's GLSL becomes what these passes run
+- [The pack format](../pack-format.md): where declarations come from and how programs are resolved
+- [Sky and shadows](../sky-and-shadows.md): the shadow targets, which follow their own conventions
+- [Developing](../developing.md): what can be measured outside the game, and what cannot
