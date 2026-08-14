@@ -17,5 +17,6 @@ public final class VitrailFabric implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		Vitrail.initClient(new FabricPlatform());
+		FabricMenuAndKey.register();
 	}
 }

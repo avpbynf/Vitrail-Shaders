@@ -19,9 +19,16 @@ are on.
 | --- | --- |
 | Minecraft | 26.2 |
 | NeoForge | 26.2.0.32-beta or later in the 26.2 line |
-| Sodium | 0.9.x for NeoForge (`sodium-neoforge-0.9.1+mc26.2` or compatible) |
+| or Fabric Loader | 0.19.3 or later, with Fabric API |
+| Sodium | 0.9.x, the build for whichever loader is in front |
 | Chloride | any 26.2 build, to run on the Vulkan backend at all |
 | Java | 25, to build (the game brings its own runtime) |
+
+One jar per loader, and they carry the same engine: `vitrail-neoforge` and
+`vitrail-fabric`. On Fabric, three modules of Fabric API are declared as
+required, and they are the whole of what this mod takes from it: the key
+mapping, the screen and the client tick, which is what the settings screen is
+opened by. Nothing of the world's rendering goes through Fabric API.
 
 Sodium and Chloride are both declared as required dependencies, so the game will
 refuse to start without either of them. Do not update Sodium past 0.9.x: it has
@@ -33,7 +40,9 @@ into. NeoForge shows an early loading screen, and the game takes that window ove
 rather than making one of its own, so the window it inherits was created for
 OpenGL and the Vulkan surface fails at boot with `GLFW error 65540 ... requires
 the window to have the client API set to GLFW_NO_API`. Chloride is what makes
-that window Vulkan capable.
+that window Vulkan capable. That mechanism is NeoForge's, and whether Fabric's
+window needs the same help has not been measured: Chloride is required on both
+because it is what every session here has run with.
 
 Worth knowing because the failure hides itself, and it hides itself twice over.
 Asked for Vulkan and unable to bring it up, the game falls back to OpenGL within
@@ -62,12 +71,13 @@ and, in the log, names each of them that is on with what it costs and what to se
 it to, names any it could not find, and says so when the file itself is not
 there.
 
-Fabric is not supported. The module exists in the build but is empty.
-
 ## Other mods
 
 Vitrail hooks the frame through public NeoForge events where the game offers
-them, and through mixins where it does not. The load-bearing ones: the matrices
+them, and through mixins where it does not, which on Fabric is everywhere: the
+points a NeoForge event is posted at are reached there by a mixin on the very
+line that posts it, so both loaders run the same ordered work. The load-bearing
+ones: the matrices
 the world is really drawn with, which are never stored anywhere the camera
 exposes; the game's sky renderer, which opens a pass of its own per sky element
 and is handed the pack's program for that element, the colour targets the pack

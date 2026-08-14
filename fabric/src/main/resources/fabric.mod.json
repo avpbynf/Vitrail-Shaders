@@ -28,7 +28,10 @@
 		"fabricloader": ">=${fabric_loader_version}",
 		"minecraft": ">=${minecraft_version} <26.3",
 		"sodium": "0.9.x",
-		"chloride": "*"
+		"chloride": "*",
+		"fabric-key-mapping-api-v1": "*",
+		"fabric-screen-api-v1": "*",
+		"fabric-lifecycle-events-v1": "*"
 	},
 	"custom": {
 		"sodium:options": {

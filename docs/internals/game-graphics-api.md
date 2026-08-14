@@ -11,10 +11,12 @@ Everything here is a property of the game. What Vitrail builds on top of it is d
 
 ## Where a renderer can get in
 
-The world render ends inside the game renderer, and a public loader event is posted immediately
-after the level renderer returns. At that moment the frame graph has been executed and **no render
-pass is open**, so a full-screen pass over the finished world needs no mixin at all. That is the
-cheapest attachment point in the frame, and it is the one to reach for first.
+The world render ends inside the game renderer, immediately after the level renderer returns. At
+that moment the frame graph has been executed and **no render pass is open**, which is what makes a
+full-screen pass over the finished world possible at all. That is the cheapest attachment point in
+the frame, and it is the one to reach for first. NeoForge posts a public event on that very line, so
+reaching it there needs no mixin; Fabric offers nothing at that point, so it is reached by a mixin
+on the same line. What matters is the line rather than the door.
 
 It comes with a deadline. Only a few statements later, the game clears the depth texture of the
 main target: the world's depth does not survive past that point. Anything that needs scene depth

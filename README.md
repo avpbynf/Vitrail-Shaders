@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders"><img src="https://img.shields.io/badge/download-CurseForge-F16436?style=flat-square&logo=curseforge&logoColor=white" alt="Vitrail on CurseForge"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.2-2E6FD9?style=flat-square" alt="Minecraft 26.2">
-  <img src="https://img.shields.io/badge/loader-NeoForge-1B2A6B?style=flat-square" alt="NeoForge">
+  <img src="https://img.shields.io/badge/loaders-NeoForge%20%7C%20Fabric-1B2A6B?style=flat-square" alt="NeoForge and Fabric">
   <img src="https://img.shields.io/badge/renderer-Vulkan-7B3FA0?style=flat-square" alt="Vulkan">
   <img src="https://img.shields.io/badge/licence-LGPL--3.0-F2B134?style=flat-square" alt="LGPL-3.0-only">
   <img src="https://img.shields.io/badge/status-experimental-C1440E?style=flat-square" alt="Experimental">
