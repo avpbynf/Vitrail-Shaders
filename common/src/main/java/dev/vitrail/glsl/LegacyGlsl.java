@@ -481,21 +481,29 @@ public final class LegacyGlsl {
 	 * and reads its texture matrix out of it; only the ones drawn from the CAMERA read its model view
 	 * as well.
 	 * <p>
-	 * <strong>Iris patches its shadow programs as vanilla like the rest and is right to, because it
-	 * puts the light on the game's own stack.</strong> {@code ShaderCreator.java:73} sends every
-	 * gbuffers and shadow program through {@code TransformPatcher.patchVanilla}, so a shadow program
-	 * there reads {@code iris_transforms.ModelViewMat} too; what makes that the light's matrix is
-	 * {@code shadows/ShadowRenderer.java:420-421}, pushing the shadow model view onto
-	 * {@code RenderSystem.getModelViewStack()} for the whole of the walk and popping it at
-	 * {@code :640}. This engine leaves that stack alone: {@code render/ShadowGeometry.submit} poses
-	 * its submissions on a {@code PoseStack} of its own, so the matrix the game writes into a
-	 * caster's dynamic transforms is whatever the camera left there. What answers the light here is
-	 * {@code dev.vitrail.uniform.values.ShadowGeometryValues}, layered over the geometry table, and
-	 * it answers all six fixed function names from the drawn shadow pair.
+	 * <strong>Iris patches its shadow programs as vanilla like the rest ({@code ShaderCreator.java:301},
+	 * the shadow twin of {@code :73}), and what its casters read there is the IDENTITY rather than the
+	 * light.</strong> Its light is baked into the vertices: the walk poses its submissions on a
+	 * {@code PoseStack} the shadow model view was built into
+	 * ({@code shadows/ShadowRenderer.java:416}, handed to {@code renderEntities} at {@code :572} and
+	 * {@code renderBlockEntities} at {@code :580}, used at {@code :684} and {@code :657-658}), and for
+	 * exactly that stretch it sets {@code RenderSystem.getModelViewStack()} to the identity
+	 * ({@code :570}, restored at {@code :590}). Its TERRAIN is the other road and is where the light
+	 * really does go on the stack, {@code :420-421}.
 	 * <p>
-	 * <strong>So the same line means opposite things in the two engines</strong>, and a shadow
-	 * program sent down this road would draw the map from the player's eye, which is a shadow map of
-	 * exactly the wrong thing and looks like one all the same.
+	 * <strong>This engine puts the light in the other place, so the same line would mean the opposite
+	 * thing.</strong> {@code render/ShadowGeometry.submit} poses its submissions on a fresh
+	 * {@code PoseStack} carrying a camera relative translation and nothing else, so a caster's
+	 * vertices arrive in PLAYER space and the light has to be the matrix a shadow program reads.
+	 * {@code dev.vitrail.uniform.values.ShadowGeometryValues} is what answers it, layered over the
+	 * geometry table, from the drawn shadow pair. What the game wrote into a caster's dynamic
+	 * transforms is meanwhile whatever the camera left there, the walk standing at the end of a
+	 * frame. So a shadow program sent down this road would draw the map from the player's eye, which
+	 * is a shadow map of exactly the wrong thing and looks like one all the same.
+	 * <p>
+	 * Both engines agree on the conclusion and disagree on the route: a shadow program is never handed
+	 * the camera's per draw matrix, there because its vertices already carry the light, here because
+	 * the matrix it is handed instead is the light's.
 	 *
 	 * @param program the bare name, {@code gbuffers_entities_translucent}, or empty where the caller
 	 *                is measuring a file and no pass is named

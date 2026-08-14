@@ -912,12 +912,16 @@ public final class GlslTranslator {
 	 * Sends the model view of a pass drawn from the camera to the game's own block, with the bob put
 	 * back on the front.
 	 * <p>
-	 * <strong>It is what Iris does for every gbuffers program</strong>, its vanilla transformer
-	 * rewriting {@code gl_ModelViewMatrix} as
+	 * <strong>It is what Iris does for every program it patches as VANILLA</strong>, its vanilla
+	 * transformer rewriting {@code gl_ModelViewMatrix} as
 	 * {@code (iris_transforms.ModelViewMat * _iris_internal_translate(iris_transforms.ModelOffset))}
-	 * ({@code transform/transformer/VanillaTransformer.java:355-366}), and
-	 * {@link LegacyGlsl#readsDrawModelView} carries which passes reach it here and why the shadow map
-	 * is not one of them.
+	 * ({@code transform/transformer/VanillaTransformer.java:354-366}, the second factor built under
+	 * {@code parameters.hasChunkOffset} and a {@code iris_VIEW_SCALE} put in front for lines). Not
+	 * every gbuffers program: the terrain family goes down the SODIUM road instead, where the same
+	 * name becomes {@code u_ModelViewMatrix}
+	 * ({@code transform/transformer/SodiumTransformer.java:72}), which is the same split this engine
+	 * has. {@link LegacyGlsl#readsDrawModelView} carries which passes reach it here and why the
+	 * shadow map is not one of them.
 	 * <p>
 	 * <strong>What it buys is that a piece and whatever is drawn at its own depth read the same
 	 * matrix from the same place.</strong> A pass matrix is one per RUN and is built on the
