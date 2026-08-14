@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="neoforge/src/main/resources/vitrail.png" width="128" alt="">
+  <img src="common/src/main/resources/vitrail.png" width="128" alt="">
 </p>
 
 <h1 align="center">Vitrail Shaders</h1>

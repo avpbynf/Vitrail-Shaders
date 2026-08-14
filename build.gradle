@@ -189,6 +189,7 @@ tasks.named("check") {
 // people dig through each module.
 tasks.register("collectJars", Copy) {
 	from project(":neoforge").tasks.named("jar")
+	from project(":fabric").tasks.named("jar")
 	into layout.buildDirectory.dir("libs")
 }
 

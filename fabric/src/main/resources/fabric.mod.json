@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"id": "${mod_id}",
+	"version": "${mod_version}",
+	"name": "Vitrail",
+	"description": "OptiFine-format shader packs, on Minecraft's native Vulkan renderer",
+	"authors": [
+		"avpbynf"
+	],
+	"contact": {
+		"homepage": "https://github.com/avpbynf/Vitrail-Shaders",
+		"sources": "https://github.com/avpbynf/Vitrail-Shaders",
+		"issues": "https://github.com/avpbynf/Vitrail-Shaders/issues"
+	},
+	"license": "LGPL-3.0-only",
+	"icon": "vitrail.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"dev.vitrail.fabric.VitrailFabric"
+		]
+	},
+	"mixins": [
+		"vitrail.mixins.json",
+		"vitrail-fabric.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=${fabric_loader_version}",
+		"minecraft": ">=${minecraft_version} <26.3",
+		"sodium": "0.9.x",
+		"chloride": "*"
+	},
+	"custom": {
+		"sodium:options": {
+			"mixin.features.render.world.sky": false
+		}
+	}
+}
