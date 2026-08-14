@@ -33,7 +33,7 @@ and therefore cheap. Or a fact may change on one side while the other side's pro
 the old one, in a paragraph far from anything git touched: that compiles, reads well, and is
 simply false. Both happen because a fact is cited in more places than it lives in.
 
-### A pull request merges one way
+### A pull request merges one way, and the repository enforces it
 
 **"Rebase and merge", and neither of the other two buttons.** "Create a merge commit" forks a
 history the section above says never forks. "Squash and merge" collapses a branch into one commit
@@ -41,6 +41,14 @@ and throws away the bodies, which is where the reasoning for each step lives; a 
 sequence of logical changes here rather than a unit of work, and the sequence is the part worth
 keeping. A rebase button that refuses means the branch is behind `dev`: rebase it and force-push,
 rather than merging `dev` into it.
+
+None of that is left to memory, and it takes two settings because each one lets through what the
+other stops. The repository allows the rebase merge alone, so the other two buttons do not exist;
+and a ruleset requires a linear history on `main` and `dev`, which refuses a merge commit arriving
+by a direct push rather than through a request. **The second does not imply the first**, and that
+is the part worth knowing before changing either: a squash is linear, so the ruleset would take it
+happily, and it is the button setting that rules it out. The same ruleset refuses the deletion of
+either branch.
 
 `.github/pull_request_template.md` is what a request opens with, and its four headings are the four
 questions this repository answers before anything lands. Three of them are ordinary. The one that
