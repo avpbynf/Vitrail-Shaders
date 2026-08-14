@@ -2,7 +2,7 @@
   <img src="neoforge/src/main/resources/vitrail.png" width="128" alt="">
 </p>
 
-<h1 align="center">Vitrail</h1>
+<h1 align="center">Vitrail Shaders</h1>
 
 <p align="center">
   OptiFine-format shader packs, on Minecraft's native Vulkan renderer.
@@ -19,20 +19,32 @@
 ---
 
 <p align="center">
-  <img src="docs/images/screenshot-cave.jpg" alt="A cave lit through its opening, rendered by BSL Shaders on the Vulkan backend" width="830">
+  <img src="docs/images/screenshot-ocean-ruins.jpg" alt="Sunken ruins in deep water, light shafts through the murk and drowned standing in it, rendered by Bliss on the Vulkan backend" width="830">
 </p>
 <p align="center">
-  <sub>BSL Shaders by Capt Tatsu, running unmodified on the Vulkan backend.</sub>
+  <sub>Bliss Shaders, running unmodified on the Vulkan backend.</sub>
 </p>
 
 <details>
 <summary>More screenshots</summary>
 <br>
 <p align="center">
+  <img src="docs/images/screenshot-end.jpg" alt="A chorus forest across the end stone, endermen standing among it, rendered by Complementary Shaders on the Vulkan backend" width="830">
+</p>
+<p align="center">
+  <sub>Complementary Shaders.</sub>
+</p>
+<p align="center">
+  <img src="docs/images/screenshot-cave.jpg" alt="A cave lit through its opening, rendered by BSL Shaders on the Vulkan backend" width="830">
+</p>
+<p align="center">
+  <sub>BSL Shaders.</sub>
+</p>
+<p align="center">
   <img src="docs/images/screenshot-cherry.jpg" alt="A cherry grove over a valley with waterfalls, rendered by BSL Shaders on the Vulkan backend" width="830">
 </p>
 <p align="center">
-  <img src="docs/images/screenshot-river.jpg" alt="A river gorge at dawn, lava glowing against the cliff, rendered by BSL Shaders on the Vulkan backend" width="830">
+  <sub>BSL Shaders.</sub>
 </p>
 </details>
 
