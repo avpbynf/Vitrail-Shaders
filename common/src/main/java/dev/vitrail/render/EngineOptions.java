@@ -161,10 +161,12 @@ final class EngineOptions {
 	 * It was off for the entities' reason and for one of its own. The entities' reason is above and
 	 * has not changed: the hand comes in by the same door and through the same vertex format, so the
 	 * identifiers above reach a pack as constants here too, {@code currentRenderedItemId} among them,
-	 * which is the one that names what is being held. Its own is what a reader should expect to see: the
-	 * half that blends is served for the ARM alone, so a hand holding a translucent block draws that
-	 * block with a blending pipeline this engine serves for no family yet, and the block stays the
-	 * game's while the arm holding it is the pack's.
+	 * which is the one that names what is being held. Its own was that the half that blends served the
+	 * ARM alone, and that one is spent: the entities' blending rows landed, every row of that table
+	 * has a hand twin ({@link EntityDraw}), so a translucent block held in hand goes through the water
+	 * pass with the arm and both are the pack's. What still goes back to the game there goes back
+	 * everywhere else too, the rows naming the item entity target under the game's improved
+	 * transparency.
 	 * <p>
 	 * <strong>It carries the position as well as the shading, and that is what changed.</strong> The
 	 * solid half is drawn where the reference draws it, after the game's own opaque features and
