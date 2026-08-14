@@ -120,7 +120,7 @@ subprojects {
 		// error by default stops gating that package too, and so do the two promoted above. A
 		// hand-written parser is exactly where OperatorPrecedence would earn its keep. That is what
 		// not owning the code costs, and reading is what stands in its place.
-		options.errorprone.excludedPaths = ".*/neoforge/mixin/.*|.*/uniform/expr/kroppeb/.*"
+		options.errorprone.excludedPaths = ".*/vitrail/mixin/.*|.*/uniform/expr/kroppeb/.*"
 	}
 
 	tasks.withType(AbstractArchiveTask).configureEach {

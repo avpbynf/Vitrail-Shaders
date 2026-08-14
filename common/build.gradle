@@ -11,3 +11,41 @@ neoForge {
 	// so that the Fabric module can reuse it as is.
 	neoFormVersion = project.neoform_version
 }
+
+repositories {
+	maven {
+		name = "FabricMC"
+		url = "https://maven.fabricmc.net/"
+	}
+	maven {
+		name = "CaffeineMC"
+		url = "https://maven.caffeinemc.net/releases"
+	}
+}
+
+dependencies {
+	// Mixin and MixinExtras are libraries rather than loaders, which is why the mixins live here
+	// with the engine they call into rather than once per loader module. Both loaders bring their
+	// own copy at runtime, so both are compile only: NeoForge ships Mixin 0.8.7 and bundles
+	// MixinExtras, and Fabric Loader ships this very artifact and has bundled MixinExtras since
+	// 0.15. What is written against here is the annotation set, which is the same upstream 0.8.7
+	// on either side.
+	compileOnly "net.fabricmc:sponge-mixin:${project.mixin_version}"
+	compileOnly "io.github.llamalad7:mixinextras-common:${project.mixinextras_version}"
+
+	// Sodium ships with the pack, so it is never bundled and never remapped.
+	//
+	// The Fabric artifact rather than the NeoForge one, and it is the plain jar: what Maven serves
+	// under sodium-neoforge is a launcher shim of seventy-two classes with the renderer in a jar
+	// inside it, under META-INF/jarjar. Compiling against the outer jar looks like it works right
+	// up to the first import.
+	//
+	// Which of the two is compiled against was settled by comparing them class by class rather than
+	// by argument. Of the 688 classes the NeoForge jar carries, 659 are byte for byte identical to
+	// the Fabric one, 26 exist only there and are all under sodium's own neoforge and
+	// mixin.platform.neoforge packages, and 3 differ and are all sodium mixins. Everything this
+	// module names is in the identical set.
+	compileOnly("net.caffeinemc:sodium-fabric:${project.sodium_version}") {
+		transitive = false
+	}
+}

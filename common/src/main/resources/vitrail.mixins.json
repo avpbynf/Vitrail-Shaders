@@ -1,0 +1,41 @@
+{
+	"required": true,
+	"minVersion": "0.8.5",
+	"package": "dev.vitrail.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"injectors": {
+		"defaultRequire": 0
+	},
+	"client": [
+		"BlockEntityRenderDispatcherMixin",
+		"BlockRendererMixin",
+		"ChunkMeshFormatsMixin",
+		"ChunkVertexMixin",
+		"ClientLevelMixin",
+		"CloudRendererMixin",
+		"CustomFeatureRendererMixin",
+		"CustomSubmitMixin",
+		"MixinDefaultChunkRenderer",
+		"DefaultFluidRendererMixin",
+		"GameRendererHandMixin",
+		"GameRendererMixin",
+		"ItemInHandRendererMixin",
+		"LevelRendererMixin",
+		"LevelRendererSkyMixin",
+		"ModelFeatureRendererMixin",
+		"ModelSubmitMixin",
+		"OptionsCloudsMixin",
+		"ProjectionMatrixBufferMixin",
+		"QuadParticleFeatureRendererMixin",
+		"RenderSectionManagerAccessor",
+		"RenderTypeFeatureRendererGroupMixin",
+		"RenderTypeFeatureRendererMixin",
+		"MixinShaderChunkRenderer",
+		"SkyRendererMixin",
+		"MixinSodiumWorldRenderer",
+		"MixinSodiumWorldRendererInit",
+		"StagedVertexBufferDrawMixin",
+		"VKDrawContextMixin",
+		"WeatherEffectRendererMixin"
+	]
+}

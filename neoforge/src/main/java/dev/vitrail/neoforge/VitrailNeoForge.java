@@ -1,6 +1,6 @@
 package dev.vitrail.neoforge;
 
-import dev.vitrail.neoforge.sodium.ShadowTerrain;
+import dev.vitrail.sodium.ShadowTerrain;
 import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.HandDraw;
 import dev.vitrail.render.PackChain;
