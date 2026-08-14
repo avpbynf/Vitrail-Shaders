@@ -62,6 +62,24 @@ there.
 
 Fabric is not supported. The module exists in the build but is empty.
 
+## Other mods
+
+Vitrail hooks the frame through public NeoForge events where the game offers
+them, and through mixins where it does not. The load-bearing ones: the matrices
+the world is really drawn with, which are never stored anywhere the camera
+exposes; the game's sky renderer, which opens a pass of its own per sky element
+and is handed the pack's program for that element, the colour targets the pack
+sends it to, and the pack's word on whether that element is drawn at all; and
+Sodium's chunk renderer, which is handed the pack's terrain programs, one extra
+vertex element carrying the block id, and the render pass its draw buffers need.
+Sodium has no API for any of that, which is why its version is pinned above.
+Every family drawn since takes one or two more, and the whole list is the mixin
+config shipped in the jar rather than anything summarised here.
+
+Any mod that unwraps a GPU texture into an OpenGL handle will crash on the Vulkan
+backend, with or without Vitrail. Distant Horizons 3.2.0-b does this and dies on
+the first frame. This is not something Vitrail can work around.
+
 ## Building
 
 ```

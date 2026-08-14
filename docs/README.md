@@ -11,6 +11,7 @@ The short version lives in the [README](../README.md) and the install steps in
 
 | If you want to | Read |
 | --- | --- |
+| Know why the format is OptiFine's, and how this sits next to other engines | [Why this exists](why.md) |
 | Work out why your pack looks wrong, starting from what you see | [Pack compatibility](compatibility.md) |
 | Understand what a shader pack is made of | [The pack format](pack-format.md) |
 | Understand how legacy GLSL reaches a Vulkan GPU | [Translation](translation.md) |
