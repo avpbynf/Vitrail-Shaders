@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders"><img src="https://img.shields.io/badge/download-CurseForge-F16436?style=flat-square&logo=curseforge&logoColor=white" alt="Vitrail on CurseForge"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.2-2E6FD9?style=flat-square" alt="Minecraft 26.2">
   <img src="https://img.shields.io/badge/loader-NeoForge-1B2A6B?style=flat-square" alt="NeoForge">
   <img src="https://img.shields.io/badge/renderer-Vulkan-7B3FA0?style=flat-square" alt="Vulkan">
@@ -91,10 +92,14 @@ and will trade image quality for it in the meantime.
 
 ## Quick start
 
-Put the Vitrail jar in `mods/` next to Sodium and Chloride, and switch the game
-to Vulkan: `preferredGraphicsBackend:"vulkan"` in `options.txt`, or Options, then
-Video Settings, in game. Nothing enforces that switch, though the mod says at
-startup which backend the game came up on, and says so as an error when it is not
+The jar is on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders),
+and attached to every [release](https://github.com/avpbynf/Vitrail-Shaders/releases)
+here. One run builds it and uploads it to both, so the two are the same file.
+
+Put it in `mods/` next to Sodium and Chloride, and switch the game to Vulkan:
+`preferredGraphicsBackend:"vulkan"` in `options.txt`, or Options, then Video
+Settings, in game. Nothing enforces that switch, though the mod says at startup
+which backend the game came up on, and says so as an error when it is not
 Vulkan. Shader packs go in `shaderpacks/`, as they always have, and are selected
 in game from Vitrail's settings screen.
 
