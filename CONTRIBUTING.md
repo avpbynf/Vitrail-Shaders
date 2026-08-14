@@ -33,6 +33,23 @@ and therefore cheap. Or a fact may change on one side while the other side's pro
 the old one, in a paragraph far from anything git touched: that compiles, reads well, and is
 simply false. Both happen because a fact is cited in more places than it lives in.
 
+### A pull request merges one way
+
+**"Rebase and merge", and neither of the other two buttons.** "Create a merge commit" forks a
+history the section above says never forks. "Squash and merge" collapses a branch into one commit
+and throws away the bodies, which is where the reasoning for each step lives; a branch is a
+sequence of logical changes here rather than a unit of work, and the sequence is the part worth
+keeping. A rebase button that refuses means the branch is behind `dev`: rebase it and force-push,
+rather than merging `dev` into it.
+
+`.github/pull_request_template.md` is what a request opens with, and its four headings are the four
+questions this repository answers before anything lands. Three of them are ordinary. The one that
+is not is the second, "how it differs from the reference": packs are written against Iris, so a
+difference in behaviour is a pack rendering wrongly however good the reason sounds, and the answer
+is either "it does not" or the three parts a divergence owes. The final box is today's lesson
+rather than hygiene: a fact is cited in more places than it lives in, so changing it in the one
+place it lives leaves the rest standing and reading perfectly well.
+
 A tag is `v` followed by whatever `mod_version` in `gradle.properties` holds, and that line
 is where the version lives. Nothing derives one from the other: a human types the tag, and
 the release workflow refuses it when the two disagree rather than publishing a jar named
@@ -194,11 +211,12 @@ counted.
 A version carrying an identifier after a dash, `0.2.0-rc.1` and the like, is published
 as a pre-release. One without is published as a release.
 
-The release body is GitHub's own generated notes, which list merged pull requests and
-new contributors and end on a changelog link. This history is rebased and fast-forwarded
-rather than merged through pull requests, so those lists are empty and the body arrives as
-the link alone: the first release came out that way. Which is to say: a release worth
-reading is one whose body is written by hand afterwards, which the release page takes
-without rebuilding anything.
+The release body is this version's entry in `CHANGELOG.md`, and the run refuses the tag when that
+entry is missing rather than publishing an empty one. It was GitHub's own generated notes until
+`06d5f53`, and they came out empty: those notes list merged pull requests and new contributors,
+and a history that is rebased and fast-forwarded has neither to show, so the body arrived as a
+comparison link under a heading. A body corrected by hand on the release page afterwards reaches
+both stores by dispatching the workflow again on the same tag, since what the stores are handed is
+read back off the page rather than rebuilt.
 
 GitHub and CurseForge are the two places a build goes, and nothing else is automated.
