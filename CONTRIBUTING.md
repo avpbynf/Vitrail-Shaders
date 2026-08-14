@@ -17,6 +17,22 @@ that forks is a tree nobody reads once it is public, and this one is public. A t
 rebased onto `dev` and folded in with `--ff-only`; `dev` is folded into `main` the same way. If
 `--ff-only` refuses, the rebase was not done, and the answer is to rebase rather than to merge.
 
+### Rebase a topic branch as soon as `dev` moves under it
+
+A branch left standing while a large change lands on `dev` is not merely behind, and the cost is
+not the conflicts you are shown. Git follows a file that was moved or renamed, so a branch editing
+a class that has since changed module rebases onto the new path without a word. What it does not
+follow is code that moved *between* classes: a call the branch edited in one class, where `dev` has
+since moved that work into another, comes back as a conflict whose two sides are about different
+files, and the branch's half has to be written into its new home by hand.
+
+**Read the whole of `git diff dev..HEAD` after a rebase, not only the hunks git marked.** The
+conflicts it raises are the ones it could see; the ones that cost an afternoon are the two it could
+not. Two sides may add the same helper under one name in different places, which is a compile error
+and therefore cheap. Or a fact may change on one side while the other side's prose still describes
+the old one, in a paragraph far from anything git touched: that compiles, reads well, and is
+simply false. Both happen because a fact is cited in more places than it lives in.
+
 A tag is `v` followed by whatever `mod_version` in `gradle.properties` holds, and that line
 is where the version lives. Nothing derives one from the other: a human types the tag, and
 the release workflow refuses it when the two disagree rather than publishing a jar named
