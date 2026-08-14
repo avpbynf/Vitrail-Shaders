@@ -55,7 +55,7 @@ on does not mean giving up the packs you already use.
 It is a side project by one person, and it started as a question: whether packs
 written for OpenGL over more than a decade could be made to run, untouched, on the
 renderer that now ships with the game. The answer turned out to be yes, well enough
-to play with. Take it in that spirit - a working experiment, not a product with a
+to play with. Take it in that spirit: a working experiment, not a product with a
 team behind it.
 
 ## Status
@@ -70,8 +70,8 @@ settings screen reads the pack's own menu layout, and a resource pack's normal
 and specular maps are served beside the blocks they belong to.
 
 Two limits ride with the last two of those. Entity geometry reaches the pack with
-its identifiers held constant - the material id, and the ones naming a mob type, a
-block entity type or the item in hand - so a pack that branches on any of them takes
+its identifiers held constant (the material id, and the ones naming a mob type, a
+block entity type or the item in hand), so a pack that branches on any of them takes
 the same branch for every draw and can read a mob as something else entirely. And a
 hand holding a translucent block draws that block with a blending pipeline this
 engine serves for no family yet, so the arm becomes the pack's while the block it
