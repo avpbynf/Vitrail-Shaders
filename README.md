@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders"><img src="https://img.shields.io/badge/download-CurseForge-F16436?style=flat-square&logo=curseforge&logoColor=white" alt="Vitrail on CurseForge"></a>
+  <a href="https://modrinth.com/project/vitrail-shaders"><img src="https://img.shields.io/badge/download-Modrinth-00AF5C?style=flat-square&logo=modrinth&logoColor=white" alt="Vitrail on Modrinth"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.2-2E6FD9?style=flat-square" alt="Minecraft 26.2">
   <img src="https://img.shields.io/badge/loaders-NeoForge%20%7C%20Fabric-1B2A6B?style=flat-square" alt="NeoForge and Fabric">
   <img src="https://img.shields.io/badge/renderer-Vulkan-7B3FA0?style=flat-square" alt="Vulkan">
@@ -92,9 +93,10 @@ and will trade image quality for it in the meantime.
 
 ## Quick start
 
-The jar is on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders),
-and attached to every [release](https://github.com/avpbynf/Vitrail-Shaders/releases)
-here. One run builds it and uploads it to both, so the two are the same file.
+The jar is on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders)
+and [Modrinth](https://modrinth.com/project/vitrail-shaders), and attached to every
+[release](https://github.com/avpbynf/Vitrail-Shaders/releases) here. One run builds
+it and uploads it to all three, so the three are the same file.
 
 Put it in `mods/` next to Sodium and Chloride, and switch the game to Vulkan:
 `preferredGraphicsBackend:"vulkan"` in `options.txt`, or Options, then Video
