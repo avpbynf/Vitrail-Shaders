@@ -11,10 +11,6 @@
 <p align="center">
   <a href="https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders"><img src="https://img.shields.io/badge/download-CurseForge-F16436?style=flat-square&logo=curseforge&logoColor=white" alt="Vitrail on CurseForge"></a>
   <a href="https://modrinth.com/project/vitrail-shaders"><img src="https://img.shields.io/badge/download-Modrinth-00AF5C?style=flat-square&logo=modrinth&logoColor=white" alt="Vitrail on Modrinth"></a>
-  <img src="https://img.shields.io/badge/Minecraft-26.2-2E6FD9?style=flat-square" alt="Minecraft 26.2">
-  <img src="https://img.shields.io/badge/loaders-NeoForge%20%7C%20Fabric-1B2A6B?style=flat-square" alt="NeoForge and Fabric">
-  <img src="https://img.shields.io/badge/renderer-Vulkan-7B3FA0?style=flat-square" alt="Vulkan">
-  <img src="https://img.shields.io/badge/licence-LGPL--3.0-F2B134?style=flat-square" alt="LGPL-3.0-only">
   <img src="https://img.shields.io/badge/status-experimental-C1440E?style=flat-square" alt="Experimental">
 </p>
 
@@ -93,17 +89,18 @@ and will trade image quality for it in the meantime.
 
 ## Quick start
 
-The jar is on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders)
-and [Modrinth](https://modrinth.com/project/vitrail-shaders), and attached to every
-[release](https://github.com/avpbynf/Vitrail-Shaders/releases) here. One run builds
-it and uploads it to all three, so the three are the same file.
+There is one jar per loader, NeoForge and Fabric. Both are on
+[CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) and
+[Modrinth](https://modrinth.com/project/vitrail-shaders), and attached to every
+[release](https://github.com/avpbynf/Vitrail-Shaders/releases) here. One run
+builds them and uploads them to all three, so the three carry the same files.
 
-Put it in `mods/` next to Sodium and Chloride, and switch the game to Vulkan:
-`preferredGraphicsBackend:"vulkan"` in `options.txt`, or Options, then Video
-Settings, in game. Nothing enforces that switch, though the mod says at startup
-which backend the game came up on, and says so as an error when it is not
-Vulkan. Shader packs go in `shaderpacks/`, as they always have, and are selected
-in game from Vitrail's settings screen.
+Put the one for your loader in `mods/` next to Sodium and Chloride, and switch
+the game to Vulkan: `preferredGraphicsBackend:"vulkan"` in `options.txt`, or
+Options, then Video Settings, in game. Nothing enforces that switch, though the
+mod says at startup which backend the game came up on, and says so as an error
+when it is not Vulkan. Shader packs go in `shaderpacks/`, as they always have,
+and are selected in game from Vitrail's settings screen.
 
 [INSTALL.md](INSTALL.md) has the versions this needs, the Chloride settings that
 have to come off, and what the absence of either looks like. Client only: it does
@@ -115,7 +112,7 @@ To build from source:
 gradlew build
 ```
 
-The jar lands in `build/libs`.
+Both jars land in `build/libs`.
 
 ## How it works
 
@@ -141,6 +138,7 @@ on its own shaders.
 | --- | --- |
 | Know why the format is OptiFine's, and how this sits next to Iris, Sulkan and Aperture | [Why this exists](docs/why.md) |
 | Work out why your pack looks wrong, starting from what you see | [Pack compatibility](docs/compatibility.md) |
+| See what changed from one version to the next | [CHANGELOG.md](CHANGELOG.md) |
 | Install it, and know what it refuses to run beside | [INSTALL.md](INSTALL.md) |
 | Understand how any of this works | [The documentation](docs/README.md) |
 
