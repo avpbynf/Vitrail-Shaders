@@ -10,11 +10,11 @@
 # neoforge/build.gradle, and spelling it a second time here would be a second home for it, out of
 # step from whichever of the two moved first.
 #
-# **CurseForge is mirrored from HERE and not from a workflow of its own**, and that is not a matter
-# of taste. A release this job creates is authored by the token the job runs under, and a release
-# published by that token starts no further workflow at all, so a file listening for the release
-# event would never wake. The other half of the reason is cheaper: one job means one build, and what
-# CurseForge serves is then the same bytes GitHub serves.
+# **The stores are mirrored from HERE and not from a workflow of their own**, and that is not a
+# matter of taste. A release this job creates is authored by the token the job runs under, and a
+# release published by that token starts no further workflow at all, so a file listening for the
+# release event would never wake. The other half of the reason is cheaper: one job means one build,
+# and what CurseForge and Modrinth serve is then the same bytes GitHub serves.
 
 name: release
 
@@ -24,9 +24,9 @@ on:
       # A digit after the v, so that a marker tag beginning with that letter is refused here rather
       # than by the check below, which would have queued a runner and checked the tree out first.
       - "v[0-9]*"
-  # For a release already out. The changelog CurseForge is given is the release body as it stands
-  # when the run starts, so a body written by hand after the tag was pushed reaches CurseForge by
-  # running this again on that tag, and by no other road.
+  # For a release already out. The changelog the stores are given is the release body as it stands
+  # when the run starts, so a body written by hand after the tag was pushed reaches them by running
+  # this again on that tag, and by no other road.
   workflow_dispatch:
     inputs:
       tag:
@@ -149,18 +149,40 @@ jobs:
           # now instead of what it said when the tag went out.
           gh release view "$TAG" --json body --jq .body > changelog.md
 
-      - name: Is the mirror configured
+      # One store missing its secrets does not take the other down with it: the action walks its
+      # platforms and passes over any whose token is empty, so what is answered here is which of
+      # the two is configured rather than whether anything is.
+      - name: Which mirrors are configured
         id: mirror
         env:
           CURSEFORGE_ID: ${{ secrets.CURSEFORGE_ID }}
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          # A project id is not a secret, so it is read from either tab rather than from the one
+          # it was guessed to be in. What that saves is the failure this file already carries a
+          # scar from: a name read from the wrong context is empty, and an empty name here reads
+          # as "not configured" and takes the run green past a store it never wrote to.
+          MODRINTH_ID: ${{ secrets.MODRINTH_ID || vars.MODRINTH_ID }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
         run: |
-          if [ -z "$CURSEFORGE_ID" ] || [ -z "$CURSEFORGE_TOKEN" ]; then
-            echo "::notice::CURSEFORGE_ID or CURSEFORGE_TOKEN is not set, so nothing is mirrored"
-            echo "configured=false" >> "$GITHUB_OUTPUT"
+          curseforge=false
+          modrinth=false
+
+          # Both halves, because a token without an id is not passed over: it reaches the store and
+          # fails there on a project that was never named.
+          if [ -n "$CURSEFORGE_ID" ] && [ -n "$CURSEFORGE_TOKEN" ]; then
+            curseforge=true
           else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::CURSEFORGE_ID or CURSEFORGE_TOKEN is not set, so CurseForge is skipped"
           fi
+
+          if [ -n "$MODRINTH_ID" ] && [ -n "$MODRINTH_TOKEN" ]; then
+            modrinth=true
+          else
+            echo "::notice::MODRINTH_ID or MODRINTH_TOKEN is not set, so Modrinth is skipped"
+          fi
+
+          echo "curseforge=$curseforge" >> "$GITHUB_OUTPUT"
+          echo "modrinth=$modrinth" >> "$GITHUB_OUTPUT"
 
       # Every flag the uploaded file needs is given rather than left to be inferred. The two that
       # were learned the hard way on another mod of this account, each added in a commit of its own
@@ -176,14 +198,23 @@ jobs:
       # The dependencies: given no list, the action reads one out of the jar's own
       # neoforge.mods.toml, so Sodium and Chloride go up as relations of the FILE as well, beside
       # whatever Default Relations the project itself carries. Their names there are the mod ids,
-      # and a name CurseForge does not know is dropped after a failed attempt rather than failing
-      # the upload, which is why the project's own relations are the ones to rely on.
-      - name: Mirror to CurseForge
-        if: steps.mirror.outputs.configured == 'true'
+      # and a name the store does not know is dropped rather than failing the upload, which is why
+      # the project's own relations are the ones to rely on. On Modrinth the drop is what happens
+      # to `minecraft` and `neoforge`, which are no projects of that store, while `sodium` and
+      # `chloride` are its slugs for them as well.
+      #
+      # `java` is CurseForge's alone. Modrinth has no field for it and the action never sends it
+      # there, so the line is not the pair of a missing one.
+      - name: Mirror to the stores
+        if: steps.mirror.outputs.curseforge == 'true' || steps.mirror.outputs.modrinth == 'true'
         uses: Kir-Antipov/mc-publish@v3.3
         with:
+          # A token is emptied rather than left to fail when its pair above is half set, an empty
+          # token being exactly what makes the action pass a store over.
           curseforge-id: ${{ secrets.CURSEFORGE_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          curseforge-token: ${{ steps.mirror.outputs.curseforge == 'true' && secrets.CURSEFORGE_TOKEN || '' }}
+          modrinth-id: ${{ secrets.MODRINTH_ID || vars.MODRINTH_ID }}
+          modrinth-token: ${{ steps.mirror.outputs.modrinth == 'true' && secrets.MODRINTH_TOKEN || '' }}
           files: ${{ steps.jar.outputs.path }}
           name: ${{ steps.which.outputs.tag }}
           changelog-file: changelog.md
