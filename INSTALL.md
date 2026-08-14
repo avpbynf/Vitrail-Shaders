@@ -100,13 +100,17 @@ gradlew.bat build
 ```
 
 The first build decompiles Minecraft and takes a couple of minutes. After that it
-is a few seconds. The jar lands in two places, they are identical, and it is named
-for the version in `gradle.properties` and the Minecraft version beside it:
+is a few seconds. Both jars are built, and each lands in two places that are
+identical, named for the version in `gradle.properties` and the Minecraft version
+beside it:
 
 ```
-build/libs/vitrail-neoforge-<version>+mc<minecraft>.jar
-neoforge/build/libs/vitrail-neoforge-<version>+mc<minecraft>.jar
+build/libs/vitrail-<loader>-<version>+mc<minecraft>.jar
+<loader>/build/libs/vitrail-<loader>-<version>+mc<minecraft>.jar
 ```
+
+`gradlew.bat :neoforge:build` builds that one alone, and `:fabric:build` the
+other.
 
 To run the mod in a development client instead of installing it:
 
