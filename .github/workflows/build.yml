@@ -1,6 +1,6 @@
-# CONTRIBUTING says main stays buildable. This runs the same gradlew build a contributor runs, so
-# a failure here is reproducible in one command rather than something only the runner knows how to
-# provoke.
+# CONTRIBUTING says dev stays buildable, and main only ever holds what dev already held. This runs
+# the same gradlew build a contributor runs, so a failure here is reproducible in one command rather
+# than something only the runner knows how to provoke.
 #
 # The local check comes first and always did: a contributor runs the build before pushing, and this
 # is the same one. What the remote adds is the case the local check cannot cover, a pull request from
@@ -17,7 +17,10 @@ name: build
 
 on:
   push:
-    branches: [main]
+    # Both long-lived branches. main carries nothing dev has not already carried, so a run there is
+    # the same tree a second time; it is kept because main is what the badge and anybody arriving at
+    # the repository read, and a branch with no run of its own reads as a branch nobody checks.
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 

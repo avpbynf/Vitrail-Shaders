@@ -2,15 +2,28 @@
 
 ## Branches
 
-`main` is the only long-lived branch and it stays buildable. Work on a topic branch, then rebase it
-onto `main` and fast-forward. The history is linear and carries no merge commit at all. There is no
-release branch.
+Two long-lived branches, and the difference between them is one question: has this been published?
+
+- `dev` is where work lands. It stays buildable, and it is what a topic branch is opened from and
+  rebased onto.
+- `main` is what is out there. Every commit on it has been released under some tag, and nothing
+  reaches it except by fast-forward from `dev` at the moment of a release.
+
+So `main` is always an exact prefix of `dev`, which is what makes the two readable side by side:
+whatever `dev` holds beyond `main` is precisely what is written and not yet published.
+
+**The history is linear and carries no merge commit anywhere, which is not a preference.** A tree
+that forks is a tree nobody reads once it is public, and this one is public. A topic branch is
+rebased onto `dev` and folded in with `--ff-only`; `dev` is folded into `main` the same way. If
+`--ff-only` refuses, the rebase was not done, and the answer is to rebase rather than to merge.
 
 A tag is `v` followed by whatever `mod_version` in `gradle.properties` holds, and that line
 is where the version lives. Nothing derives one from the other: a human types the tag, and
 the release workflow refuses it when the two disagree rather than publishing a jar named
 after one and built from the other. The target Minecraft version is in the artifact name
 and comes from the same file.
+
+A tag is pushed on `main` and on nothing else, which is what keeps the sentence above true.
 
 ## Commits
 
