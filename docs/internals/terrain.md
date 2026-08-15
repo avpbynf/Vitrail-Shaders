@@ -341,14 +341,17 @@ One family is not placed by that matrix and therefore does not read it: the play
 is drawn under a projection the engine builds rather than under the level's. The game builds the
 hand's pose out of the walk bob and the damage tilt alone, leaving the nausea and the portal out on
 purpose, since those two distort the world and not the arm; so the hand is handed that pose as its
-bob, and everything else the frame's. Handed the frame's, a hand program would form a product
-carrying a spin the arm was never drawn with, and the item in the player's grip would swim inside a
-portal while the arm holding it stayed put. What the hand's normals then come to is the one place
-this engine is knowingly not the reference's number, and the reason is the placement above rather
-than a choice: the reference keeps the hand's bob in a projection, where a normal matrix never
-reaches, and here it is in the model-view the same program reads, so a normal matrix ignoring it
-would contradict the matrix beside it. The gap is a fraction of a degree while walking and its
-widest at the peak of a damage tilt.
+bob, and everything else the frame's. Handed the frame's, a hand program forms a product carrying a
+spin the arm was never drawn with, and that product is what a pack writes the hand's clip position
+through: the whole hand turns and stretches with the screen inside a portal, where it should hold
+still in front of the camera.
+
+What the two quantities *derived* from the hand's model-view then come to, its inverse and its
+normal matrix, is the one place this engine is knowingly not the reference's number. The reason is
+the placement above rather than a choice: the reference keeps the hand's bob in a projection, where
+neither of those two ever reaches, and here it is in the model-view the same program reads, so a
+pair derived from it that ignored the bob would contradict the matrix beside it. The gap is a
+fraction of a degree while walking and at its widest at the peak of a damage tilt.
 
 Because the whole thing rests on having intercepted *every* operation that touches the projection,
 it carries its own witness. Each frame, the clean projection is multiplied back by the accumulated

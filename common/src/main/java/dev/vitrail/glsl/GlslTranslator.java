@@ -970,9 +970,17 @@ public final class GlslTranslator {
 	 * {@code iris_ModelViewMatInverse} and {@code iris_NormalMat}
 	 * ({@code transform/transformer/VanillaTransformer.java:168-178}), both filled from
 	 * {@code RenderSystem.getModelViewMatrix()} at program setup
-	 * ({@code pipeline/programs/ExtendedShader.java:181-189}), which is the stack and carries no
-	 * nudge. So a pack that multiplies the matrix by its own inverse is a hair off in both engines,
-	 * by the same hair.
+	 * ({@code pipeline/programs/ExtendedShader.java:183} and {@code :188}), which is the stack and
+	 * carries no nudge. So a pack that multiplies the matrix by its own inverse is a hair off in both
+	 * engines, by the same hair.
+	 * <p>
+	 * <strong>On the hand it is not a hair, and it is the same difference twice rather than two
+	 * findings.</strong> Both derived names come off one matrix,
+	 * {@code dev.vitrail.uniform.ViewSource#passModelView}, so what separates them from the
+	 * reference's separates them together: the hand's carries that pass's bob and Iris's stack does
+	 * not. {@code dev.vitrail.render.EntityDraw.Element.modelView} carries the whole argument and
+	 * what it costs the image; it is written down as a divergence rather than closed, because the
+	 * answer that would close it is Iris's number against this engine's placement of the bob.
 	 *
 	 * @return whether the name was one this rewrites, false leaving it to the ordinary rename
 	 */

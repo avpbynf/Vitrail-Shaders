@@ -254,6 +254,15 @@ public final class LegacyGlsl {
 	 * <p>
 	 * It is the very matrix {@code dev.vitrail.render.ViewMatrices#passModelView} multiplies by,
 	 * published rather than rebuilt, so that the two roads cannot end up with two different bobs.
+	 * <p>
+	 * <strong>Four effects for three of the four families and TWO for the hand, and that is a
+	 * property of where each is drawn.</strong> What this name means is the left factor that really
+	 * placed the geometry of the pass reading it. The entities, the block entities and the glint are
+	 * placed by the level's matrix, which carries all four; the hand is drawn under a projection this
+	 * engine builds out of the walk bob and the damage tilt alone, the nausea and the portal being a
+	 * distortion of the world rather than of the arm.
+	 * {@code dev.vitrail.render.ViewMatrices.passBob} carries what handing it the frame's four would
+	 * cost, and it is not small: a hand program writes its clip position through this factor.
 	 */
 	public static final String CAMERA_BOB = "of_CameraBob";
 

@@ -115,10 +115,11 @@ public final class ViewMatrices implements ViewSource {
 	 * with; the hand is drawn under a projection this engine builds itself, and it builds it with
 	 * {@link CameraBob#pose()}, the walk bob and the damage tilt alone, because that is the pose the
 	 * game gives its own hand and the pose Iris gives its own
-	 * ({@code pathways/HandRenderer.java:64-70}, a bob stack of {@code bobHurt} and {@code bobView}
-	 * multiplied into the hand's projection and nothing else). Handing the frame's four to a hand
-	 * program would publish a spin the arm was never drawn with: measured out of game, the product
-	 * a hand program forms lands 0.34 away from the matrix the device was given under a full portal,
+	 * ({@code pathways/HandRenderer.java:65-70}, a bob stack of {@code bobHurt} and, under the
+	 * player's own option, {@code bobView}, multiplied into the hand's projection and nothing else).
+	 * Handing the frame's four to a hand program would publish a spin the arm was never drawn with,
+	 * and a hand program writes its clip position through this factor: measured out of game, the
+	 * product it forms lands 0.34 away from the matrix the device was given under a full portal,
 	 * where the walk and the tilt leave it exact.
 	 */
 	private final Matrix4f passBob = new Matrix4f();
