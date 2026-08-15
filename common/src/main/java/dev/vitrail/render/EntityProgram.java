@@ -123,10 +123,10 @@ final class EntityProgram implements DumpedProgram {
 	 *               schedule gives it, the first one INCLUDED whichever half this is.
 	 *               {@code GeometryProgram} is what decides where that first one really goes: the
 	 *               pack's target for a piece drawn after the seed and for one that writes the mask,
-	 *               which is every entity row, and the game's for what is drawn before the seed
-	 *               without one, which is the whole of the hand's solid pass, the arm included
-	 *               although it blends. {@link EntityDraw} settles the list and refuses a whole half
-	 *               where the first one could not reach the pack
+	 *               which between them is every piece this door serves, and the game's for a piece
+	 *               that asked for a mask and could not be given one by the translation.
+	 *               {@link EntityDraw} settles the list and refuses a whole half where the first one
+	 *               could not reach the pack
 	 */
 	static EntityProgram of(PackProgram.Loaded loaded, EntityDraw.Element element, PackValues values,
 			int load, List<ChainPlan.Attachment> writes, TargetPlan chainTargets,
@@ -173,12 +173,13 @@ final class EntityProgram implements DumpedProgram {
 				//
 				// The two are still not one decision with draw buffer nought: GeometryProgram asks
 				// the side of the stage first, so a pass can keep nought on the game's target for a
-				// reason that has nothing to do with a mask, which is what the hand's solid pass does.
+				// reason that has nothing to do with a mask.
 				//
-				// claimed: no opaque piece of this family stands over these pixels, and for the hand
-				// that is the whole of why its solid pass leaves draw buffer nought on the game's
-				// target although it blends. The sky's blending pieces have the disc and the horizon
-				// cone under them; the arm has no such sibling.
+				// claimed: no opaque piece of this family stands over these pixels, which is true of
+				// every piece here including the arm. The sky's blending pieces have the disc and the
+				// horizon cone under them and are the one family that answers otherwise; what earns
+				// the hand's solid pass its own draw buffer nought is the mask it writes, not a
+				// sibling.
 				element.covers(), false,
 				// afterDeferred: which side of the stage this piece is drawn on, which decides the
 				// half of every target it reads and whether a depth sampler may be answered with the

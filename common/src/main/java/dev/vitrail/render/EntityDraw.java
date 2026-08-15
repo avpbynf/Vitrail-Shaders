@@ -2,9 +2,11 @@ package dev.vitrail.render;
 
 import dev.vitrail.glsl.LegacyGlsl;
 import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.glsl.VertexInputs;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.AlphaTest;
+import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetName;
@@ -351,16 +353,28 @@ public final class EntityDraw {
 		 * game's target it would blend onto a clear, and the seed would then throw it away, its own
 		 * depth being the depth of the geometry it hangs on.
 		 * <p>
-		 * <strong>The hand is out, and not because a mask would be wrong for it.</strong> Its solid
-		 * pass is a change to the order of the frame rather than to this answer, which
-		 * {@link GeometryProgram} sets out where it demotes it: what that pass is waiting for is to
-		 * be drawn between the seed and the deferred stage, which is Iris's own moment for it.
+		 * <strong>The hand's solid pass is in, and the depth it is drawn with is the whole of why it
+		 * could not be before.</strong> That pass is drawn one line ahead of the seed
+		 * ({@code platform/EngineStages.java:115-116}) with its clip depth squeezed into the band
+		 * {@code 0.4375} to {@code 0.5625} ({@link HandDraw}), which is not the depth of anything it
+		 * stands in front of. Against a flag the cut asked whether the depth had moved closer since a
+		 * copy taken before the game's features, so every hand pixel answered yes whatever was marked
+		 * there. Against a depth it asks nothing of the sort: the mask is filled from what the
+		 * fragment hands the depth attachment, so the two hold one number at a hand pixel and the cut
+		 * compares it with itself.
+		 * <p>
+		 * <strong>A hand row that writes no depth is served by the same answer rather than in spite
+		 * of it</strong>, and a held banner's pattern is the one that is reachable ({@code
+		 * BANNER_PATTERN}, {@code RenderPipelines.java:319}). The mask takes the hand's own squeezed
+		 * depth and the attachment keeps what stands behind the hand, which is farther, so the cut
+		 * finds nothing in front and leaves the pixel alone. That is the piece the seed used to throw
+		 * away outright.
 		 * <p>
 		 * A piece drawn after the stage owes no mask, the seed having run long before, and a shadow
 		 * row is in neither position: it is drawn into the map, which no seed ever paints.
 		 */
 		boolean covers() {
-			return !shadow() && !afterStage() && !hand();
+			return !shadow() && !afterStage();
 		}
 
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
@@ -1726,7 +1740,7 @@ public final class EntityDraw {
 				continue;
 			}
 
-			List<ChainPlan.Attachment> writes = writes(half);
+			List<ChainPlan.Attachment> writes = writes(half, one);
 			if (writes == null) {
 				return;
 			}
@@ -1795,16 +1809,26 @@ public final class EntityDraw {
 	 * buffer that is not the one it paints would have that output carried into a target the pack did
 	 * not ask for, which is a pack's albedo read as its normals.
 	 * <p>
+	 * <strong>Those two are asked of a half that will really be given the coverage mask, and it has
+	 * no seed to answer for.</strong> Every opaque piece of this door asks for one, {@link
+	 * Element#covers} saying so, and a piece that gets one writes the pack's target outright: nought
+	 * never makes the trip through the game's eight bit target, so what the seed paints and whether
+	 * it is painted at all stop being this half's business. What is left on the seed's road is the
+	 * half that asked for a mask and could not be given one, which {@code GeometryProgram.covers} is
+	 * the one reading of, and there the pack's own first draw buffer decides again.
+	 * <p>
 	 * <strong>The half drawn after the stage needs no seed and is not a relaxation of the rule but
 	 * the other side of it.</strong> It is drawn onto a colour target the chain has already
 	 * composed, so {@code GeometryProgram} gives it its own draw buffer nought: the output goes to
 	 * the pack outright rather than making the trip through the game's eight bit target. That is the
-	 * position the world's own water is in, and the translucent particles with it. The side of the
-	 * stage and not the blend is what earns it, and the hand is where the two part company: its
-	 * solid pass blends and is drawn one line before the seed, so it keeps draw buffer nought on the
-	 * game's target like the opaque halves.
+	 * position the world's own water is in, and the translucent particles with it.
+	 *
+	 * @param loaded the serving file as it came out of the translation, which is what says whether
+	 *               the mask was really placed. The same file rebound against another plan carries
+	 *               the same text and so the same answer, {@code PackProgram.Loaded.rebind} keeping
+	 *               the translated program and changing only what its samplers are bound to
 	 */
-	private List<ChainPlan.Attachment> writes(Half half) {
+	private List<ChainPlan.Attachment> writes(Half half, PackProgram.Loaded loaded) {
 		// A shadow half writes the map and nothing else. GeometryProgram gives a shadow pass no slots
 		// at all, so the list is never read for one, and asking the plan for it would ask about a
 		// name the plan's geometry table has no row for. Answered empty rather than left to fall
@@ -1815,17 +1839,38 @@ public final class EntityDraw {
 			return List.of();
 		}
 
-		// Before the plan is even asked, because it is not the plan's to answer: the scene seed is
-		// the ONLY road the opaque half's first output has into the pack's picture, so a run with the
-		// seed switched off would write every other draw buffer and no albedo at all. What that
-		// paints is a mob shaped hole of normals and specular over the terrain's own colours, which
-		// is exactly the plausible and wrong picture the switch exists to rule out.
+		Optional<ChainPlan.Pass> geometry = this.plan.geometryOf(half.servedBy(), half.afterStage());
+		if (geometry.isPresent() && !geometry.get().size().equals(TargetSize.ofScreen())) {
+			Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so they cannot share "
+					+ "a pass with the game's own target and the game keeps its own shader for that "
+					+ "half of what it serves", half.servedBy());
+
+			return null;
+		}
+
+		List<ChainPlan.Attachment> attachments =
+				geometry.map(ChainPlan.Pass::attachments).orElse(List.of());
+		if (half.afterStage()) {
+			return attachments;
+		}
+
+		// Asked before either question about the seed, because it is what decides that neither of
+		// them is this half's to answer: with the mask placed, draw buffer nought is the pack's own
+		// target and the seed is kept off every pixel this half wrote.
+		if (GeometryProgram.covers(notes(loaded), attachments.size(), this.chainRuns)) {
+			return attachments;
+		}
+
+		// The scene seed is now the ONLY road this half's first output has into the pack's picture,
+		// so a run with it switched off would write every other draw buffer and no albedo at all.
+		// What that paints is a mob shaped hole of normals and specular over the terrain's own
+		// colours, which is exactly the plausible and wrong picture the switch exists to rule out.
 		// Only where the chain runs, and the condition is not a refinement. With chain=off nothing
 		// of the pack reaches the screen through a final, so draw buffer nought stays on the game's
 		// own target and is the picture: the seed has nothing to carry and is never even drawn.
 		// Refusing the family there would take away the one configuration that tells a wrong
 		// gbuffer from a wrong composite, which is what these switches exist for.
-		if (!half.afterStage() && this.chainRuns && !this.seeded) {
+		if (this.chainRuns && !this.seeded) {
 			Vitrail.logger().info("The scene seed is off, and it is the only way the first output of "
 					+ "an opaque piece reaches the pack's picture, so the game keeps its own shader "
 					+ "for what {} serves: served, it would write every other draw buffer and no "
@@ -1834,28 +1879,16 @@ public final class EntityDraw {
 			return null;
 		}
 
-		Optional<ChainPlan.Pass> geometry = this.plan.geometryOf(half.servedBy(), half.afterStage());
-		if (geometry.isEmpty()) {
-			return List.of();
+		if (attachments.isEmpty()) {
+			return attachments;
 		}
 
-		ChainPlan.Pass pass = geometry.get();
-		if (!pass.size().equals(TargetSize.ofScreen())) {
-			Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so they cannot share "
-					+ "a pass with the game's own target and the game keeps its own shader for that "
-					+ "half of what it serves", half.servedBy());
-
-			return null;
-		}
-
-		if (half.afterStage()) {
-			return pass.attachments();
-		}
-
-		ChainPlan.Attachment first = pass.attachments().get(0);
+		// Asked of the plan's own predicate and not written out again here, which is the shape the
+		// rest of this method just took: the notes ChainPlan builds hold the same question for the
+		// families still riding on the seed, and two readings of it would be free to drift.
 		Optional<ChainPlan.Seed> seed = this.plan.seed();
-		if (seed.isEmpty() || seed.get().target() != first.target()
-				|| seed.get().side() != first.side()) {
+		if (!ChainPlan.leadsWithSeed(seed.orElse(null), geometry.orElse(null))) {
+			ChainPlan.Attachment first = attachments.get(0);
 			Vitrail.logger().warn("{} writes {} first and the scene seed paints {}, so the first output "
 					+ "of an opaque piece would be carried into a target the pack did not ask for: the "
 					+ "game keeps its own shader for that half", half.servedBy(),
@@ -1865,7 +1898,12 @@ public final class EntityDraw {
 			return null;
 		}
 
-		return pass.attachments();
+		return attachments;
+	}
+
+	/** What the fragment stage of a serving file came out of the translation carrying. */
+	private static TranslatedUnit.Notes notes(PackProgram.Loaded loaded) {
+		return loaded.program().stages().get(ProgramStage.FRAGMENT).notes();
 	}
 
 	/** The bare name of the file behind a loaded program, which is what the plan is keyed by. */
