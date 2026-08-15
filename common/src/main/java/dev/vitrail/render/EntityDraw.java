@@ -416,18 +416,26 @@ public final class EntityDraw {
 		 * HandDraw} putting the whole of the hand's transform in the projection, so what is read
 		 * here is what the game itself would have read at that draw.
 		 * <p>
-		 * <strong>What the hand's normal matrix comes to is a DIVERGENCE, and it is this engine's
-		 * placement of the bob translated rather than Iris's line copied.</strong> Iris answers the
-		 * identity there, filling {@code iris_NormalMat} from {@code RenderSystem.getModelViewMatrix()}
-		 * ({@code pipeline/programs/ExtendedShader.java:187}) while its own hand leaves the stack at a
-		 * fresh pose ({@code pathways/HandRenderer.java:104,114-115}). What stops that answer from
-		 * being right here is where the two engines keep the hand's bob: Iris multiplies it into the
-		 * projection it binds ({@code pathways/HandRenderer.java:64-70}), and a normal matrix is never
-		 * derived from a projection, so the identity is consistent with its own geometry. This engine
-		 * publishes the bob in the model view for every family, {@link CameraBob} saying why, so the
-		 * matrix a hand program reads carries it and a normal matrix that did not would contradict the
-		 * very matrix beside it. Copying the identity across would buy Iris's number and a pair that
-		 * no longer multiplies back.
+		 * <strong>What the two names DERIVED from it come to on the hand is a DIVERGENCE, and it is
+		 * this engine's placement of the bob translated rather than Iris's line copied.</strong> Two
+		 * names and not one: {@code gl_NormalMatrix} and {@code gl_ModelViewMatrixInverse} both come
+		 * off this one matrix, {@code of_NormalMatrix} and {@code of_ModelViewMatrixInverse} in
+		 * {@link dev.vitrail.uniform.values.GeometryValues}, so whatever separates one from the
+		 * reference's separates the other by the same thing. Iris answers the identity to both,
+		 * filling {@code iris_ModelViewMatInverse} and {@code iris_NormalMat} from
+		 * {@code RenderSystem.getModelViewMatrix()} ({@code pipeline/programs/ExtendedShader.java:183}
+		 * and {@code :188}) while its own hand leaves the stack at a fresh pose
+		 * ({@code pathways/HandRenderer.java:104,114-115}, out of the {@code new PoseStack()} at
+		 * {@code :73}).
+		 * <p>
+		 * What stops that answer from being right here is where the two engines keep the hand's bob.
+		 * Iris multiplies it into the projection it binds ({@code pathways/HandRenderer.java:65-70},
+		 * the damage tilt always and the walk bob under the player's own option), and a normal matrix
+		 * is never derived from a projection, so the identity is consistent with its own geometry.
+		 * This engine publishes the bob in the model view for every family, {@link CameraBob} saying
+		 * why, so the matrix a hand program reads carries it and a pair derived from it that did not
+		 * would contradict the very matrix beside it. Copying the identity across would buy Iris's
+		 * number and a pair that no longer multiplies back.
 		 * <p>
 		 * What it costs the image, measured out of game rather than argued: the hand's normals are
 		 * turned against the reference's by up to half a degree while the player walks, the walk

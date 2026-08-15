@@ -58,7 +58,12 @@ public interface ViewSource {
 	 * {@link dev.vitrail.glsl.LegacyGlsl#CAMERA_BOB} carries why the factor has to be a name.
 	 * <p>
 	 * The identity on a frame this engine could not split, exactly as the pass matrix is then the
-	 * game's own.
+	 * game's own. <strong>The hand is the exception to that sentence and to the one above.</strong>
+	 * It is not placed by the frame's matrix at all, being drawn under a projection this engine
+	 * builds, so it hands in the pose that projection was built with and is answered that;
+	 * {@code dev.vitrail.render.ViewMatrices.passBob} carries which effects that pose leaves out and
+	 * why. It is answered whatever the split says, too, so a hand program keeps a product that
+	 * multiplies back on a frame where nothing else does.
 	 */
 	Matrix4fc cameraBob();
 

@@ -152,12 +152,14 @@ public final class HandDraw {
 	 * {@code volume * bob} - which is {@link #drawn}, exactly. Measured out of game over eight states
 	 * of the player, and exact in every one of them.
 	 * <p>
-	 * That holds because {@link #bob()} hands the pack the same pose this class draws with, and it is
-	 * the same field: the frame's bob would carry the nausea roll and the portal scale besides, and
-	 * the arm is drawn without them. It holds on a frame this engine could not split as well, which
-	 * no other family manages: {@link CameraBob#pose()} is answered whatever the split says, so the
-	 * hand keeps a product that multiplies back while the rest of the frame falls back on the drawn
-	 * projection.
+	 * That holds because {@link #bob()} hands the pack the pose this class draws with: the frame's
+	 * bob would carry the nausea roll and the portal scale besides, and the arm is drawn without
+	 * them. The two read {@link CameraBob#pose()} at two moments rather than sharing one copy, and
+	 * what makes them the same matrix is that nothing writes it in between: it is written once per
+	 * level render, from the mixin on the game's own multiplication, and both moments fall after it.
+	 * It holds on a frame this engine could not split as well, which no other family manages:
+	 * {@link CameraBob#pose()} is answered whatever the split says, so the hand keeps a product that
+	 * multiplies back while the rest of the frame falls back on the drawn projection.
 	 */
 	private final Matrix4f volume = new Matrix4f();
 
@@ -250,7 +252,8 @@ public final class HandDraw {
 	 * The frame's is all four effects, the nausea and the portal included, and those two are a
 	 * distortion of the world rather than of the arm: {@link CameraBob#pose()} carries why the game
 	 * leaves them out of its own hand, and Iris leaves them out of its hand's projection too
-	 * ({@code pathways/HandRenderer.java:64-70}).
+	 * ({@code pathways/HandRenderer.java:65-70}, the damage tilt always and the walk bob under the
+	 * player's own option, which is the game's own pair of conditions).
 	 */
 	static Matrix4fc bob() {
 		return half == null || instance == null ? null : CameraBob.pose();

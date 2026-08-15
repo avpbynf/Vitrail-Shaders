@@ -25,9 +25,10 @@ what the next one holds.
 - Picking None while a pack is drawing no longer leaves the terrain in stretched coloured spikes
   until the game is restarted. The world was being drawn through a pipeline built for the wider
   vertex the pack needs, over a mesh that had already gone back to the narrower one.
-- The item in your hand no longer swims inside a nether portal or under nausea while the arm
-  holding it stays put. The pack was being handed the whole screen distortion as the hand's walk
-  bob, and the hand is drawn without it.
+- Your hand no longer turns and stretches along with the screen inside a nether portal or under
+  nausea, where it should hold still in front of the camera. The pack was being handed the whole
+  screen distortion as the hand's walk bob, and it is the hand's clip position a pack writes
+  through that. Walking and being hit were already right.
 
 ## 0.2.0-alpha.1
 
