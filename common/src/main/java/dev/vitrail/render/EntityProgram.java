@@ -263,14 +263,19 @@ final class EntityProgram implements DumpedProgram {
 	 *                   piece but the hand's and null for those. It is what the derived uniforms are
 	 *                   built from and no longer what places the geometry: {@code EntityDraw.Element}
 	 *                   says why the depth nudge of a render type is not in it
+	 * @param bob        the bob that placed this piece, or null for the frame's. Only the hand passes
+	 *                   one, and it must: the projection above is built with the walk bob and the
+	 *                   damage tilt alone, so the frame's four would publish a spin the arm was never
+	 *                   drawn with
 	 * @param projection the volume the piece is drawn in, or null for the frame's. Only the hand
 	 *                   passes one, and it must: it is drawn under the head-up field of view and a
 	 *                   clip depth squeezed to an eighth, which is a matrix of its own rather than a
 	 *                   nudge of the frame's
 	 * @see GeometryProgram#prepare
 	 */
-	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView, Matrix4fc projection) {
-		return this.body.prepare(device, null, modelView, null, projection);
+	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView, Matrix4fc bob,
+			Matrix4fc projection) {
+		return this.body.prepare(device, null, modelView, bob, null, projection);
 	}
 
 	/**

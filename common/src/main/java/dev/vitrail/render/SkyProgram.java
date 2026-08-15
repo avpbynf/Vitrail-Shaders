@@ -115,7 +115,7 @@ final class SkyProgram implements DumpedProgram {
 	 * @see GeometryProgram#prepare
 	 */
 	RenderPipeline prepare(GpuDevice device, Matrix4fc modelView, Vector4fc colour) {
-		return this.body.prepare(device, null, modelView, colour, null);
+		return this.body.prepare(device, null, modelView, null, colour, null);
 	}
 
 	/**

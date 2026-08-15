@@ -140,13 +140,24 @@ public final class HandDraw {
 	 * <strong>Without, and that is not the same as Iris's matrix.</strong> Iris multiplies the bob
 	 * into the projection it binds and leaves its model view at the identity; this engine publishes
 	 * the bob in the model view for every family, {@link CameraBob} saying why, so the hand puts it
-	 * in the same place as its neighbours. The product a pack computes,
-	 * {@code gl_ProjectionMatrix * gl_ModelViewMatrix}, is the same matrix either way for the walk
-	 * bob, which is all the device's matrix takes in. The nausea roll and the portal scale are
-	 * carried by {@code CameraBob.taken()} into the model view alone, so under those two the pack's
-	 * product bears transforms the drawn geometry does not, and with the bob untrusted it loses the
-	 * bob outright: the matrix the geometry is really drawn with is the device's, and the product
-	 * only approximates it in those states.
+	 * in the same place as its neighbours.
+	 * <p>
+	 * <strong>The product a pack computes lands on the device's matrix all the same, and the route
+	 * is not the one it looks like.</strong> A hand program does not read this engine's pass model
+	 * view at all: {@code gbuffers_hand} is one of the families
+	 * {@code LegacyGlsl.readsDrawModelView} answers for, so its {@code gl_ModelViewMatrix} is
+	 * rewritten to {@code of_CameraBob * of_GameModelView}, the second factor being what the game
+	 * wrote for that draw. That member is the identity here, {@code RenderType.writeDynamicTransforms}
+	 * copying the model view stack this class has just set to the identity, so the product comes to
+	 * {@code volume * bob} - which is {@link #drawn}, exactly. Measured out of game over eight states
+	 * of the player, and exact in every one of them.
+	 * <p>
+	 * That holds because {@link #bob()} hands the pack the same pose this class draws with, and it is
+	 * the same field: the frame's bob would carry the nausea roll and the portal scale besides, and
+	 * the arm is drawn without them. It holds on a frame this engine could not split as well, which
+	 * no other family manages: {@link CameraBob#pose()} is answered whatever the split says, so the
+	 * hand keeps a product that multiplies back while the rest of the frame falls back on the drawn
+	 * projection.
 	 */
 	private final Matrix4f volume = new Matrix4f();
 
@@ -226,6 +237,23 @@ public final class HandDraw {
 	 */
 	static Matrix4fc volume() {
 		return half == null || instance == null ? null : instance.volume;
+	}
+
+	/**
+	 * The bob the volume above was built against, or null when the hand is not being drawn, which is
+	 * the left factor a hand program is handed as {@code of_CameraBob}.
+	 * <p>
+	 * <strong>The walk bob and the damage tilt, and not the frame's four.</strong> A hand program
+	 * reads its model view out of the game's per draw block and multiplies this by it, so this factor
+	 * and {@link #drawn} have to be built from the same pose or the pack's
+	 * {@code gl_ProjectionMatrix * gl_ModelViewMatrix} stops being the matrix the device was given.
+	 * The frame's is all four effects, the nausea and the portal included, and those two are a
+	 * distortion of the world rather than of the arm: {@link CameraBob#pose()} carries why the game
+	 * leaves them out of its own hand, and Iris leaves them out of its hand's projection too
+	 * ({@code pathways/HandRenderer.java:64-70}).
+	 */
+	static Matrix4fc bob() {
+		return half == null || instance == null ? null : CameraBob.pose();
 	}
 
 	/**

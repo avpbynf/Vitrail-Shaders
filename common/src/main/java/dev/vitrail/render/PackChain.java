@@ -1939,7 +1939,7 @@ public final class PackChain {
 		// decoded dump beside it. The frame boundary drops them as
 		// well and that is not the same guard: it drops them at the head of the frame, and every one
 		// of those families writes after it and before this.
-		this.values.modelView(null);
+		this.values.modelView(null, null);
 		this.values.passColour(null);
 		this.values.projection(null);
 
