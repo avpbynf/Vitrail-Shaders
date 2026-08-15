@@ -278,8 +278,16 @@ final class GeometryProgram {
 
 	/**
 	 * Whether this pass blends and lost draw buffer nought all the same, which is the one demotion
-	 * that is a decision rather than the absence of anywhere to send it. Kept as a field because it
-	 * is answered where {@code owns} is in scope and said where it is not.
+	 * that says what it costs the BLEND rather than what it costs the colour. Kept as a field
+	 * because it is answered where {@code owns} is in scope and said where it is not.
+	 * <p>
+	 * <strong>It no longer has a cause of its own, and that is worth saying rather than leaving a
+	 * reader to work out.</strong> Every blending pass drawn before the seed either writes the mask
+	 * or has an opaque sibling of its own family marking those pixels, so what is left here is a
+	 * pass that asked for a mask and could not be given one, which the constructor has already
+	 * warned about by name. The line it prints is kept because it says a different thing: not that
+	 * the colour goes to the game's target, which the warning says, but that the blend is made
+	 * against a target the world is not in.
 	 */
 	private final boolean demoted;
 	private final ColorTargets targets;
@@ -391,49 +399,40 @@ final class GeometryProgram {
 		// of the same rule: the stage that could not be given one says so, and an engine that
 		// decided for itself would be attaching an image nothing fills.
 		boolean owns = chainRuns && !writes.isEmpty();
-		this.covers = owns && pass.covers() && notes.coverage() == 1 && writes.size() <= outputs
-				&& outputs < ColorTargetState.MAX_COLOR_TARGETS;
+		this.covers = pass.covers() && covers(notes, writes.size(), chainRuns);
 		// A blending pass may take draw buffer nought outright only where the seed will not repaint
 		// the pixels it blended onto, and blending is not that question: it was read as though it
 		// were, and every family answered the same either way until the hand arrived.
 		//
-		// Three ways the seed is kept off, and the hand has none of them. The pass is drawn AFTER
-		// the seed, which is the world's water, the weather, the clouds, the translucent particles,
-		// the blending half of the entities and the hand's own water pass. It writes the mask
-		// itself, which is what covers above answers. Or the family draws opaque pieces of its own
-		// over the same pixels, which is the sky alone and which claimed carries, with the two
-		// places it does not hold named where that field is declared.
+		// Three ways the seed is kept off. The pass is drawn AFTER the seed, which is the world's
+		// water, the weather, the clouds, the translucent particles, the blending half of the
+		// entities and the hand's own water pass. It writes the mask itself, which is what covers
+		// above answers, and which the hand's solid pass now does with the rest of the door. Or the
+		// family draws opaque pieces of its own over the same pixels, which is the sky alone and
+		// which claimed carries, with the two places it does not hold named where that field is
+		// declared.
 		//
-		// The hand's solid pass has none of the three today, and what used to make the second one
-		// impossible for it is gone. While the mask was a flag, the cut asked whether the depth had
-		// moved closer since a copy taken before the game's features, and the hand is drawn with its
-		// clip depth squeezed into the band 0.4375 to 0.5625 (render/HandDraw.java:93,362), which is
-		// not the depth of anything it stands in front of: every hand pixel answered that yes,
-		// whatever mask was written there. The mask carries the depth now, so a hand row would write
-		// that same squeezed value and the cut would compare it with itself.
+		// The hand came last of the three roads and by the second, and what had made it impossible
+		// there was the flag. The cut then asked whether the depth had moved closer since a copy
+		// taken before the game's features, and the hand is drawn with its clip depth squeezed into
+		// the band 0.4375 to 0.5625 (render/HandDraw.java:93,382), which is not the depth of anything
+		// it stands in front of: every hand pixel answered that yes, whatever mask was written there.
+		// The mask carries the depth now, so a hand row writes that same squeezed value and the cut
+		// compares it with itself.
 		//
-		// WHAT THIS COSTS AGAINST IRIS, AND IT IS NOT FORCED. Iris binds every gbuffers program to a
-		// framebuffer over the pack's own declared draw buffers, the hand included
+		// AND IT IS WHERE IRIS HAS IT. Iris binds every gbuffers program to a framebuffer over the
+		// pack's own declared draw buffers, the hand included
 		// (pipeline/IrisRenderingPipeline.java:686-687; the four keys its hand passes ask for are at
 		// pipeline/IrisPipelines.java:192,204,216), so its hand colour is written to the pack's
-		// target and never leaves it. Here it goes to the game's target and reaches the pack through
-		// the seed, which costs three things. The trip through eight bits a channel, which is the
-		// quantisation the Bliss paragraph above measured on the terrain. The blend, which happens
-		// against the game's target: with the chain running the world is in the PACK's target, so a
-		// hand pixel of alpha under one blends against the clear rather than against what stands
-		// behind it. And a row that writes no depth with nothing of its own pass writing depth under
-		// it - a held banner's pattern is the reachable one (BANNER_PATTERN,
-		// RenderPipelines.java:318) - which the cut then discards, the mask and the world's depth
-		// both holding what the geometry behind the hand left.
-		//
-		// TWO WAYS OUT, and neither is taken here. The mask, which the paragraph above says is now
-		// open to it; or drawing the hand's solid pass BETWEEN the seed and the deferred stage, which
-		// Iris's own constraint allows - it asks only that the hand precede the deferreds
-		// (mixin/MixinLevelRenderer.java:280, deferredRenderer.renderAll at
-		// pipeline/IrisRenderingPipeline.java:1073), and the seed is ours and has no counterpart
-		// there. The second is a change to the order of the frame rather than to this statement, and
-		// the two are alternatives rather than a pair: what this file can decide is where nought goes
-		// given when the pass is drawn.
+		// target and never leaves it. Three things were paid for the trip through the game's target
+		// while this pass was still making it, and they are what the mask buys back. The trip through
+		// eight bits a channel, which is the quantisation the Bliss paragraph above measured on the
+		// terrain. The blend, which happened against the game's target: with the chain running the
+		// world is in the PACK's target, so a hand pixel of alpha under one blended against the clear
+		// rather than against what stands behind it. And a row that writes no depth with nothing of
+		// its own pass writing depth under it - a held banner's pattern is the reachable one
+		// (BANNER_PATTERN, RenderPipelines.java:318) - which the cut discarded outright, the mask and
+		// the world's depth both holding what the geometry behind the hand left.
 		this.ownsFirst = owns && (this.covers || pass.afterDeferred()
 				|| (pass.blended() && pass.claimed()));
 		// The demotion just above and none of the ones before it, which is why owns and the side are
@@ -849,6 +848,38 @@ final class GeometryProgram {
 	 */
 	boolean covers() {
 		return this.covers;
+	}
+
+	/**
+	 * Whether a pass that asks for the coverage mask would really be given one, before there is a
+	 * program to ask. The constructor is one of the two callers and takes its own answer from here,
+	 * so the rule has one home.
+	 * <p>
+	 * <strong>The other caller has to know it a step earlier than the program exists</strong>, and
+	 * that is the whole reason this is not a field: {@link EntityDraw} settles where a serving file's
+	 * outputs go before it builds anything, and what it settles differs on this answer. A piece given
+	 * the mask writes the pack's target outright and owes the scene seed nothing; a piece that asked
+	 * for one and could not be given one falls back on the game's target and reaches the pack through
+	 * that seed, which is what makes the seed's own target its business again.
+	 * <p>
+	 * Three of the four terms are the translation's and one is the frame's. The stage says whether it
+	 * was really given a mask, {@code coverage} being one where the epilogue placed it; the mask sits
+	 * one rank above every output the stage declares, so a pack writing more draw buffers than it
+	 * declares outputs would have it land on a rank one of those draw buffers holds, and a stage
+	 * already at the eight a pipeline carries has no rank left for it. And with no attachment at all
+	 * there is nothing to keep the seed off, the pass drawing into the game's target as it always
+	 * did.
+	 *
+	 * @param attachments how many draw buffers the plan gives this pass, which is zero where it had
+	 *                    no answer for it. The chain is asked separately and not read off this
+	 *                    count: with the chain switched off the plan still hands its list over, and
+	 *                    what is missing is the final that would have brought a colortex to the
+	 *                    screen
+	 */
+	static boolean covers(TranslatedUnit.Notes notes, int attachments, boolean chainRuns) {
+		return chainRuns && attachments > 0 && notes.coverage() == 1
+				&& attachments <= notes.fragmentOutputs()
+				&& notes.fragmentOutputs() < ColorTargetState.MAX_COLOR_TARGETS;
 	}
 
 	/**
@@ -1499,11 +1530,13 @@ final class GeometryProgram {
 							.toList());
 		}
 
-		// Said outside the chain above, because neither branch that lands here names draw buffer
-		// nought and this is the one case where its going to the game's target is a decision rather
-		// than the ordinary answer. What it costs is a trip through eight bits a channel, a blend
-		// against the game's target instead of the world, and the rows that write no depth being
-		// discarded by the seed's cut - none of which a silent log would show.
+		// Said outside the chain above, and it is a second line about one cause rather than a line
+		// about a second cause: what lands here asked for a mask and was not given one, which the
+		// constructor has already named. What this adds is the half the warning does not carry, and
+		// it is the half a blending pass pays twice: the blend is made against the game's target
+		// instead of against the world, so a pixel of alpha under one is tinted by a clear rather
+		// than by what stands behind it, and a row that writes no depth is discarded outright by the
+		// seed's cut. Neither shows up as an error and neither is visible in a silent log.
 		if (this.demoted) {
 			Vitrail.logger().info("It blends and draw buffer nought still goes to the game's own "
 					+ "target: this pass is drawn before the scene seed and nothing marks the pixels "
