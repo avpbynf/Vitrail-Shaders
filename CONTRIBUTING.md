@@ -14,9 +14,17 @@ whatever `dev` holds beyond `main` is precisely what is written and not yet publ
 
 **The history is linear and carries no merge commit anywhere, which is not a preference.** A tree
 that forks is a tree nobody reads once it is public, and this one is public. A topic branch is
-rebased onto `dev` and enters by a pull request, merged with the rebase button; `dev` enters `main`
-the same way. If that button refuses, the rebase was not done, and the answer is to rebase rather
-than to merge.
+rebased onto `dev` and enters by a pull request, merged with the rebase button. If that button
+refuses, the rebase was not done, and the answer is to rebase rather than to merge.
+
+**`dev` reaches `main` by a fast-forward and NOT by that button**, and the difference is the whole
+of why `main` can be read as a prefix of `dev`. The rebase button always writes new commits: it
+re-applies each one under a fresh identity, which is what it is for on a topic branch and what makes
+it wrong here. `main` is already an ancestor of `dev`, so replaying `dev` onto it would give `main`
+a second copy of every commit under a different hash, and the two branches would then hold the same
+work under two histories. A pull request is still the right place to look at a release, for the
+record and for the checks it runs; what merges it is the fast-forward, and the pull request closes
+itself as merged once its commits are on `main`.
 
 **Every batch enters that way, including one written by whoever owns the repository.** Folding a
 branch in locally skips the one thing the pull request is for: `build.yml` runs on `pull_request`,
