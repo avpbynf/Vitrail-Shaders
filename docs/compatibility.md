@@ -186,15 +186,18 @@ The engine squeezes the hand's depth the way the reference does, and a pack that
 with `MC_HAND_DEPTH` gets the same eighth it expects. What blends in the hand goes through the water
 pass with the arm, a held translucent block included, so both are the pack's.
 
-**Where the SOLID hand pass is not what the reference makes of it**, the water pass being unaffected:
-its colour reaches the pack's picture through the same road everything the game draws takes, rather
-than being written into the pack's target directly. What that looks like: colour banding on a hand
-held against a smooth gradient; a sleeve or any half-transparent layer tinted by the fog colour
-rather than by what is behind it; a held banner's pattern missing over ground the pack drew; and a
-pack that writes a normal or a specular map from `gbuffers_hand` unable to light the hand from them
-anywhere the pack's own terrain stands behind it. A `gbuffers_hand` that samples scene depth is
-handed a constant rather than a depth image. The hand is lit and it moves with the pack's world;
-what a pack cannot do here is treat it as material of its own.
+**Both passes write the pack's own draw buffers, the first one included**, which is what the
+reference does with them. The solid pass earns that the way the world's opaque geometry does, by
+writing the coverage mask that keeps the scene seed off the pixels it drew; the water pass is drawn
+after the deferred stage, onto a picture the chain has already composed, and takes the buffer
+outright. So a pack that writes a normal or a specular map from `gbuffers_hand` can light the hand
+from them, and a sleeve or any half-transparent layer blends against what stands behind it.
+
+What a `gbuffers_hand` does not get is this frame's scene depth. `depthtex0` and `depthtex1` are
+answered with the far plane, the image of the opaque world not having been taken when the pass is
+drawn, and handing it the previous frame's would be wrong by one frame of camera movement.
+`depthtex2` is the exception and is a real copy, taken one line before the pass is drawn, which is
+the name a pack reads to see what the hand it is holding stands in front of.
 
 **The mobs and the block entities are drawn into the pack's own shadow map**, so they cast as well
 as receive, and the log names the shadow passes one by one when a place first draws. Two things
@@ -224,21 +227,19 @@ rather than reporting as separate bugs:
   entity can be treated as a surface to fog. The held hand shows whatever the mobs show, since it
   arrives by the same door and in the same vertex format, with the identifier that names what is
   held among the constants too.
-- **Flat wrong colours on the hand, oranges and greens that belong nowhere in the scene**, on a
-  pack that packs two values into each channel of a wide target. The hand's first draw buffer is
-  the one still making the trip through the game's eight-bit target, where such a value loses one
-  of its two halves and the other is read back as the albedo. The mobs and the block entities are
-  no longer in that position, and the frame page says what earned it: they write the coverage mask
-  and take that buffer in the pack's own targets.
 - A pack can allocate a colour target for a family that is not drawn through it. BSL allocates one
   for glowing entities alone, and its deferred pass samples that target, so the chain reads a clear
   across a whole target.
 
 The engine names the families that still come from the game, in the log, when a place first draws.
 That line is the authority; this page does not duplicate it. A place drawn without a seed does not
-print it, and says so on a line of its own instead, and there the mobs stay with the game whatever
-the switch says, the seed being the only road their colour has into the pack's picture, which the
-log also names when it happens.
+print it, and says so on a line of its own instead.
+
+What can still send one of these families back to the game for the seed's sake is narrower than it
+was, and the log names it by program: a fragment stage the translation could not place the coverage
+mask in falls back on the game's target, and there its own first draw buffer has to be the one the
+seed paints, or the game keeps its shader for that half rather than carry the pack's albedo into a
+target it never asked for.
 
 ## The sky goes flat
 
