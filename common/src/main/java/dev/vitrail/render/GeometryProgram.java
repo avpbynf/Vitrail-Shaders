@@ -111,8 +111,8 @@ final class GeometryProgram {
 	 *                     own answer for that pass and not a taste: the sun and the moon are drawn
 	 *                     over the sky and the chunk pass that is translucent is drawn over the
 	 *                     world. Empty for a pass that writes outright
-	 * @param covers       whether this pass is one of the opaque halves that write the mask the scene
-	 *                     seed is cut with
+	 * @param covers       whether this pass writes the mask the scene seed is cut with, which every
+	 *                     pass drawn before the seed and into the pack's own targets has to
 	 * @param claimed      whether this family draws opaque pieces of its OWN over the pixels its
 	 *                     blending pieces span, which is the sky and nothing else: its disc writes
 	 *                     outright and marks what it covers, and {@link HorizonCone}, drawn inside
@@ -209,7 +209,7 @@ final class GeometryProgram {
 		 */
 		UNUSED,
 
-		/** The mask saying where this pass drew, which is ours and not in the pack's draw buffers. */
+		/** The mask carrying the depth this pass left, which is ours and not in the pack's buffers. */
 		COVERAGE
 	}
 
@@ -365,20 +365,24 @@ final class GeometryProgram {
 		// drawn and then thrown away: the final overwrites that target with the image the chain
 		// composed out of a colortex the water never reached.
 		//
-		// The two opaque halves used to keep it on the game's target and reach the pack's colortex
-		// through the seed, which was one conversion too many. What a gbuffers_terrain puts in draw
+		// Every opaque half used to keep it on the game's target and reach the pack's colortex
+		// through the seed, which was one conversion too many. What a gbuffers program puts in draw
 		// buffer nought is not a colour but whatever the pack packed there, and the game's target is
 		// eight bits a channel: Bliss packs two values into each channel of a sixteen bit colortex1,
 		// and the trip through the game's target quantised its albedo away entirely, leaving the
 		// encoded normal to be read back as the albedo. So the opaque halves write their target
 		// outright, and the coverage mask below is what keeps the seed off the pixels they wrote.
+		// The entities came last of them, and only once the mask carried a DEPTH: while it was a
+		// flag, the cut compared the world's depth with one taken before a single feature was drawn,
+		// and a mob standing in front of a block moved that depth by construction, so no mask it
+		// wrote could have kept the seed off it.
 		//
 		// Everything that lands back on the game's target, and it is a list of reasons rather than a
 		// count. When the chain is not running there is no final to bring a colortex to the screen,
 		// so anything sent there would simply vanish; when the plan had no answer there is nowhere
 		// else to send it; when a half that ASKED for a mask could not be given one, the seed would
-		// repaint the whole target and take the terrain with it; when a half never asked for one,
-		// which is the entities and the opaque particles, the seed carries it in by design; and the
+		// repaint the whole target and take the geometry with it; when a half never asked for one,
+		// which is the opaque particles and the weather, the seed carries it in by design; and the
 		// last is what the statement after next is about, a blending pass drawn before the seed with
 		// nothing marking the pixels it blends onto. Either way the pass draws where Sodium would
 		// have, which is also what keeps the pipeline's one state the pass's.
@@ -400,13 +404,13 @@ final class GeometryProgram {
 		// over the same pixels, which is the sky alone and which claimed carries, with the two
 		// places it does not hold named where that field is declared.
 		//
-		// The hand's solid pass has none of the three, and no mask could give it the second: the
-		// seed's cut asks whether the depth moved closer since the pack's geometry was finished with
-		// it, and the hand is drawn with its clip depth squeezed into the band 0.4375 to 0.5625
-		// (render/HandDraw.java:93,362), which is not the depth of anything it stands in front of.
-		// A hand row that WRITES depth therefore answers that question yes at every pixel it drew,
-		// whatever mask is written there, so the seed repaints those pixels and a hand that owned
-		// draw buffer nought would have its colour painted over by a frame that never drew it.
+		// The hand's solid pass has none of the three today, and what used to make the second one
+		// impossible for it is gone. While the mask was a flag, the cut asked whether the depth had
+		// moved closer since a copy taken before the game's features, and the hand is drawn with its
+		// clip depth squeezed into the band 0.4375 to 0.5625 (render/HandDraw.java:93,362), which is
+		// not the depth of anything it stands in front of: every hand pixel answered that yes,
+		// whatever mask was written there. The mask carries the depth now, so a hand row would write
+		// that same squeezed value and the cut would compare it with itself.
 		//
 		// WHAT THIS COSTS AGAINST IRIS, AND IT IS NOT FORCED. Iris binds every gbuffers program to a
 		// framebuffer over the pack's own declared draw buffers, the hand included
@@ -414,21 +418,22 @@ final class GeometryProgram {
 		// pipeline/IrisPipelines.java:192,204,216), so its hand colour is written to the pack's
 		// target and never leaves it. Here it goes to the game's target and reaches the pack through
 		// the seed, which costs three things. The trip through eight bits a channel, which is the
-		// quantisation the Bliss paragraph above measured on the terrain. The blend, which now
-		// happens against the game's target: with the chain running the world is in the PACK's
-		// target, so a hand pixel of alpha under one blends against the clear rather than against
-		// what stands behind it. And a row that writes no depth with nothing of its own pass writing
-		// depth under it - a held banner's pattern is the reachable one (BANNER_PATTERN,
-		// RenderPipelines.java:318) - which the cut then answers no for and discards where the mask
-		// is set.
+		// quantisation the Bliss paragraph above measured on the terrain. The blend, which happens
+		// against the game's target: with the chain running the world is in the PACK's target, so a
+		// hand pixel of alpha under one blends against the clear rather than against what stands
+		// behind it. And a row that writes no depth with nothing of its own pass writing depth under
+		// it - a held banner's pattern is the reachable one (BANNER_PATTERN,
+		// RenderPipelines.java:318) - which the cut then discards, the mask and the world's depth
+		// both holding what the geometry behind the hand left.
 		//
-		// WHAT WOULD COST NOTHING, and it is not done here: draw the hand's solid pass BETWEEN the
-		// seed and the deferred stage. Iris's constraint is only that the hand precede the deferreds
+		// TWO WAYS OUT, and neither is taken here. The mask, which the paragraph above says is now
+		// open to it; or drawing the hand's solid pass BETWEEN the seed and the deferred stage, which
+		// Iris's own constraint allows - it asks only that the hand precede the deferreds
 		// (mixin/MixinLevelRenderer.java:280, deferredRenderer.renderAll at
 		// pipeline/IrisRenderingPipeline.java:1073), and the seed is ours and has no counterpart
-		// there, so that position keeps Iris's moment AND lets the pack own draw buffer nought. It
-		// is a change to the order of the frame rather than to this statement, so it is named here
-		// and not taken: what this file can decide is where nought goes given when the pass is drawn.
+		// there. The second is a change to the order of the frame rather than to this statement, and
+		// the two are alternatives rather than a pair: what this file can decide is where nought goes
+		// given when the pass is drawn.
 		this.ownsFirst = owns && (this.covers || pass.afterDeferred()
 				|| (pass.blended() && pass.claimed()));
 		// The demotion just above and none of the ones before it, which is why owns and the side are
@@ -577,7 +582,8 @@ final class GeometryProgram {
 				switch (one.bound()) {
 					case UNUSED -> builder.withUnusedColorTargetState(slot);
 					// The mask is written outright and never blended, whatever the pack asked for its
-					// own targets: a fragment either covered this pixel or it did not.
+					// own targets: what it carries is the depth the fragment left, and a depth mixed
+					// with the one behind it is the depth of nothing at all.
 					case COVERAGE -> builder.withColorTargetState(slot, new ColorTargetState(
 							Optional.empty(), one.format(), ColorTargetState.WRITE_ALL));
 					default -> builder.withColorTargetState(slot, state(one.format()));
