@@ -338,6 +338,9 @@ final class GeometryProgram {
 	/** The matrix the game pushed for this pass, or null for the frame's camera. */
 	private Matrix4fc modelView;
 
+	/** The bob that placed this pass's geometry, or null for the frame's. Only the hand sets one. */
+	private Matrix4fc bob;
+
 	/** The volume this pass is drawn in, or null for the frame's. Only the hand sets one. */
 	private Matrix4fc projection;
 
@@ -664,7 +667,7 @@ final class GeometryProgram {
 	 * @return the pipeline to draw with, or null to leave the game's own shader alone
 	 */
 	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas) {
-		return prepare(device, atlas, null, null, null);
+		return prepare(device, atlas, null, null, null, null);
 	}
 
 	/**
@@ -673,13 +676,18 @@ final class GeometryProgram {
 	 * @param modelView  the matrix the game pushed for this pass, or null for the frame's camera.
 	 *                   Kept until the block is written rather than applied here: it is one value of
 	 *                   the block among the rest, and the block is written a few lines below
+	 * @param bob        the left factor that placed this pass's geometry, or null for the frame's.
+	 *                   The hand is the one family that sets it, and it sets it because it is drawn
+	 *                   under a projection built here rather than under the level's;
+	 *                   {@code ViewMatrices.passBob} says what the frame's would cost it
 	 * @param projection the volume this pass is drawn in, or null for the frame's. The hand is the
 	 *                   one family that sets it, and it is not a nudge of the frame's but a matrix
 	 *                   of its own; {@link dev.vitrail.uniform.ViewSource#passProjection} says why
 	 */
 	RenderPipeline prepare(GpuDevice device, GpuTextureView atlas, Matrix4fc modelView,
-			Vector4fc passColour, Matrix4fc projection) {
+			Matrix4fc bob, Vector4fc passColour, Matrix4fc projection) {
 		this.modelView = modelView;
+		this.bob = bob;
 		this.passColour = passColour;
 		this.projection = projection;
 		if (this.broken) {
@@ -1103,7 +1111,7 @@ final class GeometryProgram {
 		// frame now that the shadow map is ours and the game's targets are not, and what a vertex
 		// stage does with its clip depth on the way out comes from this pair.
 		this.values.convention(this.pass.shadow() ? ClipSpace.FORWARD : ClipSpace.REVERSED);
-		this.values.modelView(this.modelView);
+		this.values.modelView(this.modelView, this.bob);
 		this.values.projection(this.projection);
 		this.values.passColour(this.passColour);
 		this.values.renderStage(this.pass.stage());

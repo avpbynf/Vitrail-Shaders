@@ -117,7 +117,7 @@ final class ParticleProgram implements DumpedProgram {
 		// No model view of its own and no colour: the renderer writes its transform from
 		// RenderSystem.getModelViewMatrixCopy(), which is the frame's camera, and through the one
 		// argument overload, whose modulator is white.
-		return this.body.prepare(device, null, null, null, null);
+		return this.body.prepare(device, null, null, null, null, null);
 	}
 
 	/**

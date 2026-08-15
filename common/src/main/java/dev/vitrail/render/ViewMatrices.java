@@ -105,6 +105,25 @@ public final class ViewMatrices implements ViewSource {
 	 */
 	private final Matrix4f bob = new Matrix4f();
 
+	/**
+	 * The bob of the pass being drawn, for the one family whose geometry is not placed by the
+	 * frame's, standing empty until a pass sets one and dropped at the same boundary the pass matrix
+	 * is.
+	 * <p>
+	 * <strong>The hand, and only the hand, and the difference is the nausea and the portal.</strong>
+	 * The frame's bob is all four effects, since all four are in the projection the level was drawn
+	 * with; the hand is drawn under a projection this engine builds itself, and it builds it with
+	 * {@link CameraBob#pose()}, the walk bob and the damage tilt alone, because that is the pose the
+	 * game gives its own hand and the pose Iris gives its own
+	 * ({@code pathways/HandRenderer.java:64-70}, a bob stack of {@code bobHurt} and {@code bobView}
+	 * multiplied into the hand's projection and nothing else). Handing the frame's four to a hand
+	 * program would publish a spin the arm was never drawn with: measured out of game, the product
+	 * a hand program forms lands 0.34 away from the matrix the device was given under a full portal,
+	 * where the walk and the tilt leave it exact.
+	 */
+	private final Matrix4f passBob = new Matrix4f();
+	private boolean passBobSet;
+
 	/** The colour the pass modulates its draw by, white until a pass says otherwise. */
 	private final Vector4f passColour = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private float far;
@@ -170,6 +189,7 @@ public final class ViewMatrices implements ViewSource {
 		// the only reader left holding a stale one being the decoded dump, and that is said where
 		// the dump is taken.
 		this.passSet = false;
+		this.passBobSet = false;
 		this.passProjectionSet = false;
 		this.passColour.set(1.0F, 1.0F, 1.0F, 1.0F);
 
@@ -269,11 +289,29 @@ public final class ViewMatrices implements ViewSource {
 	 * <p>
 	 * The frame that could not be split is right for free: {@link CameraBob#taken()} answers the
 	 * identity then, and the projection published is the one the level was drawn with, bob included.
+	 * <p>
+	 * <strong>Which bob goes on the front is the pass's to say</strong>, and the two arrive in one
+	 * call so that neither can be read against the other one's. {@link #passBob} carries why the
+	 * hand's is not the frame's; every other pass hands in nothing and is multiplied by the frame's,
+	 * as it always was.
+	 * <p>
+	 * A bob without a matrix is dropped rather than kept, and that is the conservative half of the
+	 * pair: a pass with no matrix of its own is drawn under the frame's camera, which the frame's own
+	 * bob is the left factor of. Taking one there would publish a bob against a matrix it did not
+	 * place.
+	 *
+	 * @param matrix the matrix the game drew this pass with, or null for the frame's camera
+	 * @param bob    the left factor that geometry was really placed by, or null for the frame's
 	 */
-	void passModelView(Matrix4fc matrix) {
+	void passModelView(Matrix4fc matrix, Matrix4fc bob) {
 		this.passSet = matrix != null;
+		this.passBobSet = this.passSet && bob != null;
+		if (this.passBobSet) {
+			this.passBob.set(bob);
+		}
+
 		if (this.passSet) {
-			this.passModelView.set(this.bob).mul(matrix);
+			this.passModelView.set(cameraBob()).mul(matrix);
 			this.passModelView.invert(this.passModelViewInverse);
 		}
 	}
@@ -349,16 +387,17 @@ public final class ViewMatrices implements ViewSource {
 	}
 
 	/**
-	 * The bob on its own, which is the left factor {@link #passModelView(Matrix4fc)} multiplies every
-	 * pass matrix onto.
+	 * The bob on its own, which is the left factor {@link #passModelView(Matrix4fc, Matrix4fc)}
+	 * multiplies every pass matrix onto.
 	 * <p>
 	 * The same field that multiplication reads, so the two cannot say different things: a shader
 	 * forming {@code cameraBob() * m} gets exactly what handing {@code m} in would have stored, which
-	 * is the whole point of publishing it.
+	 * is the whole point of publishing it. The pass's own when it set one, {@link #passBob} saying
+	 * which pass that is.
 	 */
 	@Override
 	public Matrix4fc cameraBob() {
-		return this.bob;
+		return this.passBobSet ? this.passBob : this.bob;
 	}
 
 	@Override

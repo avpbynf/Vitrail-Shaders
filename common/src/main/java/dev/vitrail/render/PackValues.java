@@ -195,9 +195,15 @@ public final class PackValues {
 	 * varies with the DRAW there, the depth nudge of a render type included, is read out of the
 	 * game's own per draw block instead, {@code LegacyGlsl.readsDrawModelView} saying which passes
 	 * and why.
+	 * <p>
+	 * The bob comes with it rather than beside it, and the hand is again the one family that hands
+	 * one in: it is drawn under a projection this engine builds, and built with the walk bob and the
+	 * damage tilt alone. See {@code ViewMatrices.passBob}.
+	 *
+	 * @param bob the left factor this pass's geometry was really placed by, or null for the frame's
 	 */
-	public void modelView(Matrix4fc matrix) {
-		this.state.passModelView(matrix);
+	public void modelView(Matrix4fc matrix, Matrix4fc bob) {
+		this.state.passModelView(matrix, bob);
 	}
 
 	/**

@@ -260,8 +260,8 @@ public final class FrameState implements WorldState {
 	 * the pass beside its convention, and for the same reason: both are properties of where the pass
 	 * draws rather than of the frame.
 	 */
-	public void passModelView(Matrix4fc matrix) {
-		this.view.passModelView(matrix);
+	public void passModelView(Matrix4fc matrix, Matrix4fc bob) {
+		this.view.passModelView(matrix, bob);
 	}
 
 	/**
