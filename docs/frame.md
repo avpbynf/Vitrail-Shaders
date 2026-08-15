@@ -236,6 +236,10 @@ is already mid-frame at both of those moments and refuses to be re-entered. And 
 copy above in two, since from the moment the hand is in the world's depth a pack asking what lies
 behind it has to be given the depth from before it was drawn.
 
+A projection of its own also means a walk bob of its own, since the bob a pack reads is the one that
+placed the geometry and the hand's is not the frame's. That is
+[in the bob's own section](internals/terrain.md#the-view-bob-is-in-the-projection-and-packs-expect-it-in-the-model-view).
+
 ## Why a family cannot simply be switched over
 
 There is a trap here that looks like an easy win and is a regression, and it explains the shape of

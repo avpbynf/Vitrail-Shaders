@@ -337,6 +337,19 @@ interception has no counterpart here, which is just as well: the method it wraps
 shape in this version of the game, and a patch descriptor that no longer matches its target fails
 silently when injectors are not required.
 
+One family is not placed by that matrix and therefore does not read it: the player's own hand, which
+is drawn under a projection the engine builds rather than under the level's. The game builds the
+hand's pose out of the walk bob and the damage tilt alone, leaving the nausea and the portal out on
+purpose, since those two distort the world and not the arm; so the hand is handed that pose as its
+bob, and everything else the frame's. Handed the frame's, a hand program would form a product
+carrying a spin the arm was never drawn with, and the item in the player's grip would swim inside a
+portal while the arm holding it stayed put. What the hand's normals then come to is the one place
+this engine is knowingly not the reference's number, and the reason is the placement above rather
+than a choice: the reference keeps the hand's bob in a projection, where a normal matrix never
+reaches, and here it is in the model-view the same program reads, so a normal matrix ignoring it
+would contradict the matrix beside it. The gap is a fraction of a degree while walking and its
+widest at the peak of a damage tilt.
+
 Because the whole thing rests on having intercepted *every* operation that touches the projection,
 it carries its own witness. Each frame, the clean projection is multiplied back by the accumulated
 bob and compared against the matrix captured on its way to the device. If the game ever multiplies in
