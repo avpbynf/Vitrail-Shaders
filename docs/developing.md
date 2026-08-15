@@ -136,6 +136,13 @@ There is one exemption, and it is a package: the vendored expression evaluator k
 javadoc. Bending borrowed code to this project's taste buys nothing and makes the next comparison
 with upstream harder. A contributor working in that package is not caught by this gate.
 
+That lint runs on the compiler, so it runs on every build, and the `javadoc` task is deliberately
+not part of `check`: it would run the same doclint over the same sources a second time and catch
+nothing the compile did not. It is configured all the same, with the missing-comment category off
+and the same package exempt, because a task left to its own defaults disagrees with the gate on
+both counts. It then fails on the vendored evaluator and reports the missing comments as a wall of
+warnings, and whoever ran it reads a hole in the gate where the gate made a decision.
+
 **Static analysis, contributing the checks it rates as errors** (the part of the catalogue meant to
 be a bug rather than a preference) **and two of its warnings promoted to join them.** The rest are
 worth reading and not worth blocking on, so a build flag prints them and lets the build through.
