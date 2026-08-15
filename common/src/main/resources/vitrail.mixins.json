@@ -35,6 +35,7 @@
 		"MixinSodiumWorldRenderer",
 		"MixinSodiumWorldRendererInit",
 		"StagedVertexBufferDrawMixin",
+		"TextureManagerAccessor",
 		"VKDrawContextMixin",
 		"WeatherEffectRendererMixin"
 	]

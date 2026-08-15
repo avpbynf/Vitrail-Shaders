@@ -735,8 +735,16 @@ final class GeometryProgram {
 		// to record a single command against it.
 		if (!this.drew) {
 			this.drew = true;
-			Vitrail.logger().info("The {} pass records its first draw with {}",
-					this.pass.name(), this.path);
+
+			// The image goes on this line and not on the one announce() prints, which is the only
+			// place it can go: the atlas belongs to the DRAW for two of the three families, so at
+			// the moment the program is announced this field holds nothing yet. Said for whoever
+			// reads the atlas and for nobody else, a pass with no such name having no image to name.
+			Vitrail.logger().info("The {} pass records its first draw with {}{}",
+					this.pass.name(), this.path,
+					this.samplers.stream().anyMatch(ATLAS::contains)
+							? ", reading " + GameImages.name(this.atlas) + " where it asks for the atlas"
+							: "");
 		}
 
 		pass.setUniform(UNIFORM_BLOCK, this.block.currentBuffer().slice(0, blockBytes()));
