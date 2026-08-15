@@ -10,6 +10,7 @@ import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.target.TargetSize;
 import dev.vitrail.pack.texture.TextureStage;
+import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.NoiseTexture;
 import dev.vitrail.Vitrail;
 
@@ -76,8 +77,30 @@ final class ColorTargets {
 	/** Enough for the three constants: they carry one pixel each and nothing samples their precision. */
 	private static final GpuFormat CONSTANT_FORMAT = GpuFormat.RGBA8_UNORM;
 
-	/** One byte a pixel, which is a yes or a no and nothing else. */
-	private static final GpuFormat COVERAGE_FORMAT = GpuFormat.R8_UNORM;
+	/**
+	 * One float a pixel, and no conversion: the mask carries the depth the pack's geometry left,
+	 * and it is compared with the game's own depth rather than read as one.
+	 * <p>
+	 * A float and nothing narrower because the comparison is for equality as much as for order. The
+	 * game's depth attachment is {@code D32_FLOAT} ({@code RenderTarget.createBuffers}), the mask is
+	 * filled from the very value the fragment stage hands that attachment, and both sides then carry
+	 * the same thirty two bits: a pixel nothing has been drawn over compares exactly equal. Rounded
+	 * into a narrower format it would not, and the seed would repaint the pack's own geometry
+	 * wherever the rounding fell the wrong way.
+	 */
+	private static final GpuFormat COVERAGE_FORMAT = GpuFormat.R32_FLOAT;
+
+	/**
+	 * What the mask holds where the pack's geometry has written nothing, which is outside the depth
+	 * range on the far side of the eye.
+	 * <p>
+	 * <strong>This is what makes the cut one comparison instead of two.</strong> Every real depth is
+	 * in front of it, so a pixel the pack never wrote answers "the game drew in front" through the
+	 * same test as a pixel it did write and something was drawn over, and the reader owes an empty
+	 * pixel no test of its own. The value follows {@link ClipSpace#REVERSED} rather than being
+	 * written out: the game rasterises reversed, so far is nought and this has to be below it.
+	 */
+	static final float COVERAGE_EMPTY = ClipSpace.REVERSED.z < 0.0F ? -1.0F : 2.0F;
 
 	/** The one target the format says starts at the fog colour. Every other one starts at a constant. */
 	private static final int FOG_TARGET = 0;
@@ -86,6 +109,10 @@ final class ColorTargets {
 	private static final Vector4fc OPAQUE_WHITE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private static final Vector4fc MID_GREY = new Vector4f(0.5F, 0.5F, 0.5F, 1.0F);
 	private static final Vector4fc NOTHING = new Vector4f(0.0F, 0.0F, 0.0F, 0.0F);
+
+	/** The sentinel above as a clear colour: one channel, and the mask reads the first of them. */
+	private static final Vector4fc UNWRITTEN =
+			new Vector4f(COVERAGE_EMPTY, COVERAGE_EMPTY, COVERAGE_EMPTY, COVERAGE_EMPTY);
 
 	/** Past this much the log says so once. Refusing to allocate would trade a stutter for a black screen. */
 	private static final long LOUD_BYTES = 512L * 1024L * 1024L;
@@ -163,10 +190,12 @@ final class ColorTargets {
 	private TargetSurface white;
 	private TargetSurface grey;
 	private TargetSurface noise;
+	private TargetSurface unwritten;
 
 	/**
-	 * Where the pack's own opaque geometry has drawn this frame, one byte a pixel, so that whoever
-	 * puts the game's picture into the same target can leave those pixels alone.
+	 * The depth the pack's own opaque geometry left this frame, one float a pixel, so that whoever
+	 * puts the game's picture into the same target can tell a pixel that is still the pack's from
+	 * one the game has drawn a feature over since.
 	 * <p>
 	 * Emptied here at the head of every frame rather than by the pass that writes it, and that is
 	 * the whole safety of the thing. The frames where it is not written are exactly the frames
@@ -355,13 +384,16 @@ final class ColorTargets {
 			clear(encoder, this.black, OPAQUE_BLACK);
 			clear(encoder, this.white, OPAQUE_WHITE);
 			clear(encoder, this.grey, MID_GREY);
+			clear(encoder, this.unwritten, UNWRITTEN);
 			uploadNoise(encoder);
 			this.packSurfaces.forEach((image, surface) -> upload(encoder, surface, image.rgba()));
 		}
 
 		// Every frame and never conditionally: the mask answers a question about THIS frame, and an
-		// answer carried over from the last one is worse than no answer at all.
-		clear(encoder, this.coverage, NOTHING);
+		// answer carried over from the last one is worse than no answer at all. Left standing, last
+		// frame's depths would be compared with this frame's, the camera having moved between the
+		// two, and the seed would repaint the pack's geometry over most of the screen.
+		clear(encoder, this.coverage, UNWRITTEN);
 
 		for (int index : this.plan.ordered()) {
 			// A full clear ignores colortexNClear: a target that is kept from one frame to the
@@ -512,6 +544,15 @@ final class ColorTargets {
 		return this.black == null ? null : this.black.view();
 	}
 
+	/**
+	 * One pixel of the sentinel, which is a mask saying the pack wrote nowhere at all. Stands in
+	 * for the mask itself over the frames before it is allocated, so that the seed covers its
+	 * target whole there rather than being cut against a depth nothing wrote.
+	 */
+	GpuTextureView unwritten() {
+		return this.unwritten == null ? null : this.unwritten.view();
+	}
+
 	/** White, so a shadow lookup reads the far plane rather than putting the world in shadow. */
 	GpuTextureView white() {
 		return this.white == null ? null : this.white.view();
@@ -528,7 +569,7 @@ final class ColorTargets {
 	}
 
 	/**
-	 * Where the pack's opaque geometry has drawn this frame, or null until the first frame allocates
+	 * The depth the pack's opaque geometry left this frame, or null until the first frame allocates
 	 * it. Never held across a frame by anyone: it is looked up like every other view here.
 	 */
 	GpuTextureView coverage() {
@@ -592,6 +633,7 @@ final class ColorTargets {
 		this.white = release(this.white);
 		this.grey = release(this.grey);
 		this.noise = release(this.noise);
+		this.unwritten = release(this.unwritten);
 		this.coverage = release(this.coverage);
 		this.shadowMap.release();
 		this.depth.release();
@@ -613,6 +655,10 @@ final class ColorTargets {
 		this.black = new TargetSurface("Vitrail black", CONSTANT_FORMAT, false, 1, 1);
 		this.white = new TargetSurface("Vitrail white", CONSTANT_FORMAT, false, 1, 1);
 		this.grey = new TargetSurface("Vitrail grey", CONSTANT_FORMAT, false, 1, 1);
+		// The mask's own format and not the constants', because it stands in for the mask: what
+		// reads it compares it with a depth, and black would say the pack wrote the whole screen at
+		// the far plane rather than that it wrote nothing.
+		this.unwritten = new TargetSurface("Vitrail unwritten mask", COVERAGE_FORMAT, false, 1, 1);
 
 		if (this.noiseImage != null) {
 			this.noise = new TargetSurface("Vitrail noise", CONSTANT_FORMAT, false,

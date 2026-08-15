@@ -93,8 +93,15 @@ public final class GlslTranslator {
 	private static final String PACK_MAIN = "ofPackMain";
 
 	/**
-	 * The one output this engine adds itself: a byte saying that the pack's geometry covered this
-	 * pixel, so that whoever puts the game's own picture into the same target can leave it alone.
+	 * The one output this engine adds itself: the depth the pack's geometry left at this pixel, so
+	 * that whoever puts the game's own picture into the same target can tell whether anything has
+	 * been drawn in front of it since.
+	 * <p>
+	 * A depth and not a flag, and what it buys is the whole of what a flag could not answer: the
+	 * reader compares it with the world's depth as it stands, so a pixel nothing was drawn over
+	 * compares equal and belongs to the pack, and a pixel the game drew a feature onto does not.
+	 * The pixels the pack never wrote carry a value outside zero to one instead, which every real
+	 * depth is in front of, and the reader owes them no test of their own.
 	 */
 	private static final String COVERAGE = "ofCoverage";
 
@@ -299,6 +306,18 @@ public final class GlslTranslator {
 
 	/** Whether the mask was really given a rank of its own. {@link #planCoverage} says when it is not. */
 	private boolean covers;
+
+	/**
+	 * Whether the fragment stage names {@code gl_FragDepth} anywhere at all, live branch or not.
+	 * <p>
+	 * Anywhere at all, because what it decides is which value the mask is filled from, and a stage
+	 * that writes its own depth in one branch writes the attachment from that branch and from
+	 * {@code gl_FragCoord.z} in the others. The two have to be told apart by the text, since the
+	 * branch is the preprocessor's answer and not this pass's: Bliss writes it under {@code POM}
+	 * alone, and a mask filled from the interpolated depth there would say the geometry stands
+	 * where the surface was before the parallax moved it.
+	 */
+	private boolean namesFragDepth;
 
 	/** Where the fragment stage's own {@code main} stands, once the alpha test has claimed it. */
 	private int packMainName = -1;
@@ -1072,6 +1091,14 @@ public final class GlslTranslator {
 			Token token = this.tokens.get(index);
 			if (token.kind() != Kind.IDENTIFIER) {
 				continue;
+			}
+
+			// Above every skip below, and the bias is deliberate. A stage wrongly thought to write
+			// its own depth pays the early depth test and nothing else, since the wrapper then fills
+			// the mask from a value it wrote there itself; a stage wrongly thought not to fills the
+			// mask from a depth the attachment never received, and that is a picture.
+			if (this.stage == ProgramStage.FRAGMENT && token.identifier("gl_FragDepth")) {
+				this.namesFragDepth = true;
 			}
 
 			String directive = token.directive();
@@ -2976,17 +3003,48 @@ public final class GlslTranslator {
 			lines.add("void main() { "
 					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
 					+ (wrapsFragment() ? ORDER_OUTPUTS + "(); " : "")
+					+ coveragePrologue()
 					+ PACK_MAIN + "();"
 					+ (this.depthEpilogue ? " gl_Position.z = " + DEPTH_CONV
 							+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w;" : "")
 					+ (this.alphaEpilogue
 							? " " + this.alphaTest.discard(outputName(0, shadowed) + ".a")
 							: "")
-					+ (this.covers ? " " + COVERAGE + " = 1.0;" : "")
+					+ (this.covers ? " " + COVERAGE + " = " + writtenDepth() + ";" : "")
 					+ " }");
 		}
 
 		return String.join("\n", lines) + "\n";
+	}
+
+	/**
+	 * What the depth attachment of this draw receives, which is what the mask is filled from.
+	 * <p>
+	 * The interpolated depth for an ordinary stage, and the stage's own where it writes one: those
+	 * are the two values the hardware may write, and the mask exists to be compared with what was
+	 * written. Neither is converted. The pack's own reads of {@code gl_FragCoord.z} are put back
+	 * into the window it was written for, and its writes to {@code gl_FragDepth} are brought out of
+	 * it again, both by {@link #convertDepth}; this line is text of ours that pass never sees, so
+	 * both names here carry the value the target really holds.
+	 */
+	private String writtenDepth() {
+		return this.namesFragDepth ? "gl_FragDepth" : "gl_FragCoord.z";
+	}
+
+	/**
+	 * Gives {@code gl_FragDepth} the value the hardware would have written, before the pack's own
+	 * body runs and can write another.
+	 * <p>
+	 * <strong>Only where the mask is written and the stage names the builtin</strong>, and both
+	 * halves are paid for. A stage that names it may still leave it alone on the branch that runs -
+	 * Bliss writes it under {@code POM} and nowhere else ({@code dimensions/all_solid.fsh:359,394})
+	 * - and reading a builtin the stage never wrote is undefined, so the mask would carry whatever
+	 * the driver left there. Writing it costs the early depth test, which is why a stage that never
+	 * names it is left alone: it would pay that for a value the line below can read off
+	 * {@code gl_FragCoord} instead.
+	 */
+	private String coveragePrologue() {
+		return this.covers && this.namesFragDepth ? "gl_FragDepth = gl_FragCoord.z; " : "";
 	}
 
 	/** What output {@code slot} is called, which is the pack's own name when it declared one. */
