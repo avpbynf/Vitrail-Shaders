@@ -123,6 +123,23 @@ subprojects {
 		options.errorprone.excludedPaths = ".*/vitrail/mixin/.*|.*/uniform/expr/kroppeb/.*"
 	}
 
+	// The javadoc task gates nothing the block above does not already gate: it runs the same doclint
+	// over the same sources, and a self-closing tag planted outside the vendored package fails
+	// `gradlew build` on its own, measured rather than reasoned about. So it is deliberately left out
+	// of `check`, where it would buy a second run of doclint and nothing else.
+	//
+	// What it cannot be left as is unconfigured, because then it disagrees with the gate on both of
+	// the decisions above. It reports the missing comments that -missing drops, a hundred of them
+	// before javadoc stops counting, and it fails on the vendored evaluator that -Xdoclint/package
+	// steps back from. Whoever runs it by hand reads a failure on borrowed code and a wall of
+	// warnings, and concludes the gate has a hole in exactly the place the gate made a decision. The
+	// two lines below are that decision said once more, to the only other tool that asks.
+	tasks.withType(Javadoc).configureEach {
+		options.encoding = "UTF-8"
+		options.addBooleanOption("Xdoclint:all,-missing", true)
+		options.addBooleanOption("Xdoclint/package:-dev.vitrail.uniform.expr.kroppeb.*", true)
+	}
+
 	tasks.withType(AbstractArchiveTask).configureEach {
 		preserveFileTimestamps = false
 		reproducibleFileOrder = true
