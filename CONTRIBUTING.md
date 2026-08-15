@@ -14,8 +14,14 @@ whatever `dev` holds beyond `main` is precisely what is written and not yet publ
 
 **The history is linear and carries no merge commit anywhere, which is not a preference.** A tree
 that forks is a tree nobody reads once it is public, and this one is public. A topic branch is
-rebased onto `dev` and folded in with `--ff-only`; `dev` is folded into `main` the same way. If
-`--ff-only` refuses, the rebase was not done, and the answer is to rebase rather than to merge.
+rebased onto `dev` and enters by a pull request, merged with the rebase button; `dev` enters `main`
+the same way. If that button refuses, the rebase was not done, and the answer is to rebase rather
+than to merge.
+
+**Every batch enters that way, including one written by whoever owns the repository.** Folding a
+branch in locally skips the one thing the pull request is for: `build.yml` runs on `pull_request`,
+so a batch that goes in by hand is built only once it is already in `dev`, and a red build then
+lands on the branch everything else is opened from.
 
 ### Rebase a topic branch as soon as `dev` moves under it
 
