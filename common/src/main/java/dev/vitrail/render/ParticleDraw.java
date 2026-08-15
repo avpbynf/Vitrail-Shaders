@@ -96,10 +96,15 @@ public final class ParticleDraw {
 	 */
 	record Element(RenderPipeline pipeline, String element, String program, boolean afterDeferred) {
 
-		/** What the pack has to be read for to serve this half, in terms the translation knows. */
+		/**
+		 * What the pack has to be read for to serve this half, in terms the translation knows.
+		 * <p>
+		 * No coverage mask on either half, which {@link ParticleProgram} sets out where it decides
+		 * the same thing for the pass.
+		 */
 		private PackProgram.GeometryElement asked() {
 			return new PackProgram.GeometryElement(this.element, this.program, CUTOUT,
-					VertexInputs.PARTICLE);
+					VertexInputs.PARTICLE, false);
 		}
 
 		/**

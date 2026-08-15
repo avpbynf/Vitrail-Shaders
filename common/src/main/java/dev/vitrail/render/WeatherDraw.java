@@ -98,10 +98,15 @@ public final class WeatherDraw {
 	 */
 	record Element(RenderPipeline pipeline, String element, RenderStage stage) {
 
-		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
+		/**
+		 * What the pack has to be read for to serve this piece, in terms the translation knows.
+		 * <p>
+		 * No coverage mask, which {@link WeatherProgram} sets out where it decides the same thing
+		 * for the pass.
+		 */
 		private PackProgram.GeometryElement asked() {
 			return new PackProgram.GeometryElement(this.element, PROGRAM, CUTOUT,
-					VertexInputs.PARTICLE);
+					VertexInputs.PARTICLE, false);
 		}
 	}
 

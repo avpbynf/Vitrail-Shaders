@@ -89,11 +89,11 @@ import java.util.stream.Stream;
  * ({@code feature/ShadowFeatureRenderer.java:19}), inheriting it.
  * <p>
  * <strong>What that costs the two halves is not the same thing, and it is the whole of why they
- * are two.</strong> The opaque half is drawn before the deferred stage, so its first draw buffer
- * stays on the game's target and reaches the pack through the scene seed. The blending half is
- * drawn after it, onto a colour target the chain has already composed, which is the position the
- * world's own water is in: it takes its first draw buffer outright, needs no seed, and reads the
- * far side of every target.
+ * are two.</strong> The opaque half is drawn before the deferred stage, so it takes its first draw
+ * buffer by writing the coverage mask, which is what keeps the scene seed off the pixels it wrote;
+ * {@link Element#covers} carries that. The blending half is drawn after the stage, onto a colour
+ * target the chain has already composed, which is the position the world's own water is in: it
+ * takes that buffer outright, owes no mask, and reads the far side of every target.
  * <p>
  * <strong>{@link FeatureLayer} is a second road into that same target and no draw takes both.</strong>
  * The layer catches what the game draws for itself during that window, by the game's own colour
@@ -333,10 +333,40 @@ public final class EntityDraw {
 			return (hand() || glint()) ? this.afterDeferred : blended();
 		}
 
+		/**
+		 * Whether this piece writes the coverage mask, which is the same question as whether it may
+		 * own draw buffer nought: a piece drawn before the scene seed keeps the pack's colour only
+		 * where the seed is kept off it, and the mask is what keeps it off.
+		 * <p>
+		 * <strong>Every piece of this door drawn before the stage, and that is what moves the
+		 * entities into the pack's own targets.</strong> The mask carries the depth its fragment
+		 * left, so the seed reads a mob's own depth back at every pixel of it, finds nothing drawn
+		 * in front, and leaves the pixel alone. Marking it was worth nothing while the mask was a
+		 * flag: the cut then compared the world's depth with one taken before a single feature was
+		 * drawn, and a mob standing in front of a block moved that depth by construction, so its
+		 * pixels answered "the game drew in front" whatever the flag said.
+		 * <p>
+		 * <strong>The glint is in and it could not be left out.</strong> It blends onto the pixels
+		 * the piece under it just wrote, and those pixels are the pack's target now; left on the
+		 * game's target it would blend onto a clear, and the seed would then throw it away, its own
+		 * depth being the depth of the geometry it hangs on.
+		 * <p>
+		 * <strong>The hand is out, and not because a mask would be wrong for it.</strong> Its solid
+		 * pass is a change to the order of the frame rather than to this answer, which
+		 * {@link GeometryProgram} sets out where it demotes it: what that pass is waiting for is to
+		 * be drawn between the seed and the deferred stage, which is Iris's own moment for it.
+		 * <p>
+		 * A piece drawn after the stage owes no mask, the seed having run long before, and a shadow
+		 * row is in neither position: it is drawn into the map, which no seed ever paints.
+		 */
+		boolean covers() {
+			return !shadow() && !afterStage() && !hand();
+		}
+
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
 		private PackProgram.GeometryElement asked() {
 			return new PackProgram.GeometryElement(this.element, this.program, this.alphaTest,
-					inputs());
+					inputs(), covers());
 		}
 
 		/**

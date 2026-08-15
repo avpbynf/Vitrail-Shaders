@@ -597,9 +597,15 @@ public final class PackProgram {
 	 *                  piece, exactly as the chunk passes read it
 	 * @param inputs    where this piece's vertex stage takes its inputs from, which is the format the
 	 *                  pipeline drawing it binds
+	 * @param coverage  whether this piece's fragment stage writes the coverage mask on top of what
+	 *                  the pack asked for, which every piece drawn before the scene seed and into
+	 *                  the pack's own targets has to. It is part of what two pieces have to agree on
+	 *                  to share a translation, and not for tidiness: the mask is one more output,
+	 *                  and a piece whose pass attaches no image for it would be writing at a rank
+	 *                  its pipeline carries no state for
 	 */
 	public record GeometryElement(String element, String program, AlphaTest alphaTest,
-			VertexInputs inputs) {
+			VertexInputs inputs, boolean coverage) {
 	}
 
 	/**
@@ -700,12 +706,18 @@ public final class PackProgram {
 				// The format is in the key for the same reason and a harder one: it decides which
 				// names the vertex head declares as inputs, and two stages built from one text against
 				// two formats are two different modules.
+				//
+				// The mask is in the key as well, and it is the one answer here that is not a fact
+				// about the text: two pieces of one file are two texts as soon as one of them writes
+				// the mask, because the mask is an output the other one's pipeline carries no state
+				// for, and one module cannot be right for both.
 				VertexInputs inputs = element.inputs();
 				String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program())
-						+ "|" + LegacyGlsl.bindsGameTransforms(element.program()) + "|" + inputs;
+						+ "|" + LegacyGlsl.bindsGameTransforms(element.program()) + "|" + inputs
+						+ "|" + element.coverage();
 				translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
-						ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest, false,
-								element.program(), textures.volumes()),
+						ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest,
+								element.coverage(), element.program(), textures.volumes()),
 						targets, alphaTest, textures));
 				loaded.put(element.element(), translated.get(key));
 			}
