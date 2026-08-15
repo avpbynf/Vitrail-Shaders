@@ -1133,12 +1133,6 @@ public final class PackChain {
 		// than with the frame, which is what the argument is.
 		this.targets.depth().forgetPreHand(HandDraw.diverted());
 
-		// The seed's kept depth is a per frame fact like the four above and belongs with them, the
-		// image itself outliving the frame only because nobody frees a texture every frame.
-		if (this.seed != null) {
-			this.seed.endFrame();
-		}
-
 		if (this.block != null) {
 			this.block.rotate();
 		}
@@ -1231,9 +1225,8 @@ public final class PackChain {
 		// The targets and the buffers first and the compilation second, which is not the order this
 		// had. What the warm up holds back is the drawing and not the frame, so the block ring and
 		// the targets are standing by the time the last program compiles rather than being allocated
-		// in that one frame on top of it. Not the quad, whatever an earlier reading of this line
-		// said: wherever the seed runs it is made earlier in the same frame, from markGeometryDepth,
-		// and quad() says why it cannot wait for this.
+		// in that one frame on top of it. The quad is made in prepare with them, and quad() says why
+		// it is asked for from elsewhere as well.
 		//
 		// Outside any render pass, both of them: creating a texture or a buffer records a barrier
 		// into the very command buffer a pass would be recording into, and the clears refuse
@@ -1368,44 +1361,6 @@ public final class PackChain {
 	}
 
 	/**
-	 * Keeps the world's depth as the pack's own geometry left it, which is what tells an entity the
-	 * game drew in front of a block from the block itself. Called once the opaque blocks are drawn
-	 * and before the game has drawn one feature over them.
-	 * <p>
-	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes: nothing here warms a
-	 * pipeline, prepares a target or clears anything, because all of that belongs to the moment the
-	 * chain runs and moving it a step earlier in the frame would clear away what the chunk passes
-	 * have just written. This copies one image and answers for nothing else. The one thing it does
-	 * make is the quad it draws that copy with, which is a vertex buffer and clears nothing, and
-	 * {@link #quad} says why it cannot wait for the chain.
-	 */
-	public static void markGeometryDepth() {
-		PackChain chain = active;
-		GpuDevice device = RenderSystem.tryGetDevice();
-		Minecraft minecraft = Minecraft.getInstance();
-		if (disabled || chain == null || device == null || minecraft == null || !chainWanted
-				|| chain.seed == null || !chain.seedEnabled) {
-			return;
-		}
-
-		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
-		if (main == null) {
-			return;
-		}
-
-		// Caught like every other entry point this bus calls: an exception here reaches the game
-		// through an event handler and comes back on the very next frame.
-		try {
-			chain.seed.capture(device.createCommandEncoder(), device, chain.quad(device),
-					main.getDepthTextureView(), main.width, main.height);
-		} catch (RuntimeException e) {
-			disabled = true;
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
-		}
-	}
-
-	/**
 	 * Keeps the world's depth as it stands before the player's own hand is drawn, which is what the
 	 * pack reads as {@code depthtex2}. Called from the event the hand's solid half is drawn at and
 	 * one line ahead of it.
@@ -1434,9 +1389,9 @@ public final class PackChain {
 	 * {@link PackDepth} carries what that saves, and {@code GeometryProgram.depth} what it leaves
 	 * owing.
 	 * <p>
-	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes, for the reason
-	 * {@link #markGeometryDepth} is not: nothing here warms a pipeline, prepares a target or clears
-	 * anything, all of which belong to the moment the chain runs.
+	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes: nothing here warms a
+	 * pipeline, prepares a target or clears anything, all of which belong to the moment the chain
+	 * runs.
 	 */
 	public static void markPreHandDepth() {
 		PackChain chain = active;
@@ -1476,7 +1431,7 @@ public final class PackChain {
 	 * transparency chain, which is every setup this engine runs on.
 	 * <p>
 	 * Deliberately not on the road {@link #drawBeforeTranslucents} takes, for the same reason
-	 * {@link #markGeometryDepth} is not: nothing here warms a pipeline, prepares a target or clears
+	 * {@link #markPreHandDepth} is not: nothing here warms a pipeline, prepares a target or clears
 	 * anything, all of which belong to the moment the chain runs. This copies one image and answers
 	 * for nothing else.
 	 * <p>
@@ -1787,12 +1742,13 @@ public final class PackChain {
 	 * stands in for would have written.
 	 */
 	private void drawSeed(CommandEncoder encoder, GpuTextureView mainView, GpuTextureView depthView) {
-		// One pixel of black where no mask has been allocated yet, which reads as nought everywhere
-		// and hides nothing. The mask itself is emptied at the head of every frame, so a frame no
-		// terrain program drew in is served an empty one rather than the last one that was written.
+		// One pixel of the sentinel where no mask has been allocated yet, which reads as a screen the
+		// pack wrote nowhere on and hides nothing. The mask itself is emptied at the head of every
+		// frame, so a frame no program of the pack drew in is served an empty one rather than the
+		// last one that was written.
 		GpuTextureView covered = this.targets.coverage();
 		this.seed.draw(encoder, this.quad, mainView,
-				covered == null ? this.targets.black() : covered, depthView, this.targets);
+				covered == null ? this.targets.unwritten() : covered, depthView, this.targets);
 	}
 
 	/**
@@ -1919,12 +1875,10 @@ public final class PackChain {
 	/**
 	 * The quad every full screen pass of this engine draws, made the first time anything asks for it.
 	 * <p>
-	 * Its own method rather than a line of {@link #prepare}, because two moments of the frame need it
-	 * and they are not the same moment. The chain draws from AfterOpaqueFeatures on; the depth the
-	 * scene seed is cut against is kept at AfterOpaqueBlocks, which is strictly earlier. Built where
-	 * the chain draws alone, the first frame that ever gets that far kept no depth, and a frame with
-	 * no kept depth cuts its seed with the coverage mask alone, which throws away every one of the
-	 * game's opaque features standing in front of the pack's terrain.
+	 * Its own method rather than a line of {@link #prepare}, because the two depths a pack is served
+	 * are copied with it from entry points that never go through prepare at all:
+	 * {@link #markPreHandDepth} and {@link #markSceneDepth} answer events of their own, and a frame
+	 * reaches either of them whether or not the chain drew. Each asks here and gets the one buffer.
 	 */
 	private GpuBuffer quad(GpuDevice device) {
 		if (this.quad == null) {
@@ -2075,10 +2029,11 @@ public final class PackChain {
 			// that reads the world of this frame and one that reads what the clear left.
 			Vitrail.logger().info("It is painted where the world would be drawn, after {} passes of "
 					+ "the chain", where.get().at());
-			// The pair to the terrain's own line. A frame where no terrain program of the pack ran
-			// leaves the mask empty and this covers the target whole, which is what it always did.
-			Vitrail.logger().info("It paints only what the pack's own terrain has not written, which "
-					+ "the coverage mask says pixel by pixel");
+			// The pair to the terrain's own line. A frame where no program of the pack ran leaves
+			// the mask on its sentinel and this covers the target whole, which is what it always did.
+			Vitrail.logger().info("It paints where the world's depth stands in front of the one the "
+					+ "pack's own geometry left, which is what the coverage mask carries: everywhere "
+					+ "the pack wrote nothing, and everywhere the game has drawn over what it wrote");
 			// Named because it is the difference between a gbuffer that agrees with itself and one
 			// that carries the game's colour over the pack's normals, and neither shows as itself.
 			List<Integer> emptied = this.seed.emptied();
@@ -2176,10 +2131,6 @@ public final class PackChain {
 
 	private void release() {
 		this.targets.release();
-		if (this.seed != null) {
-			this.seed.release();
-		}
-
 		if (this.features != null) {
 			this.features.release();
 		}

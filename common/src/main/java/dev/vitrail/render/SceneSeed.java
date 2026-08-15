@@ -35,20 +35,27 @@ import java.util.Optional;
  * every gbuffers stage that does not run: the entities, the particles and the weather.
  * <p>
  * It is cut around the pack's own geometry rather than painted over it. The opaque and cutout chunk
- * passes write that target themselves, and so do the two pieces of the sky that write outright, and
- * every one of them marks the pixels it covered as it goes, so what lands here is the game's picture
- * everywhere the pack answered for nothing. Without the cut the two would fight and the game would
- * win, because it is drawn second. The pieces that blend are different again, the translucent chunk
- * pass with them: they draw over what the others left and claim no pixel of their own.
+ * passes write that target themselves, and so do the two pieces of the sky that write outright and
+ * the opaque half of the entities, and every one of them records the depth it left as it goes, so
+ * what lands here is the game's picture everywhere the pack answered for nothing. Without the cut
+ * the two would fight and the game would win, because it is drawn second. The pieces that blend are
+ * different again, the translucent chunk pass with them: they draw over what the others left and
+ * claim no pixel of their own.
  * <p>
- * <strong>The mask alone cuts too much, and what it cuts is every entity standing in front of a
- * block.</strong> The game draws its opaque features after the chunk passes and into the same
- * picture, so a mob, an item frame or a block entity in front of a wall lands on a pixel the mask
- * says the pack answered for, and the cut throws the mob away with the wall. The mask is therefore
- * read against a depth taken the moment the pack's own geometry was finished with it: where the
- * depth has moved closer since, the game drew something in front, and that pixel is the game's to
- * paint after all. Where it has not, the pixel is the pack's and is cut as before. Nothing here
- * needs to know what was drawn, only that something was.
+ * <strong>The cut is one comparison, and it is the mask against the world's depth as it stands.</strong>
+ * The mask carries a depth and not a flag: what a program of the pack wrote into the depth
+ * attachment, at the moment it wrote it. So a pixel nothing has been drawn over since compares
+ * equal and is the pack's, and a pixel the game drew a feature onto compares closer and is the
+ * game's to paint after all. That second case is the one a flag could not answer, and what it is
+ * made of is every piece the game still draws for itself in front of a block: the eyes of a mob,
+ * a beacon beam, a name plate, the hand.
+ * <p>
+ * <strong>Where the pack wrote nothing the mask carries a value outside zero to one</strong>, which
+ * every real depth is in front of, so those pixels take the game's picture through the same
+ * comparison and owe no test of their own. That is the whole of why the mask is a depth: the two
+ * questions a flag needed - did the pack write here, and has anything moved closer since - are one
+ * number and one test, and the depth the pack's geometry left no longer has to be copied into an
+ * image of its own before the game's features overwrite it.
  * <p>
  * This is not a fallback and should not be read as one. The first draw buffer of the terrain pass
  * is, by the definition of the OptiFine model, where the world's colour ends up, so it is the one
@@ -95,40 +102,20 @@ final class SceneSeed {
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/seed_vertex");
 	private static final Identifier FRAGMENT_ID =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/seed_fragment");
-	private static final Identifier KEEP_FRAGMENT_ID =
-			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/seed_keep_fragment");
 	private static final Identifier EMPTY_FRAGMENT_ID =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/seed_empty_fragment");
 
 	private static final String SAMPLER = "InSampler";
 
-	/** Where the pack's own opaque geometry has already written, and where this must not paint. */
+	/** The depth the pack's own geometry left, and the value this whole class is cut against. */
 	private static final String COVERAGE = "CoverageSampler";
 
 	/** The world's depth as it stands, which by now carries the game's own features. */
 	private static final String DEPTH = "DepthSampler";
 
-	/** And as the pack's own geometry left it, before any of them was drawn. */
-	private static final String KEPT = "KeptSampler";
-
 	private static final String LABEL = "Vitrail scene seed";
 
 	private static final String EMPTY_LABEL = "Vitrail scene seed gbuffer";
-
-	private static final String KEEP_LABEL = "Vitrail depth before the features";
-
-	/**
-	 * The reason a frame kept no depth when nothing else took the blame, which is the reason worth
-	 * telling apart from the rest: the moment came and went without this class being asked at all,
-	 * so what to look at is the hook at AfterOpaqueBlocks rather than anything here.
-	 */
-	private static final String NEVER_ASKED = "nothing asked for it before the game's features";
-
-	/** How many times the cut may change answer before the log stops following it. */
-	private static final int CHANGES = 8;
-
-	/** One float a texel, and no conversion: this is compared with the game's depth, not read as one. */
-	private static final GpuFormat KEEP_FORMAT = GpuFormat.R32_FLOAT;
 
 	/**
 	 * Which way a depth grows towards the eye, taken from the one constant that holds the game's
@@ -137,6 +124,14 @@ final class SceneSeed {
 	 * the day the game stops reversing, this moves with it instead of quietly inverting the test.
 	 */
 	private static final String CLOSER = ClipSpace.REVERSED.z < 0.0F ? ">" : "<";
+
+	/**
+	 * How the mask says the pack wrote here at all, which is the sentinel of
+	 * {@link ColorTargets#COVERAGE_EMPTY} told from a real depth. Written from the same constant as
+	 * the sentinel itself, so the two cannot be moved apart: an empty pixel is on the far side of
+	 * the depth range and every depth in it satisfies this.
+	 */
+	private static final String WRITTEN = ClipSpace.REVERSED.z < 0.0F ? ">= 0.0" : "<= 1.0";
 
 	/** Two triangles, the same quad the pass itself draws, which is why it is passed in. */
 	private static final int VERTICES = 6;
@@ -155,51 +150,36 @@ final class SceneSeed {
 			}
 			""";
 
+	/**
+	 * The cut, and the whole of it: the game's picture goes in wherever the world's depth stands in
+	 * front of the depth the pack's geometry left.
+	 * <p>
+	 * Neither side is converted into the pack's window. The mask is filled by the fragment stage
+	 * from the value it hands the depth attachment, and this reads that attachment back, so the two
+	 * are the same number written by the same draw and a pixel nothing was drawn over compares
+	 * exactly equal however the game encodes its depth.
+	 */
 	private static final String FRAGMENT = String.format(Locale.ROOT, """
 			#version 460 core
 
 			uniform sampler2D InSampler;
 			uniform sampler2D CoverageSampler;
 			uniform sampler2D DepthSampler;
-			uniform sampler2D KeptSampler;
 
 			in vec2 ofTexCoord;
 
 			layout(location = 0) out vec4 ofFragData0;
 
 			void main() {
-				bool mine = texture(CoverageSampler, ofTexCoord).r > 0.5;
 				bool infront = texture(DepthSampler, ofTexCoord).r
-						%s texture(KeptSampler, ofTexCoord).r;
-				if (mine && !infront) {
+						%s texture(CoverageSampler, ofTexCoord).r;
+				if (!infront) {
 					discard;
 				}
 
 				ofFragData0 = texture(InSampler, ofTexCoord);
 			}
 			""", CLOSER);
-
-	/**
-	 * Keeps the depth as it stands, unconverted and one float a texel.
-	 * <p>
-	 * Not turned into the pack's window on the way, unlike {@link PackDepth}: nobody reads this as a
-	 * depth, it is only ever compared with the image it was copied from. Both sides then carry the
-	 * value the same way, and a fragment nothing was drawn over compares exactly equal however the
-	 * game encodes its depth.
-	 */
-	private static final String KEEP_FRAGMENT = """
-			#version 460 core
-
-			uniform sampler2D InSampler;
-
-			in vec2 ofTexCoord;
-
-			layout(location = 0) out vec4 ofFragData0;
-
-			void main() {
-				ofFragData0 = vec4(texture(InSampler, ofTexCoord).r);
-			}
-			""";
 
 	/**
 	 * One draw buffer of the geometry program the seed stands in for, past the first, that the seed
@@ -227,35 +207,10 @@ final class SceneSeed {
 	/** The pass that empties the rest of the gbuffer, or null when there is none to empty. */
 	private final RenderPipeline empties;
 
-	private final RenderPipeline keep;
 	private final ShaderSource source;
 
 	/** Built once with one output per target emptied, and handed back at every compile. */
 	private final String emptyFragment;
-
-	/** The depth the pack's own geometry left, or null until a frame has taken one. */
-	private TargetSurface kept;
-
-	/**
-	 * Whether the image above holds THIS frame's depth. Cleared at the frame boundary and set by a
-	 * capture that really ran, which is the only pair of moments that makes it true.
-	 * <p>
-	 * A frame that could not capture must fall back to the mask alone rather than to the depth of the
-	 * frame before. The image survives the boundary because it is a texture and nobody frees it every
-	 * frame, and the previous frame's depth is the worst answer available here: the camera has moved
-	 * since, so it differs at nearly every pixel of the screen, and the comparison then says that
-	 * something was drawn in front of the pack's terrain everywhere at once. The seed repaints the
-	 * whole target with the game's picture, which is the pack's geometry gone and nothing said.
-	 */
-	private boolean captured;
-
-	/** Which of the two cuts was last said, whether anything has been said, and how often. */
-	private boolean cutWithKept;
-	private boolean said;
-	private int changes;
-
-	/** Why this frame kept no depth, in the log's own words, or null when it kept one. */
-	private String refusal = NEVER_ASKED;
 
 	/** Whether {@link #empties} compiled, asked again every frame like the seed's own pipeline. */
 	private boolean emptying;
@@ -283,11 +238,7 @@ final class SceneSeed {
 					return FRAGMENT;
 				}
 
-				if (EMPTY_FRAGMENT_ID.equals(id)) {
-					return this.emptyFragment;
-				}
-
-				return KEEP_FRAGMENT_ID.equals(id) ? KEEP_FRAGMENT : null;
+				return EMPTY_FRAGMENT_ID.equals(id) ? this.emptyFragment : null;
 			}
 
 			return VERTEX_ID.equals(id) ? VERTEX : null;
@@ -302,7 +253,6 @@ final class SceneSeed {
 						.withSampler(SAMPLER)
 						.withSampler(COVERAGE)
 						.withSampler(DEPTH)
-						.withSampler(KEPT)
 						.build())
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				// The format of the target as the pack declared it, not the one of the main
@@ -315,19 +265,6 @@ final class SceneSeed {
 				.build();
 
 		this.empties = this.extras.isEmpty() ? null : emptiesPipeline(this.extras);
-
-		this.keep = RenderPipeline.builder()
-				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/seed_keep"))
-				.withVertexShader(VERTEX_ID)
-				.withFragmentShader(KEEP_FRAGMENT_ID)
-				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder().withSampler(SAMPLER).build())
-				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
-				.withColorTargetState(new ColorTargetState(Optional.empty(), KEEP_FORMAT,
-						ColorTargetState.WRITE_ALL))
-				.withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
-				.withCull(false)
-				.build();
 	}
 
 	/**
@@ -344,7 +281,6 @@ final class SceneSeed {
 				.withBindGroupLayout(BindGroupLayout.builder()
 						.withSampler(COVERAGE)
 						.withSampler(DEPTH)
-						.withSampler(KEPT)
 						.build())
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
@@ -364,6 +300,13 @@ final class SceneSeed {
 	/**
 	 * Its fragment stage: the cut of the seed turned the other way round, so that what it writes is
 	 * exactly what the seed painted over, and one output an emptied target.
+	 * <p>
+	 * The mask is asked one thing more than the seed asks it, and it is the question the sentinel
+	 * answers: whether the pack wrote this pixel at all. The seed does not need it, an empty pixel
+	 * being one the game's picture goes into either way; here it is the difference between a pixel
+	 * the seed painted OVER the pack's geometry, whose gbuffer no longer belongs with the colour,
+	 * and one the pack never touched, whose targets hold a prepare's or a clear's and are none of
+	 * this pass's business.
 	 */
 	private static String emptyFragmentOf(List<Extra> extras) {
 		StringBuilder outputs = new StringBuilder();
@@ -380,21 +323,20 @@ final class SceneSeed {
 
 				uniform sampler2D CoverageSampler;
 				uniform sampler2D DepthSampler;
-				uniform sampler2D KeptSampler;
 
 				in vec2 ofTexCoord;
 
 				%s
 				void main() {
-					bool mine = texture(CoverageSampler, ofTexCoord).r > 0.5;
-					bool infront = texture(DepthSampler, ofTexCoord).r
-							%s texture(KeptSampler, ofTexCoord).r;
+					float mask = texture(CoverageSampler, ofTexCoord).r;
+					bool mine = mask %s;
+					bool infront = texture(DepthSampler, ofTexCoord).r %s mask;
 					if (!mine || !infront) {
 						discard;
 					}
 				%s
 				}
-				""", outputs, CLOSER, empties);
+				""", outputs, WRITTEN, CLOSER, empties);
 	}
 
 	/**
@@ -409,84 +351,6 @@ final class SceneSeed {
 	/** The draw buffers past the first that the seed really empties, for the log. In pack order. */
 	List<Integer> emptied() {
 		return this.extras.stream().map(Extra::target).toList();
-	}
-
-	/**
-	 * Keeps the world's depth as the pack's own geometry left it, before the game draws a single
-	 * feature over it. Must run on the render thread and outside any render pass.
-	 * <p>
-	 * The moment is the whole value of the image and it is not the moment anything else here is
-	 * taken: {@link PackDepth} takes its opaque world once the features are drawn, because that is
-	 * what a pack means by {@code depthtex1}. This one has to be older than they are, or the
-	 * comparison it exists for compares a thing with itself.
-	 *
-	 * @param live the game's depth as it stands, which the caller has to take before the features
-	 * @return false when nothing could be kept, in which case the cut falls back to the mask alone,
-	 *         which is what it did before this image existed
-	 */
-	boolean capture(CommandEncoder encoder, GpuDevice device, GpuBuffer quad, GpuTextureView live,
-			int width, int height) {
-		this.captured = false;
-		if (live == null) {
-			this.refusal = "the game's main target carries no depth";
-
-			return false;
-		}
-
-		if (quad == null || width <= 0 || height <= 0) {
-			this.refusal = "there was nothing to draw the copy with, at " + width + "x" + height;
-
-			return false;
-		}
-
-		if (!device.precompilePipeline(this.keep, this.source).isValid()) {
-			this.refusal = "the copy did not compile";
-
-			return false;
-		}
-
-		if (this.kept == null) {
-			this.kept = new TargetSurface("Vitrail depth before the features", KEEP_FORMAT, false,
-					width, height);
-		} else {
-			this.kept.resize(width, height);
-		}
-
-		if (this.kept.view() == null) {
-			this.refusal = "the image to keep it in could not be allocated";
-
-			return false;
-		}
-
-		// Loaded rather than cleared: the draw covers the image whole.
-		try (RenderPass pass = encoder.createRenderPass(() -> KEEP_LABEL, this.kept.view(), Optional.empty())) {
-			pass.setPipeline(this.keep);
-			RenderSystem.bindDefaultUniforms(pass);
-			pass.setVertexBuffer(0, quad.slice());
-			// NEAREST, so one texel of the copy is one texel of the depth and the two compare as
-			// the same number rather than as a neighbourhood of it.
-			pass.bindTexture(SAMPLER, live,
-					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			pass.draw(VERTICES, 1, 0, 0);
-		}
-
-		this.captured = true;
-		this.refusal = null;
-
-		return true;
-	}
-
-	/**
-	 * Forgets the depth this frame kept, at the frame boundary and nowhere else, so that the next
-	 * frame answers for itself. See {@link #captured} for what carrying it over would look like.
-	 * <p>
-	 * The reason goes back to the one that costs nothing to name: a frame in which the capture was
-	 * never even reached. Every other reason is written where it happens, so the one left standing
-	 * here is the one nothing wrote.
-	 */
-	void endFrame() {
-		this.captured = false;
-		this.refusal = NEVER_ASKED;
 	}
 
 	/** Called every frame: a resource reload empties the pipeline cache. */
@@ -525,12 +389,10 @@ final class SceneSeed {
 	 * them where it landed on top of that geometry. Only worth calling once {@link #prepare} has
 	 * said the pipeline is usable.
 	 *
-	 * @param covered the mask, which is read and never judged: an image of nought everywhere is a
-	 *                mask that hides nothing and the seed then covers the target whole, which is
-	 *                what the frames with no terrain of the pack's in them have to look like
-	 * @param live    the world's depth as it stands, features included. Given the kept image as
-	 *                well when nothing kept one, so that the two compare equal everywhere and the
-	 *                cut is the mask alone, which is what it was before either existed
+	 * @param covered the mask, which is read and never judged: an image of the sentinel everywhere
+	 *                is a mask that hides nothing and the seed then covers the target whole, which
+	 *                is what the frames with no geometry of the pack's in them have to look like
+	 * @param live    the world's depth as it stands, features included
 	 * @param targets where the pack's colour targets are looked up, every frame and never held: a
 	 *                resize replaces the images and keeping one across it draws into a texture that
 	 *                has been closed
@@ -542,15 +404,10 @@ final class SceneSeed {
 	 */
 	boolean draw(CommandEncoder encoder, GpuBuffer quad, GpuTextureView scene,
 			GpuTextureView covered, GpuTextureView live, ColorTargets targets) {
-		boolean held = this.captured && this.kept != null;
-		GpuTextureView before = held ? this.kept.view() : live;
 		GpuTextureView into = targets.view(this.seed.target(), this.seed.side());
-		if (quad == null || scene == null || covered == null || live == null || before == null
-				|| into == null) {
+		if (quad == null || scene == null || covered == null || live == null || into == null) {
 			return false;
 		}
-
-		say(held);
 
 		// Loaded rather than cleared: the clears have already run, and the draw no longer covers the
 		// target whole in any case.
@@ -560,32 +417,24 @@ final class SceneSeed {
 			pass.setVertexBuffer(0, quad.slice());
 			pass.bindTexture(SAMPLER, scene,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			// NEAREST, and the mask is the size of the screen, so a texel is a pixel and the answer
-			// is the one the geometry wrote. Filtered, the edge of every block would read as half
-			// covered and the threshold would move it by half a pixel.
+			// NEAREST on both, and it matters more here than anywhere: the mask is the size of the
+			// screen, so a texel is a pixel and the answer is the one the geometry wrote, and the
+			// two depths are compared for having moved. Filtered, either read would move by a
+			// fraction of a texel along every silhouette in the picture, and the pack's own geometry
+			// would be repainted along all of them.
 			pass.bindTexture(COVERAGE, covered,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			// NEAREST for the same reason again, and it matters more here than anywhere: the two
-			// depths are compared for having moved, and a filtered read of either would move them
-			// both by a fraction of a texel along every silhouette in the picture.
 			pass.bindTexture(DEPTH, live,
-					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			pass.bindTexture(KEPT, before,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
 
-		return !this.emptying || empty(encoder, quad, covered, live, before, targets);
+		return !this.emptying || empty(encoder, quad, covered, live, targets);
 	}
 
 	/**
 	 * Empties the rest of the gbuffer over the pixels the draw above painted on top of the pack's
-	 * own geometry, which are the ones its cut let through with the mask set.
-	 * <p>
-	 * Nothing at all is written when the seed was cut against the mask alone: {@code infront} is
-	 * then false at every pixel, so this discards the whole screen. That is right rather than a gap.
-	 * The seed threw away every one of those pixels in that mode, the pack's terrain still shows
-	 * there, and its gbuffer is the one that belongs with it.
+	 * own geometry, which are the ones its cut let through where the mask holds a depth of its own.
 	 *
 	 * @return false when a target is missing or is no longer the size of the first one, which is a
 	 *         frame in the middle of a resize. The gbuffer then keeps what it held for that frame,
@@ -593,7 +442,7 @@ final class SceneSeed {
 	 *         target and the pass refuses to bind against any other count
 	 */
 	private boolean empty(CommandEncoder encoder, GpuBuffer quad, GpuTextureView covered,
-			GpuTextureView live, GpuTextureView before, ColorTargets targets) {
+			GpuTextureView live, ColorTargets targets) {
 		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> EMPTY_LABEL);
 		int width = 0;
 		int height = 0;
@@ -619,13 +468,11 @@ final class SceneSeed {
 			pass.setPipeline(this.empties);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
-			// NEAREST on all three, and for the reasons the draw above gives: a texel of the mask is
-			// a pixel, and the two depths are compared for having moved.
+			// NEAREST on both, and for the reason the draw above gives: a texel of the mask is a
+			// pixel, and the two depths are compared for having moved.
 			pass.bindTexture(COVERAGE, covered,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.bindTexture(DEPTH, live,
-					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			pass.bindTexture(KEPT, before,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
@@ -633,63 +480,4 @@ final class SceneSeed {
 		return true;
 	}
 
-	/**
-	 * Says which of the two cuts a frame drew with, the first time and at every change of answer
-	 * afterwards. A steady session therefore says it once.
-	 * <p>
-	 * <strong>Neither answer shows on screen as itself, and they are a whole defect apart.</strong>
-	 * Cut against the kept depth, everything the game drew in front of the pack's terrain comes back
-	 * around it; cut against the mask alone, every villager, every item frame and every block entity
-	 * standing in front of a block is thrown away with the block, and what the player sees is not a
-	 * cut but an empty village. <strong>Worse, and differently, once an entity is drawn with the
-	 * pack's own program</strong>: that entity has written the pack's other targets already, so what
-	 * the fallback throws away is its colour alone, and the normals and the material it left behind
-	 * are lit over the wall it stood in front of.
-	 * The fallback was silent, so a frame that took it read exactly like a
-	 * frame that never had the depth in the first place, and there was no way to tell the two apart
-	 * from the picture. This is the line that tells them apart.
-	 * <p>
-	 * Bounded, because the answer changing every frame is a real possibility and a line a frame at
-	 * sixty frames a second is a log nobody can read and a game nobody can play. The bound is said
-	 * when it is reached, so that a reader is never left thinking the answer settled.
-	 */
-	private void say(boolean held) {
-		if (this.said && held == this.cutWithKept) {
-			return;
-		}
-
-		this.said = true;
-		this.cutWithKept = held;
-		if (this.changes++ >= CHANGES) {
-			if (this.changes == CHANGES + 1) {
-				Vitrail.logger().warn("The scene seed has changed which cut it draws with {} times, so "
-						+ "it stops saying: the answer is not settling and the first lines above say "
-						+ "what the two are", CHANGES);
-			}
-
-			return;
-		}
-
-		if (held) {
-			Vitrail.logger().info("The scene seed is cut against the depth the pack's own geometry left,"
-					+ " so what the game drew in front of it is kept");
-		} else {
-			Vitrail.logger().warn("The scene seed is cut against the coverage mask alone, because {}: "
-					+ "every entity standing in front of the pack's terrain is thrown away with the "
-					+ "terrain", this.refusal);
-		}
-	}
-
-	/**
-	 * Frees the kept depth. A pipeline is not a resource this class owns: the compiled form lives
-	 * in the device cache, which the game empties on its own at every resource reload.
-	 */
-	void release() {
-		if (this.kept != null) {
-			this.kept.close();
-			this.kept = null;
-		}
-
-		this.captured = false;
-	}
 }

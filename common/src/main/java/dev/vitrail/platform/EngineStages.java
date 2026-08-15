@@ -69,16 +69,11 @@ public final class EngineStages {
 	}
 
 	/**
-	 * With the opaque chunk passes done and not one entity drawn yet.
-	 * <p>
-	 * Keeps the world's depth as the pack's own geometry left it, the last moment at which it is
-	 * that and nothing else. The scene seed is cut against it, and what it buys is every entity the
-	 * game draws in front of a block.
+	 * With the opaque chunk passes done and not one entity drawn yet, which is where the window the
+	 * entities are served in opens.
 	 */
 	public static void afterOpaqueBlocks() {
-		PackChain.markGeometryDepth();
-
-		// And opens the one window the entities are served in. It has to be a window, because the
+		// Opens the one window the entities are served in. It has to be a window, because the
 		// screen is drawn by the same feature renderers, with the same pipelines and into the same
 		// target, out of a submit storage GameRenderer hands them after the level: nothing about one
 		// of those draws says it is not an entity, and only the moment does. The hand used to be the

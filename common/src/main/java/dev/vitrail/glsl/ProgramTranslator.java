@@ -113,11 +113,12 @@ public final class ProgramTranslator {
 	}
 
 	/**
-	 * The same, told whether the pass also writes the mask saying where it drew.
+	 * The same, told whether the pass also writes the mask carrying the depth it leaves.
 	 *
-	 * @param coverage whether the fragment stage also writes the mask saying where this pass drew.
-	 *                 A property of the pass, like the alpha test: the two opaque halves of the chunk
-	 *                 pass write it and no other pass of the engine does
+	 * @param coverage whether the fragment stage also writes the mask carrying the depth this pass
+	 *                 leaves. A property of the pass, like the alpha test: every pass drawn before
+	 *                 the scene seed and into the pack's own targets writes it, which is the two
+	 *                 opaque halves of the chunk pass, the sky's disc and the entities
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
 			VertexInputs inputs, AlphaTest alphaTest, boolean coverage, String program) {
