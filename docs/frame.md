@@ -274,30 +274,28 @@ blends before the seed and keeps the buffer all the same, because it draws opaqu
 cone comes with two conditions of its own, set out under
 [the horizon gap](sky-and-shadows.md#the-horizon-gap), and where it is not drawn the seed repaints
 whatever stands in the band it would have closed: the lower half of the stars, the sunrise, a rising
-or setting sun. The hand's solid pass has no such sibling at all, and writes no mask of its own
-either, so its first draw buffer stays on the game's target and reaches the picture through the
-seed. That last one is the only piece drawn before the seed still in that position.
+or setting sun. The hand's solid pass has no such sibling at all and keeps the buffer by the other
+road, the one every opaque piece of the world takes: it writes the mask.
 
-That last one is a **divergence**, and it is the seed's price rather than a reading of Iris: Iris
-binds every gbuffers program to the pack's own draw buffers, the hand included, so the hand's colour
-never leaves the pack's target there. Here it makes the trip through the game's eight-bit target,
-which is a quantisation and not a loss of the picture. Three things do cost the picture, and none of
-them shows up as an error: a half-transparent hand pixel blends against the game's target, which
-holds no world while the chain is running, so it is tinted by the clear rather than by what stands
-behind it; a hand piece drawn with a pipeline that writes no depth, with nothing of its own pass
-writing depth under it, is discarded by the seed's cut, the mask and the world's depth both holding
-what the geometry behind the hand left; and the hand's *other* draw buffers still go straight to the
-pack, where the seed empties the ones its terrain program shares, so a pack whose hand program
-writes a normal or a specular map cannot light the hand from them over its own terrain.
+**The hand was the last piece that could have taken the mask and did not**, and what had kept it
+there was the flag the mask used to be. It is not the last piece drawn before the seed making the
+trip through the game's target, and the difference is worth keeping: the opaque particles never ask
+for a mask at all, so the seed carries them in by design, and so does anything whose fragment stage
+the translation could not place a mask in. The hand is drawn with its clip depth squeezed into the
+middle eighth of the range, which is not the depth of anything it stands in front of, so against a
+flag the cut asked whether the depth had moved closer since a copy taken before the game's features
+and every hand pixel answered yes. Against a depth it asks nothing of the sort: the mask is filled
+from the value the fragment hands the depth attachment, so at a hand pixel the two hold one number
+and the cut compares it with itself.
 
-**And it is not forced**, which is worth writing down rather than discovering twice. There are two
-ways out and neither has been taken. The mask is open to the hand now that it carries a depth: a
-hand row would write the same squeezed value the depth attachment receives, and the cut would
-compare it with itself, where the flag it used to be could not have helped. Or the reference's only
-constraint is that the hand precede the deferred stage, and the seed is this engine's own with no
-counterpart there, so drawing the hand's solid pass *between* the seed and the deferred stage would
-keep the reference's moment and let the pack own the first draw buffer. The second is a change to
-the order of the frame rather than to this rule.
+Three things the trip cost, and they are what moving it back buys, each of them a symptom that never
+showed up as an error: a half-transparent hand pixel blended against the game's target, which holds
+no world while the chain is running, so it was tinted by the clear rather than by what stands behind
+it; a hand piece drawn with a pipeline that writes no depth, with nothing of its own pass writing
+depth under it, was discarded by the seed's cut, the mask and the world's depth both holding what
+the geometry behind the hand left; and the albedo went through eight bits a channel like every other
+seeded family. It is also where the reference has it, which is the point: it binds every gbuffers
+program to the pack's own draw buffers, the hand included.
 
 ## Reading the plan before running it
 
