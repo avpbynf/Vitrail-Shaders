@@ -12,6 +12,14 @@ plus, because each of them files an upload per loader and has nowhere else to pu
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- Picking None while a pack is drawing no longer leaves the terrain in stretched coloured spikes
+  until the game is restarted. The world was being drawn through a pipeline built for the wider
+  vertex the pack needs, over a mesh that had already gone back to the narrower one.
+
 ## 0.2.0-alpha.1
 
 ### Added
