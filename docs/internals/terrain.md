@@ -29,7 +29,7 @@ The first two are what lets a pack's program run at all, and they are the ones a
 The rest are what makes what it draws correct, and leaving them out of a mental model of this area
 is how a program that compiles ends up drawing the wrong picture.
 
-Two properties of the format substitution are constraints, not details.
+Three properties of the format substitution are constraints, not details.
 
 **The format may only change where nothing holds the old one.** Every caller of the accessor (the
 section manager, the mesh builder, the per-region device resources) keeps whatever it was handed
@@ -39,6 +39,18 @@ meshes built at one stride land in an arena sized for another, and nothing in th
 notice. So the engine takes the answer at the single instant the chunk renderer is being built again
 from nothing, and merely repeats it everywhere else. Turning the terrain switch on or off asks the
 game to rebuild the world, which is the same door F3+A uses; it does not ask for a restart.
+
+**One thing outlives that rebuild, and it is a pipeline.** The chunk renderer memoises its own
+pipeline in a map keyed by render pass, the map is static and the three passes are immortal, and a
+pipeline declares the vertex format of whichever renderer built it. Nothing ever empties it, so the
+entry made during one session's warm up goes on answering for every renderer built afterwards, at
+whatever stride it was born with. What it is handed to is the game's own chunk shader, which draws
+the terrain on every road where a pass is given back: a pipeline declaring 44 bytes a vertex over a
+mesh written at 20 reads every position out of the middle of some other vertex, and the terrain comes
+out as stretched coloured spikes while the sky, the entities and the interface stay right. So the
+engine compares that pipeline's own vertex binding against the format the renderer binds, and calls a
+disagreement a miss. An older Sodium asked the same question in the key itself, its memo being one
+per renderer and keyed by a record carrying the vertex type.
 
 **Everything the pipeline declares must be bound.** Descriptor flushing walks the entries of the
 bound pipeline, so uniform and texture bindings the chunk renderer emits unconditionally for its own
