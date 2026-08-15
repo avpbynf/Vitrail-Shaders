@@ -220,13 +220,16 @@ rather than reporting as separate bugs:
 - **The identifiers a pack reads off it are constants rather than this entity's own**: the material
   id it carries, and the ones a pack compares against a mob type, a block entity type or the item
   in hand. A pack that branches on any of them takes the same branch for every draw, and what that
-  looks like is entirely the pack's business:
-  where the water composites sort by material, an entity can be treated as a surface to fog; on
-  Bliss, mobs and the held arm come out in flat wrong colours, oranges and greens that belong
-  nowhere in the scene. Which of them a given pack lands on is not established here, and they are
-  all the same lot to close. The held hand shows whatever the mobs show, since it arrives by the
-  same door and in the same vertex format, with the identifier that names what is held among the
-  constants too.
+  looks like is entirely the pack's business: where the water composites sort by material, an
+  entity can be treated as a surface to fog. The held hand shows whatever the mobs show, since it
+  arrives by the same door and in the same vertex format, with the identifier that names what is
+  held among the constants too.
+- **Flat wrong colours on the hand, oranges and greens that belong nowhere in the scene**, on a
+  pack that packs two values into each channel of a wide target. The hand's first draw buffer is
+  the one still making the trip through the game's eight-bit target, where such a value loses one
+  of its two halves and the other is read back as the albedo. The mobs and the block entities are
+  no longer in that position, and the frame page says what earned it: they write the coverage mask
+  and take that buffer in the pack's own targets.
 - A pack can allocate a colour target for a family that is not drawn through it. BSL allocates one
   for glowing entities alone, and its deferred pass samples that target, so the chain reads a clear
   across a whole target.

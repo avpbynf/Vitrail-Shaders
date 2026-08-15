@@ -174,18 +174,25 @@ applies to a family only for as long as the seed is its road in: a mob served by
 program takes a different one, with a fault of its own described in
 [pack compatibility](compatibility.md).
 
-**A pixel the pack's own terrain has covered must not be seeded over.** That is what the coverage
-mask is for: it is compared against the depth left by the pack's own geometry, so a pixel the pack
-drew belongs to the pack and a pixel it did not belongs to the seed. Comparing against the wrong
-depth (one the game has since cleared) makes the mask wrong everywhere, and things the game drew
-in front of the terrain vanish.
+**A pixel the pack's own geometry has covered must not be seeded over.** That is what the coverage
+mask is for, and it carries a **depth** rather than a flag: every program of the pack drawn before
+the seed writes into it the value it handed the depth attachment, and the seed compares that with
+the world's depth as it stands. A pixel nothing has been drawn over since compares equal and is the
+pack's; a pixel the game has drawn a feature onto compares closer and is the seed's. Where the pack
+wrote nothing at all the mask holds a value outside zero to one, which every real depth is in front
+of, so those pixels take the game's picture through the same comparison.
 
-**The entities are the exception, and it is deliberate rather than a gap.** They write no mask, so
-their pixels are seeded over on purpose: the seed is cut against a depth taken before the game draws
-a single feature, and an entity is by definition in front of that depth, so a mask claiming those
-pixels would take them from the very image that carries the entity's colour. What that costs is one
-trip through eight bits a channel for the albedo, and what it buys is every other draw buffer, which
-is where a pack keeps the normal and the material it lights an entity by.
+That is one comparison for two questions, and the second one is what a flag could not answer. The
+game still draws pieces of its own in front of the pack's geometry, and they have to arrive; the
+pack's own geometry must not be repainted. Only a depth tells those two pixels apart.
+
+**The entities used to be the exception and are not any more.** Their first draw buffer went to the
+game's target and reached the pack through the seed, which cost the albedo one trip through eight
+bits a channel: a pack that packs two values into each channel of a wider target lost the first of
+them there. They write the mask now and take that buffer in the pack's own targets, which was not
+open to them while the mask was a flag - the cut then compared the world's depth with one taken
+before a single feature was drawn, and a mob standing in front of a block moves that depth by
+construction, so every pixel of it answered "the game drew in front" whatever mask it wrote.
 
 So a flat, unlit mob is not a mask bug, and before reading it as one, check which of two things you
 are looking at. The family goes through the pack out of the box, so the first question is whether
@@ -267,11 +274,9 @@ blends before the seed and keeps the buffer all the same, because it draws opaqu
 cone comes with two conditions of its own, set out under
 [the horizon gap](sky-and-shadows.md#the-horizon-gap), and where it is not drawn the seed repaints
 whatever stands in the band it would have closed: the lower half of the stars, the sunrise, a rising
-or setting sun. The hand's solid pass has no such sibling at all, and no mask could stand in for one:
-the seed's cut asks whether the depth moved closer since the pack's geometry was finished with it,
-and the hand is drawn with its clip depth squeezed into a band of its own, so the answer is yes at
-every pixel it covers. Its first draw buffer therefore stays on the game's target and reaches the
-picture through the seed.
+or setting sun. The hand's solid pass has no such sibling at all, and writes no mask of its own
+either, so its first draw buffer stays on the game's target and reaches the picture through the
+seed. That last one is the only piece drawn before the seed still in that position.
 
 That last one is a **divergence**, and it is the seed's price rather than a reading of Iris: Iris
 binds every gbuffers program to the pack's own draw buffers, the hand included, so the hand's colour
@@ -280,17 +285,19 @@ which is a quantisation and not a loss of the picture. Three things do cost the 
 them shows up as an error: a half-transparent hand pixel blends against the game's target, which
 holds no world while the chain is running, so it is tinted by the clear rather than by what stands
 behind it; a hand piece drawn with a pipeline that writes no depth, with nothing of its own pass
-writing depth under it, is discarded by the seed's cut where the mask is set rather than carried in;
-and the hand's *other* draw buffers still go straight to the pack, where the seed empties the ones
-its terrain program shares, so a pack whose hand program writes a normal or a specular map cannot
-light the hand from them over its own terrain.
+writing depth under it, is discarded by the seed's cut, the mask and the world's depth both holding
+what the geometry behind the hand left; and the hand's *other* draw buffers still go straight to the
+pack, where the seed empties the ones its terrain program shares, so a pack whose hand program
+writes a normal or a specular map cannot light the hand from them over its own terrain.
 
-**And it is not forced**, which is worth writing down rather than discovering twice. The reference's
-only constraint is that the hand precede the deferred stage; the seed is this engine's own and has
-no counterpart there, so drawing the hand's solid pass *between* the seed and the deferred stage
-would keep the reference's moment and let the pack own the first draw buffer, at none of the three
-costs above. That is a change to the order of the frame rather than to this rule, and it has not
-been made.
+**And it is not forced**, which is worth writing down rather than discovering twice. There are two
+ways out and neither has been taken. The mask is open to the hand now that it carries a depth: a
+hand row would write the same squeezed value the depth attachment receives, and the cut would
+compare it with itself, where the flag it used to be could not have helped. Or the reference's only
+constraint is that the hand precede the deferred stage, and the seed is this engine's own with no
+counterpart there, so drawing the hand's solid pass *between* the seed and the deferred stage would
+keep the reference's moment and let the pack own the first draw buffer. The second is a change to
+the order of the frame rather than to this rule.
 
 ## Reading the plan before running it
 
