@@ -14,6 +14,12 @@ what the next one holds.
 
 ## Unreleased
 
+### Changed
+
+- The line each program prints at its first draw now names the image it really samples where the
+  pack asks for the atlas, so a picture that disagrees with the wiring can be told apart from one
+  that agrees with it.
+
 ### Fixed
 
 - Picking None while a pack is drawing no longer leaves the terrain in stretched coloured spikes
