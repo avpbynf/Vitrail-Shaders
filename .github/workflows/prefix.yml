@@ -1,0 +1,56 @@
+# `main` is an exact prefix of `dev`, and this is what says so out loud when it stops being one.
+#
+# The rule it guards is in CONTRIBUTING: everything enters `dev` by a pull request merged with the
+# rebase button, and `dev` reaches `main` by a FAST-FORWARD and by no button. The reason is that all
+# three merge buttons rewrite. `main` is already an ancestor of `dev`, so replaying `dev` onto it
+# would give `main` a second copy of every commit under a fresh hash, and the two branches would
+# then hold the same work under two histories.
+#
+# **Nothing on GitHub can prevent that press.** Which merge buttons a repository offers is a
+# repository-wide setting, not a per-target one, and the button `dev` needs for a topic branch is
+# the very button that is wrong here. So this is detection and not prevention: the wrong gesture is
+# caught within a minute of the push rather than at the next release, while the branch can still be
+# reset onto `dev` without anything having been built on top of it.
+#
+# The gesture it is guarding is one line, `git push origin origin/dev:main`, and the pull request
+# closes itself as merged once its commits are there.
+
+name: prefix
+
+on:
+  push:
+    branches:
+      - main
+  # For a state settled by hand, so the answer can be asked again without an empty commit.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prefix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Take both long-lived branches
+        uses: actions/checkout@v4
+        with:
+          # The whole history, since the question is about an ancestry that reaches back to the
+          # first commit. A shallow clone answers "not an ancestor" for a graft it simply cannot see.
+          fetch-depth: 0
+
+      - name: main is an ancestor of dev
+        run: |
+          git fetch --no-tags origin +refs/heads/dev:refs/remotes/origin/dev
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/dev; then
+            echo "main is contained in dev, so it is still an exact prefix of it."
+            exit 0
+          fi
+
+          echo "::error::main carries commits that dev does not, so it has stopped being an exact"
+          echo "::error::prefix of dev. That is what a merge button does to this pair: it replays"
+          echo "::error::dev's commits under fresh hashes instead of moving the pointer. Reset main"
+          echo "::error::onto dev with a fast-forward before anything else lands on it."
+          echo
+          echo "On main and not on dev:"
+          git log --oneline origin/dev.."$GITHUB_SHA"
+          exit 1
