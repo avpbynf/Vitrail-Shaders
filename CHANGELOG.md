@@ -12,6 +12,18 @@ plus, because each of them files an upload per loader and has nowhere else to pu
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Added
+
+- **The wind a breeze throws and the swirl over a charged creeper are painted by the pack now**,
+  where the game kept its own shader for both. What held them back is a texture matrix of the
+  game's own that scrolls them, and that matrix is answered out of the game's transforms now, so a
+  breeze scrolls rather than sitting frozen on one frame of its offset and two breezes on screen
+  keep their own. The swirl writes every image the pack declares for its entities: on five of the
+  eight packs tested that is between two and four images rather than the single one it would
+  otherwise have reached.
+
 ## 0.3.0-alpha.1
 
 ### Changed
