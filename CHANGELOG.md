@@ -16,12 +16,19 @@ what the next one holds.
 
 ### Changed
 
+- **Mobs, block entities, the enchantment shine and the player's hand are now painted into the
+  pack's own images**, where before their colour reached the pack through the game's, eight bits a
+  channel. Packs that pack two values into each channel of a wider image were reading one back in
+  place of the other: under Bliss an enderman came out lit instead of black.
 - The line each program prints at its first draw now names the image it really samples where the
   pack asks for the atlas, so a picture that disagrees with the wiring can be told apart from one
   that agrees with it.
 
 ### Fixed
 
+- The enchantment shine is no longer dropped by packs that draw it into an image of their own. It
+  was being refused outright, on a question that only applies to the pieces whose colour still
+  travels through the game.
 - Picking None while a pack is drawing no longer leaves the terrain in stretched coloured spikes
   until the game is restarted. The world was being drawn through a pipeline built for the wider
   vertex the pack needs, over a mesh that had already gone back to the narrower one.
