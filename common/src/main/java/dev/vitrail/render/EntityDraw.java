@@ -486,8 +486,10 @@ public final class EntityDraw {
 	 * {@code pipeline/IrisPipelines.java:60,61,62}, all three {@code ShaderKey.ENTITIES_CUTOUT}. It is
 	 * the assignment being a CONSTANT that pins them: {@code getSolid}, {@code getCutout} and
 	 * {@code getTranslucent} are where the phase is consulted ({@code :191-218}), and a row that never
-	 * reaches one of the three cannot be moved by a phase. Two of them draw block entities in this
-	 * game, the end crystal beam and the offset cutout, and the third is the energy swirl.
+	 * reaches one of the three cannot be moved by a phase. ONE of them draws block entities in this
+	 * game, the offset cutout, which a skull reaches through {@code SkullBlockRenderer:140}; the end
+	 * crystal beam has only entity renderers ({@code EnderDragonRenderer.java:38}) and the swirl only
+	 * an entity layer ({@code EnergySwirlLayer.java:30}), so their twins are rows nobody selects.
 	 * <p>
 	 * <strong>Read as a list here and not as a blend, and the swirl is why.</strong> It is the one row
 	 * of the table that blends and still asks for the writing half's name; asking the blend first,
@@ -582,8 +584,9 @@ public final class EntityDraw {
 		put(new Element(RenderPipelines.END_CRYSTAL_BEAM, "crystal_beam", ENTITIES, CUTOUT));
 		put(new Element(RenderPipelines.ITEM_CUTOUT, "item", ENTITIES, CUTOUT));
 
-		// The blending run. Every one of them reaches Iris through getTranslucent, which is one
-		// function and not six rows: pipeline/IrisPipelines.java:35,36,38,39,55,83.
+		// The blending run. All of them but the swirl reach Iris through getTranslucent, which is one
+		// function and not seven rows: pipeline/IrisPipelines.java:35,36,38,39,55,56,83. The swirl is
+		// the exception and the comment on its own row says what it is pinned to instead.
 		put(new Element(RenderPipelines.ENTITY_TRANSLUCENT, "translucent", ENTITIES_TRANSLUCENT,
 				CUTOUT));
 		put(new Element(RenderPipelines.ENTITY_TRANSLUCENT_CULL, "translucent_cull",
@@ -665,8 +668,9 @@ public final class EntityDraw {
 	static {
 		// Derived from the table above, which Java has already run: static initialisers go in source
 		// order. One row per row and no filter, so this table cannot be missing the pipeline some
-		// block entity turns out to use. Two of the rows it makes are unreachable by any block entity
-		// renderer of the game, the item and the end crystal beam, and they are made anyway: a row
+		// block entity turns out to use. Four of the rows it makes are unreachable by any block entity
+		// renderer of the game - the item, the end crystal beam, the breeze's wind and the energy
+		// swirl, the last three having only entity renderers and layers - and they are made anyway: a row
 		// too many is a compiled module nobody selects, a row too few is the skull defect again, and
 		// only one of those two is visible on screen.
 		ELEMENTS.values().stream()
@@ -695,7 +699,6 @@ public final class EntityDraw {
 	 * ({@code pipeline/IrisPipelines.java:212-222}), so every other blending twin is
 	 * {@code gbuffers_block_translucent} and the tenth is already what its mob row carries.
 	 */
-	@SuppressWarnings("ReferenceEquality")
 	private static Element blockTwin(Element mob) {
 		if (PINNED.contains(mob.pipeline())) {
 			return new Element(mob.pipeline(), "block_" + mob.element(), mob.program(),
@@ -1142,7 +1145,7 @@ public final class EntityDraw {
 	 * Records one draw of a feature group with the pack's own program, or answers no and leaves it to
 	 * the game.
 	 * <p>
-	 * No is the ordinary answer and covers everything from text to particles: the table holds sixteen
+	 * No is the ordinary answer and covers everything from text to particles: the table holds eighteen
 	 * pipelines and the game has a hundred. What matters about a no is that it closes the pass this
 	 * was recording into, since the caller is about to open one of its own for the same draw and the
 	 * two would overlap.
