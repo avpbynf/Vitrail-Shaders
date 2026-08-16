@@ -119,7 +119,8 @@ public final class ChainPlan {
 					new NamedProgram("gbuffers_block", false, false, Families::entities),
 					// The blending half of those same two, on the far side of the stage: the game
 					// draws them among its translucent features, which is after the deferreds have
-					// run. Four entries and not two because the side is half the key.
+					// run. Five entries for four names because the side is half the key, and the
+					// entry below says which name is here twice and why.
 					//
 					// A name that never enters this list answers empty, and empty is the same word
 					// this table uses for a walk it REFUSED, so the caller cannot tell the two
@@ -128,6 +129,21 @@ public final class ChainPlan {
 					new NamedProgram("gbuffers_entities_translucent", true, false,
 							Families::entities),
 					new NamedProgram("gbuffers_block_translucent", true, false, Families::entities),
+					// The OPAQUE entity name on the far side, which reads like a contradiction and is
+					// the energy swirl over a charged creeper: Iris pins that row to ENTITIES_CUTOUT
+					// outright (pipeline/IrisPipelines.java:60) while the game blends it, so it is
+					// drawn among the translucent features and still asks for gbuffers_entities. It is
+					// the one row of render/EntityDraw whose name and side disagree, and no other walk
+					// reaches that pair: the two entries above ask for the blending names, and the
+					// opaque entry asks on the near side.
+					//
+					// Not counted, on the hand's argument rather than the entities': the family this
+					// key answers for is one row, and a swirl is drawn where somebody has charged a
+					// creeper or armoured a wither, which is a per frame answer no per place map may
+					// carry. Where a pack ships no gbuffers_entities_translucent of its own the
+					// blending name falls back on this very file, and that entry counts it; three
+					// packs of the corpus are in that case and this entry moves nothing for them.
+					new NamedProgram("gbuffers_entities", true, false, NOT_EVERYWHERE),
 					// The hand's two passes, which straddle the stage as the particles do and for the
 					// same kind of reason: the solid one is drawn among the game's opaque features and
 					// the blending one at the end of the level. Not counted, and not by a switch:
@@ -210,9 +226,10 @@ public final class ChainPlan {
 	 * <p>
 	 * One table for every family rather than one per family, which is what lets a family that does
 	 * not exist yet ask the same question: the terrain asks it three times, the sky three times, and
-	 * the entities once per FILE AND SIDE that serves them. Their pieces ask under four names, two
-	 * per side, and those four collapse onto fewer keys wherever the fallback tree lands two of them
-	 * on one program - but never across the sides, the side being half the key.
+	 * the entities once per FILE AND SIDE that serves them. Their pieces ask under four names, two on
+	 * the near side and three on the far one, {@code gbuffers_entities} being asked on both, and those
+	 * five collapse onto fewer keys wherever the fallback tree lands two of them on one program - but
+	 * never across the sides, the side being half the key.
 	 * What differs between families is only how they reach a key, and that is the two tables below
 	 * plus {@link #geometryOf} for whoever needs neither.
 	 * <p>
@@ -623,7 +640,8 @@ public final class ChainPlan {
 
 	/**
 	 * The same walk for every geometry program asked for by name, which is the sky's three, the four
-	 * entity names, the hand's two, the glint on both sides, the weather and the two particle halves.
+	 * entity names with the opaque one on both sides, the hand's two, the glint on both sides, the
+	 * weather and the two particle halves.
 	 * <p>
 	 * The names are the OptiFine split and they are not ours to choose: untextured sky geometry goes
 	 * to {@code gbuffers_skybasic}, the sun and the moon to {@code gbuffers_skytextured}, the clouds
