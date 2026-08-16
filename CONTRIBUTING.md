@@ -26,6 +26,22 @@ work under two histories. A pull request is still the right place to look at a r
 record and for the checks it runs; what merges it is the fast-forward, and the pull request closes
 itself as merged once its commits are on `main`.
 
+    git push origin origin/dev:main
+
+**That pull request has a template of its own**, `.github/PULL_REQUEST_TEMPLATE/release.md`, opened
+with `gh pr create --base main --head dev --template release.md`. It asks nothing the default one
+asks: a release changes nothing by itself, everything in it having entered `dev` through a pull
+request of its own. What it asks instead is the version in both the places it is written, and one
+question no command can answer, whether the range about to be published carries a batch that changed
+the picture and left no changelog line. That is not hypothetical.
+
+**Nothing on GitHub can refuse the wrong press**, which is worth knowing rather than assuming: the
+merge buttons a repository offers are a repository-wide setting, and the rebase button this forbids
+here is the one a topic branch needs. So `prefix.yml` checks after the fact instead, on every push
+to `main`, that `main` is still contained in `dev`, and fails loudly within a minute when it is not.
+Recovering from it is a reset of `main` back onto `dev`, and it is cheap for exactly as long as
+nothing has been built on top.
+
 **Every batch enters that way, including one written by whoever owns the repository.** Folding a
 branch in locally skips the one thing the pull request is for: `build.yml` runs on `pull_request`,
 so a batch that goes in by hand is built only once it is already in `dev`, and a red build then
