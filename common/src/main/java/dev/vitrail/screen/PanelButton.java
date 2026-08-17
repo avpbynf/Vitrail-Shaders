@@ -38,7 +38,9 @@ public final class PanelButton extends Button {
 	 * {@link #ICON_LIT} is darker rather than brighter, which is the atlas's own answer to hovering:
 	 * its second sprite for each icon of the rows is the darker one, measured at about two thirds of
 	 * the first, because the face of the button lightens under the mouse and the icon has to keep its
-	 * contrast against it. The same two thirds are applied here.
+	 * contrast against it. The same two thirds are applied here, and to the same condition, an
+	 * inactive button keeping the resting one however the mouse moves over it,
+	 * {@code WidgetRow.IconElement.drawLabel}.
 	 */
 	private static final int ICON_REST = 0xFFAAAAAA;
 	private static final int ICON_LIT = 0xFF737373;
@@ -85,7 +87,7 @@ public final class PanelButton extends Button {
 		if (this.icon != null) {
 			this.icon.draw(graphics, getX() + (getWidth() - this.icon.width()) / 2,
 					getY() + (getHeight() - this.icon.height()) / 2,
-					isHoveredOrFocused() ? ICON_LIT : ICON_REST);
+					isActive() && isHoveredOrFocused() ? ICON_LIT : ICON_REST);
 
 			return;
 		}

@@ -225,8 +225,9 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 					BUTTON_HEIGHT, Component.empty(), this::switchView));
 			refreshViewSwitch();
 
-			// In a world only, exactly like the eye it mirrors. Out of one no pack is drawing, so
-			// reading one again changes nothing anybody can see and the corner is better left empty.
+			// In a world only, exactly like the eye it mirrors. Out of one no pack is drawing, so a
+			// reading changes no image; it still rebuilds this screen from what it read, so what is
+			// left out there is the loop this button exists for and not the whole of its effect.
 			if (this.minecraft.level != null) {
 				addRenderableWidget(reload());
 			}

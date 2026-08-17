@@ -143,9 +143,13 @@ game, press it.
 The small circular arrow at the bottom left of the screen, in a world, mirroring the eye at the
 bottom right, is the same thing for the one place the key cannot reach. The game feeds a key mapping
 only while no screen is open, so from the screen where a pack is being worked on, its own key is
-dead. That button is the one control here the reference has none of, and that is why. It keeps the
-eye's condition as well as its corner: out of a world no pack is drawing, so there is nothing a
-reading could show.
+dead. That button is the one control here the reference has none of, and that is why.
+
+It keeps the eye's condition as well as its corner, and is there in a world only. That is a choice
+about where the loop lives rather than a fact about what a reading would do: out of a world a reading
+still rebuilds this screen from the pack it re-read, which is visible on the spot. What it cannot do
+out there is change an image, since none is being drawn. The cost is that from the title screen this
+screen has no way to read a pack again by hand, the key being dead while it is open.
 
 ## The profile is worked out, not remembered
 
