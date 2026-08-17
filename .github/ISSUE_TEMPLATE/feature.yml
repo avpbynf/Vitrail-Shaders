@@ -1,0 +1,44 @@
+name: Something the engine does not do yet
+description: A family the game still draws, a value a pack is not served, a pack that is refused.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Work here is ordered by risk rather than by request, and the picture changes from one release
+        to the next, so what this asks for is the pack that needs it and what the reference does with
+        it. That is what decides where a thing lands in the order.
+
+        If you mean to write it yourself, say so: the README asks for an issue before anything
+        substantial, and the reason is that code arriving ahead of what can be verified is hard to
+        accept however good it is.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What is missing
+      description: What the engine does today, and what it would do instead.
+    validations:
+      required: true
+
+  - type: input
+    id: pack
+    attributes:
+      label: Which pack needs it
+      description: >
+        A pack that visibly wants this, and what it does without it. A gap nothing asks for is
+        cheaper to leave open.
+      placeholder: Complementary Unbound r5.8.1
+    validations:
+      required: true
+
+  - type: textarea
+    id: reference
+    attributes:
+      label: What Iris does with it
+      description: >
+        Iris is the reference this is measured against, so how it handles the same thing is half of
+        the answer. A file and a line in its tree is ideal, a description is fine, and "unknown" is
+        an honest answer.
+    validations:
+      required: false
