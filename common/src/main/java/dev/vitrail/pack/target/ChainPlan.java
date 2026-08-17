@@ -980,12 +980,13 @@ public final class ChainPlan {
 
 		if (undrawn.contains(half.target())) {
 			// What ends up here is the geometry no pass of this engine fills in EVERY place: the sky's
-			// three, whose branch of the game's own pass is not taken below the overworld, the
-			// weather, which is drawn only where the level has weather, and every family whose line
-			// is off - the entity halves by default, and the terrain, the particles or the seed's
-			// riders wherever somebody writes those lines. Why that is the
-			// question, and what holding each out was measured to cost, is where the verdicts are
-			// handed their map.
+			// three, held out by two gates and no longer by one, since a place whose skybox is none
+			// opens no sky pass at all and the clouds hang off a pass of their own that the game
+			// opens in the overworld alone, the weather, which is drawn only where the level has
+			// weather, and every family whose line is off - the entity halves by default, and the
+			// terrain, the particles or the seed's riders wherever somebody writes those lines. Why
+			// that is the question, and what holding each out was measured to cost, is where the
+			// verdicts are handed their map.
 			//
 			// The particles used to be here and no longer are. The sentence went on saying no geometry
 			// of ours reached the pack's targets while a particle program of the pack was writing them,
