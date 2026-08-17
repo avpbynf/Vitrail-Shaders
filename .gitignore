@@ -57,6 +57,7 @@ replay_pid*.log
 /*.tsv
 /.*/
 !/.github/
+!/.githooks/
 
 # Pages being written. A page moves out of here and into docs/ when it has been read back
 # against the source and stops moving; until then it is a draft, and publishing a draft is how
