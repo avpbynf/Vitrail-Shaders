@@ -1,0 +1,49 @@
+package dev.vitrail.screen;
+
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * A button drawn from our own atlas rather than from the game's widget sprites, which is what gives
+ * the screen the look of Iris's, {@code IrisButton.java}. Everything else about it is the game's: the
+ * press, the focus, the narration and the tooltip all come from {@link Button}.
+ * <p>
+ * <b>Iris's fade is deliberately absent, because on its own branch it fades nothing.</b> Its button
+ * carries a {@code SmoothedFloat} and overrides {@code getAlpha}, but the three
+ * {@code RenderSystem.setShaderColor} calls that used to apply it are commented out with a note about
+ * a version port, {@code IrisButton.java:37}, {@code IrisButton.java:43} and
+ * {@code IrisButton.java:47}. In this game's widget base the value is stored and read by nowhere,
+ * {@code AbstractWidget.java:189-194}, so overriding it changes no pixel. Porting it would have been
+ * porting a mechanism whose effect is nil in the reference too.
+ */
+public final class PanelButton extends Button {
+
+	private PanelButton(int x, int y, int width, int height, Component message, OnPress onPress) {
+		super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
+	}
+
+	public static PanelButton of(int x, int y, int width, int height, Component message,
+			Runnable action) {
+		return new PanelButton(x, y, width, height, message, _ -> action.run());
+	}
+
+	public static PanelButton of(int x, int y, int width, int height, Component message,
+			Runnable action, @Nullable Tooltip tooltip) {
+		PanelButton button = of(x, y, width, height, message, action);
+		button.setTooltip(tooltip);
+
+		return button;
+	}
+
+	@Override
+	protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+		ScreenDraw.button(graphics, getX(), getY(), getWidth(), getHeight(),
+				isHoveredOrFocused(), !isActive());
+		// The label is the game's, so it greys itself when inactive and narrates like every other.
+		extractDefaultLabel(
+				graphics.textRendererForWidget(this, GuiGraphicsExtractor.HoveredTextEffects.NONE));
+	}
+}
