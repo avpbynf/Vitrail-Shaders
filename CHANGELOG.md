@@ -87,6 +87,14 @@ what the next one holds.
   `vitrail/options.txt` is holding down and how many passes this backend could not build, is on one
   line at the bottom left.
 
+### Fixed
+
+- **Mellow draws instead of showing you the game's own picture.** A pass may read a value that the
+  step before it never sends, which a pack gets away with elsewhere and this engine refused: the
+  refusal cost the pass, and a pack cannot lose a pass without losing the whole picture, so what you
+  saw was the game with no shader on it at all. The value is now handed over rather than the pass
+  being thrown away. Mellow is the pack it cost, on one of its lighting passes, and it draws now.
+
 ## 0.3.0-alpha.1
 
 ### Changed
