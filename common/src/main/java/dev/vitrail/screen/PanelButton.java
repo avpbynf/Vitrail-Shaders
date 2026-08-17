@@ -25,6 +25,24 @@ import org.jspecify.annotations.Nullable;
  */
 public final class PanelButton extends Button {
 
+	/**
+	 * What an icon on this kind of button is laid down through, and both numbers are measured off the
+	 * atlas rather than chosen.
+	 * <p>
+	 * The one icon drawn this way is the circular arrow, which is the one sprite of the file nothing
+	 * in the reference ever draws, so nothing there decided how bright it should be and it comes out
+	 * of the file at pure white. Beside the eye it mirrors, which never goes past 170 in any of its
+	 * pixels, that reads as a much louder button than its neighbour for no reason anybody chose.
+	 * {@link #ICON_REST} multiplies white down to exactly that 170.
+	 * <p>
+	 * {@link #ICON_LIT} is darker rather than brighter, which is the atlas's own answer to hovering:
+	 * its second sprite for each icon of the rows is the darker one, measured at about two thirds of
+	 * the first, because the face of the button lightens under the mouse and the icon has to keep its
+	 * contrast against it. The same two thirds are applied here.
+	 */
+	private static final int ICON_REST = 0xFFAAAAAA;
+	private static final int ICON_LIT = 0xFF737373;
+
 	/** One sprite of the atlas in place of a word, for a button too narrow to hold one. */
 	private final @Nullable Icon icon;
 
@@ -66,7 +84,8 @@ public final class PanelButton extends Button {
 
 		if (this.icon != null) {
 			this.icon.draw(graphics, getX() + (getWidth() - this.icon.width()) / 2,
-					getY() + (getHeight() - this.icon.height()) / 2);
+					getY() + (getHeight() - this.icon.height()) / 2,
+					isHoveredOrFocused() ? ICON_LIT : ICON_REST);
 
 			return;
 		}
