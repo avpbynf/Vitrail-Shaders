@@ -34,8 +34,10 @@ import net.minecraft.resources.Identifier;
 public final class ConfigEntry implements ConfigEntryPoint {
 
 	/**
-	 * A plain texture and not a GUI sprite, because Sodium hands the identifier to the texture
-	 * manager and blits it whole rather than looking it up in the atlas.
+	 * The mod's own logo, the one both loaders show in their mod list, laid down under this name by
+	 * {@code common/build.gradle} rather than kept in the tree twice. It is named as a plain texture
+	 * and not as a GUI sprite because Sodium hands the identifier to the texture manager and blits it
+	 * whole, at three lines of text less a margin, rather than looking it up in the atlas.
 	 */
 	private static final Identifier ICON =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "textures/gui/config-icon.png");

@@ -49,3 +49,15 @@ dependencies {
 		transitive = false
 	}
 }
+
+// The mod's logo, again, under a name the texture manager can reach: it is what Sodium is handed as
+// the icon of the page this mod adds to the video settings, and the texture manager only loads from
+// assets/. Copied by the build rather than kept twice in the tree, because two copies of one image
+// drift the day somebody redraws it and only finds one of them. Both loaders still take the file at
+// the jar's root for their mod list, which is where each of them looks.
+tasks.named("processResources", ProcessResources).configure {
+	from("src/main/resources/vitrail.png") {
+		into "assets/vitrail/textures/gui"
+		rename { "config-icon.png" }
+	}
+}
