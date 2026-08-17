@@ -16,6 +16,10 @@
 	"options.vitrail.no_pack": "シェーダーパックが読み込まれていません",
 	"options.vitrail.pack_off": "シェーダーパックなし：ゲームが自前の映像を描画します",
 	"options.vitrail.error": "%s",
+	"options.vitrail.shaders_enabled": "シェーダー: ON",
+	"options.vitrail.shaders_disabled": "シェーダー: OFF",
+	"options.vitrail.shaders_none_present": "シェーダー: 未選択",
+	"options.vitrail.pack_drop": "+ ドラッグアンドドロップでシェーダーを追加",
 	"key.vitrail.open_settings": "シェーダーパックの設定を開く",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

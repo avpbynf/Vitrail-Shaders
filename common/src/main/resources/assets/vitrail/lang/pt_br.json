@@ -16,6 +16,10 @@
 	"options.vitrail.no_pack": "Nenhum pacote de sombreadores carregado",
 	"options.vitrail.pack_off": "Sem pacote de sombreadores: o jogo desenha a própria imagem",
 	"options.vitrail.error": "%s",
+	"options.vitrail.shaders_enabled": "Sombreadores: Ativado",
+	"options.vitrail.shaders_disabled": "Sombreadores: Desativado",
+	"options.vitrail.shaders_none_present": "Sombreadores: Sem pacotes disponíveis",
+	"options.vitrail.pack_drop": "Arraste os pacotes até esta janela para adicioná-los",
 	"key.vitrail.open_settings": "Abrir configurações do pacote de sombreadores",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

@@ -51,6 +51,14 @@ public final class ScreenText {
 
 	public static final String NO_PACK = "options.vitrail.no_pack";
 
+	/** The three the pack list's top row takes, one per state, and it never changes size. */
+	public static final String SHADERS_ENABLED = "options.vitrail.shaders_enabled";
+	public static final String SHADERS_DISABLED = "options.vitrail.shaders_disabled";
+	public static final String SHADERS_NONE_PRESENT = "options.vitrail.shaders_none_present";
+
+	/** The line under the pack list, which is how anybody learns a pack can be dropped onto it. */
+	public static final String PACK_DROP = "options.vitrail.pack_drop";
+
 	/** The other reason there is nothing to configure: the folder was left alone on purpose. */
 	public static final String PACK_OFF = "options.vitrail.pack_off";
 

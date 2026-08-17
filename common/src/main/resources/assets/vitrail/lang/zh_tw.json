@@ -16,6 +16,10 @@
 	"options.vitrail.no_pack": "未載入光影包",
 	"options.vitrail.pack_off": "無光影包：遊戲繪製自己的畫面",
 	"options.vitrail.error": "%s",
+	"options.vitrail.shaders_enabled": "光影：已啟用",
+	"options.vitrail.shaders_disabled": "光影：已停用",
+	"options.vitrail.shaders_none_present": "光影：沒有光影包",
+	"options.vitrail.pack_drop": "+ 將要新增的光影包拖曳至此",
 	"key.vitrail.open_settings": "開啟光影包設定",
 	"key.category.vitrail.keybinds": "Vitrail"
 }
