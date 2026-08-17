@@ -30,7 +30,8 @@ what the next one holds.
   vertex, out of the pack's own `entity.properties`, `block.properties` and `item.properties`. What
   it changes on screen is whatever the pack wrote on those numbers: the subsurface scattering some
   packs give to living things alone, the relief on an item frame, the treatment of a lightning bolt
-  or an end crystal beam. Six of the eight packs tested read at least one of the three.
+  or an end crystal beam. Seven of the eight packs tested read at least one of the three, one of them
+  only in the shadow map; the eighth declares one and never reads it.
 
 - **The sky of the End is painted by the pack now**, where the game kept its own shader for it. The
   box of sky and the flash that crosses it both go through the program the format keeps for the

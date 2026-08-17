@@ -19,9 +19,9 @@ import org.spongepowered.asm.mixin.injection.At;
  * the mesh and the pipelines disagreeing for a frame. {@link EntityMesh} carries what that costs.
  * <p>
  * <strong>Every {@code build} of the initialiser is offered and one is taken</strong>, by what the
- * format holds rather than by counting the sixteen of them: the entity format is the only one of
+ * format holds rather than by counting the fourteen of them: the entity format is the only one of
  * this class carrying the overlay, so {@code EntityMesh.lengthen} recognises it and hands the other
- * fifteen straight back. An ordinal would be the same answer written as a number nobody can check.
+ * thirteen straight back. An ordinal would be the same answer written as a number nobody can check.
  */
 @Mixin(DefaultVertexFormat.class)
 public abstract class DefaultVertexFormatMixin {

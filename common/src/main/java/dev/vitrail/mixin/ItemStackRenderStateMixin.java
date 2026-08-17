@@ -33,7 +33,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * <strong>A block held as an item answers on the BLOCK table and puts a one in the block entity
  * lane</strong>, which reads like a magic number and is the packs' own contract: it is how a shader
  * tells a block item apart from an ordinary one, and Iris writes the same one
- * ({@code ItemStackStateLayerMixin.java:66-69}). It is also why the lane is put back afterwards
+ * ({@code ItemStackStateLayerMixin.java:54}). It is also why the lane is put back afterwards
  * rather than dropped: an item is submitted inside a block entity's own window often enough, a
  * flower in a pot or a sword on an armour stand, and the block entity has to get its number back.
  */
@@ -90,7 +90,12 @@ public abstract class ItemStackRenderStateMixin implements DisplayedItem {
 		// Iris carries and it carries it by class.
 		if (item instanceof BlockItem block && !(item instanceof SolidBucketItem)) {
 			EntityIdentifiers.blockEntity(BLOCK_ITEM);
-			EntityIdentifiers.item(BlockStateIds.id(block.getBlock().defaultBlockState()));
+			// Nought and not the minus one the table answers everywhere else, which is Iris's own
+			// number here and the only place it departs from its own default: it asks for this one
+			// value with getOrDefault(state, 0) (ItemStackStateLayerMixin.java:57) where every other
+			// read of the same table takes the map's -1.
+			EntityIdentifiers.item(
+					Math.max(BlockStateIds.id(block.getBlock().defaultBlockState()), 0));
 
 			return;
 		}

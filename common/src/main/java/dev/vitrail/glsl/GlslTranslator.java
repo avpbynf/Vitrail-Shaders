@@ -96,10 +96,14 @@ public final class GlslTranslator {
 	 * this reason. A second list here would be the same three names with nothing tying it to the
 	 * mesh.
 	 * <p>
-	 * The same door as the colour, and it is Iris's door: it asks its inputs for the overlay once
-	 * and calls both patchers on the answer
-	 * ({@code pipeline/transform/transformer/VanillaCoreTransformer.java:21-25}). What the question
-	 * really settles is whether the mesh is the game's entity mesh, and both facts follow from that.
+	 * <strong>The same door as the colour, and it is one gate narrower.</strong> Iris asks its inputs
+	 * for the overlay once and calls both patchers on the answer, but the colour carries a second
+	 * condition the identifiers have not got: {@code if (!parameters.inputs.isText())}
+	 * ({@code pipeline/transform/transformer/VanillaCoreTransformer.java:21-25}). Its other path is
+	 * plainer about the same split, calling the identifiers on the overlay OR on text alone
+	 * ({@code VanillaTransformer.java:20-24}). The two agree here today for one reason: no text
+	 * family is served, so {@code VertexInputs.overlay} answers for both, and the day one is served
+	 * this door has to grow that second gate for the colour and open for the identifiers on text.
 	 * <p>
 	 * <strong>Where Iris rewrites, this renames.</strong> Iris deletes the three declarations and
 	 * puts {@code iris_entityInfo.x} and its two neighbours in the place of every read
@@ -2248,7 +2252,7 @@ public final class GlslTranslator {
 		// The three identifiers leave by the same door and for the same reason, one draw batching
 		// several submissions: a chest and the mob beside it share it, so a number in the block is
 		// one number for both. Iris deletes those three declarations in the same breath
-		// (EntityPatcher.java:129-131).
+		// (EntityPatcher.java:130-132).
 		if (this.inputs.overlay()) {
 			this.blockMembers.remove(ENTITY_COLOR);
 			ENTITY_IDS.forEach(this.blockMembers::remove);
@@ -3121,7 +3125,7 @@ public final class GlslTranslator {
 		// And the same rule again for the three identifiers, with the qualifier the language demands
 		// rather than one chosen: an integer varying may not be interpolated, so flat is not a
 		// decision here. Iris writes flat on its own ivec3 for the same reason
-		// (EntityPatcher.java:157).
+		// (EntityPatcher.java:159).
 		for (String identifier : ENTITY_IDS) {
 			if (varyings.contains(identifier)) {
 				lines.add("flat " + (this.stage == ProgramStage.VERTEX ? "out" : "in") + " int "

@@ -225,9 +225,9 @@ rather than reporting as separate bugs:
   polygon rather than per vertex, and a pack that branches on either takes the same branch for every
   draw; what that looks like is entirely the pack's business. The material id is a constant too, and
   there the reference does the same, an entity mesh carrying none. The three a pack compares against
-  a mob type, a block entity type or the item being drawn are this piece's own and no longer
-  constants. The held hand shows whatever the mobs show, arriving by the same door and in the same
-  vertex format.
+  a kind of mob, the block a block entity stands in and the item being drawn are this piece's own
+  and no longer constants. The held hand shows whatever the mobs show, arriving by the same door and
+  in the same vertex format.
 - A pack can allocate a colour target for a family that is not drawn through it. BSL allocates one
   for glowing entities alone, and its deferred pass samples that target, so the chain reads a clear
   across a whole target.

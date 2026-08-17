@@ -203,7 +203,7 @@ public final class BlockStateIds {
 	 * mesh is shifted and has the fluid bit under it; a block entity reads the number as it stands.
 	 * Minus one where the pack named nothing, which is what {@code entity.properties} and
 	 * {@code item.properties} answer there as well, and what Iris answers
-	 * ({@code shaderpack/IdMap.java:161}).
+	 * ({@code shaderpack/IdMap.java:162}).
 	 */
 	public static int id(BlockState state) {
 		return table.getInt(state);

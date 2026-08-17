@@ -13,11 +13,11 @@ import com.mojang.blaze3d.vertex.VertexFormatElement;
  * <strong>The element is added to {@code DefaultVertexFormat.ENTITY} itself, and every other way of
  * doing it is wrong here.</strong> Iris puts its own object in the buffer builder's hand
  * ({@code mixin/vertices/MixinBufferBuilder.iris$extendFormat}) and gives its own pipelines that
- * object to bind; this engine hands entity geometry back to the game's pipelines on every road where
- * a pack serves nothing, the warm up that follows a load included, so the mesh and the game's own
- * binding have to be the same width or the game draws the world at the wrong stride. Two more
+ * object to bind; this engine hands entity geometry back to the game's pipelines on every road
+ * where a pack serves nothing, the warm up that follows a load included, so the mesh and the game's
+ * own binding have to be the same width or the game draws the world at the wrong stride. Two more
  * consequences make the same choice: {@code BufferBuilder} picks its fast write path for an entity
- * vertex by comparing the format by IDENTITY ({@code BufferBuilder:64}, {@code entityFormat =
+ * vertex by comparing the format by IDENTITY ({@code BufferBuilder:65}, {@code entityFormat =
  * format == DefaultVertexFormat.ENTITY}) and writes that path at literal offsets, and
  * {@code RenderPipelines} builds every entity pipeline out of the same field at class init.
  * Lengthening the object leaves all three agreeing with no one having to be told.
@@ -38,7 +38,7 @@ public final class EntityMesh {
 
 	/**
 	 * The name the game gives the overlay, and the one element of {@code DefaultVertexFormat} no
-	 * format but the entity one carries. It is what tells the entity format apart from the fifteen
+	 * format but the entity one carries. It is what tells the entity format apart from the thirteen
 	 * others built in the same class initialiser, and it is a better question than counting them:
 	 * a format is recognised by what it holds rather than by the order it was written in.
 	 */

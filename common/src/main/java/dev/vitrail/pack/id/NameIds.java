@@ -70,7 +70,7 @@ public final class NameIds {
 	/**
 	 * What this table answers for a name the pack never mapped, and it is not nought: nought is a
 	 * number a pack may hand out itself, {@code item.0} being a legal line. Iris answers the same
-	 * ({@code IdMap.java:161}, {@code defaultReturnValue(-1)}), and what a pack meets on the mesh is
+	 * ({@code IdMap.java:162}, {@code defaultReturnValue(-1)}), and what a pack meets on the mesh is
 	 * that value carried unsigned, which is 65535.
 	 */
 	public static final int NONE = -1;
