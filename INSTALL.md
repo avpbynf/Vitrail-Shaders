@@ -205,18 +205,22 @@ is what tells a wrong gbuffer from a wrong composite. `dump=` is the one that
 answers what no picture can, since a value can be non zero, plausible and wrong.
 
 A settings screen covers all of it in game: the I key, the Config button in the
-mod list, or the icon in the pause menu. It opens on the pack list, reads each
-pack's own menu layout, and imports the settings file Iris left in
-`shaderpacks/` when a pack has none here yet. The list starts with None, which
-turns every pack off and leaves the game drawing its own image. A setting reaches
-the world when Apply is pressed and at no other moment: leaving the screen drops
-what was clicked and never applied. A program that fails to compile is reported
+mod list, or the icon in the pause menu. It is the screen of the engine packs are
+written against, ported rather than approximated, so it looks and behaves like
+that one. It opens on the pack list, reads each pack's own menu layout, and
+imports the settings file Iris left in `shaderpacks/` when a pack has none here
+yet. The row at the head of the list turns shaders off altogether and leaves the
+game drawing its own image. Clicking a pack only selects it: Apply writes what
+you changed and reads the pack again without closing, Done does both and closes,
+and Cancel throws the changes away. A program that fails to compile is reported
 in the log and the game keeps its own rendering rather than crashing.
 
-Nothing is watched for changes, neither `vitrail/` nor `shaderpacks/`. Edit any
-of it by hand while the game runs, then press Reload in the settings screen and
-the pack is read again from disk, whole; the jar never needs rebuilding for any
-of this.
+The pack folder is watched, so a pack dropped into it turns up in the list on its
+own. Nothing inside a pack is watched, and neither is `vitrail/`: an edit made by
+hand to either takes effect the next time the pack is read, which Apply does
+whenever there is something to write and which changing pack always does. Editing
+a pack's GLSL alone therefore needs the game restarted, there being nothing left
+for Apply to write; the jar never needs rebuilding for any of it.
 
 ## Switching the graphics backend to Vulkan
 

@@ -538,6 +538,43 @@ GNU Lesser General Public License version 3
   drawn rather than after, IrisElementRow lines 162 to 164, where the order leaves the face lit from
   the previous frame while the label is lit from this one.
 
+  common/src/main/java/dev/vitrail/screen/OptionList.java is
+  net.irisshaders.iris.gui.element.ShaderPackOptionList: the header entry with the page's name
+  scrolled rather than cut, the divider under it, the way back off a sub page, the import, export and
+  reset controls with their tooltips anchored on their own corners and reset held grey until shift is,
+  and the row entry that lays its cells out by dividing the row's width and works out which one the
+  mouse is over from where it sits across the row rather than from each cell's rectangle.
+  common/src/main/java/dev/vitrail/screen/PageWidget.java is
+  net.irisshaders.iris.gui.element.widget.AbstractElementWidget together with its
+  CommentedElementWidget, whose only content is the two comment methods, and
+  common/src/main/java/dev/vitrail/screen/BlankWidget.java is that class's EMPTY.
+  common/src/main/java/dev/vitrail/screen/OptionWidget.java is
+  net.irisshaders.iris.gui.element.widget.BaseOptionElementWidget, its measuring of the value box and
+  of what the name has left, its drawing coordinates, its amber for a value not yet applied, and its
+  three gestures. Its subclasses follow: ToggleWidget.java is BooleanElementWidget, with the comment
+  explaining why a default value is drawn without colour; ValueWidget.java is StringElementWidget;
+  SliderWidget.java is SliderElementWidget, queueing only when the handle is let go; ProfileWidget.java
+  is ProfileElementWidget, with the cycle order ProfileSet.scan hands back; and LinkWidget.java is
+  LinkElementWidget. common/src/main/java/dev/vitrail/screen/FileDialog.java is
+  net.irisshaders.iris.gui.FileDialogUtil, and
+  common/src/main/java/dev/vitrail/screen/SettingsScreen.java is
+  net.irisshaders.iris.gui.screen.ShaderPackScreen: the two views and the switch that applies on the
+  way between them, the three buttons of the bottom row and the two above it, the eye and F1, the
+  notification line, the comment panel with its splitting on sentences, the queue of what must be drawn
+  after every row, the two fades and the blur they gate, and the files dropped on either view.
+
+  Six things in that second group are not transcriptions. Iris keeps two maps from element class to
+  factory, OptionMenuConstructor, because its menu elements are an open hierarchy; ours are a sealed
+  interface, so the same job is a switch the compiler checks. Its NavigationController is a deque and
+  two delegations, and the deque lives in the screen here, where this project already kept its page
+  history. Its TOP_LAYER_RENDER_QUEUE is a static Set on the screen class and is an ordered list on the
+  instance here. Its option page draws a header and a footer separator guarded on a fade that answers
+  nought for as long as that page is the view being shown, ShaderPackScreen lines 97 to 103, so the two
+  blits can never run and are not carried. It builds a new pack list on every init without closing the
+  old one, which leaks a folder watch key per resize; the old one is closed here first. And its link
+  element draws its arrow with seven hex digits rather than eight, LinkElementWidget line 64, so the
+  arrow comes out at six per cent alpha; it is drawn opaque here.
+
   Nothing else in Vitrail is derived from Iris. Of its GLSL transformation machinery, which links
   against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that
   code is here, and the translator in dev.vitrail.glsl is this project's own.
