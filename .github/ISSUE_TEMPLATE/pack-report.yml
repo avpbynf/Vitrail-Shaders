@@ -1,0 +1,99 @@
+name: A pack does not draw as it should
+description: An image that is wrong, missing, or unlike the same pack elsewhere.
+labels: ["pack compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two things close most of these, and both are quicker than this form.
+
+        [Pack compatibility](https://github.com/avpbynf/Vitrail-Shaders/blob/main/docs/compatibility.md)
+        starts from what you are seeing and names the cause. Several of the shapes that get reported
+        are the game's own behaviour or the pack's default settings rather than this engine, and that
+        page says how to tell which.
+
+        And what this engine is known to be missing is
+        [open as issues already](https://github.com/avpbynf/Vitrail-Shaders/issues?q=is%3Aissue+is%3Aopen+label%3A%22known+limitation%22).
+        A symptom that matches one of them is worth a comment there, where it will be read against
+        the rest of that gap, rather than a report of its own.
+
+        The log matters more here than the description does. The engine says at load what it refused,
+        what it could not serve, and which program it chose for each pass, so most of what you are
+        about to write is already in it, in words, at the moment it happened.
+
+  - type: input
+    id: pack
+    attributes:
+      label: The pack, and its version
+      placeholder: BSL v10.1.3
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: What you see
+      description: >
+        What the picture does, and where it does it: a dimension, a time of day, standing under
+        water, whatever it takes for somebody else to stand where you are standing. Screenshots go
+        here, and one of the same spot with the pack running on Iris is worth more than any
+        description of the difference.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reference
+    attributes:
+      label: Does the same pack do this on Iris?
+      description: >
+        Iris on the OpenGL backend is what this engine is measured against, so a pack behaving the
+        same way there is behaving as it was written to, and the answer is in the pack rather than
+        here. Not having tried is a fine answer.
+      options:
+        - It draws correctly on Iris
+        - It does the same on Iris
+        - Not tried
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: The log
+      description: >
+        `logs/latest.log` from the session you saw it in, attached as a file rather than pasted. Its
+        first line names the version that is actually running, which is not always the one you meant
+        to install.
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Vitrail and its loader, Minecraft, Sodium, Chloride, and anything else in `mods/`.
+      placeholder: Vitrail 0.3.0-alpha.1 for NeoForge, MC 26.2, Sodium 0.9.1, Chloride 1.4.0
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before reporting
+      description: Every one of these has produced a report that turned out not to be a defect.
+      options:
+        - label: >
+            The log says the game came up on the Vulkan backend. A failed Vulkan start drops the
+            setting back to OpenGL and the dying process rewrites `options.txt` over any edit, so
+            what you typed there is not evidence of what ran.
+          required: true
+        - label: >
+            The pack's own setting for the effect is on. Depth of field, motion blur and custom sun
+            discs are routinely shipped switched off, and a pass that never ran is not a pass that
+            failed.
+          required: true
+        - label: >
+            The world was rebuilt after the pack changed, and not merely reloaded. Block numbers
+            travel on the vertex and no two packs number them alike, so nothing seen before that
+            rebuild means anything.
+          required: true
