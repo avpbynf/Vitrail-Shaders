@@ -238,9 +238,14 @@ jobs:
       # number itself the one this job checked the tag against. CurseForge has no version object at
       # all, only files, so there the line changes nothing and `name` is what a reader sees.
       #
-      # The version type is still left to the action, and still reads the jar rather than this file:
-      # it tells an alpha from a beta from a release by the word in the version, and `+neoforge`
-      # appended to `0.1.0-alpha.1` leaves that word exactly where it was.
+      # The version type is the one thing NOT left to the action, which would read the word out of
+      # the version and file an alpha. CurseForge hides an alpha behind a filter its own navigation
+      # sets, `showAlphaFiles=hide` on the Files link of every project page, so this one sat behind
+      # an empty page: five files uploaded and in place, and a reader who clicked Files told there
+      # were no results. Nothing is lost by saying beta here. The word is still in the version
+      # number, in the tag, in the GitHub release marked as a prerelease, and in the first paragraph
+      # of both store pages, which is where it informs somebody; as a file type it described nothing
+      # those do not say and hid the files themselves.
       #
       # `java` is CurseForge's alone. Modrinth has no field for it and the action never sends it
       # there, so the line is not the pair of a missing one.
@@ -257,6 +262,7 @@ jobs:
           files: ${{ steps.jars.outputs.neoforge }}
           name: ${{ steps.which.outputs.tag }} (NeoForge)
           version: ${{ steps.version.outputs.version }}+neoforge
+          version-type: beta
           changelog-file: changelog.md
           loaders: neoforge
           game-versions: "26.2"
@@ -283,6 +289,7 @@ jobs:
           files: ${{ steps.jars.outputs.fabric }}
           name: ${{ steps.which.outputs.tag }} (Fabric)
           version: ${{ steps.version.outputs.version }}+fabric
+          version-type: beta
           changelog-file: changelog.md
           loaders: fabric
           game-versions: "26.2"
