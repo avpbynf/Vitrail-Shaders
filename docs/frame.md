@@ -204,22 +204,28 @@ not reach: the log names the reason at the moment it happens. Neither case is th
 
 `entities=on` covers more than mobs. Block entities come in by the same door and are asked for
 `gbuffers_block` rather than `gbuffers_entities`, the hand rides its own switch, and a mob's glowing
-eyes are asked for `gbuffers_spidereyes` - blended additively, which is what makes an eye a light
-rather than a decal, and which the pack overrides with `blend.gbuffers_spidereyes` like any other.
+eyes are asked for `gbuffers_spidereyes`, and an enchantment's shine for `gbuffers_armor_glint`.
+
+The eyes answer two things differently from every other piece here, and both come from the game
+drawing them as a light rather than as a surface. They are **blended additively**, which is what
+makes an eye add to the skin under it instead of replacing it, and the pack displaces that with
+`blend.gbuffers_spidereyes` like any other. And they are drawn at **full light**: the light map
+coordinate the pack reads is the brightest one whatever the mob is standing in, and the light map
+image itself is one white texel, so a pack that multiplies by it is left where it started. Given
+only one of those two, an eye comes out darker than the game would have drawn it, and the additive
+blend then adds that darkness.
 
 What decides whether a family can come in at all is **the mesh the game binds for it**, not how
 interesting the family is. The door reads one vertex layout, the game's entity format, and names the
 attributes a pack expects out of its elements. A pipeline binding anything else would have every
 attribute read from the wrong offset - a picture, and a wrong one, with nothing to say so - so it is
-refused and named in the log instead.
+refused and named in the log instead. The glint is the one exception and it is a narrow one: it is
+drawn from a two-element quad the door decodes as well.
 
-That is the whole reason the beacon beam, the lightning bolt, the enchantment glint and the text of
-a sign or a name plate still come from the game's own shader: they bind the block, position-colour,
-position-texture and glyph layouts respectively. They reach the pack's image through the layer
-described below, which means they are visible but flat, and drawn in front of what should hide them.
-The glint has a second reason of its own: its render type animates by moving its texture matrix
-every frame, and a pack reading that matrix here would be handed the identity, so the scroll that is
-the entire effect would be frozen on one frame.
+That is the whole reason the beacon beam, the lightning bolt and the text of a sign or a name plate
+still come from the game's own shader: they bind the block, position-colour and glyph layouts. They
+reach the pack's image through the layer described below, which means they are visible but flat, and
+drawn in front of what should hide them.
 
 Which target is seeded is the first draw buffer of the pass that draws the terrain, resolved through
 the fallback tree, and it is not always target zero: one pack of the corpus serves its terrain
