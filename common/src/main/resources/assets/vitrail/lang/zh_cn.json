@@ -40,5 +40,6 @@
 	"key.vitrail.open_settings": "打开光影包设置",
 	"key.vitrail.reload_pack": "重新加载光影包",
 	"options.vitrail.pack_reloaded": "已重新加载光影包！",
+	"options.vitrail.reload_failed": "重新加载光影包失败！原因：%s",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

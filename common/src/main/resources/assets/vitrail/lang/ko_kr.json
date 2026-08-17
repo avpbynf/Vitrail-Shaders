@@ -40,5 +40,6 @@
 	"key.vitrail.open_settings": "셰이더 팩 설정 열기",
 	"key.vitrail.reload_pack": "셰이더 새로고침",
 	"options.vitrail.pack_reloaded": "셰이더를 다시 불러왔습니다.",
+	"options.vitrail.reload_failed": "셰이더를 새로고침하지 못하였습니다: %s",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

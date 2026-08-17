@@ -942,7 +942,8 @@ public final class PackChain {
 	 * <p>
 	 * Render thread only: {@link #release()} closes GPU buffers and hands back the colour targets,
 	 * which has to happen where {@code draw} runs and outside any render pass. The settings screen
-	 * calls this from Apply, which covers a pack being picked, and from Reset, and both go through
+	 * calls this from Apply, which covers a pack being picked, from Reset, and from its own reload
+	 * button; the key that reads a pack again calls it from the client tick. All of them go through
 	 * here rather than each having a path of its own, so that what the screen applies and what a hand
 	 * edit applies cannot drift apart. The world moving under the pack reads again too, and it is the
 	 * one caller that does not come through here: see {@link #readAgain}.

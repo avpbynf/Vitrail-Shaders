@@ -40,5 +40,6 @@
 	"key.vitrail.open_settings": "Abrir configurações do pacote de sombreadores",
 	"key.vitrail.reload_pack": "Recarregar sombreadores",
 	"options.vitrail.pack_reloaded": "Sombreadores recarregados!",
+	"options.vitrail.reload_failed": "Falha ao recarregar sombreadores! Motivo: %s",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

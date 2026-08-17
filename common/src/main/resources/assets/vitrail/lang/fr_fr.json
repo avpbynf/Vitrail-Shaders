@@ -40,5 +40,6 @@
 	"key.vitrail.open_settings": "Ouvrir les options du pack de shaders",
 	"key.vitrail.reload_pack": "Recharger les shaders",
 	"options.vitrail.pack_reloaded": "Shaders rechargés !",
+	"options.vitrail.reload_failed": "Échec lors du rechargement des shaders ! Raison : %s",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

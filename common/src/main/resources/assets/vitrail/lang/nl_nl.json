@@ -40,5 +40,6 @@
 	"key.vitrail.open_settings": "Shader pack-instellingen openen",
 	"key.vitrail.reload_pack": "Herlaad Shaders",
 	"options.vitrail.pack_reloaded": "Shaders herladen!",
+	"options.vitrail.reload_failed": "Shaders herladen is mislukt! Reden: %s",
 	"key.category.vitrail.keybinds": "Vitrail"
 }
