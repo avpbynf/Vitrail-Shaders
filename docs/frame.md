@@ -208,8 +208,11 @@ eyes are asked for `gbuffers_spidereyes`, and an enchantment's shine for `gbuffe
 
 The eyes answer two things differently from every other piece here, and both come from the game
 drawing them as a light rather than as a surface. They are **blended additively**, which is what
-makes an eye add to the skin under it instead of replacing it, and the pack displaces that with
-`blend.gbuffers_spidereyes` like any other. And they are drawn at **full light**: the light map
+makes an eye add to the skin under it instead of replacing it. A pack displaces that with a `blend`
+directive like any other, with one catch worth knowing: that directive is read under the name of the
+file that really serves the piece, so a pack shipping no `gbuffers_spidereyes` of its own has to
+write the line under whatever the fallback tree lands its eyes on. And they are drawn at
+**full light**: the light map
 coordinate the pack reads is the brightest one whatever the mob is standing in, and the light map
 image itself is one white texel, so a pack that multiplies by it is left where it started. Given
 only one of those two, an eye comes out darker than the game would have drawn it, and the additive
