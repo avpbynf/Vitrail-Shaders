@@ -24,9 +24,12 @@ import net.minecraft.resources.Identifier;
  * does not is a second page of its own video options, because everything this engine has to offer is
  * the pack's own and lives on the pack's pages.
  * <p>
- * Sodium builds this class itself, once, having read the class name out of each loader's metadata,
- * and calls the late registration after the game is up. The name and the version shown beside the
- * icon are read from that same metadata, so they are not written here and cannot drift from it.
+ * Each loader's metadata names this class, and each reaches it its own way: on NeoForge Sodium is
+ * handed the name and builds an instance by reflection, on Fabric the loader's own entry point
+ * machinery builds it and hands the object over. Sodium then walks that list twice, once before the
+ * window is created and once with the game up, and only the second walk reaches the screen. Nothing
+ * here is kept between the two. The name and the version shown beside the icon are read from that
+ * same metadata, so they are not written here and cannot drift from it.
  */
 public final class ConfigEntry implements ConfigEntryPoint {
 

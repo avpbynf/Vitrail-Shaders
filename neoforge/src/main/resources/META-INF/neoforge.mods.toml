@@ -21,10 +21,11 @@ description = '''OptiFine-format shader packs, on Minecraft's native Vulkan rend
 "mixin.features.render.world.sky" = false
 
 # The class Sodium builds to be handed its config builder, which is where the settings screen is put
-# into the video settings. NeoForge offers an annotation for the same thing, and the metadata is
-# taken instead because it is the one form both loaders read, which keeps the class itself free of
-# either. This block is the mod's own properties and is read by mod id, so it does not belong under
-# the [[mods]] entry above however much it looks like it should.
+# into the video settings. Sodium reads it from the metadata here and from an entry point in
+# fabric.mod.json on the other side; it also offers an annotation of its own for this, and the
+# metadata is taken instead because it leaves the class free of anything either loader brings.
+# This block is the mod's own properties and is read by mod id, so it does not belong under the
+# [[mods]] entry above however much it looks like it should.
 [modproperties.${mod_id}]
 "sodium:config_api_user" = "dev.vitrail.sodium.ConfigEntry"
 
