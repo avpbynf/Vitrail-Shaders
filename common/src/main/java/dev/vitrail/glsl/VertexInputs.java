@@ -53,6 +53,26 @@ public enum VertexInputs {
 	ENTITY,
 
 	/**
+	 * The same mesh read by a piece the game draws at full light: {@code UV2} is bound and carries a
+	 * real light map, and the two names a pack reads it under are answered with the brightest value
+	 * instead. {@link EntityVertex} carries the constant.
+	 * <p>
+	 * A second contract over one format, which is what {@link #TERRAIN_SEPARATE_AO} is over
+	 * {@link #TERRAIN}: same elements, same order, same stride, and only the two lines that fill the
+	 * light map names differ. It is a property of the piece and not of the file, the one program name
+	 * in this position walking the fallback tree like any other.
+	 * <p>
+	 * <strong>It is half of what Iris means by full light, and the other half is the sampler.</strong>
+	 * The constant here is {@code transform/transformer/VanillaCoreTransformer.java:117-121}, taken
+	 * where {@code gl/state/ShaderAttributeInputs.java:42} refused {@code UV2}; the white pixel bound
+	 * behind {@code lightmap} is {@code samplers/IrisSamplers.java:202-206}, and
+	 * {@code PackProgram.Loaded#fullbright} is what carries this answer there. A piece given one half
+	 * without the other is served darker than the game would have drawn it, a pack multiplying the
+	 * two.
+	 */
+	ENTITY_FULLBRIGHT,
+
+	/**
 	 * The game's own particle mesh: the four elements of {@code DefaultVertexFormat.PARTICLE}, out of
 	 * which the names a pack reads are made. Two families bind it, the quad particles and the
 	 * weather. {@link ParticleVertex} carries the renaming and says what a particle has not got.
@@ -113,6 +133,15 @@ public enum VertexInputs {
 	}
 
 	/**
+	 * Whether the light map names are answered with the brightest value rather than with the element
+	 * the mesh really carries, which is Iris's full light and is asked of the piece rather than of
+	 * the mesh.
+	 */
+	public boolean fullbright() {
+		return this == ENTITY_FULLBRIGHT;
+	}
+
+	/**
 	 * The names the head declares for itself, which the pack may therefore not use for anything of
 	 * its own.
 	 * <p>
@@ -137,7 +166,7 @@ public enum VertexInputs {
 		return switch (this) {
 			case FULLSCREEN -> LegacyGlsl.FULLSCREEN_ELEMENTS;
 			case TERRAIN, TERRAIN_SEPARATE_AO -> SodiumVertex.ATTRIBUTES;
-			case ENTITY -> EntityVertex.ATTRIBUTES;
+			case ENTITY, ENTITY_FULLBRIGHT -> EntityVertex.ATTRIBUTES;
 			case GLINT -> GlintVertex.ATTRIBUTES;
 			case PARTICLE -> ParticleVertex.ATTRIBUTES;
 			case SKY -> SkyVertex.ATTRIBUTES;

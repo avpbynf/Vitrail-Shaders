@@ -64,10 +64,15 @@ public final class ProgramTranslator {
 	 * @param synthesized vertex inputs the mesh has not got, answered with a constant, by name and
 	 *                    with the type the pack declared them under. Empty for every pass drawn over
 	 *                    a quad, which is every pass this engine drew before milestone six
+	 * @param inputs      where the vertex stage was translated to take its inputs from. Carried out
+	 *                    of the translation rather than tabulated again beside it, so that whoever
+	 *                    binds the samplers reads the very value that wrote the vertex head: the
+	 *                    light map is answered in the head AND behind a sampler, and a piece given
+	 *                    one half without the other is served an image neither authority asked for
 	 */
 	public record TranslatedProgram(Map<ProgramStage, TranslatedUnit> stages,
 			List<TranslatedUnit.Uniform> uniforms, List<TranslatedUnit.Uniform> samplers,
-			Map<String, String> synthesized) {
+			Map<String, String> synthesized, VertexInputs inputs) {
 	}
 
 	/**
@@ -205,7 +210,8 @@ public final class ProgramTranslator {
 			translated.put(stage, prepare.render(block, bound, varyings, shadowed));
 		});
 
-		return new TranslatedProgram(Map.copyOf(translated), block, bound, Map.copyOf(synthesized));
+		return new TranslatedProgram(Map.copyOf(translated), block, bound, Map.copyOf(synthesized),
+				inputs);
 	}
 
 	/**

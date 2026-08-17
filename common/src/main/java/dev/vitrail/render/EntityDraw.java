@@ -233,13 +233,31 @@ public final class EntityDraw {
 	 *                      and never with {@link #blended()}, its pipeline being the mob's and its
 	 *                      moment its pass's; an entity row answers with {@link #blended()}, and
 	 *                      carries false here
+	 * @param fullbright    whether the game draws this piece at full light, so that the light map
+	 *                      names are answered with a constant and the sampler behind them with one
+	 *                      white texel. True for the two rows of {@link #FIXED} and no other so far.
+	 *                      <strong>A column of the row and not a reading of the program name</strong>,
+	 *                      which is where Iris keeps it as well: its lighting model hangs off the
+	 *                      {@code ShaderKey} ({@code pipeline/programs/ShaderKey.java:44,45}), and
+	 *                      three of its program names carry keys of both kinds, one row drawn at the
+	 *                      light it stands in and one of the same geometry lit whole
+	 *                      ({@code :38,40} for {@code gbuffers_entities} alone)
 	 */
 	record Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
-			RenderStage stage, boolean afterDeferred) {
+			RenderStage stage, boolean afterDeferred, boolean fullbright) {
 
 		/** A piece of the mob half, which is every row of the table above. */
 		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest) {
-			this(pipeline, element, program, alphaTest, RenderStage.NONE, false);
+			this(pipeline, element, program, alphaTest, RenderStage.NONE, false, false);
+		}
+
+		/**
+		 * A piece whose moment or whose side of the stage is its own, which is the hand's rows, the
+		 * glint's four and the shadow table. None of them is drawn at full light.
+		 */
+		Element(RenderPipeline pipeline, String element, String program, AlphaTest alphaTest,
+				RenderStage stage, boolean afterDeferred) {
+			this(pipeline, element, program, alphaTest, stage, afterDeferred, false);
 		}
 
 		/**
@@ -286,9 +304,24 @@ public final class EntityDraw {
 			return glint() ? DefaultVertexFormat.POSITION_TEX : DefaultVertexFormat.ENTITY;
 		}
 
-		/** Where the vertex stage of this piece takes its inputs from, which is the same answer. */
+		/**
+		 * Where the vertex stage of this piece takes its inputs from, which is the same answer plus
+		 * one: the entity mesh is read under two contracts, and a piece the game draws at full light
+		 * takes the one that answers the light map names with a constant.
+		 * <p>
+		 * <strong>Two contracts and not two formats</strong>, which is why {@link #format} does not
+		 * split with it and must not: the mesh is the same thirty-six bytes and {@code UV2} is bound
+		 * and declared either way. What changes is one line of the vertex head and the texture behind
+		 * one sampler. It reaches the translation because this constant is part of the key a program
+		 * is translated under, so the two contracts are two modules and neither is handed the other's
+		 * text.
+		 */
 		VertexInputs inputs() {
-			return glint() ? VertexInputs.GLINT : VertexInputs.ENTITY;
+			if (glint()) {
+				return VertexInputs.GLINT;
+			}
+
+			return this.fullbright ? VertexInputs.ENTITY_FULLBRIGHT : VertexInputs.ENTITY;
 		}
 
 		/** One word for the log, which has to say which of the four families a line is about. */
@@ -935,6 +968,18 @@ public final class EntityDraw {
 	 * is not read off the pipeline: Iris hangs an additive override on the program name itself, which
 	 * {@link EntityProgram} takes from {@code ProgramFallbacks} rather than from the pipeline.
 	 * <p>
+	 * <strong>Both are drawn at FULL LIGHT, and it is the answer that decides whether they are worth
+	 * serving at all.</strong> Iris marks both keys {@code LightingModel.FULLBRIGHT}
+	 * ({@code pipeline/programs/ShaderKey.java:44,45}), which reaches its shaders as two things: the
+	 * light map names are answered with a constant rather than out of the mesh
+	 * ({@code gl/state/ShaderAttributeInputs.java:42} into
+	 * {@code transform/transformer/VanillaCoreTransformer.java:117-121}) and the name {@code lightmap}
+	 * is bound to one white texel ({@code samplers/IrisSamplers.java:202-206}). {@link Element#inputs} is
+	 * where the row hands that on, and both halves come back off the translation so that they cannot
+	 * part company. A pack whose {@code gbuffers_spidereyes} multiplies by the light map would
+	 * otherwise draw an enderman's eyes as dark as the block it stands on, and the additive blend
+	 * above is what would make that darkness the thing being added.
+	 * <p>
 	 * <strong>Both bind {@code DefaultVertexFormat.ENTITY}</strong> ({@code RenderPipelines.java:361}
 	 * and the {@code ENTITY_EMISSIVE_SNIPPET} at {@code :64}), which is why this family could be
 	 * served at all and the four beside it could not: the door decodes that one format.
@@ -948,10 +993,10 @@ public final class EntityDraw {
 
 	static {
 		FIXED.put(RenderPipelines.EYES, new Element(RenderPipelines.EYES, "eyes", SPIDER_EYES,
-				AlphaTest.NON_ZERO));
+				AlphaTest.NON_ZERO, RenderStage.NONE, false, true));
 		FIXED.put(RenderPipelines.ENTITY_TRANSLUCENT_EMISSIVE,
 				new Element(RenderPipelines.ENTITY_TRANSLUCENT_EMISSIVE, "eyes_emissive", SPIDER_EYES,
-						CUTOUT));
+						CUTOUT, RenderStage.NONE, false, true));
 	}
 
 	/**

@@ -107,6 +107,27 @@ public final class PackProgram {
 		}
 
 		/**
+		 * Whether this program was translated for a piece the game draws at full light, and therefore
+		 * whether the name {@code lightmap} is bound to one white texel rather than to the game's own
+		 * image.
+		 * <p>
+		 * <strong>Read off the translation and not tabulated beside it</strong>, which is
+		 * {@link #readsGameTransforms}'s reason with a different consequence: full light is TWO
+		 * answers, the constant the vertex head hands the light map names and the texture the fragment
+		 * stage samples, and a pack multiplies one by the other. Given the constant alone the piece
+		 * comes out with whatever light the mob is standing in; given the texture alone it comes out
+		 * at the light the mesh carries. Both are darker than the game would have drawn it, and
+		 * neither says anything.
+		 * <p>
+		 * Iris answers both off one field for the same reason, {@code ShaderKey}'s lighting model
+		 * reaching the head through {@code gl/state/ShaderAttributeInputs.java:42} and the sampler
+		 * through {@code samplers/IrisSamplers.java:202-206}.
+		 */
+		public boolean fullbright() {
+			return this.program.inputs().fullbright();
+		}
+
+		/**
 		 * Whether any stage of this program reads the game's own per draw transforms, and therefore
 		 * whether the pipeline has to carry the bind group that block is bound through.
 		 * <p>
