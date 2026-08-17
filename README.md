@@ -10,7 +10,6 @@
 
 <p align="center">
   <a href="https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders"><img src="https://img.shields.io/badge/download-CurseForge-F16436?style=flat-square&logo=curseforge&logoColor=white" alt="Vitrail on CurseForge"></a>
-  <a href="https://modrinth.com/project/vitrail-shaders"><img src="https://img.shields.io/badge/download-Modrinth-00AF5C?style=flat-square&logo=modrinth&logoColor=white" alt="Vitrail on Modrinth"></a>
   <img src="https://img.shields.io/badge/status-experimental-C1440E?style=flat-square" alt="Experimental">
 </p>
 
@@ -91,9 +90,9 @@ and will trade image quality for it in the meantime.
 
 There is one jar per loader, NeoForge and Fabric. Both are on
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) and
-[Modrinth](https://modrinth.com/project/vitrail-shaders), and attached to every
-[release](https://github.com/avpbynf/Vitrail-Shaders/releases) here. One run
-builds them and uploads them to all three, so the three carry the same files.
+attached to every [release](https://github.com/avpbynf/Vitrail-Shaders/releases)
+here, put there by the same run, so whichever of the two you take is the same
+file.
 
 Put the one for your loader in `mods/` next to Sodium and Chloride, and switch
 the game to Vulkan: `preferredGraphicsBackend:"vulkan"` in `options.txt`, or
