@@ -220,8 +220,8 @@ The pack folder is watched, so a pack dropped into it turns up in the list on it
 own. Nothing inside a pack is watched, and neither is `vitrail/`: edit either by
 hand while the game runs, then press `R` and the pack is read again from disk,
 whole. From inside the settings screen, where no key reaches, the same thing is
-the small circular arrow at the bottom left. The jar never needs rebuilding for
-any of it.
+the small circular arrow at the bottom left, which like the eye beside it is
+there in a world only. The jar never needs rebuilding for any of it.
 
 ## Switching the graphics backend to Vulkan
 

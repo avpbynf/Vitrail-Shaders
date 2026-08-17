@@ -89,10 +89,16 @@ public final class SettingsKey {
 	 * the choice the settings screen makes for the same reason: what a hand edit reloads and what the
 	 * screen reloads must be the same folder.
 	 * <p>
-	 * The failure is asked for rather than caught, because there is nothing to catch: reading a pack
-	 * never throws out of here, it puts what went wrong where the screen's own bottom line reads it.
-	 * So a press that read nothing has to be told apart by asking that same question, or the chat
-	 * would report a reload that did not happen. Iris says both lines too, {@code Iris.java:180}.
+	 * The failure is asked for rather than caught, because catching is not where it lands: reading a
+	 * pack puts what went wrong where the screen's own bottom line reads it instead of throwing, and
+	 * the load's own catch is what makes that so. So a press that read nothing is told apart by asking
+	 * that same question. Iris says both lines too, {@code Iris.java:184} and {@code Iris.java:191},
+	 * off a catch rather than off a question because throwing is what its own reload does.
+	 * <p>
+	 * <b>One reading that failed still answers as one that worked</b>, and it is the engine's answer
+	 * rather than this line's: a {@code pack.txt} naming a pack the folder no longer holds is warned
+	 * about and then treated as no pack having been asked for, so nothing is left to ask. The screen's
+	 * own bottom line says "no shader pack" in that same case, for the same reason.
 	 */
 	private static void reload() {
 		Path directory = PackChain.session()

@@ -76,8 +76,9 @@ what the next one holds.
   the way to see the change without restarting.
 - **`R` reads the pack again without opening anything**, which is the key the engine packs are written
   against binds for it, and the real loop: edit a shader in your editor, come back to the game, press
-  it. The button stays for the one place the key cannot reach, the settings screen itself, since the
-  game feeds no key while a screen is open.
+  it. The game feeds no key while a screen is open, so from inside the settings screen the button is
+  what reaches it. It says in the chat which of the two happened, and a reading that failed says why,
+  in red.
 - **The blur behind the settings screen fades out with the screen** instead of hanging at full width
   for half a second after the eye has taken the widgets away and then going out in one frame. How
   wide the blur is does not come from the screen in this game, only whether there is one, so the

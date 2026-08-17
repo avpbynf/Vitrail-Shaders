@@ -568,7 +568,7 @@ GNU Lesser General Public License version 3
   passes to GlobalSettingsUniform down to what the screen's own fade has reached. Asking for the blur
   is a yes or a no, so without this half the fade fades nothing.
   common/src/main/java/dev/vitrail/screen/SettingsKey.java carries iris.keybind.reload, on R as Iris
-  binds it, with both of the lines Iris says in the chat afterwards, Iris.java:180. The key that opens
+  binds it, with both of the lines Iris says in the chat afterwards, Iris.java:184 and Iris.java:191. The key that opens
   the settings screen is on I and is NOT Iris's, which binds that screen to O, Iris.java:787; the two
   it binds that have no counterpart here are toggleShaders on K and an unbound wireframe.
 
