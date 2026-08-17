@@ -70,9 +70,18 @@ what the next one holds.
   selection real.
 - **The eye at the bottom right, and F1, take the screen away** so that the world behind it can be
   looked at while a setting is judged. Escape brings it back.
-- **The button that reads a pack again is a small circular arrow** at the left of the second button
-  row, where it used to be a word. Editing a pack's shaders by hand and pressing it is still the way
-  to see the change without restarting.
+- **The button that reads a pack again is a small circular arrow**, in the free space at the bottom
+  left of the screen, mirroring the eye at the bottom right, where it used to be a word on the button
+  row. Editing a pack's shaders by hand and pressing it is still the way to see the change without
+  restarting.
+- **`R` reads the pack again without opening anything**, which is the key the engine packs are written
+  against binds for it, and the real loop: edit a shader in your editor, come back to the game, press
+  it. The button stays for the one place the key cannot reach, the settings screen itself, since the
+  game feeds no key while a screen is open.
+- **The blur behind the settings screen fades out with the screen** instead of hanging at full width
+  for half a second after the eye has taken the widgets away and then going out in one frame. How
+  wide the blur is does not come from the screen in this game, only whether there is one, so the
+  fade was fading nothing.
 - What this engine has to say and the reference has not, a load that failed, how many settings
   `vitrail/options.txt` is holding down and how many passes this backend could not build, is on one
   line at the bottom left.

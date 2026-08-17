@@ -115,6 +115,10 @@ public final class ScreenText {
 
 	public static final String OPEN_SETTINGS = "key.vitrail.open_settings";
 
+	/** The other key, and Iris's {@code keybind.reload}, with what it says once it has read. */
+	public static final String RELOAD_PACK = "key.vitrail.reload_pack";
+	public static final String PACK_RELOADED = "options.vitrail.pack_reloaded";
+
 	/**
 	 * The group that key sits in. Nothing names it and nothing can: the game builds it from the
 	 * category's identifier, in {@code KeyMapping.Category.label()}, so what decides this string is

@@ -22,8 +22,9 @@ public final class VitrailKeys {
 		modBus.addListener(RegisterKeyMappingsEvent.class, event -> {
 			event.registerCategory(SettingsKey.CATEGORY);
 			event.register(SettingsKey.OPEN);
+			event.register(SettingsKey.RELOAD);
 		});
 
-		NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, _ -> SettingsKey.pollAndOpen());
+		NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, _ -> SettingsKey.poll());
 	}
 }

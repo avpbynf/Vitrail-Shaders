@@ -38,5 +38,7 @@
 	"options.vitrail.no_pack": "Nie wczytano żadnego pakietu shaderów",
 	"options.vitrail.pack_off": "Brak pakietu shaderów: gra rysuje własny obraz",
 	"key.vitrail.open_settings": "Otwórz ustawienia pakietu shaderów",
+	"key.vitrail.reload_pack": "Przeładuj Shadery",
+	"options.vitrail.pack_reloaded": "Przeładowano Shadery!",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

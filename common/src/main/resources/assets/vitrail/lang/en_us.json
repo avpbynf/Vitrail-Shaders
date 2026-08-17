@@ -38,5 +38,7 @@
 	"options.vitrail.no_pack": "No shader pack is loaded",
 	"options.vitrail.pack_off": "No shader pack: the game draws its own image",
 	"key.vitrail.open_settings": "Open shader pack settings",
+	"key.vitrail.reload_pack": "Reload Shaders",
+	"options.vitrail.pack_reloaded": "Shaders Reloaded!",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

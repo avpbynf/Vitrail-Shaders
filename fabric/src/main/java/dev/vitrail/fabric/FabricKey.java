@@ -23,6 +23,7 @@ final class FabricKey {
 
 	static void register() {
 		KeyMappingHelper.registerKeyMapping(SettingsKey.OPEN);
-		ClientTickEvents.END_CLIENT_TICK.register(_ -> SettingsKey.pollAndOpen());
+		KeyMappingHelper.registerKeyMapping(SettingsKey.RELOAD);
+		ClientTickEvents.END_CLIENT_TICK.register(_ -> SettingsKey.poll());
 	}
 }

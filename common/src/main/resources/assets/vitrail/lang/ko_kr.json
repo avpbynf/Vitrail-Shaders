@@ -38,5 +38,7 @@
 	"options.vitrail.no_pack": "불러온 셰이더 팩이 없습니다",
 	"options.vitrail.pack_off": "셰이더 팩 없음: 게임이 자체 화면을 그립니다",
 	"key.vitrail.open_settings": "셰이더 팩 설정 열기",
+	"key.vitrail.reload_pack": "셰이더 새로고침",
+	"options.vitrail.pack_reloaded": "셰이더를 다시 불러왔습니다.",
 	"key.category.vitrail.keybinds": "Vitrail"
 }
