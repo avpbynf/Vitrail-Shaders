@@ -38,5 +38,7 @@
 	"options.vitrail.no_pack": "Er is geen shader pack geladen",
 	"options.vitrail.pack_off": "Geen shader pack: het spel tekent zijn eigen beeld",
 	"key.vitrail.open_settings": "Shader pack-instellingen openen",
+	"key.vitrail.reload_pack": "Herlaad Shaders",
+	"options.vitrail.pack_reloaded": "Shaders herladen!",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

@@ -38,5 +38,7 @@
 	"options.vitrail.no_pack": "Набор шейдеров не загружен",
 	"options.vitrail.pack_off": "Набора шейдеров нет: игра рисует собственное изображение",
 	"key.vitrail.open_settings": "Открыть настройки набора шейдеров",
+	"key.vitrail.reload_pack": "Перезагрузить шейдеры",
+	"options.vitrail.pack_reloaded": "Шейдеры перезагружены.",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

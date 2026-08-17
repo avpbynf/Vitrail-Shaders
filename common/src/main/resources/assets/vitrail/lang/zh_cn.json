@@ -38,5 +38,7 @@
 	"options.vitrail.no_pack": "未加载光影包",
 	"options.vitrail.pack_off": "无光影包：游戏绘制自己的画面",
 	"key.vitrail.open_settings": "打开光影包设置",
+	"key.vitrail.reload_pack": "重新加载光影包",
+	"options.vitrail.pack_reloaded": "已重新加载光影包！",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

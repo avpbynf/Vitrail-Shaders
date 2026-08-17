@@ -17,6 +17,7 @@
 		"CustomSubmitMixin",
 		"MixinDefaultChunkRenderer",
 		"DefaultFluidRendererMixin",
+		"GameRendererBlurMixin",
 		"GameRendererHandMixin",
 		"GameRendererMixin",
 		"ItemInHandRendererMixin",

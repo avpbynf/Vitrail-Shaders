@@ -224,7 +224,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 					topCentre + WIDE_BUTTON_PITCH, this.height - 51, WIDE_BUTTON_WIDTH,
 					BUTTON_HEIGHT, Component.empty(), this::switchView));
 			refreshViewSwitch();
-			addRenderableWidget(reload(topCentre - WIDE_BUTTON_PITCH));
+			addRenderableWidget(reload());
 		}
 
 		if (this.minecraft.level != null) {
@@ -240,20 +240,21 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	}
 
 	/**
-	 * Reads the whole pack again from disk, which is the one button on this screen Iris has none of.
+	 * Reads the whole pack again from disk, which nothing else here does on its own: Apply reads the
+	 * pack again only when it had something to write, so a GLSL file edited by hand while the game
+	 * runs would otherwise need a restart. That is the loop this engine is developed on.
 	 * <p>
-	 * It is here because nothing watches a pack's own files: Apply reads the pack again only when it
-	 * has something to write, so without this a GLSL file edited by hand while the game runs could not
-	 * be seen without restarting. That is the loop this engine is developed on.
+	 * Iris answers the same need, and answers it on a key rather than on a button: its
+	 * {@code iris.keybind.reload}, which {@link SettingsKey#RELOAD} is. The button is here as well
+	 * because the game feeds a key mapping only while no screen is open, so from this screen the key
+	 * cannot be pressed at all. Its sprite is the circular arrow Iris cuts at 12,0 of the widgets
+	 * file and never uses.
 	 * <p>
-	 * A sprite rather than a word, at the left end of the row the folder and the view switch share, so
-	 * that neither of those two loses width to it. It mirrors the eye at the other end, and it is
-	 * pushed inside the window rather than off it when there is no room to the left.
+	 * A sprite rather than a word, in the free space to the left of the button rows, mirroring the eye
+	 * in the free space to the right.
 	 */
-	private Button reload(int rowLeft) {
-		int x = Math.max(2, rowLeft - EYE_SIZE - 4);
-
-		return PanelButton.icon(x, this.height - 51, EYE_SIZE, ScreenDraw.Icon.REFRESH,
+	private Button reload() {
+		return PanelButton.icon(besideRows(true), this.height - 39, EYE_SIZE, ScreenDraw.Icon.REFRESH,
 				Component.translatable(ScreenText.RELOAD), () -> {
 					this.error = null;
 					reloadPack();
@@ -261,20 +262,35 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	}
 
 	/**
+	 * Where a lone twenty wide button sits beside the button rows, which is Iris's arithmetic for its
+	 * eye and this screen's mirror of it for the reload.
+	 * <p>
+	 * The rows are centred and three hundred and eight wide, so what is free is whatever the window
+	 * has past them on that side: plenty of room puts the button at a fixed inset from the edge, a
+	 * little centres it in what is left, and none at all presses it against the edge rather than
+	 * pushing it off.
+	 */
+	private int besideRows(boolean onTheLeft) {
+		float edge = this.width / 2.0F + (onTheLeft ? -154.0F : 154.0F);
+		float free = onTheLeft ? edge : this.width - edge;
+
+		if (free > 100.0F) {
+			return onTheLeft ? 50 - EYE_SIZE : this.width - 50;
+		}
+
+		if (free < 20.0F) {
+			return onTheLeft ? 0 : this.width - EYE_SIZE;
+		}
+
+		return (int) (onTheLeft ? free / 2.0F : edge + free / 2.0F) - EYE_SIZE / 2;
+	}
+
+	/**
 	 * The one button with no room for a word: the eye that takes the screen away. Placed in whatever
 	 * space is left to the right of the button rows, which is Iris's arithmetic.
 	 */
 	private Button eye() {
-		float endOfRow = this.width / 2.0F + 154.0F;
-		float free = this.width - endOfRow;
-		int x;
-		if (free > 100.0F) {
-			x = this.width - 50;
-		} else if (free < 20.0F) {
-			x = this.width - EYE_SIZE;
-		} else {
-			x = (int) (endOfRow + free / 2.0F) - 10;
-		}
+		int x = besideRows(false);
 
 		Component label = Component
 				.translatable(this.guiHidden ? ScreenText.GUI_SHOW : ScreenText.GUI_HIDE);
@@ -522,6 +538,23 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	@Override
 	public float listAlpha() {
 		return this.listAlpha;
+	}
+
+	/**
+	 * How wide a blur this screen wants under it this frame, for the frame's own uniform to be held
+	 * down to.
+	 * <p>
+	 * Asking for the blur, which {@link #extractBlurredBackground} does, and saying how wide it is are
+	 * two different things in this game, and the second one is not the screen's to say: the radius
+	 * reaches the shader through {@code GlobalSettingsUniform}, which the game fills from the option
+	 * alone. So the fade is only half a fade until {@code GameRendererBlurMixin} holds that argument
+	 * down to this, and it shows: the eye takes the widgets away in one frame while a blur still at
+	 * its full width waits for this value to fall under one and then goes out at once. Iris does
+	 * exactly the same two things, {@code ShaderPackScreen.java:136} for the asking and
+	 * {@code MixinGameRenderer.java:67} for the width.
+	 */
+	public int blurRadius() {
+		return (int) this.blurAlpha;
 	}
 
 	@Override

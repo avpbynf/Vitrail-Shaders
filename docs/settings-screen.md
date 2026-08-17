@@ -12,7 +12,8 @@ document says the reference behaves some way, that is not a comparison; it is th
 
 Open it from the video settings, where it sits under the mod's own name in the list of pages, with
 the key bound in the game's controls (`I` by default), or from wherever else you reached the mod's
-options.
+options. A second key, `R`, reads the pack again from disk without opening anything, which is what
+makes editing a shader by hand and seeing the result a two second loop.
 
 ## Two views, one screen
 
@@ -67,6 +68,14 @@ pack has no meaning in the next one's file.
 The eye at the bottom right of the screen, in a world, takes every widget away so the world behind
 can be looked at. F1 does the same, and Escape brings it back. This is what makes the screen usable
 for the one thing it is for, which is looking at what a setting did.
+
+The blur behind the screen leaves with the widgets, and that takes two things rather than one. A
+screen says whether it wants a blur under it, which is a yes or a no; how wide that blur is comes
+from the video option and reaches the shader in a uniform the game fills for the whole frame. Fading
+only the first of those fades nothing: the widgets go in one frame, the blur waits at full width for
+the fade to fall under one and then goes out at once. So the screen holds the frame's own radius down
+to what its fade has reached, for as long as it is the screen that is open, which is what the
+reference does too.
 
 ## The gestures
 
@@ -125,11 +134,16 @@ The pack folder is watched, so a pack dropped into it from outside the game appe
 own. Neither reference has a button for that, and neither needs one. A folder that cannot be watched
 is not a broken screen: the list is built once either way and what is lost is that one convenience.
 
-**A pack's own files are a different question, and that is what the small circular arrow at the left
-of the second button row is for.** Nothing watches the inside of a pack, and Apply reads it again only
-when it has something to write, so without that button a GLSL file edited by hand while the game runs
-could not be seen without restarting. It is the one control on this screen the reference has none of,
-and it is here because this engine is developed by editing shaders next to a running game.
+**A pack's own files are a different question, and that is what `R` is for.** Nothing watches the
+inside of a pack, and Apply reads it again only when it has something to write, so without that key a
+GLSL file edited by hand while the game runs could not be seen without restarting. That key is the
+reference's own, and this engine is developed on it: edit a shader in an editor, come back to the
+game, press it.
+
+The small circular arrow at the bottom left of the screen, mirroring the eye at the bottom right, is
+the same thing for the one place the key cannot reach. The game feeds a key mapping only while no
+screen is open, so from the screen where a pack is being worked on, its own key is dead. That button
+is the one control here the reference has none of, and that is why.
 
 ## The profile is worked out, not remembered
 
