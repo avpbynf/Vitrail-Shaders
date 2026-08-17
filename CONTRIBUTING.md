@@ -214,6 +214,34 @@ already pushed to is replaced by one on the new name, GitHub having no way to mo
 one branch to another. `main` and `dev` are exempt from the name, and so is a detached HEAD, which
 is why a rebase replays a branch without ever asking.
 
+## Labels
+
+Everything carries one, requests and issues alike, and neither set is decoration: a list of a dozen
+open things has to say what each one is before any of them is opened.
+
+**A pull request carries the type of its branch, and only that.** The nine are the ones in the table
+above, so the label is not a second opinion about the change: it is the word already in the branch
+name and at the head of every subject the branch carries. `docs/correct-a-page` is labelled `docs`,
+and a branch whose commits are mostly `fix` with a `refactor` among them is labelled `fix`, the same
+way its name was settled.
+
+**An issue carries what it is about instead**, being a report rather than a change:
+
+| label | what it marks |
+| --- | --- |
+| `known limitation` | a gap this engine already knows about, opened here rather than waited for |
+| `pack compatibility` | a pack does not draw as it should |
+| `upstream` | the cause is in another project or in the backend, and nothing here closes it |
+
+beside GitHub's own `bug`, `enhancement` and `question`, which the issue forms set themselves. The
+two sets do not overlap and are not meant to: a type says what a change does, and these say what a
+report is about.
+
+**A request that closes an issue says so in its body**, `Closes #31` on a line of its own, so that
+the issue goes with the merge rather than being noticed weeks later. That is the whole reason the
+known limitations are open as issues rather than living in a file somewhere: a branch can point at
+one, and a reader can see that somebody is on it.
+
 ## Encoding and text
 
 UTF-8 without BOM everywhere, accents included. A BOM breaks several tools in this
