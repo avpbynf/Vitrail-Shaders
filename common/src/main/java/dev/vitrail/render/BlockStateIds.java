@@ -194,6 +194,21 @@ public final class BlockStateIds {
 		return id < 0 ? NONE : packedFrom(id);
 	}
 
+	/**
+	 * The pack's number for one block state as the pack wrote it, unpacked, which is what a block
+	 * entity carries as {@code blockEntityId}.
+	 * <p>
+	 * <strong>Not the same answer as {@link #packed} and not a second table either.</strong> The
+	 * terrain reads its number back out of a word the shader unpacks itself, so what goes on that
+	 * mesh is shifted and has the fluid bit under it; a block entity reads the number as it stands.
+	 * Minus one where the pack named nothing, which is what {@code entity.properties} and
+	 * {@code item.properties} answer there as well, and what Iris answers
+	 * ({@code shaderpack/IdMap.java:161}).
+	 */
+	public static int id(BlockState state) {
+		return table.getInt(state);
+	}
+
 	/** Which table the numbers on a mesh belong to, counted up at every load. See {@link #generation}. */
 	public static int generation() {
 		return generation;

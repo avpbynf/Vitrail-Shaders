@@ -1275,6 +1275,11 @@ public final class EntityDraw {
 		// again one line before every draw.
 		BlockEntityGeometry.clear();
 
+		// And the three identifiers with them, for the same reason and with one difference: they are
+		// dropped at the end of every submission as well, so what this catches is a submission that
+		// left by a road with no return of its own.
+		EntityIdentifiers.clear();
+
 		// Closing the window closes the pass, and that is not the same safety net as the one at the
 		// end of a group. What the game does next is not the same for the two closings and both
 		// refuse an open pass: after the first it copies a depth between targets, which the encoder

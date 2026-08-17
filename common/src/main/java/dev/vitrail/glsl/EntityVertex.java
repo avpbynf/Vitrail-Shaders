@@ -6,16 +6,18 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * What the game's own entity mesh carries, and how the names a pack reads are made out of it.
+ * What the entity mesh carries, and how the names a pack reads are made out of it.
  * <p>
  * {@code DefaultVertexFormat.ENTITY} holds six elements in thirty-six bytes: {@code Position} as
  * three floats, {@code Color} as four normalised bytes, {@code UV0} as two floats, {@code UV1} and
- * {@code UV2} as two signed shorts each, {@code Normal} as four signed bytes. Every pipeline built
- * on the entity snippets binds that format and nothing else, so unlike the chunk mesh there is
- * nothing to unpack and nothing to push: the five names a pack reads are the elements themselves
- * under another spelling.
+ * {@code UV2} as two signed shorts each, {@code Normal} as four signed bytes. This engine appends a
+ * seventh, {@link #IDENTIFIERS}, and appends it to that format rather than to one of its own; the
+ * game picks its fast write path for an entity vertex by comparing the format by IDENTITY, so a
+ * second object would send every entity vertex down the generic road and leave the game's own
+ * pipelines binding a stride the mesh no longer has. {@code EntityMesh} is where that is done and
+ * says the rest.
  * <p>
- * <strong>All six are declared, and no fewer.</strong> The pairing is by name and asymmetric in
+ * <strong>All seven are declared, and no fewer.</strong> The pairing is by name and asymmetric in
  * both directions. A name the stage declares that the format has not got is refused outright,
  * {@code IntermediaryShaderModule.rebind:205-207}. An element the stage does not declare is simply
  * stepped over, and since {@code VulkanRenderPipeline} counts every element while {@code rebind}
@@ -26,10 +28,10 @@ import java.util.Set;
  * the hit flash and the damage tint, and what reads it is not a name of the prologue: the wrapper
  * around {@code main} fetches the texel it points at and hands the colour on as
  * {@code entityColor}, which is where Iris takes it from as well
- * ({@code EntityPatcher.patchOverlayColor}). See {@code GlslTranslator.overlayPrologue}. All six
+ * ({@code EntityPatcher.patchOverlayColor}). See {@code GlslTranslator.overlayPrologue}. All seven
  * elements are declared whether or not a pack asks for any of them, which is safe for the one reason
  * that matters and is measured rather than assumed: the off-game harness reads the SPIR-V of every
- * entity stage of the corpus back and checks that all six variables are still in it, because a
+ * entity stage of the corpus back and checks that all seven variables are still in it, because a
  * variable the compiler dropped is one {@code rebind} cannot find.
  * <p>
  * Written as macros rather than as globals for the reason {@link LegacyGlsl#FULLSCREEN_ATTRIBUTES}
@@ -39,9 +41,29 @@ import java.util.Set;
  */
 public final class EntityVertex {
 
-	/** The elements of the entity mesh, in the format's own order. */
+	/**
+	 * The element this engine appends to the game's own entity format, holding the three identifiers
+	 * a pack tells one entity, block entity or held item apart by.
+	 * <p>
+	 * <strong>Four lanes of which three are read</strong>, which is Iris's own shape
+	 * ({@code vertices/IrisVertexFormats.java:30}, four unsigned shorts) and is not a round number
+	 * picked for looks: a vertex has to be a multiple of four bytes wide, so three shorts would be
+	 * followed by two bytes of padding anyway.
+	 * <p>
+	 * <strong>Unsigned, and that decides what a pack reads for a name it never mapped.</strong> The
+	 * tables answer -1 there, the lane holds it as {@code 0xFFFF}, and a stage reading the element as
+	 * unsigned gets 65535 rather than -1. That is what Iris hands over as well, its element being
+	 * unsigned too and its input an {@code ivec3} the driver zero extends into, so a pack testing that
+	 * name meets the same number under both engines.
+	 */
+	public static final String IDENTIFIERS = "EntityIds";
+
+	/**
+	 * The elements of the entity mesh, in the format's own order, the six the game lays out and the
+	 * one this engine appends after them. {@code EntityMesh} is what appends it.
+	 */
 	public static final List<String> ATTRIBUTES =
-			List.of("Position", "Color", "UV0", "UV1", "UV2", "Normal");
+			List.of("Position", "Color", "UV0", "UV1", "UV2", "Normal", IDENTIFIERS);
 
 	/**
 	 * What the light map names read on a piece the game draws at full light, which is the value a
@@ -61,7 +83,7 @@ public final class EntityVertex {
 	}
 
 	/**
-	 * The head of an entity vertex stage: the six elements, the names a pack reads made out of
+	 * The head of an entity vertex stage: the seven elements, the names a pack reads made out of
 	 * five of them, and whatever the pack asks for that the mesh has not got.
 	 *
 	 * @param used        every name the rewritten body mentions, so that nothing is declared for a

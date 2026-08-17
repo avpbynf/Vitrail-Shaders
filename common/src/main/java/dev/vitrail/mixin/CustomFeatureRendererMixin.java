@@ -2,6 +2,8 @@ package dev.vitrail.mixin;
 
 import dev.vitrail.render.BlockEntityGeometry;
 import dev.vitrail.render.BlockEntityOrigin;
+import dev.vitrail.render.EntityIdentifiers;
+import dev.vitrail.render.SubmittedIdentifiers;
 
 import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.client.renderer.feature.CustomFeatureRenderer;
@@ -34,11 +36,13 @@ public abstract class CustomFeatureRendererMixin {
 	private void vitrail$begin(FeatureFrameContext context, List<CustomFeatureRenderer.Submit> submits,
 			CallbackInfo callback, @Local CustomFeatureRenderer.Submit submit) {
 		BlockEntityGeometry.building(((BlockEntityOrigin) (Object) submit).vitrail$fromBlockEntity());
+		EntityIdentifiers.restore(((SubmittedIdentifiers) (Object) submit).vitrail$identifiers());
 	}
 
 	@Inject(method = "buildGroup", at = @At("RETURN"), require = 1)
 	private void vitrail$end(FeatureFrameContext context, List<CustomFeatureRenderer.Submit> submits,
 			CallbackInfo callback) {
 		BlockEntityGeometry.building(false);
+		EntityIdentifiers.clear();
 	}
 }

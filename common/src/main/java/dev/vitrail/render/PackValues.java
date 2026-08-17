@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.pack.id.BlockIds;
+import dev.vitrail.pack.id.NameIds;
 import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.option.SettingSet;
@@ -125,6 +126,9 @@ public final class PackValues {
 			// all its declarations in one conditional and keeps a fifth of them under the #else, so a
 			// reading with an empty table measures a different pack.
 			BlockStateIds.install(BlockIds.read(source, settings.globalDefines(options)));
+			PackNameIds.install(
+					NameIds.read(source, settings.globalDefines(options), NameIds.Kind.ENTITY),
+					NameIds.read(source, settings.globalDefines(options), NameIds.Kind.ITEM));
 		}
 
 		return values;
