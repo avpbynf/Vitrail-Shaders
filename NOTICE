@@ -563,6 +563,14 @@ GNU Lesser General Public License version 3
   notification line, the comment panel with its splitting on sentences, the queue of what must be drawn
   after every row, the two fades and the blur they gate, and the files dropped on either view.
 
+  Three things on that screen are deliberately not Iris's, each of them put back after the port rather
+  than kept from it. Its cells are skipped by the narrator, AbstractElementWidget.narrationPriority
+  answering NONE, and the focused cell reads out its name and value here. Its reset button is guarded by
+  shift being held, and here it is guarded by the game's own confirmation screen, which is one guard
+  instead of two. And it has no button that reads a pack again, which this engine needs because nothing
+  watches a pack's own files; the circular arrow it cuts for its own refresh button, at 12,0 in the
+  atlas, is reused for it.
+
   Six things in that second group are not transcriptions. Iris keeps two maps from element class to
   factory, OptionMenuConstructor, because its menu elements are an open hierarchy; ours are a sealed
   interface, so the same job is a switch the compiler checks. Its NavigationController is a deque and

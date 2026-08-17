@@ -49,9 +49,20 @@ public final class ScreenText {
 	/** The page's own tools, and the tooltips saying what each of the three would do. */
 	public static final String RESET = "options.vitrail.reset";
 	public static final String RESET_TOOLTIP = "options.vitrail.reset_tooltip";
-	public static final String RESET_SHIFT_TOOLTIP = "options.vitrail.reset_shift_tooltip";
 	public static final String IMPORT_TOOLTIP = "options.vitrail.import_tooltip";
 	public static final String EXPORT_TOOLTIP = "options.vitrail.export_tooltip";
+
+	/** One argument: the pack whose settings would be thrown away. */
+	public static final String RESET_CONFIRM = "options.vitrail.reset_confirm";
+
+	/** One argument: the file that would be emptied, by name. */
+	public static final String RESET_CONFIRM_DETAIL = "options.vitrail.reset_confirm_detail";
+
+	/**
+	 * The button that reads the whole pack again, which Iris has none of and this engine needs: nothing
+	 * watches a pack's own files, so a GLSL file edited by hand has no other way in.
+	 */
+	public static final String RELOAD = "options.vitrail.reload";
 
 	/** Why the import and export windows will not open, since a full screen game hangs behind one. */
 	public static final String FULLSCREEN = "options.vitrail.fullscreen";

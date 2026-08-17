@@ -11,9 +11,11 @@ import dev.vitrail.settings.SettingsFile;
 import dev.vitrail.uniform.Smoothed;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.CommonComponents;
@@ -222,6 +224,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 					topCentre + WIDE_BUTTON_PITCH, this.height - 51, WIDE_BUTTON_WIDTH,
 					BUTTON_HEIGHT, Component.empty(), this::switchView));
 			refreshViewSwitch();
+			addRenderableWidget(reload(topCentre - WIDE_BUTTON_PITCH));
 		}
 
 		if (this.minecraft.level != null) {
@@ -234,6 +237,27 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 		// panel that stayed up after the screen had moved on.
 		this.hoveredCell = null;
 		this.commentTicks = 0;
+	}
+
+	/**
+	 * Reads the whole pack again from disk, which is the one button on this screen Iris has none of.
+	 * <p>
+	 * It is here because nothing watches a pack's own files: Apply reads the pack again only when it
+	 * has something to write, so without this a GLSL file edited by hand while the game runs could not
+	 * be seen without restarting. That is the loop this engine is developed on.
+	 * <p>
+	 * A sprite rather than a word, at the left end of the row the folder and the view switch share, so
+	 * that neither of those two loses width to it. It mirrors the eye at the other end, and it is
+	 * pushed inside the window rather than off it when there is no room to the left.
+	 */
+	private Button reload(int rowLeft) {
+		int x = Math.max(2, rowLeft - EYE_SIZE - 4);
+
+		return PanelButton.icon(x, this.height - 51, EYE_SIZE, ScreenDraw.Icon.REFRESH,
+				Component.translatable(ScreenText.RELOAD), () -> {
+					this.error = null;
+					reloadPack();
+				});
 	}
 
 	/**
@@ -616,6 +640,37 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	}
 
 	/**
+	 * Asks first, and it is the only control on this screen that does. It is also the only one that
+	 * throws away something a player wrote: a settings file can hold an evening of tuning.
+	 * <p>
+	 * Iris guards the same button with shift held instead ({@code ShaderPackOptionList.java:294}), and
+	 * this screen asked before the port, so the confirmation is what came back. One guard and not two.
+	 * The confirmation is the game's own screen rather than a panel of ours, so it is worded, laid out
+	 * and narrated like every other confirmation the player has already answered. Coming back hands it
+	 * this same screen, which rebuilds itself: the page walked into, the scroll and what is pending are
+	 * fields and none of them is touched by going away and returning.
+	 */
+	@Override
+	public void resetSettings() {
+		PackSession loaded = this.session;
+		if (loaded == null) {
+			return;
+		}
+
+		Minecraft client = this.minecraft;
+		client.gui.setScreen(new ConfirmScreen(
+				yes -> {
+					client.gui.setScreen(this);
+					if (yes) {
+						emptySettings();
+					}
+				},
+				Component.translatable(ScreenText.RESET_CONFIRM, loaded.packFileName()),
+				Component.translatable(ScreenText.RESET_CONFIRM_DETAIL,
+						loaded.settingsFile().getFileName().toString())));
+	}
+
+	/**
 	 * Empties this pack's settings file, so that it goes back to what the pack itself declares, then
 	 * applies.
 	 * <p>
@@ -628,8 +683,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	 * is pending rather than keeping it, because a pending value is a change to the settings this is
 	 * discarding.
 	 */
-	@Override
-	public void resetSettings() {
+	private void emptySettings() {
 		PackSession loaded = this.session;
 		if (loaded == null) {
 			return;

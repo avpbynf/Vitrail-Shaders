@@ -7,6 +7,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
+import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import org.jspecify.annotations.Nullable;
@@ -120,6 +121,16 @@ public abstract class OptionWidget extends PageWidget {
 	/** Whether {@code vitrail/options.txt} is holding this setting down. */
 	protected final boolean forced() {
 		return host().values().forced(name());
+	}
+
+	/**
+	 * The name and the value, joined the way the game joins its own so that the separator follows the
+	 * player's language: French puts a space before the colon and Japanese uses a full width one. The
+	 * drawn label cannot be reused, being cut to fit and carrying a colour.
+	 */
+	@Override
+	protected Component narration() {
+		return CommonComponents.optionNameValue(this.plainLabel, valueText());
 	}
 
 	@Override

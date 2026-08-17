@@ -65,8 +65,9 @@ what the next one holds.
   selection real.
 - **The eye at the bottom right, and F1, take the screen away** so that the world behind it can be
   looked at while a setting is judged. Escape brings it back.
-- Resetting a pack's settings asks for shift to be held rather than for a confirmation screen, which
-  is how the reference guards the same button.
+- **The button that reads a pack again is a small circular arrow** at the left of the second button
+  row, where it used to be a word. Editing a pack's shaders by hand and pressing it is still the way
+  to see the change without restarting.
 - What this engine has to say and the reference has not, a load that failed, how many settings
   `vitrail/options.txt` is holding down and how many passes this backend could not build, is on one
   line at the bottom left.

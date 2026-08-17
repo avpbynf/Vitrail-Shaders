@@ -255,15 +255,18 @@ public final class OptionList extends WidgetList<OptionList.BaseEntry> {
 		private static final Component BACK = Component.literal("< ")
 				.append(CommonComponents.GUI_BACK.copy().withStyle(ChatFormatting.ITALIC));
 
-		private static final MutableComponent RESET_HELD = Component
+		/**
+		 * Always this one, and always live. Iris keeps a grey form too and turns the button dead until
+		 * shift is held, which is its guard against losing an evening of tuning to one click; here the
+		 * guard is the game's own confirmation screen, which is what this project's screen asked for
+		 * before the port and what the reader has already answered elsewhere in the game. One guard and
+		 * not two: a button that demands shift AND then asks reads as a button that is broken.
+		 */
+		private static final MutableComponent RESET = Component
 				.translatable(ScreenText.RESET).withStyle(ChatFormatting.YELLOW);
-		private static final MutableComponent RESET_IDLE = Component
-				.translatable(ScreenText.RESET).withStyle(ChatFormatting.GRAY);
 
 		private static final MutableComponent RESET_TOOLTIP = Component
 				.translatable(ScreenText.RESET_TOOLTIP).withStyle(ChatFormatting.RED);
-		private static final MutableComponent RESET_SHIFT_TOOLTIP = Component
-				.translatable(ScreenText.RESET_SHIFT_TOOLTIP).withStyle(ChatFormatting.GOLD);
 		private static final MutableComponent IMPORT_TOOLTIP = Component
 				.translatable(ScreenText.IMPORT_TOOLTIP)
 				.withStyle(style -> style.withColor(TextColor.fromRgb(0xFF4da6ff)));
@@ -299,7 +302,7 @@ public final class OptionList extends WidgetList<OptionList.BaseEntry> {
 							Math.max(MIN_BUTTON_WIDTH, font.width(BACK) + 8))
 					: null;
 
-			this.reset = new WidgetRow.TextElement(RESET_IDLE, _ -> reset());
+			this.reset = new WidgetRow.TextElement(RESET, _ -> reset());
 			this.importButton = new WidgetRow.IconElement(ScreenDraw.Icon.IMPORT,
 					ScreenDraw.Icon.IMPORT_LIT, _ -> importSettings());
 			this.exportButton = new WidgetRow.IconElement(ScreenDraw.Icon.EXPORT,
@@ -308,8 +311,7 @@ public final class OptionList extends WidgetList<OptionList.BaseEntry> {
 			this.tools
 					.add(this.importButton, ICON_BUTTON_WIDTH)
 					.add(this.exportButton, ICON_BUTTON_WIDTH)
-					.add(this.reset,
-							Math.max(MIN_BUTTON_WIDTH, font.width(RESET_IDLE) + 8));
+					.add(this.reset, Math.max(MIN_BUTTON_WIDTH, font.width(RESET) + 8));
 		}
 
 		@Override
@@ -331,17 +333,11 @@ public final class OptionList extends WidgetList<OptionList.BaseEntry> {
 				this.backRow.draw(graphics, x, y, BUTTON_HEIGHT, mouseX, mouseY, a, hovered);
 			}
 
-			// Held shift is what makes reset answer a click at all, and the button says so by going
-			// from grey to yellow. Focus counts as holding it, since a keyboard cannot.
-			this.reset.disabled = !Minecraft.getInstance().hasShiftDown() && !this.reset.isFocused();
-			this.reset.setText(this.reset.disabled ? RESET_IDLE : RESET_HELD);
-
 			this.tools.drawRightAligned(graphics, (x + width) - 3, y, BUTTON_HEIGHT, mouseX, mouseY,
 					a, hovered);
 
 			Font font = Minecraft.getInstance().font;
-			tooltip(graphics, font, this.reset,
-					this.reset.disabled ? RESET_SHIFT_TOOLTIP : RESET_TOOLTIP);
+			tooltip(graphics, font, this.reset, RESET_TOOLTIP);
 			tooltip(graphics, font, this.importButton, IMPORT_TOOLTIP);
 			tooltip(graphics, font, this.exportButton, EXPORT_TOOLTIP);
 		}
@@ -366,16 +362,12 @@ public final class OptionList extends WidgetList<OptionList.BaseEntry> {
 		}
 
 		/**
-		 * Throws this pack's settings away and applies, which needs shift held. Iris guards it the same
-		 * way, and this is the one control on the page that can lose an evening of tuning.
+		 * Throws this pack's settings away and applies, once the screen has asked. The asking is the
+		 * screen's job rather than this row's, since it is a screen that gets pushed over this one.
 		 */
 		private boolean reset() {
-			if (!Minecraft.getInstance().hasShiftDown()) {
-				return false;
-			}
-
-			this.host.resetSettings();
 			ScreenDraw.clickSound();
+			this.host.resetSettings();
 
 			return true;
 		}

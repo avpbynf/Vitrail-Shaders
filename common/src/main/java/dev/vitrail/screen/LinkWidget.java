@@ -121,6 +121,11 @@ public final class LinkWidget extends PageWidget {
 	}
 
 	@Override
+	protected Component narration() {
+		return this.label;
+	}
+
+	@Override
 	public Optional<Component> commentTitle() {
 		return Optional.of(this.label);
 	}
