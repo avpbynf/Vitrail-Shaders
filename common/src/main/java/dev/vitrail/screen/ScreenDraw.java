@@ -147,12 +147,14 @@ public final class ScreenDraw {
 	/**
 	 * One sprite of the atlas, drawn at a point. The coordinates are Iris's, so its icons land where
 	 * its own row put them.
+	 * <p>
+	 * Iris cuts three more out of the same atlas, a magnifying glass, a cross and a circular arrow,
+	 * for a search box and a refresh button neither of which is here: the folder is watched rather
+	 * than refreshed, and no pack folder in the corpus is long enough to search. They are left in the
+	 * texture, which is carried over whole, and not written down as constants nothing reads.
 	 */
 	public record Icon(int u, int v, int width, int height) {
 
-		public static final Icon SEARCH = new Icon(0, 0, 7, 8);
-		public static final Icon CLOSE = new Icon(7, 0, 5, 6);
-		public static final Icon REFRESH = new Icon(12, 0, 10, 10);
 		public static final Icon EXPORT = new Icon(22, 0, 7, 8);
 		public static final Icon EXPORT_LIT = new Icon(29, 0, 7, 8);
 		public static final Icon IMPORT = new Icon(22, 8, 7, 8);

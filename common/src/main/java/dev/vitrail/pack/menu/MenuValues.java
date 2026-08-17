@@ -144,6 +144,18 @@ public final class MenuValues {
 	}
 
 	/**
+	 * Queues everything a settings file names, which is what importing one comes to.
+	 * <p>
+	 * Respelt on the way in, through the same rule the saved and forced layers go through: a file
+	 * written by either engine spells a toggle {@code true}, and a menu works in {@code on} and
+	 * {@code off} because those are the two values a toggle offers. Handing the file's spelling
+	 * straight to a widget would draw every toggle the wrong way round, and silently.
+	 */
+	public void queueAll(Map<String, String> values) {
+		values.forEach((name, value) -> this.pending.put(name, spelt(name, value)));
+	}
+
+	/**
 	 * Picks a profile by queueing every value it names, and keeping nothing else about it.
 	 * <p>
 	 * A profile is a set of values and nothing else. Iris queues them one by one and writes them out

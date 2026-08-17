@@ -29,8 +29,4 @@ public class WidgetList<E extends ContainerObjectSelectionList.Entry<E>>
 	protected int scrollBarX() {
 		return this.width - SCROLLBAR_INSET;
 	}
-
-	public void select(int index) {
-		setSelected(children().get(index));
-	}
 }

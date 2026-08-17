@@ -111,7 +111,11 @@ public final class PackLoader {
 		}
 	}
 
-	private static boolean looksLikeAPack(Path entry) {
+	/**
+	 * Whether a path is worth treating as a pack at all, which is the same question the listing above
+	 * answers and the one the settings screen asks of a file dropped onto it.
+	 */
+	public static boolean looksLikeAPack(Path entry) {
 		if (Files.isDirectory(entry)) {
 			return true;
 		}
