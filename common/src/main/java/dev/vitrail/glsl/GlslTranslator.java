@@ -1755,6 +1755,7 @@ public final class GlslTranslator {
 		if (this.stage == ProgramStage.FRAGMENT) {
 			if (wrapsFragment()) {
 				replace(this.packMainName, PACK_MAIN);
+				this.mainWrapped = true;
 			}
 
 			return;
@@ -1955,12 +1956,20 @@ public final class GlslTranslator {
 
 			// Read by the body, so it stays, and the stage before it has to hand it over instead.
 			// Every name of the declaration and not only the ones read: they share one statement,
-			// so the stage before writes the whole of it or the locations no longer line up.
+			// and a name left out of it is one the module is still refused for.
 			for (String name : declared.names()) {
-				// An array is left where it is, as Iris leaves everything it cannot write an
-				// initialiser for: CompatibilityTransformer.java:473-480 bails on a type its
-				// getInitializer has no default value for, and says so. The declarator carrying
-				// brackets is what tells one here, the type name alone never doing so.
+				// A DIVERGENCE, and an array is the whole of it. Iris patches one:
+				// CompatibilityTransformer.java:467-497 bails only on a type with no numeric
+				// specifier (:473-480), and its declarationTemplate at :68-70 is "out __type
+				// __name;", which carries no array specifier at all. What makes that impossible
+				// here is that the two sides would then disagree on the type, the fragment stage
+				// holding "in float x[4]" against a vertex stage holding "out float x", and this
+				// backend compiles each stage to its own module rather than linking them, so the
+				// disagreement lands as a compile error naming neither stage. What it costs the
+				// image is nothing: the pass is lost either way, here through the refusal it
+				// already had and there through a module that does not build, and no pack of the
+				// corpus declares a varying array. The declarator carrying brackets is what tells
+				// one, the type name alone never doing so.
 				if (declared.declarators().getOrDefault(name, "").equals(declared.type() + " " + name)) {
 					this.unprovidedInputs.put(name, declared.qualifier().isEmpty()
 							? declared.type()
@@ -1992,9 +2001,12 @@ public final class GlslTranslator {
 
 	/**
 	 * What the stage assigns an owed varying, which is the type's zero, exactly as Iris writes it at
-	 * {@code CompatibilityTransformer.java:494} out of {@code getInitializer:351-359}. Every type
-	 * that reaches here spells its own zero the same way, {@link LegacyGlsl#TYPE_NAMES} holding
-	 * nothing but the numeric ones.
+	 * {@code CompatibilityTransformer.java:494} out of {@code getInitializer:351-359}.
+	 * <p>
+	 * {@code type(0)} spells the zero of every type that can reach here. {@link LegacyGlsl#TYPE_NAMES}
+	 * holds the scalars, the vectors and the matrices, and the constructor of each takes a single
+	 * zero; {@code bool} and {@code bvec} are in it too and take one just as well. {@code void} is
+	 * the one member no constructor answers for, and a varying cannot be declared under it.
 	 */
 	private static String initialiser(String name, String qualified) {
 		int type = qualified.lastIndexOf(' ');
@@ -2100,10 +2112,11 @@ public final class GlslTranslator {
 	/**
 	 * One declaration at file scope, and the tokens that would go with it if it were taken out.
 	 *
-	 * @param qualifier   the interpolation qualifier the declaration opens with, empty where it has
-	 *                    none. Kept because a varying handed to the other stage has to be declared
-	 *                    there under the same one, and {@code flat} is the one that matters: an
-	 *                    integer varying is flat or it is nothing
+	 * @param qualifier   the interpolation qualifiers of the declaration, from either side of the
+	 *                    storage keyword, empty where it has none. Kept because a varying handed to
+	 *                    the other stage has to be declared there under the same ones, and
+	 *                    {@code flat} is the one that matters: an integer varying is flat or it is
+	 *                    nothing
 	 * @param declarators each name with the text that declares it, array brackets included, which is
 	 *                    what lets a declaration be written again rather than described
 	 */
@@ -3120,11 +3133,6 @@ public final class GlslTranslator {
 			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " float " + FOG_COORD + ";");
 		}
 
-		// The same rule read from the other end: a varying the NEXT stage declares and this one never
-		// wrote is not a silence but a refusal, so it is declared here rather than taken out there.
-		// The qualifier travels with it, since the two sides have to agree on that as well.
-		this.owedOutputs.forEach((name, qualified) -> lines.add(outDeclaration(name, qualified)));
-
 		// From zero up with no gaps, because a location the game finds nothing declared at is not
 		// left empty: it renumbers what is there and everything above the gap moves down one.
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
@@ -3152,6 +3160,18 @@ public final class GlslTranslator {
 
 			lines.add(order.append(" }").toString());
 		}
+
+		// The same rule as the varying above, read from the other end: a varying the NEXT stage
+		// declares and this one never wrote is not a silence but a refusal, so it is declared here
+		// rather than taken out there. The qualifier travels with it, the two sides having to agree
+		// on that as well.
+		//
+		// BELOW the colour outputs and below the ascending function, for the reason the next block
+		// gives about itself: on a stage that has colour outputs, a plain out declaration met first
+		// would take location nought from the one the game writes back. Only the last stage of a
+		// pipeline has those and only a stage that is not last is ever owed anything, so the two do
+		// not meet today. They are ordered anyway rather than left to that argument holding.
+		this.owedOutputs.forEach((name, qualified) -> lines.add(outDeclaration(name, qualified)));
 
 		// Below the block, since it reads it, and below the outputs and the ascending function for a
 		// reason that decides the picture: a wrapper standing above them would be the first place the
