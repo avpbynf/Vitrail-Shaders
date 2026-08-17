@@ -490,6 +490,34 @@ GNU Lesser General Public License version 3
   cancels for the image and not for the functions, so its smoothness is thresholded as if it were
   porosity.
 
+  common/src/main/resources/assets/vitrail/textures/gui/widgets.png is Iris's own widgets file,
+  copied unchanged in August 2026, and the classes below cut their sprites at its coordinates.
+  common/src/main/java/dev/vitrail/screen/ScreenDraw.java is net.irisshaders.iris.gui.GuiUtil, its
+  four part button, its panel, its text shortening and the seven icons of its top rows.
+  common/src/main/java/dev/vitrail/screen/WidgetRow.java is
+  net.irisshaders.iris.gui.element.IrisElementRow, the row of small controls that is not made of
+  widgets, together with its icon and text elements.
+  common/src/main/java/dev/vitrail/screen/WidgetList.java is
+  net.irisshaders.iris.gui.element.IrisContainerObjectSelectionList, whose whole substance is putting
+  the scrollbar against the right edge of the screen. Its sibling
+  net.irisshaders.iris.gui.element.IrisObjectSelectionList has no counterpart here and cannot have
+  one: AbstractSelectionList.Entry is protected in 26.2, so no class outside that package can bound a
+  type parameter on it, and the same four lines live in the pack list itself, which reaches the entry
+  type as a subclass.
+  common/src/main/java/dev/vitrail/screen/PanelButton.java is
+  net.irisshaders.iris.gui.element.screen.IrisButton and
+  common/src/main/java/dev/vitrail/screen/TextureButton.java is
+  net.irisshaders.iris.gui.OldImageButton.
+  Three things in this group are not transcriptions. Iris enables blending by hand before each blit
+  through com.mojang.blaze3d.opengl.GlStateManager, which is the OpenGL backend's own state machine
+  and has no context to talk to here; the blend state is declared by the render pipeline on both
+  sides, so the calls are dead weight in Iris too and are dropped. Its button fade is dropped with
+  its SmoothedFloat: the calls that applied the alpha are commented out in IrisButton lines 37, 43
+  and 47, and this game's widget base stores the value without reading it, so the mechanism moves no
+  pixel in the reference either. And a row element takes on whether it is hovered before its face is
+  drawn rather than after, IrisElementRow lines 162 to 164, where the order leaves the face lit from
+  the previous frame while the label is lit from this one.
+
   Nothing else in Vitrail is derived from Iris. Of its GLSL transformation machinery, which links
   against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that
   code is here, and the translator in dev.vitrail.glsl is this project's own.
