@@ -99,9 +99,9 @@ page but the pack's first there is also the way back off it.
   What export writes is the *applied* settings, because what it copies is the file, and the file is
   the applied settings.
 - **Reset** empties this pack's settings file and applies, so the pack goes back to what it declares
-  itself. It answers a click only while **shift is held**, and it is grey until then; that is how the
-  reference guards the same button, and it is the only control here that can lose an evening of
-  tuning.
+  itself. It **asks first**, and it is the only control on this screen that does: it is the only one
+  that can lose an evening of tuning. The reference guards the same button with shift held instead,
+  and one guard is enough; a button that demands shift and then asks reads as a button that is broken.
 
 Reset does not touch `vitrail/options.txt`, so anything held down from outside stays held down. It
 drops what is pending, a pending value being a change to the settings it is discarding. And it
@@ -118,11 +118,17 @@ pack. Emptying is what lets somebody watching the file see it go blank.
 
 Either way the line under the title says what happened, for five seconds.
 
-## The pack list watches its folder
+## The folder is watched, the pack is not
 
-There is no reload button, in either reference. The folder is watched, so a pack dropped into it from
-outside the game appears on its own. A folder that cannot be watched is not a broken screen: the
-list is built once either way and what is lost is that one convenience.
+The pack folder is watched, so a pack dropped into it from outside the game appears in the list on its
+own. Neither reference has a button for that, and neither needs one. A folder that cannot be watched
+is not a broken screen: the list is built once either way and what is lost is that one convenience.
+
+**A pack's own files are a different question, and that is what the small circular arrow at the left
+of the second button row is for.** Nothing watches the inside of a pack, and Apply reads it again only
+when it has something to write, so without that button a GLSL file edited by hand while the game runs
+could not be seen without restarting. It is the one control on this screen the reference has none of,
+and it is here because this engine is developed by editing shaders next to a running game.
 
 ## The profile is worked out, not remembered
 
@@ -261,10 +267,14 @@ are a great many of them; dropping blanks would collapse every column a pack lai
 **The drawing is not the game's.** Every button, panel and cell on this screen is cut from the
 reference's own widget texture, carried over under its licence, so a pack author recognises the
 screen they wrote their file against. The price is that a cell is not a widget as far as the game is
-concerned: hit testing and hover are worked out from the width the row gave it, the click sound has
-to be asked for, and **nothing on a pack's page is read out by a screen reader.** The screen this
-replaced was built from vanilla buttons and did narrate. Nothing in the game's API prevents it; it is
-what the screen being ported does, and it is worth writing down rather than losing quietly.
+concerned: hit testing and hover are worked out from the width the row gave it, and the click sound
+has to be asked for.
+
+**Narration is the one thing the reference drops that is not dropped here.** Its cells are skipped by
+the narrator; here the focused cell reads out its name and its value, the way every other button in
+the game does. Nothing in the API forced the loss, and it costs no pixel and no gesture to put back,
+so a pack author sees the same screen either way. Only the focused cell narrates, a screen reader
+being driven by the keyboard.
 
 **What is not paid for** is anything about the model. The layers, the pending set, what Apply writes
 and the layout rules touch no Minecraft class and log nothing, which is what lets the whole of it be

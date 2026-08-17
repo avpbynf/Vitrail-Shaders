@@ -4,6 +4,7 @@ import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.navigation.FocusNavigationEvent;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -24,11 +25,15 @@ import java.util.Optional;
  * handed its place once per frame by the row, and the click sound, which a real button would be
  * given, has to be asked for.
  * <p>
- * <b>Nothing here narrates</b>, {@link #narrationPriority()} answering {@code NONE} as Iris's does.
- * That is a loss against the screen this replaces, whose cells were vanilla buttons and so were read
- * out like every other button in the game. It is not forced by anything in 26.2; it is what the
- * screen being ported does, and the reason for porting it is that packs are written against that
- * screen.
+ * <b>Narration is the one thing here Iris does not do</b>: its cells answer {@code NONE} and are
+ * skipped by the narrator ({@code AbstractElementWidget.narrationPriority}). Nothing in 26.2 forces
+ * that, and the screen this replaces read out like every other button in the game, so it is put back
+ * rather than lost with the rest of the port. It costs no pixel and no gesture, which is why it is
+ * not a divergence to weigh: a pack author sees the same screen either way.
+ * <p>
+ * Only the focused cell narrates. A screen reader is driven by the keyboard, so focus is the question
+ * it asks; answering for the hovered cell as well would need the row to hand its reading down a frame
+ * earlier than it does.
  */
 public abstract class PageWidget implements GuiEventListener, NarratableEntry {
 
@@ -83,12 +88,24 @@ public abstract class PageWidget implements GuiEventListener, NarratableEntry {
 		return this.bounds;
 	}
 
+	/** What a screen reader should say about this cell, or nothing for one that is not reachable. */
+	protected Component narration() {
+		return Component.empty();
+	}
+
 	@Override
 	public NarrationPriority narrationPriority() {
-		return NarrationPriority.NONE;
+		return isFocused() ? NarrationPriority.FOCUSED : NarrationPriority.NONE;
 	}
 
 	@Override
 	public void updateNarration(NarrationElementOutput output) {
+		Component said = narration();
+		if (!said.getString().isEmpty()) {
+			// The game's own wording for a button, so that a cell is announced the way every other
+			// control the player has already met is announced.
+			output.add(NarratedElementType.TITLE,
+					Component.translatable("gui.narrate.button", said));
+		}
 	}
 }

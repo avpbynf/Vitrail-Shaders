@@ -216,11 +216,10 @@ and Cancel throws the changes away. A program that fails to compile is reported
 in the log and the game keeps its own rendering rather than crashing.
 
 The pack folder is watched, so a pack dropped into it turns up in the list on its
-own. Nothing inside a pack is watched, and neither is `vitrail/`: an edit made by
-hand to either takes effect the next time the pack is read, which Apply does
-whenever there is something to write and which changing pack always does. Editing
-a pack's GLSL alone therefore needs the game restarted, there being nothing left
-for Apply to write; the jar never needs rebuilding for any of it.
+own. Nothing inside a pack is watched, and neither is `vitrail/`: edit either by
+hand while the game runs, then press the small circular arrow at the left of the
+second button row and the pack is read again from disk, whole. The jar never needs
+rebuilding for any of it.
 
 ## Switching the graphics backend to Vulkan
 
