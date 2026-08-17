@@ -181,6 +181,17 @@ None of this is retroactive, and what was written before the convention is left 
 a public history to tidy the shape of its subjects would cost every reference anybody holds to it
 and buy a uniformity nobody reads for.
 
+The line falls at what LANDS, and not at what was written. A subject already in `dev` or `main` is
+history and stays as it is, for the reason just given. A branch that was opened before this page and
+has not landed yet is not history: it owes a rebase before it can enter at all, since `dev` has moved
+under it, and a subject is amended in that same gesture. It conforms.
+
+One branch escaped that, on the evening this was written. The branch carrying the settings screen
+held fourteen subjects from before the convention, needed nothing else, and entered `dev` while the
+check had never run on a request. So the log holds fourteen lines this page would refuse, in the days
+just after it. They are left where they are, and this paragraph is what a reader finds instead of
+concluding that the rule was ignored from the start.
+
 ### Both ends of the rule are one file
 
 `.githooks/commit-msg` refuses a subject or a branch name that is not in the form above. Install it
@@ -195,6 +206,13 @@ would agree only until one of them changed.
 
 Catch it at the commit rather than at the request. A subject is amended in one gesture while it is
 still the last one, and rebuilt by hand once nine commits stand on top of it.
+
+The hook reads the name of the branch you are standing on, so a branch opened before this page
+refuses its next commit until it is renamed, wherever that commit was going. Renaming is one command
+and there is nothing to reinstall: `git branch -m <type>/what-it-does`, and the request it was
+already pushed to is replaced by one on the new name, GitHub having no way to move a request from
+one branch to another. `main` and `dev` are exempt from the name, and so is a detached HEAD, which
+is why a rebase replays a branch without ever asking.
 
 ## Encoding and text
 
