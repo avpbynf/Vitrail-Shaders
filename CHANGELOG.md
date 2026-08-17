@@ -16,14 +16,16 @@ what the next one holds.
 
 ### Added
 
-- **The glowing eyes of a spider, an enderman, a phantom or a warden are painted by the pack now**,
-  where the game kept its own shader for them. They go through the program the format keeps for eyes
+- **Glowing eyes are painted by the pack now**, where the game kept its own shader for them: the eyes
+  of a spider, an enderman, a phantom, a breeze and the ender dragon, and the bioluminescent parts of
+  a warden, which the game draws the same way. They go through the program the format keeps for eyes
   alone, and they are added onto the mob's skin rather than laid over it, which is what makes an eye
   read as a light rather than as a sticker. They are also drawn at full brightness whatever the mob
   is standing in, as the game draws them: handed the light of the spot instead, a pack that shades by
   that light would have put out the eyes of anything standing in the dark, which is where they matter
   most. Six of the eight packs tested ask for that light in the program that serves their eyes, and
-  one of them looks the game's light map up with it, which is where it shows on screen.
+  one of them looks the game's light map up with it, which is where it shows on screen. What they do
+  not do yet is darken the mob's own shadow.
 - **The wind a breeze throws and the swirl over a charged creeper are painted by the pack now**,
   where the game kept its own shader for both. What held them back is a texture matrix of the
   game's own that scrolls them, and that matrix is answered out of the game's transforms now, so a

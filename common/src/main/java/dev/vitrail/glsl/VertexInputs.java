@@ -63,7 +63,7 @@ public enum VertexInputs {
 	 * in this position walking the fallback tree like any other.
 	 * <p>
 	 * <strong>It is half of what Iris means by full light, and the other half is the sampler.</strong>
-	 * The constant here is {@code transform/transformer/VanillaCoreTransformer.java:117-121}, taken
+	 * The constant here is {@code transform/transformer/VanillaCoreTransformer.java:117-118}, taken
 	 * where {@code gl/state/ShaderAttributeInputs.java:42} refused {@code UV2}; the white pixel bound
 	 * behind {@code lightmap} is {@code samplers/IrisSamplers.java:202-206}, and
 	 * {@code PackProgram.Loaded#fullbright} is what carries this answer there. A piece given one half

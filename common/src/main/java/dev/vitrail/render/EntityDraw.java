@@ -220,7 +220,8 @@ public final class EntityDraw {
 	 * @param alphaTest what this piece discards at when the pack says nothing. It is the game's own
 	 *                  {@code ALPHA_CUTOUT} define for that pipeline, a tenth where there is one and
 	 *                  no test at all where there is none, and Iris gives the entity programs the
-	 *                  same tenth
+	 *                  same tenth. <strong>One row of {@link #FIXED} takes Iris's answer where the
+	 *                  game has none</strong>, and that javadoc says why
 	 * @param stage         what the pack is told it is drawing. {@code NONE} for a mob, which is not a
 	 *                      reading of what the pass is but Iris's answer, and {@link EntityProgram}
 	 *                      has the four places it was read from; {@code BLOCK_ENTITIES} for a block
@@ -945,11 +946,14 @@ public final class EntityDraw {
 	 * nothing else so far.
 	 * <p>
 	 * <strong>A table of its own because Iris keys these rows differently, and the difference is
-	 * exactly what a twin would destroy.</strong> Every row of {@link #ELEMENTS} reaches Iris through
-	 * {@code getSolid}, {@code getCutout} or {@code getTranslucent}, which is why each of them has a
-	 * block entity twin and two hand twins: those three functions test the hand, then the block entity
-	 * phase, then fall through ({@code pipeline/IrisPipelines.java:188-222}). The two rows below reach
-	 * a CONSTANT instead, {@code p -> ShaderKey.ENTITIES_EYES} and
+	 * exactly what a twin would destroy.</strong> Most rows of {@link #ELEMENTS} reach Iris through
+	 * {@code getSolid}, {@code getCutout} or {@code getTranslucent}, which is why the table is twinned
+	 * at all: those three functions test the hand, then the block entity phase, then fall through
+	 * ({@code pipeline/IrisPipelines.java:188-222}). Three of its rows reach constants there instead,
+	 * the swirl, the crystal beam and the offset cutout ({@code :60,61,62}), and are twinned along with
+	 * the rest by a table built with no filter; whether that costs anything is a question about those
+	 * three rows and not about these two. The two rows below reach a CONSTANT,
+	 * {@code p -> ShaderKey.ENTITIES_EYES} and
 	 * {@code p -> ShaderKey.ENTITIES_EYES_TRANS} ({@code pipeline/IrisPipelines.java:52,53}), which
 	 * consults nothing. Derived into the other three tables they would ask for
 	 * {@code gbuffers_block_translucent} inside a chest's draw and {@code gbuffers_hand_water} inside
@@ -958,9 +962,16 @@ public final class EntityDraw {
 	 * Both keys are {@code ProgramId.SpiderEyes}
 	 * ({@code pipeline/programs/ShaderKey.java:44,45}), so both ask for one name and differ only in
 	 * what they discard at, {@code NON_ZERO_ALPHA} for the plain eyes and {@code ONE_TENTH_ALPHA} for
-	 * the emissive one. That tenth is the game's own {@code ALPHA_CUTOUT} for that pipeline
-	 * ({@code RenderPipelines.java:290}) and the plain eyes pipeline declares none
-	 * ({@code :351-364}), so here the two authorities agree row for row.
+	 * the emissive one. <strong>The two authorities agree on one of those rows and not on the
+	 * other</strong>, and this is the place {@link #ELEMENTS} calls the one where the two halves are
+	 * read differently. The tenth is the game's own {@code ALPHA_CUTOUT} for that pipeline
+	 * ({@code RenderPipelines.java:290}), so the emissive row is both answers at once. The plain eyes
+	 * pipeline declares no {@code ALPHA_CUTOUT} at all ({@code :351-364}), which by the letter of
+	 * {@link Element#alphaTest} would be no test, and the row carries Iris's threshold instead, for the
+	 * reason that settles every such tie here: a pack is written against Iris. What it is worth in the
+	 * picture is not claimed, and the honest answer is that it may be nothing, since a texel this test
+	 * discards adds nothing under the additive blend either and the pipeline writes no depth. A pack
+	 * that writes its own {@code alphaTest} directive settles it for both.
 	 * <p>
 	 * <strong>Both blend, so both belong to the translucent window</strong>, the game declaring
 	 * {@code BlendFunction.TRANSLUCENT} on each ({@code RenderPipelines.java:360,293}). What they are
@@ -973,7 +984,7 @@ public final class EntityDraw {
 	 * ({@code pipeline/programs/ShaderKey.java:44,45}), which reaches its shaders as two things: the
 	 * light map names are answered with a constant rather than out of the mesh
 	 * ({@code gl/state/ShaderAttributeInputs.java:42} into
-	 * {@code transform/transformer/VanillaCoreTransformer.java:117-121}) and the name {@code lightmap}
+	 * {@code transform/transformer/VanillaCoreTransformer.java:117-118}) and the name {@code lightmap}
 	 * is bound to one white texel ({@code samplers/IrisSamplers.java:202-206}). {@link Element#inputs} is
 	 * where the row hands that on, and both halves come back off the translation so that they cannot
 	 * part company. A pack whose {@code gbuffers_spidereyes} multiplies by the light map would
@@ -988,6 +999,15 @@ public final class EntityDraw {
 	 * ({@code rendertype/RenderTypes.java:190-198,242-244}), so there is no depth nudge to reproduce
 	 * and no animation to read out of the game's own transforms, which the last two rows of
 	 * {@link #ELEMENTS} do need.
+	 * <p>
+	 * <strong>Neither casts a shadow, and that is work not done rather than a choice.</strong> Iris
+	 * puts both pipelines in its shadow table as {@code SHADOW_ENTITIES_CUTOUT}
+	 * ({@code pipeline/IrisPipelines.java:105,107}); {@link #SHADOW_ELEMENTS} is derived from
+	 * {@link #ELEMENTS} alone, so a row here has no shadow twin and the draw is dropped inside the
+	 * light's walk, which the engine prints at the moment it happens. Nothing here makes it
+	 * impossible: it is named rather than argued for, and what it costs the image is the sliver of a
+	 * mob's shadow its eyes would have darkened, an eye being a decal on geometry the mob's own rows
+	 * already cast.
 	 */
 	private static final Map<RenderPipeline, Element> FIXED = new LinkedHashMap<>();
 
@@ -1021,10 +1041,12 @@ public final class EntityDraw {
 	 * <strong>{@link #FIXED} is asked before all three, and that is the same fidelity read from the
 	 * other end.</strong> Those rows are constants in Iris's own table rather than calls into the
 	 * three functions that test anything ({@code pipeline/IrisPipelines.java:52,53}), so no mark of
-	 * ours may reach them either. Asked after the hand, an eye drawn while the arm was up would be
-	 * served {@code gbuffers_hand_water}; asked after the block entity mark, an eye on a mob standing
-	 * where a chest had just been submitted would be served {@code gbuffers_block_translucent}. Iris
-	 * answers {@code gbuffers_spidereyes} to both.
+	 * ours may reach them either. What being asked LATER would cost is not the wrong program but no
+	 * program at all: the three tables the marks select are each derived from {@link #ELEMENTS} alone,
+	 * which has no eyes row, so an eye drawn while the arm was up or on a mob standing where a chest
+	 * had just been submitted would find nothing, go back to the game, and be painted flat through
+	 * {@link FeatureLayer}. Iris answers {@code gbuffers_spidereyes} in both moments, so this order is
+	 * the only one that serves them at all.
 	 */
 	@SuppressWarnings("ReferenceEquality")
 	private static Element element(RenderPipeline pipeline) {
@@ -1323,8 +1345,12 @@ public final class EntityDraw {
 		// window is shut, so the game keeps that draw. Iris would serve it, gbuffers_spidereyes being
 		// its constant there too; the obstacle is that this engine binds a piece to one side of the
 		// deferred stage at the LOAD, and an eyes row is bound to the side its window is on. No
-		// renderer of the game can reach it: the four callers of the eyes render type are the ender
-		// dragon and the ender, phantom and spider eye layers, none of which draws in a hand pass.
+		// renderer of the game can reach it, and that is read off both pipelines rather than one: the
+		// eyes render type is asked for by the ender dragon and by the ender, phantom and spider eye
+		// layers (EnderDragonRenderer:37, EnderEyesLayer:14, PhantomEyesLayer:14, SpiderEyesLayer:14),
+		// and the emissive one by the warden's five emissive layers and the breeze's eyes
+		// (WardenRenderer:34,44,54,60,65 and BreezeEyesLayer:19 through RenderTypes:515). None of the
+		// ten draws in a hand pass.
 		boolean inMoment = (element != null && element.hand()) ? HandDraw.wanted()
 				: wanted && element != null && inWindow(element);
 		if (!inMoment || device == null || element == null) {
@@ -1745,11 +1771,11 @@ public final class EntityDraw {
 		// cannot decode has already been reported once and saying it four times would read as four
 		// defects.
 		//
-		// Four GROUPS and not one list, because what stands or falls together is not the same in
-		// each. The entity names walk one picture and hold together WITHIN a half, and the two
-		// halves settle apart, which is the particles' position; the hand's two passes are two
-		// moments of the frame that share no target, so one of them can be served while the other
-		// is not.
+		// GROUPS and not one list, because what stands or falls together is not the same in each.
+		// The entity names walk one picture and hold together WITHIN a half, and the two halves
+		// settle apart, which is the particles' position; the hand's two passes are two moments of
+		// the frame that share no target, so one of them can be served while the other is not. Five
+		// where every switch is on, the eyes being a group of their own for the reason given below.
 		List<List<Element>> groups = new ArrayList<>();
 		if (wanted) {
 			List<Element> family = Stream.concat(served.stream(),

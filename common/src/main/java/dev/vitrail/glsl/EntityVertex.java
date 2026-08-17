@@ -45,10 +45,13 @@ public final class EntityVertex {
 	 * What the light map names read on a piece the game draws at full light, which is the value a
 	 * block at the brightest light level would have carried on the element.
 	 * <p>
-	 * Iris's own constant, {@code transform/transformer/VanillaCoreTransformer.java:117-121}, and the
-	 * number is the game's rather than a round one: {@code LightTexture.pack} puts each of the two
-	 * levels on the element shifted four bits up, so the brightest of the sixteen is fifteen times
-	 * sixteen. Handing a pack anything larger would send it off its own light map.
+	 * Iris's own constant, {@code transform/transformer/VanillaCoreTransformer.java:117-118}, and the
+	 * number is the game's rather than a round one. {@code LightCoordsUtil.pack} shifts the block level
+	 * up by four and the sky level up by twenty ({@code util/LightCoordsUtil.java:13-14}), so each of
+	 * the two lands on its own short with the brightest of the sixteen levels at fifteen times sixteen.
+	 * The game names that value twice itself, {@code FULL_BRIGHT = 0xF000F0} at {@code :9} and
+	 * {@code MAX_SMOOTH_LIGHT_LEVEL = 240} at {@code :11}. Handing a pack anything larger would send it
+	 * off its own light map.
 	 */
 	public static final String FULL_LIGHT = "vec4(240.0, 240.0, 0.0, 1.0)";
 
@@ -80,7 +83,7 @@ public final class EntityVertex {
 		// Still declared under full light, and it has to be: the element is in the format whatever
 		// the piece does with it, and rebind matches by name over the whole format, so a head that
 		// dropped it would move every name after it one location down without a word. Iris keeps it
-		// for the same reason, renaming vaUV2 in both branches (VanillaCoreTransformer.java:118,123).
+		// for the same reason, renaming vaUV2 in both branches (VanillaCoreTransformer.java:115,119).
 		String light = fullbright ? FULL_LIGHT : "vec4(UV2, 0.0, 1.0)";
 
 		lines.add("#define of_Vertex vec4(Position, 1.0)");

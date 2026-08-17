@@ -19,7 +19,12 @@ import java.util.Set;
  * as this project. The original is the enum
  * {@code net.irisshaders.iris.shaderpack.loading.ProgramId}, read on 1 August 2026. Adapted in
  * 2026: the enum became a name to parent map, and the public API mapping the original also
- * carried was left out. It is reproduced rather than guessed because there is no other
+ * carried was left out, as were seven of its eight blend mode overrides. Those seven are the
+ * {@code BlendModeOverride.OFF} the shadow programs each carry
+ * ({@code shaderpack/loading/ProgramId.java:13-19}), and {@code EntityProgram} answers them for the
+ * whole shadow family at once rather than name by name; {@link #blendOverride} carries the eighth,
+ * which is the only one that is not a refusal. It is reproduced rather than guessed because there is
+ * no other
  * authority for it: the format's own documentation does not spell the chain out, and getting
  * an edge wrong means a pack renders something with the wrong program and nothing reports it.
  *

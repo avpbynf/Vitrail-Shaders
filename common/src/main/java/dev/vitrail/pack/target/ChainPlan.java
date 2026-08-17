@@ -150,10 +150,10 @@ public final class ChainPlan {
 					// the deferreds.
 					//
 					// Not counted, and it is the hand's reason rather than the entities': the line
-					// being on does not put a spider, an enderman, a phantom or the dragon in front
-					// of the camera, and nothing else in the game draws with these pipelines. A
-					// verdict that took the eyes for drawn would report targets as written in every
-					// place a plan is built for, which is every place those four mobs are not.
+					// being on does not put one of the six mobs that reach these two pipelines in
+					// front of the camera. A verdict that took the eyes for drawn would report
+					// targets as written in every place a plan is built for, which is every place
+					// none of the six is standing.
 					new NamedProgram("gbuffers_spidereyes", true, false, NOT_EVERYWHERE),
 					// The hand's two passes, which straddle the stage as the particles do and for the
 					// same kind of reason: the solid one is drawn among the game's opaque features and
