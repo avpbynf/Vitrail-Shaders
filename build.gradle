@@ -158,7 +158,7 @@ tasks.register("checkText") {
 	// listing them, so a new icon does not have to be remembered here.
 	def texts = fileTree(rootDir) {
 		include "*.md", "*.gradle", "*.properties", ".gitattributes", ".gitignore"
-		include "common/src/**", "neoforge/src/**", "fabric/src/**", ".github/**"
+		include "common/src/**", "neoforge/src/**", "fabric/src/**", ".github/**", ".githooks/**"
 		// docs/ is prose rather than code, which is exactly why it needs this: a curly quote
 		// pasted from a browser is invisible in a diff and reaches the published page.
 		include "docs/**"

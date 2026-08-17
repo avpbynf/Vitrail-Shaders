@@ -1,0 +1,66 @@
+# The subject of every commit and the name of the branch carrying them, checked against the one form
+# CONTRIBUTING describes. It matters more here than the same check does elsewhere, because a pull
+# request enters `dev` with the rebase button: subjects are replayed verbatim rather than collapsed
+# into the request's title, so what is written on a branch is what the public history keeps.
+#
+# It runs `.githooks/commit-msg`, the same file a contributor installs, one message at a time. The
+# rule therefore has a single home. A workflow rewriting the same regular expression would be a
+# second one, and the two would agree only until somebody changed one of them.
+#
+# What this adds over the hook is the case the hook cannot cover: whoever never ran the one command
+# that installs it, and a pull request from a fork, whose author has read nothing of this repository
+# except what is in front of them.
+#
+# Nothing older than the convention is ever read. The range is the branch's own commits, and the one
+# pull request that would carry the whole history, `dev` into `main`, is exempted below.
+
+name: commits
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commits:
+    # The release request, and it is the only exemption. It carries everything `dev` holds beyond
+    # `main`, which reaches back past the day this convention started; and it carries nothing of its
+    # own, every commit in it having already come through a request checked here.
+    if: github.base_ref != 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The range below asks what the branch holds that the base does not, so the base's history
+          # has to be there to answer it.
+          fetch-depth: 0
+
+      - name: Every subject on the branch, and the branch's own name
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+
+          failed=0
+          # The branch's name goes to the first commit alone. The hook would otherwise repeat the
+          # same complaint about it once per commit, and a branch has only one name.
+          branch=$BRANCH
+          for sha in $(git rev-list --reverse "origin/$BASE_REF..$HEAD_SHA"); do
+            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/message"
+            if ! .githooks/commit-msg "$RUNNER_TEMP/message" "$branch"; then
+              echo "::error::$(git log -1 --format='%h %s' "$sha")"
+              failed=1
+            fi
+            branch=
+          done
+
+          exit $failed
