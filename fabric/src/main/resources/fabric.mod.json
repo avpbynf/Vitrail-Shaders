@@ -18,6 +18,9 @@
 	"entrypoints": {
 		"client": [
 			"dev.vitrail.fabric.VitrailFabric"
+		],
+		"sodium:config_api_user": [
+			"dev.vitrail.sodium.ConfigEntry"
 		]
 	},
 	"mixins": [
