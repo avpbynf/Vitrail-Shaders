@@ -7,9 +7,8 @@ installed on one.
 
 Built jars are attached to the [releases](https://github.com/avpbynf/Vitrail-Shaders/releases),
 one per tag, built by the tag itself rather than uploaded by hand, and mirrored to
-[CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) and
-[Modrinth](https://modrinth.com/project/vitrail-shaders) by that same run, so
-whichever of the three you take is the same file. A version
+[CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) by that
+same run, so whichever of the two you take is the same file. A version
 carrying an identifier after a dash is marked as a pre-release, which is what it
 is. Building from source is below and gives the same thing for whatever commit you
 are on.
