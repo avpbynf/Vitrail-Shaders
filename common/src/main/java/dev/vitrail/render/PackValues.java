@@ -432,14 +432,11 @@ public final class PackValues {
 	 * Grouped and not one entry per name, because the reason is a sentence and the names that share
 	 * one are usually several: a list built the other way printed the same clause three times in a
 	 * row and the names were what got lost in it.
-	 *
-	 * @param entityMesh whether the pass asking draws the entity mesh, which is a second list of
-	 *                   names. {@link UniformGaps} says why the answer differs by pass at all
 	 */
-	public static Map<String, List<String>> standIns(List<String> members, boolean entityMesh) {
+	public static Map<String, List<String>> standIns(List<String> members) {
 		Map<String, List<String>> named = new LinkedHashMap<>();
 		for (String member : members) {
-			String reason = UniformGaps.standIn(member, entityMesh);
+			String reason = UniformGaps.standIn(member);
 			if (reason != null) {
 				named.computeIfAbsent(reason, _ -> new ArrayList<>()).add(member);
 			}

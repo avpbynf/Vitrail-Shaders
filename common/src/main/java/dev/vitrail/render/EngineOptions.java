@@ -137,15 +137,13 @@ final class EngineOptions {
 	 * the picture a reader sees on cloning a picture nobody ships.
 	 * <p>
 	 * <strong>What it still costs is real and is named rather than counted.</strong> The normal is
-	 * carried, {@code DefaultVertexFormat.ENTITY} holding one and the prologue publishing it. What a
-	 * pack reads as a constant rather than as this entity's own are the identifiers: {@code mc_Entity},
-	 * which an entity mesh has no room to carry and the prologue answers with a constant, and the three
-	 * {@link dev.vitrail.uniform.UniformGaps} holds still, {@code entityId}, {@code blockEntityId} and
-	 * {@code currentRenderedItemId}. A pack that branches
-	 * on any of them takes the same branch for every draw, which reads on screen as anything from a
-	 * mob fogged like water to a mob in a colour that belongs nowhere. {@code entityColor} stood
-	 * beside them and has left: it is made from the overlay the mesh really carries, so a hurt mob
-	 * flashes again. The log names every one of them at each load, and closing it is a lot of its own.
+	 * carried, {@code DefaultVertexFormat.ENTITY} holding one and the prologue publishing it, and so
+	 * are {@code entityColor} and the three identifiers, each out of an element of the mesh. What a
+	 * pack still reads as a constant here are {@code mc_Entity}, which Iris does not serve on this
+	 * mesh either, and the two names that would need a value worked out per polygon,
+	 * {@code mc_midTexCoord} and {@code at_tangent}. A pack that branches on one of those takes the
+	 * same branch for every draw. The log names every one of them at each load, and closing it is a
+	 * lot of its own.
 	 * <p>
 	 * Iris routes the same geometry with nothing to switch,
 	 * {@code shaderpack/loading/ProgramId.java:40-41}, so this line is no longer a divergence from it
@@ -159,9 +157,10 @@ final class EngineOptions {
 	 * pack's own {@code gbuffers_hand} and {@code gbuffers_hand_water}. On, with the entities.
 	 * <p>
 	 * It was off for the entities' reason and for one of its own. The entities' reason is above and
-	 * has not changed: the hand comes in by the same door and through the same vertex format, so the
-	 * identifiers above reach a pack as constants here too, {@code currentRenderedItemId} among them,
-	 * which is the one that names what is being held. Its own was that the half that blends served the
+	 * has shrunk with it: the hand comes in by the same door and through the same vertex format, so
+	 * what a pack reads as a constant here is what it reads as a constant there, and
+	 * {@code currentRenderedItemId}, the one that names what is being held, is no longer among them.
+	 * Its own was that the half that blends served the
 	 * ARM alone, and that one is spent: the entities' blending rows landed, every row of that table
 	 * has a hand twin ({@link EntityDraw}), so a translucent block held in hand goes through the water
 	 * pass with the arm and both are the pack's. What still goes back to the game there goes back
