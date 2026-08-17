@@ -16,6 +16,12 @@ what the next one holds.
 
 ### Added
 
+- **The sky of the End is painted by the pack now**, where the game kept its own shader for it. The
+  box of sky and the flash that crosses it both go through the program the format keeps for the
+  textured pieces of the sky, the one that already drew the sun and the moon. Until now that sky was
+  the last piece the game still drew itself: a pack's own sky program never ran in the End, and only
+  its post-processing reached what you saw there. The Nether is the one place left with none of the
+  pack's sky in it, and there the game opens no sky pass at all.
 - **Glowing eyes are painted by the pack now**, where the game kept its own shader for them: the eyes
   of a spider, an enderman, a phantom, a breeze and the ender dragon, and the bioluminescent parts of
   a warden, which the game draws the same way. They go through the program the format keeps for eyes

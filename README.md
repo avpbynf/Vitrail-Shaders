@@ -66,9 +66,9 @@ The backend this runs on is marked experimental by the game itself, and Vitrail
 is earlier still. Point it at a pack and it loads it, settings and all,
 translates its programs once, and runs its frame on the Vulkan backend in the
 order the format prescribes. Drawn through the pack's own programs today: the
-world's terrain and water, the shadow map, the overworld sky and its clouds, the
-weather, the particles, the entities, which covers the mobs and the block
-entities alike, and the player's own hand. A settings screen reads the pack's own
+world's terrain and water, the shadow map, the sky in the overworld and in the
+End, the overworld's clouds, the weather, the particles, the entities, which
+covers the mobs and the block entities alike, and the player's own hand. A settings screen reads the pack's own
 menu layout, and a resource pack's normal and specular maps are served beside the
 blocks they belong to.
 
