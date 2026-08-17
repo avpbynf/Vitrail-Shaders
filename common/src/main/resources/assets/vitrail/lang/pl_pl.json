@@ -40,5 +40,6 @@
 	"key.vitrail.open_settings": "Otwórz ustawienia pakietu shaderów",
 	"key.vitrail.reload_pack": "Przeładuj Shadery",
 	"options.vitrail.pack_reloaded": "Przeładowano Shadery!",
+	"options.vitrail.reload_failed": "Nie udało się przeładować Shaderów! Powód: %s",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

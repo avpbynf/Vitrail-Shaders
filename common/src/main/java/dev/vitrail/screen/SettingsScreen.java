@@ -224,7 +224,12 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 					topCentre + WIDE_BUTTON_PITCH, this.height - 51, WIDE_BUTTON_WIDTH,
 					BUTTON_HEIGHT, Component.empty(), this::switchView));
 			refreshViewSwitch();
-			addRenderableWidget(reload());
+
+			// In a world only, exactly like the eye it mirrors. Out of one no pack is drawing, so
+			// reading one again changes nothing anybody can see and the corner is better left empty.
+			if (this.minecraft.level != null) {
+				addRenderableWidget(reload());
+			}
 		}
 
 		if (this.minecraft.level != null) {
@@ -250,8 +255,8 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	 * cannot be pressed at all. Its sprite is the circular arrow Iris cuts at 12,0 of the widgets
 	 * file and never uses.
 	 * <p>
-	 * A sprite rather than a word, in the free space to the left of the button rows, mirroring the eye
-	 * in the free space to the right.
+	 * A sprite rather than a word, at the bottom left, mirroring the eye at the bottom right down to
+	 * the arithmetic and to appearing in a world alone.
 	 */
 	private Button reload() {
 		return PanelButton.icon(besideRows(true), this.height - 39, EYE_SIZE, ScreenDraw.Icon.REFRESH,
@@ -268,7 +273,9 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	 * The rows are centred and three hundred and eight wide, so what is free is whatever the window
 	 * has past them on that side: plenty of room puts the button at a fixed inset from the edge, a
 	 * little centres it in what is left, and none at all presses it against the edge rather than
-	 * pushing it off.
+	 * pushing it off. That last case is not free space at all, and at the narrowest window the game
+	 * allows the button overlaps the end of a row rather than sitting beside it. It is Iris's own
+	 * arithmetic and its eye does the same on the other side.
 	 */
 	private int besideRows(boolean onTheLeft) {
 		float edge = this.width / 2.0F + (onTheLeft ? -154.0F : 154.0F);

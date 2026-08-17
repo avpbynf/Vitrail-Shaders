@@ -567,10 +567,10 @@ GNU Lesser General Public License version 3
   net.irisshaders.iris.mixin.MixinGameRenderer.iris$modifyBlur, holding the menu blur radius the frame
   passes to GlobalSettingsUniform down to what the screen's own fade has reached. Asking for the blur
   is a yes or a no, so without this half the fade fades nothing.
-  common/src/main/java/dev/vitrail/screen/SettingsKey.java carries Iris's two key bindings,
-  iris.keybind.reload on R and the settings screen on I, with the line it says in the chat once a pack
-  has been read again. Its third binding, the one that switches shaders on and off, has no counterpart
-  here.
+  common/src/main/java/dev/vitrail/screen/SettingsKey.java carries iris.keybind.reload, on R as Iris
+  binds it, with both of the lines Iris says in the chat afterwards, Iris.java:180. The key that opens
+  the settings screen is on I and is NOT Iris's, which binds that screen to O, Iris.java:787; the two
+  it binds that have no counterpart here are toggleShaders on K and an unbound wireframe.
 
   Three things on that screen are deliberately not Iris's, each of them put back after the port rather
   than kept from it. Its cells are skipped by the narrator, AbstractElementWidget.narrationPriority

@@ -40,5 +40,6 @@
 	"key.vitrail.open_settings": "Shader paketi ayarlarını aç",
 	"key.vitrail.reload_pack": "Shaderları Yenile",
 	"options.vitrail.pack_reloaded": "Shaderlar Yeniden Yüklendi!",
+	"options.vitrail.reload_failed": "Shaderları yenileme başarısız! Sebep: %s",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

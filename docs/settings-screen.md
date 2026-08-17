@@ -140,10 +140,12 @@ GLSL file edited by hand while the game runs could not be seen without restartin
 reference's own, and this engine is developed on it: edit a shader in an editor, come back to the
 game, press it.
 
-The small circular arrow at the bottom left of the screen, mirroring the eye at the bottom right, is
-the same thing for the one place the key cannot reach. The game feeds a key mapping only while no
-screen is open, so from the screen where a pack is being worked on, its own key is dead. That button
-is the one control here the reference has none of, and that is why.
+The small circular arrow at the bottom left of the screen, in a world, mirroring the eye at the
+bottom right, is the same thing for the one place the key cannot reach. The game feeds a key mapping
+only while no screen is open, so from the screen where a pack is being worked on, its own key is
+dead. That button is the one control here the reference has none of, and that is why. It keeps the
+eye's condition as well as its corner: out of a world no pack is drawing, so there is nothing a
+reading could show.
 
 ## The profile is worked out, not remembered
 

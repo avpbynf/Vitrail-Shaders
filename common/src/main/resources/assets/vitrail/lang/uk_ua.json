@@ -40,5 +40,6 @@
 	"key.vitrail.open_settings": "Відкрити налаштування пакета шейдерів",
 	"key.vitrail.reload_pack": "Перезавантажити шейдери",
 	"options.vitrail.pack_reloaded": "Шейдери перезавантажено!",
+	"options.vitrail.reload_failed": "Не вдалося перезавантажити шейдери! Причина: %s",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

@@ -40,5 +40,6 @@
 	"key.vitrail.open_settings": "シェーダーパックの設定を開く",
 	"key.vitrail.reload_pack": "シェーダーを再読み込み",
 	"options.vitrail.pack_reloaded": "シェーダーを再読み込みしました！",
+	"options.vitrail.reload_failed": "シェーダーの再読み込みに失敗しました！ 理由: %s",
 	"key.category.vitrail.keybinds": "Vitrail"
 }
