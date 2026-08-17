@@ -508,6 +508,26 @@ GNU Lesser General Public License version 3
   net.irisshaders.iris.gui.element.screen.IrisButton and
   common/src/main/java/dev/vitrail/screen/TextureButton.java is
   net.irisshaders.iris.gui.OldImageButton.
+  common/src/main/java/dev/vitrail/screen/PackList.java is
+  net.irisshaders.iris.gui.element.ShaderPackSelectionList: the row at the top switching shaders on
+  and off, one row per pack with the yellow the applied one is drawn in and the grey every one takes
+  while shaders are off, the bold on the row under the mouse, the line saying a pack can be dropped
+  in, the entry offering somewhere to get one when the folder is empty, the folder watched through a
+  WatchService rather than polled, the row geometry down to the two pixel nudge, and the swallowing of
+  Up on the first row. Its comment about why clicking a pack switches shaders on is reproduced with
+  the behaviour, being the record of a real confusion. Its EnableShadersButtonElement is not carried:
+  nothing constructs it there.
+  Four things in that file are not transcriptions. Its list background and its separators are drawn
+  with the game's in world textures when a world is loaded, where Iris names one texture of each pair
+  and so shows the out of world ones everywhere; the fade over both is Iris's and is kept, being the
+  one place on this screen where such a value reaches a blit's colour argument. The separator
+  identifiers moved from CreateWorldScreen to Screen in 26.2. The message shown when the folder cannot
+  be read is our own sentence rather than its seven lines about an untraceable bug, and is left
+  untranslated for the reason Iris gives for leaving its own untranslated. And a clicked row selects
+  itself, where Iris looks the row up by an index it was built with: that index counts the rows and
+  not the packs, so it already counts the toggle above them and would count wrong the day another row
+  joins it.
+
   Three things in this group are not transcriptions. Iris enables blending by hand before each blit
   through com.mojang.blaze3d.opengl.GlStateManager, which is the OpenGL backend's own state machine
   and has no context to talk to here; the blend state is declared by the render pipeline on both

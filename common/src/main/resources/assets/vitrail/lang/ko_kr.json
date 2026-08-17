@@ -16,6 +16,10 @@
 	"options.vitrail.no_pack": "불러온 셰이더 팩이 없습니다",
 	"options.vitrail.pack_off": "셰이더 팩 없음: 게임이 자체 화면을 그립니다",
 	"options.vitrail.error": "%s",
+	"options.vitrail.shaders_enabled": "셰이더: 활성화됨",
+	"options.vitrail.shaders_disabled": "셰이더: 비활성화됨",
+	"options.vitrail.shaders_none_present": "셰이더: 팩이 없습니다",
+	"options.vitrail.pack_drop": "+ 추가할 셰이더 팩을 끌어다 놓으십시오.",
 	"key.vitrail.open_settings": "셰이더 팩 설정 열기",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

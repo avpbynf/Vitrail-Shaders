@@ -16,6 +16,10 @@
 	"options.vitrail.no_pack": "Nie wczytano żadnego pakietu shaderów",
 	"options.vitrail.pack_off": "Brak pakietu shaderów: gra rysuje własny obraz",
 	"options.vitrail.error": "%s",
+	"options.vitrail.shaders_enabled": "Shadery: Włączone",
+	"options.vitrail.shaders_disabled": "Shadery: Wyłączone",
+	"options.vitrail.shaders_none_present": "Shadery: Brak dostępnych pakietów",
+	"options.vitrail.pack_drop": "+ Przeciągnij i upuść pakiety Shaderów, aby dodać",
 	"key.vitrail.open_settings": "Otwórz ustawienia pakietu shaderów",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

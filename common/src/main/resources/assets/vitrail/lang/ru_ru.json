@@ -16,6 +16,10 @@
 	"options.vitrail.no_pack": "Набор шейдеров не загружен",
 	"options.vitrail.pack_off": "Набора шейдеров нет: игра рисует собственное изображение",
 	"options.vitrail.error": "%s",
+	"options.vitrail.shaders_enabled": "Шейдеры: Включены",
+	"options.vitrail.shaders_disabled": "Шейдеры: Выключены",
+	"options.vitrail.shaders_none_present": "Шейдеры: наборов не обнаружено",
+	"options.vitrail.pack_drop": "+ Перетащите наборы шейдеров для добавления",
 	"key.vitrail.open_settings": "Открыть настройки набора шейдеров",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

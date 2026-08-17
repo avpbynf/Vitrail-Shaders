@@ -16,6 +16,10 @@
 	"options.vitrail.no_pack": "Пакет шейдерів не завантажено",
 	"options.vitrail.pack_off": "Пакета шейдерів немає: гра малює власне зображення",
 	"options.vitrail.error": "%s",
+	"options.vitrail.shaders_enabled": "Шейдери: Увімкнено",
+	"options.vitrail.shaders_disabled": "Шейдери: Вимкнено",
+	"options.vitrail.shaders_none_present": "Шейдери: Немає пакетів",
+	"options.vitrail.pack_drop": "+ Перетягніть пакети шейдерів, щоб додати",
 	"key.vitrail.open_settings": "Відкрити налаштування пакета шейдерів",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

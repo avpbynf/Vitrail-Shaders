@@ -16,6 +16,10 @@
 	"options.vitrail.no_pack": "Er is geen shader pack geladen",
 	"options.vitrail.pack_off": "Geen shader pack: het spel tekent zijn eigen beeld",
 	"options.vitrail.error": "%s",
+	"options.vitrail.shaders_enabled": "Shaders: Ingeschakeld",
+	"options.vitrail.shaders_disabled": "Shaders: Uitgeschakeld",
+	"options.vitrail.shaders_none_present": "Shaders: Geen Pakketten Aanwezig",
+	"options.vitrail.pack_drop": "+ Voeg Shader Packs toe door te slepen en neer te zetten",
 	"key.vitrail.open_settings": "Shader pack-instellingen openen",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

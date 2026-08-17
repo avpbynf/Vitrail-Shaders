@@ -16,6 +16,10 @@
 	"options.vitrail.no_pack": "Yüklü bir shader paketi yok",
 	"options.vitrail.pack_off": "Shader paketi yok: oyun kendi görüntüsünü çiziyor",
 	"options.vitrail.error": "%s",
+	"options.vitrail.shaders_enabled": "Shaderlar: Etkin",
+	"options.vitrail.shaders_disabled": "Shaderlar: Devre Dışı",
+	"options.vitrail.shaders_none_present": "Shaderlar: Hiç Paket Yok",
+	"options.vitrail.pack_drop": "+ Eklemek için Shader Paketlerini Sürükle ve Bırak",
 	"key.vitrail.open_settings": "Shader paketi ayarlarını aç",
 	"key.category.vitrail.keybinds": "Vitrail"
 }
