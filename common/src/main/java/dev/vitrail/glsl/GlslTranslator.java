@@ -266,8 +266,21 @@ public final class GlslTranslator {
 	/** Varyings this stage hands the next one, which is what says whether an input is provided. */
 	private final Set<String> declaredOutputs = new LinkedHashSet<>();
 
+	/**
+	 * Inputs nothing before this stage writes and that the body reads anyway, so that they could not
+	 * be taken back out: by the name, the interpolation qualifier and the type it was declared
+	 * under. What the stage before has to declare for the module to be built at all.
+	 */
+	private final Map<String, String> unprovidedInputs = new LinkedHashMap<>();
+
+	/** Declarations this stage owes the next one although its own body writes none of them. */
+	private final Map<String, String> owedOutputs = new LinkedHashMap<>();
+
 	private Set<String> declaredAfter = Set.of();
 	private Set<String> used = Set.of();
+
+	/** Whether the body's own main has been renamed, so that the header carries the one that runs. */
+	private boolean mainWrapped;
 
 	private int maxFragmentOutput = -1;
 	private boolean ordered;
@@ -547,6 +560,41 @@ public final class GlslTranslator {
 		 */
 		public void dropUnprovidedInputs(Set<String> provided) {
 			this.translator.dropUnprovidedInputs(provided);
+		}
+
+		/**
+		 * What {@link #dropUnprovidedInputs} could not take out, by name, each with the text that
+		 * declares it again. Empty until that has run.
+		 */
+		public Map<String, String> unprovided() {
+			return Map.copyOf(this.translator.unprovidedInputs);
+		}
+
+		/**
+		 * Makes this stage declare these as outputs and assign each one its zero, so that the stage
+		 * after it is provided for.
+		 * <p>
+		 * A name this stage already hands on is skipped, which is the test Iris makes at
+		 * {@code CompatibilityTransformer.java:467} against the out declarations it gathered at
+		 * :425-440. Compared against those and not against every name the stage declares: a vertex
+		 * stage that happens to call a function parameter {@code ViewPos} would otherwise make this
+		 * give up, and the pass would be lost for a name that clashes with nothing.
+		 * <p>
+		 * A name opening with {@code gl_} is skipped as well, as it is on both of Iris's sides at
+		 * :435 and :462. Redeclaring a built-in as a varying of ours is a compile error, and the
+		 * game provides them itself.
+		 */
+		public void owe(Map<String, String> declarations) {
+			declarations.forEach((name, qualified) -> {
+				if (!name.startsWith("gl_") && !this.translator.declaredOutputs.contains(name)) {
+					this.translator.owedOutputs.put(name, qualified);
+					this.translator.declaredOutputs.add(name);
+				}
+			});
+
+			if (!this.translator.owedOutputs.isEmpty()) {
+				this.translator.wrapMainForOwedOutputs();
+			}
 		}
 
 		public TranslatedUnit render(List<TranslatedUnit.Uniform> block,
@@ -1751,6 +1799,37 @@ public final class GlslTranslator {
 			takeDepthConv();
 			this.depthEpilogue = true;
 		}
+
+		this.mainWrapped = true;
+	}
+
+	/**
+	 * Wraps the body's own main so that the owed varyings can be assigned before it runs, where
+	 * nothing had wrapped it already.
+	 * <p>
+	 * After {@link #prepare} rather than inside it, and that is forced: which varyings are owed is a
+	 * property of the PROGRAM, decided once both stages have been read, and a stage prepared on its
+	 * own cannot know. The token indices are stable by then, which {@link #regions} relies on for
+	 * the same reason.
+	 * <p>
+	 * Before the pack's own main and not after, as Iris prepends it at
+	 * {@code CompatibilityTransformer.java:494}. It matters where a pack writes the name itself on
+	 * some path: the pack's own value has to win, so ours is what stands there before it runs.
+	 */
+	private void wrapMainForOwedOutputs() {
+		if (this.mainWrapped) {
+			return;
+		}
+
+		int name = mainName();
+		if (name < 0) {
+			// No main to wrap and so no place to assign from. The declarations still go out, which is
+			// what the pairing reads; the values are then whatever the stage leaves, as they were.
+			return;
+		}
+
+		replace(name, PACK_MAIN);
+		this.mainWrapped = true;
 	}
 
 	/**
@@ -1871,6 +1950,22 @@ public final class GlslTranslator {
 			if (declared.names().stream().noneMatch(read::contains)) {
 				blankRange(declared.start(), declared.end());
 				dropped = true;
+				continue;
+			}
+
+			// Read by the body, so it stays, and the stage before it has to hand it over instead.
+			// Every name of the declaration and not only the ones read: they share one statement,
+			// so the stage before writes the whole of it or the locations no longer line up.
+			for (String name : declared.names()) {
+				// An array is left where it is, as Iris leaves everything it cannot write an
+				// initialiser for: CompatibilityTransformer.java:473-480 bails on a type its
+				// getInitializer has no default value for, and says so. The declarator carrying
+				// brackets is what tells one here, the type name alone never doing so.
+				if (declared.declarators().getOrDefault(name, "").equals(declared.type() + " " + name)) {
+					this.unprovidedInputs.put(name, declared.qualifier().isEmpty()
+							? declared.type()
+							: declared.qualifier() + " " + declared.type());
+				}
 			}
 		}
 
@@ -1878,6 +1973,33 @@ public final class GlslTranslator {
 			this.used = usedNames();
 			this.declaredAfter = declaredUnderAType();
 		}
+	}
+
+	/**
+	 * An owed varying written as an output declaration, with {@code out} where GLSL wants it: after
+	 * the interpolation qualifier and before the type. Writing {@code out flat float} rather than
+	 * {@code flat out float} is a syntax error, so the two cannot simply be concatenated.
+	 *
+	 * @param qualified the qualifier and the type, {@code flat float} or {@code vec3}
+	 */
+	private static String outDeclaration(String name, String qualified) {
+		int type = qualified.lastIndexOf(' ');
+
+		return type < 0
+				? "out " + qualified + " " + name + ";"
+				: qualified.substring(0, type) + " out " + qualified.substring(type + 1) + " " + name + ";";
+	}
+
+	/**
+	 * What the stage assigns an owed varying, which is the type's zero, exactly as Iris writes it at
+	 * {@code CompatibilityTransformer.java:494} out of {@code getInitializer:351-359}. Every type
+	 * that reaches here spells its own zero the same way, {@link LegacyGlsl#TYPE_NAMES} holding
+	 * nothing but the numeric ones.
+	 */
+	private static String initialiser(String name, String qualified) {
+		int type = qualified.lastIndexOf(' ');
+
+		return name + " = " + qualified.substring(type + 1) + "(0);";
 	}
 
 	/**
@@ -1975,8 +2097,23 @@ public final class GlslTranslator {
 		return region;
 	}
 
-	/** One declaration at file scope, and the tokens that would go with it if it were taken out. */
-	private record FileScope(List<String> names, String type, int start, int end) {
+	/**
+	 * One declaration at file scope, and the tokens that would go with it if it were taken out.
+	 *
+	 * @param qualifier   the interpolation qualifier the declaration opens with, empty where it has
+	 *                    none. Kept because a varying handed to the other stage has to be declared
+	 *                    there under the same one, and {@code flat} is the one that matters: an
+	 *                    integer varying is flat or it is nothing
+	 * @param declarators each name with the text that declares it, array brackets included, which is
+	 *                    what lets a declaration be written again rather than described
+	 */
+	private record FileScope(List<String> names, String type, String qualifier,
+			Map<String, String> declarators, int start, int end) {
+
+		private FileScope {
+			names = List.copyOf(names);
+			declarators = Map.copyOf(declarators);
+		}
 	}
 
 	/**
@@ -2013,15 +2150,26 @@ public final class GlslTranslator {
 			return null;
 		}
 
+		// Gathered on both sides of the keyword, because GLSL takes the qualifier either way round
+		// and packs write both: Mellow opens with flat, and a pack writing "in flat" is as legal.
+		List<String> qualifiers = new ArrayList<>();
 		for (int before = 0; before < cursor; before++) {
-			if (!LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(this.tokens.get(parts.get(before)).text())) {
+			String text = this.tokens.get(parts.get(before)).text();
+			if (!LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(text)) {
 				return null;
 			}
+
+			qualifiers.add(text);
 		}
 
 		cursor++;
 		while (cursor < parts.size() && (isQualifier(this.tokens.get(parts.get(cursor)))
 				|| LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(this.tokens.get(parts.get(cursor)).text()))) {
+			String text = this.tokens.get(parts.get(cursor)).text();
+			if (LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(text)) {
+				qualifiers.add(text);
+			}
+
 			cursor++;
 		}
 
@@ -2039,7 +2187,8 @@ public final class GlslTranslator {
 			return null;
 		}
 
-		return new FileScope(List.copyOf(found.keySet()), type, start, end);
+		return new FileScope(List.copyOf(found.keySet()), type, String.join(" ", qualifiers), found,
+				start, end);
 	}
 
 	private boolean namesClipPosition() {
@@ -2971,6 +3120,11 @@ public final class GlslTranslator {
 			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " float " + FOG_COORD + ";");
 		}
 
+		// The same rule read from the other end: a varying the NEXT stage declares and this one never
+		// wrote is not a silence but a refusal, so it is declared here rather than taken out there.
+		// The qualifier travels with it, since the two sides have to agree on that as well.
+		this.owedOutputs.forEach((name, qualified) -> lines.add(outDeclaration(name, qualified)));
+
 		// From zero up with no gaps, because a location the game finds nothing declared at is not
 		// left empty: it renumbers what is there and everything above the gap moves down one.
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
@@ -3005,7 +3159,7 @@ public final class GlslTranslator {
 		// writes back. It has to be the ascending function that gets there first, so this goes last.
 		// The pack's body is concatenated after the header, so its own main is only a name here and
 		// has to be declared before it can be called.
-		if (this.depthEpilogue || this.terrainPrologue || wrapsFragment()) {
+		if (this.depthEpilogue || this.terrainPrologue || wrapsFragment() || owesInitialisers()) {
 			lines.add("void " + PACK_MAIN + "();");
 			// The mask goes last of all, after the discard: a fragment the alpha test threw away
 			// covered nothing, and marking it covered would leave a hole where a leaf was.
@@ -3013,6 +3167,7 @@ public final class GlslTranslator {
 					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
 					+ (wrapsFragment() ? ORDER_OUTPUTS + "(); " : "")
 					+ coveragePrologue()
+					+ owedPrologue()
 					+ PACK_MAIN + "();"
 					+ (this.depthEpilogue ? " gl_Position.z = " + DEPTH_CONV
 							+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w;" : "")
@@ -3024,6 +3179,24 @@ public final class GlslTranslator {
 		}
 
 		return String.join("\n", lines) + "\n";
+	}
+
+	/** Whether there is anything owed AND a wrapped main to assign it from. */
+	private boolean owesInitialisers() {
+		return this.mainWrapped && !this.owedOutputs.isEmpty();
+	}
+
+	/** The owed varyings set to their zero, ahead of the pack's own main. */
+	private String owedPrologue() {
+		if (!owesInitialisers()) {
+			return "";
+		}
+
+		StringBuilder assignments = new StringBuilder();
+		this.owedOutputs.forEach((name, qualified) ->
+				assignments.append(initialiser(name, qualified)).append(' '));
+
+		return assignments.toString();
 	}
 
 	/**

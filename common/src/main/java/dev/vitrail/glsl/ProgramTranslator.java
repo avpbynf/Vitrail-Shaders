@@ -182,6 +182,14 @@ public final class ProgramTranslator {
 
 				provided.addAll(prepare.provides());
 			}
+
+			// What the drop would not take, handed back the other way. Taking it out was the first
+			// answer because it is the one that changes nothing; what is left is read by the body, so
+			// the only answers remaining are to have the stage before hand it over or to lose the
+			// pass. Mellow's deferred1 is drawn over a quad and includes the header its geometry
+			// passes use, which declares eleven varyings; three of them are read by functions this
+			// pass never calls, and the game refused the whole module over exactly those three.
+			owed(prepared);
 		}
 
 		Map<String, TranslatedUnit.Uniform> uniforms = new LinkedHashMap<>();
@@ -212,6 +220,48 @@ public final class ProgramTranslator {
 
 		return new TranslatedProgram(Map.copyOf(translated), block, bound, Map.copyOf(synthesized),
 				inputs);
+	}
+
+	/**
+	 * Makes each stage declare the varyings the stage after it kept, and assign each one its zero.
+	 * <p>
+	 * <strong>This is Iris's own patch, and it is taken whole rather than adapted.</strong>
+	 * {@code CompatibilityTransformer.java:442-504} does exactly this: same condition, the input
+	 * having to be referenced somewhere (:469); same interpolation qualifier carried over (:485-488);
+	 * same pairing with the stage before; and the declaration is followed by an initialiser
+	 * prepended to that stage's main (:494). <strong>The initialiser is not decoration.</strong>
+	 * Under Iris these varyings hold ZERO, deterministically, and dropping it would leave them
+	 * holding whatever the stage happens to leave in them. Packs are written against Iris, so the
+	 * value they see here has to be the value they see there.
+	 * <p>
+	 * <strong>Why this cannot shift a location.</strong> {@code GlslCompiler.compile:69-86} hands the
+	 * fragment stage the vertex stage's output list in order; {@code createFromSpirv:114-116} had
+	 * numbered that list {@code 0..n-1} with nothing skipped; {@code rebind:151-163} then numbers the
+	 * fragment stage over the same list, counting only the names the fragment declares. The two agree
+	 * for every name that has no undeclared one before it in the list, so declaring MORE on the
+	 * fragment side is always safe, and what is added here is by construction a name the fragment
+	 * already declares.
+	 * <p>
+	 * <strong>The stage before is the vertex stage, and in this game it can be nothing else.</strong>
+	 * {@code GlslCompiler.compile:62-63} takes one vertex module and one fragment module and pairs
+	 * those two at :86; 26.2 compiles no geometry stage at all. The walk is written over the pipeline
+	 * order anyway rather than reaching for the vertex stage by name, so that a stage appearing
+	 * between them is paired correctly rather than silently skipped.
+	 *
+	 * @param prepared the stages of one program, keyed by stage, in pipeline order
+	 */
+	private static void owed(Map<ProgramStage, GlslTranslator.Stage> prepared) {
+		GlslTranslator.Stage previous = null;
+		for (GlslTranslator.Stage stage : prepared.values()) {
+			if (previous != null) {
+				Map<String, String> declarations = stage.unprovided();
+				if (!declarations.isEmpty()) {
+					previous.owe(declarations);
+				}
+			}
+
+			previous = stage;
+		}
 	}
 
 	/**
