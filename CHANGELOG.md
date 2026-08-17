@@ -48,6 +48,29 @@ what the next one holds.
   eight packs tested that is between two and four images rather than the single one it would
   otherwise have reached.
 
+### Changed
+
+- **The settings screen is the one pack authors already know.** It is the screen of the engine packs
+  are written against, ported rather than approximated: the same list of packs with the shaders
+  toggle at its head, the same pages of settings with the value of each in a sunken box beside its
+  name, the same Cancel, Apply and Done, the same buttons and panels drawn from the same texture. A
+  right click walks a value backwards, shift and a click give back the value the pack ships, a slider
+  is dragged and only writes when it is let go, and a setting waiting to be applied is marked in
+  amber. Hovering a setting brings up the pack's own words about it in a panel at the bottom.
+- **Closing the screen applies what you changed**, where it used to leave without writing. Cancel is
+  the button that throws the changes away, and Apply is the one that writes without closing.
+- **A pack is dropped straight onto the screen**, and a settings file exported and imported through
+  the platform's own file window. Clicking a pack in the list now only selects it, so a folder of
+  eight can be looked through without paying for eight loads; Apply and Done are what make a
+  selection real.
+- **The eye at the bottom right, and F1, take the screen away** so that the world behind it can be
+  looked at while a setting is judged. Escape brings it back.
+- Resetting a pack's settings asks for shift to be held rather than for a confirmation screen, which
+  is how the reference guards the same button.
+- What this engine has to say and the reference has not, a load that failed, how many settings
+  `vitrail/options.txt` is holding down and how many passes this backend could not build, is on one
+  line at the bottom left.
+
 ## 0.3.0-alpha.1
 
 ### Changed

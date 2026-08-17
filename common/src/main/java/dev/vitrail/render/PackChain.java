@@ -904,10 +904,11 @@ public final class PackChain {
 	 * very same object on both sides of a portal in single player, so a dimension change would slip
 	 * past a chain that only watched them.
 	 * <p>
-	 * <strong>Nothing here watches a file.</strong> An edit made by hand takes effect on Reload in
-	 * the settings screen, the same button the screen's own Apply goes through, and that is the whole
-	 * of it: a reload costs a second of hitch, and one that nobody asked for is a second of hitch
-	 * nobody asked for.
+	 * <strong>Nothing here watches a file.</strong> An edit made by hand takes effect the next time
+	 * the pack is read, which is Apply in the settings screen whenever that screen has something to
+	 * write, and that is the whole of it: a reload costs a second of hitch, and one that nobody asked
+	 * for is a second of hitch nobody asked for. The screen's pack list watches its own folder, which
+	 * is a different question: it notices a pack arriving and reads none of them.
 	 */
 	private static void reloadIfTheWorldMoved(Path gameDirectory) {
 		boolean stale = PackDefines.stale();
@@ -941,10 +942,10 @@ public final class PackChain {
 	 * <p>
 	 * Render thread only: {@link #release()} closes GPU buffers and hands back the colour targets,
 	 * which has to happen where {@code draw} runs and outside any render pass. The settings screen
-	 * calls this from Apply, from Reload, from Reset and from a pack being picked, and all four go
-	 * through here rather than each having a path of its own, so that what the screen applies and
-	 * what a hand edit applies cannot drift apart. The world moving under the pack reads again too,
-	 * and it is the one caller that does not come through here: see {@link #readAgain}.
+	 * calls this from Apply, which covers a pack being picked, and from Reset, and both go through
+	 * here rather than each having a path of its own, so that what the screen applies and what a hand
+	 * edit applies cannot drift apart. The world moving under the pack reads again too, and it is the
+	 * one caller that does not come through here: see {@link #readAgain}.
 	 */
 	public static void reload(Path gameDirectory) {
 		// Forgotten before the reading and not restored after it, which is the only order that

@@ -45,7 +45,7 @@ import java.util.List;
  * <p>
  * <b>The folder is watched rather than polled.</b> A pack dropped in appears on its own, off a
  * {@link WatchService} registered on the directory and drained once per frame. Iris does the same, and
- * it is why the screen has no Reload on this view: nothing here has to be asked for.
+ * it is why neither this view nor Iris's has a Reload: nothing about the folder has to be asked for.
  * <p>
  * The four lines putting the scrollbar against the right edge sit here rather than in a shared base
  * class, because {@code AbstractSelectionList.Entry} is protected and only a subclass can name it.
