@@ -135,10 +135,15 @@ same folder OptiFine and Iris use, zipped or unpacked. The mod keeps its own
 files in a `vitrail/` folder next to `mods/`:
 
 ```
-pack.txt       which pack of the folder to load, by whole or partial name,
-               or none to load nothing at all
+pack.txt       pack=  which pack of the folder to load, by whole or partial
+                      name, or none to load nothing at all
+               enabled=  false to switch shaders off without forgetting which
+                      pack was picked
 options.txt    engine switches, one NAME=value per line; wins over the settings
 ```
+
+A `pack.txt` holding one bare word, which is what earlier versions wrote, still
+reads as that pack, and one holding `none` still reads as shaders off.
 
 What you change in a pack's own settings screen is not kept there. It goes beside
 the pack, in `shaderpacks/<pack file name>.txt`, which is the file Iris reads and
