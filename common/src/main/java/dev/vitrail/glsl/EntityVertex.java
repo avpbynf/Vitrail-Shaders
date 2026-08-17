@@ -23,12 +23,14 @@ import java.util.Set;
  * word being said.
  * <p>
  * <strong>The light map is {@code UV2} and not {@code UV1}.</strong> {@code UV1} is the overlay,
- * the hit flash and the damage tint, and it is the one element nothing here answers for: Iris
- * makes {@code entityColor} out of it by fetching an overlay texture this engine does not bind
- * yet, {@code EntityPatcher.patchOverlayColor}. So it is declared and read by nobody, which is
- * safe for the one reason that matters and is measured rather than assumed: the off-game harness
- * reads the SPIR-V of every entity stage of the corpus back and checks that all six variables are
- * still in it, because a variable the compiler dropped is one {@code rebind} cannot find.
+ * the hit flash and the damage tint, and what reads it is not a name of the prologue: the wrapper
+ * around {@code main} fetches the texel it points at and hands the colour on as
+ * {@code entityColor}, which is where Iris takes it from as well
+ * ({@code EntityPatcher.patchOverlayColor}). See {@code GlslTranslator.overlayPrologue}. All six
+ * elements are declared whether or not a pack asks for any of them, which is safe for the one reason
+ * that matters and is measured rather than assumed: the off-game harness reads the SPIR-V of every
+ * entity stage of the corpus back and checks that all six variables are still in it, because a
+ * variable the compiler dropped is one {@code rebind} cannot find.
  * <p>
  * Written as macros rather than as globals for the reason {@link LegacyGlsl#FULLSCREEN_ATTRIBUTES}
  * gives: a global initialised from a vertex input is not a constant expression and the language

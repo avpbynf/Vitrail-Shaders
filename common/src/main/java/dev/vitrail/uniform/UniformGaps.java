@@ -22,18 +22,22 @@ import java.util.Map;
  * maintain is a list somebody reads.
  * <p>
  * <strong>There are two lists and not one, because whether a name is a stand-in is a question about
- * the PASS.</strong> {@code entityColor} was the standing example of it: a constant under a full
- * screen pass is the right answer there and the same one Iris gives
- * ({@code uniforms/CommonUniforms.java:163}), while the very same constant under a pass drawn from
- * the entity mesh is a mob that does not flash when it is hurt. Iris splits the line in two: the
- * identifiers are rewritten where the mesh carries the overlay OR is text
- * ({@code pipeline/transform/transformer/VanillaTransformer.java:20-25}), the overlay colour where
- * it carries the overlay and is NOT text ({@code VanillaCoreTransformer.java:21-26}). Every pass
- * this engine serves that reads these names draws the entity mesh, so one question covers both
- * gates today; the day a text family is served, its programs read the identifiers and this split
- * has to follow, which is written here so the silence cannot arrive unannounced. Listing the
- * mesh-bound kind in the everywhere list would put a false
- * alarm on every composite that reads it, which is the one thing a list like this cannot afford.
+ * the PASS.</strong> The three identifiers below are the standing example of it: a constant under a
+ * full screen pass is the right answer there and the answer Iris gives as well, the two block
+ * entity and held item ones as constants ({@code uniforms/CommonUniforms.java:164-165}) and
+ * {@code entityId} through a live fallback its own comment names, for the lightning
+ * ({@code :72-73}). The very same constant under a pass drawn from the entity mesh is one number for
+ * every mob on screen. Listing that kind in the everywhere list would put a false alarm on every
+ * composite that reads it, which is the one thing a list like this cannot afford.
+ * <p>
+ * {@code entityColor} was the fourth name of that list until the vertex stage was given the overlay
+ * to make it out of, and where it went is worth keeping. Iris gates the two halves separately: the
+ * identifiers where the mesh carries the overlay OR is text
+ * ({@code pipeline/transform/transformer/VanillaTransformer.java:20-25}), the colour where it
+ * carries the overlay and is NOT text ({@code VanillaCoreTransformer.java:21-26}). The colour is now
+ * asked of the bound format here as well, {@code glsl/VertexInputs.overlay}, which is the same
+ * question; the identifiers are still asked of the PASS, which is not, so the day a text family is
+ * served this split has to follow.
  */
 public final class UniformGaps {
 
@@ -107,14 +111,11 @@ public final class UniformGaps {
 		reasons.put("blockEntityId", noElement);
 		reasons.put("currentRenderedItemId", noElement);
 
-		// The overlay is UV1, which this mesh really does carry and nothing here reads: Iris makes
-		// the colour by sampling its overlay texture at that coordinate
-		// (pipeline/transform/transformer/EntityPatcher.java:39-56), and this engine binds no such
-		// texture. What the constant costs is visible and narrow, a mob that does not flash white
-		// when it is hurt or red when it is on fire.
-		reasons.put("entityColor", "the overlay this mesh carries is read by nobody here and Iris "
-				+ "makes the colour out of it, so a hurt mob does not flash");
-
+		// entityColor was the third of these and has left, which is what this list is for: on a mesh
+		// that carries the overlay the name is no longer answered from the table at all. The vertex
+		// stage makes it out of UV1 and hands it on as a varying, the way Iris does, so there is
+		// nothing here to stand in for. The table still registers it, and rightly: that answer is
+		// Iris's own everywhere the mesh has no overlay.
 		return Map.copyOf(reasons);
 	}
 }

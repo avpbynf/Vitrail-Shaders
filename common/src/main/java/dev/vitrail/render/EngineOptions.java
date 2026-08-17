@@ -143,9 +143,9 @@ final class EngineOptions {
 	 * {@link dev.vitrail.uniform.UniformGaps} holds still, {@code entityId}, {@code blockEntityId} and
 	 * {@code currentRenderedItemId}. A pack that branches
 	 * on any of them takes the same branch for every draw, which reads on screen as anything from a
-	 * mob fogged like water to a mob in a colour that belongs nowhere. Beside them and not among them,
-	 * {@code entityColor} is held too, and what that costs is narrow and knowable: a hurt mob does not
-	 * flash. The log names every one of them at each load, and closing it is a lot of its own.
+	 * mob fogged like water to a mob in a colour that belongs nowhere. {@code entityColor} stood
+	 * beside them and has left: it is made from the overlay the mesh really carries, so a hurt mob
+	 * flashes again. The log names every one of them at each load, and closing it is a lot of its own.
 	 * <p>
 	 * Iris routes the same geometry with nothing to switch,
 	 * {@code shaderpack/loading/ProgramId.java:40-41}, so this line is no longer a divergence from it

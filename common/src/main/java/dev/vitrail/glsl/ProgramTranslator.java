@@ -189,6 +189,19 @@ public final class ProgramTranslator {
 		Map<String, String> synthesized = new LinkedHashMap<>();
 		Set<String> varyings = new LinkedHashSet<>();
 
+		// A pass of its own and ahead of everything else, because one of these answers changes
+		// another: the overlay colour is a varying the vertex stage owes as soon as ANY stage reads
+		// it, and owing it is what makes that stage declare the texture it is fetched from. Asking
+		// for the samplers in the same walk would collect the vertex stage's before the fragment
+		// stage had said it wanted the colour.
+		for (GlslTranslator.Stage stage : prepared.values()) {
+			varyings.addAll(stage.varyings());
+		}
+
+		for (GlslTranslator.Stage stage : prepared.values()) {
+			stage.makesOverlayColour(varyings);
+		}
+
 		for (GlslTranslator.Stage stage : prepared.values()) {
 			synthesized.putAll(stage.synthesized());
 			// First declaration of a name wins, as it does within one stage. A name declared
@@ -196,7 +209,6 @@ public final class ProgramTranslator {
 			// answer the same whichever stage is looked at.
 			stage.uniforms().forEach(uniform -> uniforms.putIfAbsent(uniform.name(), uniform));
 			stage.samplers().forEach(sampler -> samplers.putIfAbsent(sampler.name(), sampler));
-			varyings.addAll(stage.varyings());
 		}
 
 		List<TranslatedUnit.Uniform> block = fixedFunctionFirst(uniforms);

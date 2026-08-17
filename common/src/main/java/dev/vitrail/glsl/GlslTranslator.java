@@ -75,6 +75,29 @@ public final class GlslTranslator {
 	/** The one varying the engine names itself, so the one both stages have to agree about. */
 	private static final String FOG_COORD = "of_FogFragCoord";
 
+	/**
+	 * The hit flash and the damage tint, which is a varying wherever the mesh carries the overlay and
+	 * a uniform everywhere else.
+	 * <p>
+	 * The name is the pack's and not ours, unlike {@link #FOG_COORD}, which is the whole reason it is
+	 * handled here rather than left in the block: a pack declares {@code uniform vec4 entityColor}
+	 * and Iris deletes that declaration outright on this mesh, makes the value in the vertex stage
+	 * and hands it on ({@code pipeline/transform/transformer/EntityPatcher.java:39-56}). Answering it
+	 * from the block instead is one number for every mob on screen, which is a mob that never flashes.
+	 */
+	private static final String ENTITY_COLOR = "entityColor";
+
+	/**
+	 * The game's own overlay image, sixteen by sixteen, under a name no pack writes.
+	 * <p>
+	 * What the two coordinates mean is the game's: {@code OverlayTexture.pack} puts the white
+	 * progress in u and the red flash in v, and the element the mesh carries is that pair.
+	 */
+	private static final String OVERLAY = LegacyGlsl.OVERLAY_SAMPLER;
+
+	/** The fetch the overlay colour is made from, named so that the pack's own names cannot meet it. */
+	private static final String OVERLAY_TEXEL = "ofOverlayTexel";
+
 	private static final String FOG_STRUCT =
 			"struct OfFog { vec4 color; float density; float start; float end; float scale; };";
 
@@ -304,6 +327,22 @@ public final class GlslTranslator {
 	private boolean terrainPrologue;
 	private boolean alphaEpilogue;
 
+	/**
+	 * Whether this vertex body was wrapped because its mesh carries the overlay, which is decided
+	 * while the text is rewritten and before anything knows whether the colour is wanted.
+	 * <p>
+	 * Two flags and not one, and the reason is when each is knowable. Wrapping renames the pack's
+	 * {@code main} and cannot be undone afterwards, so it is settled here off the MESH alone;
+	 * whether the colour is really made is a property of the whole program, since a pack commonly
+	 * reads {@code entityColor} in its fragment stage and never in its vertex stage, and that is only
+	 * known once every stage has been asked. The wrapper standing with nothing in it costs a call the
+	 * compiler inlines; the two disagreeing would cost the pass.
+	 */
+	private boolean overlayWrapped;
+
+	/** Whether this stage really makes the overlay colour, which only the whole program can say. */
+	private boolean makesOverlayColour;
+
 	/** Whether the mask was really given a rank of its own. {@link #planCoverage} says when it is not. */
 	private boolean covers;
 
@@ -518,7 +557,44 @@ public final class GlslTranslator {
 
 		/** Varyings the engine names, which both sides of a program have to declare or neither. */
 		public Set<String> varyings() {
-			return this.translator.used.contains(FOG_COORD) ? Set.of(FOG_COORD) : Set.of();
+			Set<String> named = new LinkedHashSet<>();
+			if (this.translator.used.contains(FOG_COORD)) {
+				named.add(FOG_COORD);
+			}
+
+			// Asked of the mesh and of the body together. A pack that declares the name and never
+			// reads it is left alone, where Iris hands the varying over regardless: the two draw the
+			// same picture, and declaring nothing is the one that cannot shift a location.
+			if (this.translator.inputs.overlay() && this.translator.used.contains(ENTITY_COLOR)) {
+				named.add(ENTITY_COLOR);
+			}
+
+			return Set.copyOf(named);
+		}
+
+		/**
+		 * Tells this stage whether the program it belongs to wants the overlay colour, which is what
+		 * makes its vertex stage declare the texture it is fetched from.
+		 * <p>
+		 * Handed the union of {@link #varyings} over every stage, and it has to be: a pack commonly
+		 * reads {@code entityColor} in its fragment stage alone, and it is the VERTEX stage that owes
+		 * the value. To be called once every stage has been asked for its varyings and before any is
+		 * asked for its samplers, the answer being one of them.
+		 * <p>
+		 * Only a stage whose body was really wrapped can answer, which is what keeps the declaration
+		 * and the value together: the two sides declare the varying off the union, and a vertex stage
+		 * with no {@code main} to wrap would leave the fragment reading one nothing ever wrote.
+		 * <p>
+		 * Between the vertex stage and the fragment stage and no further. Iris carries the colour
+		 * through a tessellation or geometry stage as well
+		 * ({@code pipeline/transform/transformer/EntityPatcher.java:63-106}); no program of the corpus
+		 * has either, and {@link #FOG_COORD} stops at the same place for the same reason.
+		 */
+		public void makesOverlayColour(Set<String> varyings) {
+			if (this.translator.overlayWrapped && varyings.contains(ENTITY_COLOR)) {
+				this.translator.makesOverlayColour = true;
+				this.translator.samplers.put(OVERLAY, SAMPLER_2D + " " + OVERLAY);
+			}
 		}
 
 		/** Names this stage declares itself, and that a shared block must therefore not shadow. */
@@ -1732,7 +1808,8 @@ public final class GlslTranslator {
 		// location of every one after it.
 		boolean terrain = this.inputs.terrain();
 		boolean depth = namesClipPosition();
-		if (!terrain && !depth) {
+		boolean overlay = this.inputs.overlay();
+		if (!terrain && !depth && !overlay) {
 			return;
 		}
 
@@ -1743,6 +1820,7 @@ public final class GlslTranslator {
 
 		replace(name, PACK_MAIN);
 		this.terrainPrologue = terrain;
+		this.overlayWrapped = overlay;
 		if (terrain) {
 			takeTexShrink();
 		}
@@ -2113,6 +2191,20 @@ public final class GlslTranslator {
 			if (this.unit.isLive(lines[index])) {
 				liftOne(index);
 			}
+		}
+
+		// Where the mesh carries the overlay this name is not a uniform at all, so the declaration
+		// the loop above has just taken out of the body leaves nothing behind. Iris deletes the same
+		// declaration outright (EntityPatcher.java:39) and answers every read from a varying its
+		// vertex stage writes; leaving the name in the block would answer them all with one number
+		// instead, which is the mob that never flashes.
+		//
+		// By the name and not by the shape, where Iris matches the whole declaration. The corpus
+		// writes one shape and only one, eighteen declarations of uniform vec4 entityColor over the
+		// eight packs, so the two answer the same today; a pack that wrote another type would keep
+		// its uniform under Iris and lose the pass to a redefinition, and lose the type here.
+		if (this.inputs.overlay()) {
+			this.blockMembers.remove(ENTITY_COLOR);
 		}
 	}
 
@@ -2971,6 +3063,18 @@ public final class GlslTranslator {
 			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " float " + FOG_COORD + ";");
 		}
 
+		// The same rule for the overlay colour, and it arrives here by the same road: the union says
+		// yes, so both sides declare it whichever of them reads it. No interpolation qualifier, which
+		// is Iris's answer too: every vertex of one model part carries the same overlay coordinate,
+		// so what is interpolated between them is one value.
+		if (varyings.contains(ENTITY_COLOR)) {
+			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " vec4 " + ENTITY_COLOR + ";");
+		}
+
+		if (this.makesOverlayColour) {
+			lines.add("uniform " + SAMPLER_2D + " " + OVERLAY + ";");
+		}
+
 		// From zero up with no gaps, because a location the game finds nothing declared at is not
 		// left empty: it renumbers what is there and everything above the gap moves down one.
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
@@ -3005,12 +3109,13 @@ public final class GlslTranslator {
 		// writes back. It has to be the ascending function that gets there first, so this goes last.
 		// The pack's body is concatenated after the header, so its own main is only a name here and
 		// has to be declared before it can be called.
-		if (this.depthEpilogue || this.terrainPrologue || wrapsFragment()) {
+		if (this.depthEpilogue || this.terrainPrologue || this.overlayWrapped || wrapsFragment()) {
 			lines.add("void " + PACK_MAIN + "();");
 			// The mask goes last of all, after the discard: a fragment the alpha test threw away
 			// covered nothing, and marking it covered would leave a hole where a leaf was.
 			lines.add("void main() { "
 					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
+					+ overlayPrologue()
 					+ (wrapsFragment() ? ORDER_OUTPUTS + "(); " : "")
 					+ coveragePrologue()
 					+ PACK_MAIN + "();"
@@ -3054,6 +3159,34 @@ public final class GlslTranslator {
 	 */
 	private String coveragePrologue() {
 		return this.covers && this.namesFragDepth ? "gl_FragDepth = gl_FragCoord.z; " : "";
+	}
+
+	/**
+	 * Makes the hit flash and the damage tint out of the overlay the mesh carries, before the pack's
+	 * own body runs and can read it.
+	 * <p>
+	 * Iris's three lines, term for term
+	 * ({@code pipeline/transform/transformer/EntityPatcher.java:55-56} and {@code :62}, the fourth
+	 * statement of that run being a vertex colour it hands on for its own reasons), and each is the
+	 * game's rather than a choice. The image is {@code OverlayTexture}'s sixteen by sixteen, red over
+	 * the top half and white with a falling alpha over the bottom, and the element is the pair
+	 * {@code OverlayTexture.pack} wrote; the alpha is turned around because what the texture stores
+	 * is how much of the mob shows through. The third line is a workaround Iris carries for the
+	 * packs, and it stays because the packs are what this engine is written against: some read the
+	 * colour without looking at the alpha and expect a black where there is no flash.
+	 * <p>
+	 * A {@code texelFetch} and not a sample, so nothing the bound sampler does can reach it: the
+	 * coordinate is a texel of a sixteen wide image and a filter between two of them would be a
+	 * flash halfway to the tint.
+	 */
+	private String overlayPrologue() {
+		if (!this.makesOverlayColour) {
+			return "";
+		}
+
+		return "vec4 " + OVERLAY_TEXEL + " = texelFetch(" + OVERLAY + ", UV1, 0); "
+				+ ENTITY_COLOR + " = vec4(" + OVERLAY_TEXEL + ".rgb, 1.0 - " + OVERLAY_TEXEL + ".a); "
+				+ ENTITY_COLOR + ".rgb *= float(" + ENTITY_COLOR + ".a != 0.0); ";
 	}
 
 	/** What output {@code slot} is called, which is the pack's own name when it declared one. */
