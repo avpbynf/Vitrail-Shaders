@@ -18,10 +18,11 @@ import org.joml.Matrix4f;
  * outside a gbuffers pass they are what Iris supplies as well, so a composite declaring
  * {@code entityColor} both compiles and reads the number it would read there. What differs is what
  * happens INSIDE a gbuffers pass drawn from the entity mesh, and it differs in the mesh rather than
- * in the table: Iris stops answering four of these from a uniform at all and answers them from
- * elements of a vertex format of its own, which this engine does not have. So the real values
- * arrive with the gbuffers under Iris and do not arrive at all here, and the comment on those lines
- * says what each costs. They are named here so that finding them again is not a search.
+ * in the table: Iris stops answering four of these from a uniform at all and answers them from the
+ * mesh. The overlay colour is the one this engine now answers the same way, out of the element the
+ * game's own format already carries; the three identifiers are answered from an element Iris adds
+ * and this engine has not got, so the real values arrive with the gbuffers under Iris and do not
+ * arrive at all here. The comment on those lines says what each costs.
  */
 public final class DrawValues {
 
@@ -108,6 +109,11 @@ public final class DrawValues {
 		builder.add("noiseTextureResolution", UniformShape.FLOAT,
 				(world, out) -> out.set(world.noiseTextureResolution()));
 
+		// Iris's own answer for a pass whose mesh has no overlay, which is what this table serves:
+		// a composite, the terrain, the sky (uniforms/CommonUniforms.java:163). Where the mesh DOES
+		// carry the overlay the name never reaches a table at all, here or there - the vertex stage
+		// fetches the texel and hands the colour on as a varying, glsl/GlslTranslator.overlayPrologue
+		// against pipeline/transform/transformer/EntityPatcher.java:39-56.
 		builder.add("entityColor", UniformShape.VEC4,
 				(_, out) -> out.set(0.0F, 0.0F, 0.0F, 0.0F));
 		// The three identifiers a pack tells one entity, block entity or held item apart by, and the

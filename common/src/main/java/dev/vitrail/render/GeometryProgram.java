@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.glsl.LegacyGlsl;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.pack.program.AlphaTest;
@@ -182,6 +183,12 @@ final class GeometryProgram {
 
 	private static final String LIGHTMAP = "lightmap";
 
+	/**
+	 * The game's overlay image, which only a vertex stage drawn from the entity mesh ever asks for:
+	 * the translation puts the name there itself, and no pack writes it.
+	 */
+	private static final String OVERLAY = LegacyGlsl.OVERLAY_SAMPLER;
+
 	/** One pixel each, for a name this step has no answer for. */
 	private static final GpuFormat CONSTANT_FORMAT = GpuFormat.RGBA8_UNORM;
 	private static final Vector4f OPAQUE_BLACK = new Vector4f(0.0F, 0.0F, 0.0F, 1.0F);
@@ -303,14 +310,12 @@ final class GeometryProgram {
 	 * Whether this pass draws the mesh that carries the overlay, which is the entity one and no
 	 * other of ours.
 	 * <p>
-	 * Iris asks it in two halves: the three identifiers are rewritten onto elements where the mesh
-	 * carries the overlay or is text
-	 * ({@code pipeline/transform/transformer/VanillaTransformer.java:20-25}), the overlay colour
-	 * where it carries the overlay and is not text ({@code VanillaCoreTransformer.java:21-26}).
-	 * Every pass this engine serves that reads these names draws the entity mesh, so the one
-	 * question covers both halves today; a text family would have to join the split. The same names
-	 * are a placeholder here and a real answer on the terrain, and only a pass that knows which
-	 * mesh it binds can tell the log which it is.
+	 * What it decides is what the log calls a placeholder, and that is now the three identifiers
+	 * alone: they are a real answer on the terrain and in a composite, where Iris hands over the same
+	 * constants, and one number for every mob on the mesh Iris reads them off an element of. The
+	 * overlay colour used to be asked here too and has left, being made from the element the mesh
+	 * really carries; {@code glsl/VertexInputs.overlay} is where that question moved to, and
+	 * {@link dev.vitrail.uniform.UniformGaps} says why the two are not one question.
 	 */
 	private final boolean entityMesh;
 
@@ -798,6 +803,13 @@ final class GeometryProgram {
 			return RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
 		}
 
+		// Nothing about this one reaches the read, which is a texelFetch and takes no sampler state
+		// at all. It is bound because a name declared in the module has to be, and NEAREST is what
+		// says so: a filter here would be a flash halfway to the tint if anything ever sampled it.
+		if (OVERLAY.equals(name)) {
+			return RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
+		}
+
 		// The noise image tiles and everything else clamps, the same rule the chain follows.
 		//
 		// Never past level nought, even on a target that carries a chain, and this is not a gap left
@@ -1173,6 +1185,21 @@ final class GeometryProgram {
 			return this.atlas == null ? this.white.getColorTextureView() : this.atlas;
 		}
 
+		if (OVERLAY.equals(sampler)) {
+			// The image the hit flash and the damage tint are read out of, sixteen by sixteen and
+			// built once at start up. It is read by a texelFetch at the coordinate the mesh carries,
+			// so unlike every other name here the fallback is not a colour that means something: a
+			// single texel is out of bounds at that coordinate and what comes back is undefined. The
+			// fallback is there because a name declared in the module has to be bound at all, and the
+			// branch is unreachable while there is a client to draw from - the game holds this in a
+			// field of its own, built with the renderer and never replaced.
+			Minecraft minecraft = Minecraft.getInstance();
+			GpuTextureView overlay = minecraft == null
+					? null : minecraft.gameRenderer.overlayTexture().getTextureView();
+
+			return overlay == null ? this.black.getColorTextureView() : overlay;
+		}
+
 		if (LIGHTMAP.equals(sampler)) {
 			// One white texel for a piece the game draws at full light, which is the other half of what
 			// the vertex head did with the light map names and is read off the same field so that the
@@ -1400,7 +1427,7 @@ final class GeometryProgram {
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 		SamplerPlan.Kind kind = binding.kind();
 
-		return ATLAS.contains(sampler) || LIGHTMAP.equals(sampler)
+		return ATLAS.contains(sampler) || LIGHTMAP.equals(sampler) || OVERLAY.equals(sampler)
 				|| kind == SamplerPlan.Kind.COLORTEX
 				|| kind == SamplerPlan.Kind.NOISE
 				|| (kind == SamplerPlan.Kind.DEPTH && (this.pass.afterDeferred()

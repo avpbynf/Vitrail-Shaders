@@ -200,6 +200,18 @@ public final class LegacyGlsl {
 	public static final String GLINT_ALPHA = "of_GlintAlpha";
 
 	/**
+	 * The game's overlay image, under a name no pack writes, bound wherever a vertex stage was given
+	 * the fetch that makes {@code entityColor} out of it.
+	 * <p>
+	 * Named here rather than inside the translation for the reason {@link #GAME_TRANSFORMS} is: the
+	 * name has to be the same character for character in the GLSL, in the bind group and in the call
+	 * that binds it, and those are two different classes. Iris calls its own {@code iris_overlay} and
+	 * binds the same texture ({@code samplers/IrisSamplers.java} through
+	 * {@code pipeline/transform/transformer/EntityPatcher.java:46}).
+	 */
+	public static final String OVERLAY_SAMPLER = "ofOverlay";
+
+	/**
 	 * The model view the game prepared that draw with, which is the second member of its block that
 	 * anything here reads and the one place a per draw answer is not optional.
 	 * <p>

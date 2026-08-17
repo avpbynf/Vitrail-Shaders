@@ -417,12 +417,22 @@ GNU Lesser General Public License version 3
   of this block is the identity; this engine leaves its casters in player space and answers the
   light as the matrix they read instead.
 
+  The same file makes entityColor out of the overlay wherever the bound format carries one, the way
+  net.irisshaders.iris.pipeline.transform.transformer.EntityPatcher does at lines 39 to 62: the
+  uniform the pack declared is deleted, the vertex stage fetches the texel the mesh points at, and
+  the colour is handed to the fragment stage as a varying. The three lines that make it are Iris's
+  term for term, the turned round alpha and the workaround its own comment describes, which some
+  packs need because they read the colour without looking at the alpha. What is taken is the rule
+  that this name is per vertex and not per pass, which is the difference between one mob flashing and
+  all of them. The name the texture is bound under is ours; the gate is the format rather than the
+  program name, which is what VanillaCoreTransformer asks at lines 21 to 26.
+
   common/src/main/java/dev/vitrail/uniform/UniformGaps.java registers the uniforms this engine
-  cannot answer, and one of its entries is Iris's answer rather than an absence: entityColor under a
-  full screen pass is the constant net.irisshaders.iris.uniforms.CommonUniforms gives it, line 163.
-  The rest of the file records what Iris reads off a vertex element the game's entity format has not
-  got, which is why those names are constant here; that is a statement about Iris and not material
-  taken from it.
+  cannot answer, and one of its entries is Iris's answer rather than an absence: entityColor outside
+  a pass whose mesh carries the overlay is the constant
+  net.irisshaders.iris.uniforms.CommonUniforms gives it, line 163. The rest of the file records what
+  Iris reads off a vertex element the game's entity format has not got, which is why those names are
+  constant here; that is a statement about Iris and not material taken from it.
 
   common/src/main/resources/assets/vitrail/lang/ follows the Iris translations for the words this
   screen and Iris's own screens have in common, in the fourteen languages both projects carry, so

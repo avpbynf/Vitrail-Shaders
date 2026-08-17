@@ -142,6 +142,30 @@ public enum VertexInputs {
 	}
 
 	/**
+	 * Whether the bound format carries the overlay, which is the element {@code entityColor} is made
+	 * out of and the one question that decides where that name comes from.
+	 * <p>
+	 * Iris asks the format first and then one thing more
+	 * ({@code pipeline/transform/transformer/VanillaCoreTransformer.java:21-26}): the format has to
+	 * carry the overlay, and the row must not be text. The second half is a question about the row's
+	 * own name, {@code ShaderKey.isText} being {@code name().contains("TEXT")} at
+	 * {@code pipeline/programs/ShaderKey.java:157}, carried into the attribute inputs by
+	 * {@code IrisRenderingPipeline.java:675}. There is nothing to exclude here, no text family being
+	 * served; the day one is, this gate has to grow the same second half.
+	 * <p>
+	 * What is not asked is the fallback tree, and that matters: {@code gbuffers_spidereyes} falls
+	 * back through {@code gbuffers_textured}, so a rule read off the tree would answer no for a row
+	 * drawn from this very mesh. The glint is the other way round, coming in by the same door with
+	 * {@code POSITION_TEX} and no overlay at all.
+	 * <p>
+	 * The light is beside the point: {@link #ENTITY_FULLBRIGHT} is the same format under another
+	 * contract, and what it changes is {@code UV2} rather than {@code UV1}.
+	 */
+	public boolean overlay() {
+		return this == ENTITY || this == ENTITY_FULLBRIGHT;
+	}
+
+	/**
 	 * The names the head declares for itself, which the pack may therefore not use for anything of
 	 * its own.
 	 * <p>
