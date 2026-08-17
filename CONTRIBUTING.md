@@ -12,6 +12,26 @@ Two long-lived branches, and the difference between them is one question: has th
 So `main` is always an exact prefix of `dev`, which is what makes the two readable side by side:
 whatever `dev` holds beyond `main` is precisely what is written and not yet published.
 
+Every other branch is a topic branch, and it is named for what it does:
+
+    <type>/what-the-branch-does
+
+The type is one of the nine a commit subject uses, listed under [Commits](#commits), and it is
+whatever the branch mostly is. After the slash come two to five words in lower case joined by
+dashes, saying what the branch does rather than which class it opens. The two long-lived branches
+carry no prefix, being the only two that are not about one thing.
+
+    feat/entity-color-from-overlay
+    fix/hand-bob-frame
+    ci/commit-and-branch-format
+
+`release/0.3.0-alpha.1` is the one shape that departs from it, and the version is the whole of the
+name: such a branch carries the version bump and nothing else, so there is nothing else to say
+about it.
+
+Nothing in a name records who wrote the branch or when, and none of them carries an issue number,
+there being nothing here that numbers them.
+
 **The history is linear and carries no merge commit anywhere, which is not a preference.** A tree
 that forks is a tree nobody reads once it is public, and this one is public. A topic branch is
 rebased onto `dev` and enters by a pull request, merged with the rebase button. If that button
@@ -109,16 +129,72 @@ is what the release body and both stores are handed.
 
 ## Commits
 
-One logical change per commit. Short imperative subject, no trailing period, 72 columns
-or less. A body only when the reason is not obvious from the diff, and then it explains
-why rather than what.
+One logical change per commit, and a subject in the form the wider ecosystem calls a conventional
+commit:
+
+    <type>(<scope>)!: what the commit does
+
+That form is worth more here than it is in most repositories, because of how a branch lands. The
+rebase button replays every subject verbatim into the public history instead of collapsing them
+into the request's title, so a subject is not a note to a reviewer: it is the line somebody reads
+two years later, in a log where `git log --oneline` is the only thing they will look at.
+
+| type | what it carries |
+| --- | --- |
+| `feat` | geometry served, a uniform provided, a screen opened: something the engine did not do |
+| `fix` | a defect corrected, in the image or in what a pack is allowed to say |
+| `perf` | the same behaviour for less |
+| `refactor` | no change of behaviour at all, dead code removed included |
+| `docs` | `docs/`, the changelog, this file, javadoc on its own |
+| `test` | the out-of-game harness and the corpus it runs over |
+| `build` | Gradle, the JDK, loader versions, what the build refuses |
+| `ci` | `.github/workflows` |
+| `chore` | whatever none of the others is, and the version bump, which is `chore(release):` |
+
+The scope is optional and names a tree of code: `pack`, `glsl`, `uniform`, `render`, `screen`,
+`settings`, `sodium`, `mixin`, `platform`, or `neoforge` and `fabric` for a whole module. It is left
+out where the type already says everything, which `docs` and `ci` usually do.
+
+The subject is imperative and therefore starts on a verb, in lower case, and it carries no full
+stop. The whole line is 72 columns or fewer with the prefix counted in, and the prefix is not free:
+`feat(render): ` is fourteen of them. What used to fit in a subject running to a hundred columns
+goes in the body now, which is where it reads better anyway. A body is for the reason, when the
+reason is not in the diff, and a blank line separates it from the subject.
+
+A `!` before the colon marks a change that breaks a pack or a configuration that used to work. What
+breaks is written in the body, and there is no `BREAKING CHANGE:` footer: there are no trailers here
+at all, and nothing in this repository reads one, the changelog being written by hand and the
+version typed by a human.
 
 ```
-Add fullscreen pass hook for the Vulkan backend
-Fix binding allocation colliding on location 7
+feat(render): read entityColor off the entity mesh overlay
+fix(pack)!: refuse a customTexture path that leaves the pack
+docs: correct five sentences against the source
+chore(release): raise the version to 0.3.0-alpha.1
 ```
 
-No trailers.
+A commit that changes a mechanism and the paragraph describing it is one commit under the type of
+the mechanism rather than two, since a changelog entry and a doc line belong with the change that
+made them true. `docs` is for the batch that is documentation and nothing else.
+
+None of this is retroactive, and what was written before the convention is left as it was. Rewriting
+a public history to tidy the shape of its subjects would cost every reference anybody holds to it
+and buy a uniformity nobody reads for.
+
+### Both ends of the rule are one file
+
+`.githooks/commit-msg` refuses a subject or a branch name that is not in the form above. Install it
+once per clone, worktrees sharing the same config:
+
+    git config core.hooksPath .githooks
+
+`.github/workflows/commits.yml` runs that same file over every commit of a pull request, for
+whoever never ran that command and for anything arriving from a fork. It is deliberately the same
+file: a workflow rewriting the same expression would be a second home for the rule, and the two
+would agree only until one of them changed.
+
+Catch it at the commit rather than at the request. A subject is amended in one gesture while it is
+still the last one, and rebuilt by hand once nine commits stand on top of it.
 
 ## Encoding and text
 
