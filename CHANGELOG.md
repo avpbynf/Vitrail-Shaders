@@ -16,6 +16,14 @@ what the next one holds.
 
 ### Added
 
+- **A mob flashes again when it is hurt, and a creeper whitens before it goes off.** The colour the
+  game lays over a mob it has just damaged was reaching the pack as one number for the whole world,
+  so a pack that paints the flash itself painted nothing: the red hit, the white of a creeper about
+  to explode and the tint on a mob standing in fire all went missing the moment the pack took the
+  mobs over. It is now read off the mesh, one value per vertex, which is where every one of the eight
+  packs tested expects to find it. The three identifiers a pack tells one kind of mob, block entity
+  or held item apart by are still one number apiece, which is a different hole and a wider one.
+
 - **The sky of the End is painted by the pack now**, where the game kept its own shader for it. The
   box of sky and the flash that crosses it both go through the program the format keeps for the
   textured pieces of the sky, the one that already drew the sun and the moon. Until now that sky was
