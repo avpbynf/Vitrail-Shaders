@@ -1,6 +1,6 @@
 package dev.vitrail.screen;
 
-import dev.vitrail.pack.menu.MenuPage;
+import dev.vitrail.Vitrail;
 import dev.vitrail.pack.menu.MenuValues;
 import dev.vitrail.pack.source.PackLang;
 import dev.vitrail.pack.source.PackLoader;
@@ -8,698 +8,636 @@ import dev.vitrail.render.PackChain;
 import dev.vitrail.settings.PackFile;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsFile;
-import dev.vitrail.Vitrail;
+import dev.vitrail.uniform.Smoothed;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
-import net.minecraft.client.gui.layouts.LayoutSettings;
-import net.minecraft.client.gui.layouts.LinearLayout;
-import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.stream.Stream;
 
 /**
- * The pack settings screen.
+ * The pack settings screen, ported from Iris's {@code ShaderPackScreen}.
  * <p>
- * Two views rather than two screens: the list of the packs in the folder, which is what it opens
- * on, and the pages of the one being drawn, reached by the button carrying {@link ScreenText#TITLE}
- * and inactive while there is nothing to configure. The list being the root is what makes going
- * back mean one thing everywhere: up one page, then to the list, then out to whatever screen asked
- * for this one. Which view it opens on is a line of {@code vitrail/options.txt},
- * {@code screen=packs} or {@code screen=settings}, read where that file's other reserved lines are.
+ * <b>Two views and one screen</b>: the list of packs in the folder, {@link PackList}, and the pages of
+ * the pack being configured, {@link OptionList}. The switch between them sits above the bottom row, and
+ * it applies on the way through, which is Iris's own note and not a detail: picking a pack in the list
+ * without applying and then opening the settings would otherwise open the settings of the pack before
+ * it.
  * <p>
- * A pack's pages are laid out by hand, in columns, with blanks used as alignment, and packs are
- * written against Iris. So the layout rules, the way a value cycles on a click, and the amber
- * label marking a change not yet applied are taken from how Iris behaves rather than invented:
- * they are what a pack's author saw when they wrote the file. The drawing is not taken from it:
- * every widget here is a vanilla button, so the nine slice sprites, the focus ring, the tooltip
- * and the narration come from the game and work on either backend.
+ * <b>Three buttons on the bottom row, and leaving applies.</b> Cancel drops what was clicked and
+ * leaves, Apply writes and reloads without leaving, Done applies and leaves. That last one is Iris's
+ * arrangement and is the one convention of this screen that the screen it replaces deliberately did
+ * not have; it is back, because a pack author who has used Iris expects the settings they just changed
+ * to be there when they close the screen.
  * <p>
- * Escape walks back one page, then out to the pack list, then out of the screen, and leaving never
- * writes: a pack read again for a player who was only looking is a second of hitch nobody asked
- * for. Iris applies on the way out and that is the one convention of its screen not kept here.
+ * <b>The eye, and F1, take the screen away rather than the world.</b> Both hide every widget so that
+ * the world behind can be looked at while a setting is judged, and Escape brings them back. This is
+ * what makes the screen usable for the one thing it is for.
  * <p>
- * What keeps that from being a trap is that Done is not offered while anything is waiting. The last
- * button of the row is Apply until there is nothing left to apply and only then becomes Done, so
- * the word that leaves is never the word that would have thrown work away.
- * <p>
- * Nothing is written and nothing is recompiled on a click, and Apply is the only button that writes
- * what was clicked. It writes by reading the file first and laying the pending table over it, so
- * that an edit made by hand while this screen is open and an edit made here compose instead of
- * overwriting each other.
+ * <b>Three facts this engine has and Iris does not</b> are drawn where Iris draws its own name, at the
+ * bottom left: a load that failed, how many settings {@code vitrail/options.txt} is holding down, and
+ * how many passes this backend could not build. Nothing else on the screen reaches the player with
+ * them, and the log is not where anyone looks.
  */
-public final class SettingsScreen extends Screen implements ScreenHost {
+public final class SettingsScreen extends Screen implements PackHost, ScreenHost {
 
-	private static final int HEADER_HEIGHT = 33;
-	/** One row of buttons and the room around it. The band is centred on its contents by the frame
-	 * the game lays it out in, so this is the button height plus twice the margin it gets. */
-	private static final int FOOTER_HEIGHT = 44;
-	private static final int LINE_HEIGHT = 11;
-	private static final int NARROW_BUTTON = 80;
-	private static final int BUTTON_GAP = 8;
+	/** How far down the lists start, and how much room the two button rows take under them. */
+	private static final int LIST_TOP = 32;
+	private static final int FOOTER_ROOM = 94;
 
-	/** How often the pack folder is looked at while the list is drawn, in milliseconds. */
-	private static final long FOLDER_INTERVAL = 1000L;
+	/** The bottom row: three buttons of this width, a hundred and four apart, at this height. */
+	private static final int BUTTON_WIDTH = 100;
+	private static final int BUTTON_HEIGHT = 20;
+	private static final int BUTTON_PITCH = 104;
 
-	/** The room left either side of the longest name the way out takes, so it is not set in it. */
-	private static final int SWITCH_PADDING = 2 * BUTTON_GAP;
+	/** The row above it: two wider buttons, a hundred and fifty six apart. */
+	private static final int WIDE_BUTTON_WIDTH = 152;
+	private static final int WIDE_BUTTON_PITCH = 78;
 
-	private final @Nullable Screen parent;
-	private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
+	/** Where the eye sits, and where its sprite is cut from the atlas. */
+	private static final int EYE_SIZE = 20;
+	private static final int EYE_V = 146;
+
+	private static final int COMMENT_PANEL_WIDTH = 314;
+
+	/** How long a line under the title stays up, in ticks. Iris's five seconds. */
+	private static final int NOTIFICATION_TICKS = 100;
+
+	/** How many frames the mouse has to rest on a cell before its comment panel comes up. */
+	private static final int COMMENT_DELAY = 10;
+
+	/** The half lives of the two fades, in deciseconds, and Iris's numbers. */
+	private static final float BLUR_HALF_LIFE = 2.0F;
+	private static final float LIST_HALF_LIFE = 1.0F;
 
 	/**
-	 * The pages walked through to get here, so that going back follows the way in rather than a
-	 * tree the pack never described. Pages are flat and joined by name, so a stack is all there is
-	 * to it.
+	 * How much blur the option page asks for, which is Iris's way of asking for none: the background is
+	 * blurred only past a radius of one, so a tenth reads as off while still fading rather than
+	 * switching.
+	 */
+	private static final float OPTIONS_BLUR = 0.1F;
+
+	private static final int WHITE = 0xFFFFFFFF;
+
+	private static final Component SELECT_TITLE = Component
+			.translatable(ScreenText.SELECT_TITLE)
+			.withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC);
+
+	private static final Component CONFIGURE_TITLE = Component
+			.translatable(ScreenText.CONFIGURE_TITLE)
+			.withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC);
+
+	private final @Nullable Screen parent;
+
+	/**
+	 * The pages walked through to get here, so that going back follows the way in rather than a tree
+	 * the pack never described. Pages are flat and joined by name, so a stack is all there is to it.
+	 * This is Iris's {@code NavigationController}, whose whole content is this deque.
 	 */
 	private final Deque<String> history = new ArrayDeque<>();
 
+	/** What has to be drawn after every list entry, so that the next row cannot cover a tooltip. */
+	private final List<Runnable> topLayer = new ArrayList<>();
+
+	private final Smoothed blurFade = new Smoothed();
+	private final Smoothed listFade = new Smoothed();
+
+	private @Nullable PackList packList;
+	private @Nullable OptionList optionList;
 	private @Nullable PackSession session;
 	private @Nullable MenuValues values;
-	private @Nullable PageList list;
-	private @Nullable StringWidget statusLine;
+	private @Nullable Button viewSwitch;
+	private @Nullable Button folderButton;
+	private @Nullable Button eyeButton;
+
 	private @Nullable String error;
+
+	private @Nullable Component notification;
+	private int notificationTicks;
+
+	private @Nullable PageWidget hoveredCell;
+	private Optional<Component> commentTitle = Optional.empty();
+	private List<FormattedCharSequence> commentBody = List.of();
+	private int commentTicks;
 
 	/** The page being shown, "" being the one the pack opens on. */
 	private String page = "";
 
-	/** What the list was built for last time, so that a rebuild can tell a new view from the same. */
-	private String shownView = "";
+	private boolean optionsOpen;
+	private boolean guiHidden;
+	private boolean dropChanges;
 
-	private boolean listingPacks;
-	private boolean rebuildQueued;
+	/** Whether a frame has been drawn yet, which is what the list's fade fades in from. */
+	private boolean started;
 
-	/** Whether the last row was built with something waiting, so {@link #watchPending} can tell. */
-	private boolean wasWaiting;
-
-	/** What the folder held last time it was looked at, and when. See {@link #watchFolder()}. */
-	private List<String> folderNames = List.of();
-	private long folderLooked;
+	private float blurAlpha;
+	private float listAlpha;
+	private long lastFrame;
 
 	public SettingsScreen(@Nullable Screen parent) {
-		super(Component.translatable(ScreenText.TITLE));
+		super(Component.translatable(ScreenText.PACKS_TITLE));
 		this.parent = parent;
 		adopt(PackChain.session().orElse(null));
-		// Whatever the file says when there is no pack: the other view would be an empty page, and
-		// the list is where one is picked.
-		this.listingPacks = PackChain.opensOnPacks() || this.session == null;
+		// Whatever the file says when there is no pack: the other view would be an empty page, and the
+		// list is where one is picked.
+		this.optionsOpen = !PackChain.opensOnPacks() && this.session != null;
 	}
 
 	@Override
 	protected void init() {
-		// init runs again on every rebuild and on every resize, and the layout keeps whatever it
-		// was given last time.
-		this.layout.removeChildren();
-		this.layout.setHeaderHeight(
-				forcedCount() > 0 ? HEADER_HEIGHT + LINE_HEIGHT : HEADER_HEIGHT);
-		// Grown by exactly what the status line takes when there is one, the same way the header is
-		// grown by the forced count, so that the row keeps the same room under it either way.
-		this.layout.setFooterHeight(status().getString().isEmpty()
-				? FOOTER_HEIGHT
-				: FOOTER_HEIGHT + LINE_HEIGHT);
-		this.layout.addToHeader(header());
+		int bottomCentre = this.width / 2 - BUTTON_WIDTH / 2;
+		int topCentre = this.width / 2 - WIDE_BUTTON_WIDTH / 2;
+		int listTop = LIST_TOP + 4;
+		int listHeight = Math.max(0, this.height - FOOTER_ROOM - listTop);
 
-		PageList previous = this.list;
-		String previousView = this.shownView;
-		this.list = this.layout.addToContents(new PageList(this.minecraft, this, this.width,
-				this.layout.getContentHeight(), this.layout.getHeaderHeight()));
-		this.layout.addToFooter(footer());
-		populate();
+		// Rebuilt rather than resized, which is what Iris does, with the pack the list had kept
+		// selected carried across: a resize that lost it would drop a pack chosen and not yet applied.
+		String chosen = this.packList == null
+				? PackChain.askedFor().name()
+				: this.packList.chosenName();
+		boolean enabled = this.packList == null
+				? PackChain.askedFor().enabled()
+				: this.packList.shadersEnabled();
 
-		this.layout.visitWidgets(widget -> this.addRenderableWidget(widget));
-		repositionElements();
+		// Let go of the old folder watcher first. Iris does not, and leaks a watch key per resize.
+		closePackList();
+		this.packList = new PackList(this, this.minecraft, gameDirectory(), chosen, enabled,
+				this.width, listHeight, LIST_TOP);
 
-		// Every rebuild builds a new list, which starts at the top. Applying a setting, reloading
-		// and resizing the window all rebuild without changing what is on screen, so the scroll is
-		// carried over for those; walking into another page is a new view and starts at its top.
-		// Set after the layout, since the list clamps this against a height it only has by then.
-		this.shownView = view();
-		if (previous != null && previousView.equals(this.shownView)) {
-			this.list.setScrollAmount(previous.scrollAmount());
+		PackSession loaded = this.session;
+		if (loaded == null) {
+			this.optionsOpen = false;
+			this.optionList = null;
+		} else {
+			this.optionList = new OptionList(this, this.minecraft, this.width, listHeight, LIST_TOP);
+			this.optionList.show(loaded.menu(), this.page);
 		}
+
+		this.clearWidgets();
+
+		if (!this.guiHidden) {
+			addRenderableWidget(this.optionsOpen && this.optionList != null
+					? this.optionList
+					: this.packList);
+
+			addRenderableWidget(PanelButton.of(bottomCentre - BUTTON_PITCH, this.height - 27,
+					BUTTON_WIDTH, BUTTON_HEIGHT, CommonComponents.GUI_CANCEL,
+					this::dropChangesAndClose));
+			addRenderableWidget(PanelButton.of(bottomCentre, this.height - 27, BUTTON_WIDTH,
+					BUTTON_HEIGHT, Component.translatable(ScreenText.APPLY), this::applyChanges));
+			addRenderableWidget(PanelButton.of(bottomCentre + BUTTON_PITCH, this.height - 27,
+					BUTTON_WIDTH, BUTTON_HEIGHT, CommonComponents.GUI_DONE, this::onClose));
+
+			this.folderButton = addRenderableWidget(PanelButton.of(
+					topCentre - WIDE_BUTTON_PITCH, this.height - 51, WIDE_BUTTON_WIDTH,
+					BUTTON_HEIGHT, Component.translatable(ScreenText.FOLDER), this::openFolder));
+			this.viewSwitch = addRenderableWidget(PanelButton.of(
+					topCentre + WIDE_BUTTON_PITCH, this.height - 51, WIDE_BUTTON_WIDTH,
+					BUTTON_HEIGHT, Component.empty(), this::switchView));
+			refreshViewSwitch();
+		}
+
+		if (this.minecraft.level != null) {
+			this.eyeButton = addRenderableWidget(eye());
+		} else {
+			this.eyeButton = null;
+		}
+
+		// Never let a comment panel outlive the page it belonged to, which is Iris's own fix for a
+		// panel that stayed up after the screen had moved on.
+		this.hoveredCell = null;
+		this.commentTicks = 0;
 	}
 
-	/** What the list is showing, told apart by name so that a rebuild knows whether it changed. */
-	private String view() {
-		return this.listingPacks ? "packs" : "page " + this.page;
+	/**
+	 * The one button with no room for a word: the eye that takes the screen away. Placed in whatever
+	 * space is left to the right of the button rows, which is Iris's arithmetic.
+	 */
+	private Button eye() {
+		float endOfRow = this.width / 2.0F + 154.0F;
+		float free = this.width - endOfRow;
+		int x;
+		if (free > 100.0F) {
+			x = this.width - 50;
+		} else if (free < 20.0F) {
+			x = this.width - EYE_SIZE;
+		} else {
+			x = (int) (endOfRow + free / 2.0F) - 10;
+		}
+
+		Component label = Component
+				.translatable(this.guiHidden ? ScreenText.GUI_SHOW : ScreenText.GUI_HIDE);
+		Button button = TextureButton.of(x, this.height - 39, EYE_SIZE, EYE_SIZE,
+				this.guiHidden ? EYE_SIZE : 0, EYE_V, EYE_SIZE, ScreenDraw.WIDGETS, label,
+				this::toggleHidden);
+		button.setTooltip(Tooltip.create(label));
+		// Ten seconds, which is Iris's: the tooltip would otherwise cover the world this button exists
+		// to uncover.
+		button.setTooltipDelay(Duration.ofSeconds(10));
+
+		return button;
 	}
 
 	@Override
-	protected void repositionElements() {
-		this.layout.arrangeElements();
-		if (this.list != null) {
-			this.list.updateSize(this.width, this.layout);
+	protected void extractBlurredBackground(GuiGraphicsExtractor graphics) {
+		float wanted = (float) this.minecraft.options.getMenuBackgroundBlurriness();
+		if (Math.min(wanted, this.blurAlpha) >= 1.0F) {
+			graphics.blurBeforeThisStratum();
 		}
 	}
 
 	/**
-	 * Two things happen between two frames rather than on the click that asked for them.
+	 * Two things happen here rather than on the click that asked for them.
 	 * <p>
-	 * A rebuild is one. Rebuilding inside a button press throws the pressed widget away while the
-	 * game is still holding it: {@code ContainerEventHandler.mouseClicked} focuses whatever it just
-	 * clicked once the press returns, so the focus would land on a widget no longer on screen and
-	 * the next Enter would press it again, walking into a page twice or reloading twice. Waiting
-	 * for the frame lets that focus land on a live widget, and the {@code clearFocus} inside
-	 * {@link #rebuildWidgets()} then clears it.
+	 * Following the loaded pack is one. Apply, the reset button and walking through a portal all read
+	 * the pack again underneath this screen, and nothing tells the screen about any of it, so it looks
+	 * every frame.
 	 * <p>
-	 * Following the loaded pack is the other. Reload, Reset and picking a pack all read the pack
-	 * again underneath this screen, and so does walking through a portal; nothing tells the screen
-	 * about any of it, so it looks every frame.
+	 * The two fades are the other, and their order matters: the list's fade reads {@link #started},
+	 * which is set afterwards, so the first frame folds in a nought and every frame after it a one.
+	 * Setting it first would give the fade its final value outright and there would be no fade at all.
 	 */
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
 		syncWithLoadedPack();
-		watchFolder();
-		watchPending();
-		if (this.rebuildQueued) {
-			this.rebuildQueued = false;
-			rebuildWidgets();
+		advanceFades();
+		this.started = true;
+
+		if (this.guiHidden) {
+			if (this.eyeButton != null) {
+				this.eyeButton.extractRenderState(graphics, mouseX, mouseY, a);
+			}
+		} else {
+			super.extractRenderState(graphics, mouseX, mouseY, a);
+
+			graphics.centeredText(this.font, this.title, this.width / 2, 8, WHITE);
+			graphics.centeredText(this.font, subtitle(), this.width / 2, 21, WHITE);
+			drawComment(graphics);
 		}
 
-		super.extractRenderState(graphics, mouseX, mouseY, a);
-	}
-
-	/** Not the default: the default pops a screen layer nobody pushed. */
-	@Override
-	public void onClose() {
-		// Nothing pending is written on the way out, which is the whole point: every door out leaves
-		// the world exactly as it was drawn. What was clicked and not applied goes with this screen,
-		// which every entry point builds anew. Done reaching here without writing is not a hole,
-		// since it is only ever drawn once there is nothing left to write.
-		this.minecraft.gui.setScreen(this.parent);
-	}
-
-	@Override
-	public boolean keyPressed(KeyEvent event) {
-		if (event.isEscape() && shouldCloseOnEsc() && canGoBack()) {
-			back();
-			return true;
+		// After every list entry, and before the engine's own line, which nothing may cover.
+		for (Runnable draw : this.topLayer) {
+			draw.run();
 		}
 
-		return super.keyPressed(event);
+		this.topLayer.clear();
+
+		Component note = engineNote();
+		if (!note.getString().isEmpty()) {
+			graphics.text(this.font, note, 2, this.height - 10, WHITE);
+		}
 	}
 
-	public boolean canGoBack() {
-		return !this.listingPacks;
-	}
+	private void advanceFades() {
+		long now = Util.getMillis();
+		float dt = this.lastFrame == 0L ? 0.0F : (now - this.lastFrame) / 1000.0F;
+		this.lastFrame = now;
 
-	/** One step up: the page walked in from, or the list of packs once there is none left. */
-	public void back() {
-		if (this.listingPacks) {
-			return;
+		float blur;
+		if (this.guiHidden) {
+			blur = 0.0F;
+		} else if (this.optionsOpen) {
+			blur = OPTIONS_BLUR;
+		} else {
+			blur = (float) this.minecraft.options.getMenuBackgroundBlurriness();
 		}
 
-		if (this.history.isEmpty()) {
-			openPacks();
-			return;
-		}
+		this.blurAlpha = this.blurFade.updateAndGet(blur, BLUR_HALF_LIFE, BLUR_HALF_LIFE, dt);
 
-		this.page = this.history.pop();
-		queueRebuild();
+		float list = this.guiHidden || this.optionsOpen || !this.started ? 0.0F : 1.0F;
+		this.listAlpha = this.listFade.updateAndGet(list, LIST_HALF_LIFE, LIST_HALF_LIFE, dt);
 	}
 
-	/** Waited for by {@link #extractRenderState}, which says why. */
-	private void queueRebuild() {
-		this.rebuildQueued = true;
+	/** The notification while it lasts, and which view is being shown once it has gone. */
+	private Component subtitle() {
+		Component said = this.notification;
+		if (said != null && this.notificationTicks > 0) {
+			return said;
+		}
+
+		return this.optionsOpen ? CONFIGURE_TITLE : SELECT_TITLE;
 	}
 
 	/**
-	 * Rebuilds the row when the last button's name changes hands, and only then.
-	 * <p>
-	 * Clicking a value in the page does not go through this screen at all: a widget writes into
-	 * {@link MenuValues} and redraws itself, which is what keeps a click cheap. The footer is built
-	 * once per rebuild though, so the button that reads Apply while something waits and Done once
-	 * nothing does would keep whichever name it was born with. Watching the count instead of
-	 * rebuilding on every click is what keeps that from costing a rebuild per click: only the
-	 * crossing of nought changes a name, and a player crosses it twice.
+	 * The one line at the bottom left, which is where Iris draws its own name and version. Ours carries
+	 * the engine's news instead, worst first: a load that failed, then what is being held down from
+	 * outside, then what could not be built.
 	 */
-	private void watchPending() {
-		boolean waiting = pending() > 0;
-		if (waiting != this.wasWaiting) {
-			this.wasWaiting = waiting;
-			queueRebuild();
+	private Component engineNote() {
+		String failed = this.error == null ? PackChain.lastError().orElse(null) : this.error;
+		if (failed != null) {
+			return Component.translatable(ScreenText.ERROR, failed)
+					.withStyle(ChatFormatting.RED);
 		}
-	}
 
-	/**
-	 * Takes on a reading the render layer made on its own, which is what the image was built from.
-	 * <p>
-	 * The same pack keeps what is pending, which is the whole point of holding that apart from the
-	 * file: a line added to {@code options.txt} greys a setting without losing the click made under
-	 * it. Another pack drops it, a value set on one pack having no meaning in the next one's file.
-	 */
-	// By identity, and here that is the opposite answer to the one EngineOptions gives on its own
-	// record, on purpose. The question is whether the render layer has handed over a new reading,
-	// not whether the reading says the same thing: a reload of an unchanged pack builds a session
-	// equal to the held one, and by value this method would then return early and leave the screen
-	// on the menu it read before. That is the promise the paragraph below makes and would break.
-	@SuppressWarnings("ReferenceEquality")
-	private void syncWithLoadedPack() {
-		PackSession loaded = PackChain.session().orElse(null);
-		PackSession held = this.session;
-		if (loaded == held) {
-			return;
+		if (this.session == null) {
+			return Component
+					.translatable(PackChain.noPackWanted() ? ScreenText.PACK_OFF : ScreenText.NO_PACK)
+					.withStyle(ChatFormatting.GRAY);
 		}
 
 		MenuValues current = this.values;
-		if (loaded != null && held != null && current != null
-				&& loaded.packFileName().equals(held.packFileName())) {
-			this.session = loaded;
-			// On the menu that was just read and not on the one held, since Reload promises to read
-			// everything again and the same file name is not the same pack: a directory pack is
-			// edited in place, and a zip is replaced under its own name often enough.
-			this.values = current.reread(loaded.menu(), loaded.saved().values(),
-					loaded.forcedText());
-			dropMissingPage();
-		} else {
-			adopt(loaded);
+		int forced = current == null ? 0 : current.forcedShown();
+		if (forced > 0) {
+			return Component.translatable(ScreenText.FORCED, forced)
+					.withStyle(ChatFormatting.GOLD);
 		}
 
-		queueRebuild();
+		List<String> gone = PackChain.removedPasses();
+
+		return gone.isEmpty()
+				? Component.empty()
+				: Component.translatable(ScreenText.REMOVED, gone.size())
+						.withStyle(ChatFormatting.GRAY);
+	}
+
+	private void drawComment(GuiGraphicsExtractor graphics) {
+		if (!showingComment()) {
+			return;
+		}
+
+		int panelHeight = Math.max(50, 18 + this.commentBody.size() * 10);
+		int x = this.width / 2 - 157;
+		int y = this.height - (panelHeight + 4);
+
+		ScreenDraw.panel(graphics, x, y, COMMENT_PANEL_WIDTH, panelHeight);
+		graphics.text(this.font, this.commentTitle.orElse(Component.empty()), x + 4, y + 4, WHITE);
+		for (int i = 0; i < this.commentBody.size(); i++) {
+			graphics.text(this.font, this.commentBody.get(i), x + 4, y + 16 + i * 10, WHITE);
+		}
+	}
+
+	@Override
+	public void tick() {
+		super.tick();
+
+		if (this.notificationTicks > 0) {
+			this.notificationTicks--;
+		}
+
+		if (this.hoveredCell == null) {
+			this.commentTicks = 0;
+		} else {
+			this.commentTicks++;
+		}
+	}
+
+	/**
+	 * Escape unwinds one step at a time: the hidden screen comes back, then one page, then the pack
+	 * list, then the screen closes. Tab swaps the two views. F1 is the eye.
+	 */
+	@Override
+	public boolean keyPressed(KeyEvent event) {
+		if (event.isEscape()) {
+			if (this.guiHidden) {
+				toggleHidden();
+
+				return true;
+			}
+
+			if (!this.history.isEmpty()) {
+				back();
+
+				return true;
+			}
+
+			if (this.optionsOpen) {
+				this.optionsOpen = false;
+				rebuildWidgets();
+
+				return true;
+			}
+		} else if (event.isCycleFocus()) {
+			PackList list = this.packList;
+			if (!this.optionsOpen && list != null) {
+				// Iris presses the focused row before switching, so that Tab from the list opens the
+				// settings of the pack the keyboard is on rather than of the pack that was applied.
+				list.keyPressed(new KeyEvent(GLFW.GLFW_KEY_ENTER, 0, 0));
+			}
+
+			switchView();
+			// Cleared after the rebuild put it back, so that the Tab falling through below walks the
+			// new view from its start rather than from whatever the rebuild happened to focus.
+			setFocused(null);
+		} else if (event.key() == GLFW.GLFW_KEY_F1 && this.minecraft.level != null) {
+			toggleHidden();
+
+			return true;
+		}
+
+		// Nothing else reaches a screen that is not being drawn.
+		return this.guiHidden || super.keyPressed(event);
+	}
+
+	private void toggleHidden() {
+		this.guiHidden = !this.guiHidden;
+		rebuildWidgets();
+	}
+
+	/**
+	 * Swaps the two views, applying on the way. Iris's own note gives the reason for applying: picking
+	 * a pack in the list without applying and then opening the settings would open the settings of the
+	 * pack before it.
+	 */
+	private void switchView() {
+		this.optionsOpen = !this.optionsOpen;
+		applyChanges();
+		rebuildWidgets();
+	}
+
+	private void refreshViewSwitch() {
+		Button button = this.viewSwitch;
+		if (button == null) {
+			return;
+		}
+
+		button.setMessage(Component
+				.translatable(this.optionsOpen ? ScreenText.PACKS : ScreenText.TITLE));
+		// Dead while there is nothing to configure, and it says why on hover: a folder with no pack in
+		// it and a pack that failed to read look the same from here otherwise.
+		PackList list = this.packList;
+		boolean anythingToConfigure = this.session != null
+				&& (list == null || list.shadersEnabled())
+				&& !this.session.menu().main().slots().isEmpty();
+		button.active = this.optionsOpen || anythingToConfigure;
+		button.setTooltip(button.active ? null : Tooltip.create(noPackReason()));
+	}
+
+	private static Component noPackReason() {
+		return Component.translatable(
+				PackChain.noPackWanted() ? ScreenText.PACK_OFF : ScreenText.NO_PACK);
+	}
+
+	@Override
+	public float listAlpha() {
+		return this.listAlpha;
+	}
+
+	@Override
+	public void shadersToggled() {
+		refreshViewSwitch();
+	}
+
+	@Override
+	public void focusBottomRow() {
+		setFocused(this.folderButton);
 	}
 
 	@Override
 	public MenuValues values() {
-		// Only ever reached from a widget, and a widget only exists when a pack was read.
+		// Only ever reached from a cell, and a cell only exists when a pack was read.
 		return Objects.requireNonNull(this.values, "no pack is loaded");
 	}
 
 	@Override
 	public PackLang lang() {
 		PackSession loaded = this.session;
+
 		return loaded == null ? PackLang.empty() : loaded.menu().lang();
 	}
 
 	@Override
 	public void refresh() {
-		if (this.list != null) {
-			this.list.refresh();
+		if (this.optionList != null) {
+			this.optionList.refresh();
 		}
-
-		updateStatus();
 	}
 
 	@Override
 	public void openPage(String name) {
 		this.history.push(this.page);
 		this.page = name;
-		queueRebuild();
+		showPage();
 	}
 
-	private void populate() {
-		PageList shown = this.list;
-		if (shown == null) {
-			return;
+	@Override
+	public void back() {
+		this.page = this.history.isEmpty() ? "" : this.history.pop();
+		showPage();
+	}
+
+	private void showPage() {
+		PackSession loaded = this.session;
+		if (this.optionList != null && loaded != null) {
+			this.optionList.show(loaded.menu(), this.page);
+		}
+	}
+
+	@Override
+	public boolean showingComment() {
+		return this.commentTicks > COMMENT_DELAY && this.commentTitle.isPresent()
+				&& !this.commentBody.isEmpty();
+	}
+
+	/**
+	 * Takes on the comment of whichever cell the mouse is over. Told for every cell of every row on
+	 * every frame, so the two branches are "this one has just become the one" and "this one has just
+	 * stopped being it".
+	 */
+	@Override
+	public void hovered(PageWidget widget, boolean hovered) {
+		if (hovered && widget != this.hoveredCell) {
+			this.hoveredCell = widget;
+			this.commentTitle = widget.commentTitle();
+			this.commentBody = widget.commentBody().map(this::wrapComment).orElse(List.of());
+			this.commentTicks = 0;
+		} else if (!hovered && widget == this.hoveredCell) {
+			this.hoveredCell = null;
+			this.commentTitle = Optional.empty();
+			this.commentBody = List.of();
+			this.commentTicks = 0;
+		}
+	}
+
+	/**
+	 * One line per sentence, then wrapped to the panel. Iris splits on a full stop followed by a space
+	 * and drops a trailing one, which is what turns a pack's single run-on comment into something
+	 * readable in a panel four lines tall.
+	 */
+	private List<FormattedCharSequence> wrapComment(Component comment) {
+		String text = comment.getString();
+		if (text.endsWith(".")) {
+			text = text.substring(0, text.length() - 1);
 		}
 
-		if (this.listingPacks) {
-			shown.show(packButtons(), 1);
-			return;
+		List<FormattedCharSequence> lines = new ArrayList<>();
+		for (String sentence : Arrays.stream(text.split("\\. [ ]*")).toList()) {
+			lines.addAll(this.font.split(Component.literal(sentence), COMMENT_PANEL_WIDTH - 8));
 		}
 
+		return List.copyOf(lines);
+	}
+
+	@Override
+	public void onTop(Runnable draw) {
+		this.topLayer.add(draw);
+	}
+
+	@Override
+	public void announce(Component message) {
+		this.notification = message;
+		this.notificationTicks = NOTIFICATION_TICKS;
+	}
+
+	@Override
+	public Path settingsFile() {
+		PackSession loaded = this.session;
+
+		return loaded == null
+				? SettingsFile.of(gameDirectory(), "")
+				: loaded.settingsFile();
+	}
+
+	/**
+	 * Empties this pack's settings file, so that it goes back to what the pack itself declares, then
+	 * applies.
+	 * <p>
+	 * Emptied and not deleted, where Iris deletes its own ({@code Iris.java:464-471}). The two read back
+	 * the same on both sides, a file carrying no value at all, and Iris removes it itself the next time
+	 * it loads the pack; what emptying buys is that a player who has that file open sees it go blank.
+	 * <p>
+	 * Two things it deliberately does not do. It does not touch {@code vitrail/options.txt}, which is
+	 * the file that forces settings from outside and is not the player's to lose here. And it drops what
+	 * is pending rather than keeping it, because a pending value is a change to the settings this is
+	 * discarding.
+	 */
+	@Override
+	public void resetSettings() {
 		PackSession loaded = this.session;
 		if (loaded == null) {
-			shown.show(List.of(), 1);
 			return;
 		}
 
-		MenuPage current = this.page.isEmpty()
-				? loaded.menu().main()
-				: loaded.menu().page(this.page).orElse(loaded.menu().main());
-		shown.show(current, loaded.menu().profileNames());
-	}
-
-	private LinearLayout header() {
-		LinearLayout header = LinearLayout.vertical().spacing(2);
-		header.addChild(new StringWidget(headerTitle(), this.font),
-				LayoutSettings::alignHorizontallyCenter);
-
-		int forced = forcedCount();
-		if (forced > 0) {
-			Component notice = Component.translatable(ScreenText.FORCED, forced);
-			header.addChild(new StringWidget(notice, this.font),
-					LayoutSettings::alignHorizontallyCenter);
-		}
-
-		return header;
-	}
-
-	private LinearLayout footer() {
-		LinearLayout footer = LinearLayout.vertical().spacing(4);
-
-		// Only when it has something to say. An empty line still stands its full height, and the
-		// band centres whatever it is given, so a blank one lifts the row off the middle and leaves
-		// the buttons sitting against the bottom of the screen with a hole above them.
-		Component said = status();
-		this.statusLine = said.getString().isEmpty() ? null : footer.addChild(
-				new StringWidget(said, this.font).setMaxWidth(this.width - 20),
-				LayoutSettings::alignHorizontallyCenter);
-		if (this.statusLine != null) {
-			this.statusLine.setTooltip(removedTooltip());
-		}
-
-		// One row, and it reads left to right as where you are, what you can do here, and the way
-		// on. Iris carries two, the folder and the view switch over Cancel, Apply and Done, but it
-		// needs the second line for a Cancel this screen no longer has and for an Apply that only
-		// one of the two views can use. What is left fits on one line, and one line is one thing to
-		// look at.
-		LinearLayout tools = footer.addChild(LinearLayout.horizontal().spacing(BUTTON_GAP),
-				LayoutSettings::alignHorizontallyCenter);
-		if (this.listingPacks) {
-			// No Reload on the list, and both references agree: neither OptiFine's pack screen nor
-			// Iris's offers to read the pack again from the screen whose whole subject is which pack
-			// to read. Ours offered it by accident of layout, and it reloaded the pack to answer a
-			// question about a directory listing. The folder is watched instead, see watchFolder.
-			tools.addChild(button(ScreenText.FOLDER, fits(ScreenText.FOLDER), this::openFolder));
-			tools.addChild(settingsButton());
-		} else {
-			// The way out first, and only one of them. Back replaces the view switch rather than
-			// standing beside it: from a pack's first page the two lead to the same place, and one
-			// page in the switch would skip however many pages the player walked through. Walking
-			// back reaches the list either way, which is what Escape does too.
-			tools.addChild(button(CommonComponents.GUI_BACK, NARROW_BUTTON, this::back));
-
-			// Reset before Reload rather than at the end. It is the only button here that throws
-			// away something the player wrote, and the end of a row is where a hand goes without
-			// looking; Reload is harmless and pressed often, so it takes that edge instead.
-			tools.addChild(button(ScreenText.RESET, NARROW_BUTTON, this::confirmReset));
-			tools.addChild(button(ScreenText.RELOAD, NARROW_BUTTON, this::reload));
-		}
-
-		// The last slot is whatever is left to do: Apply while something is waiting, Done once
-		// nothing is. It reads as one control because it never moves and never changes size, both
-		// names being drawn at the same fixed width, so the row does not shift under the hand that
-		// is clicking it. Apply deliberately does not close: a setting is judged by looking at the
-		// world it changed, and a screen that left as it applied would take the world with it.
-		//
-		// Never Apply on the list, and the reason to keep that term is not the one an earlier
-		// version of this comment gave. It claimed the list can be reached holding something
-		// waiting; it cannot. The two ways in both settle it on the way: openPacks drops what is
-		// pending outright, and adopt takes the values away with the session, after which pending()
-		// answers nought for want of anything to count.
-		//
-		// So this is belt and braces, and worth the two words. Without it the row's last button
-		// would depend on an invariant established in two other methods, and a third way onto the
-		// list that forgot to clear either one would put Apply where Done stands - on the only
-		// button that leaves the screen at all, Back being the root here with nowhere to go. That
-		// failure shuts the last door and leaves Escape as the way out, which is exactly the shape
-		// of thing nobody notices until somebody is stuck behind it.
-		tools.addChild(!this.listingPacks && pending() > 0
-				? button(ScreenText.APPLY, NARROW_BUTTON, () -> {
-					apply();
-					queueRebuild();
-				})
-				: button(CommonComponents.GUI_DONE, NARROW_BUTTON, this::onClose));
-
-		return footer;
-	}
-
-	/**
-	 * How much is clicked and not yet written, which is what decides the name of the last button.
-	 * Nought whenever there is no pack, so the list always ends on Done.
-	 */
-	private int pending() {
-		MenuValues current = this.values;
-
-		return current == null ? 0 : current.pendingCount();
-	}
-
-	/**
-	 * How wide the view switch is drawn, which is the wider of the two names it takes and no wider.
-	 * <p>
-	 * Measured rather than written down. Both are translated, so a number chosen by looking at the
-	 * English is either cramped or padded out in every other language, and it was padded out here:
-	 * the slot was cut for {@code Shader Pack Settings} and kept that width for
-	 * {@code Shader Pack List}, which left the shorter of the two floating in it. Measuring keeps
-	 * the one property the slot has to have, that it does not move when its name changes, without
-	 * paying for it in blank space.
-	 */
-	private int switchWidth() {
-		return fits(ScreenText.TITLE, ScreenText.PACKS);
-	}
-
-	/**
-	 * How wide a button has to be to hold the widest of the names it can take, and no wider.
-	 * <p>
-	 * Every label here is translated, so a width written down is one that was chosen by looking at
-	 * the English: right in that language and either cramped or padded out in every other. What the
-	 * button is worth is its text, and nothing else on this row cares how wide it comes out.
-	 * Several names because a button that changes its label must not change its size while it does,
-	 * which would move everything beside it under the hand that is clicking.
-	 */
-	private int fits(String... keys) {
-		int widest = 0;
-		for (String key : keys) {
-			widest = Math.max(widest, this.font.width(Component.translatable(key)));
-		}
-
-		return widest + SWITCH_PADDING;
-	}
-
-	/**
-	 * The way into the loaded pack's pages. Greyed rather than hidden when there is no pack, since a
-	 * button that comes and goes teaches nothing, and it says why on hover: a folder with no pack in
-	 * it and a pack that failed to read look the same from here otherwise.
-	 */
-	private Button settingsButton() {
-		Button settings = button(this.title, switchWidth(), this::openSettings);
-		settings.active = this.session != null;
-		if (!settings.active) {
-			settings.setTooltip(Tooltip.create(noPackReason()));
-		}
-
-		return settings;
-	}
-
-	/** Why there is nothing to configure: none was asked for, or none could be read. */
-	private static Component noPackReason() {
-		return Component.translatable(
-				PackChain.noPackWanted() ? ScreenText.PACK_OFF : ScreenText.NO_PACK);
-	}
-
-	private Button button(String key, int width, Runnable action) {
-		return button(Component.translatable(key), width, action);
-	}
-
-	private Button button(Component label, int width, Runnable action) {
-		return Button.builder(label, _ -> action.run()).width(width).build();
-	}
-
-	private Component headerTitle() {
-		if (this.listingPacks) {
-			return Component.translatable(ScreenText.PACKS_TITLE);
-		}
-
-		PackSession loaded = this.session;
-		if (loaded == null) {
-			return this.title;
-		}
-
-		String pack = loaded.menu().packName();
-		return this.page.isEmpty()
-				? ScreenText.fromPack(pack)
-				: ScreenText.fromPack(pack + " - " + lang().page(this.page));
-	}
-
-	private Component status() {
-		String failed = this.error;
-		if (failed == null) {
-			failed = PackChain.lastError().orElse(null);
-		}
-
-		if (failed != null) {
-			return Component.translatable(ScreenText.ERROR, failed);
-		}
-
-		if (this.session == null) {
-			return noPackReason();
-		}
-
-		MenuValues current = this.values;
-		int pending = current == null ? 0 : current.pendingCount();
-		if (pending > 0) {
-			return Component.translatable(ScreenText.PENDING, pending);
-		}
-
-		// Said here because nowhere else reaches the player. A pass this backend cannot build is
-		// taken out and the rest of the pack keeps drawing, which is the right thing to do and also
-		// the reason it goes unnoticed: the picture is missing an effect rather than broken. The log
-		// names each one, and the log is not where anyone looks.
-		List<String> gone = PackChain.removedPasses();
-
-		return gone.isEmpty()
-				? Component.empty()
-				: Component.translatable(ScreenText.REMOVED, gone.size());
-	}
-
-	/** The whole sentence for each pass, on hover, since the line above only carries a count. */
-	private Tooltip removedTooltip() {
-		List<String> gone = PackChain.removedPasses();
-
-		return gone.isEmpty() ? null : Tooltip.create(Component.literal(String.join("\n", gone)));
-	}
-
-	private void updateStatus() {
-		StringWidget line = this.statusLine;
-		Component now = status();
-		boolean wanted = !now.getString().isEmpty();
-
-		// Whether the line exists at all is settled when the footer is built, because an empty one
-		// still takes its height and would push the buttons off the middle of the band. A status
-		// that turns up, or goes away, is therefore a rebuild and not a message to set.
-		if (wanted != (line != null)) {
-			queueRebuild();
-
-			return;
-		}
-
-		if (line == null || now.equals(line.getMessage())) {
-			return;
-		}
-
-		line.setMessage(now);
-		// The line is centred on its own width, so a shorter message has to be laid out again.
-		repositionElements();
-	}
-
-	private int forcedCount() {
-		MenuValues current = this.values;
-		return current == null ? 0 : current.forcedShown();
-	}
-
-
-	/** Throws away what was clicked and never applied, and puts the widgets back on their values. */
-	private void dropPending() {
 		MenuValues current = this.values;
 		if (current != null) {
 			current.clearPending();
-		}
-
-		refresh();
-	}
-
-	/**
-	 * Writes what is pending, then has the pack read again from the file that was just written.
-	 * <p>
-	 * The order is not commutative. The file stays the only source of truth, so nothing is handed
-	 * to the reload in memory, and the reload resynchronises the watcher on what is now on disk or
-	 * it would read the same change a second time within the second. It runs on the render thread,
-	 * which is where a button press already is and where the GPU buffers a reload closes have to
-	 * be closed.
-	 */
-	private void apply() {
-		PackSession loaded = this.session;
-		MenuValues current = this.values;
-		if (loaded == null || current == null) {
-			return;
-		}
-
-		// Nothing waiting, nothing written. The button stays live rather than greying out, since a
-		// commit row is read at a glance and a grey Apply says the screen is stuck; what it must not
-		// do is spend a second reading the pack again to write the file it already holds.
-		if (current.pendingCount() == 0) {
-			return;
-		}
-
-		try {
-			// Read again first: the file is shared with Iris and edited by hand, and laying the
-			// pending table over what is on disk is what keeps two edits from erasing each other.
-			SettingsFile.Stored onDisk = SettingsFile.read(loaded.settingsFile());
-			current.rebase(onDisk.values(), loaded.forcedText());
-			SettingsFile.write(loaded.settingsFile(), new SettingsFile.Stored(current.toSave()));
-			current.clearPending();
-			this.error = null;
-		} catch (IOException | RuntimeException e) {
-			this.error = String.valueOf(e.getMessage());
-			Vitrail.logger().error("Vitrail could not write {}", loaded.settingsFile(), e);
-			// The screen stays open and the status line carries the message, which is all a failed
-			// write owes now that leaving no longer writes: what was pending is still pending.
-			return;
-		}
-
-		PackChain.reload(loaded.gameDirectory());
-		adopt(PackChain.session().orElse(null));
-	}
-
-	/**
-	 * Reads everything again from disk, which is what a file edited by hand does on its own. It
-	 * goes through {@link #syncWithLoadedPack()} rather than taking the new session straight on, so
-	 * that a pending value survives it: Cancel is the button that drops one, and a reload the player
-	 * asked for has no more reason to drop it than a reload the watcher noticed.
-	 */
-	private void reload() {
-		this.error = null;
-		PackChain.reload(gameDirectory());
-		syncWithLoadedPack();
-		queueRebuild();
-	}
-
-	/**
-	 * Reset asks first, and it is the only button here that does. It is also the only one that
-	 * throws away something a player wrote: a settings file can hold an evening of tuning, and it
-	 * sits two slots from Back on a row where every other button is harmless.
-	 * <p>
-	 * The confirmation is the game's own screen rather than a panel of ours, so it is worded, laid
-	 * out and narrated like every other confirmation the player has already answered. Coming back
-	 * hands it this same screen, which rebuilds itself: the page walked into, the scroll and what
-	 * is pending are fields and none of them is touched by going away and returning.
-	 */
-	private void confirmReset() {
-		PackSession loaded = this.session;
-		if (loaded == null) {
-			return;
-		}
-
-		Minecraft client = this.minecraft;
-		client.gui.setScreen(new ConfirmScreen(
-				yes -> {
-					client.gui.setScreen(this);
-					if (yes) {
-						reset();
-					}
-				},
-				Component.translatable(ScreenText.RESET_CONFIRM, loaded.packFileName()),
-				Component.translatable(ScreenText.RESET_CONFIRM_DETAIL,
-						loaded.settingsFile().getFileName().toString())));
-	}
-
-	/**
-	 * Empties this pack's settings file, so that it goes back to what the pack itself declares.
-	 * <p>
-	 * Emptied and not deleted, where Iris deletes its own ({@code Iris.java:464-471}). The two read
-	 * back the same on both sides, a file of comments carrying no value at all, and Iris removes it
-	 * itself the next time it loads the pack; what emptying buys is that the confirmation naming the
-	 * file stays true, and that a player who has that file open sees it go blank.
-	 * <p>
-	 * Two things it deliberately does not do. It does not touch {@code vitrail/options.txt}, which
-	 * is the file that forces settings from outside and is not the player's to lose here; the
-	 * greyed out widgets stay greyed out after a reset, which is the honest answer. And it drops
-	 * what is pending rather than keeping it, because a pending value is a change the player made to
-	 * the settings this is discarding, so keeping it would put back part of what was asked to be
-	 * thrown away.
-	 */
-	private void reset() {
-		PackSession loaded = this.session;
-		if (loaded == null) {
-			return;
 		}
 
 		try {
@@ -714,23 +652,295 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 
 		Vitrail.logger().info("{} is back to the settings it declares itself, {} is emptied",
 				loaded.packFileName(), loaded.settingsFile().getFileName());
-		PackChain.reload(loaded.gameDirectory());
-		adopt(PackChain.session().orElse(null));
-		queueRebuild();
+		reloadPack();
+	}
+
+	@Override
+	public void importSettings(Path file) {
+		MenuValues current = this.values;
+		if (current == null) {
+			return;
+		}
+
+		Map<String, String> read = new LinkedHashMap<>();
+		try (InputStream in = Files.newInputStream(file)) {
+			Properties properties = new Properties();
+			properties.load(in);
+			properties.forEach((name, value) -> read.put(name.toString(), value.toString()));
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().error("Vitrail could not import {}", file, e);
+			announce(Component
+					.translatable(ScreenText.FAILED_IMPORT, name(file))
+					.withStyle(ChatFormatting.ITALIC, ChatFormatting.RED));
+
+			return;
+		}
+
+		current.queueAll(read);
+		announce(Component
+				.translatable(ScreenText.IMPORTED_SETTINGS, name(file))
+				.withStyle(ChatFormatting.ITALIC, ChatFormatting.YELLOW));
+		refresh();
+	}
+
+	/**
+	 * A pack dropped onto the list is copied into the folder; a settings file dropped onto a page is
+	 * imported. Which one it is depends on the view being shown, as it does in Iris.
+	 */
+	@Override
+	public void onFilesDrop(List<Path> files) {
+		if (this.optionsOpen) {
+			if (files.size() != 1) {
+				announce(Component.translatable(ScreenText.TOO_MANY_FILES)
+						.withStyle(ChatFormatting.ITALIC, ChatFormatting.RED));
+
+				return;
+			}
+
+			importSettings(files.getFirst());
+
+			return;
+		}
+
+		addPacks(files);
+	}
+
+	private void addPacks(List<Path> files) {
+		PackList list = this.packList;
+		if (list == null) {
+			return;
+		}
+
+		List<Path> packs = files.stream().filter(PackLoader::looksLikeAPack).toList();
+		Path directory = PackLoader.directory(gameDirectory());
+
+		for (Path pack : packs) {
+			String name = name(pack);
+			try {
+				copyInto(directory, pack);
+			} catch (FileAlreadyExistsException e) {
+				announce(Component.translatable(ScreenText.COPY_ERROR_EXISTS, name)
+						.withStyle(ChatFormatting.ITALIC, ChatFormatting.RED));
+				list.refresh(list.chosenName());
+
+				return;
+			} catch (IOException | RuntimeException e) {
+				Vitrail.logger().warn("Vitrail could not copy the pack dropped from {}", pack, e);
+				announce(Component.translatable(ScreenText.COPY_ERROR, name)
+						.withStyle(ChatFormatting.ITALIC, ChatFormatting.RED));
+				list.refresh(list.chosenName());
+
+				return;
+			}
+		}
+
+		list.refresh(list.chosenName());
+
+		if (packs.isEmpty()) {
+			announce((files.size() == 1
+					? Component.translatable(ScreenText.FAILED_ADD_SINGLE, name(files.getFirst()))
+					: Component.translatable(ScreenText.FAILED_ADD))
+					.withStyle(ChatFormatting.ITALIC, ChatFormatting.RED));
+
+			return;
+		}
+
+		if (packs.size() == 1) {
+			String name = name(packs.getFirst());
+			announce(Component.translatable(ScreenText.ADDED_PACK, name)
+					.withStyle(ChatFormatting.ITALIC, ChatFormatting.YELLOW));
+			// Selected straight away: somebody who has just dragged a pack in wants to use it.
+			list.select(name);
+
+			return;
+		}
+
+		announce(Component.translatable(ScreenText.ADDED_PACKS, packs.size())
+				.withStyle(ChatFormatting.ITALIC, ChatFormatting.YELLOW));
+	}
+
+	/** Copies a zip, or a whole directory, into the pack folder without overwriting what is there. */
+	private static void copyInto(Path directory, Path pack) throws IOException {
+		Files.createDirectories(directory);
+		Path target = directory.resolve(name(pack));
+		if (Files.exists(target)) {
+			throw new FileAlreadyExistsException(target.toString());
+		}
+
+		if (!Files.isDirectory(pack)) {
+			Files.copy(pack, target, StandardCopyOption.COPY_ATTRIBUTES);
+
+			return;
+		}
+
+		try (Stream<Path> tree = Files.walk(pack)) {
+			for (Path entry : tree.toList()) {
+				Path to = target.resolve(pack.relativize(entry).toString());
+				if (Files.isDirectory(entry)) {
+					Files.createDirectories(to);
+				} else {
+					Files.createDirectories(to.getParent());
+					Files.copy(entry, to, StandardCopyOption.COPY_ATTRIBUTES);
+				}
+			}
+		}
+	}
+
+	private static String name(Path path) {
+		Path name = path.getFileName();
+
+		return name == null ? path.toString() : name.toString();
+	}
+
+	/**
+	 * Writes whatever the two views have changed and reads the pack again from what was written.
+	 * <p>
+	 * The order is not commutative. The file stays the only source of truth, so nothing is handed to
+	 * the reload in memory, and the reload resynchronises the folder watcher on what is now on disk or
+	 * it would read the same change a second time within the second.
+	 */
+	private void applyChanges() {
+		PackList list = this.packList;
+		if (list == null) {
+			return;
+		}
+
+		PackFile asked = PackChain.askedFor();
+		String chosen = list.chosenName().isEmpty() ? asked.name() : list.chosenName();
+		boolean enabled = list.shadersEnabled();
+		boolean samePack = chosen.equals(asked.name());
+
+		// A pack being swapped drops what was clicked on the one before it: a value set on one pack has
+		// no meaning in the next one's file, and Iris clears its own queue for the same reason.
+		if (!samePack) {
+			MenuValues current = this.values;
+			if (current != null) {
+				current.clearPending();
+			}
+		}
+
+		boolean wrote = samePack && writePendingSettings();
+		if (!samePack || enabled != asked.enabled()) {
+			wrote |= writePackFile(chosen, enabled);
+		}
+
+		if (wrote) {
+			reloadPack();
+		}
+
+		list.markSelectedApplied();
+		refreshViewSwitch();
+	}
+
+	/**
+	 * Lays what is pending over what is on disk and writes the result, or answers no when there is
+	 * nothing pending.
+	 * <p>
+	 * Read again first: the file is shared with Iris and edited by hand, and laying the pending table
+	 * over what is on disk is what keeps two edits from erasing each other.
+	 */
+	private boolean writePendingSettings() {
+		PackSession loaded = this.session;
+		MenuValues current = this.values;
+		if (loaded == null || current == null || current.pendingCount() == 0) {
+			return false;
+		}
+
+		try {
+			SettingsFile.Stored onDisk = SettingsFile.read(loaded.settingsFile());
+			current.rebase(onDisk.values(), loaded.forcedText());
+			SettingsFile.write(loaded.settingsFile(), new SettingsFile.Stored(current.toSave()));
+			current.clearPending();
+			this.error = null;
+		} catch (IOException | RuntimeException e) {
+			this.error = String.valueOf(e.getMessage());
+			Vitrail.logger().error("Vitrail could not write {}", loaded.settingsFile(), e);
+			// The screen stays open and the bottom line carries the message: what was pending is still
+			// pending, so nothing has been lost.
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Writes the whole file name rather than the fragment {@code pack.txt} also accepts, so that two
+	 * packs sharing a word cannot swap under the player.
+	 */
+	private boolean writePackFile(String chosen, boolean enabled) {
+		Path file = PackChain.packFile(gameDirectory());
+		try {
+			PackFile.write(file, new PackFile(chosen, enabled));
+			this.error = null;
+		} catch (IOException | RuntimeException e) {
+			this.error = String.valueOf(e.getMessage());
+			Vitrail.logger().error("Vitrail could not write {}", file, e);
+
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Has the pack read again, and does not take the reading on.
+	 * <p>
+	 * {@link #syncWithLoadedPack} picks it up on the next frame instead, and that is what keeps a
+	 * rebuild out of a button press: {@code ContainerEventHandler.mouseClicked} focuses whatever it
+	 * just clicked once the press returns, so a widget thrown away inside the press would take that
+	 * focus with it and the next Enter would press a button that is no longer on screen.
+	 */
+	private void reloadPack() {
+		PackChain.reload(gameDirectory());
+	}
+
+	private void dropChangesAndClose() {
+		this.dropChanges = true;
+		onClose();
+	}
+
+	/** Not the default: the default pops a screen layer nobody pushed. */
+	@Override
+	public void onClose() {
+		if (this.dropChanges) {
+			MenuValues current = this.values;
+			if (current != null) {
+				current.clearPending();
+			}
+		} else {
+			applyChanges();
+		}
+
+		closePackList();
+		this.minecraft.gui.setScreen(this.parent);
+	}
+
+	private void closePackList() {
+		PackList list = this.packList;
+		if (list == null) {
+			return;
+		}
+
+		try {
+			list.close();
+		} catch (IOException e) {
+			Vitrail.logger().warn("Vitrail could not let go of the pack folder watcher", e);
+		}
+
+		this.packList = null;
 	}
 
 	/**
 	 * Opens the folder the packs are read from, which is how a pack gets into the list in the first
-	 * place. Both references put this button on this screen, and it is the reason the list has to
-	 * notice a folder that changed while it is open.
+	 * place. Both references put this button on this screen.
 	 */
 	private void openFolder() {
 		Path directory = PackLoader.directory(gameDirectory());
 		try {
 			Files.createDirectories(directory);
 		} catch (IOException e) {
-			// Opened anyway: a folder that cannot be created is one the platform will report on
-			// better than this line could, and the packs are read from it either way.
+			// Opened anyway: a folder that cannot be created is one the platform will report on better
+			// than this line could.
 			Vitrail.logger().warn("Vitrail could not create {}", directory, e);
 		}
 
@@ -738,143 +948,54 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 	}
 
 	/**
-	 * Notices a pack dropped into the folder while this screen is open, without a button asking for
-	 * it. OptiFine does the same on a timer of its own; the alternative, a Reload on the pack list,
-	 * reads the whole pack again to answer a question about a directory listing.
+	 * Takes on a reading the render layer made on its own, which is what the image was built from.
 	 * <p>
-	 * Names only, and only while the list is the view being drawn. The folder is a handful of files
-	 * and this runs once a second, which is the same budget the engine already spends looking at
-	 * whether the world moved.
+	 * The same pack keeps what is pending, which is the whole point of holding that apart from the
+	 * file: a line added to {@code options.txt} greys a setting without losing the click made under it.
+	 * Another pack drops it, a value set on one pack having no meaning in the next one's file.
 	 */
-	private void watchFolder() {
-		if (!this.listingPacks) {
+	// By identity, and here that is the opposite answer to the one EngineOptions gives on its own
+	// record, on purpose. The question is whether the render layer has handed over a new reading, not
+	// whether the reading says the same thing: a reload of an unchanged pack builds a session equal to
+	// the held one, and by value this method would then return early and leave the screen on the menu
+	// it read before.
+	@SuppressWarnings("ReferenceEquality")
+	private void syncWithLoadedPack() {
+		PackSession loaded = PackChain.session().orElse(null);
+		PackSession held = this.session;
+		if (loaded == held) {
 			return;
 		}
 
-		long now = Util.getMillis();
-		if (now - this.folderLooked < FOLDER_INTERVAL) {
-			return;
+		MenuValues current = this.values;
+		if (loaded != null && held != null && current != null
+				&& loaded.packFileName().equals(held.packFileName())) {
+			this.session = loaded;
+			// On the menu that was just read and not on the one held, since the same file name is not
+			// the same pack: a directory pack is edited in place, and a zip is replaced under its own
+			// name often enough.
+			this.values = current.reread(loaded.menu(), loaded.saved().values(), loaded.forcedText());
+			dropMissingPage();
+		} else {
+			adopt(loaded);
 		}
 
-		this.folderLooked = now;
-		List<String> names;
-		try {
-			names = PackLoader.candidates(gameDirectory()).stream()
-					.map(pack -> pack.getFileName().toString())
-					.toList();
-		} catch (IOException e) {
-			// The list keeps what it has. A folder that cannot be listed is already said once, where
-			// the buttons are built, and saying it again every second would be the whole log.
-			return;
-		}
-
-		if (!names.equals(this.folderNames)) {
-			this.folderNames = names;
-			queueRebuild();
-		}
-	}
-
-	private void openPacks() {
-		// Dropped on the way out, and this is the one place that drops them. A pending value belongs
-		// to a page of one pack; carrying it to a list where the next click may load another pack
-		// leaves it waiting for a file it was never meant for, and the count in the status line then
-		// names settings the reader can no longer see.
-		dropPending();
-		this.listingPacks = true;
-		queueRebuild();
-	}
-
-	private void openSettings() {
-		this.listingPacks = false;
-		queueRebuild();
-	}
-
-	private List<AbstractWidget> packButtons() {
-		Path directory = PackLoader.directory(gameDirectory());
-		List<Path> packs;
-		try {
-			packs = PackLoader.candidates(gameDirectory());
-		} catch (IOException e) {
-			Vitrail.logger().warn("Vitrail could not list {}", directory, e);
-			packs = List.of();
-		}
-
-		PackSession loaded = this.session;
-		String drawn = loaded == null ? "" : loaded.packFileName();
-
-		List<AbstractWidget> buttons = new ArrayList<>(packs.size() + 1);
-		buttons.add(noneButton());
-		for (Path pack : packs) {
-			String name = pack.getFileName().toString();
-			Button button = Button.builder(Component.literal(name), _ -> choosePack(name))
-					.width(Button.BIG_WIDTH).build();
-			button.active = !name.equals(drawn);
-			buttons.add(button);
-		}
-
-		return buttons;
+		rebuildWidgets();
 	}
 
 	/**
-	 * Turning every pack off, first in the list rather than last, where a folder of eight would put
-	 * it out of sight. It writes the same file the pack entries write, and what it asks for is the
-	 * path the engine already takes when the folder is empty: nothing is read and the game keeps
-	 * its own image.
-	 */
-	private Button noneButton() {
-		// The game's own word for it, so it reads in the player's language on a client we ship no
-		// translation for.
-		Button none = Button.builder(Component.translatable("gui.none"),
-				_ -> choosePack(PackChain.NO_PACK)).width(Button.BIG_WIDTH).build();
-		none.active = !PackChain.noPackWanted();
-		none.setTooltip(Tooltip.create(Component.translatable(ScreenText.PACK_OFF)));
-
-		return none;
-	}
-
-	/**
-	 * Writes the whole file name rather than the fragment {@code pack.txt} also accepts, so that
-	 * two packs sharing a word cannot swap under the player, or {@link PackChain#NO_PACK} for none
-	 * of them.
-	 */
-	private void choosePack(String line) {
-		// Whatever is pending goes with the pack it was set on, unwritten. It was never this pack's
-		// to write on the way past, and the next pack's file is the wrong place for it.
-		Path file = PackChain.packFile(gameDirectory());
-		try {
-			// Through PackFile, so that both keys are written and whether shaders are switched on
-			// survives a change of pack. This screen has no toggle of its own, so it carries whatever
-			// the file already said.
-			PackFile.write(file, PackChain.askedFor().withName(line));
-			this.error = null;
-		} catch (IOException e) {
-			this.error = String.valueOf(e.getMessage());
-			Vitrail.logger().error("Vitrail could not write {}", file, e);
-			queueRebuild();
-			return;
-		}
-
-		PackChain.reload(gameDirectory());
-		adopt(PackChain.session().orElse(null));
-		// Left on the list, which now greys the pack it just switched to and offers its settings
-		// one button away. Walking straight into them would make trying a second pack a round trip.
-		queueRebuild();
-	}
-
-	/**
-	 * Takes on what the render layer has just read, which is what the image was built from. A page
-	 * the new pack does not lay out, and the way back to it, go with the old one.
+	 * Takes on what the render layer has just read. A page the new pack does not lay out, and the way
+	 * back to it, go with the old one.
 	 */
 	private void adopt(@Nullable PackSession loaded) {
 		this.session = loaded;
-		this.values = loaded == null ? null : MenuValues.of(loaded.menu(),
-				loaded.saved().values(), loaded.forcedText());
+		this.values = loaded == null
+				? null
+				: MenuValues.of(loaded.menu(), loaded.saved().values(), loaded.forcedText());
 		// Out to the list when there is no pack left to configure, which is the view a pack is picked
-		// from and the one the constructor opens on for the same reason. Turning every pack off, or a
-		// pack failing to read, otherwise leaves an empty page under a row of buttons that all return
-		// without doing anything, and the way back to the list under the name of the pack's pages.
+		// from: turning every pack off otherwise leaves an empty page under a row of buttons.
 		if (loaded == null) {
-			this.listingPacks = true;
+			this.optionsOpen = false;
 		}
 
 		dropMissingPage();
@@ -890,6 +1011,7 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 
 	private Path gameDirectory() {
 		PackSession loaded = this.session;
+
 		return loaded == null ? Vitrail.platform().gameDirectory() : loaded.gameDirectory();
 	}
 }

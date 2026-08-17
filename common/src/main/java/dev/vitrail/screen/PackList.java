@@ -311,9 +311,12 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 		return this.toggleRow.packsPresent;
 	}
 
-	/** Marks a pack as the one being drawn, which is what puts it in yellow. */
-	public void setApplied(@Nullable PackEntry entry) {
-		this.applied = entry;
+	/**
+	 * Marks whatever row is selected as the one being drawn, which is what puts it in yellow. Called
+	 * by the screen when it applies, since that is the moment the selection becomes the image.
+	 */
+	public void markSelectedApplied() {
+		this.applied = getSelected() instanceof PackEntry entry ? entry : null;
 	}
 
 	/** Selects a pack by name, which is what a pack dropped onto the screen asks for. */

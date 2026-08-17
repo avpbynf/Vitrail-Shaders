@@ -1,33 +1,33 @@
 package dev.vitrail.screen;
 
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.navigation.FocusNavigationEvent;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
+import org.jspecify.annotations.Nullable;
 
 /**
- * The gap a pack writes {@code <empty>} for, as a widget of its own.
+ * The gap a pack writes {@code <empty>} for, and the padding a last row short of a full set of
+ * columns is filled out with. This is Iris's {@code AbstractElementWidget.EMPTY}.
  * <p>
- * A blank is layout, not nothing: the corpus holds seven hundred and seventy three of them
- * against nineteen hundred and forty two settings, and it is how a pack aligns its columns by
- * hand. It has to take up a cell, so it is a widget; it must not be reachable, so it is inactive,
- * and that one line is the whole of it. An inactive widget answers no to {@code isMouseOver} and
- * hands back no focus path, so neither a click nor the tab key can land on it.
+ * A blank is layout, not nothing: the corpus holds seven hundred and seventy three of them against
+ * nineteen hundred and forty two settings, and it is how a pack aligns its columns by hand. So it
+ * takes up a cell and draws nothing in it, and it answers with an empty rectangle and no focus path
+ * so that neither a click nor the tab key can land on it.
  */
-public final class BlankWidget extends AbstractWidget {
+public final class BlankWidget extends PageWidget {
 
-	public BlankWidget(int width) {
-		super(0, 0, width, Button.DEFAULT_HEIGHT, Component.empty());
-		this.active = false;
+	@Override
+	public void draw(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered) {
 	}
 
 	@Override
-	protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY,
-			float a) {
+	public ScreenRectangle getRectangle() {
+		return ScreenRectangle.empty();
 	}
 
 	@Override
-	protected void updateWidgetNarration(NarrationElementOutput output) {
+	public @Nullable ComponentPath nextFocusPath(FocusNavigationEvent event) {
+		return null;
 	}
 }
