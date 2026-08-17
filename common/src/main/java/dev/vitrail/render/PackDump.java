@@ -69,7 +69,7 @@ final class PackDump {
 	 * reads back as whatever the last block of the frame before set, and that is NOT the chain's
 	 * {@code NONE}, whatever the order of a frame suggests: the shadow stage draws at the end of a
 	 * frame for the next one, after the chain has run, so a dump of the sky's disc comes out at
-	 * stage 17, measured in game. So the six pieces of the sky dump alike on exactly what tells them
+	 * stage 17, measured in game. So the eight pieces of the sky dump alike on exactly what tells them
 	 * apart, and so do the three chunk passes and every piece of the entities. Everything else is the
 	 * named program's own.
 	 *
@@ -80,9 +80,9 @@ final class PackDump {
 	 *                 catalogue, its {@code of_ModelViewMatrix} being the world's where a composite's
 	 *                 is the identity, which is exactly the pair a reading has to tell apart. Every
 	 *                 family is named by ELEMENT rather than by file, because in every one of them
-	 *                 several elements share a file: four of the six pieces of the sky are one, the
-	 *                 two halves of the entities sometimes are, and the clouds answer their two
-	 *                 settings, {@code fancy} and {@code flat}, out of one
+	 *                 several elements share a file: the eight pieces of the sky come out of two
+	 *                 files, four apiece, the two halves of the entities sometimes are, and the
+	 *                 clouds answer their two settings, {@code fancy} and {@code flat}, out of one
 	 */
 	@SafeVarargs
 	static void take(String place, int load, List<PackPass> passes, WorldState world,

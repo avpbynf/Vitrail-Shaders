@@ -51,8 +51,8 @@ import java.util.Set;
  * target this program reads and writes, and it is the one thing this family answers differently from
  * the sky and the entities, which are both drawn before the deferreds.
  * <p>
- * <strong>Two elements out of one program</strong>, and it is the same reason the sky is six pieces
- * out of three files: the game picks between {@code WEATHER_DEPTH_WRITE} and
+ * <strong>Two elements out of one program</strong>, and it is the same reason the sky is eight
+ * pieces out of two files: the game picks between {@code WEATHER_DEPTH_WRITE} and
  * {@code WEATHER_NO_DEPTH_WRITE} at every frame, the two differ in a depth state, and a depth state
  * belongs to a compiled pipeline rather than to a draw. A pack's file is still read and translated
  * once, the two elements sharing a translation.

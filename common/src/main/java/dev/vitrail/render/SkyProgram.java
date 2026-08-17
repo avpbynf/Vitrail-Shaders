@@ -33,10 +33,10 @@ import java.util.Set;
  * declared that the format has not got refuses the program outright, and an element the format
  * carries that the stage does not declare shifts the location of every one after it without a word.
  * <p>
- * <strong>It neither tests nor writes a depth.</strong> Not one of the five pipelines the sky is
- * drawn with declares a depth state at all, {@code RenderPipelines.END_SKY} included, and the sky is
- * drawn before the world: given the ordinary one, the pack's program would write the sky into the
- * depth buffer and the world would be tested against it.
+ * <strong>It neither tests nor writes a depth.</strong> The eight passes bind five pipelines between
+ * them, and not one of the five declares a depth state at all, {@code RenderPipelines.END_SKY}
+ * included, while the sky is drawn before the world: given the ordinary one, the pack's program
+ * would write the sky into the depth buffer and the world would be tested against it.
  * <p>
  * <strong>Its namespace is ours and has no {@code sodium} in it.</strong> The word is what makes
  * Sodium's mixin push twenty bytes of region offset into the layout, and the sky is the game's
@@ -86,11 +86,12 @@ final class SkyProgram implements DumpedProgram {
 		return new SkyProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY, element.element(),
 				NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, element.blend(),
 				// claimed, and the sky is the one family that answers it yes: it draws opaque pieces
-				// of its own, the disc and the dark, over the pixels the four that blend span - the
-				// stars, the sunrise, the sun and the moon - so those four blend onto a target the
-				// seed leaves alone although none of them marks a pixel of its own. Answered no,
-				// they would go to the game's target and the seed would discard at exactly those
-				// pixels, on the mask their own siblings wrote: no stars, no sun and no moon.
+				// of its own, the disc and the dark in the overworld and the cube of sky in the End,
+				// over the pixels the five that blend span - the stars, the sunrise, the sun, the
+				// moon and the End's flash - so those five blend onto a target the seed leaves alone
+				// although none of them marks a pixel of its own. Answered no, they would go to the
+				// game's target and the seed would discard at exactly those pixels, on the mask
+				// their own siblings wrote: no stars, no sun, no moon and no flash.
 				//
 				// WHAT IT DOES NOT COVER, and the repository already knew: the game draws the dark
 				// disc only while the eye is under the world's horizon height and not underwater,
@@ -99,11 +100,12 @@ final class SkyProgram implements DumpedProgram {
 				// rising or setting sun stand in. What marks it is ours, HorizonCone, which shares
 				// the disc's pass and its mask - and which is drawn only for a pack whose world
 				// writes the colour target rather than reaching it through the seed. There, and
-				// over the whole sky wherever the disc's own mask is turned down, the four are
-				// repainted, exactly as they were before this field existed.
+				// over the whole sky wherever the disc's own mask is turned down, the overworld's
+				// four are repainted, exactly as they were before this field existed.
 				element.covers(), true, false, element.topology(),
-				// None of the five sky pipelines names a culling of its own, so all five take the
-				// builder's default, which is to cull.
+				// Five pipelines under the eight passes, the disc sharing one with the dark plane and
+				// the End's flash sharing another with the sun and the moon, and not one of the five
+				// names a culling of its own: all eight take the builder's default, which is to cull.
 				true, null, element.stage(),
 				// Nothing of the game's bound beside the mesh, unlike the clouds: every one of the
 				// eight sky passes carries its whole geometry in the vertex buffer it binds.
@@ -123,8 +125,9 @@ final class SkyProgram implements DumpedProgram {
 
 	/**
 	 * The texture the game was going to draw this element with, and the sampler it configured for
-	 * it: the celestial atlas for the sun and the moon. Handed on so that a pack reading
-	 * {@code gtexture} reads the same image the game would have.
+	 * it: the celestial atlas for the sun, the moon and the End's flash, and an image of its own for
+	 * the End's sky. Handed on so that a pack reading {@code gtexture} reads the same image the game
+	 * would have.
 	 */
 	void texture(GpuTextureView view, GpuSampler sampler) {
 		this.body.atlas(view);
