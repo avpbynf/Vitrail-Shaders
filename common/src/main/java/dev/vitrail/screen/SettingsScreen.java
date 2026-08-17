@@ -5,6 +5,7 @@ import dev.vitrail.pack.menu.MenuValues;
 import dev.vitrail.pack.source.PackLang;
 import dev.vitrail.pack.source.PackLoader;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.settings.PackFile;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsFile;
 import dev.vitrail.Vitrail;
@@ -27,7 +28,6 @@ import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -842,8 +842,10 @@ public final class SettingsScreen extends Screen implements ScreenHost {
 		// to write on the way past, and the next pack's file is the wrong place for it.
 		Path file = PackChain.packFile(gameDirectory());
 		try {
-			Files.createDirectories(file.getParent());
-			Files.writeString(file, line + System.lineSeparator(), StandardCharsets.UTF_8);
+			// Through PackFile, so that both keys are written and whether shaders are switched on
+			// survives a change of pack. This screen has no toggle of its own, so it carries whatever
+			// the file already said.
+			PackFile.write(file, PackChain.askedFor().withName(line));
 			this.error = null;
 		} catch (IOException e) {
 			this.error = String.valueOf(e.getMessage());

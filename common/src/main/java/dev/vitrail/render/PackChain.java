@@ -12,6 +12,7 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
+import dev.vitrail.settings.PackFile;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsFile;
 import dev.vitrail.settings.SettingsLayers;
@@ -106,12 +107,12 @@ public final class PackChain {
 	private static final String QUAD_LABEL = "Vitrail quad";
 
 	/**
-	 * The one line {@code pack.txt} takes that is not the name of a pack: draw none of them, and
-	 * leave the game its own image. It is read after the whole names and before the fragments, so a
-	 * folder really called {@code none} is still reachable and a pack whose name merely holds the
-	 * word cannot answer for it.
+	 * The name {@code pack.txt} takes that is not the name of a pack: draw none of them, and leave the
+	 * game its own image. It is read after the whole names and before the fragments, so a folder really
+	 * called {@code none} is still reachable and a pack whose name merely holds the word cannot answer
+	 * for it.
 	 */
-	public static final String NO_PACK = "none";
+	public static final String NO_PACK = PackFile.NONE;
 
 	private static volatile PackChain active;
 	private static volatile boolean disabled;
@@ -124,6 +125,13 @@ public final class PackChain {
 	private static volatile boolean packsFirst = true;
 	private static volatile boolean chainWanted = true;
 	private static volatile boolean packOff;
+
+	/**
+	 * What {@code pack.txt} asked for at the last load, which is not the same question as what is
+	 * drawn: the screen highlights the pack that was chosen even while shaders are switched off, and
+	 * it needs the name to do it.
+	 */
+	private static volatile PackFile askedFor = PackFile.EMPTY;
 
 	/**
 	 * Whether this frame's values have been moved on yet.
@@ -444,6 +452,10 @@ public final class PackChain {
 		removed = List.of();
 		packsFirst = true;
 		packOff = false;
+		// Cleared here rather than left to choose(), which the empty folder path below returns ahead of:
+		// without this, a folder emptied between two loads would leave the screen highlighting a pack
+		// that is no longer there.
+		askedFor = PackFile.EMPTY;
 		try {
 			// Both ways out of the next two blocks end with no pack drawing anything, and the mesh
 			// only carries what a pack reads while one wants it: said here as well as on the road
@@ -650,23 +662,24 @@ public final class PackChain {
 	 * @return empty when no pack is to be drawn
 	 */
 	private static Optional<Path> choose(Path gameDirectory, List<Path> packs) throws IOException {
-		Path chosen = packFile(gameDirectory);
-		if (!Files.isRegularFile(chosen)) {
+		Path file = packFile(gameDirectory);
+		PackFile asked = PackFile.read(file);
+		// Held whichever way this goes, because the screen highlights the pack that was chosen even
+		// while shaders are switched off, and that is the whole point of the file carrying two facts.
+		askedFor = asked;
+
+		if (!asked.wantsPack()) {
 			return Optional.empty();
 		}
 
-		String wanted = Files.readString(chosen).trim().toLowerCase(Locale.ROOT);
-		if (wanted.isEmpty()) {
-			return Optional.empty();
-		}
-
+		String wanted = asked.name().toLowerCase(Locale.ROOT);
 		for (Path pack : packs) {
 			if (pack.getFileName().toString().toLowerCase(Locale.ROOT).equals(wanted)) {
 				return Optional.of(pack);
 			}
 		}
 
-		if (NO_PACK.equals(wanted)) {
+		if (asked.namesNone()) {
 			return Optional.empty();
 		}
 
@@ -677,7 +690,7 @@ public final class PackChain {
 		}
 
 		Vitrail.logger().warn("No pack in the folder matches '{}' from {}, so none is drawn", wanted,
-				chosen);
+				file);
 
 		return Optional.empty();
 	}
@@ -864,6 +877,17 @@ public final class PackChain {
 	 */
 	public static boolean noPackWanted() {
 		return packOff;
+	}
+
+	/**
+	 * What {@code pack.txt} asked for at the last load: the name it carries, whether or not a pack of
+	 * that name was found, and whether shaders are switched on.
+	 * <p>
+	 * The name survives shaders being switched off, which is the reason the file carries two facts
+	 * rather than one: the screen's toggle has to be able to come back to the pack the player had.
+	 */
+	public static PackFile askedFor() {
+		return askedFor;
 	}
 
 	/**
