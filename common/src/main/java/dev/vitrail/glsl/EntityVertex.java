@@ -41,6 +41,17 @@ public final class EntityVertex {
 	public static final List<String> ATTRIBUTES =
 			List.of("Position", "Color", "UV0", "UV1", "UV2", "Normal");
 
+	/**
+	 * What the light map names read on a piece the game draws at full light, which is the value a
+	 * block at the brightest light level would have carried on the element.
+	 * <p>
+	 * Iris's own constant, {@code transform/transformer/VanillaCoreTransformer.java:117-121}, and the
+	 * number is the game's rather than a round one: {@code LightTexture.pack} puts each of the two
+	 * levels on the element shifted four bits up, so the brightest of the sixteen is fifteen times
+	 * sixteen. Handing a pack anything larger would send it off its own light map.
+	 */
+	public static final String FULL_LIGHT = "vec4(240.0, 240.0, 0.0, 1.0)";
+
 	private EntityVertex() {
 	}
 
@@ -52,21 +63,33 @@ public final class EntityVertex {
 	 *                    pack that never asks
 	 * @param synthesized the vertex inputs the pack declared for itself and that were taken out of
 	 *                    the body, by name and with the type the pack gave them
+	 * @param fullbright  whether the light map names are answered with {@link #FULL_LIGHT} rather
+	 *                    than out of the element, which is a fact about the PIECE being drawn and not
+	 *                    about the mesh: {@code UV2} is bound and carries a real light map either
+	 *                    way. {@link VertexInputs#ENTITY_FULLBRIGHT} says which pieces and why the
+	 *                    sampler has to follow
 	 */
-	public static List<String> prologue(Set<String> used, Map<String, String> synthesized) {
+	public static List<String> prologue(Set<String> used, Map<String, String> synthesized,
+			boolean fullbright) {
 		List<String> lines = new ArrayList<>();
 
 		for (String attribute : ATTRIBUTES) {
 			lines.add("in " + VertexPrologue.elementType(attribute) + " " + attribute + ";");
 		}
 
+		// Still declared under full light, and it has to be: the element is in the format whatever
+		// the piece does with it, and rebind matches by name over the whole format, so a head that
+		// dropped it would move every name after it one location down without a word. Iris keeps it
+		// for the same reason, renaming vaUV2 in both branches (VanillaCoreTransformer.java:118,123).
+		String light = fullbright ? FULL_LIGHT : "vec4(UV2, 0.0, 1.0)";
+
 		lines.add("#define of_Vertex vec4(Position, 1.0)");
 		lines.add("#define of_Color Color");
 		lines.add("#define of_MultiTexCoord0 vec4(UV0, 0.0, 1.0)");
-		lines.add("#define of_MultiTexCoord1 vec4(UV2, 0.0, 1.0)");
+		lines.add("#define of_MultiTexCoord1 " + light);
 		// Unit two is a second name for the light map and not a unit of its own, which is what Iris
 		// makes of it as well, VanillaTransformer.java:77 renaming one into the other.
-		lines.add("#define of_MultiTexCoord2 vec4(UV2, 0.0, 1.0)");
+		lines.add("#define of_MultiTexCoord2 " + light);
 		lines.addAll(VertexPrologue.blankTexCoords());
 
 		lines.add("#define of_Normal Normal.xyz");

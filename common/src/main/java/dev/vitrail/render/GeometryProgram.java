@@ -1174,6 +1174,16 @@ final class GeometryProgram {
 		}
 
 		if (LIGHTMAP.equals(sampler)) {
+			// One white texel for a piece the game draws at full light, which is the other half of what
+			// the vertex head did with the light map names and is read off the same field so that the
+			// two cannot part company (PackProgram.Loaded.fullbright). Iris binds its own white pixel
+			// here (samplers/IrisSamplers.java:202-206). White is what leaves the piece alone: a pack
+			// multiplies its albedo by what it reads out of this image, and every texel of the game's
+			// own is darker than one except at the brightest level.
+			if (this.loaded.fullbright()) {
+				return this.white.getColorTextureView();
+			}
+
 			Minecraft minecraft = Minecraft.getInstance();
 			GpuTextureView lightmap = minecraft == null ? null : minecraft.gameRenderer.lightmap();
 
