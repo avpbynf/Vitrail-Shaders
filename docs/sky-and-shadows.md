@@ -330,6 +330,15 @@ frame. Not always: `sky=off` in the options stops it, so does a pack that serves
 all, and so does the Nether, whose skybox is none and which opens no sky pass whatever. In those
 cases the terrain opens the frame, as it always did.
 
+**And a boss stops it, which is the one worth knowing before diagnosing anything in the End.** The
+game builds no sky pass at all on a frame where a boss bar asks for world fog, the ender dragon and
+the wither being the two that do: `GameRenderer.renderLevel` passes the negation of that question
+as the argument `LevelRenderer.render` gates the whole pass on. Nothing of the pack's sky runs
+there, nothing of the game's does either, and no line is printed to say so, because from this
+engine's side nothing happened. So the End of a world where the dragon is still alive is exactly
+the place where a sky looks broken and is not: kill the dragon, or fly away from its bar, before
+reading anything into what the sky does there.
+
 The End is the case to be careful with, and in two ways at once. It draws no **disc**, and the disc
 is the piece the horizon cone rides in: there is no band under the End's horizon to close, and
 nothing there gates itself on the directive that gates the cone. The disc is also the piece that
