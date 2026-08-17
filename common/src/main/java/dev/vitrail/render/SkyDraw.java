@@ -609,8 +609,8 @@ public final class SkyDraw {
 		}
 
 		// The colour goes to every element and the matrix only to those the game rotated: the two
-		// are not the same question. Every sky draw carries a modulator, and the disc is the one
-		// element whose matrix is the camera's already.
+		// are not the same question. Every sky draw carries a modulator, and two elements have a
+		// matrix that is the camera's already, the disc and the End's cube of sky, one per branch.
 		RenderPipeline pipeline = program.prepare(device, element.rotated() ? modelView : null, colour);
 
 		// Here and not at the draw, because filling a vertex buffer is a copy the encoder refuses

@@ -85,13 +85,15 @@ final class SkyProgram implements DumpedProgram {
 		// question the same way, and the translucent one answers it no.
 		return new SkyProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY, element.element(),
 				NAMESPACE, Set.copyOf(SkyVertex.ATTRIBUTES), false, element.blend(),
-				// claimed, and the sky is the one family that answers it yes: it draws opaque pieces
-				// of its own, the disc and the dark in the overworld and the cube of sky in the End,
-				// over the pixels the five that blend span - the stars, the sunrise, the sun, the
-				// moon and the End's flash - so those five blend onto a target the seed leaves alone
-				// although none of them marks a pixel of its own. Answered no, they would go to the
-				// game's target and the seed would discard at exactly those pixels, on the mask
-				// their own siblings wrote: no stars, no sun, no moon and no flash.
+				// claimed, and the sky is the one family that answers it yes: it draws pieces of its
+				// own that claim every pixel they span, the disc and the dark in the overworld and the
+				// cube of sky in the End, over the pixels the five that claim nothing span, which are
+				// the stars, the sunrise, the sun, the moon and the End's flash. Not the five that
+				// blend, which are six: the cube of sky blends and claims the frame all the same.
+				// Those five blend onto a target the seed leaves alone although none of them marks a
+				// pixel of its own. Answered no, they would go to the game's target and the seed would
+				// discard at exactly those pixels, on the mask their own siblings wrote: no stars, no
+				// sun, no moon and no flash.
 				//
 				// WHAT IT DOES NOT COVER, and the repository already knew: the game draws the dark
 				// disc only while the eye is under the world's horizon height and not underwater,
