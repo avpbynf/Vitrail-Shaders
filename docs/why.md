@@ -39,9 +39,7 @@ the projects below.
 - **[Sulkan](https://github.com/mravatins/sulkanShaders)** is an open source Vulkan shader engine
   for Minecraft, GPLv3, built as a Fabric mod. It was already running on the Vulkan renderer when
   this project started, and reading where it hooks into the game was useful. None of its code is
-  reused here: its licence would not allow it without relicensing all of Vitrail. A mechanical line
-  comparison of the two sources is what keeps that claim honest rather than a promise, and it is
-  re-run whenever this engine takes on a part of the frame Sulkan also touches.
+  reused here: its licence would not allow it without relicensing all of Vitrail.
 - **[Aperture](https://github.com/IrisShaders/Aperture-Example-Pack)**, from the Iris team, is a
   newer engine whose packs are written in Slang. Its example pack is public. It is a clean break
   from the OptiFine format rather than a way to keep running what already exists.
