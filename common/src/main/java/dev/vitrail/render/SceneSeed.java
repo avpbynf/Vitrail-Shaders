@@ -48,8 +48,8 @@ import java.util.Optional;
  * attachment, at the moment it wrote it. So a pixel nothing has been drawn over since compares
  * equal and is the pack's, and a pixel the game drew a feature onto compares closer and is the
  * game's to paint after all. That second case is the one a flag could not answer, and what it is
- * made of is every piece the game still draws for itself in front of a block: the eyes of a mob,
- * a beacon beam, a name plate, and the hand on the runs that hand it back.
+ * made of is every piece the game still draws for itself in front of a block: a beacon beam, a
+ * bolt of lightning, a name plate, and the hand on the runs that hand it back.
  * <p>
  * <strong>Where the pack wrote nothing the mask carries a value outside zero to one</strong>, which
  * every real depth is in front of, so those pixels take the game's picture through the same
