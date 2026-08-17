@@ -47,7 +47,7 @@ import java.util.function.Supplier;
  * element for prepares nothing and draws exactly as it did.
  * <p>
  * <strong>The eight are two branches and not one list.</strong> {@code LevelRenderer.addSkyPass}
- * takes the End's branch or the other and never both, at {@code :344-348} and {@code :350-358}: a
+ * takes the End's branch or the other and never both, at {@code :344-349} and {@code :350-361}: a
  * place under the End's skybox reaches two of these methods and a place under any other reaches the
  * remaining six, and the ones a place never calls cost it nothing.
  * <p>

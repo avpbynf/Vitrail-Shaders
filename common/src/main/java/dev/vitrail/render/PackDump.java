@@ -81,8 +81,8 @@ final class PackDump {
 	 *                 is the identity, which is exactly the pair a reading has to tell apart. Every
 	 *                 family is named by ELEMENT rather than by file, because in every one of them
 	 *                 several elements share a file: the eight pieces of the sky come out of two
-	 *                 files, four apiece, the two halves of the entities sometimes are, and the
-	 *                 clouds answer their two settings, {@code fancy} and {@code flat}, out of one
+	 *                 files, four apiece, the two halves of the entities sometimes out of one, and
+	 *                 the clouds answer their two settings, {@code fancy} and {@code flat}, out of one
 	 */
 	@SafeVarargs
 	static void take(String place, int load, List<PackPass> passes, WorldState world,

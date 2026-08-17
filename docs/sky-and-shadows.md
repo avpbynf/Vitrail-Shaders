@@ -331,9 +331,11 @@ all, and so does the Nether, whose skybox is none and which opens no sky pass wh
 cases the terrain opens the frame, as it always did.
 
 **And a boss stops it, which is the one worth knowing before diagnosing anything in the End.** The
-game builds no sky pass at all on a frame where a boss bar asks for world fog, the ender dragon and
-the wither being the two that do: `GameRenderer.renderLevel` passes the negation of that question
-as the argument `LevelRenderer.render` gates the whole pass on. Nothing of the pack's sky runs
+game builds no sky pass at all on a frame where a boss bar asks for world fog, and the ender
+dragon's is the only bar in the whole game that asks: `GameRenderer.renderLevel` passes the negation
+of that question as the argument `LevelRenderer.render` gates the whole pass on. The wither is not
+one of them, whatever the screen does while it is up, and a boss bar a datapack raises can ask for
+it. Nothing of the pack's sky runs
 there, nothing of the game's does either, and no line is printed to say so, because from this
 engine's side nothing happened. So the End of a world where the dragon is still alive is exactly
 the place where a sky looks broken and is not: kill the dragon, or fly away from its bar, before
