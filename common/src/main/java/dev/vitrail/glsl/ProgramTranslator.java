@@ -250,9 +250,15 @@ public final class ProgramTranslator {
 	 * fragment stage the vertex stage's output list in order; {@code createFromSpirv:114-116} had
 	 * numbered that list {@code 0..n-1} with nothing skipped; {@code rebind:151-163} then numbers the
 	 * fragment stage over the same list, counting only the names the fragment declares. The two agree
-	 * for every name that has no undeclared one before it in the list, so declaring MORE on the
-	 * fragment side is always safe, and what is added here is by construction a name the fragment
-	 * already declares.
+	 * on every name with no undeclared one before it in the list. What is added here is a name the
+	 * fragment already declares, so it is counted on both sides and opens no such gap. A name the
+	 * fragment does NOT declare is what would open one, and nothing here adds one of those.
+	 * <p>
+	 * <strong>What this does not reach.</strong> A declaration whose names are only PARTLY provided,
+	 * {@code in vec3 a, b;} with a stage before writing {@code a} alone, is neither dropped nor owed:
+	 * it is offered only when nothing before writes any of its names. The module is then refused as
+	 * it was. No pack of the corpus writes one, and the shape is worth naming rather than reading as
+	 * covered.
 	 * <p>
 	 * <strong>The stage before is the vertex stage, and in this game it can be nothing else.</strong>
 	 * {@code GlslCompiler.compile:62-63} takes one vertex module and one fragment module and pairs
