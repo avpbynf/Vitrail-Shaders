@@ -10,8 +10,9 @@ screen is the reference's screen, ported rather than approximated.** The lists, 
 gestures, the panels, the buttons and the texture they are drawn from all come from it. Where this
 document says the reference behaves some way, that is not a comparison; it is the specification.
 
-Open it with the key bound in the game's controls (`I` by default), from the icon added to the title
-screen and the pause menu, or from wherever else you reached the mod's options.
+Open it from the video settings, where it sits under the mod's own name in the list of pages, with
+the key bound in the game's controls (`I` by default), or from wherever else you reached the mod's
+options.
 
 ## Two views, one screen
 

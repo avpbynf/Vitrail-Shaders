@@ -204,10 +204,11 @@ Each of the switches is a stage that can be taken in or out on its own, which
 is what tells a wrong gbuffer from a wrong composite. `dump=` is the one that
 answers what no picture can, since a value can be non zero, plausible and wrong.
 
-A settings screen covers all of it in game: the I key, the Config button in the
-mod list, or the icon in the pause menu. It is the screen of the engine packs are
-written against, ported rather than approximated, so it looks and behaves like
-that one. It opens on the pack list, reads each pack's own menu layout, and
+A settings screen covers all of it in game: the video settings, where it sits
+under Vitrail in the list of pages, the I key, or the Config button in the mod
+list. It is the screen of the engine packs are written against, ported rather
+than approximated, so it looks and behaves like that one. It opens on the pack
+list, reads each pack's own menu layout, and
 imports the settings file Iris left in `shaderpacks/` when a pack has none here
 yet. The row at the head of the list turns shaders off altogether and leaves the
 game drawing its own image. Clicking a pack only selects it: Apply writes what

@@ -30,9 +30,12 @@ import net.minecraft.resources.Identifier;
  */
 public final class ConfigEntry implements ConfigEntryPoint {
 
-	/** Named as a texture and not as a sprite: Sodium hands it to the texture manager whole. */
-	private static final Identifier ICON = Identifier.fromNamespaceAndPath(Vitrail.MOD_ID,
-			"textures/gui/sprites/icon/vitrail.png");
+	/**
+	 * A plain texture and not a GUI sprite, because Sodium hands the identifier to the texture
+	 * manager and blits it whole rather than looking it up in the atlas.
+	 */
+	private static final Identifier ICON =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "textures/gui/config-icon.png");
 
 	/**
 	 * The blue the icon is mostly made of. Sodium tints the mod's header and its pages with this,

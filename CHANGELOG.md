@@ -57,6 +57,11 @@ what the next one holds.
   right click walks a value backwards, shift and a click give back the value the pack ships, a slider
   is dragged and only writes when it is let go, and a setting waiting to be applied is marked in
   amber. Hovering a setting brings up the pack's own words about it in a panel at the bottom.
+- **The settings screen is reached from the video settings now**, under Vitrail in the list of pages
+  on the left, and the icon this mod used to add to the title screen and the pause menu is gone with
+  it. Both of those menus lead to the video settings already, so it is the same number of clicks from
+  either and it is where anything about how the world is drawn is looked for. The `I` key and the
+  Config button of the mod list still open the screen as before.
 - **Closing the screen applies what you changed**, where it used to leave without writing. Cancel is
   the button that throws the changes away, and Apply is the one that writes without closing.
 - **A pack is dropped straight onto the screen**, and a settings file exported and imported through

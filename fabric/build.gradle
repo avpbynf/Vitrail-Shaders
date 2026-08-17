@@ -36,13 +36,12 @@ dependencies {
 	compileOnly "net.fabricmc:sponge-mixin:${project.mixin_version}"
 	compileOnly "io.github.llamalad7:mixinextras-common:${project.mixinextras_version}"
 
-	// The three Fabric API modules the settings screen is reached through, and the only Fabric API
-	// this mod uses at all. Named one by one rather than through the whole of Fabric API, because
-	// what the metadata has to declare is these three: a key mapping has to be appended to an array
-	// the options own, and a laid out screen has to be handed over once the game has built it, and
-	// the bare game offers neither.
+	// The two Fabric API modules the key that opens the settings screen is registered and asked
+	// through, and the only Fabric API this mod uses at all. Named one by one rather than through the
+	// whole of Fabric API, because what the metadata has to declare is these two: a key mapping has
+	// to be appended to an array the options own, and it has to be asked once a tick, and the bare
+	// game offers neither.
 	compileOnly "net.fabricmc.fabric-api:fabric-key-mapping-api-v1:${project.fabric_key_mapping_version}"
-	compileOnly "net.fabricmc.fabric-api:fabric-screen-api-v1:${project.fabric_screen_version}"
 	compileOnly "net.fabricmc.fabric-api:fabric-lifecycle-events-v1:${project.fabric_lifecycle_version}"
 }
 

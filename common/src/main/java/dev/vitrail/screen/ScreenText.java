@@ -24,14 +24,17 @@ import net.minecraft.network.chat.MutableComponent;
  */
 public final class ScreenText {
 
-	/** The screen's own title, and Iris's {@code shaderPackSelection.title}. */
+	/**
+	 * The screen's own title, and Iris's {@code shaderPackSelection.title}. It names the page in the
+	 * video settings that opens this screen too, since that page is this screen.
+	 */
 	public static final String PACKS_TITLE = "options.vitrail.packs_title";
 
 	/** The grey line under the title, one per view. */
 	public static final String SELECT_TITLE = "pack.vitrail.select_title";
 	public static final String CONFIGURE_TITLE = "pack.vitrail.configure_title";
 
-	/** The view switch seen from the pack list, and the name the menu icon and the key take. */
+	/** The view switch seen from the pack list, and the name the key takes. */
 	public static final String TITLE = "options.vitrail.title";
 
 	/** The same switch seen from a pack's pages. */
