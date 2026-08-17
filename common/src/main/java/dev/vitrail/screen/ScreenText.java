@@ -34,7 +34,7 @@ public final class ScreenText {
 	public static final String SELECT_TITLE = "pack.vitrail.select_title";
 	public static final String CONFIGURE_TITLE = "pack.vitrail.configure_title";
 
-	/** The view switch seen from the pack list, and the name the key takes. */
+	/** The view switch seen from the pack list. The key takes {@link #OPEN_SETTINGS} instead. */
 	public static final String TITLE = "options.vitrail.title";
 
 	/** The same switch seen from a pack's pages. */
