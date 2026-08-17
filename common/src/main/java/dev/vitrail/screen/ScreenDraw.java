@@ -170,5 +170,17 @@ public final class ScreenDraw {
 			graphics.blit(RenderPipelines.GUI_TEXTURED, WIDGETS, x, y, this.u, this.v,
 					this.width, this.height, ATLAS, ATLAS);
 		}
+
+		/**
+		 * The same sprite laid down through a colour, which multiplies it.
+		 * <p>
+		 * The atlas answers hovering by holding a second, darker sprite rather than by tinting, and
+		 * every icon of the rows is drawn that way. This is for the one icon that has no second sprite
+		 * because the file it comes from never used it at all.
+		 */
+		public void draw(GuiGraphicsExtractor graphics, int x, int y, int colour) {
+			graphics.blit(RenderPipelines.GUI_TEXTURED, WIDGETS, x, y, this.u, this.v,
+					this.width, this.height, ATLAS, ATLAS, colour);
+		}
 	}
 }
