@@ -111,10 +111,15 @@ near the top of the log rather than around world load. No line means either that
 the stack ships a map, or that building them failed, and the failure says so on its own line just
 above.
 
-Two more places relief goes missing even with a material pack installed: **mobs and armour have
-none**, and **an animated block's map does not animate**. Both are named work not done, with what
-they cost, in [Material maps](internals/material-maps.md#what-is-not-done), which is also where the
-rest of the mechanism lives.
+**A mob and a piece of armour are named one at a time, and later.** Their maps are not stitched into
+an atlas, so they are read the first time the skin is drawn rather than at the resource load: expect
+those lines around the moment a mob first comes on screen, one per texture, naming the texture
+itself. The mob that line names wears its relief from the next frame on.
+
+One place relief still goes missing even with a material pack installed: **an animated block's map
+does not animate**. It is named work not done, with what it costs, in
+[Material maps](internals/material-maps.md#what-is-not-done), which is also where the rest of the
+mechanism lives.
 
 ## The water
 

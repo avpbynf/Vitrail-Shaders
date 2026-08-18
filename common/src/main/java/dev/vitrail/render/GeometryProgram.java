@@ -1151,7 +1151,16 @@ final class GeometryProgram {
 			// atlas and every entity texture answer for themselves without this step knowing which of
 			// them it is drawing. Iris resolves it from the bound albedo for the same reason
 			// (pipeline/IrisRenderingPipeline.java:849-871).
+			//
+			// Two doors and not one, because the two shapes of image are read differently: a stitched
+			// atlas has its maps stitched to match it, and a texture of its own has them beside it
+			// under its own name. Iris keeps the same pair and picks between them by the class of the
+			// bound texture (pbr/loader/PBRTextureLoaderRegistry.java:15-16); here the atlas door
+			// answers only for an image it was built against, so asking it first picks the same one.
 			GpuTextureView served = PbrAtlases.view(this.atlas, material);
+			if (served == null) {
+				served = PbrTextures.view(this.atlas, material);
+			}
 
 			return served == null ? this.flatMaps.get(material).getColorTextureView() : served;
 		}

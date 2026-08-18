@@ -4,6 +4,7 @@ import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.HandDraw;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.PbrAtlases;
+import dev.vitrail.render.PbrTextures;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.sodium.EntityMeshSerializer;
@@ -66,8 +67,19 @@ public final class EngineStages {
 	 * <p>
 	 * The frame graph no longer carries a pass of ours, only this reading: the shadow map is drawn
 	 * at the end of the frame, for the next one, and this is what the stage needs from here.
+	 * <p>
+	 * It is also the top of the level frame, which is a second thing entirely and is why the first
+	 * line below has nothing to do with the two arguments.
 	 */
 	public static void frameGraphSetup(Matrix4fc modelView, Vec3 cameraPosition) {
+		// First, and before the shadow question below can send this line home: the graph is being
+		// BUILT here and not executed, so it is the first point of a level frame where no render pass
+		// is open. That is what the material maps of a plain texture need, and it is the reason they
+		// cannot be read where they are wanted - inside the bind of a draw already being recorded.
+		// Nothing to do on a frame that met no new image, which is every frame but the few where a
+		// mob first comes on screen.
+		PbrTextures.load();
+
 		if (!TerrainDraw.shadows()) {
 			return;
 		}
@@ -188,7 +200,9 @@ public final class EngineStages {
 		ShadowGeometry.close();
 
 		// And the material maps, which belong to the resource pack rather than to any shader pack:
-		// nothing in a pack's lifetime touches them, so nothing but the end of the session does.
+		// nothing in a pack's lifetime touches them, so nothing but the end of the session does. Both
+		// doors, the atlases and the plain textures, and neither of them is the other's business.
 		PbrAtlases.close();
+		PbrTextures.close();
 	}
 }

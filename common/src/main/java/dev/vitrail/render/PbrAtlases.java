@@ -27,15 +27,16 @@ import java.util.Properties;
  * atlas, the item atlas and the particle atlas each answer for themselves without anything having
  * to know which is which.
  * <p>
- * <strong>A texture that is not an atlas gets nothing, and that is a divergence.</strong> Iris
- * registers a second loader for a plain texture
+ * <strong>A texture that is not an atlas is not this file's business, and it is not lost either.</strong>
+ * Iris registers a second loader for a plain texture
  * ({@code pbr/loader/PBRTextureLoaderRegistry.java:15} onto
  * {@code pbr/loader/SimplePBRLoader.java:19-31}), resolved per bound albedo at
- * {@code pbr/texture/PBRTextureManager.java:126-138}, so an entity skin and an armour layer read
- * their own {@code _n} and {@code _s} there. Here nothing but a stitched atlas is a door, so those
- * read the flat value: a mob stays matte while the terrain around it has relief. Nothing in 26.2
- * forbids the second door - the game hands out plain textures by name like any other - so this is
- * work not done rather than a wall, and it is the honest name for it.
+ * {@code pbr/texture/PBRTextureManager.java:126-141}, so an entity skin and an armour layer read
+ * their own {@code _n} and {@code _s} there. {@link PbrTextures} is that second door, and
+ * {@link GeometryProgram} asks this one first and it second. What decides between them here is not
+ * the class of the texture but the answer: these maps are built against one image and follow it
+ * alone, so an atlas the pack ships nothing for and a texture that is no atlas at all both fall
+ * through to the same place.
  * <p>
  * Only the geometry programs are served, which is Iris's shape: {@code normals} and
  * {@code specular} are added by {@code IrisSamplers.addLevelSamplers} and by nothing else
