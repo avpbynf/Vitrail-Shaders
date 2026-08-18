@@ -122,6 +122,12 @@ public final class EngineStages {
 		// world's translucents or, once the level returns, the screen.
 		EntityDraw.opaqueFeatures(false);
 
+		// Then Distant Horizons' far terrain into the game's depth, ahead of every line below and
+		// not only ahead of the deferred stage: each of the next three reads that depth, and a fold
+		// placed between two of them would give the pack a far terrain in one depth and not the
+		// other. PackChain.foldDistantDepth says why here is the only place it fits.
+		PackChain.foldDistantDepth();
+
 		// Then the depth the pack reads past the hand with, which has to be taken while the hand is
 		// still not in it, and the hand's solid half. The order of these three lines is the whole of
 		// where the hand belongs in the frame: after the game's own opaque features, which the window
