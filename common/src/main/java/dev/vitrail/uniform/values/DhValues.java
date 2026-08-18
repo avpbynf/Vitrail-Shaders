@@ -13,10 +13,13 @@ import dev.vitrail.uniform.UniformShape;
  * condition.
  * <p>
  * What each of them answers is {@code render/ViewMatrices}'s and moves with the frame. The two
- * planes and the render distance are DH's own the moment DH has drawn one, and fall back to
- * Iris's 0.01 otherwise, which is deliberately a number no pack can mistake for a real distance.
- * The three matrices stay the game's own on both roads, and ViewMatrices says why that is an
- * answer rather than a gap.
+ * planes and the render distance are DH's own the moment DH has drawn one. Without one the planes
+ * fall back to Iris's 0.01, {@code compat/dh/DHCompat.java:94} and {@code :104}, deliberately a
+ * number no pack can mistake for a real distance; the render distance falls back to the game's own
+ * in chunks, which is Iris's fallback as well, {@code compat/dh/DHCompat.java:114}, and the change
+ * of unit that comes with it is on {@code uniform/ViewSource}. The three matrices stay the game's
+ * own on both roads, and ViewMatrices says why that is a divergence with a reason under it rather
+ * than a gap.
  */
 public final class DhValues {
 

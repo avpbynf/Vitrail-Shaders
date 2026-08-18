@@ -36,6 +36,7 @@ rather than guess.
 | The sky turns into a flat grey sheet at sunrise | [The sky goes flat](#the-sky-goes-flat) |
 | Blocks wave, glow or cast wrong shadows after switching packs | [You just changed packs](#you-just-changed-packs) |
 | The terrain is uniformly too dark | [Terrain that is too dark](#terrain-that-is-too-dark) |
+| Distant land is there but reads as sky: no fog, wrong focus | [The far terrain is flat](#the-far-terrain-is-flat) |
 
 **Before anything else, read the log.** The engine announces what it refused, what it could not
 serve, and which program it chose for each pass. Most of what follows is already printed there in
@@ -293,6 +294,30 @@ So terrain that is still uniformly too dark is worth reporting rather than attri
 is diagnosed by comparing two builds at the same camera and the same world time on a corner where
 occlusion is strong, not by toggling settings: switching shadows off makes it worse rather than
 better.
+
+## The far terrain is flat
+
+**Distant Horizons is drawing its distant land, you can see it, and the pack treats it as though it
+were sky.** No fog on it, a depth of field focused past it, water that does not know it is behind
+it. It looks like a pack fault and it is not one.
+
+That mod draws its far terrain into images of its own and paints only the colour back onto the
+picture. Its depth never reaches the game's, so everything a pack works out from distance finds
+nothing there and answers with the far plane. Vitrail converts that depth and writes it into the
+world's own before the pack reads any of it, which is what makes those effects right, and it tells
+the pack the far terrain is there so that the pack's own distant-land code runs.
+
+**The log says whether that happened**, and there are three things it can say. Distant Horizons
+found, when the pack is read, and then the two clip planes it was folded between the first time it
+is folded. Distant Horizons installed but not in a shape a depth can be read out of, which is that
+mod's version and not a setting of yours. Or nothing at all, which is the mod not being installed.
+
+Two limits stay whatever the log says. What stands beyond the plane the game itself stops drawing
+at keeps reading as sky, because a reversed depth buffer has no number left past its far plane, and
+that plane is the further of four times the render distance and the cloud distance. And the far
+terrain is coloured by Distant Horizons rather than by the pack, so it is lit its own way and only
+its shape is the pack's to work with; a pack that lights its distant land differently from its near
+land will light all of it the near way.
 
 ## What packs ask for that is unusual
 

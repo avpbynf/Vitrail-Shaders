@@ -1231,9 +1231,10 @@ final class GeometryProgram {
 			// which is the one thing a texture.STAGE.NAME override needs to know. Mellow moves
 			// noisetex there and nowhere else, so this is not a case the chain also covers.
 			case PACK_TEXTURE -> packTexture(sampler);
-			// The far plane, because this engine folds the far terrain into the game's own depth
-			// rather than keeping a second one: the name has nothing left to say that depthtex0
-			// has not already said. SamplerPlan carries what black would do instead.
+			// The far plane, which is white in the window a pack reads a depth in, because this
+			// engine folds the far terrain into the game's own depth rather than keeping a second
+			// one: the name has nothing left to say that depthtex0 has not already said. SamplerPlan
+			// carries what black would do instead.
 			case DISTANT_DEPTH -> this.white.getColorTextureView();
 			default -> this.black.getColorTextureView();
 		};
