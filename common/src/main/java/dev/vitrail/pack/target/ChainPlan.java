@@ -194,7 +194,22 @@ public final class ChainPlan {
 					// own target and reaches the pack's picture through the seed and nowhere else.
 					new NamedProgram("gbuffers_particles", false, true, Families::particles),
 					new NamedProgram("gbuffers_particles_translucent", true, false,
-							Families::particles)))
+							Families::particles),
+					// And Distant Horizons' far terrain, on both sides of the stage: that mod draws
+					// its own two halves from the head of the game's opaque chunk group and from the
+					// head of its translucent one, which is where the world's own two chunk passes
+					// stand. Left out of this list, a pack's far terrain program writes its FIRST
+					// draw buffer and no other, which is what BSL was measured doing on 18 August
+					// 2026: it asks for colortex0 and colortex6 and colortex6 went nowhere.
+					//
+					// The opaque half rides the seed, and it is the second name to do so: its first
+					// output makes the trip through the game's own target because it never asks for a
+					// coverage mask, and render/DistantProgram says what would have to write that
+					// mask instead. Neither half is counted, for the reason no family with a switch
+					// is: the far terrain is drawn where that mod is installed and running, which is
+					// no place in particular.
+					new NamedProgram("dh_terrain", false, true, NOT_EVERYWHERE),
+					new NamedProgram("dh_water", true, false, NOT_EVERYWHERE)))
 			.toList();
 
 	/**
