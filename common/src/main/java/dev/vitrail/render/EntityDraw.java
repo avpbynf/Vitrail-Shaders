@@ -1448,10 +1448,20 @@ public final class EntityDraw {
 	}
 
 	/**
-	 * Whether what this family writes still reaches the screen this frame, which is the question
+	 * Whether what a camera row writes still reaches the screen this frame, which is the question
 	 * {@code TerrainDraw.shown} and {@code SkyDraw.shown} both ask and the same answer: the chain
 	 * draws nothing at all while it is still compiling, so a frame that wrote the pack's targets then
 	 * would be a frame with no entity in it.
+	 * <p>
+	 * <strong>The shadow rows do not ask, and their reason is not the one {@code TerrainDraw} gives
+	 * for its own shadow half.</strong> There the refusal would be unsafe: with nothing handed back,
+	 * Sodium opens its own pass on the finished picture. Here it is safe, {@link #draw} turning a no
+	 * into a drop. What rules it out instead is that the question does not reach a caster at all: it
+	 * is written into the map and never into a colour target, so the chain's final is not the road it
+	 * takes back, and the state of the chain settles nothing about it. Whether the map is worth
+	 * filling on those frames is the separate question, and the terrain half of the very same map
+	 * answers it by filling throughout: a map holding the world and nothing alive in it is the worse
+	 * of the two to leave standing.
 	 */
 	private boolean shown() {
 		return !this.chainRuns || this.owner.drawable();
@@ -1529,23 +1539,26 @@ public final class EntityDraw {
 			PreparedRenderType prepared) {
 		end();
 
-		// NEITHER OF THESE inside the light's walk, and TerrainDraw already guards the same pair for
-		// the same reason, in the same words. The walk stands after the
-		// chain has closed the frame, so both per frame guards are down again: opening here advances
-		// the value store a SECOND time, which turns every gbufferPrevious* of the next frame
-		// into the current one, and clears the pack's colour targets over what the chain has just
-		// written into them. Neither call has anything to give a caster: it is drawn into the map,
-		// which the stage ensured and emptied before any of this, and it reads no colour target.
+		// NONE OF THESE THREE inside the light's walk, and TerrainDraw skips the same three there.
+		// The walk stands after the chain has closed the frame, so both per frame guards are down
+		// again: opening here advances the value store a SECOND time, which turns every
+		// gbufferPrevious* of the next frame into the current one, and clears the pack's colour
+		// targets over what the chain has just written into them. Neither call has anything to give a
+		// caster either: it is drawn into the map, which the stage ensured and emptied before any of
+		// this, and it reads no colour target.
 		if (!element.shadow()) {
 			this.owner.beginFrame();
 			if (!this.owner.openTargets(device)) {
 				return refuse(element, "targets", "the colour targets could not be opened this frame");
 			}
-		}
 
-		if (!shown()) {
-			return refuse(element, "warming", "the chain is still compiling, so nothing written to the pack's targets "
-					+ "would reach the screen yet");
+			// The third asks about the road a colour target takes back to the screen, and a caster
+			// takes no such road. What that turns on, and why the answer here is not the one
+			// TerrainDraw gives for its own shadow half, is in shown().
+			if (!shown()) {
+				return refuse(element, "warming", "the chain is still compiling, so nothing written to "
+						+ "the pack's targets would reach the screen yet");
+			}
 		}
 
 		// The matrix belongs to the RUN and not to the draw, which is what makes it settleable here:
