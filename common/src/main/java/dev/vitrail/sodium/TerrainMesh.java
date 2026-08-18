@@ -1,6 +1,7 @@
 package dev.vitrail.sodium;
 
 import dev.vitrail.glsl.SodiumVertex;
+import dev.vitrail.glsl.TangentFrame;
 import dev.vitrail.render.BlockStateIds;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.Vitrail;
@@ -41,9 +42,9 @@ import java.util.List;
  * three after the first land where this format does not want them and are moved up, backwards and
  * word by word so that a vertex is never written over a word still to be read.
  * <p>
- * <strong>How many of the six are appended follows the pack.</strong> {@code TerrainDraw} translates
+ * <strong>How many of the five are appended follows the pack.</strong> {@code TerrainDraw} translates
  * the pack's six chunk programs far enough to know which names they read, and hands that list here;
- * a vertex is then anything from twenty-four bytes to forty-four. The ones left out close the gap
+ * a vertex is then anything from twenty-four bytes to forty. The ones left out close the gap
  * rather than leaving a hole, so an element's offset is where it lands in this pack's mesh and not
  * where it lands in {@link Extra}.
  * <p>
@@ -216,7 +217,7 @@ public final class TerrainMesh implements ChunkVertexType {
 		List<String> carried = broken ? List.of() : TerrainDraw.carried();
 		// Sodium's own four and nothing of ours is the same layout Sodium already binds, so it is
 		// answered with Sodium's own rather than with a copy of it. No pack of the corpus is here,
-		// every one of them reading at least the block id, but a pack that read none of the six
+		// every one of them reading at least the block id, but a pack that read none of the five
 		// would be, and wrapping a format to change nothing about it is one more thing to be wrong.
 		if (carried.stream().noneMatch(TerrainMesh::ours)) {
 			carried = List.of();
@@ -283,8 +284,8 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * <p>
 	 * Ours are laid out one word after another in the order they are handed in, which is also where
 	 * the encoder writes them: both read {@code offsets}, and the two used to be a walk over the
-	 * sizes here and six literal offsets there, agreeing because every element happens to be one
-	 * word and for no other reason.
+	 * sizes here and a literal offset for each there, agreeing because every element happens to
+	 * be one word and for no other reason.
 	 *
 	 * @param extras the ones of {@link Extra} this pack asked for, in {@link Extra}'s own order.
 	 *               An element left out closes the gap rather than leaving a hole: the shader
@@ -322,10 +323,6 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * what its six chunk programs read, exactly as Iris takes it from what its transformed programs
 	 * reference, {@code FormatAnalyzer}. The ones left out close the gap rather than leaving a hole,
 	 * so this order decides which words move and not where any of them lands.
-	 * <p>
-	 * What is still not Iris's is the packing: it spends one word on the normal and the tangent
-	 * together and unpacks it in the patched text, where this spends two. The prologue is the place
-	 * that would unpack a combined word, and doing it there is a change of its own.
 	 */
 	private enum Extra {
 
@@ -349,17 +346,21 @@ public final class TerrainMesh implements ChunkVertexType {
 		MID_BLOCK(SodiumVertex.MID_BLOCK, GpuFormat.RGBA8_SINT),
 
 		/**
-		 * The quad's own normal, and the tangent of its texture mapping with the sign that says which
-		 * way the third axis of that frame points.
+		 * The quad's own normal, the tangent of its texture mapping and the sign that says which way
+		 * the third axis of that frame points, in one word.
 		 * <p>
-		 * Signed and normalised, so the shader reads them as a {@code vec4} in minus one to one with
-		 * nothing to undo. Iris packs the pair into one word of its own and unpacks it in the patched
-		 * text; two elements cost four bytes more and no arithmetic, and this engine has no patched
-		 * text to unpack them in.
+		 * <strong>One word and not two, which is Iris's own bargain</strong>: what
+		 * {@link #orthogonalise} leaves is at a right angle to the normal, so once the normal is known
+		 * the tangent is one angle in the normal's plane and one sign. {@link TangentFrame} is where
+		 * the bits are shared out and where that is argued against the reference; the prologue reads
+		 * the word back with text the same class writes.
+		 * <p>
+		 * What it costs against the two words of signed bytes it replaces is measured by the off-game
+		 * harness rather than argued, and {@link TangentFrame} carries the figures. The short of it: the
+		 * normal comes back four times closer, the tangent about twice as far but exactly
+		 * perpendicular, and the handedness never turns over.
 		 */
-		NORMAL(SodiumVertex.NORMAL, GpuFormat.RGBA8_SNORM),
-
-		TANGENT(SodiumVertex.TANGENT, GpuFormat.RGBA8_SNORM),
+		TANGENT_FRAME(SodiumVertex.TANGENT_FRAME, GpuFormat.R32_UINT),
 
 		/**
 		 * The block's tint undivided, with the ambient occlusion in the alpha rather than multiplied
@@ -419,28 +420,22 @@ public final class TerrainMesh implements ChunkVertexType {
 		// every quad of the world for a word that is then thrown away.
 		int middle = offset(Extra.MID_TEX_COORD) == ABSENT ? 0 : midTexCoord(vertices);
 
-		// Both are properties of the QUAD and not of a corner, like the middle above: the four
-		// vertices carry the same pair, and a pack that reads a normal per vertex on chunk geometry
-		// is reading what the face is, not what the corner is.
-		//
-		// The two are found together and dropped together, Newell's sum being what the tangent is
-		// then squared up against: a pack reading one of them pays for both, and a pack reading
-		// neither pays for neither.
-		boolean framed = offset(Extra.NORMAL) != ABSENT || offset(Extra.TANGENT) != ABSENT;
-		float[] frame = framed ? frame(vertices) : null;
-		int normal = framed ? packAxis(frame[0], frame[1], frame[2], 0.0F) : 0;
-		int tangent = framed ? packAxis(frame[3], frame[4], frame[5], frame[6]) : 0;
+		// A property of the QUAD and not of a corner, like the middle above: the four vertices carry
+		// the same word, and a pack that reads a normal per vertex on chunk geometry is reading what
+		// the face is, not what the corner is. The normal and the tangent share it, so a pack reading
+		// one of the two pays for both and a pack reading neither pays for neither.
+		int frame = offset(Extra.TANGENT_FRAME) == ABSENT ? 0 : TangentFrame.pack(frame(vertices));
 
-		// The one of the six that is a property of the CORNER, so it is asked for inside the loop
+		// The one of the five that is a property of the CORNER, so it is asked for inside the loop
 		// and only the question is hoisted out of it.
 		boolean blockMiddle = offset(Extra.MID_BLOCK) != ABSENT;
 
 		// Backwards over the vertices, because a vertex moves up by the difference of the two strides
 		// times its own index, and one that has not been moved yet is the source of the move before
-		// it: at twenty-four bytes of difference the second vertex lands on [44, 64) and the third is
+		// it: at twenty bytes of difference the second vertex lands on [40, 60) and the third is
 		// still to be read from [40, 60). Word by word from the top of each vertex costs nothing and
 		// is what keeps the move right at any pair of strides, which is what this now needs: the
-		// difference is four bytes for a pack that reads one of the six and twenty-four for one that
+		// difference is four bytes for a pack that reads one of the five and twenty for one that
 		// reads them all, and at four the two ranges of one vertex DO overlap.
 		for (int at = vertices.length - 1; at >= 0; at--) {
 			long from = pointer + (long) at * this.innerStride;
@@ -454,8 +449,7 @@ public final class TerrainMesh implements ChunkVertexType {
 					((TerrainVertex) vertices[at]).vitrailBlockId() & BlockStateIds.PACKED_MASK);
 			write(extra, Extra.MID_TEX_COORD, middle);
 			write(extra, Extra.MID_BLOCK, blockMiddle ? midBlock(vertices[at]) : 0);
-			write(extra, Extra.NORMAL, normal);
-			write(extra, Extra.TANGENT, tangent);
+			write(extra, Extra.TANGENT_FRAME, frame);
 			// The two fields the encoder was handed, kept apart instead of multiplied together, out
 			// of Sodium's own published helper. Sodium's word beside it keeps the product, so this
 			// one is read by a pack that asked for it and by nothing else.
@@ -469,7 +463,7 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * One of our words onto one vertex, or nothing at all where this pack does not carry it.
 	 * <p>
 	 * The one place the encoder asks whether an element is there, so that the writes above read as
-	 * the six they have always been and the question is answered once for each.
+	 * the five they are and the question is answered once for each.
 	 */
 	private void write(long extra, Extra element, int value) {
 		int at = offset(element);
@@ -565,12 +559,12 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * normalising here does is give that cross product a length of one as well, and the handedness
 	 * bit goes on meaning what {@link #handedness} says it means.
 	 * <p>
-	 * <strong>What is left of the difference is the quantisation.</strong> Iris spends one byte on an
-	 * angle in a plane, so its tangent is perpendicular to the last bit; this spends three on the
-	 * vector itself and rounds each of them, so the dot product with the normal comes back at a few
-	 * thousandths rather than at nought. Three bytes for three components is what
-	 * {@link Extra#TANGENT} declares and this engine has no patched vertex text to unpack an angle
-	 * in.
+	 * <strong>Nothing of that difference is left in the quantisation any more.</strong> This used to
+	 * store the vector itself as three rounded bytes, so the dot product with the normal came back at
+	 * a few thousandths rather than at nought and the work below was undone by the rounding.
+	 * {@link Extra#TANGENT_FRAME} now stores the angle in the plane, which is what Iris stores, so
+	 * what a pack reads is perpendicular to the last bit on both engines and this projection is what
+	 * decides the angle rather than a step on the way to it.
 	 */
 	private static void orthogonalise(float[] frame) {
 		float along = frame[0] * frame[3] + frame[1] * frame[4] + frame[2] * frame[5];
@@ -735,22 +729,6 @@ public final class TerrainMesh implements ChunkVertexType {
 		frame[4] = upright ? 0.0F : frame[2];
 		frame[5] = upright ? frame[0] : -frame[1];
 		normalise(frame, 3);
-	}
-
-	/** Three components and a fourth into one word of signed bytes, as the format declares them. */
-	private static int packAxis(float x, float y, float z, float w) {
-		return (byteOf(x) & 0xFF) | ((byteOf(y) & 0xFF) << 8) | ((byteOf(z) & 0xFF) << 16)
-				| ((byteOf(w) & 0xFF) << 24);
-	}
-
-	/**
-	 * One component of a unit vector as a signed byte.
-	 * <p>
-	 * Scaled by 127 and not by 128, so that one comes back as one: the backend divides a signed byte
-	 * by 127, and a value stored at 128 would have wrapped to the other end of the range anyway.
-	 */
-	private static int byteOf(float value) {
-		return Math.round(Math.clamp(value, -1.0F, 1.0F) * 127.0F);
 	}
 
 	/**

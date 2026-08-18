@@ -21,7 +21,7 @@ import java.util.Set;
  * texture coordinate per axis and spends its top bit on which side of the sprite the corner lies.
  * {@code a_LightAndData}
  * holds the block light, the sky light, a byte of material bits and the index of the draw command,
- * one per byte. Everything past the twentieth is this engine's own, six elements of four bytes.
+ * one per byte. Everything past the twentieth is this engine's own, five elements of four bytes.
  * <p>
  * <strong>Sodium is under the PolyForm Shield licence, which this project cannot take code
  * from.</strong> So what is written below is this engine's own reading of that layout and not a
@@ -29,13 +29,13 @@ import java.util.Set;
  * ours. Nothing here is copied, and nothing here may be replaced by something copied.
  * <p>
  * <strong>Every name a pack reads of this geometry is now in the mesh.</strong> The block id, the
- * middle of the sprite, the offset to the middle of the block, the normal and the tangent are five
- * elements of this engine's own; {@link #TINT_AND_AO} is a sixth, and the one that answers no name
+ * middle of the sprite, the offset to the middle of the block and the tangent frame are four
+ * elements of this engine's own; {@link #TINT_AND_AO} is a fifth, and the one that answers no name
  * of the pack's but the shape of a name it already reads. The facing that used to stand in for a
  * normal, in the spare bits of the material byte, is gone with the last thing that read it.
  * <p>
- * <strong>Which of the six a mesh really carries follows the pack</strong>, and the format is
- * therefore anything from twenty bytes to forty-four. {@link #reads} says what one vertex stage
+ * <strong>Which of the five a mesh really carries follows the pack</strong>, and the format is
+ * therefore anything from twenty bytes to forty. {@link #reads} says what one vertex stage
  * needs, {@link #carried} turns the union over the pack's six chunk programs into the format, and
  * {@link #prologue} declares that list and nothing besides. The union and not each program's own
  * answer: an element the format carries that a stage does not declare shifts the location of every
@@ -86,23 +86,24 @@ public final class SodiumVertex {
 	public static final String MID_BLOCK = "a_MidBlock";
 
 	/**
-	 * The quad's own normal, taken from its corners rather than from the axis its facing names.
+	 * The quad's own normal, the direction the texture's U axis runs in over it, and the handedness
+	 * of the frame the two build, all in one word.
 	 * <p>
-	 * The facing this engine read before is one of six axes plus a value meaning none, so anything
-	 * that is not a box face got one of six wrong answers: a plant drawn as a cross, a sloped fluid
+	 * The normal is taken from the quad's corners rather than from the axis its facing names. The
+	 * facing this engine read before is one of six axes plus a value meaning none, so anything that
+	 * is not a box face got one of six wrong answers: a plant drawn as a cross, a sloped fluid
 	 * surface, every custom model. And the facing never reached a translucent quad or a fluid at all,
-	 * so glass and water were lit as if they faced up.
-	 */
-	public static final String NORMAL = "a_Normal";
-
-	/**
-	 * The direction the texture's own U axis runs in over this quad, with the handedness of the frame
-	 * in the fourth component.
+	 * so glass and water were lit as if they faced up. Every normal map on the terrain is read
+	 * through the tangent, and this engine handed back a constant for it, which tilts all of them the
+	 * same wrong way. Eight packs of the corpus read {@code at_tangent}.
 	 * <p>
-	 * Every normal map on the terrain is read through it, and this engine handed back a constant,
-	 * which tilts all of them the same wrong way. Eight packs of the corpus read {@code at_tangent}.
+	 * <strong>One word and not two, which is Iris's own bargain</strong>, {@code encodeNormalTangent}
+	 * ({@code NormalHelper.java:512-520}): the tangent is at a right angle to the normal, so what is
+	 * left of it once the normal is known is one angle in the normal's own plane and the sign that
+	 * says which way the third axis turns. {@link #prologue} is the patched text that undoes it, and
+	 * {@code TerrainMesh.Extra} says how the bits are shared out and what that costs.
 	 */
-	public static final String TANGENT = "a_Tangent";
+	public static final String TANGENT_FRAME = "a_TangentFrame";
 
 	/**
 	 * The block's tint undivided, with the ambient occlusion in the fourth component rather than
@@ -137,7 +138,7 @@ public final class SodiumVertex {
 	 */
 	public static final List<String> ATTRIBUTES =
 			List.of("a_Position", "a_Color", "a_TexCoord", "a_LightAndData", BLOCK_ID, MID_TEX_COORD,
-					MID_BLOCK, NORMAL, TANGENT, TINT_AND_AO);
+					MID_BLOCK, TANGENT_FRAME, TINT_AND_AO);
 
 	/**
 	 * The ones of {@link #ATTRIBUTES} this engine appends, which are also the only ones a pack may
@@ -145,7 +146,7 @@ public final class SodiumVertex {
 	 * engine is doing, and its own chunk shader reads all four.
 	 */
 	private static final Set<String> OURS =
-			Set.of(BLOCK_ID, MID_TEX_COORD, MID_BLOCK, NORMAL, TANGENT, TINT_AND_AO);
+			Set.of(BLOCK_ID, MID_TEX_COORD, MID_BLOCK, TANGENT_FRAME, TINT_AND_AO);
 
 	/**
 	 * What the translation has turned {@code gl_Normal} into by the time a head is written. The one
@@ -218,9 +219,11 @@ public final class SodiumVertex {
 		}
 
 		// Not one of the four, because it answers no name the pack writes: a body reads gl_Normal,
-		// and the translation has already turned that into of_Normal by the time this is asked.
+		// and the translation has already turned that into of_Normal by the time this is asked. It
+		// is the same element at_tangent comes out of, so a pack that reads one of the two pays for
+		// both and a pack that reads neither pays for neither.
 		if (used.contains(OWN_NORMAL)) {
-			reads.add(NORMAL);
+			reads.add(TANGENT_FRAME);
 		}
 
 		// Nor is this, for the other reason: it is a second shape for a word the mesh already
@@ -313,6 +316,12 @@ public final class SodiumVertex {
 				+ " float((index >> 2u) & 7u)) * 16.0;");
 		lines.add("}");
 
+		// Both functions read the element by name, so they are written only where the format carries
+		// it: emitted over a mesh without it, they would name an input the stage never declared.
+		if (carried.contains(TANGENT_FRAME)) {
+			lines.addAll(TangentFrame.decode(globals.containsKey("at_tangent")));
+		}
+
 		lines.add("void " + PROLOGUE + "() {");
 		lines.add("\tvec3 ofLocal = vec3(ofAxis(0u), ofAxis(10u), ofAxis(20u));");
 		lines.add("\tof_Vertex = vec4(ofLocal + of_RegionOffset"
@@ -340,8 +349,8 @@ public final class SodiumVertex {
 		// no spelling of the pack's. A pack no chunk program of which reads gl_Normal leaves the
 		// element off the mesh, and what stands here is then the constant every other family hands
 		// back for a mesh with no normal in it.
-		lines.add("\tof_Normal = " + (carried.contains(NORMAL)
-				? NORMAL + ".xyz"
+		lines.add("\tof_Normal = " + (carried.contains(TANGENT_FRAME)
+				? TangentFrame.NORMAL_OF + "(" + TANGENT_FRAME + ")"
 				: VertexPrologue.value(OWN_NORMAL, "vec3")) + ";");
 		globals.forEach((name, type) -> {
 			if (answered(carried, name)) {
@@ -403,11 +412,13 @@ public final class SodiumVertex {
 	 * and gets the direction alone, which is what asking for three means.
 	 */
 	private static String tangent(String type) {
+		String frame = TangentFrame.TANGENT_OF + "(" + OWN_NORMAL + ", " + TANGENT_FRAME + ")";
+
 		return switch (type) {
-			case "float" -> "float(" + TANGENT + ".x)";
-			case "vec2" -> "vec2(" + TANGENT + ".xy)";
-			case "vec3" -> "vec3(" + TANGENT + ".xyz)";
-			case "vec4" -> TANGENT;
+			case "float" -> frame + ".x";
+			case "vec2" -> frame + ".xy";
+			case "vec3" -> frame + ".xyz";
+			case "vec4" -> frame;
 			// A tangent is an axis and not a zero: a pack normalises what it reads here, and
 			// normalize(vec3(0)) puts a NaN in the colour. That rule is carried by the vec3 and vec4
 			// arms above, which hand back a whole direction, and by the at_tangent entry of
@@ -483,9 +494,9 @@ public final class SodiumVertex {
 		return switch (attribute) {
 			case "a_Position", "a_TexCoord", MID_TEX_COORD -> "uvec2";
 			case MID_BLOCK -> "ivec4";
-			case NORMAL, TANGENT, TINT_AND_AO -> "vec4";
+			case TINT_AND_AO -> "vec4";
 			case "a_LightAndData" -> "uvec4";
-			case BLOCK_ID -> "uint";
+			case BLOCK_ID, TANGENT_FRAME -> "uint";
 			default -> "vec4";
 		};
 	}
@@ -495,7 +506,7 @@ public final class SodiumVertex {
 		names.put("mc_Entity", BLOCK_ID);
 		names.put("mc_midTexCoord", MID_TEX_COORD);
 		names.put("at_midBlock", MID_BLOCK);
-		names.put("at_tangent", TANGENT);
+		names.put("at_tangent", TANGENT_FRAME);
 
 		return Collections.unmodifiableMap(names);
 	}

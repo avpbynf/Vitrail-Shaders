@@ -72,10 +72,20 @@ what the next one holds.
   normal, the tangent and a second copy of the colour, whichever of those the pack asked for: forty
   four bytes each, whether four of them were read or none. The pack's own chunk programs are now read
   first and the mesh is built from what they name, so a vertex costs between twenty four and forty
-  four bytes. Of the eight packs tested, one drops twelve bytes a vertex, one drops eight and one
-  drops four. It is video memory and the bandwidth of every chunk draw, so it is paid twice a frame
-  as soon as a shadow map is being filled. Switching between two packs that read different names
-  rebuilds the world, as switching the terrain off already did.
+  bytes. Of the eight packs tested, one drops sixteen bytes a vertex, one twelve, one eight and the
+  other five four. It is video memory and the bandwidth of every chunk draw, so it is paid twice a
+  frame as soon as a shadow map is being filled. Switching between two packs that read different
+  names rebuilds the world, as switching the terrain off already did.
+
+- **The normal and the tangent of a chunk vertex travel in one word instead of two.** The tangent is
+  at a right angle to the normal, so once the normal is known there is nothing left of it but an
+  angle and the direction the frame turns in, which is how the engine the packs are written against
+  has always stored the pair. That is the last four bytes of the paragraph above, on every pack that
+  lights the terrain by a normal, and it is where the upper bound of forty comes from. A pack reads
+  the same two directions as before: the normal comes back four times closer than it did, and the
+  tangent, which every normal map on the terrain is read through, is now exactly perpendicular to it
+  rather than a few thousandths off, at the price of being up to nine tenths of a degree round the
+  face from where it was.
 
 - **The settings screen is the one pack authors already know.** It is the screen of the engine packs
   are written against, ported rather than approximated: the same list of packs with the shaders
