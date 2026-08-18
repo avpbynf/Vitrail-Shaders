@@ -137,14 +137,15 @@ public final class VertexPrologue {
 	 * {@code UV2} as pairs of signed shorts wherever they appear, and a family reading one of them
 	 * as a float would read a different number from the same bytes.
 	 * <p>
-	 * {@link EntityVertex#IDENTIFIERS} is in here rather than beside its own head for that same
-	 * reason and no other: it is an element of a format like the six around it, and the one format
-	 * that carries it is the one this engine appends it to.
+	 * The three {@link EntityVertex} appends are in here rather than beside their own head for that
+	 * same reason and no other: they are elements of a format like the six around them, and the one
+	 * format that carries them is the one this engine appends them to. {@link EntityVertex#TANGENT}
+	 * takes the default, being four normalised bytes exactly as {@code Normal} is.
 	 */
 	public static String elementType(String element) {
 		return switch (element) {
 			case "Position" -> "vec3";
-			case "UV0" -> "vec2";
+			case "UV0", EntityVertex.MID_TEX_COORD -> "vec2";
 			case "UV1", "UV2" -> "ivec2";
 			case EntityVertex.IDENTIFIERS -> "uvec4";
 			default -> "vec4";
