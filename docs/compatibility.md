@@ -224,9 +224,11 @@ Two consequences follow from how that geometry reaches the pack, and both are wo
 rather than reporting as separate bugs:
 
 - **Two of the values a pack reads off it are constants rather than this piece's own**: the middle
-  of the sprite a face is mapped to, and the tangent of that mapping. Both are worked out per
-  polygon rather than per vertex, and a pack that branches on either takes the same branch for every
-  draw; what that looks like is entirely the pack's business. The material id is a constant too, and
+  of the sprite a face is mapped to, and the tangent of that mapping. Neither is a property of one
+  vertex, both having to be worked out over a whole polygon, and that is the work this engine does
+  not do yet: the reference does it and hands the answer over on the vertex, where a pack reads the
+  same constant here for every draw. What that looks like is entirely the pack's business. The
+  material id is a constant too, and
   there the reference does the same, an entity mesh carrying none. The three a pack compares against
   a kind of mob, the block a block entity stands in and the item being drawn are this piece's own
   and no longer constants. The held hand shows whatever the mobs show, arriving by the same door and
