@@ -457,15 +457,21 @@ public final class PackChain {
 		// that is no longer there.
 		askedFor = PackFile.EMPTY;
 		try {
-			// Both ways out of the next two blocks end with no pack drawing anything, and the mesh
-			// only carries what a pack reads while one wants it: said here as well as on the road
-			// that loads a pack, or picking None after a terrain pack would leave the extra bytes on
-			// every vertex with nothing left to read them. The refusals further down do not say it,
-			// and the note on the one at the head of the load prices what that costs.
+			// Both ways out of the next two blocks end with no pack drawing anything, and NEITHER mesh
+			// carries what a pack reads once none wants it: said here as well as on the road that
+			// loads a pack, or picking None after a pack would leave the extra bytes on every vertex
+			// with nothing left to read them. The refusals further down do not say it, and the note on
+			// the one at the head of the load prices what that costs.
+			//
+			// Three switches for two meshes: the hand is drawn from the entity mesh and carries a
+			// switch of its own, so putting a pack away has to take that one down too or the entity
+			// mesh goes on carrying for a family nothing serves.
 			List<Path> packs = PackLoader.candidates(gameDirectory);
 			if (packs.isEmpty()) {
 				lastError = "No shader pack in " + PackLoader.directory(gameDirectory);
 				TerrainDraw.wanted(false);
+				EntityDraw.wanted(false);
+				HandDraw.wanted(false);
 				Vitrail.logger().info("No shader pack in {}, nothing to draw",
 						PackLoader.directory(gameDirectory));
 				return;
@@ -477,6 +483,8 @@ public final class PackChain {
 			if (pack == null) {
 				packOff = true;
 				TerrainDraw.wanted(false);
+				EntityDraw.wanted(false);
+				HandDraw.wanted(false);
 				Vitrail.logger().info("No pack asked for, so none of the {} in {} is read and the game "
 						+ "draws its own image. Pick one in the settings screen, or name it in {}",
 						packs.size(), PackLoader.directory(gameDirectory), packFile(gameDirectory));

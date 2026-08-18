@@ -1,5 +1,6 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.render.EntityMesh;
 import dev.vitrail.sodium.TerrainMesh;
 
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
@@ -9,8 +10,12 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * The one instant at which the chunk mesh format may change, and the reason it needs an instant of
- * its own.
+ * The one instant at which either mesh format may change, and the reason they need an instant of
+ * their own.
+ * <p>
+ * The chunk mesh is the harder of the two and the rest of this note is about it; the entity one wants
+ * the same instant for a reason of its own, {@code EntityMesh} saying which, and takes it here rather
+ * than opening a second door onto the same frame boundary.
  * <p>
  * Sodium reads the format in three places and only two of them are the section manager's
  * constructor, which asks twice: for the builder that writes meshes at its stride, and for the
@@ -42,5 +47,6 @@ public abstract class MixinSodiumWorldRendererInit {
 	@Inject(method = "initRenderer", at = @At("HEAD"), require = 1)
 	private void vitrail$settle(CallbackInfo callback) {
 		TerrainMesh.settle();
+		EntityMesh.settle();
 	}
 }

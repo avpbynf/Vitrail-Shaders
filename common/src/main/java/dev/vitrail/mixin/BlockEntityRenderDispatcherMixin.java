@@ -1,6 +1,8 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.render.BlockEntityGeometry;
+import dev.vitrail.render.BlockStateIds;
+import dev.vitrail.render.EntityIdentifiers;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -36,11 +38,19 @@ public abstract class BlockEntityRenderDispatcherMixin {
 	private void vitrail$begin(BlockEntityRenderState state, PoseStack poseStack,
 			SubmitNodeCollector collector, CameraRenderState camera, CallbackInfo callback) {
 		BlockEntityGeometry.submitting(true);
+
+		// The number is the pack's for the BLOCK STATE this thing stands in, out of block.properties
+		// and not out of a table of its own, which is Iris's answer as well
+		// (MixinBlockEntityRenderDispatcher.java:61). Raw, where the terrain mesh carries the same
+		// table packed: the shader unpacks the terrain's own word and reads this one as it stands.
+		EntityIdentifiers.blockEntity(
+				BlockStateIds.id(((BlockEntityRenderStateAccessor) state).vitrail$blockState()));
 	}
 
 	@Inject(method = "submit", at = @At("RETURN"), require = 1)
 	private void vitrail$end(BlockEntityRenderState state, PoseStack poseStack,
 			SubmitNodeCollector collector, CameraRenderState camera, CallbackInfo callback) {
 		BlockEntityGeometry.submitting(false);
+		EntityIdentifiers.blockEntity(0);
 	}
 }

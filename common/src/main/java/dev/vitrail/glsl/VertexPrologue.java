@@ -136,12 +136,17 @@ public final class VertexPrologue {
 	 * element and not to the pass that binds it: {@code DefaultVertexFormat} spells {@code UV1} and
 	 * {@code UV2} as pairs of signed shorts wherever they appear, and a family reading one of them
 	 * as a float would read a different number from the same bytes.
+	 * <p>
+	 * {@link EntityVertex#IDENTIFIERS} is in here rather than beside its own head for that same
+	 * reason and no other: it is an element of a format like the six around it, and the one format
+	 * that carries it is the one this engine appends it to.
 	 */
 	public static String elementType(String element) {
 		return switch (element) {
 			case "Position" -> "vec3";
 			case "UV0" -> "vec2";
 			case "UV1", "UV2" -> "ivec2";
+			case EntityVertex.IDENTIFIERS -> "uvec4";
 			default -> "vec4";
 		};
 	}

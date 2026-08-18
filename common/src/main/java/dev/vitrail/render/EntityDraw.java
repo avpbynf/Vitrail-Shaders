@@ -293,16 +293,22 @@ public final class EntityDraw {
 		}
 
 		/**
-		 * The game's format this piece is drawn from, which is the entity mesh for every row but the
-		 * glint's four.
+		 * The format this piece is drawn from, which is the entity mesh for every row but the glint's
+		 * four.
 		 * <p>
 		 * Derived from {@link #glint} rather than tabulated beside it, so that the two cannot drift: a
 		 * row whose format did not match the pipeline it names would declare the wrong inputs and read
 		 * its texture coordinates off whatever the format really carries, without a word being said.
 		 * {@link #decodable} is where the claim is checked against the pipeline in hand.
+		 * <p>
+		 * The entity one is {@link EntityMesh}'s and no longer the game's own: this is what a pipeline
+		 * of this engine's is built to bind, and it is what the game's own entity pipelines report
+		 * while the mesh carries. The rows are only ever read while it does, {@link #served} refusing
+		 * the whole family otherwise, so the two answers cannot be taken under different ones. The
+		 * glint keeps the game's, its two elements being untouched by any of this.
 		 */
 		VertexFormat format() {
-			return glint() ? DefaultVertexFormat.POSITION_TEX : DefaultVertexFormat.ENTITY;
+			return glint() ? DefaultVertexFormat.POSITION_TEX : EntityMesh.format();
 		}
 
 		/**
@@ -1172,9 +1178,23 @@ public final class EntityDraw {
 		this.targets = targets;
 	}
 
-	/** Whether a pack's own entity programs take over the game's, from the loaded options. */
+	/**
+	 * Whether a pack's own entity programs take over the game's, from the loaded options.
+	 * <p>
+	 * <strong>This answer is half of what the entity mesh carries</strong>, and the mesh only carries
+	 * what a pack reads while a pack wants it, so a change here is worth a rebuilt world:
+	 * {@code EntityMesh.ask} is what decides whether one is owed. What that buys and what it costs are
+	 * written there.
+	 * <p>
+	 * <strong>Asking is all this does</strong>, which is what makes the one place that writes the
+	 * field directly safe: an entity program that threw stops being offered at once, without a
+	 * rebuilt world, and the mesh goes on carrying what it carried. The format cannot fall out of step
+	 * with a living builder that way, because it is not this field that the format follows but the
+	 * reading {@code EntityMesh.settle} takes.
+	 */
 	static void wanted(boolean asked) {
 		wanted = asked;
+		EntityMesh.ask();
 	}
 
 	/**
@@ -1304,6 +1324,11 @@ public final class EntityDraw {
 		// again one line before every draw.
 		BlockEntityGeometry.clear();
 
+		// And the three identifiers with them, for the same reason and with one difference: they are
+		// dropped at the end of every submission as well, so what this catches is a submission that
+		// left by a road with no return of its own.
+		EntityIdentifiers.clear();
+
 		// Closing the window closes the pass, and that is not the same safety net as the one at the
 		// end of a group. What the game does next is not the same for the two closings and both
 		// refuse an open pass: after the first it copies a depth between targets, which the encoder
@@ -1382,7 +1407,14 @@ public final class EntityDraw {
 		// ten draws in a hand pass.
 		boolean inMoment = (element != null && element.hand()) ? HandDraw.wanted()
 				: wanted && element != null && inWindow(element);
-		if (!inMoment || device == null || element == null) {
+		// And the mesh has to be carrying the identifiers, whatever the moment says. Every row but the
+		// glint's is read against EntityMesh.format, so a draw served before the mesh settled would
+		// bind forty-four bytes of layout over a vertex of thirty-six. It lasts from the load that
+		// asked until the extract that rebuilds the world, which is one frame in the ordinary case,
+		// and what it costs is the frame's mobs drawn by the game rather than by the pack. The glint
+		// is held out with them rather than let through: it comes in by this door, and a run of draws
+		// is one pass with one program.
+		if (!inMoment || !EntityMesh.carrying() || device == null || element == null) {
 			draw.end();
 
 			return false;
@@ -1422,7 +1454,7 @@ public final class EntityDraw {
 			// either. Leaving the hand on would keep the same throw coming, once a frame, with the
 			// line that explains it printed only the first time.
 			wanted = false;
-			HandDraw.wanted(false);
+			HandDraw.stopped();
 			Vitrail.logger().error("Vitrail stopped drawing the entities, the hand and the glint after "
 							+ "an error",
 					e);
