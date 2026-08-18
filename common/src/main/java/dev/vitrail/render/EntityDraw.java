@@ -841,6 +841,11 @@ public final class EntityDraw {
 	 * outright, which is what a shadow map wants: the depth a surface stands at, not that depth mixed
 	 * with the one behind it.
 	 * <p>
+	 * <strong>Two tables feed it, {@link #ELEMENTS} and {@link #FIXED}</strong>, the second being what
+	 * puts a mob's glowing eyes in the map. The hand's two tables do not, and cannot: their rows are
+	 * the mob rows again under a moment of the camera's, and no hand is submitted inside the light's
+	 * walk.
+	 * <p>
 	 * The stage is {@code ENTITIES} for the whole table, including the rows the camera draws under
 	 * {@code NONE}. Iris poses it once for the whole stretch its feature renderers are drawn in
 	 * ({@code shadows/ShadowRenderer.java:521} up to the copy), the two chunk groups of the same
@@ -850,7 +855,19 @@ public final class EntityDraw {
 	private static final Map<RenderPipeline, Element> SHADOW_ELEMENTS = new LinkedHashMap<>();
 
 	static {
-		ELEMENTS.values().stream()
+		shadowTwins(ELEMENTS);
+	}
+
+	/**
+	 * Files one table's rows into {@link #SHADOW_ELEMENTS}, one shadow row each.
+	 * <p>
+	 * Taken a table at a time rather than over one stream of both, because {@link #FIXED} is declared
+	 * below this point: a static initialiser here would read it while it is still empty, and the two
+	 * rows that put a mob's eyes in the map would be missing with nothing said. Its call sits under
+	 * its own block instead.
+	 */
+	private static void shadowTwins(Map<RenderPipeline, Element> from) {
+		from.values().stream()
 				.filter(mob -> mob.pipeline() != RenderPipelines.ENTITY_SHADOW)
 				.map(mob -> new Element(mob.pipeline(), "shadow_" + mob.element(), SHADOW_ENTITIES,
 						CUTOUT, RenderStage.ENTITIES, false))
@@ -955,7 +972,7 @@ public final class EntityDraw {
 	 * three rows and not about these two. The two rows below reach a CONSTANT,
 	 * {@code p -> ShaderKey.ENTITIES_EYES} and
 	 * {@code p -> ShaderKey.ENTITIES_EYES_TRANS} ({@code pipeline/IrisPipelines.java:52,53}), which
-	 * consults nothing. Derived into the other three tables they would ask for
+	 * consults nothing. Derived into the block table or either hand one they would ask for
 	 * {@code gbuffers_block_translucent} inside a chest's draw and {@code gbuffers_hand_water} inside
 	 * the hand's, and Iris asks for neither: an eye is an eye wherever it is drawn.
 	 * <p>
@@ -1000,14 +1017,20 @@ public final class EntityDraw {
 	 * and no animation to read out of the game's own transforms, which the last two rows of
 	 * {@link #ELEMENTS} do need.
 	 * <p>
-	 * <strong>Neither casts a shadow, and that is work not done rather than a choice.</strong> Iris
-	 * puts both pipelines in its shadow table as {@code SHADOW_ENTITIES_CUTOUT}
-	 * ({@code pipeline/IrisPipelines.java:105,107}); {@link #SHADOW_ELEMENTS} is derived from
-	 * {@link #ELEMENTS} alone, so a row here has no shadow twin and the draw is dropped inside the
-	 * light's walk, which the engine prints at the moment it happens. Nothing here makes it
-	 * impossible: it is named rather than argued for, and what it costs the image is the sliver of a
-	 * mob's shadow its eyes would have darkened, an eye being a decal on geometry the mob's own rows
-	 * already cast.
+	 * <strong>Both reach the shadow map, and what they reach of it is its COLOUR and never its
+	 * depth.</strong> Iris puts both pipelines in its shadow table as {@code SHADOW_ENTITIES_CUTOUT}
+	 * ({@code pipeline/IrisPipelines.java:105,107}), so {@link #shadowTwins} files them beside the mob
+	 * rows and the load is asked for their programs there. Neither pipeline writes depth, which the
+	 * paragraph above says of the plain one and {@code RenderPipelines.java:295} says of the emissive
+	 * one, and {@code EntityProgram.intoMap} keeps the write exactly. So an eye paints into
+	 * {@code shadowcolor} and lays nothing under itself: it is not an occluder and it darkens no
+	 * shadow, which is the same reading this file gives the ground oval. What the row buys is a pack
+	 * that reads the map's colour seeing the eyes where it used to see a dropped draw.
+	 * <p>
+	 * <strong>Nor at full light, and that side of it is the camera's alone.</strong> The shadow key is
+	 * declared {@code LightingModel.LIGHTMAP} ({@code pipeline/programs/ShaderKey.java:79}) where the
+	 * two the camera reaches are {@code FULLBRIGHT} ({@code :44,45}), so the twins take the row every
+	 * other caster gets rather than the full light of their own side.
 	 */
 	private static final Map<RenderPipeline, Element> FIXED = new LinkedHashMap<>();
 
@@ -1017,6 +1040,12 @@ public final class EntityDraw {
 		FIXED.put(RenderPipelines.ENTITY_TRANSLUCENT_EMISSIVE,
 				new Element(RenderPipelines.ENTITY_TRANSLUCENT_EMISSIVE, "eyes_emissive", SPIDER_EYES,
 						CUTOUT, RenderStage.NONE, false, true));
+	}
+
+	static {
+		// Here and not beside the call for the mob table: this one is declared below it, so a block up
+		// there would read it while it is still empty and lose both rows without a word.
+		shadowTwins(FIXED);
 	}
 
 	/**
@@ -1658,9 +1687,10 @@ public final class EntityDraw {
 		// gives them.
 		if (pipeline == RenderPipelines.ENTITY_SHADOW) {
 			Vitrail.logger().info("The ground oval under a mob is left out of the shadow map, which "
-					+ "is what Iris does: it has no shadow row for that pipeline either, and the "
-					+ "pipeline writes no depth, so a row for it would put nothing into the depth a "
-					+ "pack reads its shadows from");
+					+ "is what Iris does: it has no shadow row for that pipeline either. What a row "
+					+ "would add is worth knowing and is not the obvious answer: the pipeline writes "
+					+ "no depth, so it would lay no occluder under anything and would only paint into "
+					+ "the map's colour, which is what a mob's eyes do there");
 
 			return;
 		}
@@ -1777,6 +1807,11 @@ public final class EntityDraw {
 		// the frame that share no target, so one of them can be served while the other is not. Five
 		// where every switch is on, the eyes being a group of their own for the reason given below.
 		List<List<Element>> groups = new ArrayList<>();
+
+		// Asked once and held, because it is asked for twice: once as a group of the picture and once
+		// as the rows the shadow table takes from it. Calling fixed() again would send a format this
+		// engine cannot decode to the log a second time, and read as two defects.
+		List<Element> eyes = wanted ? fixed() : List.of();
 		if (wanted) {
 			List<Element> family = Stream.concat(served.stream(),
 							served.stream().map(element -> BLOCK_ELEMENTS.get(element.pipeline())))
@@ -1791,7 +1826,7 @@ public final class EntityDraw {
 			// buffers; put in with the entities, a place that could not answer for that one file
 			// would take every mob and every chest down with it. Apart, the worst it can paint is a
 			// mob the pack lit wearing eyes the game drew, which is the smaller of the two pictures.
-			groups.add(fixed());
+			groups.add(eyes);
 		}
 
 		if (HandDraw.wanted()) {
@@ -1827,7 +1862,8 @@ public final class EntityDraw {
 		// can ever select. The ground shadow is not in the table, so this really is empty for such a
 		// pack rather than nearly empty.
 		if (wanted && TerrainDraw.shadowsAsked() && this.values.shadowCasters().anyFeature()) {
-			groups.add(twinsOf(served, SHADOW_ELEMENTS));
+			groups.add(twinsOf(Stream.concat(served.stream(), eyes.stream()).toList(),
+					SHADOW_ELEMENTS));
 		}
 
 		List<Element> asked = groups.stream().flatMap(List::stream).toList();
@@ -1883,11 +1919,14 @@ public final class EntityDraw {
 	}
 
 	/**
-	 * One table's row for each served mob row, for the tables derived from the mob one.
+	 * One table's row for each row handed in, for the tables derived from another.
 	 * <p>
 	 * A missing row is dropped rather than carried as a null, and only one table has any: the shadow
 	 * one leaves the ground shadow out, because Iris leaves it out. The two hand tables and the block
 	 * one are derived row for row and cannot lose one here.
+	 * <p>
+	 * What is handed in is the mob rows for three of the four tables and the mob rows plus the eyes
+	 * for the shadow one, which is the same pair {@link #SHADOW_ELEMENTS} is filled from.
 	 */
 	private static List<Element> twinsOf(List<Element> served, Map<RenderPipeline, Element> table) {
 		return served.stream()

@@ -199,17 +199,19 @@ drawn, and handing it the previous frame's would be wrong by one frame of camera
 `depthtex2` is the exception and is a real copy, taken one line before the pass is drawn, which is
 the name a pack reads to see what the hand it is holding stands in front of.
 
-**The mobs and the block entities are drawn into the pack's own shadow map**, so they cast as well
-as receive, and the log names the shadow passes one by one when a place first draws. Two things
-take that back: a pack can ask for fewer casters than the default and is given what it asks for,
-and a draw whose pipeline this engine has no shadow row for is left out of the map rather than
-guessed at: the log says so, by name, for each one. **The rain, the snow, the particles, the hand,
-a mob's glowing eyes and the glint of an enchantment are never in it**: they have the pack's light
-on them and nothing under them. Two of the six cost less than the list suggests, the eyes and the
-glint both sitting on a body that fills the map on its own, so what is missing there is a tint on a
-shape the map already has; and the glint is the one where the reference does the same thing for its
-own reason, cancelling the foil while the map is filled. Receiving and casting are two different
-things here, and the second is the shorter list.
+**The mobs and the block entities are drawn into the pack's own shadow map**, so they cast as
+well as receive, and the log names the shadow passes one by one when a place first draws. A mob's
+glowing eyes are drawn into it too and are the one thing there that casts nothing: neither pipeline
+the game gives them writes depth, so what they reach is the map's colour and not the depth a pack
+reads its shadows from. Two things take that back: a pack can ask for fewer casters than the
+default and is given what it asks for, and a draw whose pipeline this engine has no shadow row for
+is left out of the map rather than guessed at: the log says so, by name, for each one. **The rain,
+the snow, the particles, the hand and the glint of an enchantment are never in it**: they have the
+pack's light on them and nothing under them. The glint costs less than the list suggests, sitting
+on a body that fills the map on its own, so what is missing there is a tint on a shape the map
+already has; and it is the one where the reference does the same thing for its own reason,
+cancelling the foil while the map is filled. Receiving and casting are two different things here,
+and the second is the shorter list.
 
 **Turn the game's improved transparency off if the rain or the translucent particles do not change.**
 It is a video setting of its own, which the Fabulous preset turns on everywhere except macOS. With
