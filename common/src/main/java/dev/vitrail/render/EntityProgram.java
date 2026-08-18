@@ -228,7 +228,9 @@ final class EntityProgram implements DumpedProgram {
 				// and transforms, and this program declares none of their names.
 				null,
 				// One block, written once: every draw of one pass reads the same values.
-				null),
+				null,
+				// Drawn in the game's own volume, so the dh matrices answer the game's.
+				false),
 				bound, values, load, element.format(), writes, targets, chainRuns));
 	}
 

@@ -106,7 +106,9 @@ final class ParticleProgram implements DumpedProgram {
 				// its whole geometry in the vertex buffer the renderer fills.
 				null,
 				// One block, written once: every draw of one pass reads the same values.
-				null),
+				null,
+				// Drawn in the game's own volume, so the dh matrices answer the game's.
+				false),
 				bound, values, load, DefaultVertexFormat.PARTICLE, writes, targets, chainRuns));
 	}
 

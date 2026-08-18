@@ -91,7 +91,9 @@ public final class TerrainProgram implements DumpedProgram {
 				// buffers and none of them is a name this program declares.
 				!pass.shadow(), depthState(pass), pass.stage(), null,
 				// One block, written once: every section of one pass reads the same values.
-				null),
+				null,
+				// Drawn in the game's own volume, so the dh matrices answer the game's.
+				false),
 				loaded, values, load, format, writes, targets, chainRuns);
 	}
 
