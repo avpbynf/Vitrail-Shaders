@@ -226,6 +226,8 @@ final class EntityProgram implements DumpedProgram {
 				element.stage(),
 				// Nothing of the game's bound beside the mesh: an entity pipeline carries samplers
 				// and transforms, and this program declares none of their names.
+				null,
+				// One block, written once: every draw of one pass reads the same values.
 				null),
 				bound, values, load, element.format(), writes, targets, chainRuns));
 	}

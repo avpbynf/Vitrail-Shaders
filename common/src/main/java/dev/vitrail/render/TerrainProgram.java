@@ -89,7 +89,9 @@ public final class TerrainProgram implements DumpedProgram {
 				// through its back. Iris cuts it for the same reason.
 				// Nothing of the game's bound beside the mesh: the chunk pass reads Sodium's own
 				// buffers and none of them is a name this program declares.
-				!pass.shadow(), depthState(pass), pass.stage(), null),
+				!pass.shadow(), depthState(pass), pass.stage(), null,
+				// One block, written once: every section of one pass reads the same values.
+				null),
 				loaded, values, load, format, writes, targets, chainRuns);
 	}
 

@@ -455,6 +455,15 @@ public final class FrameState implements WorldState {
 			this.view.advanceDistant(ViewMatrices.FALLBACK_PLANE, ViewMatrices.FALLBACK_PLANE, -1);
 		}
 
+		// And the volume itself, which is the row rather than the pair of planes the planes were
+		// worked out from: a row put back together out of two planes would be the same arithmetic
+		// done twice and rounded twice. Handed a zero offset where there is no row to be had, and
+		// then the volume published is the frame's own, which is what a pack read before this engine
+		// drew a far terrain at all.
+		boolean row = DhDepth.zRow(this.distantPlanes);
+		this.view.advanceDistantVolume(row ? this.distantPlanes.x : 0.0F,
+				row ? this.distantPlanes.y : 0.0F);
+
 		this.view.advanceShadow(sunAngle(isDay()) / 360.0F, this.directives.sunPathRotation(),
 				this.directives.shadowIntervalSize(), this.shift.unshifted(),
 				this.directives.shadowDistance(), this.directives.shadowNearPlane(),
@@ -1733,6 +1742,11 @@ public final class FrameState implements WorldState {
 	@Override
 	public Matrix4fc drawnShadowProjectionInverse() {
 		return this.view.drawnShadowProjectionInverse();
+	}
+
+	@Override
+	public Matrix4fc drawnDistantProjection() {
+		return this.view.drawnDistantProjection();
 	}
 
 	@Override

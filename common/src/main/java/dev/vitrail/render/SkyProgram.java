@@ -111,6 +111,8 @@ final class SkyProgram implements DumpedProgram {
 				true, null, element.stage(),
 				// Nothing of the game's bound beside the mesh, unlike the clouds: every one of the
 				// eight sky passes carries its whole geometry in the vertex buffer it binds.
+				null,
+				// One block, written once: every draw of one pass reads the same values.
 				null),
 				bound, values, load, element.format(), writes, targets, chainRuns));
 	}

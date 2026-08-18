@@ -221,12 +221,15 @@ public final class PackChain {
 	private final WeatherDraw weather;
 	private final ParticleDraw particles;
 
+	/** Distant Horizons' far terrain, drawn with the pack's own programs where DH is there at all. */
+	private final DistantDraw distant;
+
 	/**
 	 * The far terrain's road into the game's depth. Held by the chain and not by the targets,
 	 * because it writes nothing of the pack's: it lives here for the same reason {@link #quad} does,
 	 * which is that it is asked for from an entry point of its own.
 	 */
-	private final DhFold distant = new DhFold();
+	private final DhFold fold = new DhFold();
 
 	private List<PackPass> programs;
 	private PackPass last;
@@ -324,6 +327,11 @@ public final class PackChain {
 		this.particles = new ParticleDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted,
 				seedEnabled && this.seed != null, this.targets);
+		// And the seventh, read on demand like the five before it and for the sharpest reason of
+		// them: most sessions have no Distant Horizons at all, and the ones that do only reach this
+		// on the frames DH really draws a far terrain.
+		this.distant = new DistantDraw(this, packPath, chain.place(), chosen, profile, values,
+				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 	}
 
 	/**
@@ -1087,6 +1095,13 @@ public final class PackChain {
 		return disabled || chain == null ? null : chain.weather;
 	}
 
+	/** The same, for Distant Horizons' far terrain. */
+	static DistantDraw distant() {
+		PackChain chain = active;
+
+		return disabled || chain == null ? null : chain.distant;
+	}
+
 	/** The same, for the quad particles. */
 	static ParticleDraw particles() {
 		PackChain chain = active;
@@ -1105,7 +1120,8 @@ public final class PackChain {
 			PackDump.take(this.chain.place(), this.load,
 					this.programs == null ? List.of() : this.programs, this.values.world(),
 					this.terrain.programs(), this.sky.programs(), this.entities.programs(),
-					this.clouds.programs(), this.weather.programs(), this.particles.programs());
+					this.clouds.programs(), this.weather.programs(), this.particles.programs(),
+					this.distant.programs());
 		}
 	}
 
@@ -1193,6 +1209,7 @@ public final class PackChain {
 		this.clouds.rotate();
 		this.weather.rotate();
 		this.particles.rotate();
+		this.distant.rotate();
 	}
 
 	/** Called when the client shuts down, while the device is still alive. */
@@ -1452,10 +1469,11 @@ public final class PackChain {
 		// Caught like every other point the game calls this engine back at: an exception here reaches
 		// the game through an event handler and comes back on the very next frame.
 		try {
-			chain.distant.fold(device.createCommandEncoder(), device, chain.quad(device),
+			chain.fold.fold(device.createCommandEncoder(), device, chain.quad(device),
 					main.getColorTextureView(), main.getDepthTextureView(),
 					minecraft.gameRenderer.gameRenderState().levelRenderState.cameraRenderState
-							.depthFar);
+							.depthFar,
+					chain.distant.served());
 		} catch (RuntimeException e) {
 			disabled = true;
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -2249,6 +2267,7 @@ public final class PackChain {
 		this.clouds.release();
 		this.weather.release();
 		this.particles.release();
+		this.distant.release();
 
 		if (this.block != null) {
 			this.block.close();

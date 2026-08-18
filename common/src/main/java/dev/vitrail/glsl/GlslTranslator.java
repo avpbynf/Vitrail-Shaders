@@ -372,6 +372,9 @@ public final class GlslTranslator {
 	private int strippedExtensions;
 	private boolean depthEpilogue;
 	private boolean terrainPrologue;
+
+	/** Whether the far terrain's own head is called before the pack's body, for the same reason. */
+	private boolean distantPrologue;
 	private boolean alphaEpilogue;
 
 	/**
@@ -618,6 +621,10 @@ public final class GlslTranslator {
 		 * {@code prepare} for a stage that will only ever be asked this is not yet settled.
 		 */
 		public Set<String> reads() {
+			if (this.translator.inputs == VertexInputs.DISTANT) {
+				return DistantVertex.reads(this.translator.used, this.translator.synthesized);
+			}
+
 			return this.translator.inputs.terrain()
 					? SodiumVertex.reads(this.translator.used, this.translator.synthesized,
 							this.translator.inputs.separateAo())
@@ -1950,9 +1957,10 @@ public final class GlslTranslator {
 		// SPIR-V, and rebind only counts the ones that survived, so a dropped attribute shifts the
 		// location of every one after it.
 		boolean terrain = this.inputs.terrain();
+		boolean distant = this.inputs == VertexInputs.DISTANT;
 		boolean depth = namesClipPosition();
 		boolean overlay = this.inputs.overlay();
-		if (!terrain && !depth && !overlay) {
+		if (!terrain && !distant && !depth && !overlay) {
 			return;
 		}
 
@@ -1963,6 +1971,7 @@ public final class GlslTranslator {
 
 		replace(name, PACK_MAIN);
 		this.terrainPrologue = terrain;
+		this.distantPrologue = distant;
 		this.entityWrapped = overlay;
 		if (terrain) {
 			takeTexShrink();
@@ -3308,6 +3317,8 @@ public final class GlslTranslator {
 				case PARTICLE -> lines.addAll(ParticleVertex.prologue(this.used, this.synthesized));
 				case SKY -> lines.addAll(SkyVertex.prologue(this.bound, this.used, this.synthesized));
 				case CLOUDS -> lines.addAll(CloudVertex.prologue(this.used, this.synthesized));
+				case DISTANT -> lines.addAll(
+						DistantVertex.prologue(this.bound, this.used, this.synthesized));
 				case WORLD -> {
 					for (Map.Entry<String, String> attribute : LegacyGlsl.FIXED_ATTRIBUTES.entrySet()) {
 						if (this.used.contains(attribute.getKey())) {
@@ -3462,13 +3473,14 @@ public final class GlslTranslator {
 		// writes back. It has to be the ascending function that gets there first, so this goes last.
 		// The pack's body is concatenated after the header, so its own main is only a name here and
 		// has to be declared before it can be called.
-		if (this.depthEpilogue || this.terrainPrologue || this.entityWrapped || wrapsFragment()
-				|| owesInitialisers()) {
+		if (this.depthEpilogue || this.terrainPrologue || this.distantPrologue || this.entityWrapped
+				|| wrapsFragment() || owesInitialisers()) {
 			lines.add("void " + PACK_MAIN + "();");
 			// The mask goes last of all, after the discard: a fragment the alpha test threw away
 			// covered nothing, and marking it covered would leave a hole where a leaf was.
 			lines.add("void main() { "
 					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
+					+ (this.distantPrologue ? DistantVertex.PROLOGUE + "(); " : "")
 					+ overlayPrologue()
 					+ identifierPrologue(varyings)
 					+ (wrapsFragment() ? ORDER_OUTPUTS + "(); " : "")

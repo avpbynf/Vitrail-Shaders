@@ -105,6 +105,8 @@ final class WeatherProgram implements DumpedProgram {
 				game.getDepthStencilState(), element.stage(),
 				// Nothing of the game's bound beside the mesh, unlike the clouds: the curtain is a
 				// vertex buffer the renderer fills, and this program declares no name of its own.
+				null,
+				// One block, written once: every draw of one pass reads the same values.
 				null),
 				bound, values, load, DefaultVertexFormat.PARTICLE, writes, targets, chainRuns));
 	}

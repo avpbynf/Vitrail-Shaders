@@ -486,6 +486,118 @@ public final class PackProgram {
 	}
 
 	/**
+	 * Reads and translates the programs the far terrain is drawn with, in one opening of the pack.
+	 * <p>
+	 * <strong>The passes are walked twice, and it is the chunk mesh's reason exactly.</strong> Every
+	 * stage drawn from one mesh has to declare the same elements of it, or the location of every
+	 * element after the first difference moves in silence, so the first walk asks each vertex stage
+	 * what it reads and the second translates all of them against the union. What that costs is one
+	 * extra rewrite per vertex stage, and it is DH's mesh here rather than Sodium's:
+	 * {@link DistantVertex} says which of its six elements may be left off and why leaving one off is
+	 * forced rather than thrifty.
+	 * <p>
+	 * Both programs together and not one at a time, for the reason {@code loadGeometry} gives: the
+	 * plan reads thirty odd files whatever is asked of it, and the two here are one frame apart at
+	 * most, the opaque half and the one DH defers.
+	 *
+	 * @param elements the halves to read, each carrying the name the pack is asked for and the key it
+	 *                 gets its answer back under. Every one of them has to be written against
+	 *                 {@link VertexInputs#DISTANT}, which is checked rather than trusted: a constant
+	 *                 of another family would translate against a head built for another mesh
+	 */
+	public static Distant loadDistant(Path packPath, String place, List<GeometryElement> elements,
+			Map<String, OptionValue> chosen, String profile) throws IOException {
+		for (GeometryElement element : elements) {
+			if (element.inputs() != VertexInputs.DISTANT) {
+				throw new IllegalArgumentException("The far terrain is drawn from Distant Horizons' own "
+						+ "mesh, so " + element.inputs() + " is not a contract its programs may be "
+						+ "written against");
+			}
+		}
+
+		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
+			OptionIndex options = OptionIndex.build(source);
+			ShaderProperties properties = ShaderProperties.parse(source);
+			Map<String, OptionValue> fromProfile = profile.isEmpty()
+					? Map.of()
+					: properties.expandProfile(profile);
+			SettingSet settings =
+					SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
+			IncludeExpander expander = new IncludeExpander(source, settings);
+			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
+			PackTextures textures = textures(source, properties, options, settings);
+
+			DimensionSet dimensions = DimensionSet.discover(source);
+			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
+					dimensions);
+
+			record Served(String path, Map<ProgramStage, ExpandedUnit> units, AlphaTest alphaTest,
+					GeometryElement element) {
+			}
+
+			Map<String, Served> served = new LinkedHashMap<>();
+			Set<String> reads = new LinkedHashSet<>();
+			for (GeometryElement element : elements) {
+				Optional<ProgramResolver.Resolution> resolution =
+						resolver.lookup(place, element.program());
+				if (resolution.isEmpty()) {
+					continue;
+				}
+
+				// The file that really serves the half and not the name asked for, which is how Iris
+				// looks it up and how the chunk passes read the same line: a pack shipping one
+				// dh_terrain and no dh_water draws its far water with the first.
+				String servedBy = resolution.get().servedBy();
+				String path = pathOf(place, servedBy);
+				Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
+				if (!units.containsKey(ProgramStage.VERTEX)
+						|| !units.containsKey(ProgramStage.FRAGMENT)) {
+					continue;
+				}
+
+				AlphaTest alphaTest = properties.alphaTest(servedBy).orElse(element.alphaTest());
+				served.put(element.element(), new Served(path, units, alphaTest, element));
+				reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), element.inputs(),
+						alphaTest, element.coverage(), element.program(), textures.volumes()));
+			}
+
+			if (served.isEmpty()) {
+				return new Distant(Map.of(), List.of());
+			}
+
+			List<String> carried = DistantVertex.carried(reads);
+			Map<String, Loaded> loaded = new LinkedHashMap<>();
+			served.forEach((key, one) -> loaded.put(key, bind(source.packName(), one.path(),
+					ProgramTranslator.translate(one.units(), one.element().inputs(), carried,
+							one.alphaTest(), one.element().coverage(), one.element().program(),
+							textures.volumes()),
+					targets, one.alphaTest(), textures)));
+
+			return new Distant(loaded, carried);
+		}
+	}
+
+	/**
+	 * The pack's far terrain programs and the elements of DH's mesh they were written against.
+	 * <p>
+	 * The two travel together for the reason {@link Terrain}'s pair does: a vertex stage declares
+	 * exactly the elements listed here, so a caller binding a format built from anything else would
+	 * shift the location of every element after the first difference without a word.
+	 *
+	 * @param programs one per half the pack serves, keyed by the caller's own word for it and absent
+	 *                 for a half it does not serve
+	 * @param carried  the elements of DH's mesh these stages declare, in DH's own order. Empty when
+	 *                 there is no program at all, where DH goes on drawing its far terrain itself
+	 */
+	public record Distant(Map<String, Loaded> programs, List<String> carried) {
+
+		public Distant {
+			programs = Map.copyOf(programs);
+			carried = List.copyOf(carried);
+		}
+	}
+
+	/**
 	 * One piece of the sky, as a pack has to be read for it.
 	 *
 	 * @param element  what the caller calls this piece, one word, and the key it gets its answer back

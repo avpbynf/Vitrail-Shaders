@@ -142,6 +142,13 @@ public interface ViewSource {
 
 	Matrix4fc dhProjectionInverse();
 
+	/**
+	 * The same volume in the convention the device rasterises in, for the one pass that draws the far
+	 * terrain itself. {@code drawnShadowProjection} stands to {@code shadowProjection} exactly as
+	 * this stands to {@code dhProjection}.
+	 */
+	Matrix4fc drawnDistantProjection();
+
 	Matrix4fc dhPreviousProjection();
 
 	float dhNearPlane();
