@@ -125,15 +125,16 @@ top of grass blocks. The engine hands that bias to the shader as a block member 
 for, alongside the depth-conversion constant.
 
 What the format does not carry is the interesting half: **no normal, no block id, no mid texture
-coordinate, no mid block, no tangent.** The engine appends an element for each, and a sixth carrying
-the separated colour described above, which answers no name of the pack's own but a second shape for
-one it already reads.
+coordinate, no mid block, no tangent.** The engine appends an element for the block id, one for the
+mid texture coordinate, one for the mid block and one that carries the normal and the tangent
+together, and a fifth carrying the separated colour described above, which answers no name of the
+pack's own but a second shape for one it already reads.
 
-**Which of the six a mesh really carries is the loaded pack's answer, not a constant.** The pack's
+**Which of the five a mesh really carries is the loaded pack's answer, not a constant.** The pack's
 six chunk programs are translated far enough to say which of those names each of them reads, and the
 union decides the format: a pack whose programs never mention the mid block gets no element for it,
 and one that never wrote `separateAo` gets one colour instead of two. So a vertex is anything from
-twenty-four bytes to forty-four, twenty of which are the renderer's own. The union and never one
+twenty-four bytes to forty, twenty of which are the renderer's own. The union and never one
 program's own answer, because of the pairing rule at the top of this page: every one of the six
 declares the whole format whether or not it reads all of it, and one that declared less would move
 the location of every element after the gap without a word.
@@ -171,7 +172,7 @@ reaches the encoder whichever road the quad took. The block id, the block's own 
 light emission all travel that way, and the encoder turns the last two into the offset from a vertex
 to the middle of its block.
 
-**Three of the five are properties of the quad rather than of a corner**, and are computed in the
+**Three of the four are properties of the quad rather than of a corner**, and are computed in the
 encoder from the corners it already has. The middle of the sprite is their mean. The normal is
 Newell's sum over the loop, which is what makes it right for a plant drawn as a cross, a sloped
 fluid surface and any model that is not a box: a face direction offers six axes and a seventh value
@@ -221,12 +222,30 @@ element the stage does not declare shifts every element after it, and there is n
 last one. That single placement decision is what lets the renderer keep drawing through a format it
 was never told about.
 
-**They are all appended, never chosen per pack**, where the reference builds its format out of the
-names a pack's compiled programs really reference. The reason this engine could not do the same was
-that its format was settled before any pack was chosen, and that is no longer so: the format now
-follows the pack. What is left is a plain difference in what the vertex costs, and it has not been
-closed. Seven packs of the test corpus read the sprite middle and eight read the tangent, so what a
-conditional would save is small either way.
+**The normal and the tangent share one of those words.** The tangent is squared up against the
+normal before anything is stored, so what is left of it once the normal is known is one angle in the
+normal's own plane and one bit saying which way the third axis of the frame turns. The reference
+makes the same bargain and the engine follows it: twelve bits of octahedral x, then the octahedral
+y, then that bit, then the eight bits of angle. Where the two part is the bit: the reference keeps
+its whole word for the two directions and reads the handedness out of a spare material bit instead,
+which nothing here can do, since a translucent quad reaches the encoder from the sorter under a
+material the renderer chose itself and anything written in that byte is gone by then. The bit is
+therefore taken off the normal rather than off the angle, eleven bits of octahedral y where the
+reference spends twelve, because at that end it costs three hundredths of a degree and at the other
+end it would cost nine tenths.
+
+Against the two words of signed bytes this replaces, a pack reads a normal four times closer to the
+true one and a tangent up to nine tenths of a degree round the face from where it was, and that
+tangent is now exactly perpendicular to the normal where three rounded bytes left it a few
+thousandths off. The out-of-game harness measures all of it over four hundred thousand frames, which
+is the only witness there is: nothing off the game runs the text that undoes the word.
+
+One thing the reference does here is not followed, and reproducing it would be reproducing a defect.
+It measures the angle against the normal the quad had, while its own patched shader reads that angle
+back in a basis built from the normal the word holds. That basis turns over on the sign of the
+normal's z, so a quad whose two normals straddle it gets a tangent back nearly reversed; measured
+the same way, the worst such tangent is a hundred and eighty degrees out. The engine measures the
+angle against the decoded normal instead, so both sides build the same basis.
 
 The encoding itself matches the reference implementation term for term: the id plus one, shifted up
 by one bit, with the low bit flagging a fluid, and a default of minus one so that an unmapped block
