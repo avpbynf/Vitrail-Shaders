@@ -16,6 +16,14 @@ what the next one holds.
 
 ### Added
 
+- **A mob and a piece of armour take the relief their resource pack draws for them.** A skin and an
+  armour layer are textures of their own rather than sprites in an atlas, so the maps a material
+  resource pack ships beside them were never read at all and both names came back flat: every mob
+  stayed matte while the terrain around it had relief. They are now read from whichever texture the
+  draw is really using, the same way the atlases already were, and the log names each texture that
+  answers as the skin first comes on screen. A skin downloaded from the skin server rather than
+  shipped by the resource pack has no maps beside it and is left alone.
+
 - **A normal map on a mob, on armour or on a chest is read the right way round.** The two values a
   pack works a bump out from, the middle of the sprite a face is mapped to and the direction the
   texture runs in over it, were the same constant for every face of every piece: a pack lighting a
@@ -24,7 +32,7 @@ what the next one holds.
   entities, on a held item and on the hand alike. Of the hundred and fifty entity programs the eight
   packs tested ship between them, seventy-five read the sprite middle and sixty-one read the
   direction. What it changes on screen depends on the resource pack as well: a mob with no normal
-  map beside its skin has nothing to tilt, which is a second thing and is not fixed here.
+  map beside its skin has nothing to tilt, and finding that map is the entry above.
 
 - **A mob flashes again when it is hurt, and a creeper whitens before it goes off.** The colour the
   game lays over a mob it has just damaged was reaching the pack as one number for the whole world,
