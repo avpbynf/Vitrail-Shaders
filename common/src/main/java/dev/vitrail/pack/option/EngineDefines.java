@@ -135,11 +135,11 @@ public final class EngineDefines {
 		}
 
 		// What a pack branches its far terrain on. Posed only where the terrain really reaches the
-		// pack, which is what the name means to the packs that read it: the eleven blend lines and
-		// four buffer sizes of the corpus that sit under it are written for a picture with a far
-		// terrain in its depth, and posing it over a depth that has none applies them to a screen
-		// they were never meant for. Iris poses it on the same terms, the mod being loaded AND its
-		// rendering answering for the frame.
+		// pack, which is what the name means to the packs that read it: what sits under it in the
+		// corpus is written for a picture with a far terrain in its depth, its own blend states and
+		// its own programs, and posing it over a depth that has none applies them to a screen they
+		// were never meant for. Iris poses it on the mod being loaded AND its rendering answering,
+		// gl/shader/StandardMacros.java:64; render/PackDefines asks the same two questions here.
 		if (environment.distantHorizons()) {
 			defines.put("DISTANT_HORIZONS", "");
 		}

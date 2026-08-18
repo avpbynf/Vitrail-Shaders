@@ -23,6 +23,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.resources.Identifier;
@@ -53,17 +54,36 @@ import java.util.OptionalDouble;
  * than fitted.
  * <p>
  * <strong>One test does the work of three.</strong> A folded value at or below nought is thrown
- * away, and that covers every case at once: DH clears its image to nought, which is its own far
- * plane and also every texel it drew nothing into, and both land below the game's far plane once
- * converted. So does anything genuinely past the game's far plane, which is the honest limit of
- * this pass and is written out below.
+ * away, and that covers every case at once: DH clears its image to nought, which on a reversed Z is
+ * its own far plane and is also every texel it drew nothing into,
+ * {@code common/render/blaze/BlazeDhMetaRenderer.java:48} taking that value from
+ * {@code core/render/EDhRenderDepth.java:18} and clearing with it at {@code :114}. Both land at or
+ * below nought once converted, and the
+ * conversion is monotonic, so anything genuinely past the game's far plane goes with them. That the
+ * cleared value lands there and not in front of the player is not luck: it holds exactly while the
+ * game's far plane is no further out than DH's, which the paragraph below shows is every setting
+ * the game allows.
  * <p>
  * <strong>What cannot be folded.</strong> The game clips at {@code max(renderDistance * 4,
- * cloudRange * 16)} blocks, two thousand and forty-eight of them with both sliders at their default,
- * and a reversed Z has no value left for anything beyond that: the far plane IS nought. DH's own
- * terrain reaches the same two thousand at its default, so the band that matters is inside, and it
- * grows with the render distance rather than against it. What sits past the game's far plane keeps
- * reading as sky, exactly as the whole of the far terrain did before this pass existed.
+ * cloudRange * 16)} blocks with the render distance already in blocks, {@code Camera.update}, and
+ * both of those cap at two thousand and forty-eight: thirty-two chunks is the most the render
+ * distance slider gives and a hundred and twenty-eight the most the cloud one does. A reversed Z
+ * has no value left beyond that plane, the far plane IS nought, so what stands past it keeps
+ * reading as sky exactly as the whole of the far terrain did before this pass existed. DH's own far
+ * clip is {@code (chunkRenderDistance * 16 + 512) * 2} and its render distance will not go below
+ * thirty-two chunks, so the nearest plane DH can rasterise against is that same two thousand and
+ * forty-eight, and at its default of two hundred and fifty-six chunks it is nine thousand two
+ * hundred and sixteen. The game's plane is therefore never the further of the two, and the band
+ * this pass wins is everything between them.
+ * <p>
+ * <strong>What is folded is the shape and not the light.</strong> The far terrain keeps the colour
+ * DH gave it: this engine puts DH's depth into the game's and nothing more. Iris does not stop
+ * there, drawing the LODs itself with the pack's own {@code dh_terrain}, {@code dh_water} and
+ * {@code dh_generic} programs into the pack's own targets,
+ * {@code compat/dh/DHCompatInternal.java:67}. Those three families are not served here at all, and
+ * a family served by the wrong program would be worse than one left alone. What it costs is that
+ * the far terrain is lit DH's way while everything nearer is lit the pack's, so the two meet at a
+ * seam a pack cannot close from here; what it buys is every effect a pack indexes on depth.
  * <p>
  * The colour attachment is written by nothing and is there because the encoder demands one: a pass
  * with a depth attachment alone is legal, but the first colour attachment may not be absent, and a
@@ -89,10 +109,14 @@ final class DhFold {
 	private static final int VERTICES = 6;
 
 	/**
-	 * The game's own near plane, which {@code Camera.update} passes and never varies. The far plane
-	 * is the frame's and is handed in, {@code Camera.depthFar} moving with two sliders.
+	 * The game's own near plane, under the game's own name for it. {@code Camera.update} passes the
+	 * same number as a literal rather than through this constant, and javac inlines a constant
+	 * anyway, so what the name buys is not a wire: it is that a reader sees which plane is meant,
+	 * and that a rebuild against a game which moved that plane moves this with it. It never varies
+	 * within a run. The far plane does, is the frame's, and is handed in, {@code Camera.depthFar}
+	 * moving with two sliders.
 	 */
-	private static final float NEAR = 0.05F;
+	private static final float NEAR = Camera.PROJECTION_Z_NEAR;
 
 	private static final String LABEL = "Vitrail distant depth";
 
@@ -185,8 +209,19 @@ final class DhFold {
 			return false;
 		}
 
+		// Asked every frame rather than once, because DH's rendering switch is reachable from its
+		// own screen without leaving the world and its images keep whatever was last drawn into
+		// them. Folding those after DH has stopped would stand the last far terrain it drew in
+		// front of a world that has moved on.
+		if (!DhDepth.present()) {
+			return false;
+		}
+
 		GpuTextureView distant = DhDepth.view();
-		if (distant == null || !DhDepth.zRow(this.far)) {
+		// The row is refused rather than divided by. Both of its terms are positive on any matrix
+		// built the way DH builds this one, and neither the conversion below nor the line it logs
+		// would say anything true if one of them were not.
+		if (distant == null || !DhDepth.zRow(this.far) || this.far.x <= 0.0F || this.far.y <= 0.0F) {
 			return false;
 		}
 
