@@ -29,8 +29,10 @@ carry no prefix, being the only two that are not about one thing.
 name: such a branch carries the version bump and nothing else, so there is nothing else to say
 about it.
 
-Nothing in a name records who wrote the branch or when, and none of them carries an issue number,
-there being nothing here that numbers them.
+Nothing in a name records who wrote the branch or when, and none of them carries an issue number
+either. That second one is a choice rather than an absence, now that there are issues to number: a
+request points at the one it closes from its body, where `Closes #31` really closes it, and a name
+carrying the number would say the same thing in the one place nothing reads it back from.
 
 **The history is linear and carries no merge commit anywhere, which is not a preference.** A tree
 that forks is a tree nobody reads once it is public, and this one is public. A topic branch is
