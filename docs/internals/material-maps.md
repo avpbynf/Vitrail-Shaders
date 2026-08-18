@@ -93,8 +93,9 @@ to this second door on its own.
 **A map is read one frame after it is first wanted.** The want is discovered while a draw is being
 recorded, inside a render pass, where a texture cannot be created; so a skin met for the first time
 is remembered, answered with the flat value for that frame, and read at the top of the next one.
-Iris defers the same read at the same place and for the same reason. What either engine shows is one
-frame of a mob without relief, at the moment it first comes on screen.
+Iris defers the same read at the same place and by the same means, and says nothing about what for:
+that reason is this engine's own. What either engine shows is one frame of a mob without relief, the
+one it first comes on screen in.
 
 **What has no map on either side** is an image the game builds rather than reads: the light map, the
 overlay, and a player skin that came down over HTTP rather than out of the resource pack. The engine

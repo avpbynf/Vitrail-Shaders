@@ -67,6 +67,15 @@ public final class PbrTextures {
 	 * rather than the image, this is what lets a reload be met without a hook of its own - the new
 	 * image misses below, its name is found here, and what the old one held is handed back before the
 	 * new is built.
+	 * <p>
+	 * <strong>What that does not cover is a name that is never drawn again, and it is a divergence
+	 * worth its two lines.</strong> Iris hands a pair back the moment the albedo it followed is
+	 * deleted ({@code pbr/texture/PBRTextureManager.java:147-152}). Here nothing is watching the
+	 * deletion, so after a resource reload the two images built for a skin the player never meets
+	 * again stay resident until the session ends. It is bounded rather than open - one pair per
+	 * distinct name ever served, and the next reload of that name frees it - so this is work not
+	 * done rather than a wall: what it would take is a hook on the game closing a texture, which is
+	 * a mixin nothing else here needs yet.
 	 */
 	private static final Map<Identifier, Maps> BY_NAME = new HashMap<>();
 
@@ -200,9 +209,16 @@ public final class PbrTextures {
 	/**
 	 * The name the game loaded an image under, or null where no texture of its own carries it.
 	 * <p>
-	 * Only a {@link SimpleTexture} is answered for, which is Iris's own line: its registry holds this
-	 * class and the atlas one and nothing else, so an image the game builds rather than reads - the
-	 * light map, the overlay, a skin that came down over HTTP - has no map beside it on either side.
+	 * Only a {@link SimpleTexture} is answered for, which is where Iris draws the same line: its
+	 * registry holds this class and the atlas one and nothing else, so an image the game builds
+	 * rather than reads - the light map, the overlay, a skin that came down over HTTP - has no map
+	 * beside it on either side. The test is not written the same way and the difference is worth the
+	 * sentence: Iris looks the loader up by the EXACT class ({@code texture.getClass()} into a map
+	 * at {@code pbr/texture/PBRTextureManager.java:129} and
+	 * {@code pbr/loader/PBRTextureLoaderRegistry.java:27-28}), where this takes subclasses too. On
+	 * 26.2 the two answer the same for everything the game ships, {@code SimpleTexture} having no
+	 * subclass in it, so what the difference decides today is nothing.
+	 * <p>
 	 * The name is the texture's own resource identifier rather than the key it is registered under,
 	 * which is the one Iris reads too ({@code pbr/loader/SimplePBRLoader.java:20}): the two differ
 	 * wherever the game loads one file into a slot named after something else.

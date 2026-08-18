@@ -114,7 +114,8 @@ above.
 **A mob and a piece of armour are named one at a time, and later.** Their maps are not stitched into
 an atlas, so they are read the first time the skin is drawn rather than at the resource load: expect
 those lines around the moment a mob first comes on screen, one per texture, naming the texture
-itself. The mob that line names wears its relief from the next frame on.
+itself. A line is printed at the top of a frame and the mob wears its relief in that same frame, so
+what a player sees is one flat frame: the one the mob first appeared in.
 
 One place relief still goes missing even with a material pack installed: **an animated block's map
 does not animate**. It is named work not done, with what it costs, in
