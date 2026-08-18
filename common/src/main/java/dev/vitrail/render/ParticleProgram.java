@@ -104,6 +104,8 @@ final class ParticleProgram implements DumpedProgram {
 				game.getDepthStencilState(), element.stage(),
 				// Nothing of the game's bound beside the mesh, unlike the clouds: a particle carries
 				// its whole geometry in the vertex buffer the renderer fills.
+				null,
+				// One block, written once: every draw of one pass reads the same values.
 				null),
 				bound, values, load, DefaultVertexFormat.PARTICLE, writes, targets, chainRuns));
 	}

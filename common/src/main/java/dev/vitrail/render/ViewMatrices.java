@@ -139,6 +139,15 @@ public final class ViewMatrices implements ViewSource {
 	private boolean shadowSeeded;
 
 	/**
+	 * The volume DH rasterises in, as the device takes it, and the same volume published the way a
+	 * pack reads it. All three stand at the frame's own until {@link #advanceDistantVolume} is handed
+	 * a row of DH's, which is every frame of every session without a far terrain.
+	 */
+	private final Matrix4f distantProjection = new Matrix4f();
+	private final Matrix4f publishedDistant = new Matrix4f();
+	private final Matrix4f publishedDistantInverse = new Matrix4f();
+
+	/**
 	 * What Distant Horizons drew this frame with, or nothing when it drew nothing. See
 	 * {@link #advanceDistant} for why the three move together.
 	 */
@@ -238,6 +247,49 @@ public final class ViewMatrices implements ViewSource {
 		this.dhNear = near;
 		this.dhFar = far;
 		this.dhRenderDistanceBlocks = distance;
+	}
+
+	/**
+	 * The volume Distant Horizons rasterises its far terrain in, out of the frame's own matrix and
+	 * the z row DH really drew with.
+	 * <p>
+	 * <strong>The frame's matrix with its z row replaced, which is DH's matrix and not a rebuild of
+	 * it.</strong> {@code RenderUtil.setDhProjectionMatrix} takes the game's own matrix and
+	 * overwrites that one row with clip planes of its own, so the two share every other term: the
+	 * field of view, the aspect and the handedness are the frame's by construction rather than by
+	 * agreement. Iris rebuilds a perspective instead, out of the field of view read back off the
+	 * game's matrix and DH's two planes ({@code compat/dh/DHCompat.java:54} and
+	 * {@code compat/dh/LodRendererEvents.java:318}), which is the same volume for as long as the
+	 * game's own matrix is a plain perspective and is not one the day anything is composed into it.
+	 * <p>
+	 * <strong>What is replaced is the CLEAN projection's row, and the walk bob is what that
+	 * costs.</strong> This engine publishes a projection with the bob taken out of it and multiplied
+	 * into the model view instead, which is where a pack expects both; DH overwrites the row of the
+	 * composed matrix, bob included. The two agree exactly while the bob is the identity, and part by
+	 * the terms the bob puts into that row while the player is walking. Nothing else could be done
+	 * here without taking the bob back out of the model view for this one family, which would move
+	 * the far terrain rather than its depth.
+	 *
+	 * @param scale  the m22 of DH's own matrix, which is the row's z term
+	 * @param offset its m23, the row's w term. Zero while DH has drawn no frame, and then there is no
+	 *               volume to be had and the frame's own stands in
+	 */
+	void advanceDistantVolume(float scale, float offset) {
+		this.distantProjection.set(this.projection);
+		if (offset != 0.0F) {
+			// Row z, column z and column w, in JOML's column first spelling: what DH calls m22 and
+			// m23 are m22 and m32 here, and the two conventions number the pair the other way round.
+			this.distantProjection.m22(scale);
+			this.distantProjection.m32(offset);
+			// The rest of the row is nought in every perspective the game builds, and DH leaves it
+			// alone as well; set here rather than assumed, so that a matrix carrying anything there
+			// does not leave half of DH's row standing beside half of the game's.
+			this.distantProjection.m02(0.0F);
+			this.distantProjection.m12(0.0F);
+		}
+
+		ClipSpace.toLegacyDepth(this.distantProjection, this.publishedDistant);
+		this.publishedDistant.invert(this.publishedDistantInverse);
 	}
 
 	/**
@@ -542,12 +594,17 @@ public final class ViewMatrices implements ViewSource {
 	 */
 	@Override
 	public Matrix4fc dhProjection() {
-		return this.projection;
+		return this.publishedDistant;
 	}
 
 	@Override
 	public Matrix4fc dhProjectionInverse() {
-		return this.projectionInverse;
+		return this.publishedDistantInverse;
+	}
+
+	@Override
+	public Matrix4fc drawnDistantProjection() {
+		return this.distantProjection;
 	}
 
 	@Override

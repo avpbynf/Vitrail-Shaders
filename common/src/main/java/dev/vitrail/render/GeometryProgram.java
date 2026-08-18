@@ -161,11 +161,20 @@ final class GeometryProgram {
 	 *                     one, and there it is the whole geometry: the pass fills {@code CloudInfo}
 	 *                     and {@code CloudFaces} by name against whatever pipeline is bound, so a
 	 *                     pipeline that did not declare them would be handed neither
+	 * @param perDraw      the name of a second uniform block of ours, one the FAMILY fills between
+	 *                     draws inside one pass, or null for every family whose block is written
+	 *                     once. Only the far terrain has one, and it has one because its geometry
+	 *                     arrives in pieces that do not share a value: each section of Distant
+	 *                     Horizons carries block coordinates of its own corner, so the corner has to
+	 *                     be bound per section, and a value bound per draw cannot live in
+	 *                     {@code OfGlobals}, which is written once and read by every draw of the
+	 *                     pass. Declared here and bound by the family: what this record decides is
+	 *                     that the layout carries the name, without which the draw is refused
 	 */
 	record Pass(String family, String name, String namespace, Set<String> answered, boolean shadow,
 			Optional<BlendFunction> blend, boolean covers, boolean claimed, boolean afterDeferred,
 			PrimitiveTopology topology, boolean cull, DepthStencilState depth, RenderStage stage,
-			BindGroupLayout bindings) {
+			BindGroupLayout bindings, String perDraw) {
 
 		/** Whether the pass blends at all, which is the same question as having something to blend with. */
 		boolean blended() {
@@ -515,6 +524,14 @@ final class GeometryProgram {
 
 		BindGroupLayout.Builder bindings = BindGroupLayout.builder()
 				.withUniform(UNIFORM_BLOCK, UniformType.UNIFORM_BUFFER);
+		// The second block, for the one family whose geometry arrives in pieces that do not share a
+		// value. In the same group as ours rather than in a group of its own: what the game builds a
+		// second group for is a layout of ITS own, bound by the names it spells, and this one is this
+		// engine's from end to end.
+		if (pass.perDraw() != null) {
+			bindings.withUniform(pass.perDraw(), UniformType.UNIFORM_BUFFER);
+		}
+
 		this.samplers.forEach(bindings::withSampler);
 
 		// Everything but the shaders, the bind group, the attachments and the two lines below is

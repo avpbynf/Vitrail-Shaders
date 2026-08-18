@@ -1,5 +1,7 @@
 package dev.vitrail.dh;
 
+import dev.vitrail.render.DistantDraw;
+import dev.vitrail.render.DistantMesh;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -92,6 +94,9 @@ public final class DhLods {
 	/** Said once a session, of the first pass that came through here carrying anything. */
 	private static boolean reported;
 
+	/** Whether DH's own stride has been measured against the format declared over it. */
+	private static boolean strideChecked;
+
 	private DhLods() {
 	}
 
@@ -132,12 +137,27 @@ public final class DhLods {
 		}
 	}
 
-	/** One section of the far terrain: the corner it stands at, and the buffers it is drawn from. */
-	private record Section(int x, int y, int z, List<Piece> pieces) {
+	/**
+	 * One section of the far terrain: the corner it stands at, in blocks of the world, and the
+	 * buffers it is drawn from.
+	 * <p>
+	 * The corner is the whole reason a section is a thing out here rather than a detail of DH's: the
+	 * vertices under it hold block coordinates INSIDE it, three unsigned shorts wide, so what places
+	 * them is this and it changes between draws of one pass.
+	 */
+	public record Section(int x, int y, int z, List<Piece> pieces) {
+
+		public Section {
+			pieces = List.copyOf(pieces);
+		}
 	}
 
-	/** One draw of one section, in blaze3d's own objects and nothing of DH's. */
-	private record Piece(GpuBuffer vertices, GpuBuffer indices, int indexCount, int vertexCount) {
+	/**
+	 * One draw of one section, in blaze3d's own objects and nothing of DH's. What crosses out of this
+	 * package is this record and not a wrapper of DH's, so that nothing downstream of it is
+	 * reflective.
+	 */
+	public record Piece(GpuBuffer vertices, GpuBuffer indices, int indexCount) {
 	}
 
 	private static void resolve() {
@@ -203,8 +223,16 @@ public final class DhLods {
 		@Override
 		public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
 			if (usable && "render".equals(method.getName()) && args != null && args.length == 4) {
+				boolean opaque = (Boolean) args[1];
 				try {
-					report(sections(args[2], (Boolean) args[1]), (Boolean) args[1]);
+					List<Section> sections = sections(args[2], opaque);
+					report(sections, opaque);
+					// Drawn by the pack, or handed straight back to DH below. There is no third answer
+					// and no half of one: a pass this engine records and then lets DH record again
+					// would draw the far terrain twice, once lit by each engine.
+					if (DistantDraw.draw(opaque, sections)) {
+						return null;
+					}
 				} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 					usable = false;
 					// Handed back for good and not merely stopped: this proxy stands in front of DH's
@@ -266,8 +294,8 @@ public final class DhLods {
 				if (vertices instanceof GpuBuffer vertexBuffer
 						&& indices instanceof GpuBuffer indexBuffer
 						&& !vertexBuffer.isClosed()) {
-					pieces.add(new Piece(vertexBuffer, indexBuffer, indexCountField.getInt(wrapper),
-							vertexCountField.getInt(wrapper)));
+					checkStride(vertexBuffer, vertexCountField.getInt(wrapper));
+					pieces.add(new Piece(vertexBuffer, indexBuffer, indexCountField.getInt(wrapper)));
 				}
 			}
 
@@ -282,13 +310,7 @@ public final class DhLods {
 		return List.copyOf(sections);
 	}
 
-	/**
-	 * Says once what the far terrain really holds, which is what tells a reader it is reachable.
-	 * <p>
-	 * The stride is worked out rather than read: a buffer's own length divided by the vertices DH
-	 * says are in it is the same number the vertex format this engine declares has to come to, and
-	 * it is the one number a wrong assumption about that format shows up in.
-	 */
+	/** Says once what the far terrain really holds, which is what tells a reader it is reachable. */
 	private static void report(List<Section> sections, boolean opaque) {
 		if (reported || sections.isEmpty()) {
 			return;
@@ -298,10 +320,37 @@ public final class DhLods {
 		int pieces = sections.stream().mapToInt(one -> one.pieces().size()).sum();
 		int indices = sections.stream().flatMap(one -> one.pieces().stream())
 				.mapToInt(Piece::indexCount).sum();
-		Piece first = sections.getFirst().pieces().getFirst();
 		Vitrail.logger().info("Distant Horizons' far terrain is reachable on this backend: {} "
-				+ "sections, {} buffers, {} indices in the {} half, {} bytes a vertex",
-				sections.size(), pieces, indices, opaque ? "opaque" : "translucent",
-				first.vertices().size() / first.vertexCount());
+				+ "sections, {} buffers, {} indices in the {} half", sections.size(), pieces, indices,
+				opaque ? "opaque" : "translucent");
+	}
+
+	/**
+	 * Checks that DH really wrote its vertices as wide as the format this engine declares over them,
+	 * once a session, and closes the road when it did not.
+	 * <p>
+	 * <strong>It is the one assumption in this package nothing else would catch.</strong> A buffer's
+	 * own length divided by the vertices DH says are in it IS the stride, so a DH that added an
+	 * element or widened one shows up here as a number; read through the wrong format, the same
+	 * buffer draws a far terrain out of the wrong bytes, which is a picture rather than a failure.
+	 * The road is closed rather than corrected: what a wider vertex means cannot be worked out from
+	 * its width.
+	 */
+	private static void checkStride(GpuBuffer vertices, int count) {
+		if (strideChecked || count <= 0) {
+			return;
+		}
+
+		strideChecked = true;
+		long stride = vertices.size() / count;
+		if (stride != DistantMesh.STRIDE) {
+			usable = false;
+			restore();
+			Vitrail.logger().warn("Distant Horizons writes {} bytes a vertex where this engine's "
+					+ "format declares {}, so that mod keeps drawing its far terrain with its own "
+					+ "shader for the rest of this session: read through the wrong format, its "
+					+ "buffers would draw a landscape out of the wrong bytes", stride,
+					DistantMesh.STRIDE);
+		}
 	}
 }

@@ -100,7 +100,9 @@ final class CloudProgram implements DumpedProgram {
 				// The game's own state, which tests and writes under the reversed Z the scene is
 				// drawn in. Unlike the sky, which declares none: a cloud stands in the world and has
 				// to be hidden by whatever is in front of it.
-				DepthStencilState.DEFAULT, RenderStage.CLOUDS, BindGroupLayouts.CLOUD_INFO),
+				DepthStencilState.DEFAULT, RenderStage.CLOUDS, BindGroupLayouts.CLOUD_INFO,
+				// One block, written once: every cloud face of a pass shares every value it reads.
+				null),
 				bound, values, load,
 				// No format, which this family is alone in and GeometryProgram takes as "bind no
 				// vertex buffer". Handing DefaultVertexFormat.POSITION here instead would declare an

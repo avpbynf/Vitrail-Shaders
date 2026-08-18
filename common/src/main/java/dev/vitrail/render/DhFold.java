@@ -76,14 +76,12 @@ import java.util.OptionalDouble;
  * hundred and sixteen. The game's plane is therefore never the further of the two, and the band
  * this pass wins is everything between them.
  * <p>
- * <strong>What is folded is the shape and not the light.</strong> The far terrain keeps the colour
- * DH gave it: this engine puts DH's depth into the game's and nothing more. Iris does not stop
- * there, drawing the LODs itself with the pack's own {@code dh_terrain}, {@code dh_water} and
- * {@code dh_generic} programs into the pack's own targets,
- * {@code compat/dh/DHCompatInternal.java:67}. Those three families are not served here at all, and
- * a family served by the wrong program would be worse than one left alone. What it costs is that
- * the far terrain is lit DH's way while everything nearer is lit the pack's, so the two meet at a
- * seam a pack cannot close from here; what it buys is every effect a pack indexes on depth.
+ * <strong>What is folded is the shape, and whose light the shape carries is no longer this class's
+ * business.</strong> Two of the three families Iris serves are served here now,
+ * {@code dh_terrain} and {@code dh_water} ({@link DistantDraw}), and on a frame they drew the image
+ * folded is theirs rather than DH's: same volume, same clear, same conversion, so nothing below
+ * changes and the argument above holds word for word. {@code dh_generic} is not served, so DH's own
+ * generic objects keep DH's light and enter the picture the way the whole far terrain used to.
  * <p>
  * The colour attachment is written by nothing and is there because the encoder demands one: a pass
  * with a depth attachment alone is legal, but the first colour attachment may not be absent, and a
@@ -202,9 +200,15 @@ final class DhFold {
 	 * @param colour   the game's own colour target, written by nothing here
 	 * @param depth    the game's depth as it stands, with its opaque world in it
 	 * @param depthFar the plane the game clips at this frame, which is {@code Camera.depthFar}
+	 * @param served   the image the pack's own far terrain programs left their depth in, or null on a
+	 *                 frame where DH drew its far terrain itself. <strong>Which of the two is folded
+	 *                 is the only thing that moves</strong>: both are written in DH's own volume,
+	 *                 against the row {@link DhDepth#zRow} answers, both are cleared to nought, and
+	 *                 the conversion below cannot tell them apart. What decides is who drew, and
+	 *                 {@link DistantDraw} is the one that knows
 	 */
 	boolean fold(CommandEncoder encoder, GpuDevice device, GpuBuffer quad, GpuTextureView colour,
-			GpuTextureView depth, float depthFar) {
+			GpuTextureView depth, float depthFar, GpuTextureView served) {
 		if (this.refused || quad == null || colour == null || depth == null || depthFar <= NEAR) {
 			return false;
 		}
@@ -217,7 +221,7 @@ final class DhFold {
 			return false;
 		}
 
-		GpuTextureView distant = DhDepth.view();
+		GpuTextureView distant = served != null ? served : DhDepth.view();
 		// The row is refused rather than divided by. Both of its terms are positive on any matrix
 		// built the way DH builds this one, and neither the conversion below nor the line it logs
 		// would say anything true if one of them were not.

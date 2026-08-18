@@ -96,6 +96,17 @@ public enum VertexInputs {
 	SKY,
 
 	/**
+	 * Distant Horizons' LOD mesh: sixteen bytes in six elements, out of which the names a
+	 * {@code dh_} program reads are made. {@link DistantVertex} carries the decode, and says which of
+	 * the six are left off a stage that does not read them and why leaving them off is forced.
+	 * <p>
+	 * Not a second reading of {@link #TERRAIN} although both are terrain to a player: the mesh is
+	 * DH's own and shares no element, no stride and no space with Sodium's, and the position it
+	 * carries is a section's rather than a region's.
+	 */
+	DISTANT,
+
+	/**
 	 * The game's clouds, which are not a mesh at all: {@code CloudRenderer} binds no vertex buffer
 	 * and the stage works every corner out of {@code gl_VertexID} and a texel buffer.
 	 * {@link CloudVertex} carries the whole of it.
@@ -196,6 +207,7 @@ public enum VertexInputs {
 			case PARTICLE -> ParticleVertex.ATTRIBUTES;
 			case SKY -> SkyVertex.ATTRIBUTES;
 			case CLOUDS -> CloudVertex.ATTRIBUTES;
+			case DISTANT -> DistantVertex.ATTRIBUTES;
 			case WORLD -> List.of();
 		};
 	}
