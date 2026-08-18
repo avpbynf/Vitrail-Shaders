@@ -127,26 +127,16 @@ public final class DrawValues {
 		//
 		// So these three are the right answer wherever Iris hands the uniform over, which is every
 		// pass whose mesh has no overlay: the composites, and the terrain and the sky with them.
+		// Where the mesh DOES carry them the name never reaches a table at all, here or there, the
+		// vertex stage handing each on out of a lane of the element the mesh carries,
+		// glsl/GlslTranslator.identifierPrologue against EntityPatcher.java:124-204.
 		//
-		// The one divergence is the other case, and it is real rather than a placeholder. Where the
-		// mesh does carry the overlay, Iris deletes these declarations and rewrites every read onto
-		// a vertex element of its own (pipeline/transform/transformer/EntityPatcher.java:130-152),
-		// four unsigned shorts wide with three lanes read as an ivec3
-		// (vertices/IrisVertexFormats.java:30). The game's entity format has no such element and
-		// this engine decodes the game's format, which is said where the prologue is built,
-		// glsl/EntityVertex.java:74-76. A chest or a mob therefore reads one number for the whole
-		// world here, where Iris gives it the identifier its pack mapped.
-		//
-		// It has a second half that is not about the mesh at all, and it is not live yet. Iris keeps
-		// the uniform for a program the element cannot reach and names the case: the lightning
-		// (uniforms/CommonUniforms.java:72-73), whose shard puts the live identifier in the field
-		// around the draw (layer/LightningRenderStateShard.java:19-21). Served, our lightning would
-		// read zero there, and what a pack loses is the branch it writes on that one identifier.
-		// No program of the pack serves the lightning here - the game draws it and the feature
-		// layer carries it in - so today it costs the image nothing.
-		//
-		// UniformGaps carries both halves, and per pass rather than in one list, which is the whole
-		// reason it has two: named everywhere, these would be a false alarm on every composite.
+		// One case Iris keeps the uniform for is not about the mesh at all, and it is not live here:
+		// the lightning (uniforms/CommonUniforms.java:72-73), whose shard puts the live identifier
+		// in the field around the draw (layer/LightningRenderStateShard.java:19-21). Served, our
+		// lightning would read zero there, and what a pack loses is the branch it writes on that one
+		// identifier. No program of the pack serves the lightning here, the game drawing it and the
+		// feature layer carrying it in, so today it costs the image nothing.
 		builder.add("entityId", UniformShape.INT, (_, out) -> out.set(0));
 		builder.add("blockEntityId", UniformShape.INT, (_, out) -> out.set(-1));
 		builder.add("currentRenderedItemId", UniformShape.INT, (_, out) -> out.set(-1));

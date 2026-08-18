@@ -102,6 +102,12 @@ public final class LegacyGlsl {
 	 * file that reaches those programs, which costs six programs of the corpus. The other two are
 	 * here because Iris moves the three together and because listing a name nothing reads costs
 	 * nothing: only a name a program mentions and never declares is ever put in the block.
+	 * <p>
+	 * <strong>The order of these three is the order of the lanes of the element the entity mesh
+	 * carries them on</strong>, {@code EntityVertex.IDENTIFIERS}, and {@code GlslTranslator} reads
+	 * this table's keys rather than keeping a list of its own. Where the mesh does carry them the
+	 * block never sees them at all; this table is what a pass with no such mesh gets, which is the
+	 * composites and the terrain and the sky.
 	 */
 	public static final Map<String, String> ENTITY_UNIFORMS = entityUniforms();
 

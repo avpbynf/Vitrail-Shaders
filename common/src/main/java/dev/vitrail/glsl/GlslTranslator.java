@@ -88,6 +88,34 @@ public final class GlslTranslator {
 	private static final String ENTITY_COLOR = "entityColor";
 
 	/**
+	 * The three identifiers, which are varyings wherever the mesh carries them and uniforms
+	 * everywhere else, exactly as {@link #ENTITY_COLOR} is.
+	 * <p>
+	 * <strong>The order is the order of the lanes of the element</strong> and not a list of its own:
+	 * these are {@link LegacyGlsl#ENTITY_UNIFORMS}'s keys, which that table writes in that order for
+	 * this reason. A second list here would be the same three names with nothing tying it to the
+	 * mesh.
+	 * <p>
+	 * <strong>The same door as the colour, and it is one gate narrower.</strong> Iris asks its inputs
+	 * for the overlay once and calls both patchers on the answer, but the colour carries a second
+	 * condition the identifiers have not got: {@code if (!parameters.inputs.isText())}
+	 * ({@code pipeline/transform/transformer/VanillaCoreTransformer.java:21-25}). Its other path is
+	 * plainer about the same split, calling the identifiers on the overlay OR on text alone
+	 * ({@code VanillaTransformer.java:20-24}). The two agree here today for one reason: no text
+	 * family is served, so {@code VertexInputs.overlay} answers for both, and the day one is served
+	 * this door has to grow that second gate for the colour and open for the identifiers on text.
+	 * <p>
+	 * <strong>Where Iris rewrites, this renames.</strong> Iris deletes the three declarations and
+	 * puts {@code iris_entityInfo.x} and its two neighbours in the place of every read
+	 * ({@code EntityPatcher.java:124-152}); here each name stays the name it was and becomes a
+	 * varying of its own, which is the same value under the same spelling and one location apiece
+	 * instead of one for the three. What it costs is a pack that declared one of them under another
+	 * type than {@code int}: Iris would keep that declaration and lose the pass to a redefinition,
+	 * and this loses the type. No pack of the corpus writes one.
+	 */
+	private static final List<String> ENTITY_IDS = List.copyOf(LegacyGlsl.ENTITY_UNIFORMS.keySet());
+
+	/**
 	 * The game's own overlay image, sixteen by sixteen, under a name no pack writes.
 	 * <p>
 	 * What the two coordinates mean is the game's: {@code OverlayTexture.pack} puts the white
@@ -347,17 +375,22 @@ public final class GlslTranslator {
 	private boolean alphaEpilogue;
 
 	/**
-	 * Whether this vertex body was wrapped because its mesh carries the overlay, which is decided
-	 * while the text is rewritten and before anything knows whether the colour is wanted.
+	 * Whether this vertex body was wrapped because it is drawn from the game's own entity mesh, which
+	 * is decided while the text is rewritten and before anything knows what of that mesh is wanted.
 	 * <p>
-	 * Two flags and not one, and the reason is when each is knowable. Wrapping renames the pack's
-	 * {@code main} and cannot be undone afterwards, so it is settled here off the MESH alone;
-	 * whether the colour is really made is a property of the whole program, since a pack commonly
-	 * reads {@code entityColor} in its fragment stage and never in its vertex stage, and that is only
-	 * known once every stage has been asked. The wrapper standing with nothing in it costs a call the
-	 * compiler inlines; the two disagreeing would cost the pass.
+	 * One flag for the two things that wrapper carries, the overlay colour and the three identifiers,
+	 * because the question it answers belongs to neither of them: it is whether this is that mesh.
+	 * <p>
+	 * Two flags and not one for the colour, and the reason is when each is knowable. Wrapping renames
+	 * the pack's {@code main} and cannot be undone afterwards, so it is settled here off the MESH
+	 * alone; whether the colour is really made is a property of the whole program, since a pack
+	 * commonly reads {@code entityColor} in its fragment stage and never in its vertex stage, and
+	 * that is only known once every stage has been asked. The wrapper standing with nothing in it
+	 * costs a call the compiler inlines; the two disagreeing would cost the pass. The identifiers
+	 * need no second flag of their own, owing no sampler: what the wrapper writes for them is read
+	 * off the union of the varyings, which the header already holds.
 	 */
-	private boolean overlayWrapped;
+	private boolean entityWrapped;
 
 	/** Whether this stage really makes the overlay colour, which only the whole program can say. */
 	private boolean makesOverlayColour;
@@ -584,8 +617,16 @@ public final class GlslTranslator {
 			// Asked of the mesh and of the body together. A pack that declares the name and never
 			// reads it is left alone, where Iris hands the varying over regardless: the two draw the
 			// same picture, and declaring nothing is the one that cannot shift a location.
-			if (this.translator.inputs.overlay() && this.translator.used.contains(ENTITY_COLOR)) {
-				named.add(ENTITY_COLOR);
+			if (this.translator.inputs.overlay()) {
+				if (this.translator.used.contains(ENTITY_COLOR)) {
+					named.add(ENTITY_COLOR);
+				}
+
+				for (String identifier : ENTITY_IDS) {
+					if (this.translator.used.contains(identifier)) {
+						named.add(identifier);
+					}
+				}
 			}
 
 			return Set.copyOf(named);
@@ -610,7 +651,7 @@ public final class GlslTranslator {
 		 * has either, and {@link #FOG_COORD} stops at the same place for the same reason.
 		 */
 		public void makesOverlayColour(Set<String> varyings) {
-			if (this.translator.overlayWrapped && varyings.contains(ENTITY_COLOR)) {
+			if (this.translator.entityWrapped && varyings.contains(ENTITY_COLOR)) {
 				this.translator.makesOverlayColour = true;
 				this.translator.samplers.put(OVERLAY, SAMPLER_2D + " " + OVERLAY);
 			}
@@ -770,7 +811,11 @@ public final class GlslTranslator {
 			}
 		}
 
-		if (LegacyGlsl.drawsEntities(this.program)) {
+		// Not where the mesh carries them, which is the answer liftUniforms gives for a pack that
+		// declared one of the three itself, given here for a pack that never declares them. The two
+		// halves have to agree: a name offered here and taken out of the block there would be a
+		// declaration in the block that the varying of the same name then redeclares.
+		if (LegacyGlsl.drawsEntities(this.program) && !this.inputs.overlay()) {
 			for (Map.Entry<String, String> member : LegacyGlsl.ENTITY_UNIFORMS.entrySet()) {
 				if (this.used.contains(member.getKey())
 						&& !this.declaredNames.contains(member.getKey())) {
@@ -1901,7 +1946,7 @@ public final class GlslTranslator {
 
 		replace(name, PACK_MAIN);
 		this.terrainPrologue = terrain;
-		this.overlayWrapped = overlay;
+		this.entityWrapped = overlay;
 		if (terrain) {
 			takeTexShrink();
 		}
@@ -2465,8 +2510,14 @@ public final class GlslTranslator {
 		// writes one shape and only one, eighteen declarations of uniform vec4 entityColor over the
 		// eight packs, so the two answer the same today; a pack that wrote another type would keep
 		// its uniform under Iris and lose the pass to a redefinition, and lose the type here.
+		//
+		// The three identifiers leave by the same door and for the same reason, one draw batching
+		// several submissions: a chest and the mob beside it share it, so a number in the block is
+		// one number for both. Iris deletes those three declarations in the same breath
+		// (EntityPatcher.java:130-132).
 		if (this.inputs.overlay()) {
 			this.blockMembers.remove(ENTITY_COLOR);
+			ENTITY_IDS.forEach(this.blockMembers::remove);
 		}
 	}
 
@@ -3333,6 +3384,17 @@ public final class GlslTranslator {
 			lines.add((this.stage == ProgramStage.VERTEX ? "out" : "in") + " vec4 " + ENTITY_COLOR + ";");
 		}
 
+		// And the same rule again for the three identifiers, with the qualifier the language demands
+		// rather than one chosen: an integer varying may not be interpolated, so flat is not a
+		// decision here. Iris writes flat on its own ivec3 for the same reason
+		// (EntityPatcher.java:159).
+		for (String identifier : ENTITY_IDS) {
+			if (varyings.contains(identifier)) {
+				lines.add("flat " + (this.stage == ProgramStage.VERTEX ? "out" : "in") + " int "
+						+ identifier + ";");
+			}
+		}
+
 		if (this.makesOverlayColour) {
 			lines.add("uniform " + SAMPLER_2D + " " + OVERLAY + ";");
 		}
@@ -3383,7 +3445,7 @@ public final class GlslTranslator {
 		// writes back. It has to be the ascending function that gets there first, so this goes last.
 		// The pack's body is concatenated after the header, so its own main is only a name here and
 		// has to be declared before it can be called.
-		if (this.depthEpilogue || this.terrainPrologue || this.overlayWrapped || wrapsFragment()
+		if (this.depthEpilogue || this.terrainPrologue || this.entityWrapped || wrapsFragment()
 				|| owesInitialisers()) {
 			lines.add("void " + PACK_MAIN + "();");
 			// The mask goes last of all, after the discard: a fragment the alpha test threw away
@@ -3391,6 +3453,7 @@ public final class GlslTranslator {
 			lines.add("void main() { "
 					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
 					+ overlayPrologue()
+					+ identifierPrologue(varyings)
 					+ (wrapsFragment() ? ORDER_OUTPUTS + "(); " : "")
 					+ coveragePrologue()
 					+ owedPrologue()
@@ -3481,6 +3544,38 @@ public final class GlslTranslator {
 		return "vec4 " + OVERLAY_TEXEL + " = texelFetch(" + OVERLAY + ", UV1, 0); "
 				+ ENTITY_COLOR + " = vec4(" + OVERLAY_TEXEL + ".rgb, 1.0 - " + OVERLAY_TEXEL + ".a); "
 				+ ENTITY_COLOR + ".rgb *= float(" + ENTITY_COLOR + ".a != 0.0); ";
+	}
+
+	/**
+	 * Hands the three identifiers on out of the element the mesh carries them on, before the pack's
+	 * own body runs and can read them.
+	 * <p>
+	 * Iris's one line spread over three, and the difference is only that its names are components of
+	 * one {@code ivec3} where these keep the spelling the pack wrote
+	 * ({@code EntityPatcher.java:165-166}). Only what some stage really reads is written: what is in
+	 * the union is what was declared, and writing a varying the header did not declare would not
+	 * compile.
+	 * <p>
+	 * The lane is the position in {@link #ENTITY_IDS} and the element is unsigned, so the cast is
+	 * where a name the pack never mapped becomes 65535 rather than minus one. That is Iris's number
+	 * as well, its own element being unsigned and its input an {@code ivec3} the driver zero extends
+	 * into, and it is the number the packs are written against.
+	 */
+	private String identifierPrologue(Set<String> varyings) {
+		if (!this.entityWrapped) {
+			return "";
+		}
+
+		StringBuilder written = new StringBuilder();
+		for (int lane = 0; lane < ENTITY_IDS.size(); lane++) {
+			String identifier = ENTITY_IDS.get(lane);
+			if (varyings.contains(identifier)) {
+				written.append(identifier).append(" = int(")
+						.append(EntityVertex.IDENTIFIERS).append('[').append(lane).append("]); ");
+			}
+		}
+
+		return written.toString();
 	}
 
 	/** What output {@code slot} is called, which is the pack's own name when it declared one. */

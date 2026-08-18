@@ -1492,7 +1492,11 @@ public final class FrameState implements WorldState {
 		return this.lightningBoltPosition;
 	}
 
-	/** Needs the pack's item.properties table, which nothing reads yet. */
+	/**
+	 * Needs the item the player is holding, which nothing here has. The pack's own table is read and
+	 * live, {@code PackNameIds}, and is asked about what is being DRAWN rather than about what is in
+	 * a hand; the two are different questions and this is the one still owed.
+	 */
 	@Override
 	public int heldItemId() {
 		return -1;
