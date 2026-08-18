@@ -220,6 +220,13 @@ public final class PackChain {
 	private final WeatherDraw weather;
 	private final ParticleDraw particles;
 
+	/**
+	 * The far terrain's road into the game's depth. Held by the chain and not by the targets,
+	 * because it writes nothing of the pack's: it lives here for the same reason {@link #quad} does,
+	 * which is that it is asked for from an entry point of its own.
+	 */
+	private final DhFold distant = new DhFold();
+
 	private List<PackPass> programs;
 	private PackPass last;
 
@@ -1399,6 +1406,51 @@ public final class PackChain {
 	}
 
 	/**
+	 * Folds Distant Horizons' far terrain into the game's depth, at the head of the moment the game
+	 * has finished its opaque features.
+	 * <p>
+	 * <strong>The place is the whole design and it is one line wide.</strong> DH draws its LODs from
+	 * {@code renderSectionLayer}, long before this, and composes only its colour; so by here its
+	 * image is this frame's and the game's depth is everything the game itself drew. Every reader of
+	 * the game's depth is still downstream: {@link #markPreHandDepth} takes {@code depthtex2} on the
+	 * next line, {@link #drawEarly} takes {@code depthtex1} two lines later, the scene seed is cut
+	 * against the same image, and the world's translucents have not been drawn. Folded one line
+	 * later the pack would read a far terrain in two of its three depths and not the third; folded
+	 * after the chain it would read it in none.
+	 * <p>
+	 * Only when a pack is being drawn. Nothing of the game's own picture wants this: DH already
+	 * composes its colour, and a depth the game would only ever test against is a change to the
+	 * game's own image for no reader. {@link DhFold} carries what the fold costs and what it cannot
+	 * reach.
+	 */
+	public static void foldDistantDepth() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		Minecraft minecraft = Minecraft.getInstance();
+		if (disabled || chain == null || device == null || minecraft == null || !chainWanted) {
+			return;
+		}
+
+		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+		if (main == null || !main.useDepth) {
+			return;
+		}
+
+		// Caught like every other point the game calls this engine back at: an exception here reaches
+		// the game through an event handler and comes back on the very next frame.
+		try {
+			chain.distant.fold(device.createCommandEncoder(), device, chain.quad(device),
+					main.getColorTextureView(), main.getDepthTextureView(),
+					minecraft.gameRenderer.gameRenderState().levelRenderState.cameraRenderState
+							.depthFar);
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
+	}
+
+	/**
 	 * Keeps the world's depth as it stands before the player's own hand is drawn, which is what the
 	 * pack reads as {@code depthtex2}. Called from the event the hand's solid half is drawn at and
 	 * one line ahead of it.
@@ -2172,6 +2224,8 @@ public final class PackChain {
 		if (this.features != null) {
 			this.features.release();
 		}
+
+		this.distant.release();
 
 		this.terrain.release();
 		this.sky.release();
