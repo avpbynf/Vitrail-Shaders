@@ -90,7 +90,11 @@ config shipped in the jar rather than anything summarised here.
 
 Any mod that unwraps a GPU texture into an OpenGL handle will crash on the Vulkan
 backend, with or without Vitrail. Distant Horizons 3.2.0-b does this and dies on
-the first frame. This is not something Vitrail can work around.
+the first frame. This is not something Vitrail can work around, and the fix is
+that mod's rather than this one's: its own sources no longer make the call on a
+backend that is not OpenGL. On a build that carries the fix, Vitrail folds its
+far terrain into the depth a pack reads and tells the pack the far terrain is
+there; the changelog says what that changes and what it does not reach.
 
 ## Building
 
