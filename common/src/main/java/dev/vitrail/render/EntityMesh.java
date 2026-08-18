@@ -109,13 +109,20 @@ public final class EntityMesh {
 	private static boolean said;
 
 	/**
-	 * Whether a rebuild has already been asked for since the last settle, so that one load asks for
+	 * Whether a rebuild has already been asked for and not yet answered, so that one load asks for
 	 * one.
 	 * <p>
 	 * The two switches are set one after the other and nothing settles between them, so
 	 * {@link #ask()} would find the same disagreement twice and print the same line twice for one
 	 * load. Comparing against {@link #carrying} cannot see that: the answer in force is exactly what
 	 * has not moved yet.
+	 * <p>
+	 * <strong>Cleared at every settle and whenever the answer comes back into agreement</strong>,
+	 * which is two roads and not one. Clearing only where the answer MOVED would leave it standing
+	 * after a settle that found nothing to do, and a flag stuck true swallows the next rebuild that
+	 * is really owed. Nothing reaches that state today, the one writer that moves a switch without
+	 * asking sitting behind a gate that is shut exactly then, but the guard costs a line and the
+	 * reachability argument costs a paragraph nobody will re-derive.
 	 */
 	private static boolean rebuildAsked;
 
@@ -206,13 +213,15 @@ public final class EntityMesh {
 	public static void settle() {
 		boolean asked = asked();
 		boolean moved = asked != carrying;
+		// Before the way out and not after it: this runs whether or not the answer moved, and a settle
+		// that found nothing to do is exactly the one that would leave the flag standing.
+		rebuildAsked = false;
 		if (said && !moved) {
 			return;
 		}
 
 		said = true;
 		carrying = asked;
-		rebuildAsked = false;
 
 		// ONLY where the answer really moved, and the two conditions are not one. The first settle of
 		// a session has never said anything and must print, but a session nobody picked a pack in
