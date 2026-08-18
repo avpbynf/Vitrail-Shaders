@@ -78,20 +78,37 @@ constant and is exposed nowhere, so it is recovered from the sprite's own first 
 resolution from its blocks. The map is resampled to the sprite's size first, by point sampling when
 the target is a whole multiple of the source and by a weighted average otherwise.
 
+## The second door: a texture that is no atlas
+
+An entity skin and an armour layer are textures of their own rather than sprites in an atlas, so
+none of the mechanism above applies to them: there is no slot to land in, no border to replicate and
+no companion to stitch. `creeper_n.png` beside `creeper.png` is read whole and uploaded whole, at
+its own resolution, with no mip chain, because the albedo beside it has none either.
+
+Iris keeps exactly this pair of doors, one loader per texture class, and picks between them from the
+albedo the draw has bound. Here the pick is made by the answer rather than by the class: the atlas
+maps are built against one image and follow it alone, so an image no atlas answers for falls through
+to this second door on its own.
+
+**A map is read one frame after it is first wanted.** The want is discovered while a draw is being
+recorded, inside a render pass, where a texture cannot be created; so a skin met for the first time
+is remembered, answered with the flat value for that frame, and read at the top of the next one.
+Iris defers the same read at the same place and for the same reason. What either engine shows is one
+frame of a mob without relief, at the moment it first comes on screen.
+
+**What has no map on either side** is an image the game builds rather than reads: the light map, the
+overlay, and a player skin that came down over HTTP rather than out of the resource pack. The engine
+names each texture that does answer, one line each, as it is read.
+
+A held item is **not** in this second group, and it is worth saying because it looks like it should
+be: item textures are sprites in an atlas of their own, so they are served like any other sprite.
+
 ## What is not done
 
-Both of these are work not done rather than a limit of the backend, and both are things Iris does.
+This is work not done rather than a limit of the backend, and it is a thing Iris does.
 
 **The maps do not animate.** A sprite whose albedo has frames gets the first frame of its map, held
 still, so flowing water keeps a moving surface and a fixed normal. Iris gives its companion sprites
 their own animation states and ticks them with the atlas. Nothing in the game's API forbids the same
 here: those animation states are public and the game drives its own atlases through them.
 
-**Textures that are not atlases have no maps.** An entity skin and an armour layer are textures of
-their own rather than sprites in an atlas, so nothing is built for them and the two names read the
-flat value: a mob stays matte while the terrain around it has relief. Iris has a second loader for
-exactly this case, resolved from whichever texture the draw has bound. Nothing here forbids the same
-door; it is not built yet.
-
-A held item is **not** in this second group, and it is worth saying because it looks like it should
-be: item textures are sprites in an atlas of their own, so they are served like any other sprite.
