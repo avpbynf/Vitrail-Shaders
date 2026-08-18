@@ -148,7 +148,13 @@ public interface ViewSource {
 
 	float dhFarPlane();
 
-	int dhRenderDistanceChunks();
+	/**
+	 * How far the far terrain reaches, in BLOCKS while Distant Horizons is drawing one and in
+	 * CHUNKS while it is not. The change of unit is Iris's own and packs are written against it:
+	 * without the mod the name answers {@code getEffectiveRenderDistance} and with it, that mod's
+	 * own chunk setting times sixteen.
+	 */
+	int dhRenderDistance();
 
 	float near();
 

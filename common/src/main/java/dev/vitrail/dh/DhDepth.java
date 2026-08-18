@@ -72,6 +72,14 @@ public final class DhDepth {
 	private static Field projectionScaleField;
 	private static Field projectionOffsetField;
 
+	private static Field configsField;
+	private static Method graphicsMethod;
+	private static Method renderDistanceMethod;
+	private static Method valueMethod;
+
+	/** Blocks across a chunk, which is what turns DH's own setting into what a pack reads. */
+	private static final int CHUNK = 16;
+
 	private static boolean resolved;
 	private static boolean usable;
 
@@ -167,6 +175,64 @@ public final class DhDepth {
 		}
 	}
 
+	/**
+	 * DH's own near and far clip planes this frame, in blocks, out of the row it drew with. False
+	 * while there is none to be had.
+	 * <p>
+	 * Taken from the matrix and not from {@code getNearClipPlaneDistanceInBlocks}, which answers the
+	 * unclamped near the class comment carries. Iris publishes the unclamped one and is right to:
+	 * under Iris the LODs are drawn by Iris's own programs with a projection Iris builds from it, so
+	 * there it IS the plane the far terrain was rasterised against. Here DH draws them itself, so
+	 * the plane a pack has to be told is DH's own.
+	 *
+	 * @param dest filled with the near plane and then the far one, and left alone on false
+	 */
+	public static boolean planes(Vector2f dest) {
+		if (!zRow(dest)) {
+			return false;
+		}
+
+		float scale = dest.x;
+		float offset = dest.y;
+		if (scale <= 0.0F) {
+			return false;
+		}
+
+		dest.set(offset / (1.0F + scale), offset / scale);
+
+		return true;
+	}
+
+	/**
+	 * How far DH draws, in blocks, or -1 when it cannot be asked. Blocks and not chunks, because
+	 * blocks is what a pack does arithmetic with and what Iris publishes under the same name.
+	 */
+	public static int renderDistanceBlocks() {
+		if (!resolved) {
+			resolve();
+		}
+
+		if (!usable) {
+			return -1;
+		}
+
+		try {
+			Object configs = configsField.get(null);
+			if (configs == null) {
+				return -1;
+			}
+
+			Object value = renderDistanceMethod.invoke(graphicsMethod.invoke(configs));
+
+			return (valueMethod.invoke(value) instanceof Integer chunks) ? chunks * CHUNK : -1;
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			usable = false;
+			Vitrail.logger().warn("Distant Horizons' render distance cannot be read, so its far "
+					+ "terrain will stay flat for the rest of this session", e);
+			return -1;
+		}
+	}
+
 	/** Whether anything at all can be expected from DH, without touching the frame's state. */
 	public static boolean present() {
 		if (!resolved) {
@@ -195,6 +261,11 @@ public final class DhDepth {
 			textureViewMethod = wrapperType.getMethod("getTextureView");
 
 			resolveProjection();
+
+			configsField = delayed.getField("configs");
+			graphicsMethod = configsField.getType().getMethod("graphics");
+			renderDistanceMethod = graphicsMethod.getReturnType().getMethod("chunkRenderDistance");
+			valueMethod = renderDistanceMethod.getReturnType().getMethod("getValue");
 
 			usable = true;
 			Vitrail.logger().info("Distant Horizons found, its far terrain will be given a depth");

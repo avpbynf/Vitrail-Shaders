@@ -509,6 +509,11 @@ final class PackPass {
 				// own window and so a focus point at the horizon. Black would be a focus point at the
 				// camera, which is the defect this whole path exists to close.
 				case CENTER_DEPTH -> or(targets.centerDepth().view(), targets.white());
+				// White here as well, and here it is not a fallback but the answer: this engine keeps
+				// no depth of the far terrain apart from the game's, so the name says there is
+				// nothing at this texel that depthtex0 has not already got. SamplerPlan carries what
+				// black would do to the sky.
+				case DISTANT_DEPTH -> targets.white();
 				// A name this backend cannot bind should have taken its program out of the chain
 				// before a frame was drawn. It is still answered rather than left out, because the
 				// layout carries it either way and the draw throws on the first name it misses.

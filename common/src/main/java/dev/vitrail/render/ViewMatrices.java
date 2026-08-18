@@ -37,6 +37,12 @@ public final class ViewMatrices implements ViewSource {
 	 */
 	private static final float RENDER_DISTANCE_SENTINEL = -1.0F;
 
+	/**
+	 * What the two Distant Horizons planes answer while there is no far terrain. Iris's own number,
+	 * and it is deliberately one no pack can mistake for a real distance.
+	 */
+	static final float FALLBACK_PLANE = 0.01F;
+
 	private final Matrix4f modelView = new Matrix4f();
 	private final Matrix4f modelViewInverse = new Matrix4f();
 	private final Matrix4f projection = new Matrix4f();
@@ -133,6 +139,14 @@ public final class ViewMatrices implements ViewSource {
 	private boolean shadowSeeded;
 
 	/**
+	 * What Distant Horizons drew this frame with, or nothing when it drew nothing. See
+	 * {@link #advanceDistant} for why the three move together.
+	 */
+	private float dhNear = FALLBACK_PLANE;
+	private float dhFar = FALLBACK_PLANE;
+	private int dhRenderDistanceBlocks = -1;
+
+	/**
 	 * Takes this frame's view and projection, publishes them, and shifts the previous frame's
 	 * copies down. It is also the boundary a pass's own matrix and colour are dropped at, for the
 	 * reason written on the two lines that drop them.
@@ -196,6 +210,30 @@ public final class ViewMatrices implements ViewSource {
 
 		this.far = far;
 		this.renderDistanceChunks = renderDistanceChunks;
+	}
+
+	/**
+	 * Takes what Distant Horizons drew this frame with, or puts the three values back where they
+	 * stand when it drew nothing.
+	 * <p>
+	 * The three move together on purpose. A pack that has been told the far terrain is there works
+	 * its fog out of the render distance and rebuilds a position out of the planes, so a frame that
+	 * served two of the three from DH and the third from the game would fog the far terrain against
+	 * a distance a fifteenth of the one it stands at. The far plane is the one to watch: BSL takes
+	 * {@code fogFar = max(fogFar, float(dhRenderDistance))} at {@code lib/atmospherics/fog.glsl:137}
+	 * and Complementary the same at {@code lib/common.glsl:708}.
+	 *
+	 * @param near     DH's own near plane in blocks, or {@link #FALLBACK_PLANE} for none
+	 * @param far      DH's own far plane in blocks, or {@link #FALLBACK_PLANE} for none
+	 * @param distance how far DH draws in blocks, or -1 for none, in which case the game's own
+	 *                 render distance in CHUNKS is published instead. The change of unit is Iris's
+	 *                 own and it is what packs are written against: without the mod the name
+	 *                 answers {@code getEffectiveRenderDistance}, and with it, chunks times sixteen
+	 */
+	void advanceDistant(float near, float far, int distance) {
+		this.dhNear = near;
+		this.dhFar = far;
+		this.dhRenderDistanceBlocks = distance;
 	}
 
 	/**
@@ -482,9 +520,15 @@ public final class ViewMatrices implements ViewSource {
 	}
 
 	/**
-	 * Distant Horizons is not loaded, and these are answered anyway. Iris registers them without a
-	 * condition and falls back the same way, which is why a pack that reads {@code dhProjection}
-	 * outside the mod still compiles there and did not here.
+	 * Answered whether or not Distant Horizons is loaded. Iris registers them without a condition
+	 * and falls back the same way, which is why a pack that reads {@code dhProjection} outside the
+	 * mod still compiles there and did not here.
+	 * <p>
+	 * The three matrices stay the game's own on both roads, and that is not a gap left open. What a
+	 * pack unprojects with them is a {@code dhDepthTex} lookup, and this engine answers those with
+	 * the far plane: the far terrain is in the game's own depth by then, so the road that would use
+	 * a matrix of DH's is a road no pack takes. The planes and the render distance are read outside
+	 * that road, which is why those three are DH's own the moment DH has drawn.
 	 */
 	@Override
 	public Matrix4fc dhProjection() {
@@ -503,17 +547,18 @@ public final class ViewMatrices implements ViewSource {
 
 	@Override
 	public float dhNearPlane() {
-		return 0.01F;
+		return this.dhNear;
 	}
 
 	@Override
 	public float dhFarPlane() {
-		return 0.01F;
+		return this.dhFar;
 	}
 
 	@Override
-	public int dhRenderDistanceChunks() {
-		return this.renderDistanceChunks;
+	public int dhRenderDistance() {
+		return this.dhRenderDistanceBlocks < 0 ? this.renderDistanceChunks
+				: this.dhRenderDistanceBlocks;
 	}
 
 	@Override
