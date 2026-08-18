@@ -170,11 +170,16 @@ final class GeometryProgram {
 	 *                     {@code OfGlobals}, which is written once and read by every draw of the
 	 *                     pass. Declared here and bound by the family: what this record decides is
 	 *                     that the layout carries the name, without which the draw is refused
+	 * @param distantVolume whether this pass is drawn in Distant Horizons' own volume rather than in
+	 *                     the game's, which decides what the three {@code dhProjection} names answer
+	 *                     for it. True for the far terrain and false for everything else, and
+	 *                     {@code ViewMatrices.dhProjection} carries what each of the two roads reads
+	 *                     them for and what answering both the same way costs
 	 */
 	record Pass(String family, String name, String namespace, Set<String> answered, boolean shadow,
 			Optional<BlendFunction> blend, boolean covers, boolean claimed, boolean afterDeferred,
 			PrimitiveTopology topology, boolean cull, DepthStencilState depth, RenderStage stage,
-			BindGroupLayout bindings, String perDraw) {
+			BindGroupLayout bindings, String perDraw, boolean distantVolume) {
 
 		/** Whether the pass blends at all, which is the same question as having something to blend with. */
 		boolean blended() {
@@ -1129,6 +1134,7 @@ final class GeometryProgram {
 		// frame now that the shadow map is ours and the game's targets are not, and what a vertex
 		// stage does with its clip depth on the way out comes from this pair.
 		this.values.convention(this.pass.shadow() ? ClipSpace.FORWARD : ClipSpace.REVERSED);
+		this.values.distantVolume(this.pass.distantVolume());
 		this.values.modelView(this.modelView, this.bob);
 		this.values.projection(this.projection);
 		this.values.passColour(this.passColour);

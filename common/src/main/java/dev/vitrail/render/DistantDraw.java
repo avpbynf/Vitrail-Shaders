@@ -331,7 +331,13 @@ public final class DistantDraw {
 	 */
 	private int writeSections(GpuDevice device, List<DhLods.Section> sections, Minecraft minecraft) {
 		int stride = slotBytes(device);
-		if (this.sections == null || this.slots < this.used + sections.size()) {
+		// Room for BOTH halves and not for the one at hand, which is the whole reason the wanted count
+		// is doubled at the head of a frame: the second half of a frame cannot be given a wider buffer,
+		// the first half already holding slices of the one that stands. Sized off the half in hand
+		// alone, a frame whose two halves each carry sixty sections would fit the first and refuse the
+		// second on every frame for as long as the horizon stayed that wide.
+		int wanted = this.used == 0 ? 2 * sections.size() : this.used + sections.size();
+		if (this.sections == null || this.slots < wanted) {
 			// Not while a half of this frame is already drawn from it: closing the buffer that pass
 			// holds slices of would pull the ground out from under a recorded draw. The caller says so
 			// and the next frame is built wide enough for both halves.
@@ -343,9 +349,9 @@ public final class DistantDraw {
 				this.sections.close();
 			}
 
-			// Room for both halves and then some, in steps rather than to the exact count, so that a
-			// player walking into a wider horizon does not reallocate on every frame.
-			this.slots = Math.max(64, Mth.smallestEncompassingPowerOfTwo(2 * sections.size()));
+			// In steps rather than to the exact count, so that a player walking into a wider horizon
+			// does not reallocate on every frame.
+			this.slots = Math.max(64, Mth.smallestEncompassingPowerOfTwo(wanted));
 			this.sections = new MappableRingBuffer(() -> "Vitrail far terrain sections",
 					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, this.slots * stride);
 		}
@@ -392,9 +398,15 @@ public final class DistantDraw {
 			return false;
 		}
 
+		// Three usages and every one of them is asked for by name somewhere: drawn into as an
+		// attachment, sampled by the fold, and emptied at the head of the frame. The clear is the one
+		// that is not obvious: an encoder refuses to clear a depth image that was not also made a copy
+		// destination (CommandEncoder.verifyDepthTexture), a clear being a write it performs itself
+		// rather than a load the pass does.
 		this.depth = device.createTexture(() -> "Vitrail far terrain depth",
-				GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_TEXTURE_BINDING, DEPTH_FORMAT,
-				this.depthWidth, this.depthHeight, 1, 1);
+				GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_TEXTURE_BINDING
+						| GpuTexture.USAGE_COPY_DST,
+				DEPTH_FORMAT, this.depthWidth, this.depthHeight, 1, 1);
 		this.depthView = device.createTextureView(this.depth);
 
 		return true;

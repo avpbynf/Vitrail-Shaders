@@ -107,7 +107,9 @@ final class WeatherProgram implements DumpedProgram {
 				// vertex buffer the renderer fills, and this program declares no name of its own.
 				null,
 				// One block, written once: every draw of one pass reads the same values.
-				null),
+				null,
+				// Drawn in the game's own volume, so the dh matrices answer the game's.
+				false),
 				bound, values, load, DefaultVertexFormat.PARTICLE, writes, targets, chainRuns));
 	}
 

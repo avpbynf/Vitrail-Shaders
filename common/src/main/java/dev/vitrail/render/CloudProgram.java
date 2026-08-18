@@ -102,7 +102,9 @@ final class CloudProgram implements DumpedProgram {
 				// to be hidden by whatever is in front of it.
 				DepthStencilState.DEFAULT, RenderStage.CLOUDS, BindGroupLayouts.CLOUD_INFO,
 				// One block, written once: every cloud face of a pass shares every value it reads.
-				null),
+				null,
+				// Drawn in the game's own volume, so the dh matrices answer the game's.
+				false),
 				bound, values, load,
 				// No format, which this family is alone in and GeometryProgram takes as "bind no
 				// vertex buffer". Handing DefaultVertexFormat.POSITION here instead would declare an

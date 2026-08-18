@@ -148,6 +148,13 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f publishedDistantInverse = new Matrix4f();
 
 	/**
+	 * Whether the pass being written is the far terrain's, which is what decides the volume the three
+	 * dh matrices answer. Set by the pass before it writes its block, like the depth convention and
+	 * the pass matrices beside it, and false for every pass that sets nothing.
+	 */
+	private boolean distantVolume;
+
+	/**
 	 * What Distant Horizons drew this frame with, or nothing when it drew nothing. See
 	 * {@link #advanceDistant} for why the three move together.
 	 */
@@ -356,6 +363,11 @@ public final class ViewMatrices implements ViewSource {
 			this.mapShadowProjectionInverse.set(this.shadowProjectionInverse);
 			this.shadowSeeded = true;
 		}
+	}
+
+	/** Whether the pass about to write its block is drawn in Distant Horizons' own volume. */
+	void distantVolume(boolean distant) {
+		this.distantVolume = distant;
 	}
 
 	/** Which depth convention the target this pass draws into carries. */
@@ -580,26 +592,39 @@ public final class ViewMatrices implements ViewSource {
 	 * and falls back the same way, which is why a pack that reads {@code dhProjection} outside the
 	 * mod still compiles there and did not here.
 	 * <p>
-	 * <strong>The three matrices stay the game's own even while DH is drawing, and that is a
-	 * divergence.</strong> Iris builds a perspective of DH's out of the game's field of view and
-	 * aspect with DH's own two planes, {@code compat/dh/DHCompat.java:54}, and registers that under
-	 * these three names. It is right there and would be wrong here. What a pack unprojects with them
-	 * is a {@code dhDepthTex} lookup, and {@code pack/target/SamplerPlan} answers those names with
-	 * the far plane, the far terrain being in the game's own depth by then: the road that needs a
-	 * matrix of DH's is a road no pack reaches. Handing one over anyway would cost the packs that
-	 * read {@code dhProjection} outside that road, which are the ones the paragraph above is about;
-	 * they would unproject the game's own depth through a volume it was never drawn in. The planes
-	 * and the render distance are read outside that road, which is why those three are DH's own the
-	 * moment DH has drawn.
+	 * <strong>Which volume they answer is the PASS's question and not the frame's</strong>, and it
+	 * has to be, because two roads read the same name for two different things. A {@code dh_}
+	 * program writes its own clip position through this matrix - BSL's
+	 * {@code program/dh_terrain.glsl} ends on
+	 * {@code gl_Position = dhProjection * gbufferModelView * position} - so for the far terrain it
+	 * has to be the volume the far terrain is rasterised in, or everything past the game's own far
+	 * plane is clipped away. Every other program reads it to UNPROJECT, and what those unproject is
+	 * the game's own depth: this engine folds the far terrain into it rather than keeping it beside
+	 * it, and {@code pack/target/SamplerPlan} answers {@code dhDepthTex} with the far plane for that
+	 * very reason. Under BSL those others are {@code gbuffers_water}, {@code deferred},
+	 * {@code deferred1}, {@code composite}, {@code composite7}, the temporal antialiasing and the
+	 * reflections.
+	 * <p>
+	 * <strong>Handed DH's volume everywhere, they unproject the game's depth through a volume its
+	 * image was never drawn in, and the near picture goes with it</strong>: measured on 18 August
+	 * 2026, black water, no distant fog and a scene that reads as though no pack were loaded. Handed
+	 * the game's volume everywhere, which is what this engine did before the far terrain was served,
+	 * the far terrain is clipped at the game's far plane and there is nothing to light.
+	 * <p>
+	 * Iris has one answer because it has one road: its {@code dhDepthTex} really is DH's own depth
+	 * image, in DH's own volume ({@code compat/dh/DHCompatInternal.java:159}), so the matrix that
+	 * unprojects it is the matrix its LODs were drawn with, {@code compat/dh/DHCompat.java:54}. The
+	 * split here is the price of the fold, and the fold is what buys every effect a pack indexes on
+	 * depth reaching the far terrain at all.
 	 */
 	@Override
 	public Matrix4fc dhProjection() {
-		return this.publishedDistant;
+		return this.distantVolume ? this.publishedDistant : this.projection;
 	}
 
 	@Override
 	public Matrix4fc dhProjectionInverse() {
-		return this.publishedDistantInverse;
+		return this.distantVolume ? this.publishedDistantInverse : this.projectionInverse;
 	}
 
 	@Override

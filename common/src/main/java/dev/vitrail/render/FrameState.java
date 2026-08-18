@@ -261,6 +261,17 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
+	 * Whether the pass about to write its block is drawn in Distant Horizons' own volume, which is
+	 * what the three dh matrices answer by. Set by the pass beside its convention and for the same
+	 * reason: it is a property of where the pass draws and not of the frame, and
+	 * {@link ViewMatrices#dhProjection} carries the two roads that read those names for two different
+	 * things.
+	 */
+	public void distantVolume(boolean distant) {
+		this.view.distantVolume(distant);
+	}
+
+	/**
 	 * The model view the pass about to write its block draws with, or null for the camera's. Set by
 	 * the pass beside its convention, and for the same reason: both are properties of where the pass
 	 * draws rather than of the frame.

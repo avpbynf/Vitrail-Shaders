@@ -122,7 +122,10 @@ final class DistantProgram implements DumpedProgram {
 				// Culled, which is DH's own answer: withFaceCulling(true) on both of its pipelines.
 				true, DEPTH, element.stage(), null,
 				// The one family with a value that belongs to the section rather than to the pass.
-				DistantVertex.SECTION_BLOCK),
+				DistantVertex.SECTION_BLOCK,
+				// And the one family drawn in DH's own volume, so the three dh matrices answer that
+				// volume here and the game's everywhere else.
+				true),
 				bound, values, load, format, writes, targets, chainRuns));
 	}
 
