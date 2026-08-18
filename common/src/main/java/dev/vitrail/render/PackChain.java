@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
@@ -1435,6 +1436,13 @@ public final class PackChain {
 		if (disabled || chain == null || device == null || minecraft == null || !chainWanted) {
 			return;
 		}
+
+		// Where the far terrain is taken over, and it is here for the reason the fold is: this is the
+		// one point of the frame reached exactly when DH's far terrain matters to a pack. What it
+		// costs is that a takeover lands on the NEXT frame, DH having drawn its LODs long before this
+		// line; nothing of the picture turns on that, the frame before it being the picture this
+		// engine drew before this door existed.
+		DhLods.install();
 
 		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
 		if (main == null || !main.useDepth) {
