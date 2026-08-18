@@ -151,8 +151,15 @@ public final class VertexPrologue {
 		};
 	}
 
-	/** What a name the mesh does not carry is worth, given the type the pack declared it under. */
-	private static String value(String name, String type) {
+	/**
+	 * What a name the mesh does not carry is worth, given the type the pack declared it under.
+	 * <p>
+	 * Public because a head may have to answer one of these names itself rather than through a
+	 * global: the chunk mesh carries a normal only while a pack reads one, and its head fills
+	 * {@code of_Normal} in the prologue where the other families fill it with a macro. Asking here
+	 * is what keeps the two answers one answer.
+	 */
+	public static String value(String name, String type) {
 		String better = BETTER_DEFAULTS.get(name);
 
 		return better != null && better.startsWith(type + "(") ? better : zero(type);

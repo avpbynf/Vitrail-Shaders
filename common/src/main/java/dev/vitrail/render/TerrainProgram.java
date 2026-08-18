@@ -109,38 +109,49 @@ public final class TerrainProgram implements DumpedProgram {
 	}
 
 	/**
-	 * Reads and translates the three programs the chunk renderer draws with, keyed by the pass each
-	 * one serves. A pass the pack ships nothing for is absent, and keeps the game's own shader.
+	 * Reads and translates the six programs the chunk renderer draws with, and says what mesh they
+	 * were written against. A pass the pack ships nothing for is absent, and keeps the game's own
+	 * shader.
 	 * <p>
-	 * A second reading of the pack, which costs one plan build for all three. The chain's own reading
+	 * A second reading of the pack, which costs one plan build for all six. The chain's own reading
 	 * translates what the chain runs, and a gbuffers program is not in it: folding this into that
 	 * walk would make every place pay for programs only this step uses.
+	 * <p>
+	 * <strong>Read where the pack is loaded and not where a chunk pass first asks.</strong> What the
+	 * mesh carries is the union of what these six read, and the mesh has to be settled before Sodium
+	 * builds the chunk renderer that meshes with it. The device is not touched here: the pipelines
+	 * are built by {@link #build}, at the first draw and against the format the renderer hands over.
+	 */
+	static PackProgram.Terrain read(Path packPath, String place, Map<String, OptionValue> chosen,
+			String profile, PackValues values) throws IOException {
+		// Which of the two colours the six vertex stages read, settled here because this is where
+		// the pack's own reading of separateAo is held. Two shapes for one word Sodium already
+		// writes, so it decides both which element a stage reads and whether the mesh carries the
+		// second one at all.
+		VertexInputs inputs = values.separateAo()
+				? VertexInputs.TERRAIN_SEPARATE_AO
+				: VertexInputs.TERRAIN;
+		PackProgram.Terrain read = PackProgram.loadTerrain(packPath, place, chosen, profile, inputs);
+		if (read.programs().isEmpty()) {
+			Vitrail.logger().warn("{} serves no terrain program with both stages in {}, so the "
+					+ "world keeps the game's own shader", packPath.getFileName(),
+					place.isEmpty() ? "its root" : place);
+		}
+
+		return read;
+	}
+
+	/**
+	 * Equips the programs already read with everything that needs a format and a plan, keyed by the
+	 * pass each one serves.
 	 *
 	 * @param format the chunk mesh format, handed in rather than looked up, because nothing in this
 	 *               module is allowed to name Sodium
 	 */
-	static Map<TerrainPass, TerrainProgram> read(Path packPath, String place,
-			Map<String, OptionValue> chosen, String profile, PackValues values, int load,
-			VertexFormat format, ChainPlan plan, TargetPlan chainTargets, boolean chainRuns,
-			ColorTargets targets) {
+	static Map<TerrainPass, TerrainProgram> build(Map<TerrainPass, PackProgram.Loaded> loaded,
+			PackValues values, int load, VertexFormat format, ChainPlan plan,
+			TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
 		try {
-			// Which of the two colours the three vertex stages read, settled here because this is
-			// where the pack's own reading of separateAo is held. It is not a property of the mesh:
-			// every vertex carries both, so a pack that asks replacing one that does not costs a
-			// second reading of the programs and nothing else.
-			VertexInputs inputs = values.separateAo()
-					? VertexInputs.TERRAIN_SEPARATE_AO
-					: VertexInputs.TERRAIN;
-			Map<TerrainPass, PackProgram.Loaded> loaded =
-					PackProgram.loadTerrain(packPath, place, chosen, profile, inputs);
-			if (loaded.isEmpty()) {
-				Vitrail.logger().warn("{} serves no terrain program with both stages in {}, so the "
-						+ "world keeps the game's own shader", packPath.getFileName(),
-						place.isEmpty() ? "its root" : place);
-
-				return Map.of();
-			}
-
 			Map<TerrainPass, TerrainProgram> programs = new EnumMap<>(TerrainPass.class);
 			loaded.forEach((pass, one) -> {
 				// The samplers are bound again, against the chain's own plan and on the step of the
@@ -177,20 +188,28 @@ public final class TerrainProgram implements DumpedProgram {
 			});
 
 			return programs;
-		} catch (IOException | RuntimeException e) {
-			Vitrail.logger().error("Could not prepare the terrain programs of "
-					+ packPath.getFileName() + ", so the world keeps the game's own shader", e);
+		} catch (RuntimeException e) {
+			Vitrail.logger().error("Could not equip the terrain programs, so the world keeps the "
+					+ "game's own shader", e);
 
 			return Map.of();
 		}
 	}
 
-	/** Checks that the mesh is still the one the prologue decodes, and says so once when it is not. */
-	static boolean carries(VertexFormat format) {
+	/**
+	 * Checks that the mesh the renderer bound is the one these programs were written against, and
+	 * says so once when it is not.
+	 *
+	 * @param carried the elements the programs declare, which is what the pack was read for and what
+	 *                the format was built from. Compared rather than assumed because the two are
+	 *                settled at two moments, the reading of the pack and the rebuild of the chunk
+	 *                renderer, and nothing in between makes them agree by construction
+	 */
+	static boolean carries(VertexFormat format, List<String> carried) {
 		List<String> elements = format.getElements().stream()
 				.map(VertexFormatElement::name)
 				.toList();
-		if (elements.equals(SodiumVertex.ATTRIBUTES)) {
+		if (elements.equals(carried)) {
 			return true;
 		}
 
@@ -203,9 +222,9 @@ public final class TerrainProgram implements DumpedProgram {
 		// the world then came from the game while the sky came from the pack, which puts the sky in
 		// front of the trees and reads as a broken sky rather than as a terrain program that never
 		// ran. So the caller stops the whole pack.
-		Vitrail.logger().error("The chunk mesh carries {} and this engine decodes {}, so no terrain "
+		Vitrail.logger().error("The chunk mesh carries {} and these programs declare {}, so no terrain "
 				+ "program can be drawn and this pack is put away rather than drawn by halves",
-				elements, SodiumVertex.ATTRIBUTES);
+				elements, carried);
 
 		return false;
 	}

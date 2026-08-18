@@ -28,6 +28,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -365,6 +366,14 @@ public final class PackProgram {
 	 * A pass the pack serves no program for is simply absent from the answer, and the chunk renderer
 	 * keeps the game's own shader for it. That is a normal thing for a pack to do rather than a
 	 * failure: nothing in the format obliges a pack to ship a {@code gbuffers_water}.
+	 * <p>
+	 * <strong>The passes are walked twice, and that is what settles the mesh.</strong> The chunk
+	 * mesh carries what the pack reads and no more, so the first walk rewrites each vertex stage and
+	 * asks it what it reads, and only the union of the six is enough to say what any of them may
+	 * declare. The second walk is the translation proper, against that answer. What the two walks
+	 * cost is one extra rewrite per vertex stage; what a single walk would cost is either a mesh
+	 * built before it is known or six programs each declaring its own idea of the format, which
+	 * shifts every location after the first difference and says nothing.
 	 *
 	 * @param place  where the entry points are read from, {@code world0} or the root, already
 	 *               settled by the chain
@@ -377,7 +386,7 @@ public final class PackProgram {
 	 *               for another mesh, which declares other names and would be found out by nothing
 	 *               short of the picture
 	 */
-	public static Map<TerrainPass, Loaded> loadTerrain(Path packPath, String place,
+	public static Terrain loadTerrain(Path packPath, String place,
 			Map<String, OptionValue> chosen, String profile, VertexInputs inputs)
 			throws IOException {
 		if (!inputs.terrain()) {
@@ -400,7 +409,15 @@ public final class PackProgram {
 			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
 					dimensions);
 
-			Map<TerrainPass, Loaded> loaded = new LinkedHashMap<>();
+			// What each pass is served by, read once and kept, because the passes are walked twice:
+			// the mesh is built out of what ALL of them ask for, and every one of them then declares
+			// that whole mesh. Expanding the includes a second time would be the same files read
+			// again for the same answer.
+			record Served(String path, Map<ProgramStage, ExpandedUnit> units, AlphaTest alphaTest) {
+			}
+
+			Map<TerrainPass, Served> served = new LinkedHashMap<>();
+			Set<String> reads = new LinkedHashSet<>();
 			for (TerrainPass pass : TerrainPass.values()) {
 				Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, pass.program());
 				if (resolution.isEmpty()) {
@@ -418,15 +435,53 @@ public final class PackProgram {
 				}
 
 				AlphaTest alphaTest = pass.alphaTest(properties, servedBy);
-				// The pass's own program and not the file that serves it, for the reason the alpha
-				// test is taken that way: what the engine supplies belongs to what is being drawn.
-				loaded.put(pass, bind(source.packName(), path,
-						ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest,
-								pass.covers(), pass.program(), textures.volumes()),
-						targets, alphaTest, textures));
+				served.put(pass, new Served(path, units, alphaTest));
+				reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), inputs,
+						alphaTest, pass.covers(), pass.program(), textures.volumes()));
 			}
 
-			return loaded;
+			// Nothing to draw and therefore nothing to carry, which is not the same answer as a mesh
+			// whose pack reads none of the six: the caller leaves Sodium's own format alone either
+			// way, and this is the road where it also has no program to leave it alone for.
+			if (served.isEmpty()) {
+				return new Terrain(Map.of(), List.of());
+			}
+
+			List<String> carried = SodiumVertex.carried(reads);
+			Map<TerrainPass, Loaded> loaded = new LinkedHashMap<>();
+			for (Map.Entry<TerrainPass, Served> entry : served.entrySet()) {
+				TerrainPass pass = entry.getKey();
+				Served one = entry.getValue();
+				// The pass's own program and not the file that serves it, for the reason the alpha
+				// test is taken that way: what the engine supplies belongs to what is being drawn.
+				loaded.put(pass, bind(source.packName(), one.path(),
+						ProgramTranslator.translate(one.units(), inputs, carried, one.alphaTest(),
+								pass.covers(), pass.program(), textures.volumes()),
+						targets, one.alphaTest(), textures));
+			}
+
+			return new Terrain(loaded, carried);
+		}
+	}
+
+	/**
+	 * The pack's chunk programs and the mesh they were written against.
+	 * <p>
+	 * The two travel together because neither is worth anything without the other. A vertex stage
+	 * declares exactly the elements listed here, so a caller that took these programs and bound a
+	 * format built from anything else would be shifting the location of every element after the
+	 * first difference, in silence.
+	 *
+	 * @param programs one per pass the pack serves, absent for a pass it does not
+	 * @param carried  the elements the chunk mesh has to carry, Sodium's own four first and then
+	 *                 whatever the union of the six programs reads. Empty when there is no program
+	 *                 at all, where the mesh keeps Sodium's own format
+	 */
+	public record Terrain(Map<TerrainPass, Loaded> programs, List<String> carried) {
+
+		public Terrain {
+			programs = Map.copyOf(programs);
+			carried = List.copyOf(carried);
 		}
 	}
 

@@ -131,6 +131,25 @@ public final class ProgramTranslator {
 	}
 
 	/**
+	 * Which elements of its mesh one program's vertex stage really reads, without a line of it being
+	 * written.
+	 * <p>
+	 * The chunk mesh is the one family whose format follows the pack, so its caller has to know what
+	 * every one of the pack's chunk programs asks for before it can settle what any of them
+	 * declares. This is the half of the translation that answers that: the stage is rewritten, its
+	 * names are read off it, and the header it would have been given is never built.
+	 * <p>
+	 * <strong>The elements handed in here are not the ones the head will declare</strong>, and they
+	 * cannot be: the format is what this call is being asked for. Nothing between here and
+	 * {@code render} reads them, which is what makes the two halves separable at all.
+	 */
+	public static Set<String> reads(ExpandedUnit vertex, VertexInputs inputs, AlphaTest alphaTest,
+			boolean coverage, String program, Map<String, VolumeAtlas> volumes) {
+		return GlslTranslator.prepare(vertex, ProgramStage.VERTEX, inputs, inputs.elements(),
+				alphaTest, coverage, program, volumes).reads();
+	}
+
+	/**
 	 * The same, for a family that binds more than one vertex format.
 	 * <p>
 	 * Only {@link VertexInputs#SKY} is one today: {@code SkyRenderer} binds four formats between its
