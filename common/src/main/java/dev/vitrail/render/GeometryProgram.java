@@ -1491,7 +1491,8 @@ final class GeometryProgram {
 		}
 
 		// Split by what the mesh really answers. Only names the mesh has no element for are a gap;
-		// the chunk mesh now answers four of them and the entity mesh answers none.
+		// the chunk mesh now answers four of them and the entity mesh two, while the glint's answers
+		// none, which is why this comes off the PASS rather than off the family.
 		List<String> constants = this.loaded.program().synthesized().keySet().stream()
 				.filter(name -> !this.pass.answered().contains(name))
 				.toList();

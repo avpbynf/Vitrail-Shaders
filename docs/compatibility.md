@@ -223,13 +223,14 @@ unaffected.
 Two consequences follow from how that geometry reaches the pack, and both are worth recognising
 rather than reporting as separate bugs:
 
-- **One value a pack reads off it is a constant rather than this piece's own**, the material id, and
-  there the reference does the same: an entity mesh carries none. Everything else a pack reads of
-  this geometry is now its own. The middle of the sprite a face is mapped to and the tangent of that
-  mapping are worked out over each polygon and handed over on its corners, which is what a normal
-  map on a mob or on a piece of armour is read through; so are the three a pack compares against a
-  kind of mob, the block a block entity stands in and the item being drawn. The held hand shows
-  whatever the mobs show, arriving by the same door and in the same vertex format.
+- **The values a pack reads off a polygon are this piece's own, and the ones that describe a BLOCK
+  are constants.** The middle of the sprite a face is mapped to and the tangent of that mapping are
+  worked out over each polygon and handed over on its corners, which is what a normal map on a mob
+  or on a piece of armour is read through; so are the three a pack compares against a kind of mob,
+  the block a block entity stands in and the item being drawn. What stays constant is the material
+  id and the offset to the middle of a block, and there the reference does the same: an entity is
+  not a block and has neither. The held hand shows whatever the mobs show, arriving by the same door
+  and in the same vertex format.
 - A pack can allocate a colour target for a family that is not drawn through it. BSL allocates one
   for glowing entities alone, and its deferred pass samples that target, so the chain reads a clear
   across a whole target.

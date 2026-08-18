@@ -14,7 +14,7 @@ import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The game's entity mesh with the three identifiers appended to it, as a format of this engine's
+ * The game's entity mesh with three elements of this engine's appended to it, as a format of its
  * own, and the one instant at which it comes into force.
  * <p>
  * <strong>A format APART, which is Iris's own shape</strong>
@@ -30,7 +30,7 @@ import org.jspecify.annotations.Nullable;
  * {@code mixin/core/render/immediate/consumer/BufferBuilderMixin.push} reserves
  * {@code count * this.vertexSize} and copies the source over it RAW whenever
  * {@code srcFormat == this.format}. Lengthening the game's field leaves that identity test passing
- * and copies forty-four bytes a vertex out of a buffer carrying thirty-six. It was measured rather
+ * and copies fifty-six bytes a vertex out of a buffer carrying thirty-six. It was measured rather
  * than deduced: under the lengthened field, on one bench and with only the jar changing, the spider,
  * the enderman, the warden, the charged creeper and the player's own arm were all gone, and only the
  * enderman's particles were left hanging where its body should have been. All three readings are off
@@ -39,7 +39,7 @@ import org.jspecify.annotations.Nullable;
  * A separate object fails that identity test, so the same {@code push} takes {@code copySlow}, which
  * asks {@code VertexSerializerRegistry} for a serializer from one format to the other.
  * {@link dev.vitrail.sodium.EntityMeshSerializer} is what answers, and it has to: left to itself the
- * registry generates one that copies the elements the two formats share and leaves the eight bytes
+ * registry generates one that copies the elements the two formats share and leaves the twenty bytes
  * after them at whatever the arena last held.
  * <p>
  * <strong>It buys a second thing for nothing, and Iris pays a mixin for it.</strong>
@@ -58,11 +58,12 @@ import org.jspecify.annotations.Nullable;
  * the mesh and the binding move together and cannot disagree. {@link dev.vitrail.mixin.RenderPipelineMixin}
  * is that method here.
  * <p>
- * What makes it safe is that the element goes LAST. The game's entity vertex stage declares the six
- * names the game's format spells and knows nothing of a seventh; {@code IntermediaryShaderModule.rebind}
- * walks the format's names and only counts the ones it finds in the SPIR-V, while
- * {@code VulkanRenderPipeline} counts every element of the format, so an element the stage skips
- * shifts the location of everything AFTER it and there has to be nothing after it. That is already
+ * What makes it safe is that the three go LAST. The game's entity vertex stage declares the six
+ * names the game's format spells and knows nothing of the three after them;
+ * {@code IntermediaryShaderModule.rebind} walks the format's names and only counts the ones it finds
+ * in the SPIR-V, while {@code VulkanRenderPipeline} counts every element of the format, so an
+ * element the stage skips shifts the location of everything AFTER it and there has to be nothing
+ * after them. That is already
  * this engine's answer for the chunk mesh, and {@code sodium/TerrainMesh} says it there for Sodium's
  * own shader.
  *
@@ -201,7 +202,7 @@ public final class EntityMesh {
 		}
 
 		Vitrail.logger().info("The pack draws the entities or the hand {} now, and the entity mesh "
-				+ "carries {} only while it does, so the world is built again",
+				+ "only carries these while it does, so the world is built again: {}",
 				asked ? "and did not" : "and did", EntityVertex.APPENDED);
 		minecraft.levelExtractor.allChanged();
 		rebuildAsked = true;
@@ -248,9 +249,9 @@ public final class EntityMesh {
 		}
 
 		Vitrail.logger().info("The entity mesh carries {} bytes a vertex instead of {}, the "
-				+ "difference being {}, which are the three identifiers a pack tells one entity, "
-				+ "block entity or held item apart by, then the middle of the sprite a polygon is "
-				+ "mapped to and the tangent of that mapping",
+				+ "difference being the three identifiers a pack tells one entity, block entity or "
+				+ "held item apart by, then the middle of the sprite a polygon is mapped to and the "
+				+ "tangent of that mapping: {}",
 				FORMAT.getVertexSize(), DefaultVertexFormat.ENTITY.getVertexSize(),
 				EntityVertex.APPENDED);
 	}
@@ -263,7 +264,7 @@ public final class EntityMesh {
 	 * next. Every element of that format is laid out end to end, so appending after the last leaves
 	 * the six exactly where they were.
 	 * <p>
-	 * The order and the widths are Iris's, {@code vertices/IrisVertexFormats.java:61-70}. The
+	 * The order and the widths are Iris's, {@code vertices/IrisVertexFormats.java:49-60}. The
 	 * identifiers are four unsigned shorts of which three are read; the middle of the sprite is the
 	 * pair of floats {@code UV0} already spells a corner in; the tangent is four normalised bytes,
 	 * which is what the game spells {@code Normal} as and what the fourth component being a

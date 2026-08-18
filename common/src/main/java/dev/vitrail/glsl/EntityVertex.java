@@ -20,7 +20,7 @@ import java.util.stream.Stream;
  * then binds.
  * <p>
  * <strong>The three are Iris's own three and in its own order</strong>
- * ({@code vertices/IrisVertexFormats.java:61-70}: {@code iris_Entity}, then {@code mc_midTexCoord},
+ * ({@code vertices/IrisVertexFormats.java:49-60}: {@code iris_Entity}, then {@code mc_midTexCoord},
  * then {@code at_tangent}). The last two are what a pack asks of a POLYGON rather than of a corner,
  * the four corners of a quad carrying one pair and one tangent between them;
  * {@code render/EntityFrame} works both out, and the two roads that write them in are
@@ -48,6 +48,14 @@ import java.util.stream.Stream;
  * gives: a global initialised from a vertex input is not a constant expression and the language
  * refuses it, and the chunk mesh only escapes that by having a prologue it needs anyway. Here
  * there is nothing to compute, so there is no prologue to hang it on.
+ * <p>
+ * <strong>A macro is not shadowable where a global is</strong>, and that is the one thing it costs.
+ * A pack that spells one of these names for something of its own meets a substitution rather than a
+ * name, and what comes out does not parse. The attribute a pack declares is answered by the
+ * translation, which takes that declaration out of the body before the head is written; a LOCAL of
+ * the same name inside a function is answered by nothing, and would have compiled under a global.
+ * Both are measured rather than argued: the off-game harness translates and compiles every entity
+ * stage of the corpus, so either would have failed there, and none does.
  */
 public final class EntityVertex {
 

@@ -127,17 +127,29 @@ public abstract class BufferBuilderMixin {
 	@Inject(method = "<init>", at = @At("RETURN"), require = 1)
 	private void vitrail$findElements(ByteBufferBuilder buffer, PrimitiveTopology topology,
 			VertexFormat format, CallbackInfo callback) {
-		VertexFormatElement element = this.format.getElement(EntityVertex.IDENTIFIERS);
-		this.vitrail$identifiers = element == null ? -1 : element.offset();
-		if (element == null) {
+		int identifiers = vitrail$offsetOf(EntityVertex.IDENTIFIERS);
+		int midTexCoord = vitrail$offsetOf(EntityVertex.MID_TEX_COORD);
+		int tangent = vitrail$offsetOf(EntityVertex.TANGENT);
+		int position = vitrail$offsetOf("Position");
+		int texCoord = vitrail$offsetOf("UV0");
+		int normal = vitrail$offsetOf("Normal");
+		// Six or none, and never some of them: what this builder is is one question, and a format
+		// carrying the first without the rest is not a state this engine can build. Answering it the
+		// way a builder of any other format is answered is what keeps a constructor the game runs
+		// thousands of times a frame from being a place anything can be thrown out of.
+		if (identifiers < 0 || midTexCoord < 0 || tangent < 0 || position < 0 || texCoord < 0
+				|| normal < 0) {
+			this.vitrail$identifiers = -1;
+
 			return;
 		}
 
-		this.vitrail$midTexCoord = vitrail$offsetOf(EntityVertex.MID_TEX_COORD);
-		this.vitrail$tangent = vitrail$offsetOf(EntityVertex.TANGENT);
-		this.vitrail$position = vitrail$offsetOf("Position");
-		this.vitrail$texCoord = vitrail$offsetOf("UV0");
-		this.vitrail$normal = vitrail$offsetOf("Normal");
+		this.vitrail$identifiers = identifiers;
+		this.vitrail$midTexCoord = midTexCoord;
+		this.vitrail$tangent = tangent;
+		this.vitrail$position = position;
+		this.vitrail$texCoord = texCoord;
+		this.vitrail$normal = normal;
 		this.vitrail$corners = switch (topology) {
 			case QUADS -> 4;
 			case TRIANGLES -> 3;
@@ -234,11 +246,12 @@ public abstract class BufferBuilderMixin {
 		midU /= corners;
 		midV /= corners;
 
-		// A quad is lit flat and a triangle is not, which is Iris's own split and is a fact about
-		// what the two carry rather than a preference (MixinBufferBuilder.fillExtendedData): the
-		// game writes one normal over a quad's four corners, so a quad has a normal of its own and
-		// its four tangents are one tangent; a triangle may be smooth shaded, so each corner keeps
-		// the normal it was given and takes the tangent that normal's own plane gives it.
+		// A quad is read flat and a triangle is not, which is Iris's own split
+		// (MixinBufferBuilder.fillExtendedData) and its own reason: it took the face normal off the
+		// triangle branch deliberately, its note at NormalHelper's call site saying that was "to
+		// enable smooth shaded triangles". So a quad gets one tangent for its four corners, measured
+		// against the normal its own corners give it; a triangle keeps the normal each corner was
+		// given and takes the tangent that normal's own plane gives it.
 		if (corners == 4) {
 			vitrail$fillQuad(base, corner, read, face, midU, midV);
 
@@ -257,26 +270,43 @@ public abstract class BufferBuilderMixin {
 	}
 
 	/**
-	 * The same for a quad, whose normal is taken from its own corners rather than read off one of
-	 * them, and <strong>written back over the one the game left there</strong>.
+	 * The same for a quad, whose tangent is measured against a normal taken from its own corners
+	 * rather than read off one of them, exactly as Iris measures it
+	 * ({@code MixinBufferBuilder.fillExtendedData}, {@code NormalHelper.computeFaceNormal} then
+	 * {@code computeTangent} on what it gives).
 	 * <p>
-	 * That write-back is Iris's answer ({@code MixinBufferBuilder.fillExtendedData}, its
-	 * {@code recalculateNormal} branch) and costs nothing on the geometry this road really carries: a
-	 * cuboid's four corners are handed the same normal already, so the two agree to the quantum.
-	 * Where they do not agree, the corners were given a normal that is not the face's, and a tangent
-	 * measured against one normal beside a light computed from another is a frame that does not
-	 * close.
+	 * <strong>The normal itself is left as the game wrote it, and Iris writes its own back.</strong>
+	 * A divergence, and what it works around is that this engine has no moment to hang the write-back
+	 * on. Iris does it only inside the level render ({@code MixinBufferBuilder.java:244},
+	 * {@code recalculateNormal = ImmediateState.isRenderingLevel}, under a comment at {@code :243}
+	 * naming an item batching mod), and outside it the question never arises because it does not
+	 * extend the format there at all ({@code MixinBufferBuilder.java:98} and
+	 * {@code MixinRenderPipeline.java:26}, both on the same flag). This engine settles its format
+	 * once and binds it wherever the game declares the entity one,
+	 * {@link dev.vitrail.render.EntityMesh#settle()} saying why it cannot be read live and
+	 * {@link dev.vitrail.mixin.RenderPipelineMixin} doing the binding, so a write-back here would
+	 * reach geometry Iris never touches, an item drawn into an inventory screen among it.
 	 * <p>
-	 * A quad of no area is the one case that keeps what the game wrote: corners lying on a line have
-	 * no normal to give, and normalising nought is a NaN that reaches the colour.
-	 * {@code EntityFrame.faceNormal} is what refuses, and Iris has no such branch.
+	 * <strong>What it costs is the handedness and not the direction.</strong> The corners are not
+	 * flattened onto this normal's plane here, so it reaches {@code EntityFrame.tangent} for one
+	 * thing only, the sign in the fourth component. A quad whose corners were given a normal that is
+	 * not the face's therefore keeps a tangent pointing the right way and may get that sign turned
+	 * over, which is a bump lighting as a dent. No entity geometry of the game reaches this road in
+	 * that state: a {@code ModelPart} cuboid does not come this way at all, Sodium's
+	 * {@code CubeMixin} taking it, and a baked quad carries one normal over its four corners.
+	 * <p>
+	 * A quad of no area falls back on the normal of its first corner: corners lying on a line have no
+	 * normal to give, and normalising nought is a NaN that would travel into the colour through the
+	 * whole tangent frame. {@code EntityFrame.faceNormal} is what refuses, and Iris has no such
+	 * branch: {@code NormalHelper.computeFaceNormalManual:85-91} normalises whatever the cross
+	 * product gave. It costs a degenerate quad a tangent measured against a corner normal rather than
+	 * a NaN, and the game draws no such quad here.
 	 */
 	@Unique
 	private void vitrail$fillQuad(long base, long[] corner, float[] read, float[] face, float midU,
 			float midV) {
-		boolean own = EntityFrame.faceNormal(face, read[0], read[1], read[2], read[5], read[6],
-				read[7], read[10], read[11], read[12], read[15], read[16], read[17]);
-		if (!own) {
+		if (!EntityFrame.faceNormal(face, read[0], read[1], read[2], read[5], read[6], read[7],
+				read[10], read[11], read[12], read[15], read[16], read[17])) {
 			int given = MemoryUtil.memGetInt(base + corner[0] + this.vitrail$normal);
 			face[0] = EntityFrame.unpack(given, 0);
 			face[1] = EntityFrame.unpack(given, 1);
@@ -287,14 +317,8 @@ public abstract class BufferBuilderMixin {
 				read[0], read[1], read[2], read[3], read[4],
 				read[5], read[6], read[7], read[8], read[9],
 				read[10], read[11], read[12], read[13], read[14]);
-		int normal = EntityFrame.pack(face[0], face[1], face[2], 0.0F);
 		for (int at = 0; at < 4; at++) {
-			long vertex = base + corner[at];
-			if (own) {
-				MemoryUtil.memPutInt(vertex + this.vitrail$normal, normal);
-			}
-
-			vitrail$write(vertex, midU, midV, tangent);
+			vitrail$write(base + corner[at], midU, midV, tangent);
 		}
 	}
 
@@ -306,14 +330,11 @@ public abstract class BufferBuilderMixin {
 		MemoryUtil.memPutInt(vertex + this.vitrail$tangent, tangent);
 	}
 
-	/** One element of this builder's format, which is known to carry it by the time this is asked. */
+	/** Where one element starts inside a vertex of this builder, or minus one where it has none. */
 	@Unique
 	private int vitrail$offsetOf(String element) {
 		VertexFormatElement found = this.format.getElement(element);
-		if (found == null) {
-			throw new IllegalStateException("The entity mesh was built without " + element);
-		}
 
-		return found.offset();
+		return found == null ? -1 : found.offset();
 	}
 }
