@@ -607,6 +607,23 @@ public final class GlslTranslator {
 			return Map.copyOf(this.translator.synthesized);
 		}
 
+		/**
+		 * Which elements of the mesh this stage really reads, out of the ones its family may leave
+		 * off. Empty for every family that carries one format for all packs, which is all of them
+		 * but the chunk mesh.
+		 * <p>
+		 * Asked between {@link #prepare} and {@link #render}, and that is the whole reason it is a
+		 * method of this class: the answer is what the format is built from, and the format is what
+		 * the header then declares. Nothing here reads {@code bound}, so the value handed to
+		 * {@code prepare} for a stage that will only ever be asked this is not yet settled.
+		 */
+		public Set<String> reads() {
+			return this.translator.inputs.terrain()
+					? SodiumVertex.reads(this.translator.used, this.translator.synthesized,
+							this.translator.inputs.separateAo())
+					: Set.of();
+		}
+
 		/** Varyings the engine names, which both sides of a program have to declare or neither. */
 		public Set<String> varyings() {
 			Set<String> named = new LinkedHashSet<>();
@@ -3283,8 +3300,8 @@ public final class GlslTranslator {
 					lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
 					lines.addAll(VertexPrologue.tail(this.used, this.synthesized));
 				}
-				case TERRAIN, TERRAIN_SEPARATE_AO -> lines.addAll(
-						SodiumVertex.prologue(this.used, this.synthesized, this.inputs.separateAo()));
+				case TERRAIN, TERRAIN_SEPARATE_AO -> lines.addAll(SodiumVertex.prologue(this.bound,
+						this.used, this.synthesized, this.inputs.separateAo()));
 				case ENTITY, ENTITY_FULLBRIGHT -> lines.addAll(
 						EntityVertex.prologue(this.used, this.synthesized, this.inputs.fullbright()));
 				case GLINT -> lines.addAll(GlintVertex.prologue(this.used, this.synthesized));

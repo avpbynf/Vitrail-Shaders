@@ -16,6 +16,7 @@ import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexT
 import org.lwjgl.system.MemoryUtil;
 
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * The chunk mesh with the elements a pack reads and Sodium does not carry, appended after its own.
@@ -40,6 +41,12 @@ import java.util.Arrays;
  * three after the first land where this format does not want them and are moved up, backwards and
  * word by word so that a vertex is never written over a word still to be read.
  * <p>
+ * <strong>How many of the six are appended follows the pack.</strong> {@code TerrainDraw} translates
+ * the pack's six chunk programs far enough to know which names they read, and hands that list here;
+ * a vertex is then anything from twenty-four bytes to forty-four. The ones left out close the gap
+ * rather than leaving a hole, so an element's offset is where it lands in this pack's mesh and not
+ * where it lands in {@link Extra}.
+ * <p>
  * <strong>The new elements have to stay last, and after Sodium's four.</strong> An element the shader
  * does not declare shifts the location of every element AFTER it, in silence, because the pipeline
  * counts every element of the format and the shader module only counts the ones a stage declared.
@@ -50,13 +57,13 @@ import java.util.Arrays;
 public final class TerrainMesh implements ChunkVertexType {
 
 	/**
-	 * This format, built the first time one is wanted and kept because it holds no state of its own.
-	 * Null until then, and null for good once {@link #broken} is set.
+	 * The format in force, or null to leave Sodium's own alone. Held rather than rebuilt because it
+	 * holds no state of its own.
 	 * <p>
-	 * <strong>Which of the two answers is served is not settled for the run, and that is why a pack
-	 * picked in a running game draws the world.</strong> It moves only in {@link #settle()}, and
-	 * {@code TerrainDraw.wanted} is what asks for that to happen: it changes what the options say and
-	 * has the world rebuilt, and everything meshed at the old stride is thrown out on the way.
+	 * <strong>Which answer is served is not settled for the run, and that is why a pack picked in a
+	 * running game draws the world.</strong> It moves only in {@link #settle()}, and
+	 * {@code TerrainDraw} is what asks for that to happen: the elements it publishes change, it has
+	 * the world rebuilt, and everything meshed at the old stride is thrown out on the way.
 	 */
 	private static TerrainMesh built;
 
@@ -67,15 +74,14 @@ public final class TerrainMesh implements ChunkVertexType {
 	 */
 	private static boolean broken;
 
-	/** The answer in force, which only {@link #settle()} moves. */
-	private static boolean carrying;
-
 	/**
-	 * Whether the answer has ever been said out loud. Kept apart from {@link #carrying} because the
-	 * two share their initial value: without it, the first settle of a game nobody picked a pack in
-	 * would find nothing changed and stay silent, which is the case that most needs the line.
+	 * What the log last announced, and null until the first settle of a run.
+	 * <p>
+	 * Null and not the empty list, because the two would otherwise share their value: without the
+	 * difference, the first settle of a game nobody picked a pack in would find nothing changed and
+	 * stay silent, which is the case that most needs the line.
 	 */
-	private static boolean said;
+	private static List<String> said;
 
 	/**
 	 * What a texture coordinate is multiplied by before it is stored, which is Sodium's own
@@ -119,19 +125,36 @@ public final class TerrainMesh implements ChunkVertexType {
 	private final ChunkVertexEncoder innerEncoder = this.inner.getEncoder();
 	private final ChunkVertexEncoder encoder = this::encode;
 	private final int innerStride = this.inner.getVertexFormat().getVertexSize();
-	private final VertexFormat format = extend(this.inner.getVertexFormat());
-	private final int stride = this.format.getVertexSize();
 
-	private TerrainMesh() {
+	/** The whole format this was asked for, Sodium's own names first, kept to answer a second ask. */
+	private final List<String> carried;
+
+	/** The ones of {@link Extra} that list names, in the order they are laid out. */
+	private final List<Extra> extras;
+
+	/**
+	 * Where each element of {@link Extra} starts, counted from the end of Sodium's own bytes, and
+	 * {@link #ABSENT} for one this pack does not carry. Indexed by ordinal, which is how the layout
+	 * and the encoder read the same table rather than each counting for itself.
+	 */
+	private final int[] offsets;
+
+	private final VertexFormat format;
+	private final int stride;
+
+	/** What {@link #offsets} holds for an element the pack was not asked to carry. */
+	private static final int ABSENT = -1;
+
+	private TerrainMesh(List<String> carried) {
 		if (this.innerStride % Integer.BYTES != 0) {
 			throw new IllegalStateException("The chunk mesh is " + this.innerStride + " bytes, which "
 					+ "is not a whole number of words, and this engine moves it a word at a time");
 		}
 
-		// What holds the layout and the encoder together. Both take their offsets from
-		// Extra.offset(), which spends one word per element, and the encoder writes each of them
-		// with a single memPutInt. An element of any other width would put the two on different
-		// bytes without either of them saying so, and the pack would read the neighbour's.
+		// What holds the layout and the encoder together. Both take their offsets from the table
+		// below, which spends one word per element, and the encoder writes each of them with a
+		// single memPutInt. An element of any other width would put the two on different bytes
+		// without either of them saying so, and the pack would read the neighbour's.
 		for (Extra extra : Extra.values()) {
 			if (extra.format().blockSize() != Integer.BYTES) {
 				throw new IllegalStateException(extra.attribute() + " takes "
@@ -139,6 +162,19 @@ public final class TerrainMesh implements ChunkVertexType {
 						+ "one word for each of the elements it appends");
 			}
 		}
+
+		this.carried = List.copyOf(carried);
+		this.extras = Arrays.stream(Extra.values())
+				.filter(extra -> this.carried.contains(extra.attribute()))
+				.toList();
+		this.offsets = new int[Extra.values().length];
+		Arrays.fill(this.offsets, ABSENT);
+		for (int at = 0; at < this.extras.size(); at++) {
+			this.offsets[this.extras.get(at).ordinal()] = at * Integer.BYTES;
+		}
+
+		this.format = extend(this.inner.getVertexFormat(), this.extras);
+		this.stride = this.format.getVertexSize();
 	}
 
 	/**
@@ -156,11 +192,11 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * the wrong place and the world draws out of garbage.
 	 */
 	public static synchronized ChunkVertexType current() {
-		return carrying ? built : null;
+		return built;
 	}
 
 	/**
-	 * Takes the answer the options now ask for, at the one instant it is safe to change it.
+	 * Takes the format the loaded pack now asks for, at the one instant it is safe to change it.
 	 * <p>
 	 * That instant is the head of Sodium's {@code initRenderer}, the only place its section manager is
 	 * built, and {@code MixinSodiumWorldRendererInit} is what calls this from there. What makes it
@@ -168,29 +204,45 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * the format, so no two askers can end up disagreeing. Everything that will ask is built
 	 * afterwards, and every section is meshed again after that.
 	 * <p>
+	 * <strong>The elements are the pack's and not this class's</strong>, which is what makes a stride
+	 * that follows what the pack reads possible at all: {@code TerrainDraw} has already translated
+	 * the pack's chunk programs far enough to know, and has already asked for the world to be rebuilt
+	 * if the answer moved. Nothing is decided here beyond turning that list into a layout.
+	 * <p>
 	 * Built here rather than in a static field so that a mesh this cannot extend leaves the game
 	 * running on Sodium's own instead of failing to load a class in the middle of a world.
 	 */
 	public static synchronized void settle() {
-		boolean asked = TerrainDraw.asked() && !broken;
-		if (asked && built == null) {
+		List<String> carried = broken ? List.of() : TerrainDraw.carried();
+		// Sodium's own four and nothing of ours is the same layout Sodium already binds, so it is
+		// answered with Sodium's own rather than with a copy of it. No pack of the corpus is here,
+		// every one of them reading at least the block id, but a pack that read none of the six
+		// would be, and wrapping a format to change nothing about it is one more thing to be wrong.
+		if (carried.stream().noneMatch(TerrainMesh::ours)) {
+			carried = List.of();
+		}
+
+		if (!carried.isEmpty() && (built == null || !built.carried.equals(carried))) {
 			try {
-				built = new TerrainMesh();
+				built = new TerrainMesh(carried);
 			} catch (RuntimeException e) {
 				broken = true;
-				asked = false;
+				carried = List.of();
 				Vitrail.logger().error("This engine cannot extend the chunk mesh, so the terrain keeps "
 						+ "Sodium's own and no pack will draw it", e);
 			}
 		}
 
-		if (said && asked == carrying) {
+		if (carried.isEmpty()) {
+			built = null;
+		}
+
+		if (carried.equals(said)) {
 			return;
 		}
 
-		said = true;
-		carrying = asked;
-		if (!asked) {
+		said = carried;
+		if (carried.isEmpty()) {
 			// Said out loud, and it used to be the silent branch. Without naming a cause, because
 			// there are three and this cannot tell them apart: a terrain= line, no pack chosen yet,
 			// which is every first launch of a fresh instance, and a terrain program that threw.
@@ -202,9 +254,14 @@ public final class TerrainMesh implements ChunkVertexType {
 		}
 
 		Vitrail.logger().info("The chunk mesh carries {} bytes a vertex instead of {}, the difference "
-				+ "being what a pack reads and Sodium does not carry: {}",
+				+ "being what this pack reads and Sodium does not carry: {}",
 				built.stride, built.innerStride,
-				Arrays.stream(Extra.values()).map(Extra::attribute).toList());
+				built.extras.stream().map(Extra::attribute).toList());
+	}
+
+	/** Whether an element of the format is one this engine appends rather than one of Sodium's. */
+	private static boolean ours(String attribute) {
+		return Arrays.stream(Extra.values()).anyMatch(extra -> extra.attribute().equals(attribute));
 	}
 
 	@Override
@@ -224,11 +281,16 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * any padding Sodium leaves between two of them survives. The builder refuses a size that is not
 	 * a whole number of words, which is what makes the id four bytes wide where two would do.
 	 * <p>
-	 * Ours are placed at {@code Extra.offset()}, which is where the encoder writes them as well: the
-	 * two used to be a walk over the sizes here and six literal offsets there, and they agreed
-	 * because every element happens to be one word and for no other reason.
+	 * Ours are laid out one word after another in the order they are handed in, which is also where
+	 * the encoder writes them: both read {@code offsets}, and the two used to be a walk over the
+	 * sizes here and six literal offsets there, agreeing because every element happens to be one
+	 * word and for no other reason.
+	 *
+	 * @param extras the ones of {@link Extra} this pack asked for, in {@link Extra}'s own order.
+	 *               An element left out closes the gap rather than leaving a hole: the shader
+	 *               declares this list and no more, so there is nothing to keep a place for
 	 */
-	private static VertexFormat extend(VertexFormat base) {
+	private static VertexFormat extend(VertexFormat base, List<Extra> extras) {
 		VertexFormat.Builder builder = VertexFormat.builder(base.getStepRate());
 		for (VertexFormatElement element : base.getElements()) {
 			builder.addAttribute(element.name(), element.offset(), element.format().blockSize(),
@@ -236,24 +298,34 @@ public final class TerrainMesh implements ChunkVertexType {
 		}
 
 		int at = base.getVertexSize();
-		for (Extra extra : Extra.values()) {
-			builder.addAttribute(extra.attribute(), at + extra.offset(), extra.format().blockSize(),
-					extra.format(), 1);
+		for (Extra extra : extras) {
+			builder.addAttribute(extra.attribute(), at, extra.format().blockSize(), extra.format(), 1);
+			at += Integer.BYTES;
 		}
 
 		return builder.build();
 	}
 
 	/**
+	 * Where one of our elements starts, counted from the end of Sodium's own bytes, or
+	 * {@link #ABSENT} for one this pack does not carry.
+	 */
+	private int offset(Extra extra) {
+		return this.offsets[extra.ordinal()];
+	}
+
+	/**
 	 * The elements this engine adds after Sodium's own, in the order they are laid out.
 	 * <p>
 	 * Each is four bytes and each is named by {@link SodiumVertex}, which is the side that decodes
-	 * them. They are all appended rather than chosen per pack, where Iris keeps only the ones a pack's
-	 * compiled programs really reference, {@code FormatAnalyzer}. <strong>The reason this engine could
-	 * not do the same has gone</strong>: it was that the format was settled before any pack was
-	 * chosen, and the format follows the pack now. What is left is a plain difference in what a vertex
-	 * costs, and it is not closed here. What it would save is small either way: seven packs of the
-	 * corpus read {@code mc_midTexCoord} and eight read {@code at_tangent}.
+	 * them. <strong>Which of them a mesh really carries is the pack's answer</strong>, taken from
+	 * what its six chunk programs read, exactly as Iris takes it from what its transformed programs
+	 * reference, {@code FormatAnalyzer}. The ones left out close the gap rather than leaving a hole,
+	 * so this order decides which words move and not where any of them lands.
+	 * <p>
+	 * What is still not Iris's is the packing: it spends one word on the normal and the tangent
+	 * together and unpacks it in the patched text, where this spends two. The prologue is the place
+	 * that would unpack a combined word, and doing it there is a change of its own.
 	 */
 	private enum Extra {
 
@@ -304,9 +376,10 @@ public final class TerrainMesh implements ChunkVertexType {
 		 * shader draws this mesh too and reads the word. Iris has no such
 		 * window to cover, nothing of its own warming up over several frames.
 		 * <p>
-		 * Written for every pack, asked or not, like the five above it. The format is one answer for
-		 * all packs, and what a pack's directive decides is which of the two colours the translated
-		 * vertex stage reads, which costs no rebuild and is settled at translation.
+		 * <strong>The one element here whose presence is not a question about the pack's BODY.</strong>
+		 * The five above it are carried when a chunk program names them; this one is carried exactly
+		 * when the pack wrote {@code separateAo}, which is what makes every one of its vertex stages
+		 * read it. Two packs of the corpus write nothing, and their meshes carry one colour.
 		 */
 		TINT_AND_AO(SodiumVertex.TINT_AND_AO, GpuFormat.RGBA8_UNORM);
 
@@ -325,15 +398,6 @@ public final class TerrainMesh implements ChunkVertexType {
 		GpuFormat format() {
 			return this.format;
 		}
-
-		/**
-		 * Where this element starts, counted from the end of Sodium's own bytes. One word each,
-		 * which the constructor checks against the widths declared above, and the single list both
-		 * the layout and the encoder place these from.
-		 */
-		int offset() {
-			return ordinal() * Integer.BYTES;
-		}
 	}
 
 	/**
@@ -349,22 +413,35 @@ public final class TerrainMesh implements ChunkVertexType {
 		// and not a property of a corner, so the four vertices carry the same number. Iris does the
 		// same and packs it the same way, which is what lets a pack divide it by the number it
 		// already divides its own texture coordinate by.
-		int middle = midTexCoord(vertices);
+		//
+		// Guarded like the frame below it, and for a plainer reason than the frame's: an element the
+		// mesh does not carry has nowhere to be written, so working it out would be arithmetic on
+		// every quad of the world for a word that is then thrown away.
+		int middle = offset(Extra.MID_TEX_COORD) == ABSENT ? 0 : midTexCoord(vertices);
 
 		// Both are properties of the QUAD and not of a corner, like the middle above: the four
 		// vertices carry the same pair, and a pack that reads a normal per vertex on chunk geometry
 		// is reading what the face is, not what the corner is.
-		float[] frame = frame(vertices);
-		int normal = packAxis(frame[0], frame[1], frame[2], 0.0F);
-		int tangent = packAxis(frame[3], frame[4], frame[5], frame[6]);
+		//
+		// The two are found together and dropped together, Newell's sum being what the tangent is
+		// then squared up against: a pack reading one of them pays for both, and a pack reading
+		// neither pays for neither.
+		boolean framed = offset(Extra.NORMAL) != ABSENT || offset(Extra.TANGENT) != ABSENT;
+		float[] frame = framed ? frame(vertices) : null;
+		int normal = framed ? packAxis(frame[0], frame[1], frame[2], 0.0F) : 0;
+		int tangent = framed ? packAxis(frame[3], frame[4], frame[5], frame[6]) : 0;
+
+		// The one of the six that is a property of the CORNER, so it is asked for inside the loop
+		// and only the question is hoisted out of it.
+		boolean blockMiddle = offset(Extra.MID_BLOCK) != ABSENT;
 
 		// Backwards over the vertices, because a vertex moves up by the difference of the two strides
 		// times its own index, and one that has not been moved yet is the source of the move before
 		// it: at twenty-four bytes of difference the second vertex lands on [44, 64) and the third is
 		// still to be read from [40, 60). Word by word from the top of each vertex costs nothing and
-		// is what keeps the move right at any pair of strides, where at this pair a vertex's own two
-		// ranges are twenty-four bytes apart and never meet at all, the first being copied onto
-		// itself.
+		// is what keeps the move right at any pair of strides, which is what this now needs: the
+		// difference is four bytes for a pack that reads one of the six and twenty-four for one that
+		// reads them all, and at four the two ranges of one vertex DO overlap.
 		for (int at = vertices.length - 1; at >= 0; at--) {
 			long from = pointer + (long) at * this.innerStride;
 			long to = pointer + (long) at * this.stride;
@@ -373,20 +450,32 @@ public final class TerrainMesh implements ChunkVertexType {
 			}
 
 			long extra = to + this.innerStride;
-			MemoryUtil.memPutInt(extra + Extra.BLOCK_ID.offset(),
+			write(extra, Extra.BLOCK_ID,
 					((TerrainVertex) vertices[at]).vitrailBlockId() & BlockStateIds.PACKED_MASK);
-			MemoryUtil.memPutInt(extra + Extra.MID_TEX_COORD.offset(), middle);
-			MemoryUtil.memPutInt(extra + Extra.MID_BLOCK.offset(), midBlock(vertices[at]));
-			MemoryUtil.memPutInt(extra + Extra.NORMAL.offset(), normal);
-			MemoryUtil.memPutInt(extra + Extra.TANGENT.offset(), tangent);
+			write(extra, Extra.MID_TEX_COORD, middle);
+			write(extra, Extra.MID_BLOCK, blockMiddle ? midBlock(vertices[at]) : 0);
+			write(extra, Extra.NORMAL, normal);
+			write(extra, Extra.TANGENT, tangent);
 			// The two fields the encoder was handed, kept apart instead of multiplied together, out
 			// of Sodium's own published helper. Sodium's word beside it keeps the product, so this
 			// one is read by a pack that asked for it and by nothing else.
-			MemoryUtil.memPutInt(extra + Extra.TINT_AND_AO.offset(),
-					ColorABGR.withAlpha(vertices[at].color, vertices[at].ao));
+			write(extra, Extra.TINT_AND_AO, ColorABGR.withAlpha(vertices[at].color, vertices[at].ao));
 		}
 
 		return pointer + (long) vertices.length * this.stride;
+	}
+
+	/**
+	 * One of our words onto one vertex, or nothing at all where this pack does not carry it.
+	 * <p>
+	 * The one place the encoder asks whether an element is there, so that the writes above read as
+	 * the six they have always been and the question is answered once for each.
+	 */
+	private void write(long extra, Extra element, int value) {
+		int at = offset(element);
+		if (at != ABSENT) {
+			MemoryUtil.memPutInt(extra + at, value);
+		}
 	}
 
 	/**

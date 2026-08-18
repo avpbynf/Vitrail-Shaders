@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.source.ShadowCasters;
@@ -20,6 +21,7 @@ import net.minecraft.client.Minecraft;
 
 import org.joml.Matrix4f;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
@@ -93,6 +95,18 @@ public final class TerrainDraw {
 	 */
 	private static boolean shadowing;
 
+	/**
+	 * What the chunk mesh has to carry for the pack in force: Sodium's own elements first, then the
+	 * ones this engine appends that the pack's chunk programs really read. Empty where no pack's
+	 * terrain program is wanted, and then the mesh keeps Sodium's own format.
+	 * <p>
+	 * <strong>Read by the mesh at the one instant it may change and written only by
+	 * {@link #carries}</strong>, which has the world rebuilt when the answer moves. Volatile because
+	 * the two sides are two threads: a pack is loaded off the render thread while the game starts up,
+	 * and Sodium builds its chunk renderer on the render thread.
+	 */
+	private static volatile List<String> carried = List.of();
+
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
@@ -104,6 +118,15 @@ public final class TerrainDraw {
 	private final TargetPlan chainTargets;
 	private final boolean chainRuns;
 	private final ColorTargets targets;
+
+	/**
+	 * The pack's chunk programs as the translation left them, read when the pack was loaded. Empty
+	 * where the pack serves none, and where the reading threw.
+	 */
+	private Map<TerrainPass, PackProgram.Loaded> loaded = Map.of();
+
+	/** The elements those programs declare, which is what this pack published through {@link #carries}. */
+	private List<String> declares = List.of();
 
 	private Map<TerrainPass, TerrainProgram> programs = Map.of();
 	private boolean read;
@@ -127,12 +150,13 @@ public final class TerrainDraw {
 	/**
 	 * Whether a pack's terrain program takes over the opaque chunk pass, from the loaded options.
 	 * <p>
-	 * <strong>This answer decides what the chunk mesh carries</strong>, and the mesh only carries what
-	 * a pack reads while a pack wants it. So a change here is worth a rebuilt world: the sections
+	 * <strong>Switched off, this empties what the chunk mesh carries</strong>, the mesh only carrying
+	 * what a pack reads while a pack wants it. So a change here is worth a rebuilt world: the sections
 	 * standing at this instant were meshed at the other stride, and the renderer would bind a layout
 	 * that does not describe them. What that costs when it is skipped is a world drawn by the game
 	 * while the sky is drawn by the pack, which reads as the sky being in front of the world rather
-	 * than as a terrain program that never ran.
+	 * than as a terrain program that never ran. Switched on it empties nothing and settles nothing:
+	 * {@link #read()} is what fills the answer in, once the pack's own programs have been read.
 	 * <p>
 	 * The door is the one F3+A uses, {@code LevelExtractor.allChanged}, and it raises a flag the next
 	 * extract consumes rather than tearing sections down inside a frame. That extract calls
@@ -149,6 +173,13 @@ public final class TerrainDraw {
 	 * itself.
 	 */
 	static void wanted(boolean asked) {
+		if (!asked) {
+			// Whether or not the flag itself moved. A pack refused after this was raised leaves the
+			// flag standing with no chain behind it, and the elements are the half of the answer the
+			// mesh really reads.
+			carries(List.of());
+		}
+
 		if (wanted == asked) {
 			return;
 		}
@@ -163,6 +194,88 @@ public final class TerrainDraw {
 				+ "what it reads only while it does, so the sections are all built again",
 				asked ? "wanted" : "no longer wanted");
 		minecraft.levelExtractor.allChanged();
+	}
+
+	/**
+	 * Reads the pack's own chunk programs and publishes the mesh they were written against.
+	 * <p>
+	 * <strong>Here and not at the first chunk draw, and the reason is the ORDER.</strong> What the
+	 * mesh carries is the union of what those six programs read, and Sodium takes the format where it
+	 * builds its chunk renderer, which is long before any pass asks for a shader. Read late, the
+	 * format would be settled from the pack before it and every section would be meshed at a stride
+	 * these programs do not declare.
+	 * <p>
+	 * Nothing here touches the device, so it runs wherever the load runs, off the render thread while
+	 * the client starts up. What it costs a place that never draws a chunk is those six translations;
+	 * what the laziness bought was exactly that, and it cannot be had at the same time as a format
+	 * that follows the pack.
+	 * <p>
+	 * A reading that throws takes the terrain down rather than the pack: the sky and the entities are
+	 * read from the same archive and have their own answer about it, and a world drawn by the game
+	 * under a pack's sky is what this used to leave behind.
+	 */
+	void read() {
+		if (!wanted) {
+			return;
+		}
+
+		try {
+			PackProgram.Terrain read = TerrainProgram.read(this.packPath, this.place, this.chosen,
+					this.profile, this.values);
+			this.loaded = read.programs();
+			this.declares = read.carried();
+		} catch (IOException | RuntimeException e) {
+			wanted = false;
+			Vitrail.logger().error("Could not read the terrain programs of "
+					+ this.packPath.getFileName() + ", so the world keeps the game's own shader", e);
+		}
+
+		carries(this.declares);
+	}
+
+	/**
+	 * Takes the elements the mesh has to carry from here on, and has the world rebuilt when they
+	 * move.
+	 * <p>
+	 * The same door and the same reason as {@link #wanted(boolean)}: the sections standing at this
+	 * instant were meshed at the other stride and carry their words at the other offsets, so a
+	 * renderer binding the new layout over them reads each element out of its neighbour. It is
+	 * {@code LevelExtractor.allChanged}, which raises a flag the next extract consumes rather than
+	 * tearing sections down inside a frame, and that extract is where Sodium builds its chunk
+	 * renderer again and where {@code TerrainMesh.settle} takes this answer.
+	 * <p>
+	 * <strong>Two packs that both draw the terrain are the case this exists for.</strong> The flag
+	 * above does not move between them, and the ids moving is what used to rebuild the world;
+	 * two packs reading different names of the mesh with the same {@code block.properties} would have
+	 * left the sections at a stride nothing was writing.
+	 * <p>
+	 * Silent before a world is joined, where nothing has been meshed and the first reading answers
+	 * itself.
+	 */
+	private static void carries(List<String> asked) {
+		if (carried.equals(asked)) {
+			return;
+		}
+
+		carried = List.copyOf(asked);
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft == null || minecraft.level == null) {
+			return;
+		}
+
+		Vitrail.logger().info("The chunk mesh carries {} now, so the sections are all built again",
+				carried);
+		minecraft.levelExtractor.allChanged();
+	}
+
+	/**
+	 * The elements the chunk mesh has to carry, for the side that builds the format.
+	 * <p>
+	 * Read at one instant of that side's own choosing and not per frame, for the reason
+	 * {@link #asked()} gives: the format may only change where nothing is left holding the old one.
+	 */
+	public static List<String> carried() {
+		return carried;
 	}
 
 	/** Whether the shadow map is drawn, from the loaded options. */
@@ -623,15 +736,19 @@ public final class TerrainDraw {
 	private RenderPipeline prepare(TerrainPass pass, VertexFormat format, GpuTextureView atlas) {
 		if (!this.read) {
 			this.read = true;
-			if (!TerrainProgram.carries(format)) {
+			// Asked of the programs and not of the mesh, because a pack that serves no chunk program
+			// at all declares nothing and asked for nothing: the mesh was never extended for it, and
+			// comparing an empty list against Sodium's own four would put the whole pack away over a
+			// chunk pass it never wanted. It keeps the game's own shader for the six passes, which is
+			// a normal thing for a pack to do, and its sky and its chain go on being drawn.
+			if (!this.loaded.isEmpty() && !TerrainProgram.carries(format, this.declares)) {
 				this.owner.putAway("the chunk mesh does not carry what a terrain program reads");
 
 				return null;
 			}
 
-			this.programs = TerrainProgram.read(this.packPath, this.place, this.chosen,
-					this.profile, this.values, this.load, format, this.plan, this.chainTargets,
-					this.chainRuns, this.targets);
+			this.programs = TerrainProgram.build(this.loaded, this.values, this.load, format,
+					this.plan, this.chainTargets, this.chainRuns, this.targets);
 		}
 
 		TerrainProgram program = this.programs.get(pass);

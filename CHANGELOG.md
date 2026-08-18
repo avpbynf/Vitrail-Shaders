@@ -67,6 +67,16 @@ what the next one holds.
 
 ### Changed
 
+- **A chunk vertex only carries what the pack loaded actually reads.** Every vertex of every section
+  used to carry the block id, the middle of the sprite, the offset to the middle of the block, the
+  normal, the tangent and a second copy of the colour, whichever of those the pack asked for: forty
+  four bytes each, whether four of them were read or none. The pack's own chunk programs are now read
+  first and the mesh is built from what they name, so a vertex costs between twenty four and forty
+  four bytes. Of the eight packs tested, one drops twelve bytes a vertex, one drops eight and one
+  drops four. It is video memory and the bandwidth of every chunk draw, so it is paid twice a frame
+  as soon as a shadow map is being filled. Switching between two packs that read different names
+  rebuilds the world, as switching the terrain off already did.
+
 - **The settings screen is the one pack authors already know.** It is the screen of the engine packs
   are written against, ported rather than approximated: the same list of packs with the shaders
   toggle at its head, the same pages of settings with the value of each in a sunken box beside its

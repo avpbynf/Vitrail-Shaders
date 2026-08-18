@@ -615,6 +615,10 @@ public final class PackChain {
 			announceRemoved(chain);
 			active = new PackChain(chain, values, world, engine.seed(), pack, chosen,
 					settings.profile());
+			// The one family read here rather than on demand, and the order is the whole reason: the
+			// chunk mesh carries what this pack's chunk programs read, and Sodium takes the format
+			// where it builds its chunk renderer, which is well before any pass asks for a shader.
+			active.terrain.read();
 			if (!chainWanted) {
 				EngineOptions.announceChainOff();
 			}

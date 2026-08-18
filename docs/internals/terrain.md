@@ -45,8 +45,8 @@ pipeline in a map keyed by render pass, the map is static and the three passes a
 pipeline declares the vertex format of whichever renderer built it. Nothing ever empties it, so the
 entry made during one session's warm up goes on answering for every renderer built afterwards, at
 whatever stride it was born with. What it is handed to is the game's own chunk shader, which draws
-the terrain on every road where a pass is given back: a pipeline declaring 44 bytes a vertex over a
-mesh written at 20 reads every position out of the middle of some other vertex, and the terrain comes
+the terrain on every road where a pass is given back: a pipeline declaring a wider vertex than the
+mesh was written at reads every position out of the middle of some other vertex, and the terrain comes
 out as stretched coloured spikes while the sky, the entities and the interface stay right. So the
 engine compares that pipeline's own vertex binding against the format the renderer binds, and calls a
 disagreement a miss. An older Sodium asked the same question in the key itself, its memo being one
@@ -125,11 +125,25 @@ top of grass blocks. The engine hands that bias to the shader as a block member 
 for, alongside the depth-conversion constant.
 
 What the format does not carry is the interesting half: **no normal, no block id, no mid texture
-coordinate, no mid block, no tangent.** Packs declare all five as a matter of course, so none of them
-is an optional extra, and the engine appends an element for each. A sixth carries the separated
-colour described above, which answers no name of the pack's own but a second shape for one it already
-reads. The vertex therefore more than doubles: twenty bytes the renderer packs and twenty-four this
-engine adds after them.
+coordinate, no mid block, no tangent.** The engine appends an element for each, and a sixth carrying
+the separated colour described above, which answers no name of the pack's own but a second shape for
+one it already reads.
+
+**Which of the six a mesh really carries is the loaded pack's answer, not a constant.** The pack's
+six chunk programs are translated far enough to say which of those names each of them reads, and the
+union decides the format: a pack whose programs never mention the mid block gets no element for it,
+and one that never wrote `separateAo` gets one colour instead of two. So a vertex is anything from
+twenty-four bytes to forty-four, twenty of which are the renderer's own. The union and never one
+program's own answer, because of the pairing rule at the top of this page: every one of the six
+declares the whole format whether or not it reads all of it, and one that declared less would move
+the location of every element after the gap without a word.
+
+Two consequences follow from the format now depending on the pack rather than on a switch. **A pack
+swap rebuilds the world whenever that answer moves**, through the same door the terrain switch uses,
+because the sections standing at that instant carry their words at the other offsets. And **the pack
+is read where it is loaded rather than at the first chunk draw**: the format has to be settled before
+the chunk renderer that meshes with it is built, and that is earlier than any pass asking for a
+shader.
 
 One further difference to keep in mind when comparing images: the chunk renderer samples the
 lightmap at the vertex, while a pack handed a lightmap coordinate samples it at the fragment. That
