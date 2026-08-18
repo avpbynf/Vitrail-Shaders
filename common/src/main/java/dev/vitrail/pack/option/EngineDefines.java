@@ -73,6 +73,9 @@ public final class EngineDefines {
 	 *
 	 * @param vendorName      the device's vendor as the driver reports it, classified here
 	 * @param rendererName    the driver's own description, classified here
+	 * @param distantHorizons whether the far terrain of Distant Horizons is both there and reaching
+	 *                        the pack, which is a promise and not an installed mod list; see the
+	 *                        symbol below
 	 * @param biomes          registered biome path to id, in the order the ids were handed out. It
 	 *                        is the id a pack's biome comparison is written against, so the two
 	 *                        have to come from the same place
@@ -80,10 +83,11 @@ public final class EngineDefines {
 	 *                        {@code CAT_DESERT} the number the biome value carries
 	 */
 	public record Environment(int mcVersion, Os os, String vendorName, String rendererName,
-			int mipmapLevel, Map<String, Integer> biomes, List<String> biomeCategories) {
+			int mipmapLevel, boolean distantHorizons, Map<String, Integer> biomes,
+			List<String> biomeCategories) {
 
 		public static Environment of(int mcVersion) {
-			return new Environment(mcVersion, Os.WINDOWS, "", "", DEFAULT_MIPMAP_LEVEL,
+			return new Environment(mcVersion, Os.WINDOWS, "", "", DEFAULT_MIPMAP_LEVEL, false,
 					Map.of(), List.of());
 		}
 	}
@@ -128,6 +132,16 @@ public final class EngineDefines {
 		// number the block carries cannot part company. The value IS the ordinal.
 		for (RenderStage stage : RenderStage.values()) {
 			defines.put(stage.symbol(), Integer.toString(stage.ordinal()));
+		}
+
+		// What a pack branches its far terrain on. Posed only where the terrain really reaches the
+		// pack, which is what the name means to the packs that read it: the eleven blend lines and
+		// four buffer sizes of the corpus that sit under it are written for a picture with a far
+		// terrain in its depth, and posing it over a depth that has none applies them to a screen
+		// they were never meant for. Iris poses it on the same terms, the mod being loaded AND its
+		// rendering answering for the frame.
+		if (environment.distantHorizons()) {
+			defines.put("DISTANT_HORIZONS", "");
 		}
 
 		// Distant Horizons block kinds. No pack declares them and several read them, so leaving
