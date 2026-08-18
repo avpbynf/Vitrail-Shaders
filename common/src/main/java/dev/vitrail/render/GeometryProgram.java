@@ -41,7 +41,6 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.BindGroupLayouts;
@@ -307,19 +306,6 @@ final class GeometryProgram {
 	private final ShaderSource source;
 
 	/**
-	 * Whether this pass draws the mesh that carries the overlay, which is the entity one and no
-	 * other of ours.
-	 * <p>
-	 * What it decides is what the log calls a placeholder, and that is now the three identifiers
-	 * alone: they are a real answer on the terrain and in a composite, where Iris hands over the same
-	 * constants, and one number for every mob on the mesh Iris reads them off an element of. The
-	 * overlay colour used to be asked here too and has left, being made from the element the mesh
-	 * really carries; {@code glsl/VertexInputs.overlay} is where that question moved to, and
-	 * {@link dev.vitrail.uniform.UniformGaps} says why the two are not one question.
-	 */
-	private final boolean entityMesh;
-
-	/**
 	 * Whether this program reads {@code gl_TextureMatrix[0]} out of the game's own per draw
 	 * transforms, which is what puts a second bind group on the pipeline.
 	 *
@@ -365,7 +351,6 @@ final class GeometryProgram {
 			boolean chainRuns) {
 		this.pass = pass;
 		this.path = loaded.path();
-		this.entityMesh = DefaultVertexFormat.ENTITY.equals(format);
 		this.gameTransforms = loaded.readsGameTransforms();
 		this.blockLabel = () -> "Vitrail " + pass.family() + " OfGlobals";
 		this.passLabel = () -> "Vitrail " + pass.family();
@@ -1625,13 +1610,12 @@ final class GeometryProgram {
 		// which is the whole reason for naming them, and a full screen pass has named them since the
 		// block existed while a geometry pass named none.
 		//
-		// The mesh is handed in because it decides the list. A name Iris reads off an element is a
-		// placeholder only where that element would have been, so the terrain hears about the names
-		// it shares with a composite and nothing else, and a pass drawn from the entity mesh hears
-		// about the identifiers and the overlay colour as well.
+		// One list for every pass, and that is a change this lot earned: the names that were a
+		// placeholder on the entity mesh alone are made on the mesh now, each out of an element of
+		// its own, so no name is a stand-in in one pass and a value in another.
 		PackValues.standIns(this.loaded.program().uniforms().stream()
 						.map(TranslatedUnit.Uniform::name)
-						.toList(), this.entityMesh)
+						.toList())
 				.forEach((reason, names) -> Vitrail.logger().warn("{} reads {} values answered with "
 						+ "a stand-in rather than with the value, {}, which count as supplied "
 						+ "everywhere else, because {}", this.path, names.size(), names, reason));
