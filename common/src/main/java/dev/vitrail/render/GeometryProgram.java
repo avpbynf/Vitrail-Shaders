@@ -759,9 +759,13 @@ final class GeometryProgram {
 
 		PbrMap material = material(name);
 		if (material != null) {
-			// The atlas's own sampler, because these images ARE the atlas: the same size, the same
-			// chain, and the same sprite under the same texture coordinate, so anything read
-			// differently would be read at a different place than the albedo beside it.
+			// The albedo's own sampler, because a map is read at the albedo's own texture coordinate
+			// whichever door served it, so anything read differently would be read at a different
+			// place than the albedo beside it. What that means is not the same on the two doors: an
+			// atlas's maps ARE the atlas, the same size and the same chain with every sprite in the
+			// same slot, where a plain texture's cover the same whole range at a resolution of their
+			// own and carry no chain at all. A mipmapped sampler on the second is harmless rather
+			// than overlooked: the view carries one level, so the read is bounded by the image.
 			//
 			// Except the specular map under labPBR, where a filter that blends two texels of it
 			// produces a material that is in neither of them. Iris asks the same question here
