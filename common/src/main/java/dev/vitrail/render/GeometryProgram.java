@@ -1443,6 +1443,11 @@ final class GeometryProgram {
 						&& this.shadow.colour(binding.index()) != null);
 	}
 
+	/** A name answered with the far plane on purpose, which is not the same as one nothing fills. */
+	private boolean readsTheDistantDepth(String sampler) {
+		return this.loaded.samplers().binding(sampler).kind() == SamplerPlan.Kind.DISTANT_DEPTH;
+	}
+
 	private FilterMode filter(String sampler) {
 		if (LIGHTMAP.equals(sampler)) {
 			return FilterMode.LINEAR;
@@ -1523,8 +1528,19 @@ final class GeometryProgram {
 				.filter(this::readsATexture)
 				.map(this::describe)
 				.toList();
-		List<String> flat = this.samplers.stream().filter(name -> !readsATexture(name)).toList();
+		// Kept out of the line below rather than counted in it, because that line is about a gap and
+		// this is not one: nothing will ever fill these, they answer the far plane on purpose, and
+		// PackChain says once for the whole chain what that means.
+		List<String> distant = this.samplers.stream().filter(this::readsTheDistantDepth).toList();
+		List<String> flat = this.samplers.stream()
+				.filter(name -> !readsATexture(name) && !readsTheDistantDepth(name))
+				.toList();
 		Vitrail.logger().info("{} samplers of this program read a real texture: {}", real.size(), real);
+		if (!distant.isEmpty()) {
+			Vitrail.logger().info("{} read the far plane, the far terrain of Distant Horizons being "
+					+ "in the world's own depth rather than beside it: {}", distant.size(), distant);
+		}
+
 		if (!flat.isEmpty()) {
 			// What is left is what nothing fills for this pass: the shadow map, the depth on the
 			// passes that draw before the copy of this frame is taken, and the two material maps

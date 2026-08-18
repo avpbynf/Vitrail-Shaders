@@ -16,6 +16,25 @@ what the next one holds.
 
 ### Added
 
+- **The far terrain of Distant Horizons is fogged at the distance it stands at, instead of being
+  treated as sky.** That mod draws its distant land into images of its own and paints only the
+  colour back onto the picture, so everything a pack works out from distance, fog, the point a depth
+  of field focuses on, what water knows is behind it, found nothing there and answered as though the
+  sky went all the way down. Its depth is now written into the world's own before the pack reads
+  any of it, converted on the way: the two are drawn through the same camera but not between the
+  same clip planes, and copied across untouched a hill a thousand blocks off would have landed a
+  few paces from the player's face. Packs are also told the far terrain is there, which is the
+  switch most of them put their own distant-land code behind.
+
+  Two limits worth knowing. What stands beyond the plane the game itself stops drawing at, which is
+  four times the render distance or the cloud distance, whichever is farther, still reads as sky:
+  there is no number left in the depth buffer past that point. And the far terrain is coloured by
+  Distant Horizons and not by the pack, so it is lit its own way and only its shape is the pack's to
+  work with.
+
+  This needs a build of Distant Horizons newer than 3.2.0-b. That one still ends the game on the
+  first frame for the reason `INSTALL.md` gives, and no version of Vitrail changes it.
+
 - **A mob and a piece of armour take the relief their resource pack draws for them.** A skin and an
   armour layer are textures of their own rather than sprites in an atlas, so the maps a material
   resource pack ships beside them were never read at all and both names came back flat: every mob
