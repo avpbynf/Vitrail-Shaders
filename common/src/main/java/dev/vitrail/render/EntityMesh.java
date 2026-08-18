@@ -17,9 +17,12 @@ import org.jspecify.annotations.Nullable;
  * The game's entity mesh with the three identifiers appended to it, as a format of this engine's
  * own, and the one instant at which it comes into force.
  * <p>
- * <strong>A format APART, and lengthening {@code DefaultVertexFormat.ENTITY} itself is what this
- * replaces.</strong> That is Iris's shape ({@code mixin/vertices/MixinBufferBuilder.iris$extendFormat}),
- * and here it is an obstacle rather than a preference. Sodium's
+ * <strong>A format APART, which is Iris's own shape</strong>
+ * ({@code mixin/vertices/MixinBufferBuilder.iris$extendFormat:107-111} hands back
+ * {@code IrisVertexFormats.ENTITY}, an object of its own built at
+ * {@code vertices/IrisVertexFormats.java:49-60}). <strong>What this replaces is lengthening
+ * {@code DefaultVertexFormat.ENTITY} itself</strong>, which was this engine's first answer and is
+ * nobody else's: it drew no mob at all. Sodium's
  * {@code api/vertex/format/common/EntityVertex} declares {@code FORMAT = DefaultVertexFormat.ENTITY},
  * the same object, beside a {@code STRIDE = 36} its compiler folds into every caller;
  * {@code mixin/features/render/entity/CubeMixin} cancels the game's own {@code compile} for every
@@ -68,7 +71,8 @@ import org.jspecify.annotations.Nullable;
  * Iris reads its gate live, at every buffer and at every call for a format, and can afford to: it
  * runs against a backend that rebuilds the vertex array from the pipeline's bindings at the draw.
  * Here {@code VulkanRenderPipeline.compile} bakes the stride into the compiled pipeline
- * ({@code VulkanRenderPipeline:82-96}), and {@code VulkanDevice.pipelineCache} is an identity map
+ * ({@code VulkanRenderPipeline:99}, {@code .stride(bindings.getVertexSize())} over the bindings it
+ * reads at {@code :82}), and {@code VulkanDevice.pipelineCache} is an identity map
  * that nothing empties but {@code ShaderManager.apply}. A live answer would therefore leave a mesh
  * built under one answer bound by a pipeline compiled under the other, which is the same wrong stride
  * by another road.
@@ -103,6 +107,17 @@ public final class EntityMesh {
 	 * would find nothing changed and stay silent, which is the case that most needs the line.
 	 */
 	private static boolean said;
+
+	/**
+	 * Whether a rebuild has already been asked for since the last settle, so that one load asks for
+	 * one.
+	 * <p>
+	 * The two switches are set one after the other and nothing settles between them, so
+	 * {@link #ask()} would find the same disagreement twice and print the same line twice for one
+	 * load. Comparing against {@link #carrying} cannot see that: the answer in force is exactly what
+	 * has not moved yet.
+	 */
+	private static boolean rebuildAsked;
 
 	private EntityMesh() {
 	}
@@ -163,15 +178,26 @@ public final class EntityMesh {
 	 * a settings file saved with neither switch touched owes no rebuild.
 	 */
 	static void ask() {
+		boolean asked = asked();
+		if (asked == carrying) {
+			// Back in agreement, so whatever was asked for is owed no longer and the next real
+			// disagreement gets its own line. This is the road a load takes when it turns one switch
+			// off and the other leaves the answer where it was.
+			rebuildAsked = false;
+
+			return;
+		}
+
 		Minecraft minecraft = Minecraft.getInstance();
-		if (asked() == carrying || minecraft == null || minecraft.level == null) {
+		if (rebuildAsked || minecraft == null || minecraft.level == null) {
 			return;
 		}
 
 		Vitrail.logger().info("The pack draws the entities or the hand {} now, and the entity mesh "
 				+ "carries {} only while it does, so the world is built again",
-				asked() ? "and did not" : "and did", EntityVertex.IDENTIFIERS);
+				asked ? "and did not" : "and did", EntityVertex.IDENTIFIERS);
 		minecraft.levelExtractor.allChanged();
+		rebuildAsked = true;
 	}
 
 	/**
@@ -179,19 +205,27 @@ public final class EntityMesh {
 	 */
 	public static void settle() {
 		boolean asked = asked();
-		if (said && asked == carrying) {
+		boolean moved = asked != carrying;
+		if (said && !moved) {
 			return;
 		}
 
 		said = true;
 		carrying = asked;
+		rebuildAsked = false;
 
-		// The game precompiles every static pipeline at every resource load and caches it by
-		// identity (ShaderManager.apply, VulkanDevice.pipelineCache), so the entity ones standing at
-		// this instant were compiled under the answer that has just moved. Emptying the cache is what
-		// ShaderManager itself does before it recompiles, and what is dropped here comes back on
-		// demand through the same shader source the device was built with.
-		GpuDevice device = RenderSystem.tryGetDevice();
+		// ONLY where the answer really moved, and the two conditions are not one. The first settle of
+		// a session has never said anything and must print, but a session nobody picked a pack in
+		// settles false onto false and has nothing to drop: dropping anyway is a full recompile of
+		// every static pipeline at the first world join, for a stride that did not change.
+		//
+		// Where it did move, the drop is owed. The game precompiles every static pipeline at every
+		// resource load and caches it by identity (ShaderManager.apply, VulkanDevice.pipelineCache),
+		// so the entity ones standing here were compiled under the other answer, and this backend
+		// bakes the stride into them. Emptying the cache is what ShaderManager itself does before it
+		// recompiles, and what is dropped comes back on demand through the same shader source the
+		// device was built with.
+		GpuDevice device = moved ? RenderSystem.tryGetDevice() : null;
 		if (device != null) {
 			device.clearPipelineCache();
 		}
