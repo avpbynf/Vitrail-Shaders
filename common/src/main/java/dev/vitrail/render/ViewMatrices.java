@@ -216,12 +216,16 @@ public final class ViewMatrices implements ViewSource {
 	 * Takes what Distant Horizons drew this frame with, or puts the three values back where they
 	 * stand when it drew nothing.
 	 * <p>
-	 * The three move together on purpose. A pack that has been told the far terrain is there works
-	 * its fog out of the render distance and rebuilds a position out of the planes, so a frame that
-	 * served two of the three from DH and the third from the game would fog the far terrain against
-	 * a distance a fifteenth of the one it stands at. The far plane is the one to watch: BSL takes
-	 * {@code fogFar = max(fogFar, float(dhRenderDistance))} at {@code lib/atmospherics/fog.glsl:137}
-	 * and Complementary the same at {@code lib/common.glsl:708}.
+	 * The three move together on purpose, and {@code render/FrameState} takes them that way. A pack
+	 * that has been told the far terrain is there works its fog out of the render distance and
+	 * rebuilds a position out of the planes, so a frame that served two of the three from DH and the
+	 * third from the game would fog the far terrain against a distance a fifteenth of the one it
+	 * stands at. The render distance is the one to watch, and the two packs read most closely here
+	 * do different things with it: BSL v10.1.3 widens the fog it already had,
+	 * {@code fogFar = max(fogFar, float(dhRenderDistance))} at
+	 * {@code shaders/lib/atmospherics/fog.glsl:137}, while Complementary Unbound r5.8.1 replaces the
+	 * distance outright, {@code float renderDistance = float(dhRenderDistance);} at
+	 * {@code shaders/lib/common.glsl:708}, which is what the whole of its fog is measured against.
 	 *
 	 * @param near     DH's own near plane in blocks, or {@link #FALLBACK_PLANE} for none
 	 * @param far      DH's own far plane in blocks, or {@link #FALLBACK_PLANE} for none
@@ -524,11 +528,17 @@ public final class ViewMatrices implements ViewSource {
 	 * and falls back the same way, which is why a pack that reads {@code dhProjection} outside the
 	 * mod still compiles there and did not here.
 	 * <p>
-	 * The three matrices stay the game's own on both roads, and that is not a gap left open. What a
-	 * pack unprojects with them is a {@code dhDepthTex} lookup, and this engine answers those with
-	 * the far plane: the far terrain is in the game's own depth by then, so the road that would use
-	 * a matrix of DH's is a road no pack takes. The planes and the render distance are read outside
-	 * that road, which is why those three are DH's own the moment DH has drawn.
+	 * <strong>The three matrices stay the game's own even while DH is drawing, and that is a
+	 * divergence.</strong> Iris builds a perspective of DH's out of the game's field of view and
+	 * aspect with DH's own two planes, {@code compat/dh/DHCompat.java:54}, and registers that under
+	 * these three names. It is right there and would be wrong here. What a pack unprojects with them
+	 * is a {@code dhDepthTex} lookup, and {@code pack/target/SamplerPlan} answers those names with
+	 * the far plane, the far terrain being in the game's own depth by then: the road that needs a
+	 * matrix of DH's is a road no pack reaches. Handing one over anyway would cost the packs that
+	 * read {@code dhProjection} outside that road, which are the ones the paragraph above is about;
+	 * they would unproject the game's own depth through a volume it was never drawn in. The planes
+	 * and the render distance are read outside that road, which is why those three are DH's own the
+	 * moment DH has drawn.
 	 */
 	@Override
 	public Matrix4fc dhProjection() {

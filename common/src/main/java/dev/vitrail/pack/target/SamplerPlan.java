@@ -38,10 +38,25 @@ public final class SamplerPlan {
 	 * The depth Distant Horizons keeps apart from the game's, which this engine does not keep apart:
 	 * {@code render/DhFold} writes the far terrain into the game's own depth before anything copies
 	 * it, so a pack reads the far terrain through {@code depthtex0} and the rest like any other
-	 * surface. These names therefore answer the far plane, which is what every pack of the corpus
-	 * tests for before it takes its Distant Horizons road: BSL reaches its at
-	 * {@code composite.glsl:281} with {@code else if (dhZ0 < 1.0)}, and it must not be taken, or the
-	 * sky would be rebuilt as a surface a hand's width from the camera.
+	 * surface.
+	 * <p>
+	 * <strong>Iris binds DH's real image under these names and this engine does not, which is a
+	 * divergence.</strong> Iris hands {@code dhDepthTex} and {@code dhDepthTex0} DH's own depth and
+	 * {@code dhDepthTex1} a copy of it without translucents,
+	 * {@code samplers/IrisSamplers.java:109} and {@code :110}. It has to: under Iris the far terrain
+	 * is nowhere else,
+	 * its LODs being drawn into targets of the pack's through a projection of DH's. Here it is in
+	 * the game's own depth already, so binding it a second time would offer a pack the same surface
+	 * twice in two different volumes, only one of which is the volume the matrix under these names
+	 * unprojects. What it costs is that the road a pack keeps for its distant land is never taken,
+	 * so a pack that lights the far terrain differently from the near one lights all of it the near
+	 * way.
+	 * <p>
+	 * These names therefore answer the far plane, which in the window a pack reads a depth in is
+	 * WHITE, the engine's own reversed window being the other way round. That is what every pack of
+	 * the corpus tests for before it takes its Distant Horizons road: BSL v10.1.3 reaches its at
+	 * {@code shaders/program/composite.glsl:282} with {@code else if (dhZ0 < 1.0)}, and it must not
+	 * be taken, or the sky would be rebuilt as a surface a hand's width from the camera.
 	 */
 	private static final Set<String> DISTANT_DEPTH =
 			Set.of("dhDepthTex", "dhDepthTex0", "dhDepthTex1");

@@ -32,8 +32,11 @@ what the next one holds.
   Distant Horizons and not by the pack, so it is lit its own way and only its shape is the pack's to
   work with.
 
-  This needs a build of Distant Horizons newer than 3.2.0-b. That one still ends the game on the
-  first frame for the reason `INSTALL.md` gives, and no version of Vitrail changes it.
+  What this waits on is Distant Horizons and not Vitrail. That mod has to draw on this backend at
+  all, which the version named in `INSTALL.md` does not, and it has to hand its depth back without
+  an OpenGL handle in it. The log says which of the two you are looking at, naming Distant Horizons
+  as found or as installed but not in a shape a depth can be read out of when the pack is read, and
+  naming the clip planes it folded between the first time it folds.
 
 - **A mob and a piece of armour take the relief their resource pack draws for them.** A skin and an
   armour layer are textures of their own rather than sprites in an atlas, so the maps a material
