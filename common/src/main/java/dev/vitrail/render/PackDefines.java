@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.dh.DhDepth;
 import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.uniform.BiomeCategory;
 
@@ -92,8 +93,12 @@ public final class PackDefines {
 
 		int mipmap = minecraft == null ? 4 : minecraft.options.mipmapLevels().get();
 
+		// Asked of the one class that knows whether the far terrain can be read at all, and not of
+		// the loader's mod list. An installed Distant Horizons this engine cannot get a depth image
+		// or a projection out of leaves the far terrain flat, and a pack told otherwise would light
+		// a picture that has none.
 		return new EngineDefines.Environment(EngineDefines.DEFAULT_MC_VERSION, os(), vendor,
-				renderer, mipmap, biomeIds(minecraft, biomes), categories());
+				renderer, mipmap, DhDepth.present(), biomeIds(minecraft, biomes), categories());
 	}
 
 	private static Map<String, Integer> biomeIds(Minecraft minecraft, BiomeClassifier biomes) {
