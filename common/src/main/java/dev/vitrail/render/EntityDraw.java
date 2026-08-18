@@ -1410,10 +1410,14 @@ public final class EntityDraw {
 		// And the mesh has to be carrying the identifiers, whatever the moment says. Every row but the
 		// glint's is read against EntityMesh.format, so a draw served before the mesh settled would
 		// bind forty-four bytes of layout over a vertex of thirty-six. It lasts from the load that
-		// asked until the extract that rebuilds the world, which is one frame in the ordinary case,
-		// and what it costs is the frame's mobs drawn by the game rather than by the pack. The glint
-		// is held out with them rather than let through: it comes in by this door, and a run of draws
-		// is one pass with one program.
+		// asked until the extract that rebuilds the world, which is one frame in the ordinary case.
+		//
+		// What it costs is NOT the same thing on the two roads, and saying it once would be wrong on
+		// the second. In the picture's windows a no hands the draw back, so the frame's mobs are drawn
+		// by the game rather than by the pack. Inside the light's walk there is no handing back: draw
+		// turns every no into a drop, so those casters are drawn by nobody and the map has holes for
+		// that frame. The glint is held out with them rather than let through: it comes in by this
+		// door, and a run of draws is one pass with one program.
 		if (!inMoment || !EntityMesh.carrying() || device == null || element == null) {
 			draw.end();
 
