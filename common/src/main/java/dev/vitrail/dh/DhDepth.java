@@ -30,14 +30,13 @@ import java.lang.reflect.Method;
  * {@link #zRow} is the half of it only DH can answer.
  * <p>
  * <strong>Why reflection.</strong> The accessors that hand back a rendering-API neutral object,
- * {@code getDhDepthTextureBlazeWrapper} and its colour twin, were added to DH's API on
- * 11 July 2026, four days after the version number moved past 3.2.0-b. No released build of DH
- * carries them, so there is no coordinate to compile against; the older accessors that are released
- * hand back an OpenGL name, which is exactly the thing that cannot exist on this backend. Compiling
- * against a locally built jar would tie this repository to a path on one machine, so the call is
- * made by name instead and simply stays quiet on any DH that cannot answer it. When a build
- * carrying those methods ships, this class can become an ordinary typed dependency and the shape of
- * it will not change.
+ * {@code getDhDepthTextureBlazeWrapper} and its colour twin, belong to a newer API than the one
+ * this can be built against: the accessors old enough to compile against hand back an OpenGL name,
+ * which is exactly the thing that cannot exist on this backend. Compiling against a locally built
+ * jar would tie this repository to a path on one machine, so the call is made by name instead and
+ * simply stays quiet on any DH that cannot answer it. The day a build carrying those methods is a
+ * dependency this can resolve, this class becomes an ordinary typed one and the shape of it does
+ * not change.
  * <p>
  * <strong>The projection is reached by an uglier road, and the published ones are wrong.</strong>
  * {@code IDhApiRenderProxy.getNearClipPlaneDistanceInBlocks} and the {@code nearClipPlane} field of
@@ -45,7 +44,9 @@ import java.lang.reflect.Method;
  * BEFORE the clamp to seven and a half the matrix itself is built with: at any ordinary render
  * distance the two are more than a factor of ten apart. The matrix DH really rasterised with is
  * held in one place, the private render parameter of its client entry point, so that is what is
- * read. Iris never needs it, its own programs drawing the LODs with a projection Iris supplies.
+ * read. Iris reaches that same matrix off the public event parameter and sets it on its generic
+ * object program, {@code compat/dh/IrisGenericRenderProgram.java:240}; its terrain, water and
+ * shadow programs are handed a projection Iris builds instead, {@code compat/dh/DHCompat.java:54}.
  * <p>
  * Nothing here throws into a frame. Every failure resolves once, says so once, and answers
  * {@code null} forever after, because a far terrain that is merely flat is a picture and a far
@@ -75,6 +76,7 @@ public final class DhDepth {
 	private static Field configsField;
 	private static Method graphicsMethod;
 	private static Method renderDistanceMethod;
+	private static Method renderingEnabledMethod;
 	private static Method valueMethod;
 
 	/** Blocks across a chunk, which is what turns DH's own setting into what a pack reads. */
@@ -82,6 +84,15 @@ public final class DhDepth {
 
 	private static boolean resolved;
 	private static boolean usable;
+
+	/**
+	 * Latched off on its own, and the line is drawn by what the answer is for rather than by which
+	 * accessor gave it. How far DH draws is a number handed to a pack, so losing it must not stop
+	 * the folding of an image that still reads; whether DH is drawing at all is the question of
+	 * there being anything to fold, so losing that one latches the whole of it, which is why
+	 * {@link #renderingEnabled} sets the flag beside this one.
+	 */
+	private static boolean distanceUsable = true;
 
 	private DhDepth() {
 	}
@@ -120,7 +131,9 @@ public final class DhDepth {
 
 			Object textureView = textureViewMethod.invoke(wrapper);
 			return (textureView instanceof GpuTextureView view) ? view : null;
-		} catch (ReflectiveOperationException | RuntimeException e) {
+			// The error is caught here for the reason it is caught in the two below: a class of DH's
+			// that will not link is a far terrain this engine goes without, not a frame it drops.
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 			usable = false;
 			Vitrail.logger().warn("Distant Horizons' depth image cannot be read, its far terrain "
 					+ "will stay flat for the rest of this session", e);
@@ -180,10 +193,23 @@ public final class DhDepth {
 	 * while there is none to be had.
 	 * <p>
 	 * Taken from the matrix and not from {@code getNearClipPlaneDistanceInBlocks}, which answers the
-	 * unclamped near the class comment carries. Iris publishes the unclamped one and is right to:
-	 * under Iris the LODs are drawn by Iris's own programs with a projection Iris builds from it, so
-	 * there it IS the plane the far terrain was rasterised against. Here DH draws them itself, so
-	 * the plane a pack has to be told is DH's own.
+	 * unclamped near the class comment carries.
+	 * <p>
+	 * <strong>Both planes therefore carry a number Iris does not publish, and that is a divergence
+	 * rather than a preference.</strong> Iris answers the near with
+	 * {@code renderProxy.getNearClipPlaneDistanceInBlocks} at
+	 * {@code compat/dh/DHCompatInternal.java:133}, published through
+	 * {@code uniforms/CommonUniforms.java:185}, and the far with a formula of its own,
+	 * {@code (chunkRenderDistance * 16 + 512) * sqrt(2)} at
+	 * {@code compat/dh/DHCompatInternal.java:124}. Both are right there and neither is right here,
+	 * because under Iris the LODs are drawn by Iris's own programs against exactly those two planes,
+	 * and DH itself switches to Iris's far formula when it sees Iris,
+	 * {@code core/util/RenderUtil.java:289}. Here DH draws the LODs itself, between the planes its
+	 * own matrix carries. What both engines publish is the same fact, the pair the far terrain was
+	 * rasterised against; the numbers differ only because the terrain was. Serving Iris's numbers
+	 * here would cost a pack every distance it works out from them: the near it publishes is the
+	 * unclamped one the class comment carries, and since the clamp only ever pulls that plane in, it
+	 * is always the further out of the two. Its far is out by the ratio of the two formulas.
 	 *
 	 * @param dest filled with the near plane and then the far one, and left alone on false
 	 */
@@ -212,7 +238,7 @@ public final class DhDepth {
 			resolve();
 		}
 
-		if (!usable) {
+		if (!usable || !distanceUsable) {
 			return -1;
 		}
 
@@ -226,20 +252,58 @@ public final class DhDepth {
 
 			return (valueMethod.invoke(value) instanceof Integer chunks) ? chunks * CHUNK : -1;
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-			usable = false;
-			Vitrail.logger().warn("Distant Horizons' render distance cannot be read, so its far "
-					+ "terrain will stay flat for the rest of this session", e);
+			distanceUsable = false;
+			Vitrail.logger().warn("Distant Horizons' render distance cannot be read, so the far "
+					+ "terrain keeps its depth and a pack is given the game's own distance and clip "
+					+ "planes instead of that mod's, for the rest of this session", e);
 			return -1;
 		}
 	}
 
-	/** Whether anything at all can be expected from DH, without touching the frame's state. */
+	/**
+	 * Whether the far terrain is there to be had: DH answering, and DH's own rendering switched on.
+	 * <p>
+	 * <strong>The second half is Iris's condition and not a caution of ours.</strong> Iris poses
+	 * {@code DISTANT_HORIZONS} on the mod being loaded AND {@code DHCompat.hasRenderingEnabled()},
+	 * {@code gl/shader/StandardMacros.java:64}, which is a live read of
+	 * {@code configs.graphics().renderingEnabled()}, {@code compat/dh/DHCompatInternal.java:143}.
+	 * Without it a player who switches DH's rendering off keeps a pack that has been told the far
+	 * terrain is there, and the pack then takes its distant road over every pixel of sky.
+	 * <p>
+	 * Read live rather than kept, because that switch is reachable without leaving the world:
+	 * {@link dev.vitrail.render.PackDefines} watches this answer the way it watches the world's own
+	 * symbols, so a flip reads the pack again. Iris does the same with a reload of its own,
+	 * {@code compat/dh/DHCompatInternal.java:148}.
+	 */
 	public static boolean present() {
 		if (!resolved) {
 			resolve();
 		}
 
-		return usable;
+		return usable && renderingEnabled();
+	}
+
+	/**
+	 * DH's own rendering switch. False while DH is still starting up, which is not a failure and
+	 * latches nothing off: the switch is read again on the next frame that asks.
+	 */
+	private static boolean renderingEnabled() {
+		try {
+			Object configs = configsField.get(null);
+			if (configs == null) {
+				return false;
+			}
+
+			Object value = renderingEnabledMethod.invoke(graphicsMethod.invoke(configs));
+
+			return valueMethod.invoke(value) instanceof Boolean on && on;
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			usable = false;
+			Vitrail.logger().warn("Distant Horizons' rendering switch cannot be read, so its far "
+					+ "terrain will stay flat for the rest of this session", e);
+
+			return false;
+		}
 	}
 
 	private static void resolve() {
@@ -265,6 +329,7 @@ public final class DhDepth {
 			configsField = delayed.getField("configs");
 			graphicsMethod = configsField.getType().getMethod("graphics");
 			renderDistanceMethod = graphicsMethod.getReturnType().getMethod("chunkRenderDistance");
+			renderingEnabledMethod = graphicsMethod.getReturnType().getMethod("renderingEnabled");
 			valueMethod = renderDistanceMethod.getReturnType().getMethod("getValue");
 
 			usable = true;

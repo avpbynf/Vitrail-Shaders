@@ -34,6 +34,11 @@ import java.util.Map;
  * world costs the same half second reload as editing a setting does and the symbols are right
  * afterwards.
  * <p>
+ * Distant Horizons rides the same road for the same reason. Whether its far terrain reaches the
+ * pack is a thing the player changes from that mod's own screen, without leaving the world, so
+ * {@link #stale()} watches it beside the registry rather than trusting what was true when the pack
+ * was read.
+ * <p>
  * Two biomes of different namespaces can carry the same path, and only the first of them gets the
  * symbol. Iris has the same limit, and a pack naming a modded biome is naming its path anyway.
  */
@@ -41,6 +46,9 @@ public final class PackDefines {
 
 	/** Which registry the installed table was built from, so that a change of one is noticed. */
 	private static volatile long installed;
+
+	/** And whether the far terrain was there, which the player can change without leaving. */
+	private static volatile boolean distant;
 
 	private PackDefines() {
 	}
@@ -61,6 +69,7 @@ public final class PackDefines {
 	 */
 	public static void settle() {
 		installed = stamp();
+		distant = DhDepth.present();
 	}
 
 	/**
@@ -69,7 +78,24 @@ public final class PackDefines {
 	 * being a reload every second.
 	 */
 	public static boolean stale() {
-		return stamp() != installed;
+		return stamp() != installed || distantHorizonsMoved();
+	}
+
+	/**
+	 * Whether it is the far terrain that moved rather than the world, which is the other half of
+	 * what Iris does with {@code DISTANT_HORIZONS}: it reads DH's rendering switch every frame and
+	 * reloads on the flip, {@code compat/dh/DHCompatInternal.java:143} and {@code :148}. Without
+	 * this the symbol would be whatever it was when the pack was read, and a player who switches
+	 * that mod's rendering off would keep a pack lighting a far terrain that is no longer drawn.
+	 * <p>
+	 * What {@link #settle()} records is the live answer and not the one {@link #gather} compiled
+	 * with, so a flip inside the half second a pack takes to read is not noticed until the next
+	 * flip. Recording what the read compiled with instead would mean recording nothing when the
+	 * read could not happen at all, and that is the case this whole pair exists to keep out of a
+	 * reload every frame.
+	 */
+	public static boolean distantHorizonsMoved() {
+		return DhDepth.present() != distant;
 	}
 
 	private static long stamp() {
@@ -93,10 +119,10 @@ public final class PackDefines {
 
 		int mipmap = minecraft == null ? 4 : minecraft.options.mipmapLevels().get();
 
-		// Asked of the one class that knows whether the far terrain can be read at all, and not of
-		// the loader's mod list. An installed Distant Horizons this engine cannot get a depth image
-		// or a projection out of leaves the far terrain flat, and a pack told otherwise would light
-		// a picture that has none.
+		// Asked of the one class that knows whether the far terrain reaches the pack at all, and not
+		// of the loader's mod list. An installed Distant Horizons this engine cannot get a depth
+		// image or a projection out, or whose own rendering is switched off, leaves the far terrain
+		// flat, and a pack told otherwise would light a picture that has none.
 		return new EngineDefines.Environment(EngineDefines.DEFAULT_MC_VERSION, os(), vendor,
 				renderer, mipmap, DhDepth.present(), biomeIds(minecraft, biomes), categories());
 	}

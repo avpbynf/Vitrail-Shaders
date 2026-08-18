@@ -437,13 +437,20 @@ public final class FrameState implements WorldState {
 				split ? cameraState.projectionMatrix : rendered, renderDistance * 16.0F,
 				renderDistance);
 
-		// And what Distant Horizons drew this frame with, which is nothing at all on the sessions
-		// that have no far terrain. Read here rather than where the depth is folded, because these
-		// three are written into the block once a frame and the fold happens after that: taken
-		// there, a pack would read the frame before's planes.
-		if (DhDepth.planes(this.distantPlanes)) {
-			this.view.advanceDistant(this.distantPlanes.x, this.distantPlanes.y,
-					DhDepth.renderDistanceBlocks());
+		// And what Distant Horizons drew with, which is nothing at all on the sessions that have no
+		// far terrain. The three are taken together or not at all, the distance first: advanceDistant
+		// says what a frame that served two of them from DH and the third from the game costs.
+		//
+		// What they carry is the projection DH drew the PREVIOUS frame with, and that is worth
+		// saying rather than hiding. DH fills its render parameter from the opaque chunk pass, while
+		// the pack's frame opens ahead of it at the first sky draw. Reading them where the depth is
+		// folded would not mend it: the block is written once, here, so a value taken after it would
+		// reach a pack one frame later still. What it costs is nothing measurable, both planes moving
+		// with DH's own settings and with the player's height above the world rather than with the
+		// camera. The fold does not read the block at all: it takes the row itself as it converts.
+		int distance = DhDepth.renderDistanceBlocks();
+		if (distance >= 0 && DhDepth.planes(this.distantPlanes)) {
+			this.view.advanceDistant(this.distantPlanes.x, this.distantPlanes.y, distance);
 		} else {
 			this.view.advanceDistant(ViewMatrices.FALLBACK_PLANE, ViewMatrices.FALLBACK_PLANE, -1);
 		}

@@ -940,6 +940,10 @@ public final class PackChain {
 			Vitrail.logger().info("Left {} for {}: a dimension replaces the root rather than layering "
 					+ "over it, so the whole pack is read, translated and its colour targets allocated "
 					+ "again, which is the hitch at the portal", PackPlace.settled(), PackPlace.world());
+		} else if (PackDefines.distantHorizonsMoved()) {
+			Vitrail.logger().info("Distant Horizons is drawing a far terrain now, or has stopped, so "
+					+ "the pack is read again against DISTANT_HORIZONS: the symbol is what a pack "
+					+ "branches its distant land on, and it cannot be right for both");
 		} else {
 			Vitrail.logger().info("The world's own symbols are known now, reloading the pack against "
 					+ "them");
@@ -1410,7 +1414,8 @@ public final class PackChain {
 	 * has finished its opaque features.
 	 * <p>
 	 * <strong>The place is the whole design and it is one line wide.</strong> DH draws its LODs from
-	 * {@code renderSectionLayer}, long before this, and composes only its colour; so by here its
+	 * inside the game's own opaque chunk pass, {@code ChunkSectionsToRender.renderGroup}, long
+	 * before this, and composes only its colour; so by here its
 	 * image is this frame's and the game's depth is everything the game itself drew. Every reader of
 	 * the game's depth is still downstream: {@link #markPreHandDepth} takes {@code depthtex2} on the
 	 * next line, {@link #drawEarly} takes {@code depthtex1} two lines later, the scene seed is cut
