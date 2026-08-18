@@ -178,9 +178,26 @@ public final class HandDraw {
 		this.bound = new ProjectionMatrixBuffer("Vitrail hand");
 	}
 
-	/** Whether a pack's own hand programs take over the game's, from the loaded options. */
+	/**
+	 * Whether a pack's own hand programs take over the game's, from the loaded options.
+	 * <p>
+	 * The other half of what the entity mesh carries, the hand being drawn from that mesh:
+	 * {@code EntityMesh.ask} says what a change here owes and why {@link #stopped()} exists beside it.
+	 */
 	static void wanted(boolean asked) {
 		wanted = asked;
+		EntityMesh.ask();
+	}
+
+	/**
+	 * Takes the hand down after the entity door threw, without asking anything of the mesh.
+	 * <p>
+	 * The one place that writes the field directly, and the reason is the reason
+	 * {@code EntityDraw.wanted} has one too: a program that threw is not a reason to rebuild the
+	 * world, and the mesh goes on carrying what it carried until something else rebuilds it.
+	 */
+	static void stopped() {
+		wanted = false;
 	}
 
 	/**

@@ -600,8 +600,8 @@ public final class PackProgram {
 	 * own format below, so the elements to declare are that constant's.
 	 * <p>
 	 * <strong>The format belongs to the piece and not to the family asking</strong>, because one door
-	 * serves two: the entity door draws its own rows from {@code DefaultVertexFormat.ENTITY} and an
-	 * enchantment's glint from {@code DefaultVertexFormat.POSITION_TEX}, six elements against two.
+	 * serves two: the entity door draws its own rows from the entity mesh and an enchantment's glint
+	 * from {@code DefaultVertexFormat.POSITION_TEX}, seven elements against two.
 	 * <strong>That door checks each piece's claim against the pipeline in hand</strong>,
 	 * reading the format off the binding rather than trusting the constant; the particles and the
 	 * weather trust it, so a pipeline of theirs that ever bound something else would read its

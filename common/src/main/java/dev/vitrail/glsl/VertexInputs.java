@@ -46,9 +46,10 @@ public enum VertexInputs {
 	TERRAIN_SEPARATE_AO,
 
 	/**
-	 * The game's own entity mesh: the six elements of {@code DefaultVertexFormat.ENTITY}, out of
-	 * which the five names a pack reads are made. {@link EntityVertex} carries the renaming and
-	 * says which element nothing answers for.
+	 * The entity mesh: the six elements of {@code DefaultVertexFormat.ENTITY} and the one this engine
+	 * appends after them, out of which the names a pack reads are made. {@link EntityVertex} carries
+	 * the renaming and says which name nothing answers for, and {@code EntityMesh} why the seven are
+	 * a format of this engine's rather than the game's own object lengthened.
 	 */
 	ENTITY,
 

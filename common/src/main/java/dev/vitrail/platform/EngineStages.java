@@ -6,6 +6,7 @@ import dev.vitrail.render.PackChain;
 import dev.vitrail.render.PbrAtlases;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
+import dev.vitrail.sodium.EntityMeshSerializer;
 import dev.vitrail.sodium.ShadowTerrain;
 import dev.vitrail.HostReport;
 import dev.vitrail.Vitrail;
@@ -47,6 +48,12 @@ public final class EngineStages {
 		// And what an install decides that this mod cannot, said before the pack is read so that it
 		// stands above whatever the pack has to say for itself.
 		HostReport.say(Vitrail.platform().gameDirectory());
+
+		// Before the pack and not with it: a serializer is a fact about two vertex formats and knows
+		// nothing of a pack, and Sodium keeps it in a cache keyed on the pair. Without it, every mob
+		// Sodium draws through its own cuboid writer would reach the mesh with the identifiers left
+		// at whatever the arena held. EntityMeshSerializer says the rest.
+		EntityMeshSerializer.register();
 
 		// The report of the pack goes with the reading of it, in PackChain, where which pack is
 		// being drawn is known.
