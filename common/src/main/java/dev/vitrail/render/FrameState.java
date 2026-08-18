@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.dh.DhDepth;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.uniform.ClipSpace;
@@ -42,6 +43,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4fc;
+import org.joml.Vector2f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
@@ -88,6 +90,9 @@ public final class FrameState implements WorldState {
 	private static final int FOG_SHAPE_OFF = -1;
 
 	private final ViewMatrices view = new ViewMatrices();
+
+	/** Refilled every frame by the reading of Distant Horizons, and never read outside it. */
+	private final Vector2f distantPlanes = new Vector2f();
 	private final BiomeClassifier biomes = new BiomeClassifier();
 	private final CameraShift shift = new CameraShift();
 
@@ -431,6 +436,17 @@ public final class FrameState implements WorldState {
 		this.view.advance(cameraState.viewRotationMatrix, CameraBob.taken(),
 				split ? cameraState.projectionMatrix : rendered, renderDistance * 16.0F,
 				renderDistance);
+
+		// And what Distant Horizons drew this frame with, which is nothing at all on the sessions
+		// that have no far terrain. Read here rather than where the depth is folded, because these
+		// three are written into the block once a frame and the fold happens after that: taken
+		// there, a pack would read the frame before's planes.
+		if (DhDepth.planes(this.distantPlanes)) {
+			this.view.advanceDistant(this.distantPlanes.x, this.distantPlanes.y,
+					DhDepth.renderDistanceBlocks());
+		} else {
+			this.view.advanceDistant(ViewMatrices.FALLBACK_PLANE, ViewMatrices.FALLBACK_PLANE, -1);
+		}
 
 		this.view.advanceShadow(sunAngle(isDay()) / 360.0F, this.directives.sunPathRotation(),
 				this.directives.shadowIntervalSize(), this.shift.unshifted(),
@@ -1738,8 +1754,8 @@ public final class FrameState implements WorldState {
 	}
 
 	@Override
-	public int dhRenderDistanceChunks() {
-		return this.view.dhRenderDistanceChunks();
+	public int dhRenderDistance() {
+		return this.view.dhRenderDistance();
 	}
 
 	@Override

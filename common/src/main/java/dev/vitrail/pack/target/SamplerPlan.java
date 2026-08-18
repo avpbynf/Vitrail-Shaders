@@ -33,6 +33,18 @@ public final class SamplerPlan {
 	private static final Set<String> DEPTH = Set.of("depthtex0", "depthtex1", "depthtex2", "gdepthtex");
 	private static final Set<String> SHADOW_DEPTH =
 			Set.of("shadowtex0", "shadowtex1", "shadow", "watershadow");
+
+	/**
+	 * The depth Distant Horizons keeps apart from the game's, which this engine does not keep apart:
+	 * {@code render/DhFold} writes the far terrain into the game's own depth before anything copies
+	 * it, so a pack reads the far terrain through {@code depthtex0} and the rest like any other
+	 * surface. These names therefore answer the far plane, which is what every pack of the corpus
+	 * tests for before it takes its Distant Horizons road: BSL reaches its at
+	 * {@code composite.glsl:281} with {@code else if (dhZ0 < 1.0)}, and it must not be taken, or the
+	 * sky would be rebuilt as a surface a hand's width from the camera.
+	 */
+	private static final Set<String> DISTANT_DEPTH =
+			Set.of("dhDepthTex", "dhDepthTex0", "dhDepthTex1");
 	private static final String SHADOW_COLOUR_PREFIX = "shadowcolor";
 	private static final String NOISE = "noisetex";
 	private static final String WATER_SHADOW = "watershadow";
@@ -82,8 +94,8 @@ public final class SamplerPlan {
 	 * over a name that already meant something else.
 	 */
 	public enum Kind {
-		COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, PACK_TEXTURE, CENTER_DEPTH, UNSERVED,
-		UNBINDABLE
+		COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, PACK_TEXTURE, CENTER_DEPTH,
+		DISTANT_DEPTH, UNSERVED, UNBINDABLE
 	}
 
 	/**
@@ -208,6 +220,10 @@ public final class SamplerPlan {
 
 		if (SHADOW_DEPTH.contains(name)) {
 			return Kind.SHADOW_DEPTH;
+		}
+
+		if (DISTANT_DEPTH.contains(name)) {
+			return Kind.DISTANT_DEPTH;
 		}
 
 		if (isShadowColour(name)) {

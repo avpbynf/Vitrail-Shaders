@@ -2184,6 +2184,9 @@ public final class PackChain {
 		named(byKind, SamplerPlan.Kind.CENTER_DEPTH,
 				"read the smoothed depth at the centre of the screen, which is what a depth of field "
 						+ "focuses on");
+		named(byKind, SamplerPlan.Kind.DISTANT_DEPTH,
+				"read the far plane, the far terrain of Distant Horizons being folded into the "
+						+ "world's own depth rather than kept beside it");
 		named(byKind, SamplerPlan.Kind.UNBINDABLE,
 				"are declared under a type this backend cannot bind, and should have gone with "
 						+ "their pass");
