@@ -136,13 +136,30 @@ the fragment declares without the vertex emitting it is refused loudly, while th
 and shifts the locations of everything after it.
 
 The two sides are reconciled in two different ways, and it is worth not confusing them. A varying
-the *engine* names (there is one, the fog coordinate) has to be declared by both stages or by
-neither, so it is decided at program assembly. The pack's own varyings are not unified that way:
-they are reconciled in the other direction, by striking from the later stage the inputs nothing
-upstream writes.
+the *engine* names (there are two, the fog coordinate and the colour a hurt mob flashes) has to be
+declared by both stages or by neither, so it is decided once at program assembly and written into
+both headers from the one answer. The pack's own varyings are not unified that way. They are
+brought into agreement by three passes over the pair, in this order, and the order matters because
+each one changes what the next one sees:
 
-A consequence for measurement: a per-unit check cannot see this class of defect at all, because it
-never pairs a vertex stage with its fragment stage.
+1. An input the later stage declares that nothing upstream writes is **struck out**, where its body
+   never reads it. That is the cheapest answer, because it changes nothing else.
+2. What the strike could not take, because the body does read it, is **owed by the stage before**,
+   which declares it and assigns it its zero. This is the reference's own patch, taken whole,
+   including the assignment: under the reference these varyings hold zero rather than whatever the
+   stage happened to leave in them.
+3. An output the earlier stage hands on that the later one never declares is **withheld**: the
+   `out` and its interpolation qualifier come off and a plain global of the same name and type is
+   left behind, so the body's own writes keep compiling. The reference does nothing here, and has
+   no reason to: it links two stages the way OpenGL does, where an output nobody reads is legal.
+   What forces it here is a backend that pairs the two lists by counting rather than by name.
+
+A consequence for measurement, and it is sharper than it looks: **a per-unit check cannot see this
+class of defect at all**, because it never pairs a vertex stage with its fragment stage. Neither
+can a check that compiles both stages in one invocation of a desktop GLSL compiler, which is the
+trap worth naming: that links them the OpenGL way, where both of these shapes are legal, so it
+reports the same clean number before and after either fix. Only compiling each stage on its own and
+pairing the two reflected interfaces answers.
 
 Two more rules on lifting. A declaration sitting in a dead branch must **not** be lifted out of it,
 because lifting makes it unconditional and can collide with a same-named ordinary global in the
