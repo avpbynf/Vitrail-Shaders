@@ -21,8 +21,22 @@ what the next one holds.
   so a pack that paints the flash itself painted nothing: the red hit, the white of a creeper about
   to explode and the tint on a mob standing in fire all went missing the moment the pack took the
   mobs over. It is now read off the mesh, one value per vertex, which is where every one of the eight
-  packs tested expects to find it. The three identifiers a pack tells one kind of mob, block entity
-  or held item apart by are still one number apiece, which is a different hole and a wider one.
+  packs tested expects to find it.
+
+- **A pack can tell one kind of mob from another again, and a chest from the block it stands in.**
+  The three numbers a pack compares against a mob type, a block entity and the item being drawn were
+  reaching it as one value for the whole world, because they were handed over per draw and a draw
+  carries a whole batch of pieces at once. They now ride on the geometry itself, one value per
+  vertex, out of the pack's own `entity.properties`, `block.properties` and `item.properties`. What
+  it changes on screen is whatever the pack wrote on those numbers: the subsurface scattering some
+  packs give to living things alone, the treatment of an end crystal and of its beam. Seven of the
+  eight packs tested read at least one of the three, one of them only in the shadow map; the eighth
+  declares one and never reads it. The lightning bolt is not among them and stays as it was: the game
+  draws it with a mesh this engine does not read.
+
+  The entity mesh only carries the three while the pack is drawing the entities or the hand, so
+  turning either switch now rebuilds the world, exactly as the terrain switch already did. It does
+  not ask for a restart.
 
 - **The sky of the End is painted by the pack now**, where the game kept its own shader for it. The
   box of sky and the flash that crosses it both go through the program the format keeps for the

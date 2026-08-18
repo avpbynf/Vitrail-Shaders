@@ -225,6 +225,22 @@ attribute read from the wrong offset - a picture, and a wrong one, with nothing 
 refused and named in the log instead. The glint is the one exception and it is a narrow one: it is
 drawn from a two-element quad the door decodes as well.
 
+That layout is the game's own with **one element appended**, holding the three numbers a pack tells
+one kind of mob, block entity or held item apart by. It is a format of the engine's rather than the
+game's own object lengthened, and the difference is not cosmetic: Sodium writes every cuboid of a mob
+at the game's stride and copies the run over untouched whenever the two are the same object, so
+widening the game's own leaves that copy reading eight bytes a vertex past what was written and no
+mob is drawn at all. The engine registers the conversion between the two formats with Sodium instead,
+which is where those cuboids get their three numbers.
+
+The element goes **last**, and that is what lets the game go on drawing through the same mesh. On
+every road where a draw is handed back - a program that would not compile, a family a switch turned
+off, the warm up that follows every load - the game's own entity shader draws it, and that shader
+declares the six names it knows and nothing of the seventh. An element a stage skips shifts the
+location of every element after it in silence, so there has to be nothing after it. The mesh only
+carries the element while the pack is drawing the entities or the hand; turning either switch asks
+the game to rebuild the world, the same door F3+A uses, and it does not ask for a restart.
+
 That is the whole reason the beacon beam, the lightning bolt and the text of a sign or a name plate
 still come from the game's own shader: they bind the block, position-colour and glyph layouts. They
 reach the pack's image through the layer described below, which means they are visible but flat, and
