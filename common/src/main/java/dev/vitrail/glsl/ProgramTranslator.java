@@ -190,6 +190,10 @@ public final class ProgramTranslator {
 			// passes use, which declares eleven varyings; three of them are read by functions this
 			// pass never calls, and the game refused the whole module over exactly those three.
 			owed(prepared);
+
+			// And last, the other way round, because it reads what the two above have just settled:
+			// the first takes inputs out and the second adds outputs, and both change the answer.
+			withheld(prepared);
 		}
 
 		Map<String, TranslatedUnit.Uniform> uniforms = new LinkedHashMap<>();
@@ -279,6 +283,49 @@ public final class ProgramTranslator {
 			}
 
 			previous = stage;
+		}
+	}
+
+	/**
+	 * Stops each stage handing on the varyings the stage after it does not declare.
+	 * <p>
+	 * <strong>The same pairing as {@link #owed}, read from the other end, and the end that says
+	 * nothing.</strong> A varying the next stage declares and this one never wrote is a refusal,
+	 * loud, and the whole module goes with it. A varying this stage writes and the next one never
+	 * declares raises nothing: {@code rebind:151-163} counts only the names the next stage declares
+	 * while {@code createFromSpirv:114-116} numbered the whole list, so the two agree on nothing
+	 * after the first name that is missing. What the picture then shows is a fragment stage reading
+	 * its neighbour's varying, which looks like a shader that is merely wrong.
+	 * <p>
+	 * <strong>Last of the three, and the order is what makes it right.</strong> The drop takes
+	 * inputs out of the next stage, {@link #owed} puts outputs into this one, and both change the
+	 * two sets this compares. Running it first would withhold a name {@code owed} is about to make
+	 * the pair agree on.
+	 * <p>
+	 * <strong>A compute stage is stepped over, and it is not tidiness.</strong> It stands LAST in
+	 * the pipeline order, after the fragment stage, so pairing it with the stage before it would
+	 * make the fragment stage the one handing something on. What a fragment stage declares as
+	 * {@code out} is a colour attachment and not a varying, and one written without an explicit
+	 * {@code layout(location = n)} is still in the body here, {@code liftFragmentOutputs} only
+	 * taking out the ones that carry one. Demoting it would leave the pass compiling, drawing, and
+	 * writing to nothing. It costs nothing to step over: a compute stage is dispatched on its own,
+	 * and {@code GlslCompiler.compile:62-63} pairs one vertex module with one fragment module and
+	 * takes no third.
+	 *
+	 * @param prepared the stages of one program, keyed by stage, in pipeline order
+	 */
+	private static void withheld(Map<ProgramStage, GlslTranslator.Stage> prepared) {
+		GlslTranslator.Stage previous = null;
+		for (Map.Entry<ProgramStage, GlslTranslator.Stage> entry : prepared.entrySet()) {
+			if (entry.getKey() == ProgramStage.COMPUTE) {
+				continue;
+			}
+
+			if (previous != null) {
+				previous.withhold(entry.getValue().requires());
+			}
+
+			previous = entry.getValue();
 		}
 	}
 

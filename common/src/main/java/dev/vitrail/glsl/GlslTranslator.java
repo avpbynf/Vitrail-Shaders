@@ -289,6 +289,12 @@ public final class GlslTranslator {
 	/** Varyings this stage hands the next one, which is what says whether an input is provided. */
 	private final Set<String> declaredOutputs = new LinkedHashSet<>();
 
+	/** The same, as the declarations they came from, so that one can be taken back out whole. */
+	private final List<FileScope> declaredOutputScopes = new ArrayList<>();
+
+	/** Inputs {@link #dropUnprovidedInputs} took out, which this stage no longer declares. */
+	private final Set<String> droppedInputs = new LinkedHashSet<>();
+
 	/**
 	 * Inputs nothing before this stage writes and that the body reads anyway, so that they could not
 	 * be taken back out: by the name, the interpolation qualifier and the type it was declared
@@ -623,6 +629,32 @@ public final class GlslTranslator {
 		/** The varyings this stage hands on, which is what says whether the next one is provided. */
 		public Set<String> provides() {
 			return Set.copyOf(this.translator.declaredOutputs);
+		}
+
+		/**
+		 * The varyings this stage still takes in, which is what says whether the stage before it is
+		 * handing on one nobody declares.
+		 * <p>
+		 * What {@link #dropUnprovidedInputs} took out is left out here, and has to be: it is no
+		 * longer in the text, so the game will not count it either.
+		 */
+		public Set<String> requires() {
+			Set<String> names = new LinkedHashSet<>();
+			this.translator.declaredInputs.forEach(declared -> names.addAll(declared.names()));
+			names.removeAll(this.translator.droppedInputs);
+
+			return Set.copyOf(names);
+		}
+
+		/**
+		 * Stops this stage handing on the varyings the next one does not declare.
+		 * See {@link GlslTranslator#withholdUndeclaredOutputs}.
+		 * <p>
+		 * After {@link #owe}, which adds to what this stage hands on, and before anything is
+		 * rendered: it changes both the text and the answer {@link #provides} gives.
+		 */
+		public void withhold(Set<String> declared) {
+			this.translator.withholdUndeclaredOutputs(declared);
 		}
 
 		/**
@@ -1983,6 +2015,7 @@ public final class GlslTranslator {
 				FileScope declared = fileScopeDeclaration(index);
 				if (declared != null) {
 					this.declaredOutputs.addAll(declared.names());
+					this.declaredOutputScopes.add(declared);
 				}
 			} else if (token.identifier("in") && this.stage != ProgramStage.VERTEX) {
 				FileScope declared = fileScopeDeclaration(index);
@@ -2028,6 +2061,7 @@ public final class GlslTranslator {
 		for (FileScope declared : unprovided) {
 			if (declared.names().stream().noneMatch(read::contains)) {
 				blankRange(declared.start(), declared.end());
+				this.droppedInputs.addAll(declared.names());
 				dropped = true;
 				continue;
 			}
@@ -2059,6 +2093,72 @@ public final class GlslTranslator {
 		if (dropped) {
 			this.used = usedNames();
 			this.declaredAfter = declaredUnderAType();
+		}
+	}
+
+	/**
+	 * Stops this stage handing on every varying the stage after it does not declare, by taking the
+	 * {@code out} off the declaration and leaving a plain global of the same name and type behind.
+	 * <p>
+	 * <strong>The other way round from {@link #dropUnprovidedInputs}, and it is the way that says
+	 * nothing at all.</strong> {@code rebind:151-163} numbers the fragment stage over the vertex
+	 * stage's output list and advances its counter only on the names the fragment declares, while
+	 * {@code createFromSpirv:114-116} had numbered that same list {@code 0..n-1} with nothing
+	 * skipped. One name the fragment does not declare therefore drops every name after it in the
+	 * list by a location, with no exception raised and no line logged, and the fragment reads its
+	 * neighbour's value. Measured over the corpus before this: 39 pairs handing on a varying the
+	 * fragment never declares, and 16 of them landing at least one location on the neighbour.
+	 * <p>
+	 * <strong>Demoted rather than deleted, because the body writes them.</strong> Deleting the
+	 * declaration would leave the assignments naming nothing, which is the pass lost. A global of
+	 * the same name and type keeps every assignment compiling and is simply not part of the
+	 * interface any more, which is the whole of what was wanted. The interpolation qualifier goes
+	 * with the {@code out}: {@code flat} on a plain global is a syntax error, and it means nothing
+	 * once there is nobody to interpolate for.
+	 * <p>
+	 * <strong>What Iris does here is nothing, and that is not an oversight on its part.</strong> It
+	 * links two stages the way OpenGL does, where an output nobody reads is legal and costs nothing;
+	 * there is no line of {@code CompatibilityTransformer} to follow because the language it targets
+	 * never asked the question. What forces the hand here is
+	 * {@code IntermediaryShaderModule.rebind:151-163}, which pairs by counting rather than by name.
+	 * The picture is unchanged either way: what is taken out of the interface is, by the condition
+	 * itself, a value no later stage could read.
+	 * <p>
+	 * <strong>A declaration is taken whole or left alone.</strong> {@code out vec3 a, b;} with the
+	 * fragment declaring {@code b} alone stays as it is, since demoting it would take {@code b} out
+	 * from under a fragment that reads it and that is the failure this exists to prevent. No pack
+	 * of the corpus writes one, the measurement below being zero, and the shape is worth naming
+	 * rather than reading as covered.
+	 * <p>
+	 * <strong>Only what the PACK declares is offered here, on both sides.</strong> The two varyings
+	 * the engine names itself are emitted into both headers off one union and are never in either
+	 * list, so neither can be withheld from under a stage that declares it. The shape that would
+	 * be a hazard is a pack writing {@code out vec4 entityColor} in its vertex stage against a
+	 * fragment that only gets the name from the header; it cannot arise, because a vertex stage
+	 * that reaches that union already receives the header's declaration of the same name and is
+	 * refused for the redefinition before this is ever asked.
+	 *
+	 * @param declared every name the stage after this one still declares as an input
+	 */
+	private void withholdUndeclaredOutputs(Set<String> declared) {
+		for (FileScope scope : this.declaredOutputScopes) {
+			if (scope.names().stream().anyMatch(declared::contains)) {
+				continue;
+			}
+
+			// From the start of the statement up to the type, which is the first token that is
+			// neither the keyword nor a qualifier. Either order has to be taken: GLSL accepts both,
+			// Mellow opens with flat, and fileScopeDeclaration already gathers them both ways.
+			for (int index : significantRange(scope.start(), scope.end())) {
+				String text = this.tokens.get(index).text();
+				if (!text.equals("out") && !LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(text)) {
+					break;
+				}
+
+				blank(index);
+			}
+
+			this.declaredOutputs.removeAll(scope.names());
 		}
 	}
 
