@@ -16,6 +16,16 @@ what the next one holds.
 
 ### Added
 
+- **A normal map on a mob, on armour or on a chest is read the right way round.** The two values a
+  pack works a bump out from, the middle of the sprite a face is mapped to and the direction the
+  texture runs in over it, were the same constant for every face of every piece: a pack lighting a
+  mob through them tilted every bump on it the same way, whichever way the face was really turned.
+  Both are now worked out over each polygon and carried on its corners, on the mobs, on the block
+  entities, on a held item and on the hand alike. Of the hundred and fifty entity programs the eight
+  packs tested ship between them, seventy-five read the sprite middle and sixty-one read the
+  direction. What it changes on screen depends on the resource pack as well: a mob with no normal
+  map beside its skin has nothing to tilt, which is a second thing and is not fixed here.
+
 - **A mob flashes again when it is hurt, and a creeper whitens before it goes off.** The colour the
   game lays over a mob it has just damaged was reaching the pack as one number for the whole world,
   so a pack that paints the flash itself painted nothing: the red hit, the white of a creeper about

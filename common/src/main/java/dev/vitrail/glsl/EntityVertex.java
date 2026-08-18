@@ -4,20 +4,30 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * What the entity mesh carries, and how the names a pack reads are made out of it.
  * <p>
  * {@code DefaultVertexFormat.ENTITY} holds six elements in thirty-six bytes: {@code Position} as
  * three floats, {@code Color} as four normalised bytes, {@code UV0} as two floats, {@code UV1} and
- * {@code UV2} as two signed shorts each, {@code Normal} as four signed bytes. This engine appends a
- * seventh, {@link #IDENTIFIERS}, on a format of its OWN built out of those six: Sodium writes every
- * cuboid of a mob at the game's own stride and copies the run over raw whenever the two formats are
- * the same object, so lengthening the game's would copy forty-four bytes a vertex out of thirty-six
- * and leave no mob on screen. {@code EntityMesh} is where that is built, and it carries what a draw
- * a loaded pack does not serve then binds.
+ * {@code UV2} as two signed shorts each, {@code Normal} as four signed bytes. This engine appends
+ * three more, {@link #IDENTIFIERS}, {@link #MID_TEX_COORD} and {@link #TANGENT}, on a format of its
+ * OWN built out of those six: Sodium writes every cuboid of a mob at the game's own stride and
+ * copies the run over raw whenever the two formats are the same object, so lengthening the game's
+ * would copy fifty-six bytes a vertex out of thirty-six and leave no mob on screen.
+ * {@code EntityMesh} is where that is built, and it carries what a draw a loaded pack does not serve
+ * then binds.
  * <p>
- * <strong>All seven are declared, and no fewer.</strong> The pairing is by name and asymmetric in
+ * <strong>The three are Iris's own three and in its own order</strong>
+ * ({@code vertices/IrisVertexFormats.java:61-70}: {@code iris_Entity}, then {@code mc_midTexCoord},
+ * then {@code at_tangent}). The last two are what a pack asks of a POLYGON rather than of a corner,
+ * the four corners of a quad carrying one pair and one tangent between them;
+ * {@code render/EntityFrame} works both out, and the two roads that write them in are
+ * {@code sodium/EntityMeshSerializer} for a mob and {@code mixin/BufferBuilderMixin} for everything
+ * else this format draws.
+ * <p>
+ * <strong>All nine are declared, and no fewer.</strong> The pairing is by name and asymmetric in
  * both directions. A name the stage declares that the format has not got is refused outright,
  * {@code IntermediaryShaderModule.rebind:205-207}. An element the stage does not declare is simply
  * stepped over, and since {@code VulkanRenderPipeline} counts every element while {@code rebind}
@@ -28,10 +38,10 @@ import java.util.Set;
  * the hit flash and the damage tint, and what reads it is not a name of the prologue: the wrapper
  * around {@code main} fetches the texel it points at and hands the colour on as
  * {@code entityColor}, which is where Iris takes it from as well
- * ({@code EntityPatcher.patchOverlayColor}). See {@code GlslTranslator.overlayPrologue}. All seven
+ * ({@code EntityPatcher.patchOverlayColor}). See {@code GlslTranslator.overlayPrologue}. All nine
  * elements are declared whether or not a pack asks for any of them, which is safe for the one reason
  * that matters and is measured rather than assumed: the off-game harness reads the SPIR-V of every
- * entity stage of the corpus back and checks that all seven variables are still in it, because a
+ * entity stage of the corpus back and checks that all nine variables are still in it, because a
  * variable the compiler dropped is one {@code rebind} cannot find.
  * <p>
  * Written as macros rather than as globals for the reason {@link LegacyGlsl#FULLSCREEN_ATTRIBUTES}
@@ -59,11 +69,55 @@ public final class EntityVertex {
 	public static final String IDENTIFIERS = "EntityIds";
 
 	/**
-	 * The elements of the entity mesh, in the format's own order, the six the game lays out and the
-	 * one this engine appends after them. {@code EntityMesh} is what appends it.
+	 * The middle of the sprite a polygon is mapped to, as the pair of floats {@code UV0} already
+	 * spells a corner in, so that the two are compared without a scale between them.
+	 * <p>
+	 * It is a property of the POLYGON and not of a corner: the four corners of a quad carry the same
+	 * pair. That is what a pack tests a corner against to know which side of its sprite the corner
+	 * lies on, and on an entity it is what tells a cape's lower edge from its upper one, or picks the
+	 * middle texel of a sprite to read a colour from without an edge in it.
 	 */
-	public static final List<String> ATTRIBUTES =
-			List.of("Position", "Color", "UV0", "UV1", "UV2", "Normal", IDENTIFIERS);
+	public static final String MID_TEX_COORD = "MidTexCoord";
+
+	/**
+	 * The direction the texture's U axis runs in over a polygon, and the handedness of the frame it
+	 * builds with the normal, in four normalised bytes as the game spells {@code Normal} beside it.
+	 * <p>
+	 * A property of the polygon like {@link #MID_TEX_COORD}, and the one every normal map on an
+	 * entity is read through: a pack builds its tangent frame out of this and {@code gl_Normal}, so
+	 * an engine answering it with a constant tilts every bump on every mob the same wrong way.
+	 * <p>
+	 * <strong>The fourth component is not padding</strong>: it is plus or minus one and says which
+	 * way the third axis of the frame turns, which is what a pack multiplies its bitangent by. A skin
+	 * whose sprite is mirrored lights its bumps as dents without it. {@code EntityFrame.tangent} is
+	 * where it is worked out.
+	 */
+	public static final String TANGENT = "Tangent";
+
+	/**
+	 * The three this engine appends, in the order {@code EntityMesh} appends them and the order they
+	 * have to keep: an element sits at the location its place in the format gives it.
+	 */
+	public static final List<String> APPENDED = List.of(IDENTIFIERS, MID_TEX_COORD, TANGENT);
+
+	/**
+	 * The elements of the entity mesh, in the format's own order, the six the game lays out and the
+	 * three this engine appends after them. {@code EntityMesh} is what appends them.
+	 */
+	public static final List<String> ATTRIBUTES = Stream.concat(
+			Stream.of("Position", "Color", "UV0", "UV1", "UV2", "Normal"), APPENDED.stream())
+			.toList();
+
+	/**
+	 * The ones of {@link VertexPrologue#SYNTHESIZED} this mesh answers for real rather than with a
+	 * constant. What is left of that set is what the log has to call a constant, and
+	 * {@code EntityProgram} is what hands this on to it.
+	 * <p>
+	 * {@code mc_Entity} is not in here and is the one worth naming: the chunk mesh serves it out of
+	 * the block id it carries, and an entity is not a block state and has no id to travel on. Iris
+	 * does not serve it on this mesh either.
+	 */
+	public static final Set<String> ANSWERED = Set.of("mc_midTexCoord", "at_tangent");
 
 	/**
 	 * What the light map names read on a piece the game draws at full light, which is the value a
@@ -83,8 +137,8 @@ public final class EntityVertex {
 	}
 
 	/**
-	 * The head of an entity vertex stage: the seven elements, the names a pack reads made out of
-	 * five of them, and whatever the pack asks for that the mesh has not got.
+	 * The head of an entity vertex stage: the nine elements, the names a pack reads made out of
+	 * seven of them, and whatever the pack asks for that the mesh has not got.
 	 *
 	 * @param used        every name the rewritten body mentions, so that nothing is declared for a
 	 *                    pack that never asks
@@ -121,11 +175,57 @@ public final class EntityVertex {
 
 		lines.add("#define of_Normal Normal.xyz");
 
-		// The chunk mesh answers mc_Entity out of the block id it carries and this one cannot: an
-		// entity mesh has no room for one. So every name here is a constant, including that one,
-		// and what the picture is then wrong about is what the caller has to name in the log.
-		lines.addAll(VertexPrologue.tail(used, synthesized));
+		// The two the mesh really carries are macros over their element, like every name above them
+		// and for the same reason: a global initialised from a vertex input is not a constant
+		// expression. The rest stay constants, mc_Entity among them, and what the picture is then
+		// wrong about is what the caller has to name in the log.
+		VertexPrologue.globals(used, synthesized, Map.of()).forEach((name, type) -> lines.add(
+				ANSWERED.contains(name)
+						? "#define " + name + " " + answer(name, type)
+						: VertexPrologue.declaration(name, type)));
 
 		return List.copyOf(lines);
+	}
+
+	/** One of the two names the mesh answers, in the shape the pack declared it under. */
+	private static String answer(String name, String type) {
+		return name.equals("at_tangent") ? tangent(type) : midTexCoord(type);
+	}
+
+	/**
+	 * {@code mc_midTexCoord} out of the element, in the shape the pack declared it under.
+	 * <p>
+	 * The shapes are what a driver would have handed a stage declaring that many components against
+	 * an element carrying two, which is exactly what a pack meets under Iris: its element is the
+	 * pair and the pack's own declaration is the input. So three components get a nought and four
+	 * get a nought and a one, and the two engines answer alike whatever the pack wrote. A type this
+	 * does not know keeps its zero, which is a pack declaring this name as something the corpus has
+	 * never used.
+	 */
+	private static String midTexCoord(String type) {
+		return switch (type) {
+			case "float" -> MID_TEX_COORD + ".x";
+			case "vec2" -> MID_TEX_COORD;
+			case "vec3" -> "vec3(" + MID_TEX_COORD + ", 0.0)";
+			case "vec4" -> "vec4(" + MID_TEX_COORD + ", 0.0, 1.0)";
+			default -> VertexPrologue.zero(type);
+		};
+	}
+
+	/**
+	 * {@code at_tangent} out of the element, in the shape the pack declared it under.
+	 * <p>
+	 * Four components is what every pack of the corpus declares, and the fourth is the handedness
+	 * rather than a spare lane. A pack declaring three loses it and gets the direction alone, which
+	 * is what asking for three means.
+	 */
+	private static String tangent(String type) {
+		return switch (type) {
+			case "float" -> TANGENT + ".x";
+			case "vec2" -> TANGENT + ".xy";
+			case "vec3" -> TANGENT + ".xyz";
+			case "vec4" -> TANGENT;
+			default -> VertexPrologue.zero(type);
+		};
 	}
 }

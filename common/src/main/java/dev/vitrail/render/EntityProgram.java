@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.glsl.EntityVertex;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.program.ProgramFallbacks;
 import dev.vitrail.pack.program.RenderStage;
@@ -96,18 +97,21 @@ final class EntityProgram implements DumpedProgram {
 	private static final String NAMESPACE = Vitrail.MOD_ID;
 
 	/**
-	 * The names the mesh really carries under the spelling a pack writes, which is none of them.
+	 * The names the mesh this piece is drawn from really carries under the spelling a pack writes.
 	 * <p>
-	 * Empty and not an oversight: {@code EntityVertex} answers every fixed function name out of the
-	 * six elements of the format, and there is no room in those six for anything a pack declares for
-	 * itself. {@code mc_Entity} is the one worth naming, since the chunk mesh does carry it: an
-	 * entity is not a block state and has no id to travel on, so a pack branching on it here is
-	 * branching on a constant, and the log says so at every load.
+	 * <strong>Asked of the piece rather than fixed for the family</strong>, because the glint comes
+	 * in by this same door with a mesh of its own: {@code POSITION_TEX}, two elements, out of which
+	 * {@code GlintVertex} makes every other name with a constant. A set fixed here would have the log
+	 * tell a reader that the glint's mesh carries a tangent, and telling a reader which names are
+	 * real is the whole of what that line is for.
 	 * <p>
-	 * The glint's mesh answers the same, and with room to spare: it carries two elements, and
-	 * {@code GlintVertex} makes every other name out of a constant.
+	 * {@code mc_Entity} is in neither answer and is the one worth naming, since the chunk mesh does
+	 * carry it: an entity is not a block state and has no id to travel on, so a pack branching on it
+	 * here is branching on a constant.
 	 */
-	private static final Set<String> ANSWERED = Set.of();
+	private static Set<String> answered(EntityDraw.Element element) {
+		return element.glint() ? Set.of() : EntityVertex.ANSWERED;
+	}
 
 	private final GeometryProgram body;
 
@@ -159,7 +163,7 @@ final class EntityProgram implements DumpedProgram {
 		RenderPipeline game = element.pipeline();
 
 		return new EntityProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
-				element.element(), NAMESPACE, ANSWERED, shadow,
+				element.element(), NAMESPACE, answered(element), shadow,
 				// Nothing blends into the shadow map, whatever the pipeline the row was made from
 				// says. Every shadow program of Iris is declared with BlendModeOverride.OFF
 				// (shaderpack/loading/ProgramId.java:13-19), and the reason is what a map is for:

@@ -202,7 +202,7 @@ public final class EntityMesh {
 
 		Vitrail.logger().info("The pack draws the entities or the hand {} now, and the entity mesh "
 				+ "carries {} only while it does, so the world is built again",
-				asked ? "and did not" : "and did", EntityVertex.IDENTIFIERS);
+				asked ? "and did not" : "and did", EntityVertex.APPENDED);
 		minecraft.levelExtractor.allChanged();
 		rebuildAsked = true;
 	}
@@ -241,30 +241,33 @@ public final class EntityMesh {
 
 		if (!asked) {
 			Vitrail.logger().info("Neither the entities nor the hand are drawn by the pack, so the "
-					+ "entity mesh keeps the game's own format and carries no {}",
-					EntityVertex.IDENTIFIERS);
+					+ "entity mesh keeps the game's own format and carries none of {}",
+					EntityVertex.APPENDED);
 
 			return;
 		}
 
 		Vitrail.logger().info("The entity mesh carries {} bytes a vertex instead of {}, the "
-				+ "difference being {}, which is the three identifiers a pack tells one entity, block "
-				+ "entity or held item apart by",
+				+ "difference being {}, which are the three identifiers a pack tells one entity, "
+				+ "block entity or held item apart by, then the middle of the sprite a polygon is "
+				+ "mapped to and the tangent of that mapping",
 				FORMAT.getVertexSize(), DefaultVertexFormat.ENTITY.getVertexSize(),
-				EntityVertex.IDENTIFIERS);
+				EntityVertex.APPENDED);
 	}
 
 	/**
-	 * The game's entity format with one element appended after its six.
+	 * The game's entity format with three elements appended after its six.
 	 * <p>
 	 * Rebuilt element by element from the game's own rather than written out again, so that the six
 	 * keep the names, the formats and the offsets the game gave them whatever the game does to them
-	 * next. Every element of that format is laid out end to end, so appending one after the last
-	 * leaves the six exactly where they were.
+	 * next. Every element of that format is laid out end to end, so appending after the last leaves
+	 * the six exactly where they were.
 	 * <p>
-	 * Four lanes of which three are read, and unsigned: {@code EntityVertex.IDENTIFIERS} says why
-	 * both, and four is in any case the only width that fits, a vertex having to be a whole number of
-	 * words wide.
+	 * The order and the widths are Iris's, {@code vertices/IrisVertexFormats.java:61-70}. The
+	 * identifiers are four unsigned shorts of which three are read; the middle of the sprite is the
+	 * pair of floats {@code UV0} already spells a corner in; the tangent is four normalised bytes,
+	 * which is what the game spells {@code Normal} as and what the fourth component being a
+	 * handedness needs. Each is a whole number of words wide, which a vertex has to stay.
 	 */
 	private static VertexFormat extend() {
 		VertexFormat.Builder builder = VertexFormat.builder(DefaultVertexFormat.ENTITY.getStepRate());
@@ -272,6 +275,9 @@ public final class EntityMesh {
 			builder.addAttribute(element.name(), element.format());
 		}
 
-		return builder.addAttribute(EntityVertex.IDENTIFIERS, GpuFormat.RGBA16_UINT).build();
+		return builder.addAttribute(EntityVertex.IDENTIFIERS, GpuFormat.RGBA16_UINT)
+				.addAttribute(EntityVertex.MID_TEX_COORD, GpuFormat.RG32_FLOAT)
+				.addAttribute(EntityVertex.TANGENT, GpuFormat.RGBA8_SNORM)
+				.build();
 	}
 }
