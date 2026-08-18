@@ -95,6 +95,14 @@ what the next one holds.
   saw was the game with no shader on it at all. The value is now handed over rather than the pass
   being thrown away. Mellow is the pack it cost, on one of its lighting passes, and it draws now.
 
+- **A pass reading its neighbour's value, which showed as a shader that simply looks wrong.** The
+  other half of the same pairing, and the half that said nothing: a value a pass sends on and the
+  next one never asks for used to push everything sent after it one place along, so the pass read
+  the wrong value under the right name. Nothing was refused and nothing was logged, which is what
+  made it hard to see. Sixteen passes across Bliss and Mellow were reading at least one value that
+  way: the enchantment shine under Mellow, and under Bliss the block-breaking crack along with the
+  post-processing steps that carry the sun's direction and the exposure, in every dimension.
+
 ## 0.3.0-alpha.1
 
 ### Changed
