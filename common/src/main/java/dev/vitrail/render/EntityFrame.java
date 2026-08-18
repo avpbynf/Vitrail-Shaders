@@ -32,9 +32,20 @@ public final class EntityFrame {
 	 * What a polygon that has no tangent to give is written with, which is the axis
 	 * {@code VertexPrologue} hands a mesh carrying no tangent at all.
 	 * <p>
-	 * A tangent of nought is not harmless: every pack normalises the one it reads, and
+	 * <strong>A divergence, and Iris has no one value to follow here.</strong> Its two roads answer
+	 * differently: the mob one gives up and returns {@code -1} as a whole word,
+	 * {@code vertices/NormalHelper.java:375-377} read at
+	 * {@code vertices/sodium/ModelToEntityVertexSerializer.java:61}, which is every component at
+	 * minus one; the buffer builder one has no test at all and packs whatever came out, which for a
+	 * tangent of no length is nought, {@code NormalHelper.java:294-300}. What makes neither usable
+	 * here is what a pack does with what it reads: every one of them normalises it, and
 	 * {@code normalize(vec3(0))} is a division by nought whose NaN travels into the colour through
-	 * the whole tangent frame.
+	 * the whole tangent frame, while a tangent of minus one on all three axes is a direction pointing
+	 * nowhere the texture runs. So both roads of this engine answer with the axis instead,
+	 * {@link #tangent} and {@link dev.vitrail.sodium.EntityMeshSerializer#serialize} writing it and
+	 * {@code VertexPrologue.BETTER_DEFAULTS} already holding it for a mesh with no tangent at all. It
+	 * costs a polygon that has no texture gradient a tangent along X rather than a NaN or a corner of
+	 * a cube.
 	 */
 	public static final int FLAT = pack(1.0F, 0.0F, 0.0F, 1.0F);
 
@@ -44,6 +55,19 @@ public final class EntityFrame {
 	/**
 	 * The squared length below which a vector is taken to be nought rather than normalised. On the
 	 * square so that no root is taken of a degenerate case on the way to finding out.
+	 * <p>
+	 * <strong>A threshold where Iris tests for exact nought</strong>, {@code NormalHelper.rsqrt}
+	 * ({@code NormalHelper.java:417-424}) special-casing {@code 0.0f} and
+	 * {@code computeFaceNormalManual} ({@code :85-91}) testing nothing whatever. What it works around
+	 * is that a float that is merely near nought normalises to a direction made entirely of rounding
+	 * error, and {@link #tangent} and {@link #faceNormal} both hand that direction on to the tangent
+	 * frame, which carries it into every normal map on the piece.
+	 * <p>
+	 * <strong>What it reaches is not the same size on the two.</strong> {@link #faceNormal} squares
+	 * the CROSS PRODUCT of the diagonals, whose length is twice the quad's area, so the refusal
+	 * covers a quad of about seven ten-thousandths of a block a side and smaller. {@link #tangent}
+	 * squares a length, so there it is a millionth. The game draws neither, an entity model being
+	 * built in sixteenths of a block.
 	 */
 	private static final float TINY = 1.0E-12F;
 
@@ -58,10 +82,12 @@ public final class EntityFrame {
 	 * rather than one corner's: a quad whose four corners are not quite coplanar has two edge
 	 * normals and one diagonal normal.
 	 * <p>
-	 * <strong>The refusal is this engine's own and Iris has no such branch.</strong> A quad of no
-	 * area gives a cross product of nought, and normalising that is a NaN that reaches the colour
-	 * through the tangent frame; the caller keeps the normal the game wrote instead. Nothing of the
-	 * game's own entity geometry is known to draw one, so this is a guard rather than a case.
+	 * <strong>The refusal is this engine's own and Iris has no such branch</strong>,
+	 * {@code NormalHelper.computeFaceNormalManual:85-91} normalising whatever the cross product gave.
+	 * A quad of no area gives nought there, and normalising that is a NaN that reaches the colour
+	 * through the tangent frame; the caller keeps the normal the game wrote instead. It costs such a
+	 * quad a tangent measured against a corner's normal rather than a NaN, and nothing of the game's
+	 * own entity geometry is known to draw one, so this is a guard rather than a case.
 	 */
 	public static boolean faceNormal(float[] into, float x0, float y0, float z0, float x1, float y1,
 			float z1, float x2, float y2, float z2, float x3, float y3, float z3) {
@@ -177,11 +203,10 @@ public final class EntityFrame {
 	 * Four normalised components into one word, low byte first, which is how the element is laid out
 	 * and how the game writes the normal beside it.
 	 * <p>
-	 * <strong>Rounded where Iris and the game both truncate</strong> ({@code NormI8.pack},
-	 * {@code BufferBuilder.normalIntValue}), which is what {@code TangentFrame.snorm} already does
-	 * for the chunk mesh: truncation pulls every component toward nought by up to a whole step where
-	 * rounding pulls it by half of one. It is a quantisation and not a convention, so both engines
-	 * read the same direction either way, to within four tenths of a degree.
+	 * Truncated toward nought rather than rounded, which is what both engines already do to a
+	 * normalised byte ({@code NormI8.pack}, {@code BufferBuilder.normalIntValue}) and is therefore
+	 * the same word out of the same tangent. Rounding would land closer to the direction, by up to
+	 * half a step, and be a different word for no reason a pack could name.
 	 */
 	public static int pack(float x, float y, float z, float w) {
 		return (snorm(x) & 0xFF) | ((snorm(y) & 0xFF) << 8) | ((snorm(z) & 0xFF) << 16)
@@ -195,6 +220,6 @@ public final class EntityFrame {
 
 	/** One component as the signed byte the element holds it in. */
 	private static int snorm(float value) {
-		return Math.round(Math.clamp(value, -1.0F, 1.0F) * RANGE);
+		return (int) (Math.clamp(value, -1.0F, 1.0F) * RANGE);
 	}
 }

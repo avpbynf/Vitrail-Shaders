@@ -317,8 +317,9 @@ public final class EntityDraw {
 		 * takes the one that answers the light map names with a constant.
 		 * <p>
 		 * <strong>Two contracts and not two formats</strong>, which is why {@link #format} does not
-		 * split with it and must not: the mesh is the same thirty-six bytes and {@code UV2} is bound
-		 * and declared either way. What changes is one line of the vertex head and the texture behind
+		 * split with it and must not: the mesh is the same elements at the same stride and
+		 * {@code UV2} is bound and declared either way. What changes is one line of the vertex head
+		 * and the texture behind
 		 * one sampler. It reaches the translation because this constant is part of the key a program
 		 * is translated under, so the two contracts are two modules and neither is handed the other's
 		 * text.
@@ -1407,9 +1408,9 @@ public final class EntityDraw {
 		// ten draws in a hand pass.
 		boolean inMoment = (element != null && element.hand()) ? HandDraw.wanted()
 				: wanted && element != null && inWindow(element);
-		// And the mesh has to be carrying the identifiers, whatever the moment says. Every row but the
-		// glint's is read against EntityMesh.format, so a draw served before the mesh settled would
-		// bind forty-four bytes of layout over a vertex of thirty-six. It lasts from the load that
+		// And the mesh has to be carrying, whatever the moment says. Every row but the glint's is read
+		// against EntityMesh.format, so a draw served before the mesh settled would bind fifty-six
+		// bytes of layout over a vertex of thirty-six. It lasts from the load that
 		// asked until the extract that rebuilds the world, which is one frame in the ordinary case.
 		//
 		// What it costs is NOT the same thing on the two roads, and saying it once would be wrong on

@@ -113,10 +113,13 @@ public final class EntityMeshSerializer implements VertexSerializer {
 	 * onto all four of its corners already, so there is nothing a quad could be asked that its
 	 * corners do not agree on. The {@code BufferBuilder} road has no such promise and works one out.
 	 * <p>
-	 * A run that is not a whole number of quads keeps the flat stand-in on whatever is left over,
-	 * rather than being dropped: Iris's loop copies {@code vertexCount >> 2} quads and never touches
-	 * the remainder at all, which would leave those vertices at whatever the arena last held. Nothing
-	 * of the game writes a partial quad down this road, so it is a guard and not a case.
+	 * A run that is not a whole number of quads keeps the stand-in on whatever is left over, rather
+	 * than being dropped: Iris's loop copies {@code vertexCount >> 2} quads and never touches the
+	 * remainder at all, which would leave those vertices at whatever the arena last held. It is the
+	 * same stand-in {@code BufferBuilderMixin} writes for the same reason, nought for the sprite
+	 * middle and {@code EntityFrame.FLAT} for the tangent, which are the two values
+	 * {@code VertexPrologue} hands a mesh carrying neither. Nothing of the game writes a partial quad
+	 * down this road, so it is a guard and not a case.
 	 */
 	@Override
 	public void serialize(long written, long carried, int vertices) {
@@ -171,9 +174,8 @@ public final class EntityMeshSerializer implements VertexSerializer {
 
 		for (int vertex = quads << 2; vertex < vertices; vertex++) {
 			copy(from, into, entity, blockEntity, item);
-			MemoryUtil.memPutFloat(into + MID_TEX_COORD, MemoryUtil.memGetFloat(from + TEX_COORD));
-			MemoryUtil.memPutFloat(into + MID_TEX_COORD + 4L,
-					MemoryUtil.memGetFloat(from + TEX_COORD + 4L));
+			MemoryUtil.memPutFloat(into + MID_TEX_COORD, 0.0F);
+			MemoryUtil.memPutFloat(into + MID_TEX_COORD + 4L, 0.0F);
 			MemoryUtil.memPutInt(into + TANGENT, EntityFrame.FLAT);
 			from += WRITTEN;
 			into += CARRIED;
