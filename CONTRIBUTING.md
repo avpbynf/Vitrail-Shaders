@@ -30,9 +30,10 @@ name: such a branch carries the version bump and nothing else, so there is nothi
 about it.
 
 Nothing in a name records who wrote the branch or when, and none of them carries an issue number
-either. That second one is a choice rather than an absence, now that there are issues to number: a
-request points at the one it closes from its body, where `Closes #31` really closes it, and a name
-carrying the number would say the same thing in the one place nothing reads it back from.
+either. That second one is a choice rather than an absence, now that there are issues to number: the
+commit that does the work names the issue it closes, and a name carrying the number would say the
+same thing in the one place nothing reads it back from. Commits says where that line goes and why it
+is not the request's body.
 
 **The history is linear and carries no merge commit anywhere, which is not a preference.** A tree
 that forks is a tree nobody reads once it is public, and this one is public. A topic branch is
@@ -164,9 +165,23 @@ goes in the body now, which is where it reads better anyway. A body is for the r
 reason is not in the diff, and a blank line separates it from the subject.
 
 A `!` before the colon marks a change that breaks a pack or a configuration that used to work. What
-breaks is written in the body, and there is no `BREAKING CHANGE:` footer: there are no trailers here
-at all, and nothing in this repository reads one, the changelog being written by hand and the
-version typed by a human.
+breaks is written in the body, and there is no `BREAKING CHANGE:` footer: the changelog is written
+by hand and the version typed by a human, so nothing here would read one. The `Closes` line below is
+the single exception, and what reads it is GitHub rather than anything in this repository.
+
+**An issue is closed from the COMMIT that closes it and never from the pull request**, on a line of
+its own at the foot of the body:
+
+    Closes #30
+
+That is the shape of this repository rather than a taste. A closing keyword fires when the request
+it is written in merges into the DEFAULT branch, which here is `main`, and every request here merges
+into `dev`: written in a request's body it links the issue and then leaves it open for good. Written
+on the commit it travels with the commit, and it lands on `main` the day `dev` does.
+
+**Check the issue really closed once `dev` has landed on `main`, and close it by hand if it did
+not.** This is the one rule in this file whose far end is a service rather than a script, so it is
+the one that can quietly stop being true without anything here changing.
 
 ```
 feat(render): read entityColor off the entity mesh overlay
