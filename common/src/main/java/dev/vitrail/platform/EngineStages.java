@@ -36,7 +36,11 @@ public final class EngineStages {
 	}
 
 	/**
-	 * Once, as soon as the loader has a game to look at, and before any frame.
+	 * Once, with the game and its device up, and before any world is entered. Not before any frame:
+	 * a pack takes seconds to read, and the one thing this moment must not do is hold up the render
+	 * thread between the boot's resource reload and the first frame, where the game uploads its
+	 * atlases against uniforms only a drawn frame provides. Each loader module says how it gets
+	 * there; the Fabric mixin carries the measurement.
 	 */
 	public static void clientSetup() {
 		// The backend rides on the line that was already here rather than taking one of its own. It
