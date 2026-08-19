@@ -26,7 +26,9 @@ types='feat|fix|perf|refactor|docs|test|build|ci|chore'
 subject_re="^($types)(\([a-z0-9-]+\))?!?: [a-z].*[^.]$"
 # `release` is a branch prefix and not a commit type: what lands from such a branch is the version
 # bump, which is a chore. The version itself is the name, so this is the one branch carrying dots.
-branch_re="^(($types)/[a-z0-9]+(-[a-z0-9]+)*|release/[0-9]+\.[0-9]+\.[0-9]+(-[0-9a-z.]+)?)$"
+# Three numbers, then either `-alpha`, or `-beta`, or nothing: a counted pre-release is refused here
+# rather than at the tag, where the repair costs a branch already pushed under the wrong name.
+branch_re="^(($types)/[a-z0-9]+(-[a-z0-9]+)*|release/[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta))?)$"
 
 die() {
 	echo "commit-msg: $1" >&2

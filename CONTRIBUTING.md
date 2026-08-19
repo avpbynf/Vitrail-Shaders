@@ -29,7 +29,7 @@ carry no prefix, being the only two that are not about one thing.
     fix/hand-bob-frame
     ci/commit-and-branch-format
 
-`release/0.3.0-alpha.1` is the one shape that departs from it, and the version is the whole of the
+`release/0.5.0-beta` is the one shape that departs from it, and the version is the whole of the
 name: such a branch carries the version bump and nothing else, so there is nothing else to say
 about it.
 
@@ -123,6 +123,14 @@ and comes from the same file.
 
 A tag is pushed on `main` and on nothing else, which is what keeps the sentence above true.
 
+A version is three numbers, and after them either `-alpha`, or `-beta`, or nothing at all. Those
+three are one version reached in order: `0.5.0-alpha`, then `0.5.0-beta`, then `0.5.0`. Nothing
+follows the word, and a counter least of all, so `0.5.0-beta.1` is not a version here. What that
+costs is worth saying, because it is the whole of the rule: there is no second beta of a version.
+A beta that needs a fix is a new version and the patch number moves, `0.5.1-beta`, which is also
+what a reader of the two numbers would have assumed. The hook refuses a release branch named
+otherwise, and the release workflow refuses such a tag before it builds anything.
+
 ## Changelog
 
 `CHANGELOG.md` carries an `Unreleased` section, and a change a player would notice is written into
@@ -191,7 +199,7 @@ the one that can quietly stop being true without anything here changing.
 feat(render): read entityColor off the entity mesh overlay
 fix(pack)!: refuse a customTexture path that leaves the pack
 docs: correct five sentences against the source
-chore(release): raise the version to 0.3.0-alpha.1
+chore(release): raise the version to 0.5.0-beta
 ```
 
 A commit that changes a mechanism and the paragraph describing it is one commit under the type of
@@ -389,8 +397,8 @@ means a changelog corrected on the second attempt quietly never lands. On the Gi
 the same run replaces the asset rather than adding one, which resets what the old asset had
 counted.
 
-A version carrying an identifier after a dash, `0.2.0-rc.1` and the like, is published
-as a pre-release. One without is published as a release.
+A version carrying `-alpha` or `-beta` is published as a pre-release. One carrying neither is
+published as a release.
 
 The release body is this version's entry in `CHANGELOG.md`, and the run refuses the tag when that
 entry is missing rather than publishing an empty one. It was GitHub's own generated notes until
