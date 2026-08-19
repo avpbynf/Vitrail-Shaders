@@ -124,7 +124,7 @@ public final class DistantDraw {
 	}
 
 	/** One vec3 under std140, which is what one slot HOLDS; how far apart slots start is the
-	 * device's answer and {@link #slotBytes} alone carries it. */
+	 * device's answer and {@link Corners#slotBytes} alone carries it. */
 	private static final int BLOCK_BYTES = 16;
 
 	/** What the far terrain's own depth image holds, which is the format the game's own depth has. */
@@ -170,18 +170,7 @@ public final class DistantDraw {
 	private boolean broken;
 
 	/** The section corners of the halves recorded this frame, one aligned slot each. */
-	private MappableRingBuffer sections;
-	private int slots;
-
-	/** How many of those slots this frame has already written, which is where the next half starts. */
-	private int used;
-
-	/**
-	 * The most slots any one frame has spent, both halves together, so that a frame refused for
-	 * width is refused once: the guess below doubles the OPAQUE half, and a water half wider than
-	 * that would otherwise outgrow the buffer on every frame alike rather than only the first.
-	 */
-	private int peak;
+	private final Corners corners = new Corners("Vitrail far terrain sections");
 
 	DistantDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
 			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
@@ -304,7 +293,11 @@ public final class DistantDraw {
 			encoder.clearDepthTexture(this.depth, 0.0);
 		}
 
-		int base = writeSections(device, sections, minecraft);
+		// The camera is the game's own and not DH's copy of it, although DH hands one in: everything
+		// else this engine places is placed against the game's, and a far terrain placed against a
+		// second reading of the same position would stand a fraction of a block away from the near
+		// terrain it meets.
+		int base = this.corners.write(device, sections, minecraft.gameRenderer.mainCamera().position());
 		if (base < 0) {
 			return refuse(element, "sections", "the far terrain grew wider than the block holding its "
 					+ "section corners between the two halves of one frame, and the wider block cannot "
@@ -319,10 +312,8 @@ public final class DistantDraw {
 			pass.setPipeline(pipeline);
 			program.bind(pass);
 
-			GpuBuffer block = this.sections.currentBuffer();
 			for (int index = 0; index < sections.size(); index++) {
-				pass.setUniform(DistantVertex.SECTION_BLOCK,
-						block.slice((long) (base + index) * slotBytes(device), BLOCK_BYTES));
+				pass.setUniform(DistantVertex.SECTION_BLOCK, this.corners.slot(device, base + index));
 
 				for (DhLods.Piece piece : sections.get(index).pieces()) {
 					pass.setIndexBuffer(piece.indices(), IndexType.INT);
@@ -335,80 +326,6 @@ public final class DistantDraw {
 		this.drew = true;
 
 		return true;
-	}
-
-	/**
-	 * Writes every section's corner, relative to the camera, into one slot each.
-	 * <p>
-	 * <strong>Appended to what this frame has already written rather than written from the
-	 * start</strong>, and the reason is that a frame has two halves and one buffer. The pass of the
-	 * first half is RECORDED and not executed: it holds slices of this buffer, so slots the second
-	 * half wrote over would be the ones the first half draws from, and the two halves do not see the
-	 * same sections - a section carrying only water is in one list and not the other, so slot for slot
-	 * the two lists are not the same sections at all.
-	 * <p>
-	 * The camera is the game's own and not DH's copy of it, although DH hands one in: everything else
-	 * this engine places is placed against the game's, and a far terrain placed against a second
-	 * reading of the same position would stand a fraction of a block away from the near terrain it
-	 * meets.
-	 *
-	 * @return the slot this half's first section landed in, or -1 when there was no room left for it
-	 */
-	private int writeSections(GpuDevice device, List<DhLods.Section> sections, Minecraft minecraft) {
-		int stride = slotBytes(device);
-		// Room for BOTH halves and not for the one at hand, which is the whole reason the wanted count
-		// is doubled at the head of a frame: the second half of a frame cannot be given a wider buffer,
-		// the first half already holding slices of the one that stands. Sized off the half in hand
-		// alone, a frame whose two halves each carry sixty sections would fit the first and refuse the
-		// second on every frame for as long as the horizon stayed that wide. The peak covers the
-		// case the doubling cannot: a water half wider than twice the opaque one is refused once,
-		// and the frame after allocates what the refused frame really spent.
-		int wanted = Math.max(this.peak,
-				this.used == 0 ? 2 * sections.size() : this.used + sections.size());
-		if (this.sections == null || this.slots < wanted) {
-			// Not while a half of this frame is already drawn from it: closing the buffer that pass
-			// holds slices of would pull the ground out from under a recorded draw. The caller says
-			// so, and the refusal itself teaches the width: the next frame allocates what this one
-			// wanted rather than a guess that already fell short once.
-			if (this.used > 0) {
-				this.peak = Math.max(this.peak, wanted);
-				return -1;
-			}
-
-			if (this.sections != null) {
-				this.sections.close();
-			}
-
-			// In steps rather than to the exact count, so that a player walking into a wider horizon
-			// does not reallocate on every frame.
-			this.slots = Math.max(64, Mth.smallestEncompassingPowerOfTwo(wanted));
-			this.sections = new MappableRingBuffer(() -> "Vitrail far terrain sections",
-					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, this.slots * stride);
-		}
-
-		int base = this.used;
-		Vec3 camera = minecraft.gameRenderer.mainCamera().position();
-		try (GpuBufferSlice.MappedView view = this.sections.currentBuffer().map(false, true)) {
-			ByteBuffer data = view.data();
-			for (int index = 0; index < sections.size(); index++) {
-				DhLods.Section section = sections.get(index);
-				data.position((base + index) * stride);
-				Std140Builder.intoBuffer(data).putVec3(
-						(float) (section.x() - camera.x),
-						(float) (section.y() - camera.y),
-						(float) (section.z() - camera.z));
-			}
-		}
-
-		this.used = base + sections.size();
-
-		return base;
-	}
-
-	/** How far apart two slots stand, which is the device's answer and not a number of ours. */
-	private static int slotBytes(GpuDevice device) {
-		return Mth.roundToward(BLOCK_BYTES,
-				device.getDeviceInfo().limits().minUniformOffsetAlignment());
 	}
 
 	/**
@@ -567,11 +484,7 @@ public final class DistantDraw {
 	/** Rotates the ring buffers. Called once the frame's far terrain draws have been recorded. */
 	void rotate() {
 		this.drew = false;
-		this.used = 0;
-		if (this.sections != null) {
-			this.sections.rotate();
-		}
-
+		this.corners.rotate();
 		this.programs.values().forEach(DistantProgram::rotate);
 	}
 
@@ -583,14 +496,7 @@ public final class DistantDraw {
 		this.read = false;
 		this.drew = false;
 		this.broken = false;
-		if (this.sections != null) {
-			this.sections.close();
-			this.sections = null;
-			this.slots = 0;
-			this.used = 0;
-		}
-
-		this.peak = 0;
+		this.corners.close();
 
 		releaseDepth();
 	}
@@ -604,6 +510,141 @@ public final class DistantDraw {
 		if (this.depth != null) {
 			this.depth.close();
 			this.depth = null;
+		}
+	}
+
+	/**
+	 * One ring of section corners, and the slot bookkeeping the halves that share it need.
+	 * <p>
+	 * A ring rather than one buffer, for the reason every other per frame block of this engine is
+	 * one: the backend keeps two submissions in flight, and a buffer written again while a frame
+	 * that has not finished is still reading it is the far terrain of two frames at once. It turns
+	 * where {@link DistantDraw#rotate} turns.
+	 * <p>
+	 * <strong>One ring cannot serve halves drawn on either side of that turn</strong>, which is
+	 * why there is more than one of these. The camera's two halves are recorded before the frame
+	 * closes and the light's two after it, so a single ring would have the light writing over the
+	 * very slots the camera's recorded passes hold slices of.
+	 */
+	private static final class Corners {
+
+		private final String label;
+
+		private MappableRingBuffer buffer;
+		private int slots;
+
+		/** How many slots this frame has already written, which is where the next half starts. */
+		private int used;
+
+		/**
+		 * The most slots any one frame has spent, both halves together, so that a frame refused for
+		 * width is refused once: the guess below doubles the FIRST half, and a second half wider
+		 * than that would otherwise outgrow the buffer on every frame alike rather than only the
+		 * first.
+		 */
+		private int peak;
+
+		Corners(String label) {
+			this.label = label;
+		}
+
+		/**
+		 * Writes every section's corner, relative to the camera, into one slot each.
+		 * <p>
+		 * <strong>Appended to what this frame has already written rather than written from the
+		 * start</strong>, and the reason is that a frame has two halves and one buffer. The pass of
+		 * the first half is RECORDED and not executed: it holds slices of this buffer, so slots the
+		 * second half wrote over would be the ones the first half draws from, and the two halves do
+		 * not see the same sections - a section carrying only water is in one list and not the
+		 * other, so slot for slot the two lists are not the same sections at all.
+		 *
+		 * @param camera where the pass this belongs to measures its geometry from, which is the
+		 *               game's own camera and not DH's copy of it: everything else this engine
+		 *               places is placed against the game's, and a far terrain placed against a
+		 *               second reading of the same position would stand a fraction of a block away
+		 *               from the near terrain it meets
+		 * @return the slot this half's first section landed in, or -1 when there was no room left
+		 *         for it
+		 */
+		int write(GpuDevice device, List<DhLods.Section> sections, Vec3 camera) {
+			int stride = slotBytes(device);
+			// Room for BOTH halves and not for the one at hand, which is the whole reason the wanted
+			// count is doubled at the head of a frame: the second half of a frame cannot be given a
+			// wider buffer, the first half already holding slices of the one that stands. Sized off
+			// the half in hand alone, a frame whose two halves each carry sixty sections would fit
+			// the first and refuse the second on every frame for as long as the horizon stayed that
+			// wide. The peak covers the case the doubling cannot: a second half wider than twice the
+			// first is refused once, and the frame after allocates what the refused frame really
+			// spent.
+			int wanted = Math.max(this.peak,
+					this.used == 0 ? 2 * sections.size() : this.used + sections.size());
+			if (this.buffer == null || this.slots < wanted) {
+				// Not while a half of this frame is already drawn from it: closing the buffer that
+				// pass holds slices of would pull the ground out from under a recorded draw. The
+				// caller says so, and the refusal itself teaches the width: the next frame allocates
+				// what this one wanted rather than a guess that already fell short once.
+				if (this.used > 0) {
+					this.peak = Math.max(this.peak, wanted);
+
+					return -1;
+				}
+
+				if (this.buffer != null) {
+					this.buffer.close();
+				}
+
+				// In steps rather than to the exact count, so that a player walking into a wider
+				// horizon does not reallocate on every frame.
+				this.slots = Math.max(64, Mth.smallestEncompassingPowerOfTwo(wanted));
+				this.buffer = new MappableRingBuffer(() -> this.label,
+						GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, this.slots * stride);
+			}
+
+			int base = this.used;
+			try (GpuBufferSlice.MappedView view = this.buffer.currentBuffer().map(false, true)) {
+				ByteBuffer data = view.data();
+				for (int index = 0; index < sections.size(); index++) {
+					DhLods.Section section = sections.get(index);
+					data.position((base + index) * stride);
+					Std140Builder.intoBuffer(data).putVec3(
+							(float) (section.x() - camera.x),
+							(float) (section.y() - camera.y),
+							(float) (section.z() - camera.z));
+				}
+			}
+
+			this.used = base + sections.size();
+
+			return base;
+		}
+
+		/** The slot one section was written into, as the pass binds it. */
+		GpuBufferSlice slot(GpuDevice device, int index) {
+			return this.buffer.currentBuffer().slice((long) index * slotBytes(device), BLOCK_BYTES);
+		}
+
+		/** How far apart two slots stand, which is the device's answer and not a number of ours. */
+		private static int slotBytes(GpuDevice device) {
+			return Mth.roundToward(BLOCK_BYTES,
+					device.getDeviceInfo().limits().minUniformOffsetAlignment());
+		}
+
+		void rotate() {
+			this.used = 0;
+			if (this.buffer != null) {
+				this.buffer.rotate();
+			}
+		}
+
+		void close() {
+			if (this.buffer != null) {
+				this.buffer.close();
+				this.buffer = null;
+				this.slots = 0;
+				this.used = 0;
+			}
+
+			this.peak = 0;
 		}
 	}
 }
