@@ -82,13 +82,12 @@ quality for it in the meantime.
 
 ## Quick start
 
-There is one jar per loader, NeoForge and Fabric. Both are on
+There is one jar and it runs on both loaders, NeoForge and Fabric. It is on
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) and
 attached to every [release](https://github.com/avpbynf/Vitrail-Shaders/releases)
-here, put there by the same run, so whichever of the two you take is the same
-file.
+here, put there by the same run, so both places serve the same file.
 
-Put the one for your loader in `mods/` next to Sodium and Chloride, and switch
+Put it in `mods/` next to Sodium and Chloride, and switch
 the game to Vulkan: `preferredGraphicsBackend:"vulkan"` in `options.txt`, or
 Options, then Video Settings, in game. Nothing enforces that switch, though the
 mod says at startup which backend the game came up on, and says so as an error
@@ -105,7 +104,8 @@ To build from source:
 gradlew build
 ```
 
-Both jars land in `build/libs`.
+Three jars land in `build/libs`; the one to install is the plain
+`vitrail-<version>` one, the other two being its per-loader slices.
 
 ## How it works
 

@@ -6,18 +6,15 @@
 # stops before anything is uploaded when they disagree: that is the one mistake that would otherwise
 # ship a jar under a version number nothing inside it agrees with.
 #
-# There are two jars, one per loader, and both go everywhere: the same engine reaches the same
-# stages of the same frame on either, so a release that carried one of them would be a release that
-# left half its users on the version before. They are found rather than named. Each name is built
-# out of archivesName and archiveVersion in that module's build.gradle, and spelling either a second
-# time here would be a second home for it, out of step from whichever of the two moved first.
+# What ships is ONE jar, the merged one the root build assembles, and it runs under either loader:
+# each loader reads its own metadata file and ignores the other's, so the union of the two loader
+# jars is a mod to both of them. It is found rather than named. Its name is built out of
+# archivesName and archiveVersion on the mergedJar task in the root build.gradle, and spelling it a
+# second time here would be a second home for it, out of step the day the first one moves.
 #
-# What is NOT shared between them is the loader a store files the upload under, and that is the
-# whole reason the mirroring is two steps rather than one. The action takes one list of loaders per
-# invocation and hangs it on every file it is given, so a single step would tell both stores that
-# the NeoForge jar runs on Fabric. Two steps, one jar each, and the version number carries the
-# loader after a plus so that the two versions of one release are told apart on a store that has no
-# other place to put the distinction.
+# One upload per store, filed under both loaders at once, which both stores take on a single file.
+# That also unties the version number: with one upload per release there are no two rows on a store
+# left to tell apart, so nothing is added after a plus any more.
 #
 # **The stores are mirrored from HERE and not from a workflow of their own**, and that is not a
 # matter of taste. A release this job creates is authored by the token the job runs under, and a
@@ -136,40 +133,41 @@ jobs:
       # on the day this runs.
       - run: ./gradlew build
 
-      # One per loader, and a missing one stops the run rather than shipping the other on its own.
-      # The root build gathers both here through collectJars, which assemble depends on.
-      - name: Find the jars
+      # The merged jar is the one that ships; the loader jars are its inputs and sit beside it in
+      # build/libs, gathered by collectJars, which assemble depends on. All three are counted, so
+      # a jar that stopped being built and a jar this list does not know are both a stop rather
+      # than a green run: a module added to settings.gradle looks like a fourth jar on the day it
+      # lands, and until this file and the mergedJar task both know it, refusing loses nothing.
+      - name: Find the jar
         id: jars
         run: |
-          # The loaders a release is expected to carry, named once. Adding a third is this word
-          # plus a mirror step of its own further down, since a store files a loader per upload.
           shopt -s nullglob
-          expected=0
+
+          # The merged jar is the one whose version begins right after the name; the loader jars
+          # carry their loader between the two. Naming the pattern and listing the directory on
+          # failure, because the way this fails is a rename in the root build.gradle, and "found 0"
+          # beside a folder that visibly holds jars sends whoever reads it looking for a build
+          # that did not happen.
+          jars=(build/libs/vitrail-[0-9]*.jar)
+          if [ ${#jars[@]} -ne 1 ]; then
+            echo "::error::build/libs/vitrail-[0-9]*.jar matched ${#jars[@]} files, and build/libs holds: $(ls build/libs)"
+            exit 1
+          fi
+
+          echo "merged=${jars[0]}" >> "$GITHUB_OUTPUT"
 
           for loader in neoforge fabric; do
             glob="build/libs/vitrail-$loader-*.jar"
-            jars=($glob)
-            if [ ${#jars[@]} -ne 1 ]; then
-              # Naming the pattern and listing the directory, because the way this fails is a rename
-              # in that module's build.gradle, and "found 0" beside a folder that visibly holds a jar
-              # sends whoever reads it looking for a build that did not happen.
-              echo "::error::$glob matched ${#jars[@]} files, and build/libs holds: $(ls build/libs)"
+            inputs=($glob)
+            if [ ${#inputs[@]} -ne 1 ]; then
+              echo "::error::$glob matched ${#inputs[@]} files, and build/libs holds: $(ls build/libs)"
               exit 1
             fi
-
-            expected=$((expected + 1))
-            echo "$loader=${jars[0]}" >> "$GITHUB_OUTPUT"
           done
 
-          # The same silence read from the other end. The check above catches a jar that stopped
-          # being built; this one catches a jar that is built and answers to no loader on the list,
-          # which is what a module added to settings.gradle looks like on the day it lands. Without
-          # it that jar reaches neither store and nothing says so, the run ending as green as one
-          # where everything shipped. Counting is enough to find it: the patterns above share the
-          # vitrail- prefix and part at the loader, so no jar is claimed by two of them.
           built=(build/libs/*.jar)
-          if [ ${#built[@]} -ne "$expected" ]; then
-            echo "::error::the list names $expected jars, and build/libs holds: $(ls build/libs)"
+          if [ ${#built[@]} -ne 3 ]; then
+            echo "::error::the list names 3 jars, and build/libs holds: $(ls build/libs)"
             exit 1
           fi
 
@@ -178,8 +176,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
           TAG: ${{ steps.which.outputs.tag }}
-          NEOFORGE_JAR: ${{ steps.jars.outputs.neoforge }}
-          FABRIC_JAR: ${{ steps.jars.outputs.fabric }}
+          MERGED_JAR: ${{ steps.jars.outputs.merged }}
         run: |
           # Creating refuses a tag that already carries a release, so a re-run of a job that died
           # after the release was made would have no way back other than deleting a public release.
@@ -191,14 +188,14 @@ jobs:
           # that carries no release, this makes one, which is the same thing the tag push would
           # have done and is why it is not guarded against.
           if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" "$NEOFORGE_JAR" "$FABRIC_JAR" --clobber
+            gh release upload "$TAG" "$MERGED_JAR" --clobber
             gh release edit "$TAG" --draft=false
           else
             # The body is this version's changelog entry and not the API's generated list of merged
             # pull requests. There are none to generate from here, the history being linear and
             # pushed rather than merged, so what that flag produced was a bare compare link under a
             # heading; and a body written by hand is the whole point of keeping the file.
-            gh release create "$TAG" "$NEOFORGE_JAR" "$FABRIC_JAR" \
+            gh release create "$TAG" "$MERGED_JAR" \
               --title "$TAG" \
               --notes-file changelog.md \
               --prerelease="$PRERELEASE"
@@ -247,14 +244,6 @@ jobs:
       # were learned the hard way on another mod of this account, each added in a commit of its own
       # after a first upload had gone out without them, are `environment` and `java`.
       #
-      # `version` is given now, and only because there are two uploads per release. Modrinth files a
-      # version number per version and has nowhere else to say which loader a version is for, so two
-      # versions carrying the same number would be two rows a reader has to open to tell apart, and
-      # would rest besides on that store accepting a duplicate, which is not written down anywhere
-      # this file could check. The loader goes after a plus, which is build metadata and leaves the
-      # number itself the one this job checked the tag against. CurseForge has no version object at
-      # all, only files, so there the line changes nothing and `name` is what a reader sees.
-      #
       # The version type is the one thing NOT left to the action, which would read the word out of
       # the version and file an alpha. CurseForge hides an alpha behind a filter its own navigation
       # sets, `showAlphaFiles=hide` on the Files link of every project page, so this one sat behind
@@ -266,7 +255,7 @@ jobs:
       #
       # `java` is CurseForge's alone. Modrinth has no field for it and the action never sends it
       # there, so the line is not the pair of a missing one.
-      - name: Mirror the NeoForge jar
+      - name: Mirror the jar
         if: steps.mirror.outputs.curseforge == 'true' || steps.mirror.outputs.modrinth == 'true'
         uses: Kir-Antipov/mc-publish@v3.3
         with:
@@ -276,51 +265,26 @@ jobs:
           curseforge-token: ${{ steps.mirror.outputs.curseforge == 'true' && secrets.CURSEFORGE_TOKEN || '' }}
           modrinth-id: ${{ secrets.MODRINTH_ID || vars.MODRINTH_ID }}
           modrinth-token: ${{ steps.mirror.outputs.modrinth == 'true' && secrets.MODRINTH_TOKEN || '' }}
-          files: ${{ steps.jars.outputs.neoforge }}
-          name: ${{ steps.which.outputs.tag }} (NeoForge)
-          version: ${{ steps.version.outputs.version }}+neoforge
+          files: ${{ steps.jars.outputs.merged }}
+          name: ${{ steps.which.outputs.tag }}
+          version: ${{ steps.version.outputs.version }}
           version-type: beta
           changelog-file: changelog.md
-          loaders: neoforge
+          loaders: |
+            neoforge
+            fabric
           game-versions: "26.2"
           environment: client
           java: 25
-          # Left to the action, which reads the jar's own neoforge.mods.toml, so Sodium and Chloride
-          # go up as relations of the FILE as well, beside whatever Default Relations the project
-          # itself carries. Their names there are the mod ids, and a name the store does not know is
-          # dropped rather than failing the upload. On Modrinth the drop is what happens to
-          # `minecraft` and `neoforge`, which are no projects of that store, while `sodium` and
-          # `chloride` are its slugs for them as well.
-
-      # The same release, the other loader. Everything that differs between the two steps differs
-      # because a store files it per upload: the file, the loader it is filed under, the version
-      # number that tells the two apart, and the dependencies.
-      - name: Mirror the Fabric jar
-        if: steps.mirror.outputs.curseforge == 'true' || steps.mirror.outputs.modrinth == 'true'
-        uses: Kir-Antipov/mc-publish@v3.3
-        with:
-          curseforge-id: ${{ secrets.CURSEFORGE_ID }}
-          curseforge-token: ${{ steps.mirror.outputs.curseforge == 'true' && secrets.CURSEFORGE_TOKEN || '' }}
-          modrinth-id: ${{ secrets.MODRINTH_ID || vars.MODRINTH_ID }}
-          modrinth-token: ${{ steps.mirror.outputs.modrinth == 'true' && secrets.MODRINTH_TOKEN || '' }}
-          files: ${{ steps.jars.outputs.fabric }}
-          name: ${{ steps.which.outputs.tag }} (Fabric)
-          version: ${{ steps.version.outputs.version }}+fabric
-          version-type: beta
-          changelog-file: changelog.md
-          loaders: fabric
-          game-versions: "26.2"
-          environment: client
-          java: 25
-          # Written out here, where the NeoForge step is left to read its jar, and the difference is
-          # not a change of mind: fabric.mod.json names the three Fabric API modules this mod uses
-          # one by one, and no store has a project under any of those three names. Read off the jar
-          # they would each be dropped in silence and the file would go up declaring no Fabric API
-          # at all, which is the one dependency a Fabric player is most likely to be missing. Both
-          # stores call the whole of it `fabric-api`. `fabricloader` and `minecraft` are dropped the
-          # same way and are meant to be: what stands for them is the loader and the game version
-          # the upload is filed under.
+          # Written out rather than read off the jar, which carries TWO metadata files: whichever
+          # one the action read, its list would be wrong for half the audience. Both stores call
+          # the whole of Fabric API `fabric-api`; the two modules fabric.mod.json names one by one
+          # are projects of neither store and would be dropped in silence. And fabric-api is
+          # optional here while that file says required, both on purpose: a store hangs a
+          # dependency on the upload as a whole, so `required` would send a NeoForge install
+          # chasing a mod that has no NeoForge build, while on Fabric the metadata inside the jar
+          # is what refuses to boot without it, which is where the requirement actually bites.
           dependencies: |
             sodium(required)
             chloride(required)
-            fabric-api(required)
+            fabric-api(optional)
