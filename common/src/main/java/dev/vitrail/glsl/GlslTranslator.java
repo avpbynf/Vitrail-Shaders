@@ -995,6 +995,11 @@ public final class GlslTranslator {
 				continue;
 			}
 
+			if (name.equals("gl_TextureMatrix") && this.inputs == VertexInputs.DISTANT
+					&& rewriteDistantTextureMatrix(index)) {
+				continue;
+			}
+
 			if (LegacyGlsl.readsDrawModelView(this.program) && rewriteGameModelView(index, name)) {
 				continue;
 			}
@@ -1148,6 +1153,61 @@ public final class GlslTranslator {
 		blank(close);
 		this.injectedNames.add(LegacyGlsl.GAME_TEXTURE_MATRIX);
 		this.gameTextureMatrix++;
+
+		return true;
+	}
+
+	/**
+	 * Answers a far terrain program's read of {@code gl_TextureMatrix[0]}, {@code [1]} or
+	 * {@code [2]} with the identity, which is Iris's answer for this family and the other half of
+	 * the light pair {@link DistantVertex} hands over normalised.
+	 * <p>
+	 * <strong>Iris replaces the first two expressions on its DH road,</strong>
+	 * {@code DHTerrainTransformer.java:23-24}, because the light coordinate its vertex init builds
+	 * is already {@code (i + 0.5) / 16} ({@code :135}) and unit nought's coordinate is a constant:
+	 * neither has a fixed function scale left to undo. The packs split over which way they read the
+	 * light, BSL and Complementary through the matrix and Bliss raw, so the matrix and the
+	 * coordinate have to change convention together or one of the two camps reads a number two
+	 * hundred and fifty six times off.
+	 * <p>
+	 * <strong>Unit two rides along because it is this engine's second name for unit one</strong>,
+	 * {@code of_MultiTexCoord2} answering the same pair in the head and
+	 * {@code GeometryValues.LIGHTMAP_UNITS} holding both, where Iris spells the aliasing on the
+	 * coordinate instead and renames {@code gl_MultiTexCoord2} to one on this family
+	 * ({@code DHTerrainTransformer.java:30}), leaving its {@code gl_TextureMatrix[2]} to fail the
+	 * compile. Leaving two out here would put the light matrix under a coordinate already
+	 * normalised, the exact mismatch this method exists to close. The corpus names neither the
+	 * coordinate nor the matrix of unit two in a {@code dh_} program, so nothing rests on the
+	 * difference from Iris's refusal.
+	 * <p>
+	 * Any other index, and any index that is not one of the three literals spelled plainly, falls
+	 * through to the ordinary rename and reads the engine's real table. Iris leaves those reads
+	 * untouched on this family, where they fail to compile; the corpus never writes one in a
+	 * {@code dh_} program, so nothing rests on that today either, and it is written down here for
+	 * the pack that one day does.
+	 *
+	 * @return whether this was a read of unit nought, one or two, false leaving the name to the
+	 *         ordinary rename
+	 */
+	private boolean rewriteDistantTextureMatrix(int index) {
+		int open = significantAfter(index);
+		if (open < 0 || !this.tokens.get(open).operator("[")) {
+			return false;
+		}
+
+		int unit = significantAfter(open);
+		int close = matchingBracket(open);
+		if (unit < 0 || close < 0 || significantAfter(unit) != close
+				|| !(this.tokens.get(unit).text().equals("0")
+						|| this.tokens.get(unit).text().equals("1")
+						|| this.tokens.get(unit).text().equals("2"))) {
+			return false;
+		}
+
+		inject(index, "mat4(1.0)");
+		blank(open);
+		blank(unit);
+		blank(close);
 
 		return true;
 	}

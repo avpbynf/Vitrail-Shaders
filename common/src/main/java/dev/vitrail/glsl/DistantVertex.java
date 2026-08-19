@@ -36,13 +36,17 @@ import java.util.Set;
  * light in y, and that is what a pack reads {@code lmCoord} as everywhere else. So the builder is
  * what this head follows.
  * <p>
- * <strong>The pair is handed over RAW, as the chunk mesh hands it, and that is not a divergence from
- * Iris although the two lines look nothing alike.</strong> Iris answers
- * {@code gl_TextureMatrix[1]} with the identity on this family and normalises the pair itself, level
- * {@code i} arriving as {@code (i + 0.5) / 16}; this engine answers that matrix with the sixteen
- * numbers the fixed function pipeline held and hands the level as {@code 16i}, which comes back out
- * of the product as {@code i / 16 + 1 / 32}. The two are the same number. Handing normalised
- * coordinates here would be the divergence, the matrix being scaled either way.
+ * <strong>The pair arrives NORMALISED, level {@code i} as {@code (i + 0.5) / 16}, and every read
+ * of {@code gl_TextureMatrix[0]} or {@code [1]} in a program of this family answers the identity:
+ * both halves are Iris's, and they only hold together.</strong> Iris scales the pair itself
+ * ({@code DHTerrainTransformer.java:135}) and replaces the two matrices with {@code mat4(1.0)}
+ * ({@code :23-24}), so a pack may read the coordinate through the matrix or raw and get the same
+ * number, and the packs really do both: BSL and Complementary multiply the matrix in, Bliss reads
+ * the coordinate raw. This head first handed the level over as {@code 16i} beside the real fixed
+ * function matrix, which is the same product for a pack that multiplies and two hundred and fifty
+ * six times too big for one that does not: every sky level from one upward saturated Bliss's
+ * light map, and its far terrain came out uniformly lit, chalk white against the shaded near
+ * ground.
  * <p>
  * <strong>There is no texture coordinate at all.</strong> Iris answers
  * {@code gl_MultiTexCoord0} with {@code vec4(0.0, 0.0, 0.0, 1.0)} on this family
@@ -194,8 +198,8 @@ public final class DistantVertex {
 		lines.addAll(VertexPrologue.blankTexCoords());
 
 		lines.add("vec2 ofDistantLight() {");
-		lines.add("\treturn vec2(float((" + META + " >> 4u) & 15u), float(" + META
-				+ " & 15u)) * 16.0;");
+		lines.add("\treturn (vec2(float((" + META + " >> 4u) & 15u), float(" + META
+				+ " & 15u)) + 0.5) / 16.0;");
 		lines.add("}");
 
 		// The nudge, out of the six bits above the light: two a coordinate, the low one saying there
