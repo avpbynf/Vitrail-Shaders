@@ -2,16 +2,16 @@
 
 ## The packs this engine is measured against
 
-These are the packs development runs against, and this table says what has actually been seen with
-each rather than what is expected of it. **A pack that is not here is not thereby unsupported**: it
-is a pack nobody here has loaded, and the format is the format. Nothing in this table is a judgement
-of the pack; every line is a note about this engine.
+These are the packs I run against, and this table says what I have actually seen with each rather
+than what is expected of it. **A pack that is not here is not thereby unsupported**: it is a pack I
+have not loaded, and the format is the format. Nothing in this table is a judgement of the pack;
+every line is a note about this engine.
 
-**A row that says nobody has looked means exactly that, and never means it works.** Rewriting this
+**A row that says I have not looked means exactly that, and never means it works.** Rewriting this
 table is one of the steps of cutting a release, which is the only thing that keeps it from going
 quietly stale.
 
-| Pack | What has been seen |
+| Pack | What I have seen |
 | --- | --- |
 | BSL v10.1.3 | Drawn whole, and the one watched most closely. Terrain, water, shadow map, sky, clouds, weather, particles, mobs and the held hand all go through it. |
 | Complementary Unbound r5.8.1 | Drawn whole, and watched as closely. Its colour targets, its deferred chain and its shadow map all come up; the log prints how many targets it allocated and at what size. Its two top profiles are the exception, and the pack announces it itself: see [the pack asks for Iris](#the-pack-asks-for-iris). |
