@@ -14,8 +14,8 @@ quietly stale.
 | Pack | What has been seen |
 | --- | --- |
 | BSL v10.1.3 | Drawn whole, and the one watched most closely. Terrain, water, shadow map, sky, clouds, weather, particles, mobs and the held hand all go through it. |
-| Complementary Unbound r5.8.1 | Drawn whole, and watched as closely. Its colour targets, its deferred chain and its shadow map all come up; the log prints how many targets it allocated and at what size. |
-| Complementary Reimagined r5.8.1 | Drawn whole, seen beside Unbound, and visually as close to it as the two packs are to each other. |
+| Complementary Unbound r5.8.1 | Drawn whole, and watched as closely. Its colour targets, its deferred chain and its shadow map all come up; the log prints how many targets it allocated and at what size. Its two top profiles are the exception, and the pack announces it itself: see [the pack asks for Iris](#the-pack-asks-for-iris). |
+| Complementary Reimagined r5.8.1 | Drawn whole, seen beside Unbound, and visually as close to it as the two packs are to each other. Same top-profile exception as Unbound. |
 | Bliss v2.1.2 | Drawn, and its terrain in the End was right when last looked at, which was before the End's sky went through the pack's own program. The flat wrong colours its mobs and its held arm used to come out in are gone: that was this engine sending their first output through a target of the game's, eight bits to a channel where the pack stacks two values in sixteen, and both now write the pack's own. Its water is a separate open case, and it was the pack the [dark terrain](#terrain-that-is-too-dark) section was written for. |
 | Sildur's Vibrant Extreme v2.01 | Drawn, except for its water, which is an open case here. It is the pack that exercises the paths least travelled: it keeps the overworld's programs at the root of `shaders/` and gives the other two dimensions folders of their own, several families reach its textured program through the fallback tree rather than shipping one, and the target its terrain writes first is not target zero. |
 | Mellow v3.3 | Drawn, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. |
@@ -28,6 +28,7 @@ rather than guess.
 | What you see | Go to |
 | --- | --- |
 | Nothing of the pack is drawn, the world looks vanilla | [The pack was refused](#the-pack-was-refused) |
+| A red full-screen message tells you to install Iris | [The pack asks for Iris](#the-pack-asks-for-iris) |
 | An effect does nothing at all | [The effect never ran](#the-effect-never-ran) |
 | Blocks have no relief, however smooth the pack promises | [Everything is flat](#everything-is-flat) |
 | Water is missing, or looks like the game's | [The water](#the-water) |
@@ -81,6 +82,27 @@ pass the cut above handles it, since a quad reads none of them; where it lands o
 that really does read one, the pass is refused. **The log names which program was refused and which
 inputs did not match**: that line, not this page, is what tells you whether a given pack is
 affected today, and it is the only thing that will.
+
+## The pack asks for Iris
+
+The image dims and a red message of the pack's own says the feature you turned on is not supported
+and asks you to switch to Iris. This is not the engine refusing anything: the pack is running, the
+message is one of its passes, and it is drawn because a capability test in its code came out false.
+
+The test reads capability defines. This engine announces itself the way Iris does, but a
+capability define is a promise, so it defines only what the backend actually serves, and it
+serves no `IRIS_FEATURE_` at all; the section above says why the features behind those names are
+closed. A pack that finds the announcement without the capability concludes it is running on
+OptiFine, the only renderer in that position when the pack was written, and words its message for
+it. Read "OptiFine" as "not Iris" and the message is accurate.
+
+Complementary is the pack of the test set that does this. Its colored lighting, which its two top
+profiles Very High and Ultra turn on, is voxel lighting: storage images filled by the geometry
+passes and a compute pass that spreads the light, all behind `IRIS_FEATURE_CUSTOM_IMAGES`. Finding
+that define absent, the pack switches its colored lighting off, draws the message over the frame,
+and leaves every other setting of the profile applied, so the image behind the overlay is the
+pack's own and correct. Any profile from High down draws without the message, and so do the two
+top ones once their Colored Lighting setting is turned back off.
 
 ## The effect never ran
 
