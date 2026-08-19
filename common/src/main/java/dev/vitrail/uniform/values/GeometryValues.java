@@ -16,7 +16,7 @@ import java.util.Set;
  * The fixed function state of a pass drawn over the world rather than over a quad, and the one
  * name outside it whose answer depends on which of the two a program is.
  * <p>
- * Seven names {@link DrawValues} already answers, layered over it, plus two this family alone has
+ * Seven names {@link DrawValues} already answers, layered over it, plus four this family alone has
  * and one it answers with a nought.
  * The seven are answered there with the stand ins a full screen pass needs: an identity model view,
  * the matrix that carries the quad to the screen, and eight identities where the texture matrices

@@ -117,10 +117,10 @@ public final class DimensionSet {
 	/**
 	 * Which directory this world's programs are read from, the empty string for the root.
 	 * <p>
-	 * The root is the answer for a world the pack says nothing about and has no catch-all for, and
-	 * for a folder named here that is not on disk. A folder that IS on disk answers for itself
-	 * whether or not it holds an entry point, which {@link TargetPlan} decides rather than this: a
-	 * name here is where to look, not what is there.
+	 * The root is the answer for a world the pack says nothing about and has no catch-all for. A
+	 * folder named here answers for itself whether or not it is on disk and whether or not it holds
+	 * an entry point, which {@link TargetPlan} decides rather than this: a name here is where to
+	 * look, not what is there.
 	 *
 	 * @param world the dimension's identifier, {@code minecraft:the_nether}
 	 */

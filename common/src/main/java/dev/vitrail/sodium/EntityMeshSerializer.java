@@ -48,7 +48,7 @@ public final class EntityMeshSerializer implements VertexSerializer {
 	/** What Sodium writes, which is the game's own entity vertex. */
 	private static final int WRITTEN = DefaultVertexFormat.ENTITY.getVertexSize();
 
-	/** What this engine binds, which is that plus the element. */
+	/** What this engine binds, which is that plus the three elements. */
 	private static final int CARRIED = EntityMesh.format().getVertexSize();
 
 	/** Where the identifiers start inside one of those, taken off the format rather than counted. */

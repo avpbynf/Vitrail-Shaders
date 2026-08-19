@@ -378,7 +378,7 @@ public final class TerrainMesh implements ChunkVertexType {
 		 * window to cover, nothing of its own warming up over several frames.
 		 * <p>
 		 * <strong>The one element here whose presence is not a question about the pack's BODY.</strong>
-		 * The five above it are carried when a chunk program names them; this one is carried exactly
+		 * The four above it are carried when a chunk program names them; this one is carried exactly
 		 * when the pack wrote {@code separateAo}, which is what makes every one of its vertex stages
 		 * read it. Two packs of the corpus write nothing, and their meshes carry one colour.
 		 */
@@ -426,8 +426,8 @@ public final class TerrainMesh implements ChunkVertexType {
 		// one of the two pays for both and a pack reading neither pays for neither.
 		int frame = offset(Extra.TANGENT_FRAME) == ABSENT ? 0 : TangentFrame.pack(frame(vertices));
 
-		// The one of the five that is a property of the CORNER, so it is asked for inside the loop
-		// and only the question is hoisted out of it.
+		// One of the two that are a property of the CORNER, so it is asked for inside the loop and
+		// only the question is hoisted out of it.
 		boolean blockMiddle = offset(Extra.MID_BLOCK) != ABSENT;
 
 		// Backwards over the vertices, because a vertex moves up by the difference of the two strides
