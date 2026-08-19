@@ -22,6 +22,17 @@ what the next one holds.
   nothing was paying for them on every frame. They go back to whatever that menu says the moment a
   pack is unloaded.
 
+### Fixed
+
+- **The same pack now translates to the same text on every start.** Four tables the translator
+  walks to write a shader were handed back in an order the runtime picks afresh each time the game
+  starts: the varyings a stage is owed, the vertex inputs a mesh has not got, and the volume
+  helpers a pack's three dimensional textures need. Two launches on the same pack could therefore
+  produce shaders that differ only in the order of their declarations, which is the same shader to
+  a reader and a different one to the game, so it compiled pipelines it already had. One warning
+  line about mesh elements a program computes from and does not get also listed its names in a
+  different order each run.
+
 ## 0.6.0-beta
 
 ### Added
