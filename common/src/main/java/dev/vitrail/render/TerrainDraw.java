@@ -439,8 +439,11 @@ public final class TerrainDraw {
 	 * <strong>Skipped whole where no source of the pack names what it feeds.</strong> The copy is
 	 * the map at one resolution and four bytes a texel, taken every frame, and it answers exactly
 	 * one name: a pack that never reads it pays sixty-four mebibytes a frame at a shadow map of
-	 * 4096 for an image nothing samples. Two of the eight packs measured are that pack, Bliss
-	 * reading the bare {@code shadow} alone and Mellow only {@code shadowtex0}.
+	 * 4096 for an image nothing samples. Of the eight packs measured, Mellow is the one that gets
+	 * there, naming {@code shadowtex0} and nothing else. Bliss declares the name in no program
+	 * either, its {@code shadowtex1} sitting behind a setting it ships switched off, but it WRITES
+	 * that name in eight files and what is read here is text, so it keeps the copy: the pack turns
+	 * that setting on from its own screen, and the copy is there when it does.
 	 * <p>
 	 * The question is asked of the pack's text rather than of a sampler plan because of WHEN it
 	 * has to be answered: here, during the shadow stage, while the programs that would read the

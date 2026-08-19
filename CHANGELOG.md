@@ -11,6 +11,17 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Changed
+
+- **Two things taken on every frame are no longer taken for a pack that cannot read them.** The
+  copy the shadow map is read from as `shadowtex1` is sixty-four mebibytes a frame at a shadow map
+  of 4096, and the depth kept from before the hand is a full screen image and a draw on every frame
+  the hand is drawn. Each is now skipped where no file of the pack writes the name that reads it,
+  which the log says out loud when it happens. Of the eight packs tried here, one skips the shadow
+  copy and five skip the depth.
+
 ## 0.5.0-beta.1
 
 ### Added
