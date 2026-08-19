@@ -277,7 +277,12 @@ jobs:
           modrinth-id: ${{ secrets.MODRINTH_ID || vars.MODRINTH_ID }}
           modrinth-token: ${{ steps.mirror.outputs.modrinth == 'true' && secrets.MODRINTH_TOKEN || '' }}
           files: ${{ steps.jars.outputs.merged }}
-          name: ${{ steps.which.outputs.tag }}
+          # The two loaders are named in the row's own title because the file no longer names
+          # them: what ships is one merged jar, where the pair it replaced said neoforge or
+          # fabric in the file name. A store lists its files under this title and hangs its own
+          # loader tags elsewhere on the page, so the question a reader arrives with is answered
+          # in the list rather than one click further in.
+          name: ${{ steps.which.outputs.tag }} (Neo/Fabric)
           version: ${{ steps.version.outputs.version }}
           version-type: beta
           changelog-file: changelog.md
