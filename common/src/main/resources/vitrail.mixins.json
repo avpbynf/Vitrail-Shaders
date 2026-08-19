@@ -18,6 +18,8 @@
 		"CloudRendererMixin",
 		"CustomFeatureRendererMixin",
 		"CustomSubmitMixin",
+		"DebugScreenEntriesMixin",
+		"DebugScreenEntryListMixin",
 		"MixinDefaultChunkRenderer",
 		"DefaultFluidRendererMixin",
 		"EntityRenderDispatcherMixin",
