@@ -12,6 +12,16 @@ plus, because each of them files an upload per loader and has nowhere else to pu
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- The texture filtering selector in the video settings no longer offers RGSS while a pack draws the
+  world. That method is written into the terrain shader the game and Sodium ship, and neither of
+  those two draws once the pack's own terrain program does, so the setting read as live and moved
+  nothing at all. It comes back the moment no pack is drawing the terrain. Anisotropic filtering is
+  untouched and goes on working under a pack.
+
 ## 0.4.0-beta.1
 
 ### Added
