@@ -188,9 +188,9 @@ public final class DhDepth {
 			return (valueMethod.invoke(value) instanceof Integer chunks) ? chunks * CHUNK : -1;
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 			distanceUsable = false;
-			Vitrail.logger().warn("Distant Horizons' render distance cannot be read, so the far "
-					+ "terrain keeps its depth and a pack is given the game's own distance and clip "
-					+ "planes instead of that mod's, for the rest of this session", e);
+			Vitrail.logger().warn("Distant Horizons' render distance cannot be read, so a pack is "
+					+ "given the game's own distance and clip planes instead of that mod's, for the "
+					+ "rest of this session", e);
 			return -1;
 		}
 	}

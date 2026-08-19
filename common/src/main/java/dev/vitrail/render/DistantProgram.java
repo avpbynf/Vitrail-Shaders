@@ -113,7 +113,7 @@ final class DistantProgram implements DumpedProgram {
 				// The half DH defers blends over what stands behind it, exactly as the world's own
 				// water does; the opaque half writes outright. DH's own two pipelines are built the
 				// same way, one withoutBlend and one with TRANSLUCENT
-				// (common/render/blaze/BlazeDhTerrainRenderer.java:133-146).
+				// (common/render/blaze/BlazeDhTerrainRenderer.java:140 and :148).
 				element.afterDeferred() ? Optional.of(BlendFunction.TRANSLUCENT)
 						: Optional.<BlendFunction>empty(),
 				// No coverage mask, and the class comment says what writes those pixels instead.

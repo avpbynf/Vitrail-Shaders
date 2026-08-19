@@ -305,18 +305,23 @@ That mod draws its far terrain into images of its own and paints only the colour
 picture: nothing of it reaches a pack by itself. Vitrail hands the geometry to the pack instead,
 drawn with the pack's own `dh_terrain` and `dh_water` programs into the pack's own targets, and
 serves its depth beside the world's under the `dhDepthTex` names, which is the arrangement packs
-are written against. The pack's own distant-land code does the rest: its fog, its shadows and its
-occlusion run on the far terrain exactly as they run under the reference.
+are written against. The pack's own distant-land code does the rest: everything it works out on
+screen, the fog, the shadows it computes from the LOD depth, the occlusion, runs on the far
+terrain from there.
 
-**The log says whether that happened**, and there are three things to look for. Distant Horizons
-found, when the mod starts. The two far terrain passes being drawn with the pack's programs, one
-line each when the pack is read. And the far terrain's depth being converted into the pack's
-window, once, when the first frame draws it. A pack that ships no `dh_terrain` is the one case that
-still reads as the symptom above: the far terrain then stays that mod's own drawing, and the pack
-never hears of it.
+**The log says whether that happened**, and there are three things to look for. Two `Distant
+Horizons found` lines, on the first frames a pack is drawn with that mod running, one for its
+volume and one for its geometry. The two far terrain passes being drawn with the pack's programs,
+one line each the first time they draw. And the far terrain's depth being converted into the
+pack's window, whenever those two images are allocated, so the line comes back after a resize.
+When the far terrain goes back to that mod instead, the engine says so and names the reason on the
+same line: a pack serving nothing for it is the common one, and every other refusal has a line of
+its own shape.
 
-One limit stays whatever the log says: past Distant Horizons' own far plane there is nothing drawn,
-and the picture there is the pack's sky, exactly as without the mod.
+Two limits stay whatever the log says. Past Distant Horizons' own far plane there is nothing
+drawn, and the picture there is the pack's sky, exactly as without the mod. And the far terrain
+does not enter the pack's shadow map yet, a pack's `dh_shadow` not being served, so what shades it
+is what its programs compute from the depth rather than a shadow the map carries.
 
 ## What packs ask for that is unusual
 

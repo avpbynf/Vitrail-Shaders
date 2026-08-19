@@ -25,12 +25,15 @@ what the next one holds.
   against. The fog, the shadows and the occlusion on the distant land are the pack's own from
   there, and the seam where it meets the near terrain closes.
 
-  One limit worth knowing: a pack that ships no `dh_terrain` keeps Distant Horizons' own drawing,
-  which no pack effect touches.
+  Two limits worth knowing. A pack that ships no `dh_terrain` keeps Distant Horizons' own drawing,
+  which no pack effect touches. And the far terrain does not enter the pack's shadow map yet, so
+  what shades it is what the pack computes from its depth rather than a shadow the map carries.
 
   What this waits on is Distant Horizons and not Vitrail: that mod has to draw on this backend at
-  all, which the version named in `INSTALL.md` does not. The log names Distant Horizons as found
-  when it is, and names each far terrain pass as the pack's programs take it over.
+  all, which the version named in `INSTALL.md` does not, and it has to be one whose insides this
+  engine can read, which the log says when it is not, naming that mod as installed but not in a
+  shape its far terrain can be served from. The log names Distant Horizons as found when it is,
+  and names each far terrain pass as the pack's programs take it over.
 
 - **A mob and a piece of armour take the relief their resource pack draws for them.** A skin and an
   armour layer are textures of their own rather than sprites in an atlas, so the maps a material

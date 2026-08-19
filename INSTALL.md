@@ -93,11 +93,11 @@ backend, with or without Vitrail. Distant Horizons 3.2.0-b does this and dies on
 the first frame. This is not something Vitrail can work around: the fix belongs
 to that mod and not to this one.
 
-Given a build of it that both draws on this backend and hands its depth back
-without an OpenGL handle in it, Vitrail folds its far terrain into the depth a
-pack reads and tells the pack the far terrain is there. The changelog says what
-that changes and what it does not reach, and the log names which of the two
-cases you are in when the pack is read.
+Given a build of it that draws on this backend, Vitrail hands its far terrain to
+the pack's own `dh_terrain` and `dh_water` programs and serves its depth beside
+the world's, which is the arrangement packs are written against. The changelog
+says what that changes and what it does not reach, and the log names each far
+terrain pass as the pack takes it over.
 
 ## Building
 

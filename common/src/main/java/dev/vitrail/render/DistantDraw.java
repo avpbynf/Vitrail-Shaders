@@ -50,8 +50,10 @@ import java.util.Set;
  * light.</strong> The colour used to be DH's, so the two halves of one landscape were lit by two
  * engines and met at a seam no pack could close. The geometry {@code dh/DhLods} takes over is drawn
  * here instead, once per half of the frame, with {@code dh_terrain} and {@code dh_water} - the two
- * names every pack of the corpus ships, and the two Iris serves
- * ({@code compat/dh/DHCompatInternal.java:67-79}).
+ * names every pack of the corpus ships, and two of the four Iris serves
+ * ({@code compat/dh/DHCompatInternal.java:67-79}; its {@code dh_generic} and {@code dh_shadow},
+ * built at {@code :70-72} and {@code :80-89}, are not served here yet and the backlog carries
+ * both).
  * <p>
  * <strong>The depth image is this engine's own, and that is what keeps DH out of the picture
  * entirely.</strong> Nothing is drawn into DH's own colour or depth; DH's own apply pass then finds
@@ -70,8 +72,8 @@ import java.util.Set;
  * So there is a second block, one aligned slot per section, written before the pass opens and bound
  * as each section comes up. DH does exactly this with its own, one buffer per container
  * ({@code common/render/blaze/BlazeDhTerrainRenderer.java:280}), and Iris sets a uniform per buffer
- * ({@code compat/dh/IrisLodRenderProgram.java:124}) because a GL uniform is per program rather than
- * per draw.
+ * ({@code compat/dh/IrisLodRenderProgram.java:252-253}) because a GL uniform is per program rather
+ * than per draw.
  */
 public final class DistantDraw {
 
@@ -84,8 +86,10 @@ public final class DistantDraw {
 	 *                      half of every target it reads and writes. DH calls its own two halves from
 	 *                      the head of the game's opaque chunk group and from the head of its
 	 *                      translucent one ({@code neoforge/mixins/client/MixinChunkSectionsToRender
-	 *                      .java:57-64}), which is where the game's own solid and translucent chunk
-	 *                      passes stand, so the two answers are the chunk passes' own
+	 *                      .java:67-74}, the water half held to the second by the switch
+	 *                      {@code dh/DhLods} throws), which is where the game's own solid and
+	 *                      translucent chunk passes stand, so the two answers are the chunk passes'
+	 *                      own
 	 */
 	public record Element(String element, String program, boolean afterDeferred) {
 

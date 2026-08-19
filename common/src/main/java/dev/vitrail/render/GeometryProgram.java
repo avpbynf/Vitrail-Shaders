@@ -1391,6 +1391,16 @@ final class GeometryProgram {
 	 * previous frame's, and no distinction between the three names arrives before the copy with the
 	 * water does, which is the composites' and {@link PackPass}'s to serve.
 	 * <p>
+	 * <strong>That second half is a divergence, written out.</strong> What Iris does: it binds the
+	 * live image on every gbuffers and shadow program alike ({@code samplers/IrisSamplers.java:
+	 * 109-110}), and by the time an opaque gbuffers program draws, DH's opaque LODs are already in
+	 * it. What stops that here: the image a pack reads is a converted copy rather than the live
+	 * attachment, and the only copy in existence when the solid passes draw is the previous
+	 * frame's, which is the shape of picture this engine refuses by rule. What it costs: an opaque
+	 * geometry program reading {@code dhDepthTex} sees no far terrain, where under Iris it sees the
+	 * opaque LODs; no program of the eight-pack corpus makes that read, the readers being deferreds
+	 * and composites throughout.
+	 * <p>
 	 * The far plane is also the whole answer while the pack is not drawing the far terrain: the
 	 * image is only taken on the frames it really drew, so a session without Distant Horizons, or a
 	 * frame its rendering switch is off on, reads white here exactly as it always did, and every
