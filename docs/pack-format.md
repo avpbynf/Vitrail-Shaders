@@ -156,12 +156,32 @@ used packs of the corpus lose their entity shadows to a line their settings had 
 key of this file. It bounds how far from the camera a caster that moves may stand and still reach
 the map.
 
-`shadow.culling` is not read, and it is not treated as a word this engine knows either: a pack that
-writes it sees it among the keys nothing reads, in the same list as a misspelling. That is
-deliberate rather than half-honoured. Its values do not pick between ways of walking one frustum:
-they pick between different cullers with different distance directives behind them, and reading the
-word while walking one frustum anyway would put casters into a map the pack asked to keep them out
-of.
+`shadow.culling` is read, and **its three written words do not mean what they look like they mean**.
+It is not a switch: it names one of four shapes the light measures a section against, and the
+default is the tightest of them rather than the loosest.
+
+- nothing written, or `true`: the camera's own volume swept along the light. A section that cannot
+  drop anything onto what the camera can see is thrown away before it is drawn.
+- `false`: no sweep. The light walks its own volume, the one the map is drawn in, which is what this
+  engine did for every pack before the sweep existed.
+- `reversed` or `safe_zone`, two spellings of one word: the same sweep, plus a box at the pack's own
+  `voxelDistance` that is kept whatever the sweep says of it, for a pack that samples its map from
+  places the sweep knows nothing about.
+
+A word this cannot read leaves the default standing, which is what the reference does with it.
+
+**How far the walk reaches is a separate question from the shape.** Whichever shape is chosen, a box
+around the camera is cut out of it wherever a distance bounds the walk, and that distance is
+`shadowDistance` times the `const float shadowDistanceRenderMul` of the pack's own source, or the
+player's Max Shadow Distance where the pack declares no multiplier. Two of the four states step
+outside that arbitration and both do so in the reference: `false` reads the pack's product alone and
+never the player's setting, and the safe zone reads neither, its two boxes being the pack's
+throughout.
+
+Iris has a fifth road into the first line, and this engine cannot take it: it drops the sweep for a
+pack whose shadow program ships a geometry stage, on the grounds that such a pack is moving its
+vertices somewhere the camera's volume cannot predict. Nothing here runs a geometry stage at all, so
+no pack can move a vertex that way and the question does not arise.
 
 ## Settings, and how a user changes them
 

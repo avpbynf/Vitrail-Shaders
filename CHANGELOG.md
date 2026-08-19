@@ -32,6 +32,21 @@ what the next one holds.
   three and not on the rest. Those packs decide the distance, so the slider greys out and says so;
   it is the packs that stay silent, Sildur's among them, where it is the player's to move.
 
+### Changed
+
+- **The shadow map stops being drawn from parts of the world that cannot cast into what you are
+  looking at.** The light used to walk everything inside the box its map covers, the ground behind
+  you included, which is a second copy of the world drawn every frame for shadows nothing ever
+  samples. It now walks the camera's own view swept along the sun instead: what stands between the
+  sun and what you can see is kept, what could only ever shade your back is dropped. Expect more
+  frames per second wherever shadows are on, and no change to the picture.
+
+  The shape is the pack's to choose through `shadow.culling`, which is read now where it used to be
+  ignored, together with the `voxelDistance` distance behind one of its states. A pack asking for a
+  box about the camera instead of that sweep, or for no view frustum at all, gets what it asked for.
+  The log line the shadow stage prints on the first frame of a pack now names the shape as well as
+  the two counts, so the gain can be read off it.
+
 ### Fixed
 
 - The texture filtering selector in the video settings no longer offers RGSS while a pack draws the

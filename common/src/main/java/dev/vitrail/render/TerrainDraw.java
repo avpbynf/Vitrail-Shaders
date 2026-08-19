@@ -20,6 +20,7 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -618,6 +619,22 @@ public final class TerrainDraw {
 		TerrainDraw self = PackChain.terrain();
 
 		return self == null ? null : self.values.shadowFrustum(dest);
+	}
+
+	/**
+	 * What the light's walk needs to choose a shape to measure a section against, or null when no
+	 * pack is drawing. The two scratch objects handed in are written and carried into the answer.
+	 * <p>
+	 * It carries the bound {@link #shadowRenderDistance} would have answered, so the two are never
+	 * asked for separately: the states that step outside that arbitration do it inside
+	 * {@link PackValues#shadowCullPlan}, and a caller taking the shape from one and the distance
+	 * from the other would put a pack's own bound under a shape that asked for the player's.
+	 */
+	public static ShadowCullPlan shadowCullPlan(Vector3f light, Matrix4f camera) {
+		TerrainDraw self = PackChain.terrain();
+
+		return self == null ? null : self.values.shadowCullPlan(PackChain.shadowDistance(),
+				renderDistanceChunks(), light, camera);
 	}
 
 	/**

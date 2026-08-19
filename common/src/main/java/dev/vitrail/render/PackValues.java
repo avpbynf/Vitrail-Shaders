@@ -9,16 +9,19 @@ import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.source.ShadowCasters;
+import dev.vitrail.pack.source.ShadowCullState;
 import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.uniform.expr.CustomUniforms;
 import dev.vitrail.uniform.NoiseTexture;
 import dev.vitrail.uniform.UniformCatalog;
 import dev.vitrail.uniform.UniformGaps;
+import dev.vitrail.uniform.values.CelestialValues;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
+import org.joml.Vector3f;
 import org.joml.Vector4fc;
 
 import java.io.IOException;
@@ -76,6 +79,9 @@ public final class PackValues {
 	 */
 	private ShadowCasters shadowCasters = ShadowCasters.DEFAULT;
 
+	/** Which shape this pack asked the light to measure a section against. */
+	private ShadowCullState shadowCull = ShadowCullState.DEFAULT;
+
 	private boolean separateAo;
 	private Optional<String> particleOrdering = Optional.empty();
 	private NoiseTexture.Image noiseImage;
@@ -119,6 +125,7 @@ public final class PackValues {
 			values.weather = properties.weather(settings.globalDefines(options));
 			values.rainDepth = properties.rainDepth(settings.globalDefines(options));
 			values.shadowCasters = properties.shadowCasters(settings.globalDefines(options));
+			values.shadowCull = properties.shadowCull(settings.globalDefines(options));
 			values.separateAo = properties.separateAo(settings.globalDefines(options));
 			values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
 			values.declare(properties, settings.globalDefines(options));
@@ -257,6 +264,71 @@ public final class PackValues {
 		ViewMatrices view = this.state.view();
 
 		return dest.set(view.drawnShadowProjection()).mul(view.drawnShadowModelView());
+	}
+
+	/**
+	 * What the light's walk needs to choose a shape, all of it read out of the one frame.
+	 * <p>
+	 * <strong>The camera's volume is the PUBLISHED projection and not the drawn one, and that is the
+	 * conversion this whole step turns on.</strong> The game rasterises with a reversed Z over zero
+	 * to one; the plane extraction the frustum performs is Iris's, written against the OpenGL volume;
+	 * and {@code ViewMatrices.gbufferProjection} is the frame's matrix already put into that volume by
+	 * {@link dev.vitrail.uniform.ClipSpace#toLegacyDepth} at {@code ViewMatrices:205}. So Iris's
+	 * lines hold as they stand, and it is the DRAWN matrix that would lose the far plane outright;
+	 * the arithmetic and the second way of getting it wrong are worked through on
+	 * {@code dev.vitrail.sodium.ShadowCullFrustum}.
+	 * <p>
+	 * The frame's own volume and not the distant one, which is Iris's condition and not the absence
+	 * of it: it reaches for {@code DHCompat.getProjection()} only under
+	 * {@code shouldRenderDH && DHCompat.hasRenderingEnabled()}
+	 * ({@code shadows/ShadowRenderer.java:366}), and its left half is the pack asking for the far
+	 * terrain in its SHADOW map ({@code :150}, the {@code dhShadow} directive). Nothing puts the far
+	 * terrain into this engine's shadow map at all, so that half can only be answered false here and
+	 * the branch Iris takes is the frame's own projection. Widening the volume to Distant Horizons'
+	 * would walk further out for casters that have nowhere to be drawn.
+	 *
+	 * <strong>The two distances are settled here and not at the frustum</strong>, because two of the
+	 * four states step outside the arbitration {@link #shadowRenderDistance} performs and the
+	 * arbitration has one home. {@link ShadowCullState#DISTANCE} reads the pack's own product and
+	 * never the player's setting, Iris asking for {@code halfPlaneLength * renderMultiplier} on its
+	 * own at {@code shadows/ShadowRenderer.java:303} and turning the walk loose when that is not
+	 * positive or reaches past the loaded world ({@code :317-322}). The safe zone steps outside it
+	 * the other way: it forces a multiplier the pack never declared to one BEFORE the branch that
+	 * would have read the player's setting ({@code :330-331}), so the player's number cannot reach
+	 * it either, and its two boxes are the pack's own throughout.
+	 *
+	 * @param userChunks           the player's own setting in chunks, for the states that read it
+	 * @param renderDistanceChunks the world that is loaded, which is what every bound is capped
+	 *                             against
+	 * @param light                scratch for the light vector, written and carried into the plan
+	 * @param camera               scratch for the camera's volume, likewise
+	 */
+	public ShadowCullPlan shadowCullPlan(int userChunks, int renderDistanceChunks, Vector3f light,
+			Matrix4f camera) {
+		ViewMatrices view = this.state.view();
+		camera.set(view.gbufferProjection()).mul(view.gbufferModelView());
+
+		PackDirectives directives = this.state.directives();
+		float multiplier = directives.shadowDistanceRenderMul();
+		float bound;
+		float safeZone = -1.0F;
+
+		switch (this.shadowCull) {
+			case DISTANCE -> {
+				float distance = directives.shadowDistance() * multiplier;
+				bound = distance <= 0.0F || distance > renderDistanceChunks * (float) CHUNK_BLOCKS
+						? -1.0F : distance;
+			}
+			case SAFE_ZONE -> {
+				float effective = multiplier < 0.0F ? 1.0F : multiplier;
+				safeZone = directives.voxelDistance() * effective;
+				bound = directives.shadowDistance() * effective;
+			}
+			default -> bound = shadowRenderDistance(userChunks, renderDistanceChunks);
+		}
+
+		return new ShadowCullPlan(this.shadowCull,
+				CelestialValues.shadowLightVector(this.state, light), camera, bound, safeZone);
 	}
 
 	/**

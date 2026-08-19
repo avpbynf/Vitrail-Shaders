@@ -6,10 +6,12 @@ import dev.vitrail.uniform.Val;
 import dev.vitrail.uniform.WorldState;
 
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 /**
- * The sky: where the sun, the moon and the shadow light are, in eye space.
+ * The sky: where the sun, the moon and the shadow light are, in eye space, plus the one answer this
+ * engine needs in world space, {@link #shadowLightVector}.
  * <p>
  * These live before the projection, so no clip space convention touches them and they are the one
  * family that carries over unchanged. Two things about them are counter-intuitive and are in the
@@ -84,6 +86,49 @@ public final class CelestialValues {
 				(world, out) -> out.set(world.endFlashIntensity()));
 		builder.add("previousEndFlashIntensity", UniformShape.FLOAT,
 				(world, out) -> out.set(world.previousEndFlashIntensity()));
+	}
+
+	/**
+	 * Where the light stands in WORLD space, as a unit vector from the origin.
+	 * <p>
+	 * <strong>The same rotations as the {@code shadowLightPosition} uniform, and deliberately
+	 * without the model view.</strong> Iris keeps the pair apart for the same reason and under two
+	 * names, {@code getCelestialPositionInWorldSpace} against {@code getCelestialPosition}
+	 * ({@code uniforms/CelestialUniforms.java:145,165}): a pack reads where the sun is in EYE space,
+	 * because that is the space its lighting is written in, while a cull has to know where it is in
+	 * the world. Handing the eye space answer to the cull would swing the light with the player's
+	 * head, and every shadow caster the light stands behind would be kept or dropped by where the
+	 * player happens to be looking.
+	 * <p>
+	 * The End flash is taken on the same condition the shadow MATRICES are built on rather than on
+	 * Iris's, which tests the dimension and the pack's opt in and not the flash itself
+	 * ({@code uniforms/CelestialUniforms.java:138}). The two have to agree here, or a frame would
+	 * extrude a frustum along one light and draw its map from another.
+	 *
+	 * @param dest the vector to write, returned
+	 */
+	public static Vector3f shadowLightVector(WorldState world, Vector3f dest) {
+		// The shared scratch, on the invariant the field's own note carries: every call fills all of
+		// it before reading any of it, so a reader between two writes is impossible.
+		if (inEndFlash(world) && world.endFlashShadows()) {
+			SCRATCH.identity()
+					.rotateY((float) Math.toRadians(180.0F - world.endFlashYAngleDegrees()))
+					.rotateX((float) Math.toRadians(-90.0F - world.endFlashXAngleDegrees()));
+		} else {
+			SCRATCH.identity()
+					.rotateY((float) Math.toRadians(-90.0F))
+					.rotateZ((float) Math.toRadians(world.sunPathRotation()))
+					.rotateX((float) Math.toRadians(isDay(world)
+							? world.sunAngleDegrees() : world.moonAngleDegrees()));
+		}
+
+		// A direction and not a place, which is why the w is nought: the hundred is a length the
+		// normalisation throws away, and it is kept only so that the rotations are fed the very
+		// vector the uniform feeds them.
+		POSITION.set(0.0F, 100.0F, 0.0F, 0.0F);
+		SCRATCH.transform(POSITION);
+
+		return dest.set(POSITION.x, POSITION.y, POSITION.z).normalize();
 	}
 
 	/** One step of wrapping, not a modulus. See the class note. */

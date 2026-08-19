@@ -1,20 +1,21 @@
 package dev.vitrail.sodium;
 
 import net.caffeinemc.mods.sodium.client.render.viewport.frustum.Frustum;
-import net.caffeinemc.mods.sodium.client.render.viewport.frustum.SimpleFrustum;
 
 import org.joml.FrustumIntersection;
 
 /**
- * The light's frustum with a box around the camera cut out of it, which is how a shadow distance
- * bounds a walk that is otherwise the pack's own volume.
+ * Whichever shape the light walks with, with a box around the camera cut out of it, which is how a
+ * shadow distance bounds a walk that is otherwise the pack's own.
  * <p>
  * <strong>A box and not a shorter frustum, and that is the whole reason this class exists.</strong>
- * The light's volume is built from the pack's half plane and is what the shadow map is DRAWN with;
- * narrowing it would move every texel of the map and change the picture. What a shadow distance
- * asks for is different and cheaper: keep the volume, and stop walking the world beyond a cube of
- * that many blocks around the player. Iris draws the same distinction with the same shape, an
- * axis-aligned cube tested on each axis independently, {@code shadows/frustum/BoxCuller.java}.
+ * The shape inside is either the light's own volume, built from the pack's half plane and what the
+ * shadow map is DRAWN with, or the camera's volume swept along the light
+ * ({@link ShadowCullFrustum}), and narrowing either would change which casters reach the map rather
+ * than how far the walk goes. What a shadow distance asks for is different and cheaper: keep the
+ * shape, and stop walking the world beyond a cube of that many blocks around the player. Iris draws
+ * the same distinction with the same shape, an axis-aligned cube tested on each axis independently,
+ * {@code shadows/frustum/BoxCuller.java}, and hangs it off each of its own frustums the same way.
  * <p>
  * <strong>The coordinates are relative to the camera, and nothing here converts them.</strong>
  * Sodium subtracts the camera before it asks ({@code Viewport.isBoxVisibleDirect}, which is where
@@ -39,11 +40,12 @@ public final class ShadowCull implements Frustum {
 	private final float distance;
 
 	/**
-	 * @param light    the light's own view projection, the volume the map is drawn with
+	 * @param planes   the shape the walk measures against before the box is cut out of it, which
+	 *                 {@link ShadowCullFrustum#of} chooses from what the pack asked for
 	 * @param distance how far from the camera the walk still gathers, in blocks
 	 */
-	public ShadowCull(FrustumIntersection light, float distance) {
-		this.planes = new SimpleFrustum(light);
+	public ShadowCull(Frustum planes, float distance) {
+		this.planes = planes;
 		this.distance = distance;
 	}
 
