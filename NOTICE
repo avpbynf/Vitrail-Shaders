@@ -40,6 +40,19 @@ GNU Lesser General Public License version 3
   GAUX4FORMAT and the promotion of colortex1 on a gdepth uniform, are not implemented. The flip
   state is carried once rather than as the pair BufferFlipper keeps.
 
+  common/src/main/java/dev/vitrail/pack/target/SamplerPlan.java reproduces the sampler aliasing
+  rules of net.irisshaders.iris.samplers.IrisSamplers and of
+  net.irisshaders.iris.gl.program.ProgramSamplers, read on 19 August 2026: shadow reads the map
+  without translucents only when the pack declares watershadow, lines 143 to 153 of the former;
+  the bare shadowcolor names target nought, and eight shadow colour targets are allowed, after
+  net.irisshaders.iris.shaderpack.properties.PackShadowDirectives; a custom texture override on a
+  colour target is dropped under both its spellings once a program of the same stage has flipped
+  the target, lines 245 to 264 of the latter, while geometry is handed an empty snapshot and so
+  keeps its overrides for the whole frame; and the final rides with the composites, which is where
+  net.irisshaders.iris.shaderpack.texture.TextureStage puts it. The stage each program falls in is
+  worked out from this engine's own plan rather than from the flip snapshots Iris takes at link
+  time.
+
   common/src/main/java/dev/vitrail/render/ColorTargets.java empties colortex0 to the frame's fog
   colour with an alpha of one, which is what net.irisshaders.iris.targets.ClearPass.execute does
   with the default colour IrisRenderingPipeline hands it. The alpha is reproduced along with the
