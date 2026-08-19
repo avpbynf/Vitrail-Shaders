@@ -42,7 +42,7 @@ OpenGL and the Vulkan surface fails at boot with `GLFW error 65540 ... requires
 the window to have the client API set to GLFW_NO_API`. Chloride is what makes
 that window Vulkan capable. That mechanism is NeoForge's, and whether Fabric's
 window needs the same help has not been measured: Chloride is required on both
-because it is what every session here has run with.
+because it is what every session of mine has run with.
 
 Worth knowing because the failure hides itself, and it hides itself twice over.
 Asked for Vulkan and unable to bring it up, the game falls back to OpenGL within
