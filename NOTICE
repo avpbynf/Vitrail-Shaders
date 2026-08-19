@@ -4,6 +4,11 @@ Third-party material in Vitrail
 Vitrail is distributed under the GNU Lesser General Public License version 3, in LICENSE.
 The files below contain material from another project, reused under that project's own terms.
 
+A file is listed here as soon as it reproduces material of another project's, a table, a
+grammar, a formula, a rule or a formulation, because packs are written against it. It is not
+listed for naming that project to locate a seam, to state a divergence, or to say how this
+engine differs: those files carry their own account, in place.
+
 Iris, https://github.com/IrisShaders/Iris
 Copyright the Iris contributors
 GNU Lesser General Public License version 3
