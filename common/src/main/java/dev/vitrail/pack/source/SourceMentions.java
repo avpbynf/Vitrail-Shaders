@@ -3,7 +3,6 @@ package dev.vitrail.pack.source;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -29,6 +28,12 @@ import java.util.Set;
  * reading could say "no" about a name that is really read. Rather than trust that no pack does it,
  * a {@code ##} anywhere in the sources makes {@link #maybe} answer yes to everything, which costs
  * exactly what not having a guard costs. No pack of the August 2026 corpus writes one at all.
+ *
+ * <p>Reading a name proves it absent only if everything was read, so <strong>every file under the
+ * shaders root is</strong>, and not the ones an extension marks as a source: an include is settled
+ * by the path it names, so a declaration can arrive from a file that list never had. Nothing of the
+ * corpus does it today, every include of the eight packs landing on an extension the list holds; it
+ * is the claim above that has to hold for a pack nobody here has seen.
  */
 public final class SourceMentions {
 
@@ -48,21 +53,32 @@ public final class SourceMentions {
 	}
 
 	/**
-	 * Walks every source file of the pack once and notes which of {@code names} it writes.
+	 * Walks the pack's files once and notes which of {@code names} they write.
 	 *
-	 * <p>Every file under the shaders root, not the ones a program includes: an include is a file of
-	 * the pack like any other, and walking the tree rather than the include graph is what makes the
-	 * answer hold for families nothing has read yet.
+	 * <p>The tree and not the include graph: walking what a program includes would answer for the
+	 * families that have been read, and the whole point is to answer for the ones that have not.
 	 *
-	 * @param names the names to look for, each matched as plain text anywhere in a line
+	 * <p><strong>The walk is in two parts, and they are not asked the same thing.</strong> The
+	 * sources are read first, and they alone settle {@link #PASTING}: what that flag decides is
+	 * whether this pack's GLSL can be trusted to spell its own names, which is a question about
+	 * GLSL. A name, on the other hand, has to be proved absent from the pack ENTIRELY, and an
+	 * include reaches whatever path it names, so anything the source list leaves out is read too
+	 * rather than assumed empty. Reading a texture for a {@code ##} instead would turn the flag on
+	 * for almost every pack, the two bytes falling out of compressed noise on their own, and a flag
+	 * on is a guard off.
+	 *
+	 * <p>The second part is skipped whole once the sources have written every name, which is the
+	 * ordinary case and is why a pack that reads what it is asked about never opens a texture. What
+	 * is left of the cost falls on the packs a guard is about to fire for.
+	 *
+	 * @param names the names to look for, each matched as plain text anywhere in a file
 	 */
 	public static SourceMentions of(ShaderPackSource source, Set<String> names) throws IOException {
 		Set<String> found = new LinkedHashSet<>();
 		boolean pasting = false;
 
 		for (Path file : source.sourceFiles()) {
-			List<String> lines = source.readLines(file);
-			for (String line : lines) {
+			for (String line : source.readLines(file)) {
 				if (line.contains(PASTING)) {
 					pasting = true;
 				}
@@ -78,6 +94,25 @@ public final class SourceMentions {
 			// leaving early on a full set would miss a paste in a file further down and hand back an
 			// answer narrower than the pack deserves.
 			if (found.size() == names.size() && pasting) {
+				break;
+			}
+		}
+
+		if (found.size() == names.size()) {
+			return new SourceMentions(found, pasting);
+		}
+
+		for (Path file : source.otherFiles()) {
+			// Empty for anything that is not text, a pack's own textures included, and decided on
+			// the head of the file rather than on its name.
+			String text = source.searchableText(file);
+			for (String name : names) {
+				if (text.contains(name)) {
+					found.add(name);
+				}
+			}
+
+			if (found.size() == names.size()) {
 				break;
 			}
 		}

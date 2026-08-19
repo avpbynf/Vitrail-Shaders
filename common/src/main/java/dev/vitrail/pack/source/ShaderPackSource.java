@@ -1,6 +1,7 @@
 package dev.vitrail.pack.source;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharsetDecoder;
@@ -47,6 +48,9 @@ public final class ShaderPackSource implements AutoCloseable {
 
 	/** Fifty times the largest source file in the corpus, and a bound on a hostile archive. */
 	private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
+
+	/** How much of a file is read before it is allowed to be called binary. */
+	private static final int BINARY_PROBE = 4096;
 
 	private final String packName;
 	private final Path shadersRoot;
@@ -161,6 +165,74 @@ public final class ShaderPackSource implements AutoCloseable {
 			files.sort(Comparator.comparing(this::rel));
 
 			return List.copyOf(files);
+		}
+	}
+
+	/**
+	 * Every regular file under the shaders root that {@link #sourceFiles} leaves out, and that is
+	 * small enough to still be read, in the same fixed order.
+	 * <p>
+	 * The pair exists because the two lists answer different questions. That one is settled by
+	 * extension and has to stay that way, the lexical measurements being taken over it; but an
+	 * include is settled by the path it names, so {@code #include "common.h"} reaches a file that
+	 * list never had, and a reader that has to prove a name appears NOWHERE cannot stop at an
+	 * extension.
+	 * <p>
+	 * Past the ceiling a source is allowed is left out rather than refused here. It is the ceiling
+	 * {@link #readLines} throws on, so a file that big cannot be expanded into a program either, and
+	 * nothing can read a name out of it.
+	 */
+	public List<Path> otherFiles() throws IOException {
+		Set<Path> sources = Set.copyOf(sourceFiles());
+
+		try (Stream<Path> tree = Files.walk(this.shadersRoot)) {
+			List<Path> files = new ArrayList<>(tree.filter(Files::isRegularFile)
+					.filter(path -> !sources.contains(path))
+					.filter(this::withinCeiling)
+					.toList());
+			files.sort(Comparator.comparing(this::rel));
+
+			return List.copyOf(files);
+		}
+	}
+
+	/**
+	 * A file's bytes as text to search through, or empty for a file that is not text at all.
+	 * <p>
+	 * Not text is decided on a zero byte in the first {@value #BINARY_PROBE}, which no GLSL source
+	 * can hold and which the head of a compressed texture almost always does. <strong>The test is
+	 * made before the rest is read</strong>, and that is the point of it: the one caller has to
+	 * visit every file of the pack to prove a name appears in none of them, and inflating a few
+	 * megabytes of noise to search it for an identifier would be the whole cost of that walk.
+	 * <p>
+	 * Decoded as Latin-1 where {@link #readLines} decodes UTF-8, which is exact for this and would
+	 * be wrong there: what is searched are ASCII names, and no byte of a multi-byte UTF-8 sequence
+	 * is ever an ASCII letter, so a name is found in the same files either way.
+	 */
+	public String searchableText(Path file) throws IOException {
+		try (InputStream in = Files.newInputStream(file)) {
+			byte[] head = in.readNBytes(BINARY_PROBE);
+			for (byte b : head) {
+				if (b == 0) {
+					return "";
+				}
+			}
+
+			byte[] rest = in.readAllBytes();
+			StringBuilder text = new StringBuilder(head.length + rest.length);
+			text.append(new String(head, StandardCharsets.ISO_8859_1));
+			text.append(new String(rest, StandardCharsets.ISO_8859_1));
+
+			return text.toString();
+		}
+	}
+
+	private boolean withinCeiling(Path file) {
+		try {
+			return Files.size(file) <= MAX_FILE_BYTES;
+		} catch (IOException e) {
+			// A file whose size cannot even be read is one nothing will read either.
+			return false;
 		}
 	}
 
