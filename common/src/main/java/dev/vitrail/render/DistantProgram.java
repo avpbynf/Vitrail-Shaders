@@ -52,8 +52,13 @@ import java.util.Optional;
  * <strong>Every draw buffer goes to the pack's own targets, the first included</strong>, which is
  * where Iris puts them: its dh programs are bound over the pack's declared draw buffers exactly as
  * its gbuffers programs are ({@code compat/dh/DHCompatInternal.java:92}). The seed cannot carry
- * this family and does not need to keep off it, and {@link GeometryProgram} says why in the one
- * place that rule is decided.
+ * this family, and it has to KEEP OFF it: the world's depth holds nothing where an LOD stands, so
+ * without a cut of its own the seed reads those pixels as unanswered and paints the game's sky
+ * over the albedo this family just wrote. That is what bleached Bliss's far terrain chalk white,
+ * and only Bliss's: every other pack's sky claims those pixels into the coverage mask and the
+ * seed already kept off, while Bliss's {@code gbuffers_skybasic} is the one sky the translation
+ * cannot give a mask to. {@link SceneSeed} carries the cut, against this family's own depth
+ * image, so the far terrain no longer depends on the sky in front of it having claimed the mask.
  * <p>
  * <strong>Its namespace is ours and has no {@code sodium} in it</strong>, for the reason
  * {@link SkyProgram} gives: the word is what makes Sodium's mixin push twenty bytes of region offset

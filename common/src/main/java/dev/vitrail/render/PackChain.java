@@ -2004,8 +2004,13 @@ public final class PackChain {
 		// frame, so a frame no program of the pack drew in is served an empty one rather than the
 		// last one that was written.
 		GpuTextureView covered = this.targets.coverage();
+		// The far terrain's own depth rides the same fallback: a frame it drew nothing in reads as
+		// nothing of the pack's standing there, through the sentinel sitting outside the range on
+		// the clear's side.
+		GpuTextureView distantServed = this.distant.served();
 		this.seed.draw(encoder, this.quad, mainView,
-				covered == null ? this.targets.unwritten() : covered, depthView, this.targets);
+				covered == null ? this.targets.unwritten() : covered, depthView,
+				distantServed == null ? this.targets.unwritten() : distantServed, this.targets);
 	}
 
 	/**
