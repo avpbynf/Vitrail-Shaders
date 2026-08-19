@@ -159,6 +159,13 @@ public final class DhLods {
 	/**
 	 * Throws DH's own switch that moves its water half behind the deferred stage, where this
 	 * engine's model of the frame expects it.
+	 * <p>
+	 * The frame it lands on pays one artefact, and it is accepted rather than mended: DH's first
+	 * pass of that frame already ran with the switch off, water included, and its deferred entry
+	 * then reads the switch on and draws the water again, so the far water is blended twice for
+	 * that one frame. It is the same class of cost as the takeover itself landing on the next
+	 * frame, once per session, and mending it would mean holding the whole takeover for a frame
+	 * boundary nothing else needs.
 	 *
 	 * @return whether the switch is thrown, false while DH has not published its proxy yet
 	 */
@@ -297,6 +304,22 @@ public final class DhLods {
 				// Unwrapped, or the proxy hands DH's own failure back to DH wrapped in one of ours.
 				throw e.getCause();
 			}
+		}
+	}
+
+	/**
+	 * Hands DH its far terrain back because no pack is drawn any more: the renderer, and its own
+	 * frame order with it. Called when the chain releases, and it has to be: {@link #install} runs
+	 * only while a pack is drawn, so nothing else would ever put the deferred-water switch back,
+	 * and a session whose shaders were turned off would keep DH on a frame order it only holds for
+	 * a consumer, its far-clip fade among the things that order turns off. Iris keeps the same
+	 * switch tied to a live condition rather than latched
+	 * ({@code compat/dh/LodRendererEvents.java:92}). Quiet and idempotent: the ordinary caller is
+	 * every pack unload, most of which never took the far terrain over at all.
+	 */
+	public static void handBack() {
+		if (substitute != null && original != null) {
+			restore();
 		}
 	}
 

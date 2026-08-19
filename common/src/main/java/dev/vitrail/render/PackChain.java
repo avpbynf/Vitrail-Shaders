@@ -2264,7 +2264,9 @@ public final class PackChain {
 			this.features.release();
 		}
 
-		this.distant.release();
+		// DH takes its far terrain back with the pack, its own frame order included: DhLods.handBack
+		// says why nothing else would ever return it.
+		DhLods.handBack();
 
 		this.terrain.release();
 		this.sky.release();

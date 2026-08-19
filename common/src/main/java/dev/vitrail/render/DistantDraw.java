@@ -249,12 +249,16 @@ public final class DistantDraw {
 			return false;
 		}
 
-		// The water half only over an opaque half this engine drew in the same frame. Handed back
-		// alone, DH would draw it into its own images, which hold nothing else, and its apply pass
-		// would composite that water over the pack's far terrain with no opaque LODs left in DH's
-		// depth to occlude it: water showing through the hills that stand in front of it. The same
-		// rule the other way round is read()'s, which serves the two halves together or not at all.
+		// The water half only over an opaque half somebody drew in the same frame, and the somebody
+		// has to be the same engine on both. Handed back here, DH draws BOTH halves itself and its
+		// images agree with each other; said once, because this is the one hand-back of the class
+		// whose reason is the frame's shape rather than a failure.
 		if (element.afterDeferred() && !this.drew) {
+			if (this.refused.add("water-without-opaque")) {
+				Vitrail.logger().info("A frame's far terrain had a water half and no opaque half "
+						+ "drawn by this engine, so such frames go back to Distant Horizons whole");
+			}
+
 			return false;
 		}
 
@@ -274,18 +278,18 @@ public final class DistantDraw {
 
 		RenderPipeline pipeline = program.prepare(device, this.values.world().drawnDistantProjection());
 		if (pipeline == null) {
-			return refuse("prepare:" + element.element(), "the " + element.element() + " program "
-					+ "refused to prepare, which it says on its own line above. That is settled for as "
-					+ "long as this pack is loaded, so the far terrain keeps Distant Horizons' own "
-					+ "shader steadily rather than as a flicker");
+			return refuse(element, "prepare:" + element.element(), "the " + element.element()
+					+ " program refused to prepare, which it says on its own line above. That is "
+					+ "settled for as long as this pack is loaded, so the far terrain keeps Distant "
+					+ "Horizons' own shader steadily rather than as a flicker");
 		}
 
 		RenderPassDescriptor descriptor = program.descriptor(main.getColorTextureView(),
 				this.depthView);
 		if (descriptor == null && !program.plain()) {
-			return refuse("unallocated:" + element.element(), "one of the pack's colour targets had "
-					+ "no image yet on some frame, so the pass this half wanted could not be built "
-					+ "then. That comes and goes with the frame rather than lasting");
+			return refuse(element, "unallocated:" + element.element(), "one of the pack's colour "
+					+ "targets had no image yet on some frame, so the pass this half wanted could not "
+					+ "be built then. That comes and goes with the frame rather than lasting");
 		}
 
 		CommandEncoder encoder = device.createCommandEncoder();
@@ -302,9 +306,9 @@ public final class DistantDraw {
 
 		int base = writeSections(device, sections, minecraft);
 		if (base < 0) {
-			return refuse("sections", "the far terrain grew wider than the block holding its section "
-					+ "corners between the two halves of one frame, and the wider block cannot replace "
-					+ "the one the half already recorded is drawn from. The next frame has it");
+			return refuse(element, "sections", "the far terrain grew wider than the block holding its "
+					+ "section corners between the two halves of one frame, and the wider block cannot "
+					+ "replace the one the half already recorded is drawn from. The next frame has it");
 		}
 
 		try (RenderPass pass = descriptor == null
@@ -530,17 +534,29 @@ public final class DistantDraw {
 	}
 
 	/**
-	 * Hands one half back to DH and says why, once per reason and per load.
+	 * Hands one half back to DH and says why, once per reason and per load - or DROPS it for the
+	 * frame instead, and the difference is which half and when.
+	 * <p>
+	 * A water half that cannot be drawn over an opaque half this engine DID draw is claimed and
+	 * skipped rather than handed back: DH would composite it out of an image holding that water
+	 * alone, with nothing left in its depth to occlude it, and far water would show through the
+	 * hills in front of it. A frame without far water costs less than one with water through the
+	 * hills, and every reason that reaches this is transient by its own description.
 	 *
-	 * @return false always, so that a caller can hand this straight back
+	 * @return whether the caller should claim the half all the same, which is the drop; false hands
+	 *         it back to DH
 	 */
-	private boolean refuse(String reason, String why) {
-		if (this.refused.add(reason)) {
-			Vitrail.logger().warn("The far terrain went back to Distant Horizons' own shader because {}",
+	private boolean refuse(Element element, String reason, String why) {
+		boolean drop = element.afterDeferred() && this.drew;
+		if (this.refused.add((drop ? "dropped:" : "") + reason)) {
+			Vitrail.logger().warn("The {} half of the far terrain {} because {}",
+					element.afterDeferred() ? "water" : "opaque",
+					drop ? "is dropped on such frames, the opaque half being this engine's already"
+							: "went back to Distant Horizons' own shader",
 					why);
 		}
 
-		return false;
+		return drop;
 	}
 
 	/** The programs once the far terrain has been read, for the decoded dump. Empty until then. */
