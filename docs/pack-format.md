@@ -103,6 +103,13 @@ buffer sizes, the sky toggles, the shadow caster directives, the noise and custo
 images and the per-program flip directives described further down. Patterns are anchored and tried
 in a fixed order, first match wins.
 
+**A value is cut on SPACES, and a tab never separates two words.** The lists, which are the screen
+and its pages, the two feature lines, the sliders and the profile bodies, take a run of spaces as
+one separator; every other directive takes a single space, so a double space there leaves an empty
+word in the middle of the value and changes how many words the directive holds. That is not a
+nicety of ours, it is where the reference draws the line, and a value written with a tab is read by
+neither.
+
 Two rules are worth calling out:
 
 **The per-program enable flag is read through the pack's own preprocessor conditionals**, using the

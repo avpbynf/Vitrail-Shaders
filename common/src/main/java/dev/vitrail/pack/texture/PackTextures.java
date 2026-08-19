@@ -201,7 +201,10 @@ public final class PackTextures {
 		// have a deferred read the scene as a lookup table, which is the picture nobody questions,
 		// where black is a question. The file itself is the one thing that can, and only by not
 		// being there at all; that case is at the bottom of this method.
-		String[] parts = value.trim().split("\\s+", -1);
+		// One space, the separator Iris gives the texture directives, and not a run of whitespace:
+		// the word count is what tells a PNG from a raw texture there, and an empty word between two
+		// real ones moves the value into a count the format gives no meaning to.
+		String[] parts = value.trim().split(" ", -1);
 		if (parts.length != PNG_TOKENS && (parts.length < RAW_1D_TOKENS || parts.length > RAW_3D_TOKENS)) {
 			refused.add(new Refused(key, value, "holds " + parts.length
 					+ " words, and the format gives a meaning to 1, 6, 7 and 8", stage, sampler));

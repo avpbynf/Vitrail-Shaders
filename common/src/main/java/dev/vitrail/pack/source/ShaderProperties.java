@@ -63,7 +63,7 @@ public final class ShaderProperties {
 	private static final Pattern ALPHA_TEST = Pattern.compile("^\\s*alphaTest\\.(\\S+)\\s*=\\s*(.*)$");
 	private static final Pattern SLIDERS = Pattern.compile("^\\s*sliders\\s*=\\s*(.*)$");
 	// Two lines that say what a pack cannot draw without, and what it would use if it were there.
-	// Whitespace separated lists, and the last line of each wins, which is how Iris reads them.
+	// Space separated lists, and the last line of each wins, which is how Iris reads them.
 	private static final Pattern IRIS_FEATURES =
 			Pattern.compile("^\\s*iris\\.features\\.(required|optional)\\s*=\\s*(.*)$");
 	private static final Pattern END_FLASH_SHADOWS = Pattern.compile("^\\s*endFlashShadows\\s*=\\s*(.*)$");
@@ -262,7 +262,11 @@ public final class ShaderProperties {
 			List<String> layout = builder.screens.computeIfAbsent(page, _ -> new ArrayList<>());
 			List<ScreenToken> slots = builder.screenLayout.computeIfAbsent(page, _ -> new ArrayList<>());
 
-			for (String token : screen.group(2).trim().split("\\s+", -1)) {
+			// A run of SPACES and not a run of whitespace. The list directives are the only ones Iris
+			// splits on more than one space, and even there a tab is not a separator; every other
+			// directive of this file is split on a single space, which is why the two forms sit side
+			// by side here rather than one being used throughout.
+			for (String token : screen.group(2).trim().split(" +", -1)) {
 				if (token.isEmpty()) {
 					continue;
 				}
@@ -306,7 +310,7 @@ public final class ShaderProperties {
 		Matcher features = IRIS_FEATURES.matcher(line);
 		if (features.matches()) {
 			List<String> named = new ArrayList<>();
-			for (String token : features.group(2).trim().split("\\s+", -1)) {
+			for (String token : features.group(2).trim().split(" +", -1)) {
 				if (!token.isEmpty()) {
 					named.add(token);
 				}
@@ -323,7 +327,7 @@ public final class ShaderProperties {
 
 		Matcher sliders = SLIDERS.matcher(line);
 		if (sliders.matches()) {
-			for (String token : sliders.group(1).trim().split("\\s+", -1)) {
+			for (String token : sliders.group(1).trim().split(" +", -1)) {
 				if (SCREEN_TOKEN.matcher(token).matches()) {
 					builder.sliders.add(token);
 				}
@@ -399,7 +403,7 @@ public final class ShaderProperties {
 		// really did take the splashes away. A line whose two words are both unreadable falls
 		// through, which is where a reader has to be able to find it.
 		Matcher weather = WEATHER.matcher(line);
-		if (weather.matches() && reads(weather.group(1).trim().split("\\s+", 0))) {
+		if (weather.matches() && reads(weather.group(1).trim().split(" ", 0))) {
 			return;
 		}
 
@@ -898,12 +902,12 @@ public final class ShaderProperties {
 		boolean particles = true;
 
 		for (Matcher line : live(WEATHER, defines)) {
-			// Split on whitespace, the first word being the rain and the second the splashes, and a
-			// second word left out leaves the splashes alone. Iris takes the words the same way and
+			// Split on one space, the first word being the rain and the second the splashes, and a
+			// second word left out leaves the splashes alone. Iris splits this value the same way and
 			// reads anything that is not "true" as false; this reads the four words the rest of the
 			// file takes and leaves the piece as it was on anything else, which is the rule every
 			// other boolean of this class already follows.
-			String[] words = line.group(1).trim().split("\\s+", 0);
+			String[] words = line.group(1).trim().split(" ", 0);
 			Boolean rain = truth(words[0]);
 			if (rain != null) {
 				drawn = rain;
@@ -1034,7 +1038,7 @@ public final class ShaderProperties {
 
 			Matcher image = IMAGE.matcher(line);
 			if (conditions.active() && image.matches()) {
-				String[] words = image.group(1).trim().split("\\s+", -1);
+				String[] words = image.group(1).trim().split(" ", -1);
 				if (!words[0].isEmpty() && !words[0].equalsIgnoreCase("none")) {
 					samplers.add(words[0]);
 				}
@@ -1068,7 +1072,8 @@ public final class ShaderProperties {
 			return;
 		}
 
-		for (String token : body.trim().split("\\s+", -1)) {
+		// A profile body is one of the lists, so it is split on a run of spaces like the others.
+		for (String token : body.trim().split(" +", -1)) {
 			if (token.isEmpty()) {
 				continue;
 			}
