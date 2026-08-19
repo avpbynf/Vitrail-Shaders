@@ -232,14 +232,16 @@ public final class ShadowTerrain {
 
 		ShadowCasters casters = TerrainDraw.shadowCasters();
 
-		// Distant Horizons' far terrain, ahead of the world's own opaque group and outside the word
-		// that governs it. Both halves of that are Iris's: DH hangs its LOD draws off the HEAD of
-		// ChunkSectionsToRender.renderGroup, which is the very call the two lines below make, and
-		// nothing on that road consults shadowTerrain.
-		DistantDraw.shadow(false, camera);
-
 		// Refused by the pack rather than skipped for cheapness.
 		if (casters.terrain()) {
+			// Distant Horizons' far terrain goes first and INSIDE this word, both of which are
+			// Iris's. DH hangs its LOD draws off the HEAD of ChunkSectionsToRender.renderGroup
+			// (neoforge/mixins/client/MixinChunkSectionsToRender.java:67-74), and the only call to
+			// that method in Iris's shadow stage is the one inside its own shadowTerrain test
+			// (shadows/ShadowRenderer.java:508-511). So a pack that keeps the opaque world out of
+			// its map keeps the far terrain out with it, and getting this wrong is not a nuance: a
+			// pack that asked for neither would see LODs in its map here and none under Iris.
+			DistantDraw.shadow(false, camera);
 			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.OPAQUE,
 					matrices, camera.x, camera.y, camera.z, sampler));
 		}
@@ -257,12 +259,13 @@ public final class ShadowTerrain {
 		// walk above closes its last one, so a copy here is outside one.
 		TerrainDraw.copyShadowDepth();
 
-		// And its water half after that copy, where the world's own translucent group stands, which
-		// is again where DH's own hook puts it: shadowtex1 is the map WITHOUT the translucents, and
-		// far water belongs on the same side of it as near water.
-		DistantDraw.shadow(true, camera);
-
 		if (casters.translucent()) {
+			// And its water half here, after the copy and inside the word that governs the world's
+			// own translucent group, for the two reasons the opaque half is where it is: DH's hook
+			// is the head of this very call, and Iris makes it inside its own shadowTranslucent test
+			// (shadows/ShadowRenderer.java:598-601). shadowtex1 is the map WITHOUT the translucents,
+			// and far water belongs on the same side of it as near water.
+			DistantDraw.shadow(true, camera);
 			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.TRANSLUCENT,
 					matrices, camera.x, camera.y, camera.z, sampler));
 		}
