@@ -2,43 +2,24 @@ package dev.vitrail.dh;
 
 import dev.vitrail.Vitrail;
 
-import com.mojang.blaze3d.textures.GpuTextureView;
 import org.joml.Vector2f;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * Distant Horizons' own depth image, and the projection it was drawn with.
+ * The projection Distant Horizons draws its far terrain with, its planes, its render distance and
+ * its rendering switch.
  * <p>
- * <strong>Why this exists at all.</strong> DH draws its far terrain into its own colour and depth
- * images and then composites the colour onto the game's texture with depth writing and depth
- * testing both switched off. So its colour reaches the pack the way any family that does not draw
- * through the pack reaches it, through the seed, and its depth reaches nothing. Every effect a pack
- * indexes on depth therefore reads sky where the far terrain stands: fog at the far plane, a focal
- * distance at infinity, water that does not know what is behind it. Folding this image into the
- * game's depth before {@code PackDepth} takes its copies is what makes those effects right, and it
- * is the whole of what this package is for.
+ * <strong>Why this exists at all.</strong> The far terrain is rasterised in a volume of DH's own:
+ * {@code RenderUtil.setDhProjectionMatrix} takes the game's matrix and overwrites its z row with
+ * clip planes of its own, a near plane pulled in to seven and a half blocks and a far plane out
+ * past the last LOD. Everything this engine serves a pack about the far terrain hangs off that
+ * row: the volume the {@code dhProjection} names answer, the projection the pack's own
+ * {@code dh_} programs are rasterised under, and the two planes and the distance published beside
+ * them. {@link #zRow} is the half of it only DH can answer.
  * <p>
- * <strong>The image is not in the game's volume, and that is why a projection is handed back
- * beside it.</strong> The two windows agree, both being a reversed Z over zero to one cleared to
- * zero, and the agreement stops there: {@code RenderUtil.setDhProjectionMatrix} takes the game's
- * matrix and overwrites its z row with clip planes of DH's own, a near plane pulled in to seven and
- * a half blocks and a far plane out past the last LOD. A hill a thousand blocks off then carries a
- * value the game's own volume reads as eight blocks off, which is the player's face. Folded raw the
- * far terrain would not be flat, it would be in the way. So the fold is a conversion, and
- * {@link #zRow} is the half of it only DH can answer.
- * <p>
- * <strong>Why reflection.</strong> The accessors that hand back a rendering-API neutral object,
- * {@code getDhDepthTextureBlazeWrapper} and its colour twin, belong to a newer API than the one
- * this can be built against: the accessors old enough to compile against hand back an OpenGL name,
- * which is exactly the thing that cannot exist on this backend. Compiling against a locally built
- * jar would tie this repository to a path on one machine, so the call is made by name instead and
- * simply stays quiet on any DH that cannot answer it. The day a build carrying those methods is a
- * dependency this can resolve, this class becomes an ordinary typed one and the shape of it does
- * not change.
- * <p>
- * <strong>The projection is reached by an uglier road, and the published ones are wrong.</strong>
+ * <strong>The projection is reached by an ugly road, and the published ones are wrong.</strong>
  * {@code IDhApiRenderProxy.getNearClipPlaneDistanceInBlocks} and the {@code nearClipPlane} field of
  * the event parameter both answer {@code RenderUtil.getNearClipPlaneInBlocks()}, which is the value
  * BEFORE the clamp to seven and a half the matrix itself is built with: at any ordinary render
@@ -48,10 +29,13 @@ import java.lang.reflect.Method;
  * object program, {@code compat/dh/IrisGenericRenderProgram.java:240}; its terrain, water and
  * shadow programs are handed a projection Iris builds instead, {@code compat/dh/DHCompat.java:54}.
  * <p>
- * Nothing here throws into a frame. Every failure resolves once, says so once, and answers
- * {@code null} forever after, because a far terrain that is merely flat is a picture and a far
- * terrain that rises inside the render is not. The image and the projection stand or fall together:
- * half a conversion is worse than none.
+ * <strong>Why reflection.</strong> That field belongs to a class this cannot be built against:
+ * compiling against a locally built jar would tie this repository to a path on one machine, so the
+ * reads are made by name instead and simply stay quiet on any DH that cannot answer them.
+ * <p>
+ * Nothing here throws into a frame. Every failure resolves once, says so once, and answers nothing
+ * forever after, because a far terrain that is merely flat is a picture and a far terrain that
+ * rises inside the render is not.
  */
 public final class DhDepth {
 
@@ -63,11 +47,6 @@ public final class DhDepth {
 			"com.seibel.distanthorizons.core.api.internal.ClientApi";
 
 	/** Resolved once, on the first frame that asks. Null means "asked and cannot be served". */
-	private static Method depthWrapperMethod;
-	private static Method textureViewMethod;
-	private static Field payloadField;
-	private static Field renderProxyField;
-
 	private static Field renderParamsField;
 	private static Field dhProjectionField;
 	private static Field projectionScaleField;
@@ -88,57 +67,13 @@ public final class DhDepth {
 	/**
 	 * Latched off on its own, and the line is drawn by what the answer is for rather than by which
 	 * accessor gave it. How far DH draws is a number handed to a pack, so losing it must not stop
-	 * the folding of an image that still reads; whether DH is drawing at all is the question of
-	 * there being anything to fold, so losing that one latches the whole of it, which is why
-	 * {@link #renderingEnabled} sets the flag beside this one.
+	 * the volume being read for an image that still draws; whether DH is drawing at all is the
+	 * question of there being anything to serve, so losing that one latches the whole of it, which
+	 * is why {@link #renderingEnabled} sets the flag beside this one.
 	 */
 	private static boolean distanceUsable = true;
 
 	private DhDepth() {
-	}
-
-	/**
-	 * DH's depth image as it stands this frame, or null when DH is absent, not yet up, still on its
-	 * OpenGL renderer, or a build too old to answer.
-	 * <p>
-	 * The image is reversed Z over zero to one, cleared to zero. That is the window the game
-	 * rasterises in as well, but not the volume: {@link #zRow} carries what has to be undone before
-	 * a value from here means anything beside a value of the game's. The conversion a pack reads is
-	 * a third one again, and belongs to {@code PackDepth}.
-	 */
-	public static GpuTextureView view() {
-		if (!resolved) {
-			resolve();
-		}
-
-		if (!usable) {
-			return null;
-		}
-
-		try {
-			Object proxy = renderProxyField.get(null);
-			if (proxy == null) {
-				// DH is present but has not finished starting, which is ordinary on the first frames.
-				return null;
-			}
-
-			Object result = depthWrapperMethod.invoke(proxy);
-			Object wrapper = payloadField.get(result);
-			if (wrapper == null) {
-				// DH answers a failed result until its own texture has been created and bound.
-				return null;
-			}
-
-			Object textureView = textureViewMethod.invoke(wrapper);
-			return (textureView instanceof GpuTextureView view) ? view : null;
-			// The error is caught here for the reason it is caught in the two below: a class of DH's
-			// that will not link is a far terrain this engine goes without, not a frame it drops.
-		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-			usable = false;
-			Vitrail.logger().warn("Distant Horizons' depth image cannot be read, its far terrain "
-					+ "will stay flat for the rest of this session", e);
-			return null;
-		}
 	}
 
 	/**
@@ -311,18 +246,6 @@ public final class DhDepth {
 
 		try {
 			Class<?> delayed = Class.forName(DELAYED);
-			renderProxyField = delayed.getField("renderProxy");
-
-			Class<?> proxyType = renderProxyField.getType();
-			depthWrapperMethod = proxyType.getMethod("getDhDepthTextureBlazeWrapper");
-
-			payloadField = depthWrapperMethod.getReturnType().getField("payload");
-
-			// The wrapper hands its objects back as Object on purpose, so that a Vulkan texture
-			// travels through an API whose older half speaks OpenGL names.
-			Class<?> wrapperType = Class.forName(
-					"com.seibel.distanthorizons.api.interfaces.render.IDhApiBlazeTextureWrapper");
-			textureViewMethod = wrapperType.getMethod("getTextureView");
 
 			resolveProjection();
 
@@ -333,14 +256,15 @@ public final class DhDepth {
 			valueMethod = renderDistanceMethod.getReturnType().getMethod("getValue");
 
 			usable = true;
-			Vitrail.logger().info("Distant Horizons found, its far terrain will be given a depth");
+			Vitrail.logger().info("Distant Horizons found, its far terrain's volume, planes and "
+					+ "switch will be read");
 		} catch (ClassNotFoundException e) {
 			// The ordinary case: DH is simply not installed. Not worth a line above debug.
 			usable = false;
 		} catch (ReflectiveOperationException | RuntimeException e) {
 			usable = false;
-			Vitrail.logger().info("Distant Horizons is installed but not in a shape a depth can be "
-					+ "read out of, so its far terrain will stay flat: {}", e.toString());
+			Vitrail.logger().info("Distant Horizons is installed but not in a shape a projection can "
+					+ "be read out of, so its far terrain will stay flat: {}", e.toString());
 		}
 	}
 

@@ -224,13 +224,6 @@ public final class PackChain {
 	/** Distant Horizons' far terrain, drawn with the pack's own programs where DH is there at all. */
 	private final DistantDraw distant;
 
-	/**
-	 * The far terrain's road into the game's depth. Held by the chain and not by the targets,
-	 * because it writes nothing of the pack's: it lives here for the same reason {@link #quad} does,
-	 * which is that it is asked for from an entry point of its own.
-	 */
-	private final DhFold fold = new DhFold();
-
 	private List<PackPass> programs;
 	private PackPass last;
 
@@ -1199,6 +1192,9 @@ public final class PackChain {
 		// than with the frame, which is what the argument is.
 		this.targets.depth().forgetPreHand(HandDraw.diverted());
 
+		// The far terrain's pair is on the same per frame rule, and PackDepth says why.
+		this.targets.depth().forgetDistant();
+
 		if (this.block != null) {
 			this.block.rotate();
 		}
@@ -1332,10 +1328,14 @@ public final class PackChain {
 	 * every pass still runs where the schedule put it and the ping pong is untouched. What changes
 	 * is only the moment the commands are recorded.
 	 *
-	 * @param depth what this half's programs read as {@code depthtex0}, in the pack's own window:
-	 *              the opaque world before the translucents and the whole scene after
+	 * @param depth   what this half's programs read as {@code depthtex0}, in the pack's own window:
+	 *                the opaque world before the translucents and the whole scene after
+	 * @param distant what they read as {@code dhDepthTex0}, on the same split: the far terrain
+	 *                before its water and with it after, or null for the far plane on the frames the
+	 *                pack drew no far terrain
 	 */
-	private void drawRange(GpuDevice device, Ready ready, int from, int to, GpuTextureView depth) {
+	private void drawRange(GpuDevice device, Ready ready, int from, int to, GpuTextureView depth,
+			GpuTextureView distant) {
 		// Clamped to the list, so that the rank of a chain whose every pass runs before the world is
 		// one the walk below can reach rather than one nothing ever equals.
 		int seedAt = ready.seeding()
@@ -1367,10 +1367,11 @@ public final class PackChain {
 
 			GpuBufferSlice uniforms = buffer.slice(pass.uniformOffset(), pass.uniformSize());
 			if (pass == this.last) {
-				pass.drawFinal(encoder, ready.mainView(), this.targets, depth, this.quad, uniforms);
+				pass.drawFinal(encoder, ready.mainView(), this.targets, depth, distant, this.quad,
+						uniforms);
 			} else {
-				pass.draw(encoder, this.targets, depth, this.quad, uniforms, ready.main().width,
-						ready.main().height);
+				pass.draw(encoder, this.targets, depth, distant, this.quad, uniforms,
+						ready.main().width, ready.main().height);
 			}
 		}
 
@@ -1428,25 +1429,21 @@ public final class PackChain {
 	}
 
 	/**
-	 * Folds Distant Horizons' far terrain into the game's depth, at the head of the moment the game
-	 * has finished its opaque features.
+	 * Takes the far terrain's depth as it stands with its opaque half in, converted into the window
+	 * the pack reads, at the head of the moment the game has finished its opaque features.
 	 * <p>
-	 * <strong>The place is the whole design and it is one line wide.</strong> DH draws its LODs from
-	 * inside the game's own opaque chunk pass, {@code ChunkSectionsToRender.renderGroup}, long
-	 * before this, and composes only its colour; so by here its
-	 * image is this frame's and the game's depth is everything the game itself drew. Every reader of
-	 * the game's depth is still downstream: {@link #markPreHandDepth} takes {@code depthtex2} on the
-	 * next line, {@link #drawEarly} takes {@code depthtex1} two lines later, the scene seed is cut
-	 * against the same image, and the world's translucents have not been drawn. Folded one line
-	 * later the pack would read a far terrain in two of its three depths and not the third; folded
-	 * after the chain it would read it in none.
+	 * <strong>The moment is Iris's.</strong> Its {@code dhDepthTex1} is a copy of DH's depth taken
+	 * before the translucent LODs are drawn ({@code compat/dh/DHCompatInternal.java:260-269}), and
+	 * that boundary falls here: the far terrain's opaque half was drawn from inside the game's own
+	 * opaque chunk pass, long before this, and its water half is drawn from the head of the game's
+	 * translucent chunk group, which is still ahead. Every reader of the early half is downstream
+	 * too, the deferred stage first of all.
 	 * <p>
-	 * Only when a pack is being drawn. Nothing of the game's own picture wants this: DH already
-	 * composes its colour, and a depth the game would only ever test against is a change to the
-	 * game's own image for no reader. {@link DhFold} carries what the fold costs and what it cannot
-	 * reach.
+	 * Only when a pack is being drawn, and only on the frames the pack really drew the far terrain:
+	 * on every other frame the {@code dhDepthTex} names keep answering the far plane, and every
+	 * Distant Horizons branch of the pack stays shut, exactly as without the mod.
 	 */
-	public static void foldDistantDepth() {
+	public static void takeDistantDepth() {
 		PackChain chain = active;
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Minecraft minecraft = Minecraft.getInstance();
@@ -1454,26 +1451,23 @@ public final class PackChain {
 			return;
 		}
 
-		// Where the far terrain is taken over, and it is here for the reason the fold is: this is the
-		// one point of the frame reached exactly when DH's far terrain matters to a pack. What it
-		// costs is that a takeover lands on the NEXT frame, DH having drawn its LODs long before this
-		// line; nothing of the picture turns on that, the frame before it being the picture this
-		// engine drew before this door existed.
+		// Where the far terrain is taken over, and it is here rather than where the take needs it:
+		// this is the one point of the frame reached exactly when DH's far terrain matters to a
+		// pack. What it costs is that a takeover lands on the NEXT frame, DH having drawn its LODs
+		// long before this line; nothing of the picture turns on that, the frame before it being
+		// the picture this engine drew before this door existed.
 		DhLods.install();
 
-		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
-		if (main == null || !main.useDepth) {
+		GpuTextureView served = chain.distant.served();
+		if (served == null) {
 			return;
 		}
 
 		// Caught like every other point the game calls this engine back at: an exception here reaches
 		// the game through an event handler and comes back on the very next frame.
 		try {
-			chain.fold.fold(device.createCommandEncoder(), device, chain.quad(device),
-					main.getColorTextureView(), main.getDepthTextureView(),
-					minecraft.gameRenderer.gameRenderState().levelRenderState.cameraRenderState
-							.depthFar,
-					chain.distant.served());
+			chain.targets.depth().takeDistantOpaque(device.createCommandEncoder(), device,
+					chain.quad(device), served, served.getWidth(0), served.getHeight(0));
 		} catch (RuntimeException e) {
 			disabled = true;
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -1767,7 +1761,8 @@ public final class PackChain {
 					this.programs.stream().limit(end).map(PackPass::path).toList());
 		}
 
-		drawRange(device, ready, 0, end, this.targets.depth().opaque());
+		drawRange(device, ready, 0, end, this.targets.depth().opaque(),
+				this.targets.depth().distantOpaque());
 	}
 
 	/**
@@ -1813,7 +1808,17 @@ public final class PackChain {
 					+ "earlier in this frame");
 		}
 
-		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene());
+		// The far terrain's depth with its water in, which the composites read as dhDepthTex0. On a
+		// frame the pack served only the opaque half this is that half over again, which is also
+		// what Iris's live image holds then.
+		GpuTextureView distantServed = this.distant.served();
+		if (distantServed != null) {
+			this.targets.depth().takeDistantScene(device.createCommandEncoder(), device, this.quad,
+					distantServed, distantServed.getWidth(0), distantServed.getHeight(0));
+		}
+
+		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene(),
+				this.targets.depth().distantScene());
 
 		// Outside any pass, and after the last one. Only the targets the pack keeps between frames
 		// and that the chain left on the far half are copied: the next frame walks from an empty
@@ -2216,8 +2221,8 @@ public final class PackChain {
 				"read the smoothed depth at the centre of the screen, which is what a depth of field "
 						+ "focuses on");
 		named(byKind, SamplerPlan.Kind.DISTANT_DEPTH,
-				"read the far plane, the far terrain of Distant Horizons being folded into the "
-						+ "world's own depth rather than kept beside it");
+				"read the far terrain's own depth, kept beside the world's as Iris keeps it, on the "
+						+ "frames this pack draws the far terrain, and the far plane on the rest");
 		named(byKind, SamplerPlan.Kind.UNBINDABLE,
 				"are declared under a type this backend cannot bind, and should have gone with "
 						+ "their pass");

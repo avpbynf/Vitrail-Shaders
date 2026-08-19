@@ -411,8 +411,9 @@ final class PackPass {
 	 * allocated here, and the attachments are loaded rather than cleared, since the clears for the
 	 * whole frame have already run and an earlier pass may have written these very pixels.
 	 */
-	void draw(CommandEncoder encoder, ColorTargets targets, GpuTextureView depthView, GpuBuffer quad,
-			GpuBufferSlice uniforms, int screenWidth, int screenHeight) {
+	void draw(CommandEncoder encoder, ColorTargets targets, GpuTextureView depthView,
+			GpuTextureView distantView, GpuBuffer quad, GpuBufferSlice uniforms, int screenWidth,
+			int screenHeight) {
 		// The two draws are not interchangeable and neither mistake shows as an error: a final sent
 		// here has one null attachment and no target at all, and a composite sent the other way
 		// paints the screen instead of the buffer the rest of the chain reads.
@@ -436,7 +437,7 @@ final class PackPass {
 				this.pass.size().width(screenWidth), this.pass.size().height(screenHeight)));
 
 		try (RenderPass pass = encoder.createRenderPass(descriptor)) {
-			record(pass, targets, depthView, quad, uniforms);
+			record(pass, targets, depthView, distantView, quad, uniforms);
 		}
 	}
 
@@ -446,24 +447,25 @@ final class PackPass {
 	 * the world showing underneath.
 	 */
 	void drawFinal(CommandEncoder encoder, GpuTextureView into, ColorTargets targets,
-			GpuTextureView depthView, GpuBuffer quad, GpuBufferSlice uniforms) {
+			GpuTextureView depthView, GpuTextureView distantView, GpuBuffer quad,
+			GpuBufferSlice uniforms) {
 		if (!this.last) {
 			throw new IllegalStateException(this.path + " writes " + this.attachments.size()
 					+ " colour targets of the pack and cannot be drawn onto the game's own");
 		}
 
 		try (RenderPass pass = encoder.createRenderPass(this.label, into, Optional.empty())) {
-			record(pass, targets, depthView, quad, uniforms);
+			record(pass, targets, depthView, distantView, quad, uniforms);
 		}
 	}
 
 	private void record(RenderPass pass, ColorTargets targets, GpuTextureView depthView,
-			GpuBuffer quad, GpuBufferSlice uniforms) {
+			GpuTextureView distantView, GpuBuffer quad, GpuBufferSlice uniforms) {
 		pass.setPipeline(this.pipeline);
 		RenderSystem.bindDefaultUniforms(pass);
 		pass.setUniform(UNIFORM_BLOCK, uniforms);
 		pass.setVertexBuffer(0, quad.slice());
-		bindSamplers(pass, targets, depthView);
+		bindSamplers(pass, targets, depthView, distantView);
 		pass.draw(VERTICES, 1, 0, 0);
 	}
 
@@ -473,11 +475,14 @@ final class PackPass {
 	 * than being left out. The half a colour target is read from is the plan's answer for this
 	 * program, taken when the pack was read.
 	 *
-	 * @param depthView the depth of the half this pass stands in, already converted into the pack's
-	 *                  own window. Never the game's live view: a pack reads what it is handed and
-	 *                  has nothing left in it that would turn a reversed depth round
+	 * @param depthView   the depth of the half this pass stands in, already converted into the
+	 *                    pack's own window. Never the game's live view: a pack reads what it is
+	 *                    handed and has nothing left in it that would turn a reversed depth round
+	 * @param distantView the far terrain's depth on the same split, already converted as well, or
+	 *                    null for the far plane on the frames the pack drew no far terrain
 	 */
-	private void bindSamplers(RenderPass pass, ColorTargets targets, GpuTextureView depthView) {
+	private void bindSamplers(RenderPass pass, ColorTargets targets, GpuTextureView depthView,
+			GpuTextureView distantView) {
 		for (String sampler : this.samplers) {
 			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 
@@ -509,12 +514,14 @@ final class PackPass {
 				// own window and so a focus point at the horizon. Black would be a focus point at the
 				// camera, which is the defect this whole path exists to close.
 				case CENTER_DEPTH -> or(targets.centerDepth().view(), targets.white());
-				// White here as well, and here it is not a fallback but the answer: white is the far
-				// plane in the window a pack reads a depth in, and this engine keeps no depth of the
-				// far terrain apart from the game's, so the name says there is nothing at this texel
-				// that depthtex0 has not already got. SamplerPlan carries what black would do to the
-				// sky.
-				case DISTANT_DEPTH -> targets.white();
+				// The far terrain's own depth, kept beside the world's as Iris keeps it, and white
+				// for the far plane on the frames the pack drew no far terrain: the pack's Distant
+				// Horizons branches then stay shut, exactly as without the mod. dhDepthTex1 is the
+				// image without the water whichever half asks, which is Iris's copy before the
+				// translucent LODs; the other two names follow the half, like depthtex0.
+				case DISTANT_DEPTH -> SamplerPlan.distantWithoutWater(binding.sampler())
+						? or(targets.depth().distantOpaque(), targets.white())
+						: or(distantView, targets.white());
 				// A name this backend cannot bind should have taken its program out of the chain
 				// before a frame was drawn. It is still answered rather than left out, because the
 				// layout carries it either way and the draw throws on the first name it misses.

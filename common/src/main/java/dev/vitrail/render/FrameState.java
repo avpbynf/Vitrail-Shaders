@@ -261,17 +261,6 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
-	 * Whether the pass about to write its block is drawn in Distant Horizons' own volume, which is
-	 * what the three dh matrices answer by. Set by the pass beside its convention and for the same
-	 * reason: it is a property of where the pass draws and not of the frame, and
-	 * {@link ViewMatrices#dhProjection} carries the two roads that read those names for two different
-	 * things.
-	 */
-	public void distantVolume(boolean distant) {
-		this.view.distantVolume(distant);
-	}
-
-	/**
 	 * The model view the pass about to write its block draws with, or null for the camera's. Set by
 	 * the pass beside its convention, and for the same reason: both are properties of where the pass
 	 * draws rather than of the frame.
@@ -454,11 +443,10 @@ public final class FrameState implements WorldState {
 		//
 		// What they carry is the projection DH drew the PREVIOUS frame with, and that is worth
 		// saying rather than hiding. DH fills its render parameter from the opaque chunk pass, while
-		// the pack's frame opens ahead of it at the first sky draw. Reading them where the depth is
-		// folded would not mend it: the block is written once, here, so a value taken after it would
-		// reach a pack one frame later still. What it costs is nothing measurable, both planes moving
-		// with DH's own settings and with the player's height above the world rather than with the
-		// camera. The fold does not read the block at all: it takes the row itself as it converts.
+		// the pack's frame opens ahead of it at the first sky draw. Reading them later would not
+		// mend it: the block is written once, here, so a value taken after it would reach a pack one
+		// frame later still. What it costs is nothing measurable, both planes moving with DH's own
+		// settings and with the player's height above the world rather than with the camera.
 		int distance = DhDepth.renderDistanceBlocks();
 		if (distance >= 0 && DhDepth.planes(this.distantPlanes)) {
 			this.view.advanceDistant(this.distantPlanes.x, this.distantPlanes.y, distance);

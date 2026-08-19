@@ -36,24 +36,24 @@ import java.util.Optional;
  * ({@code compat/dh/LodRendererEvents.java:317-320}), so both spellings have to answer the volume
  * the far terrain is really rasterised in. That is why the pass is prepared with a projection of its
  * own, the way the hand is: {@code render/ViewMatrices} builds it out of the frame's own matrix and
- * the z row DH drew with, and says what the pair costs.
+ * the z row DH drew with, and serves the same volume to every pass, as Iris serves it.
  * <p>
  * <strong>The depth it writes is not the game's</strong>, and that is the arrangement Iris has
  * rather than a caution of ours: DH's own near plane is pulled in to seven and a half blocks, so a
  * value from that volume read as one of the game's puts a hill a thousand blocks off at arm's
  * length. Iris draws its LODs into a framebuffer whose depth attachment is DH's own depth image
- * ({@code compat/dh/LodRendererEvents.java:104-107} handing {@code getDhDepthTextureId} to
- * {@code reconnectDHTextures}), and the far terrain therefore never enters the game's depth there
- * at all. Here it does, one conversion later: {@link DistantDraw} keeps a depth image of its own,
- * {@link DhFold} folds it into the game's, and every effect a pack indexes on depth then reads the
- * far terrain where Iris leaves it reading sky.
+ * ({@code compat/dh/DHCompatInternal.java:166-171} attaching the texture it will serve back), and
+ * the far terrain never enters the game's depth there at all. Here it is the same shape one class
+ * over: {@link DistantDraw} keeps a depth image of its own, and {@code render/PackDepth} converts
+ * it into the window the pack reads, which is what a {@code dhDepthTex} lookup is answered with.
+ * The pack's own Distant Horizons branches - BSL's {@code deferred1.glsl} taking its
+ * {@code else if (dhZ < 1.0)} road - are what light, fog and occlude the far terrain from there.
  * <p>
- * <strong>Draw buffer nought goes to the game's target and reaches the pack's picture through the
- * scene seed</strong>, which is the entities' road before their mask landed and it costs what it
- * cost them: the far terrain's first output makes the trip through eight bits a channel. The mask is
- * turned down rather than asked for because what would have to write it is not this pass: the seed
- * is cut against the game's depth, and the value this pass leaves is in DH's volume until the fold
- * has converted it, one line before the seed runs.
+ * <strong>Every draw buffer goes to the pack's own targets, the first included</strong>, which is
+ * where Iris puts them: its dh programs are bound over the pack's declared draw buffers exactly as
+ * its gbuffers programs are ({@code compat/dh/DHCompatInternal.java:92}). The seed cannot carry
+ * this family and does not need to keep off it, and {@link GeometryProgram} says why in the one
+ * place that rule is decided.
  * <p>
  * <strong>Its namespace is ours and has no {@code sodium} in it</strong>, for the reason
  * {@link SkyProgram} gives: the word is what makes Sodium's mixin push twenty bytes of region offset

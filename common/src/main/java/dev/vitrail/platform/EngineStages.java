@@ -122,11 +122,11 @@ public final class EngineStages {
 		// world's translucents or, once the level returns, the screen.
 		EntityDraw.opaqueFeatures(false);
 
-		// Then Distant Horizons' far terrain into the game's depth, ahead of every line below and
-		// not only ahead of the deferred stage: each of the next three reads that depth, and a fold
-		// placed between two of them would give the pack a far terrain in one depth and not the
-		// other. PackChain.foldDistantDepth says why here is the only place it fits.
-		PackChain.foldDistantDepth();
+		// Then the far terrain's depth, taken into the pack's window before its water half is drawn
+		// and before the deferred stage below reads it: this boundary is where Iris takes its own
+		// copy without the translucent LODs. PackChain.takeDistantDepth says what the frames
+		// without a far terrain read instead.
+		PackChain.takeDistantDepth();
 
 		// Then the depth the pack reads past the hand with, which has to be taken while the hand is
 		// still not in it, and the hand's solid half. The order of these three lines is the whole of
