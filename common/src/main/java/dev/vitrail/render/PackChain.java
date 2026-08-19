@@ -1607,6 +1607,27 @@ public final class PackChain {
 	}
 
 	/**
+	 * Whether this pack may read the shadow map as it stood before the translucents, which is the
+	 * only thing the copy of it is for.
+	 * <p>
+	 * Answered off the pack's TEXT and not off a sampler plan, because the copy is taken during the
+	 * shadow stage and the programs that read it bind later in the same frame: at the moment the
+	 * decision has to be made, six of the seven geometry families may not have been read at all. A
+	 * name no source of the pack writes cannot be declared by any of them, which is the one half of
+	 * the question that can be settled that early, and it is the safe half: a pack that spells the
+	 * name anywhere keeps the copy it would have had.
+	 */
+	boolean mayReadShadowWithoutTranslucents() {
+		return this.chain.mentions().maybe("shadowtex1")
+				|| this.chain.mentions().maybe("watershadow");
+	}
+
+	/** The same question for the depth taken before the hand, which a pack reads as depthtex2. */
+	boolean mayReadPreHandDepth() {
+		return this.chain.mentions().maybe("depthtex2");
+	}
+
+	/**
 	 * Keeps the world's depth as it stands before the player's own hand is drawn, which is what the
 	 * pack reads as {@code depthtex2}. Called from the event the hand's solid half is drawn at and
 	 * one line ahead of it.
@@ -1644,7 +1665,7 @@ public final class PackChain {
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Minecraft minecraft = Minecraft.getInstance();
 		if (disabled || chain == null || device == null || minecraft == null || !chainWanted
-				|| !HandDraw.draws()) {
+				|| !HandDraw.draws() || !chain.mayReadPreHandDepth()) {
 			return;
 		}
 
@@ -2379,6 +2400,21 @@ public final class PackChain {
 		if (!pastTheHand.isEmpty()) {
 			Vitrail.logger().info("{} read the depth of the world from before the hand was drawn, "
 					+ "which is an image of its own only while this engine draws the hand", pastTheHand);
+		}
+
+		// Said whichever way it went, because what is worth reading here is the work NOT done and
+		// a silence would look the same as a guard that never fired. Off the whole pack's text
+		// rather than off this chain's programs: that is the reading the two guards go by, and a
+		// line quoting a narrower one would send whoever chases a missing shadow to the wrong
+		// place.
+		if (!mayReadShadowWithoutTranslucents()) {
+			Vitrail.logger().info("No source of this pack names shadowtex1 or watershadow, so the "
+					+ "copy of the shadow map taken before its translucents is not taken at all");
+		}
+
+		if (!mayReadPreHandDepth()) {
+			Vitrail.logger().info("No source of this pack names depthtex2, so the depth of the "
+					+ "world from before the hand is neither converted nor kept");
 		}
 	}
 

@@ -435,11 +435,23 @@ public final class TerrainDraw {
 	 * Takes the copy the pack reads as {@code shadowtex1}. The caller invokes it between the opaque
 	 * halves of the shadow map and the translucent one, which is the only moment the two names mean
 	 * different things, and outside any render pass: the renderer closes its own before returning.
+	 * <p>
+	 * <strong>Skipped whole where no source of the pack names what it feeds.</strong> The copy is
+	 * the map at one resolution and four bytes a texel, taken every frame, and it answers exactly
+	 * one name: a pack that never reads it pays sixty-four mebibytes a frame at a shadow map of
+	 * 4096 for an image nothing samples. Two of the eight packs measured are that pack, Bliss
+	 * reading the bare {@code shadow} alone and Mellow only {@code shadowtex0}.
+	 * <p>
+	 * The question is asked of the pack's text rather than of a sampler plan because of WHEN it
+	 * has to be answered: here, during the shadow stage, while the programs that would read the
+	 * copy bind later in the same frame and six of the seven geometry families may not have been
+	 * read at all. What that reading can prove is only ever the absence of a name, which is the
+	 * half that makes this safe.
 	 */
 	public static void copyShadowDepth() {
 		TerrainDraw self = PackChain.terrain();
 		GpuDevice device = RenderSystem.tryGetDevice();
-		if (self != null && device != null) {
+		if (self != null && device != null && self.owner.mayReadShadowWithoutTranslucents()) {
 			self.targets.shadow().copyWithoutTranslucents(device.createCommandEncoder());
 		}
 	}

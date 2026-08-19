@@ -13,6 +13,7 @@ import dev.vitrail.pack.source.DimensionSet;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.source.IncludeExpander;
 import dev.vitrail.pack.source.ShaderPackSource;
+import dev.vitrail.pack.source.SourceMentions;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
@@ -49,6 +50,19 @@ public final class PackProgram {
 			List.of(ProgramStage.VERTEX, ProgramStage.GEOMETRY, ProgramStage.FRAGMENT);
 
 	private static final String FINAL = "final";
+
+	/**
+	 * The names the engine has to have an answer about before its first frame, and which it
+	 * therefore reads out of the pack's text rather than out of a program that may not be read
+	 * yet. Both are things paid for every frame and useful only to a pack that reads them.
+	 * <p>
+	 * {@code watershadow} rides with {@code shadowtex1} because it is what moves the meaning of
+	 * the bare {@code shadow}: a program declaring it reads the map WITHOUT the translucents
+	 * under that name, so a pack writing it is a pack that may want the copy even though it
+	 * never spells {@code shadowtex1} ({@code SamplerPlan.withoutTranslucents}).
+	 */
+	private static final Set<String> SETTLED_EARLY =
+			Set.of("shadowtex1", "watershadow", "depthtex2");
 
 	/** The one name of the format the game's clouds are drawn under. */
 	private static final String CLOUD_PROGRAM = "gbuffers_clouds";
@@ -248,13 +262,18 @@ public final class PackProgram {
 	 *
 	 * @param place    where the entry points were read from, {@code ""} at the root
 	 * @param programs by bare name, {@code composite4}, in the order they run, the final last
+	 * @param mentions which of the few names the engine has to settle before the first frame appear
+	 *                 anywhere in this pack's text. Read here because the pack is open here and
+	 *                 every source is walked here anyway; asked because six of the seven geometry
+	 *                 families are read at the first draw of their own kind, so nothing else can
+	 *                 answer for the pack as a whole this early
 	 * @param removed  the full screen programs no pipeline can be built for, by bare name, each with
 	 *                 what did it. They are gone from {@link #programs} and the plan was rebuilt
 	 *                 without them, unless the {@code final} is one of them: nothing is then removed
 	 *                 at all and {@link ChainPlan#refusals()} refuses the whole chain
 	 */
 	public record Chain(String packName, String place, TargetPlan targets, ChainPlan chain,
-			Map<String, Loaded> programs, Map<String, Refusal> removed) {
+			Map<String, Loaded> programs, Map<String, Refusal> removed, SourceMentions mentions) {
 
 		public Chain {
 			// Kept in order rather than Map.copyOf: a reader walking this map is walking the frame,
@@ -974,6 +993,10 @@ public final class PackProgram {
 			}
 
 			PackTextures textures = textures(source, properties, options, settings);
+
+			// Inside the same opening as everything else, for the reason the other readings give: a
+			// zip closed behind us invalidates every path taken from it.
+			SourceMentions mentions = SourceMentions.of(source, SETTLED_EARLY);
 			Map<String, ProgramTranslator.TranslatedProgram> translated = new LinkedHashMap<>();
 			for (String name : targets.running()) {
 				String path = pathOf(place, name);
@@ -1021,7 +1044,8 @@ public final class PackProgram {
 						AlphaTest.OFF, textures));
 			}
 
-			return Optional.of(new Chain(source.packName(), place, targets, chain, loaded, refused));
+			return Optional.of(
+					new Chain(source.packName(), place, targets, chain, loaded, refused, mentions));
 		}
 	}
 
