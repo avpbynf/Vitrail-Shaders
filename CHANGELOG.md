@@ -11,7 +11,27 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
-## Unreleased
+## 0.5.0-beta.1
+
+### Added
+
+- **The debug screen names the engine, the pack and its profile**, where Iris has always put those
+  three lines. A screenshot taken with F3 open is how the question "what drew this, with what, set
+  how" arrives, and until now a Vitrail frame and an Iris frame of the same pack read as the same
+  picture. A pack that is not being drawn says which of the three reasons it is rather than reading
+  as none at all: shaders switched off, a pack named that is not in the folder, or a pack the
+  engine refused, the last of which sends you to the log rather than to the settings screen.
+
+### Changed
+
+- **One download for both loaders.** The release now carries a single jar,
+  `vitrail-<version>+mc<minecraft>`, that runs on NeoForge and on Fabric alike; each loader reads
+  its own metadata out of it and ignores the rest. It is the same engine the two per-loader jars
+  carried, in one file, and the per-loader downloads stop being published. Nothing changes in
+  game, and nothing changes about what has to sit next to it: Sodium, Chloride, and on Fabric the
+  Fabric API. Upgrading means replacing: delete the old `vitrail-neoforge-*` or `vitrail-fabric-*`
+  jar when this one goes in, because the two carry the same mod and a loader that finds it twice
+  refuses to start.
 
 ### Fixed
 
@@ -31,16 +51,32 @@ what the next one holds.
   enough to lose the race. The pack is now read once the boot reload is over, which is where
   NeoForge always effectively had it.
 
-### Changed
+- **Bliss no longer stands its swamp fog over any shoreline.** Biomes were numbered by walking the
+  level's registry, which hands them out alphabetically, while a pack compares against the numbers
+  Iris hands out, which are the game's own declaration order. Six is swamp there and cold ocean
+  here, so the green followed you along every coast. The numbering is now taken where Iris takes
+  it, and a biome the game's own list never declares answers nought, as it does under Iris.
 
-- **One download for both loaders.** The release now carries a single jar,
-  `vitrail-<version>+mc<minecraft>`, that runs on NeoForge and on Fabric alike; each loader reads
-  its own metadata out of it and ignores the rest. It is the same engine the two per-loader jars
-  carried, in one file, and the per-loader downloads stop being published. Nothing changes in
-  game, and nothing changes about what has to sit next to it: Sodium, Chloride, and on Fabric the
-  Fabric API. Upgrading means replacing: delete the old `vitrail-neoforge-*` or `vitrail-fabric-*`
-  jar when this one goes in, because the two carry the same mod and a loader that finds it twice
-  refuses to start.
+- **Distant Horizons terrain stops washing out flat under packs that read the light raw.** The far
+  terrain family was handed raw light levels scaled by sixteen; Iris hands level i as
+  (i + 0.5) / 16 and answers the fixed function light matrices with the identity, so a pack reading
+  that light through the matrix or raw gets the same number either way. BSL and Complementary
+  multiply the matrix in and were never affected. Bliss reads the pair raw, and from sky level one
+  upward its light map saturated and its far terrain went flat.
+
+- **Under Bliss, the game's sky no longer paints over the far terrain.** The engine fills the
+  game's own frame back in wherever the world's depth stands in front of what a pack claimed, and
+  the world's depth holds nothing where an LOD stands, the game never rasterising the far terrain
+  itself: those pixels read as unanswered and were covered over the colour the Distant Horizons
+  programs had just written. Only Bliss showed it, its sky pass being the one the translation
+  cannot hand a coverage mask to, every other pack's sky claiming those pixels itself. The far
+  terrain's own depth is read now.
+
+- **The line printed when the game came up on OpenGL no longer says the pack draws nothing.** The
+  passes do run on that backend, and what they draw is a picture both credible and wrong: the
+  programs are translated against Vulkan's depth and clip conventions, so a sky cut in two or a
+  misdrawn hand there is the backend and not the pack. The line owns that now, which is the point
+  of it, a report filed against the pack being the one thing it exists to prevent.
 
 ## 0.4.1-beta.1
 
