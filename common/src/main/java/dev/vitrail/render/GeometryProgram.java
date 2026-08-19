@@ -171,10 +171,11 @@ final class GeometryProgram {
 	 *                     pass. Declared here and bound by the family: what this record decides is
 	 *                     that the layout carries the name, without which the draw is refused
 	 * @param distantVolume whether this pass is drawn in Distant Horizons' own volume rather than in
-	 *                     the game's, which decides what the three {@code dhProjection} names answer
-	 *                     for it. True for the far terrain and false for everything else, and
-	 *                     {@code ViewMatrices.dhProjection} carries what each of the two roads reads
-	 *                     them for and what answering both the same way costs
+	 *                     the game's. True for the far terrain and false for everything else. The
+	 *                     three {@code dhProjection} names answer that volume for every pass alike
+	 *                     now, as Iris serves them; what this still decides is that the pass owns its
+	 *                     first draw buffer outright, the constructor saying why the seed cannot be
+	 *                     its road
 	 */
 	record Pass(String family, String name, String namespace, Set<String> answered, boolean shadow,
 			Optional<BlendFunction> blend, boolean covers, boolean claimed, boolean afterDeferred,
@@ -440,8 +441,20 @@ final class GeometryProgram {
 		// its own pass writing depth under it - a held banner's pattern is the reachable one
 		// (BANNER_PATTERN, RenderPipelines.java:318) - which the cut discarded outright, the mask and
 		// the world's depth both holding what the geometry behind the hand left.
+		// The far terrain owns its first draw buffer whichever half it falls on, and it is the one
+		// family that owns it without a mask and without being drawn after the seed. Iris binds its
+		// dh programs to a framebuffer over the pack's own declared draw buffers, exactly as it
+		// binds every gbuffers program (compat/dh/DHCompatInternal.java:92 building
+		// createDHFramebuffer over the terrain source), so the pack's colour never makes the trip
+		// through the game's target there. And the seed cannot be this family's road at all: the
+		// pack's sky claims the whole horizon with a depth of its own - the disc's, and the cone's
+		// below it - which stands nearer than any far terrain, so the cut refuses the transport and
+		// what the seed target keeps where the far terrain stands is the sky. What keeps the seed
+		// OFF the pixels this family writes is that same claim, the world's depth holding the far
+		// plane there: a game feature really drawn in front still comes in over it, its depth being
+		// nearer than the sky's claim.
 		this.ownsFirst = owns && (this.covers || pass.afterDeferred()
-				|| (pass.blended() && pass.claimed()));
+				|| (pass.blended() && pass.claimed()) || pass.distantVolume());
 		// The demotion just above and none of the ones before it, which is why owns and the side are
 		// both in it: without owns this would answer yes for every blending pass in a place where
 		// the chain does not run or the plan had no attachments to give, and then say of the water,
@@ -1134,7 +1147,6 @@ final class GeometryProgram {
 		// frame now that the shadow map is ours and the game's targets are not, and what a vertex
 		// stage does with its clip depth on the way out comes from this pair.
 		this.values.convention(this.pass.shadow() ? ClipSpace.FORWARD : ClipSpace.REVERSED);
-		this.values.distantVolume(this.pass.distantVolume());
 		this.values.modelView(this.modelView, this.bob);
 		this.values.projection(this.projection);
 		this.values.passColour(this.passColour);
@@ -1254,11 +1266,7 @@ final class GeometryProgram {
 			// which is the one thing a texture.STAGE.NAME override needs to know. Mellow moves
 			// noisetex there and nowhere else, so this is not a case the chain also covers.
 			case PACK_TEXTURE -> packTexture(sampler);
-			// The far plane, which is white in the window a pack reads a depth in, because this
-			// engine folds the far terrain into the game's own depth rather than keeping a second
-			// one: the name has nothing left to say that depthtex0 has not already said. SamplerPlan
-			// carries what black would do instead.
-			case DISTANT_DEPTH -> this.white.getColorTextureView();
+			case DISTANT_DEPTH -> distantDepth();
 			default -> this.black.getColorTextureView();
 		};
 	}
@@ -1375,6 +1383,31 @@ final class GeometryProgram {
 	}
 
 	/**
+	 * What a {@code dhDepthTex} sampler reads, on the same two rules the world's depth follows.
+	 * <p>
+	 * The translucent passes get the image taken before the far terrain's own water half, which at
+	 * that point of the frame is the whole of what has been drawn into it; the solid and cutout
+	 * passes stay on the far plane, because the only image in existence at their moment holds the
+	 * previous frame's, and no distinction between the three names arrives before the copy with the
+	 * water does, which is the composites' and {@link PackPass}'s to serve.
+	 * <p>
+	 * The far plane is also the whole answer while the pack is not drawing the far terrain: the
+	 * image is only taken on the frames it really drew, so a session without Distant Horizons, or a
+	 * frame its rendering switch is off on, reads white here exactly as it always did, and every
+	 * Distant Horizons branch of the pack stays shut.
+	 */
+	private GpuTextureView distantDepth() {
+		if (this.pass.afterDeferred()) {
+			GpuTextureView distant = this.targets.depth().distantOpaque();
+			if (distant != null) {
+				return distant;
+			}
+		}
+
+		return this.white.getColorTextureView();
+	}
+
+	/**
 	 * A colour target of the pack, on the half the plan reads it from, or black.
 	 * <p>
 	 * Black covers two cases and only one of them is temporary. The targets may not be allocated
@@ -1467,7 +1500,7 @@ final class GeometryProgram {
 						&& this.shadow.colour(binding.index()) != null);
 	}
 
-	/** A name answered with the far plane on purpose, which is not the same as one nothing fills. */
+	/** A name answered per frame, an image or the far plane, which is not one nothing fills. */
 	private boolean readsTheDistantDepth(String sampler) {
 		return this.loaded.samplers().binding(sampler).kind() == SamplerPlan.Kind.DISTANT_DEPTH;
 	}
@@ -1553,16 +1586,16 @@ final class GeometryProgram {
 				.map(this::describe)
 				.toList();
 		// Kept out of the line below rather than counted in it, because that line is about a gap and
-		// this is not one: nothing will ever fill these, they answer the far plane on purpose, and
-		// PackChain says once for the whole chain what that means.
+		// this is not one: these names are filled exactly on the frames the pack draws the far
+		// terrain, and PackChain says once for the whole chain what they carry.
 		List<String> distant = this.samplers.stream().filter(this::readsTheDistantDepth).toList();
 		List<String> flat = this.samplers.stream()
 				.filter(name -> !readsATexture(name) && !readsTheDistantDepth(name))
 				.toList();
 		Vitrail.logger().info("{} samplers of this program read a real texture: {}", real.size(), real);
 		if (!distant.isEmpty()) {
-			Vitrail.logger().info("{} read the far plane, the far terrain of Distant Horizons being "
-					+ "in the world's own depth rather than beside it: {}", distant.size(), distant);
+			Vitrail.logger().info("{} read the far terrain's own depth on the frames this pack draws "
+					+ "it, and the far plane on the rest: {}", distant.size(), distant);
 		}
 
 		if (!flat.isEmpty()) {

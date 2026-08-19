@@ -60,6 +60,19 @@ import java.util.Optional;
  * WITHOUT the hand, so that a pack can read what the hand it is holding stands in front of, and
  * only {@link #takeOpaque}'s image carries the hand.
  * <p>
+ * <strong>The far terrain of Distant Horizons has a pair of its own, under the same rule
+ * again.</strong> Iris keeps DH's depth beside the world's and serves it raw, {@code dhDepthTex0}
+ * being DH's own image and {@code dhDepthTex1} a copy of it without the translucent LODs
+ * ({@code samplers/IrisSamplers.java:109-110} and
+ * {@code compat/dh/DHCompatInternal.java:260-269}); this engine's copy of that image is reversed
+ * like everything else it rasterises, so the same conversion turns it round. The two moments
+ * mirror the world's: {@link #takeDistantOpaque} before the translucent half is drawn, which is
+ * {@code dhDepthTex1} and the {@code dhDepthTex0} of the deferred stage, and
+ * {@link #takeDistantScene} once the water LODs are in, which is the {@code dhDepthTex0} of the
+ * composites. They are taken only on the frames the pack really drew the far terrain, and
+ * {@link #forgetDistant} drops them at every frame boundary, so a frame Distant Horizons drew
+ * nothing on serves the far plane rather than the last far terrain it did draw.
+ * <p>
  * <strong>It is allocated with the hand and not with the pair</strong>, where Iris builds a third
  * texture beside the other two ({@code targets/RenderTargets.java:73}), rebuilds it on a resize or
  * a depth format change like the pair ({@code targets/RenderTargets.java:172-178}) and refills it
@@ -143,6 +156,10 @@ final class PackDepth {
 	/** Null until a frame that draws the hand asks for it; see the class comment. */
 	private TargetSurface preHand;
 
+	/** Null until a frame the pack draws the far terrain on asks for them; see the class comment. */
+	private TargetSurface distantOpaque;
+	private TargetSurface distantScene;
+
 	/**
 	 * Whether anything has written each image since it was allocated.
 	 * <p>
@@ -159,6 +176,14 @@ final class PackDepth {
 	 */
 	private boolean preHandWritten;
 
+	/**
+	 * The same per frame rule for the far terrain's pair, and for the same reason the hand's image
+	 * has it: the pair is only filled on the frames the pack really drew the far terrain, so a flag
+	 * left standing would serve the last far terrain drawn to every frame that drew none.
+	 */
+	private boolean distantOpaqueWritten;
+	private boolean distantSceneWritten;
+
 	private boolean broken;
 
 	/**
@@ -167,6 +192,15 @@ final class PackDepth {
 	 * allocated at, and the resize that would lift it goes through {@link #release}.
 	 */
 	private boolean preHandBroken;
+
+	/**
+	 * And for the far terrain's pair, with a size of its own: unlike the hand's image, this pair is
+	 * allocated at the size of the image Distant Horizons drew rather than at one {@link #ensure}
+	 * has already settled, so the refusal has to remember which size it was about.
+	 */
+	private boolean distantBroken;
+	private int distantBrokenWidth;
+	private int distantBrokenHeight;
 
 	/**
 	 * The screen the allocation failed at, so that the refusal is about that screen and not about the
@@ -238,6 +272,46 @@ final class PackDepth {
 	}
 
 	/**
+	 * Converts the far terrain's depth as it stands before its translucent half is drawn, which the
+	 * pack reads as {@code dhDepthTex1} everywhere and as {@code dhDepthTex0} up to the deferred
+	 * stage. Must run on the render thread and outside any render pass.
+	 * <p>
+	 * The caller may only take it on the frames the pack really drew the far terrain, for the reason
+	 * the hand's image has the same rule: an image taken on another frame would hand the pack the
+	 * far plane dressed as a depth, and one taken from a stale source the far terrain of a camera
+	 * that has moved on.
+	 *
+	 * @param distant the far terrain's own depth image, reversed like the game's, with its opaque
+	 *                half in it and its water not yet
+	 */
+	boolean takeDistantOpaque(CommandEncoder encoder, GpuDevice device, GpuBuffer quad,
+			GpuTextureView distant, int width, int height) {
+		if (!ensureDistant(width, height) || !fill(encoder, device, quad, distant, this.distantOpaque)) {
+			return false;
+		}
+
+		this.distantOpaqueWritten = true;
+
+		return true;
+	}
+
+	/**
+	 * Converts the far terrain's depth with its water in, which the pack reads as
+	 * {@code dhDepthTex0} from the composites on. Must run on the render thread and outside any
+	 * render pass, and only on the frames the pack really drew the far terrain, like the take above.
+	 */
+	boolean takeDistantScene(CommandEncoder encoder, GpuDevice device, GpuBuffer quad,
+			GpuTextureView distant, int width, int height) {
+		if (!ensureDistant(width, height) || !fill(encoder, device, quad, distant, this.distantScene)) {
+			return false;
+		}
+
+		this.distantSceneWritten = true;
+
+		return true;
+	}
+
+	/**
 	 * The opaque world's depth, or null while nothing has filled it. Looked up at every use like
 	 * every other view of a place: a resize destroys and recreates it.
 	 */
@@ -280,6 +354,30 @@ final class PackDepth {
 	}
 
 	/**
+	 * The far terrain's depth without its water, or null while this frame has none. Null falls back
+	 * to the far plane, which is what the name answered before the pack drew the far terrain at all.
+	 */
+	GpuTextureView distantOpaque() {
+		return this.distantOpaqueWritten ? this.distantOpaque.view() : null;
+	}
+
+	/** The far terrain's depth with its water in, or null while this frame has none. */
+	GpuTextureView distantScene() {
+		return this.distantSceneWritten ? this.distantScene.view() : null;
+	}
+
+	/**
+	 * Forgets this frame's pair of far terrain images, at the frame boundary and for the reason the
+	 * hand's image is forgotten there: they are only filled on the frames the pack really drew the
+	 * far terrain, so a flag left standing would serve a stale one. The memory stays, like the
+	 * hand's, because the frames that fill it again are every frame Distant Horizons draws.
+	 */
+	void forgetDistant() {
+		this.distantOpaqueWritten = false;
+		this.distantSceneWritten = false;
+	}
+
+	/**
 	 * Forgets this frame's pre-hand image, and gives the memory back with the family it was
 	 * allocated for.
 	 * <p>
@@ -317,10 +415,15 @@ final class PackDepth {
 		this.opaque = close(this.opaque);
 		this.scene = close(this.scene);
 		this.preHand = close(this.preHand);
+		this.distantOpaque = close(this.distantOpaque);
+		this.distantScene = close(this.distantScene);
 		this.opaqueWritten = false;
 		this.sceneWritten = false;
 		this.preHandWritten = false;
 		this.preHandBroken = false;
+		this.distantOpaqueWritten = false;
+		this.distantSceneWritten = false;
+		this.distantBroken = false;
 	}
 
 	/**
@@ -421,6 +524,64 @@ final class PackDepth {
 		Vitrail.logger().info("The depth before the hand is converted into the pack's window in one "
 				+ "more image at {}x{}, {} MiB", width, height,
 				this.preHand.bytes() / (1024L * 1024L));
+
+		return true;
+	}
+
+	/**
+	 * Makes the far terrain's pair exist at the size of the image Distant Horizons drew, which is
+	 * the screen's, reallocating when it moved. Called only from the two distant takes, so a session
+	 * whose pack never draws the far terrain never pays for it.
+	 *
+	 * @return false when there is nothing to draw into, in which case every {@code dhDepthTex}
+	 *         lookup of the pack falls back to the far plane and the pack's own Distant Horizons
+	 *         branches stay shut
+	 */
+	private boolean ensureDistant(int width, int height) {
+		if (width <= 0 || height <= 0) {
+			return false;
+		}
+
+		if (this.distantBroken
+				&& (width != this.distantBrokenWidth || height != this.distantBrokenHeight)) {
+			this.distantBroken = false;
+		}
+
+		if (this.distantBroken) {
+			return false;
+		}
+
+		if (this.distantOpaque != null && this.distantOpaque.width() == width
+				&& this.distantOpaque.height() == height) {
+			return true;
+		}
+
+		try {
+			// Both or neither, like the world's own pair and for the same reason.
+			this.distantOpaque = close(this.distantOpaque);
+			this.distantScene = close(this.distantScene);
+			this.distantOpaque = new TargetSurface("Vitrail far terrain depth before its water",
+					FORMAT, false, width, height);
+			this.distantScene = new TargetSurface("Vitrail far terrain depth with its water",
+					FORMAT, false, width, height);
+		} catch (RuntimeException e) {
+			this.distantBroken = true;
+			this.distantBrokenWidth = width;
+			this.distantBrokenHeight = height;
+			this.distantOpaque = close(this.distantOpaque);
+			this.distantScene = close(this.distantScene);
+			Vitrail.logger().error("Vitrail could not allocate the two depth images the pack reads "
+					+ "the far terrain out of at {}x{}, so every dhDepthTex lookup of this pack reads "
+					+ "the far plane until the screen is another size", width, height, e);
+
+			return false;
+		}
+
+		// Said out loud like the world's pair: this is the cost of a pack that draws the far
+		// terrain, and of nothing else.
+		Vitrail.logger().info("The far terrain's depth is converted into the pack's window in two "
+				+ "more images at {}x{}, {} MiB", width, height,
+				(this.distantOpaque.bytes() + this.distantScene.bytes()) / (1024L * 1024L));
 
 		return true;
 	}

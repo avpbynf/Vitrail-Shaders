@@ -47,20 +47,20 @@ import java.util.Set;
  * with its.
  * <p>
  * <strong>This is the whole of what the far terrain was missing, and what it was missing was the
- * light.</strong> DH's depth has been folded into the game's for a session already, which is what
- * every effect a pack indexes on distance needed; the colour was still DH's, so the two halves of
- * one landscape were lit by two engines and met at a seam no pack could close. The geometry
- * {@code dh/DhLods} takes over is drawn here instead, once per half of the frame, with
- * {@code dh_terrain} and {@code dh_water} - the two names every pack of the corpus ships, and the
- * two Iris serves ({@code compat/dh/DHCompatInternal.java:67-79}).
+ * light.</strong> The colour used to be DH's, so the two halves of one landscape were lit by two
+ * engines and met at a seam no pack could close. The geometry {@code dh/DhLods} takes over is drawn
+ * here instead, once per half of the frame, with {@code dh_terrain} and {@code dh_water} - the two
+ * names every pack of the corpus ships, and the two Iris serves
+ * ({@code compat/dh/DHCompatInternal.java:67-79}).
  * <p>
  * <strong>The depth image is this engine's own, and that is what keeps DH out of the picture
  * entirely.</strong> Nothing is drawn into DH's own colour or depth; DH's own apply pass then finds
  * its depth image exactly as it cleared it and discards every pixel of the screen
  * ({@code assets/distanthorizons/shaders/apply/blaze/frag.fsh} discarding on a depth of nought under
  * a reversed Z), so there is no compositing to switch off and no event to bind. What the far terrain
- * leaves here is what {@link DhFold} folds into the game's depth, one line before the scene seed is
- * cut, and the fold does not know which of the two images it was handed.
+ * leaves here is what {@code render/PackDepth} converts into the pack's window and serves back
+ * under {@code dhDepthTex}, in two takes that bracket the water half exactly as the world's own
+ * depth is taken around its translucents.
  * <p>
  * <strong>One value belongs to the section rather than to the pass</strong>, which is where DH keeps
  * a section's corner: three unsigned shorts cannot hold a world coordinate, so the vertex carries
@@ -149,13 +149,13 @@ public final class DistantDraw {
 	/** The reasons this engine has already said something about, one line each and not one a frame. */
 	private final Set<String> refused = new LinkedHashSet<>();
 
-	/** Where the far terrain leaves its depth, in DH's own volume until the fold converts it. */
+	/** Where the far terrain leaves its depth, in DH's own volume and reversed like the game's. */
 	private GpuTexture depth;
 	private GpuTextureView depthView;
 	private int depthWidth;
 	private int depthHeight;
 
-	/** Whether anything was drawn into that image this frame, which is what the fold asks. */
+	/** Whether anything was drawn into that image this frame, which is what the takes ask. */
 	private boolean drew;
 
 	/**
@@ -271,11 +271,11 @@ public final class DistantDraw {
 
 		// Emptied at the first half of the frame that gets this far, and asked that way rather than
 		// keyed on the opaque half: a half that refused, or a pack that serves only the other one,
-		// would otherwise leave the image holding the frame before it, and the fold would put last
-		// frame's far terrain into a world that has moved on.
+		// would otherwise leave the image holding the frame before it, and the takes would hand the
+		// pack last frame's far terrain in a world that has moved on.
 		if (!this.drew) {
 			// Nought is DH's own clear and the far plane of a reversed Z, so an untouched pixel reads
-			// as nothing drawn, which is what the fold tests and what DH's own apply tests.
+			// as nothing drawn, which converts to the far plane the pack tests for.
 			encoder.clearDepthTexture(this.depth, 0.0);
 		}
 
@@ -399,10 +399,10 @@ public final class DistantDraw {
 		}
 
 		// Three usages and every one of them is asked for by name somewhere: drawn into as an
-		// attachment, sampled by the fold, and emptied at the head of the frame. The clear is the one
-		// that is not obvious: an encoder refuses to clear a depth image that was not also made a copy
-		// destination (CommandEncoder.verifyDepthTexture), a clear being a write it performs itself
-		// rather than a load the pass does.
+		// attachment, sampled by the window takes, and emptied at the head of the frame. The clear is
+		// the one that is not obvious: an encoder refuses to clear a depth image that was not also
+		// made a copy destination (CommandEncoder.verifyDepthTexture), a clear being a write it
+		// performs itself rather than a load the pass does.
 		this.depth = device.createTexture(() -> "Vitrail far terrain depth",
 				GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_TEXTURE_BINDING
 						| GpuTexture.USAGE_COPY_DST,

@@ -176,15 +176,6 @@ public final class PackValues {
 	}
 
 	/**
-	 * Whether the pass about to write its block is drawn in Distant Horizons' own volume, which is
-	 * what the three dh matrices answer by. {@code ViewMatrices.dhProjection} says why that is a
-	 * question of the pass and not of the frame.
-	 */
-	public void distantVolume(boolean distant) {
-		this.state.distantVolume(distant);
-	}
-
-	/**
 	 * Which depth convention the target the next block is written for carries. A property of where a
 	 * pass draws rather than of the frame, so it is set by the pass, before it writes, and every
 	 * frame: the shadow map is ours and stores the forward window, the game's targets are reversed.
