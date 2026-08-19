@@ -138,12 +138,11 @@ final class EngineOptions {
 	 * <p>
 	 * <strong>What it still costs is real and is named rather than counted.</strong> The normal is
 	 * carried, {@code DefaultVertexFormat.ENTITY} holding one and the prologue publishing it, and so
-	 * are {@code entityColor} and the three identifiers, each out of an element of the mesh. What a
-	 * pack still reads as a constant here are {@code mc_Entity}, which Iris does not serve on this
-	 * mesh either, and the two names that would need a value worked out per polygon,
-	 * {@code mc_midTexCoord} and {@code at_tangent}. A pack that branches on one of those takes the
-	 * same branch for every draw. The log names every one of them at each load, and closing it is a
-	 * lot of its own.
+	 * are {@code entityColor} and the three identifiers, each out of an element of the mesh, and
+	 * {@code mc_midTexCoord} and {@code at_tangent} are worked out over each polygon on both write
+	 * roads. What a pack still reads as a constant here is {@code mc_Entity}, which Iris does not
+	 * serve on this mesh either: an entity is not a block state and has no id to travel on. The log
+	 * names it at each load.
 	 * <p>
 	 * Iris routes the same geometry with nothing to switch,
 	 * {@code shaderpack/loading/ProgramId.java:40-41}, so this line is no longer a divergence from it

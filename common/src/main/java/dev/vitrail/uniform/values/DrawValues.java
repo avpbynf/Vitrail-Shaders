@@ -19,10 +19,9 @@ import org.joml.Matrix4f;
  * {@code entityColor} both compiles and reads the number it would read there. What differs is what
  * happens INSIDE a gbuffers pass drawn from the entity mesh, and it differs in the mesh rather than
  * in the table: Iris stops answering four of these from a uniform at all and answers them from the
- * mesh. The overlay colour is the one this engine now answers the same way, out of the element the
- * game's own format already carries; the three identifiers are answered from an element Iris adds
- * and this engine has not got, so the real values arrive with the gbuffers under Iris and do not
- * arrive at all here. The comment on those lines says what each costs.
+ * mesh. This engine now answers all four the same way, the overlay colour out of the element the
+ * game's own format already carries and the three identifiers out of the element the entity mesh
+ * appends, so inside such a pass the name reaches a table on neither engine.
  */
 public final class DrawValues {
 

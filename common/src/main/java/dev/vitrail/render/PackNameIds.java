@@ -22,8 +22,8 @@ import net.minecraft.world.entity.EntityType;
  * up as a name, and the only thing to do with it is remember the answer.
  * <p>
  * Two names of the entity file are not entity types at all, and they are the pack's own way of
- * asking about a case the registry has no key for: {@code minecraft:current_player} for the entity
- * the camera is riding, and {@code minecraft:zombie_villager_converting} for one that is turning
+ * asking about a case the registry has no key for: {@code minecraft:current_player} for the player
+ * the camera is looking out of, and {@code minecraft:zombie_villager_converting} for one that is turning
  * back. Iris answers both here as well
  * ({@code mixin/entity_render_context/MixinEntityRenderDispatcher.java:44-47,64-77}).
  * <p>
@@ -35,7 +35,7 @@ import net.minecraft.world.entity.EntityType;
  */
 public final class PackNameIds {
 
-	/** The name a pack asks about the entity the camera is riding under. */
+	/** The name a pack asks about the player the camera is looking out of under. */
 	private static final Identifier CURRENT_PLAYER =
 			Identifier.fromNamespaceAndPath("minecraft", "current_player");
 
@@ -64,7 +64,7 @@ public final class PackNameIds {
 		byType = emptyCache();
 	}
 
-	/** Whether the pack named the entity the camera rides, which is what makes that case worth asking. */
+	/** Whether the pack named the camera's own player, which is what makes that case worth asking. */
 	public static boolean namesCurrentPlayer() {
 		return entities.id(CURRENT_PLAYER.toString()) != NameIds.NONE;
 	}
