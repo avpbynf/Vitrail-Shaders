@@ -79,6 +79,13 @@ public final class PackValues {
 	 */
 	private ShadowCasters shadowCasters = ShadowCasters.DEFAULT;
 
+	/**
+	 * Whether this pack wants Distant Horizons' far terrain drawn into its shadow map, on until it
+	 * says otherwise. The default is Iris's and is the opposite way round from the six words above,
+	 * which {@code ShaderProperties.dhShadow} says in full.
+	 */
+	private boolean dhShadow = true;
+
 	/** Which shape this pack asked the light to measure a section against. */
 	private ShadowCullState shadowCull = ShadowCullState.DEFAULT;
 
@@ -125,6 +132,7 @@ public final class PackValues {
 			values.weather = properties.weather(settings.globalDefines(options));
 			values.rainDepth = properties.rainDepth(settings.globalDefines(options));
 			values.shadowCasters = properties.shadowCasters(settings.globalDefines(options));
+			values.dhShadow = properties.dhShadow(settings.globalDefines(options));
 			values.shadowCull = properties.shadowCull(settings.globalDefines(options));
 			values.separateAo = properties.separateAo(settings.globalDefines(options));
 			values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
@@ -527,6 +535,19 @@ public final class PackValues {
 	 */
 	public ShadowCasters shadowCasters() {
 		return this.shadowCasters;
+	}
+
+	/**
+	 * Whether this pack wants the far terrain drawn into its shadow map, read on the same walk and
+	 * with the same settings as the six words above.
+	 * <p>
+	 * It is not one of them and it is not read as one: a pack that ships no {@code dh_shadow} at all
+	 * is answered by the fallback tree rather than by this, {@code dh_shadow} having no parent to
+	 * reach, so what this decides is the one case where a pack ships the program and asks for it not
+	 * to be drawn.
+	 */
+	public boolean dhShadow() {
+		return this.dhShadow;
 	}
 
 	/**

@@ -92,6 +92,13 @@ public final class ShaderProperties {
 	// the live lines for the same reason, but it is not a caster word and it is not a boolean: the
 	// value is one of four states, and ShadowCullState carries what each of the written words means.
 	private static final Pattern SHADOW_CULLING = Pattern.compile("^\\s*shadow\\.culling\\s*=\\s*(.*)$");
+	// Whether Distant Horizons' far terrain is drawn into the map. A seventh caster word by what it
+	// decides, kept out of SHADOW_CASTER because its default is the other way round: the six above
+	// are answered by a set the engine ships, and this one is on for a pack that says nothing
+	// (pipeline/IrisRenderingPipeline.java:408). Six of the eight packs of the corpus write it and
+	// five of the six write false, so a flat default would put the far terrain in five maps that
+	// asked to keep it out.
+	private static final Pattern DH_SHADOW = Pattern.compile("^\\s*dhShadow\\.enabled\\s*=\\s*(.*)$");
 	// Whether the terrain's ambient occlusion is kept out of the vertex colour. Read on the live
 	// lines like every other directive of this file, and the note on RAIN_DEPTH says why that is
 	// what the reference does too.
@@ -1125,6 +1132,36 @@ public final class ShaderProperties {
 	public boolean rainDepth(Map<String, String> defines) {
 		boolean asked = false;
 		for (Matcher line : live(RAIN_DEPTH, defines)) {
+			Boolean value = truth(line.group(1).trim());
+			if (value != null) {
+				asked = value;
+			}
+		}
+
+		return asked;
+	}
+
+	/**
+	 * Whether the pack wants Distant Horizons' far terrain drawn into its shadow map, live lines
+	 * only, ON unless it says otherwise.
+	 * <p>
+	 * <strong>The default is the opposite way round from every other word about the map, and it is
+	 * Iris's</strong> ({@code pipeline/IrisRenderingPipeline.java:408} handing
+	 * {@code isDhShadowEnabled().orElse(true)} to the object that builds the program). A pack that
+	 * ships a {@code dh_shadow} and says nothing has asked for it to be drawn; there is no second
+	 * flag it could have meant.
+	 * <p>
+	 * <strong>Live lines are the whole of it here.</strong> Bliss writes the word three times, once
+	 * true and twice false, and the true one stands alone under an {@code #ifdef} of a setting it
+	 * ships commented out ({@code shaders/lib/settings.glsl:721}). Read flat, the answer is whichever
+	 * line the file ends on, which is the {@code #else} arm of a conditional about whether Distant
+	 * Horizons is running at all.
+	 *
+	 * @param defines the pack's settings, which decide which lines of the file are alive at all
+	 */
+	public boolean dhShadow(Map<String, String> defines) {
+		boolean asked = true;
+		for (Matcher line : live(DH_SHADOW, defines)) {
 			Boolean value = truth(line.group(1).trim());
 			if (value != null) {
 				asked = value;

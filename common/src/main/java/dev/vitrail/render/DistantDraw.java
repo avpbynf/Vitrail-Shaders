@@ -51,9 +51,17 @@ import java.util.Set;
  * engines and met at a seam no pack could close. The geometry {@code dh/DhLods} takes over is drawn
  * here instead, once per half of the frame, with {@code dh_terrain} and {@code dh_water} - the two
  * names every pack of the corpus ships, and two of the four Iris serves
- * ({@code compat/dh/DHCompatInternal.java:67-79}; its {@code dh_generic} and {@code dh_shadow},
- * built at {@code :70-72} and {@code :80-89}, are not served here yet and the backlog carries
- * both).
+ * ({@code compat/dh/DHCompatInternal.java:67-79}; the one still missing here is its
+ * {@code dh_generic}, built at {@code :70-72}, and the backlog carries it).
+ * <p>
+ * <strong>The same geometry is drawn a second time from the light, with {@code dh_shadow}</strong>,
+ * which is the third of the four. Without it a far hill shades itself out of its own depth and lays
+ * nothing on the ground in front of it, and the near world lays nothing on the far one either: the
+ * map they are both read out of simply has no LOD in it. Iris builds that program the same way it
+ * builds the other three ({@code compat/dh/DHCompatInternal.java:80-89}), and the shape of this
+ * class comes from where the light's stage stands here: at the tail of the frame, long after DH has
+ * handed its geometry over, so the sections are KEPT for it rather than asked for again. The one
+ * divergence that follows is written where it bites, on {@link #shadow}.
  * <p>
  * <strong>The depth image is this engine's own, and that is what keeps DH out of the picture
  * entirely.</strong> Nothing is drawn into DH's own colour or depth; DH's own apply pass then finds
@@ -78,20 +86,25 @@ import java.util.Set;
 public final class DistantDraw {
 
 	/**
-	 * One half of the far terrain: what the pack is asked for, and where in the frame it falls.
+	 * One draw of the far terrain: which half of DH's geometry it is, which of the two images it
+	 * lands in, and what the pack is asked for to serve it.
 	 *
-	 * @param element       one word for the log and for the shader identifier
-	 * @param program       the bare name the pack is asked for
-	 * @param afterDeferred whether this half is drawn after the deferred stage, which decides the
-	 *                      half of every target it reads and writes. DH calls its own two halves from
-	 *                      the head of the game's opaque chunk group and from the head of its
-	 *                      translucent one ({@code neoforge/mixins/client/MixinChunkSectionsToRender
-	 *                      .java:67-74}, the water half held to the second by the switch
-	 *                      {@code dh/DhLods} throws), which is where the game's own solid and
-	 *                      translucent chunk passes stand, so the two answers are the chunk passes'
-	 *                      own
+	 * @param element one word for the log and for the shader identifier
+	 * @param program the bare name the pack is asked for
+	 * @param water   whether this is the half DH keeps its transparent LODs in rather than its
+	 *                opaque ones. It is the geometry and nothing about the frame: both images take
+	 *                both halves
+	 * @param shadow  whether this draw fills the pack's shadow map rather than its picture. The two
+	 *                images take the same geometry twice, which is what Iris does without a line of
+	 *                its own about it: DH draws its LODs from the head of the game's two chunk
+	 *                groups ({@code neoforge/mixins/client/MixinChunkSectionsToRender.java:67-74}),
+	 *                and Iris's shadow stage runs those very groups a second time
+	 *                ({@code shadows/ShadowRenderer.java:505-507} and {@code :599-601}), so every
+	 *                LOD the camera pass drew is offered again from the light and bound to
+	 *                {@code dh_shadow} there ({@code compat/dh/LodRendererEvents.java:220-222} and
+	 *                {@code :332-334})
 	 */
-	public record Element(String element, String program, boolean afterDeferred) {
+	public record Element(String element, String program, boolean water, boolean shadow) {
 
 		/** What the pack has to be read for to serve this half, in terms the translation knows. */
 		private PackProgram.GeometryElement asked() {
@@ -103,24 +116,60 @@ public final class DistantDraw {
 		}
 
 		/**
+		 * Whether this draw falls after the deferred stage, which decides the half of every target it
+		 * reads and writes.
+		 * <p>
+		 * The water half of the PICTURE does and nothing else does. DH calls its own two halves from
+		 * the head of the game's opaque chunk group and from the head of its translucent one
+		 * ({@code neoforge/mixins/client/MixinChunkSectionsToRender.java:67-74}, the water half held
+		 * to the second by the switch {@code dh/DhLods} throws), which is where the game's own solid
+		 * and translucent chunk passes stand. The light's two halves are drawn in a stage that runs
+		 * once the deferreds are long over, and they take the same answer the world's own shadow
+		 * halves take, which is no: {@code pack/program/TerrainPass.afterDeferred} is true for the
+		 * translucent chunk pass alone.
+		 */
+		boolean afterDeferred() {
+			return this.water && !this.shadow;
+		}
+
+		/**
 		 * What a pack is told it is drawing. The chunk passes' own answer, which is what the geometry
 		 * is: a pack branching on {@code MC_RENDER_STAGE_TERRAIN_SOLID} in a {@code dh_terrain} is
 		 * branching on the stage it was written for.
+		 * <p>
+		 * A shadow half answers the same name as the half it shadows, which is the rule
+		 * {@code TerrainPass.stage} already follows and which is what Iris really hands over: its
+		 * shadow stage names its opaque chunk group {@code TERRAIN_SOLID} and its translucent one
+		 * {@code TERRAIN_TRANSLUCENT} ({@code shadows/ShadowRenderer.java:505-507} and
+		 * {@code :599-601}), and DH's LODs are drawn from inside those two calls.
 		 */
 		RenderStage stage() {
-			return this.afterDeferred ? RenderStage.TERRAIN_TRANSLUCENT : RenderStage.TERRAIN_SOLID;
+			return this.water ? RenderStage.TERRAIN_TRANSLUCENT : RenderStage.TERRAIN_SOLID;
+		}
+
+		/** What the log calls this draw in the middle of a sentence. */
+		String half() {
+			return (this.water ? "translucent" : "opaque") + (this.shadow ? " shadow" : "");
 		}
 	}
 
 	/**
-	 * The two halves, keyed by the word the log uses. Ordered, so that the lines the load may write
+	 * The four draws, keyed by the word the log uses. Ordered, so that the lines the load may write
 	 * about them come out in the order they are drawn.
 	 */
 	private static final Map<String, Element> ELEMENTS = new LinkedHashMap<>();
 
 	static {
-		ELEMENTS.put("distant", new Element("distant", "dh_terrain", false));
-		ELEMENTS.put("distant_water", new Element("distant_water", "dh_water", true));
+		ELEMENTS.put("distant", new Element("distant", "dh_terrain", false, false));
+		ELEMENTS.put("distant_water", new Element("distant_water", "dh_water", true, false));
+		ELEMENTS.put("distant_shadow", new Element("distant_shadow", "dh_shadow", false, true));
+		ELEMENTS.put("distant_shadow_water",
+				new Element("distant_shadow_water", "dh_shadow", true, true));
+	}
+
+	/** The key one half of DH's geometry is drawn under, in each of the two images. */
+	private static String key(boolean water, boolean shadow) {
+		return (shadow ? "distant_shadow" : "distant") + (water ? "_water" : "");
 	}
 
 	/** One vec3 under std140, which is what one slot HOLDS; how far apart slots start is the
@@ -172,6 +221,35 @@ public final class DistantDraw {
 	/** The section corners of the halves recorded this frame, one aligned slot each. */
 	private final Corners corners = new Corners("Vitrail far terrain sections");
 
+	/**
+	 * The same for the light's own two halves, which cannot share the ring above: they are recorded
+	 * once the frame has closed and the ring has turned, so they would be writing over the very
+	 * slots the camera's recorded passes hold slices of.
+	 */
+	private final Corners shadowCorners = new Corners("Vitrail far terrain shadow sections");
+
+	/** What DH has handed over on the frame being drawn, one list per half of its geometry. */
+	private List<DhLods.Section> opaqueSections = List.of();
+	private List<DhLods.Section> waterSections = List.of();
+
+	/**
+	 * The same two once the frame has closed, which is what the light draws.
+	 * <p>
+	 * Moved across by {@link #rotate} rather than read where they are written, and that is what
+	 * bounds them in time: the shadow stage stands after the close, so a frame where DH handed
+	 * nothing over leaves these empty and the light draws no far terrain rather than the last one
+	 * it saw.
+	 */
+	private List<DhLods.Section> shadowOpaque = List.of();
+	private List<DhLods.Section> shadowWater = List.of();
+
+	/**
+	 * Whether the light's own two halves have stopped for the load, which is latched apart from
+	 * {@link #broken}: a failure drawing into the map says nothing about the picture, and the map is
+	 * the half of the two that can be dropped without the far terrain changing colour.
+	 */
+	private boolean shadowBroken;
+
 	DistantDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
 			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
 			boolean chainRuns, ColorTargets targets) {
@@ -207,9 +285,17 @@ public final class DistantDraw {
 			return false;
 		}
 
+		// Kept before anything can refuse the draw, and kept whether or not the pack ends up drawing
+		// it: what the light wants is the geometry DH handed over, and its own stage stands at the
+		// far end of the frame from here.
+		if (opaque) {
+			draw.opaqueSections = sections;
+		} else {
+			draw.waterSections = sections;
+		}
+
 		try {
-			return draw.record(device, minecraft, ELEMENTS.get(opaque ? "distant" : "distant_water"),
-					sections);
+			return draw.record(device, minecraft, ELEMENTS.get(key(!opaque, false)), sections);
 		} catch (RuntimeException e) {
 			// Latched, like every other family the game calls back into: the alternative is one stack
 			// trace a frame for a failure that will not mend itself. What is lost by stopping is only
@@ -222,9 +308,142 @@ public final class DistantDraw {
 		}
 	}
 
+	/**
+	 * Draws one half of the far terrain into the pack's shadow map, with the pack's own
+	 * {@code dh_shadow}.
+	 * <p>
+	 * Called from the light's own stage, at the two moments the world's own chunk groups are drawn
+	 * there, because that is where Iris's are: DH hangs its LOD draws off the head of
+	 * {@code ChunkSectionsToRender.renderGroup}
+	 * ({@code neoforge/mixins/client/MixinChunkSectionsToRender.java:67-74}) and Iris's shadow stage
+	 * calls that very method for its own two groups ({@code shadows/ShadowRenderer.java:505-507} and
+	 * {@code :599-601}), so the water half lands after the copy the pack reads as
+	 * {@code shadowtex1}, exactly as the world's translucent half does.
+	 * <p>
+	 * <strong>The sections are the ones DH culled against the CAMERA, and that is a divergence with
+	 * a cost.</strong> Under Iris the shadow pass makes DH build its list a second time, against a
+	 * frustum of the light's - and against none at all unless something binds one, DH's own default
+	 * being {@code NeverCullFrustum} ({@code core/render/RenderBufferHandler.java:98-103,154-164}) -
+	 * so its map holds far terrain the camera cannot see. Here there is no second list to be had:
+	 * {@code dh/DhLods} stands in for the one interface DH hands its geometry to, and DH walks that
+	 * road once a frame, from the camera. What it costs the image is a hill behind the camera laying
+	 * no shadow on the ground in front of it.
+	 * <p>
+	 * Quiet where there is nothing to draw, which is every frame of every session without that mod,
+	 * and every pack that ships no {@code dh_shadow}.
+	 *
+	 * @param water  which half of DH's geometry this is
+	 * @param camera where the light's stage measures its geometry from, which has to be the position
+	 *               the shadow pair was built around
+	 */
+	public static void shadow(boolean water, Vec3 camera) {
+		DistantDraw draw = PackChain.distant();
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (draw == null || draw.shadowBroken || device == null) {
+			return;
+		}
+
+		try {
+			draw.recordShadow(device, ELEMENTS.get(key(water, true)),
+					water ? draw.shadowWater : draw.shadowOpaque, camera);
+		} catch (RuntimeException e) {
+			// Latched on its own, and the picture keeps going: what stops here is the far terrain's
+			// entry into the map, so the LOD is lit by what the pack computes from its own depth,
+			// which is the whole of what it had before this half existed.
+			draw.shadowBroken = true;
+			Vitrail.logger().error("Vitrail stopped drawing the far terrain into the shadow map after "
+					+ "an error, so nothing of it casts into the map for the rest of this pack", e);
+		}
+	}
+
 	/** The image the far terrain left its depth in, or null when it drew nothing this frame. */
 	GpuTextureView served() {
 		return this.drew ? this.depthView : null;
+	}
+
+	/**
+	 * Records one half of the far terrain into the map, or leaves the map as it stands.
+	 * <p>
+	 * Neither {@code beginFrame} nor the colour targets are touched, and that is not thrift: this
+	 * runs once the chain has closed the frame, so opening either would advance the value store a
+	 * second time and empty targets holding the picture the player is looking at.
+	 * {@code TerrainDraw.openShadowStage} has already made the map exist and emptied it.
+	 */
+	private void recordShadow(GpuDevice device, Element element, List<DhLods.Section> sections,
+			Vec3 camera) {
+		// Never read from here. The reading opens the pack and expands every include of it, which is
+		// not something to do inside the light's own stage; the camera's own halves read at the
+		// first frame the far terrain is drawn, and a map is only worth filling for a far terrain
+		// something is drawing.
+		DistantProgram program = this.programs.get(element.element());
+		if (program == null || sections.isEmpty()) {
+			return;
+		}
+
+		// No volume of its own: this half is drawn in the light's, which the shadow catalogue of the
+		// six fixed function names already answers, and the projection handed to a pass is the
+		// frame's camera one wherever a pack asks for it by its gbuffers name.
+		RenderPipeline pipeline = program.prepare(device, null);
+		if (pipeline == null) {
+			refuseShadow(element, "prepare", "the " + element.element() + " program could not be "
+					+ "prepared, and the line above this one says which of its own reasons it was");
+
+			return;
+		}
+
+		// The two arguments are the camera pass's and a shadow program reads neither: it names the
+		// map's own attachments and the map's own square.
+		RenderPassDescriptor descriptor = program.descriptor(null, null);
+		if (descriptor == null) {
+			refuseShadow(element, "unallocated", "the shadow map had no image yet on some frame, so "
+					+ "the pass this half wanted could not be built then. That comes and goes with "
+					+ "the frame rather than lasting");
+
+			return;
+		}
+
+		int base = this.shadowCorners.write(device, sections, camera);
+		if (base < 0) {
+			refuseShadow(element, "sections", "the far terrain grew wider than the block holding its "
+					+ "section corners between the two halves of one stage, and the wider block "
+					+ "cannot replace the one the half already recorded is drawn from. The next frame "
+					+ "has it");
+
+			return;
+		}
+
+		try (RenderPass pass = device.createCommandEncoder().createRenderPass(descriptor)) {
+			pass.setPipeline(pipeline);
+			program.bind(pass);
+
+			for (int index = 0; index < sections.size(); index++) {
+				pass.setUniform(DistantVertex.SECTION_BLOCK,
+						this.shadowCorners.slot(device, base + index));
+
+				for (DhLods.Piece piece : sections.get(index).pieces()) {
+					// Asked again here and not only where the section was taken, which is the one
+					// thing this half owes to being a frame's width away from its own capture: these
+					// are DH's buffers and DH is free to have closed one between its pass and this
+					// stage. A section short of a piece is a hole in a shadow; a draw against a
+					// closed buffer is the frame.
+					if (piece.vertices().isClosed() || piece.indices().isClosed()) {
+						continue;
+					}
+
+					pass.setIndexBuffer(piece.indices(), IndexType.INT);
+					pass.setVertexBuffer(0, piece.vertices().slice());
+					pass.drawIndexed(piece.indexCount(), 1, 0, 0, 0);
+				}
+			}
+		}
+	}
+
+	/** Says why one half of the far terrain is missing from the map, once per reason and per load. */
+	private void refuseShadow(Element element, String reason, String why) {
+		if (this.refused.add("shadow:" + reason)) {
+			Vitrail.logger().warn("The {} half of the far terrain is not drawn into the shadow map "
+					+ "because {}", element.half(), why);
+		}
 	}
 
 	private boolean record(GpuDevice device, Minecraft minecraft, Element element,
@@ -365,18 +584,20 @@ public final class DistantDraw {
 	}
 
 	/**
-	 * Reads the pack for both halves at once, at the first frame the far terrain is drawn.
+	 * Reads the pack for every half at once, at the first frame the far terrain is drawn.
 	 * <p>
-	 * Both and not the one being asked for, for the reason every other family reads all of its
-	 * pieces: the halves are one frame apart at most, and a reading is an opening and an expansion of
-	 * the whole pack.
+	 * All of them and not the one being asked for, for the reason every other family reads all of
+	 * its pieces: they are one frame apart at most, and a reading is an opening and an expansion of
+	 * the whole pack. It also settles the mesh, which is the union of what they all declare and
+	 * cannot be settled one half at a time.
 	 */
 	private void read() {
 		this.read = true;
 
 		try {
+			List<Element> asked = ELEMENTS.values().stream().filter(this::wanted).toList();
 			PackProgram.Distant distant = PackProgram.loadDistant(this.packPath, this.place,
-					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
+					asked.stream().map(Element::asked).toList(), this.chosen, this.profile);
 			if (distant.programs().isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the far terrain, so Distant "
 						+ "Horizons keeps drawing it with its own shader", this.packPath.getFileName(),
@@ -386,12 +607,18 @@ public final class DistantDraw {
 			}
 
 			this.carried = distant.carried();
-			for (Element element : ELEMENTS.values()) {
+			for (Element element : asked) {
 				PackProgram.Loaded one = distant.programs().get(element.element());
 				if (one == null) {
-					Vitrail.logger().info("{} serves nothing in {} for the {} half of the far terrain",
-							this.packPath.getFileName(), this.place.isEmpty() ? "its root" : this.place,
-							element.afterDeferred() ? "translucent" : "opaque");
+					// Said for the picture's halves alone. The light's two resolve one name between
+					// them, and that name has no parent in the fallback tree, so a pack without a
+					// dh_shadow is the ordinary case rather than a gap: the line further down says it
+					// once for the pair.
+					if (!element.shadow()) {
+						Vitrail.logger().info("{} serves nothing in {} for the {} half of the far "
+								+ "terrain", this.packPath.getFileName(),
+								this.place.isEmpty() ? "its root" : this.place, element.half());
+					}
 
 					continue;
 				}
@@ -404,22 +631,53 @@ public final class DistantDraw {
 				}
 			}
 
-			// The two halves together or not at all. One landscape drawn by two engines does not
-			// compose: whichever went back to DH is composited by DH's apply pass out of an image
-			// holding that half alone, with nothing left in its depth to occlude it, so far water
-			// would show through the hills in front of it. Rarely reached at all: a pack without
-			// one of the two files resolves it through its own fallback tree first.
-			if (this.programs.size() == 1) {
+			// The two halves of the PICTURE together or not at all. One landscape drawn by two
+			// engines does not compose: whichever went back to DH is composited by DH's apply pass
+			// out of an image holding that half alone, with nothing left in its depth to occlude it,
+			// so far water would show through the hills in front of it. Rarely reached at all: a
+			// pack without one of the two files resolves it through its own fallback tree first.
+			//
+			// And the light's halves go back with them, which is Iris's own shape: every road its
+			// events take is behind shouldOverride, so a far terrain handed back whole is handed back
+			// from the map as well (compat/dh/LodRendererEvents.java:216-227 and :251-259).
+			if (served(false) == 1) {
 				Vitrail.logger().info("The far terrain goes back to Distant Horizons whole: the pack "
 						+ "serves one half of it and the two only compose together");
 				this.programs.values().forEach(DistantProgram::release);
 				this.programs.clear();
+			} else if (served(true) == 0) {
+				Vitrail.logger().info("{} serves no dh_shadow in {}, so the far terrain casts nothing "
+						+ "into the pack's shadow map and what shades it is what the pack's own "
+						+ "programs work out of its depth", this.packPath.getFileName(),
+						this.place.isEmpty() ? "its root" : this.place);
 			}
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the far terrain programs of "
 					+ this.packPath.getFileName() + ", so Distant Horizons keeps drawing it with its "
 					+ "own shader", e);
 		}
+	}
+
+	/**
+	 * Whether this half is asked of the pack at all.
+	 * <p>
+	 * The picture's two always are. The light's two are asked for where a map is drawn this session
+	 * and the pack has not refused them, which is the pair of questions Iris asks before it builds
+	 * its own shadow program ({@code compat/dh/DHCompatInternal.java:80}, over the flag
+	 * {@code pipeline/IrisRenderingPipeline.java:408} reads out of the directive). Not asking saves
+	 * more than one program: what the mesh carries is the union of what every half declares, so a
+	 * shadow half nothing draws would still widen the vertex the camera's halves are drawn from.
+	 */
+	private boolean wanted(Element element) {
+		return !element.shadow() || (TerrainDraw.shadowsAsked() && this.values.dhShadow());
+	}
+
+	/** How many halves of one image the pack really served, which is what the load's own lines say. */
+	private long served(boolean shadow) {
+		return ELEMENTS.values().stream()
+				.filter(element -> element.shadow() == shadow)
+				.filter(element -> this.programs.containsKey(element.element()))
+				.count();
 	}
 
 	/**
@@ -431,6 +689,13 @@ public final class DistantDraw {
 	 * place whose targets are not the size of the screen, one render pass having one render area.
 	 */
 	private List<ChainPlan.Attachment> writes(Element element, PackProgram.Loaded loaded) {
+		// The light's halves write the map's own colour targets, which no chain plan carries a word
+		// about: GeometryProgram builds their attachments out of the program's own draw buffers and
+		// the map's, and reads nothing of this list.
+		if (element.shadow()) {
+			return List.of();
+		}
+
 		String servedBy = loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
 		Optional<ChainPlan.Pass> geometry = this.plan.geometryOf(servedBy, element.afterDeferred());
 		if (geometry.isEmpty()) {
@@ -441,8 +706,7 @@ public final class DistantDraw {
 		if (!pass.size().equals(TargetSize.ofScreen())) {
 			Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so they cannot share "
 					+ "a pass with the game's own target and Distant Horizons keeps drawing the {} half "
-					+ "of the far terrain", servedBy,
-					element.afterDeferred() ? "translucent" : "opaque");
+					+ "of the far terrain", servedBy, element.half());
 
 			return null;
 		}
@@ -466,8 +730,7 @@ public final class DistantDraw {
 	private boolean refuse(Element element, String reason, String why) {
 		boolean drop = element.afterDeferred() && this.drew;
 		if (this.refused.add((drop ? "dropped:" : "") + reason)) {
-			Vitrail.logger().warn("The {} half of the far terrain {} because {}",
-					element.afterDeferred() ? "water" : "opaque",
+			Vitrail.logger().warn("The {} half of the far terrain {} because {}", element.half(),
 					drop ? "is dropped on such frames, the opaque half being this engine's already"
 							: "went back to Distant Horizons' own shader",
 					why);
@@ -481,10 +744,23 @@ public final class DistantDraw {
 		return this.programs.values();
 	}
 
-	/** Rotates the ring buffers. Called once the frame's far terrain draws have been recorded. */
+	/**
+	 * Rotates the ring buffers. Called once the frame's far terrain draws have been recorded.
+	 * <p>
+	 * <strong>And hands what DH gave this frame to the light</strong>, which is the one thing here
+	 * that is not a turn of a buffer. The light's stage runs after this call, so what it draws is
+	 * what the frame now closing captured; a frame where DH handed nothing over leaves the light
+	 * with nothing rather than with the last far terrain it saw, which is what the two empty lists
+	 * below buy.
+	 */
 	void rotate() {
 		this.drew = false;
+		this.shadowOpaque = this.opaqueSections;
+		this.shadowWater = this.waterSections;
+		this.opaqueSections = List.of();
+		this.waterSections = List.of();
 		this.corners.rotate();
+		this.shadowCorners.rotate();
 		this.programs.values().forEach(DistantProgram::rotate);
 	}
 
@@ -496,7 +772,13 @@ public final class DistantDraw {
 		this.read = false;
 		this.drew = false;
 		this.broken = false;
+		this.shadowBroken = false;
+		this.opaqueSections = List.of();
+		this.waterSections = List.of();
+		this.shadowOpaque = List.of();
+		this.shadowWater = List.of();
 		this.corners.close();
+		this.shadowCorners.close();
 
 		releaseDepth();
 	}
