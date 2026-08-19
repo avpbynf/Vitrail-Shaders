@@ -397,6 +397,15 @@ means a changelog corrected on the second attempt quietly never lands. On the Gi
 the same run replaces the asset rather than adding one, which resets what the old asset had
 counted.
 
+CurseForge holds a fresh file under review before it is public, and an app looking for updates
+does not see a file that is not approved yet. An instance reading the list inside that window
+keeps the release before this one as the newest it knows and offers it as an update, which is a
+downgrade: what it compares is which file is installed against which file is newest, and no
+version number anywhere. Nothing is wrong with the release and there is nothing to repair, the
+instance settling by itself the next time it looks. It is whoever published who meets this,
+having installed the jar minutes after the tag while everybody else arrives once the review is
+over.
+
 A version carrying `-alpha` or `-beta` is published as a pre-release. One carrying neither is
 published as a release.
 
