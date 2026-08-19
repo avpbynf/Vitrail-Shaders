@@ -41,7 +41,9 @@ import java.util.Optional;
  * Without the cut the two would fight and the game would win, because it is drawn second. The pieces
  * that claim nothing are different again, the translucent chunk pass among them: they draw over what
  * the others left, and whether they blend is not the question - the End's cube of sky blends and
- * claims the frame all the same.
+ * claims the frame all the same. The far terrain writes the target itself as well, but records
+ * nothing the mask could carry, its depth living in DH's own volume; it is cut around through its
+ * own image instead, and the fragment stage says how.
  * <p>
  * <strong>The cut is one comparison, and it is the mask against the world's depth as it stands.</strong>
  * The mask carries a depth and not a flag: what a program of the pack wrote into the depth
@@ -114,6 +116,9 @@ final class SceneSeed {
 	/** The world's depth as it stands, which by now carries the game's own features. */
 	private static final String DEPTH = "DepthSampler";
 
+	/** The far terrain's own depth, in DH's volume, which the world's depth knows nothing of. */
+	private static final String DISTANT = "DistantSampler";
+
 	private static final String LABEL = "Vitrail scene seed";
 
 	private static final String EMPTY_LABEL = "Vitrail scene seed gbuffer";
@@ -134,6 +139,14 @@ final class SceneSeed {
 	 */
 	private static final String WRITTEN = ClipSpace.REVERSED.z < 0.0F ? ">= 0.0" : "<= 1.0";
 
+	/**
+	 * How a depth image says something was really rasterised into it, told from its clear. The
+	 * game clears reversed depth to nought and the far terrain's image follows it, so a real
+	 * fragment is strictly past the clear; the sentinel of an absent image sits outside the range
+	 * on the same side as the clear and reads as nothing drawn through the same test.
+	 */
+	private static final String REAL = ClipSpace.REVERSED.z < 0.0F ? "> 0.0" : "< 1.0";
+
 	/** Two triangles, the same quad the pass itself draws, which is why it is passed in. */
 	private static final int VERTICES = 6;
 
@@ -153,12 +166,23 @@ final class SceneSeed {
 
 	/**
 	 * The cut, and the whole of it: the game's picture goes in wherever the world's depth stands in
-	 * front of the depth the pack's geometry left.
+	 * front of the depth the pack's geometry left, except where the far terrain owns the pixel.
 	 * <p>
-	 * Neither side is converted into the pack's window. The mask is filled by the fragment stage
-	 * from the value it hands the depth attachment, and this reads that attachment back, so the two
-	 * are the same number written by the same draw and a pixel nothing was drawn over compares
-	 * exactly equal however the game encodes its depth.
+	 * Neither side of the first comparison is converted into the pack's window. The mask is filled
+	 * by the fragment stage from the value it hands the depth attachment, and this reads that
+	 * attachment back, so the two are the same number written by the same draw and a pixel nothing
+	 * was drawn over compares exactly equal however the game encodes its depth.
+	 * <p>
+	 * <strong>The far terrain's depth is a third image and cannot enter that comparison</strong>:
+	 * it is rasterised in DH's own volume, whose near plane stands blocks out, so its numbers and
+	 * the world's are two windows onto one scene and comparing them would put a hill a thousand
+	 * blocks off at arm's length. It does not need to. The far terrain begins where the world's
+	 * chunks end, so anything the game really drew stands in front of it, and the one question
+	 * left is yes or no twice: did the far terrain write here, and did the game write anything at
+	 * all. Where the first is yes and the second no, the pixel is the pack's own picture already,
+	 * written by its {@code dh_} programs, and the seed painting the game's sky over it is what
+	 * bleached the far terrain chalk white under Bliss while its water half, drawn after the
+	 * deferred stage, kept its colour.
 	 */
 	private static final String FRAGMENT = String.format(Locale.ROOT, """
 			#version 460 core
@@ -166,21 +190,28 @@ final class SceneSeed {
 			uniform sampler2D InSampler;
 			uniform sampler2D CoverageSampler;
 			uniform sampler2D DepthSampler;
+			uniform sampler2D DistantSampler;
 
 			in vec2 ofTexCoord;
 
 			layout(location = 0) out vec4 ofFragData0;
 
 			void main() {
-				bool infront = texture(DepthSampler, ofTexCoord).r
-						%s texture(CoverageSampler, ofTexCoord).r;
+				float live = texture(DepthSampler, ofTexCoord).r;
+				bool infront = live %s texture(CoverageSampler, ofTexCoord).r;
 				if (!infront) {
+					discard;
+				}
+
+				bool farTerrain = texture(DistantSampler, ofTexCoord).r %s;
+				bool gameDrew = live %s;
+				if (farTerrain && !gameDrew) {
 					discard;
 				}
 
 				ofFragData0 = texture(InSampler, ofTexCoord);
 			}
-			""", CLOSER);
+			""", CLOSER, REAL, REAL);
 
 	/**
 	 * One draw buffer of the geometry program the seed stands in for, past the first, that the seed
@@ -254,6 +285,7 @@ final class SceneSeed {
 						.withSampler(SAMPLER)
 						.withSampler(COVERAGE)
 						.withSampler(DEPTH)
+						.withSampler(DISTANT)
 						.build())
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				// The format of the target as the pack declared it, not the one of the main
@@ -394,6 +426,9 @@ final class SceneSeed {
 	 *                is a mask that hides nothing and the seed then covers the target whole, which
 	 *                is what the frames with no geometry of the pack's in them have to look like
 	 * @param live    the world's depth as it stands, features included
+	 * @param distant the far terrain's own depth image, judged the same way: a frame it drew
+	 *                nothing in hands the sentinel image instead, and the cut then reads nothing
+	 *                of the pack's standing there, which is what those frames are
 	 * @param targets where the pack's colour targets are looked up, every frame and never held: a
 	 *                resize replaces the images and keeping one across it draws into a texture that
 	 *                has been closed
@@ -404,9 +439,11 @@ final class SceneSeed {
 	 *         the block behind wrote. No caller reads this today
 	 */
 	boolean draw(CommandEncoder encoder, GpuBuffer quad, GpuTextureView scene,
-			GpuTextureView covered, GpuTextureView live, ColorTargets targets) {
+			GpuTextureView covered, GpuTextureView live, GpuTextureView distant,
+			ColorTargets targets) {
 		GpuTextureView into = targets.view(this.seed.target(), this.seed.side());
-		if (quad == null || scene == null || covered == null || live == null || into == null) {
+		if (quad == null || scene == null || covered == null || live == null || distant == null
+				|| into == null) {
 			return false;
 		}
 
@@ -426,6 +463,8 @@ final class SceneSeed {
 			pass.bindTexture(COVERAGE, covered,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.bindTexture(DEPTH, live,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			pass.bindTexture(DISTANT, distant,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
