@@ -971,11 +971,15 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	/**
 	 * Writes the whole file name rather than the fragment {@code pack.txt} also accepts, so that two
 	 * packs sharing a word cannot swap under the player.
+	 * <p>
+	 * Over what the file already says rather than over a record built here: the shadow distance
+	 * lives in that same file and is moved from the video settings, so a choice written from a
+	 * record this screen assembled would put it back to its default every time a pack is picked.
 	 */
 	private boolean writePackFile(String chosen, boolean enabled) {
 		Path file = PackChain.packFile(gameDirectory());
 		try {
-			PackFile.write(file, new PackFile(chosen, enabled));
+			PackFile.write(file, PackFile.read(file).withChoice(chosen, enabled));
 			this.error = null;
 		} catch (IOException | RuntimeException e) {
 			this.error = String.valueOf(e.getMessage());

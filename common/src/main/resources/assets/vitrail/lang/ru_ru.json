@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "Наборы шейдеров",
+	"options.vitrail.shadow_distance": "Дальность теней",
+	"options.vitrail.shadow_distance_tooltip": "Позволяет изменять максимальное расстояние видимости теней. Блоки и сущности за его пределами не будут иметь теней. Снижая этот параметр, вы можете значительно улучшить производительность.",
+	"options.vitrail.shadow_distance_forced": "Ваш текущий набор шейдеров уже установил своё расстояние для теней; вы не сможете его изменить.",
 	"pack.vitrail.select_title": "Список",
 	"pack.vitrail.configure_title": "Настройки",
 	"options.vitrail.title": "Настройки набора шейдеров",

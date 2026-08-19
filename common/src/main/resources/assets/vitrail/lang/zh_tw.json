@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "光影包",
+	"options.vitrail.shadow_distance": "最大陰影距離",
+	"options.vitrail.shadow_distance_tooltip": "能讓您變更陰影的最大距離。超出此距離的地形和實體將不會有陰影。降低陰影距離能顯著提升效能。",
+	"options.vitrail.shadow_distance_forced": "您無法變更目前光影包所設定的陰影顯示距離。",
 	"pack.vitrail.select_title": "選擇",
 	"pack.vitrail.configure_title": "設定",
 	"options.vitrail.title": "光影包設定",

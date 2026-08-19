@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "Shader Packs",
+	"options.vitrail.shadow_distance": "Max Shadow Distance",
+	"options.vitrail.shadow_distance_tooltip": "Allows you to change the maximum distance for shadows. Terrain and entities beyond this distance will not cast shadows. Lowering the shadow distance can significantly increase performance.",
+	"options.vitrail.shadow_distance_forced": "Your current shader pack has already set a render distance for shadows; you cannot change it.",
 	"pack.vitrail.select_title": "Select",
 	"pack.vitrail.configure_title": "Configure",
 	"options.vitrail.title": "Shader Pack Settings",

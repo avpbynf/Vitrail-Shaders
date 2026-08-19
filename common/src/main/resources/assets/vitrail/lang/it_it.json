@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "Pacchetti di shader",
+	"options.vitrail.shadow_distance": "Massima Distanza delle ombre",
+	"options.vitrail.shadow_distance_tooltip": "Permette di cambiare la massima distanza per le ombre. Terreno ed entità oltre questa distanza non creeranno ombre. Abbassare questa opzione può aumentare la tua performance di molto.",
+	"options.vitrail.shadow_distance_forced": "La tua shader pack corrente ha già una distanza per le ombre e non puoi cambiarla.",
 	"pack.vitrail.select_title": "Seleziona",
 	"pack.vitrail.configure_title": "Configura",
 	"options.vitrail.title": "Impostazioni del pacchetto di shader",

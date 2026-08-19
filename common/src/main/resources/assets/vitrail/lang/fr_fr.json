@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "Packs de shaders",
+	"options.vitrail.shadow_distance": "Distance maximale des ombres",
+	"options.vitrail.shadow_distance_tooltip": "Permet de changer la distance maximale des ombres. Le terrain et les entités au-delà de cette distance ne projettent pas d'ombre. Baisser la distance des ombres peut améliorer nettement les performances.",
+	"options.vitrail.shadow_distance_forced": "Votre pack de shaders a déjà fixé sa propre distance de rendu des ombres; vous ne pouvez pas la changer.",
 	"pack.vitrail.select_title": "Sélectionner",
 	"pack.vitrail.configure_title": "Configure",
 	"options.vitrail.title": "Options du pack de shaders",

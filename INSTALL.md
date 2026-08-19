@@ -145,6 +145,8 @@ pack.txt       pack=  which pack of the folder to load, by whole or partial
                       name, or none to load nothing at all
                enabled=  false to switch shaders off without forgetting which
                       pack was picked
+               shadowdistance=  how far the shadow map reaches, in chunks, 0 to
+                      32; the Max Shadow Distance slider writes this line
 options.txt    engine switches, one NAME=value per line; wins over the settings
 ```
 

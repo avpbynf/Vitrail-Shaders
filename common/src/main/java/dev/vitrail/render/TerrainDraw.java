@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 
 /**
  * The door the chunk renderer comes in by, and the one place a pack's terrain program is read.
@@ -352,7 +353,55 @@ public final class TerrainDraw {
 	public static float entityShadowDistance() {
 		TerrainDraw self = PackChain.terrain();
 
-		return self == null ? -1.0F : self.values.entityShadowDistance();
+		return self == null ? -1.0F
+				: self.values.entityShadowDistance(PackChain.shadowDistance(), renderDistanceChunks());
+	}
+
+	/**
+	 * How far from the camera the light still gathers the world, in BLOCKS, or minus one where
+	 * nothing bounds it beyond the light's own frustum.
+	 * <p>
+	 * The arithmetic and the two units are {@link PackValues#shadowRenderDistance}'s and are said
+	 * there; what happens here is that the two numbers it needs are fetched from the two places
+	 * that hold them, the player's setting from {@code pack.txt} and the render distance from the
+	 * game's own options.
+	 */
+	public static float shadowRenderDistance() {
+		TerrainDraw self = PackChain.terrain();
+
+		return self == null ? -1.0F
+				: self.values.shadowRenderDistance(PackChain.shadowDistance(), renderDistanceChunks());
+	}
+
+	/**
+	 * How far the light reaches once the pack has had its say, in CHUNKS: the pack's own number
+	 * where it forces one, and the player's otherwise. Iris's
+	 * {@code IrisVideoSettings.getOverriddenShadowDistance} ({@code gui/option/IrisVideoSettings.java:61-65}),
+	 * and read for the two things that number decides rather than a distance: what the slider shows,
+	 * and whether the shadow stage runs at all.
+	 */
+	public static int shadowDistanceChunks() {
+		return forcedShadowDistanceChunks().orElseGet(PackChain::shadowDistance);
+	}
+
+	/**
+	 * How far the loaded pack itself insists the light gathers, in chunks, or empty where it leaves
+	 * the distance to the player. What the video settings grey their slider out on.
+	 */
+	public static OptionalInt forcedShadowDistanceChunks() {
+		TerrainDraw self = PackChain.terrain();
+
+		return self == null ? OptionalInt.empty() : self.values.forcedShadowRenderDistanceChunks();
+	}
+
+	/**
+	 * As far as there is a world to gather, in chunks. Zero where the game has no options yet, which
+	 * bounds nothing and is what a frame drawn before there is a world should get.
+	 */
+	private static int renderDistanceChunks() {
+		Minecraft minecraft = Minecraft.getInstance();
+
+		return minecraft == null ? 0 : minecraft.options.getEffectiveRenderDistance();
 	}
 
 	/**
@@ -416,7 +465,21 @@ public final class TerrainDraw {
 		}
 
 		ShadowTargets shadow = self.targets.shadow();
-		if (!shadows() || !self.shadowsServed()) {
+		if (!shadows() || !self.shadowsServed() || shadowDistanceChunks() == 0) {
+			// A shadow distance of nought is not a very short walk, it is no stage at all, and the
+			// test is on the CHUNKS rather than on the blocks the walk is bounded by. That is Iris's
+			// own: renderShadows returns at its first line when the distance the pack or the player
+			// settled on is zero (shadows/ShadowRenderer.java:384-387), before a frustum is built or
+			// a target is touched. Bounding the walk at zero blocks instead would cost a full walk
+			// and a full clear to draw nothing.
+			//
+			// What the pack reads then is the DEPTH emptied to the far plane, both names of it,
+			// because the clear below empties the depth whichever way the pack's own keep directive
+			// reads (ShadowTargets.java:236-241). A shadowcolor the pack asked to KEEP is a
+			// different matter and is NOT emptied (:243-248 through :256-264): it holds the last
+			// frame the stage drew, for as long as the setting stays at nought. Iris returns before
+			// touching any of its targets, so there both halves keep the last frame.
+			//
 			// A pack that serves no shadow program gets no shadow pass, which is Iris's rule, and
 			// at the end of a frame it is also the only safe answer: with nothing of ours to hand
 			// the renderer, the pass it opens for itself is the game's own target, and the stage

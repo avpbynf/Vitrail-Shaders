@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "Shaderpakete",
+	"options.vitrail.shadow_distance": "Max. Schattendistanz",
+	"options.vitrail.shadow_distance_tooltip": "Erlaubt es dir, die maximale Distanz für Schatten zu ändern. Gelände und Objekte, die weiter entfernt sind als die eingestellte Distanz, werden keine Schatten werfen. Das Senken der Distanz kann die Leistung erheblich verbessern.",
+	"options.vitrail.shadow_distance_forced": "Dein aktuelles Shaderpaket hat bereits eine Distanz für Schatten gesetzt; du kannst sie nicht ändern.",
 	"pack.vitrail.select_title": "Auswählen",
 	"pack.vitrail.configure_title": "Konfigurieren",
 	"options.vitrail.title": "Shader-Einstellungen",

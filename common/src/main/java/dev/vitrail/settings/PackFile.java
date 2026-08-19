@@ -7,7 +7,15 @@ import java.nio.file.Path;
 import java.util.Locale;
 
 /**
- * What {@code vitrail/pack.txt} carries: which pack was chosen, and whether shaders are on at all.
+ * What {@code vitrail/pack.txt} carries: which pack was chosen, whether shaders are on at all, and
+ * how far the player asked the light to reach.
+ * <p>
+ * <b>The third one is not about a pack, and it is here for the reason the other two are.</b> Iris
+ * keeps its own in the same properties file as {@code shaderPack} and {@code enableShaders},
+ * {@code maxShadowRenderDistance} in {@code config/IrisConfig.java:178,206}, because it is the same
+ * kind of thing: one number the player set once, that outlives whichever pack is loaded and has to
+ * be there before one is. A file of its own would be a second file to find, to write and to keep in
+ * step.
  * <p>
  * <b>Two facts and not one, and that is what the screen's toggle needs.</b> Iris keeps
  * {@code shaderPack} and {@code enableShaders} apart in its own properties file, so turning shaders
@@ -23,24 +31,39 @@ import java.util.Locale;
  * Nothing here touches Minecraft, which is the rule for this whole package: it is what lets the
  * settings be run against the pack corpus without starting the game.
  */
-public record PackFile(String name, boolean enabled) {
+public record PackFile(String name, boolean enabled, int shadowDistance) {
 
 	/** The word that means no pack rather than the name of one, kept from the one line format. */
 	public static final String NONE = "none";
 
 	private static final String NAME_KEY = "pack";
 	private static final String ENABLED_KEY = "enabled";
+	private static final String SHADOW_DISTANCE_KEY = "shadowdistance";
+
+	/**
+	 * The range the shadow distance is offered and stored over, in CHUNKS, and Iris's own: zero to
+	 * thirty-two, thirty-two being both the default and the largest render distance the game has
+	 * ({@code gui/option/IrisVideoSettings.java:15,50}). At the top the setting bounds nothing,
+	 * which is what makes an untouched one free; at the bottom the light gathers nothing at all.
+	 */
+	public static final int MIN_SHADOW_DISTANCE = 0;
+	public static final int MAX_SHADOW_DISTANCE = 32;
+	public static final int DEFAULT_SHADOW_DISTANCE = MAX_SHADOW_DISTANCE;
 
 	/** Nothing chosen. Shaders are on, so choosing a pack is all it takes to draw one. */
-	public static final PackFile EMPTY = new PackFile("", true);
+	public static final PackFile EMPTY = new PackFile("", true, DEFAULT_SHADOW_DISTANCE);
 
 	public PackFile {
 		name = name.trim();
+		// Clamped here rather than where the file is read, so that a number typed by hand and a
+		// number arriving from a screen are held to the same range: the value is served to the
+		// culling as a distance and a negative one there means something else entirely.
+		shadowDistance = Math.clamp(shadowDistance, MIN_SHADOW_DISTANCE, MAX_SHADOW_DISTANCE);
 	}
 
 	/**
 	 * What the file says, or {@link #EMPTY} when it is not there. A line that is neither a comment nor
-	 * one of the two keys is ignored rather than refused: this file is edited by hand.
+	 * one of the three keys is ignored rather than refused: this file is edited by hand.
 	 * <p>
 	 * Handed the file rather than the game directory, so that where it lives stays the render layer's
 	 * business: this package names no folder of the installation and imports nothing that does.
@@ -57,11 +80,14 @@ public record PackFile(String name, boolean enabled) {
 		if (!content.contains("=")) {
 			String bare = content.trim();
 
-			return NONE.equalsIgnoreCase(bare) ? new PackFile("", false) : new PackFile(bare, true);
+			return NONE.equalsIgnoreCase(bare)
+					? new PackFile("", false, DEFAULT_SHADOW_DISTANCE)
+					: new PackFile(bare, true, DEFAULT_SHADOW_DISTANCE);
 		}
 
 		String name = "";
 		boolean enabled = true;
+		int shadowDistance = DEFAULT_SHADOW_DISTANCE;
 		for (String line : content.lines().toList()) {
 			String trimmed = line.trim();
 			if (trimmed.isEmpty() || trimmed.startsWith("#")) {
@@ -80,17 +106,34 @@ public record PackFile(String name, boolean enabled) {
 				// Anything that is not the word for true is false, which is how the pack format's own
 				// booleans read and what keeps a typo from turning shaders on by accident.
 				case ENABLED_KEY -> enabled = Boolean.parseBoolean(value);
+				// A number that does not parse keeps the default rather than refusing the file, which
+				// is how every other line here is read: this file is edited by hand, and one bad
+				// character must not cost the player the pack they had chosen.
+				case SHADOW_DISTANCE_KEY -> shadowDistance = number(value, shadowDistance);
 				default -> {
 				}
 			}
 		}
 
-		return new PackFile(name, enabled);
+		return new PackFile(name, enabled, shadowDistance);
+	}
+
+	private static int number(String value, int fallback) {
+		try {
+			return Integer.parseInt(value);
+		} catch (NumberFormatException e) {
+			return fallback;
+		}
 	}
 
 	/**
-	 * Writes both keys, always, so that the file a player opens says what state it is in rather than
-	 * leaving one of the two to be inferred from its absence.
+	 * Writes every key, always, so that the file a player opens says what state it is in rather than
+	 * leaving any of them to be inferred from its absence.
+	 * <p>
+	 * <b>Two things write this file and neither owns all of it</b>, the settings screen picking a
+	 * pack and the video settings moving the shadow distance. Whichever writes has to carry the
+	 * other's line through, which is why both go through a read of the file first rather than
+	 * building a record out of what they happen to hold.
 	 * <p>
 	 * In LF and without a byte order mark, like every other file this mod writes.
 	 */
@@ -98,7 +141,8 @@ public record PackFile(String name, boolean enabled) {
 		Files.createDirectories(file.getParent());
 		Files.writeString(file,
 				NAME_KEY + "=" + chosen.name() + "\n"
-						+ ENABLED_KEY + "=" + chosen.enabled() + "\n",
+						+ ENABLED_KEY + "=" + chosen.enabled() + "\n"
+						+ SHADOW_DISTANCE_KEY + "=" + chosen.shadowDistance() + "\n",
 				StandardCharsets.UTF_8);
 	}
 
@@ -120,10 +164,19 @@ public record PackFile(String name, boolean enabled) {
 	}
 
 	public PackFile withName(String name) {
-		return new PackFile(name, this.enabled);
+		return new PackFile(name, this.enabled, this.shadowDistance);
 	}
 
 	public PackFile withEnabled(boolean enabled) {
-		return new PackFile(this.name, enabled);
+		return new PackFile(this.name, enabled, this.shadowDistance);
+	}
+
+	/** Both halves of a pack choice at once, leaving whatever else the file carries where it is. */
+	public PackFile withChoice(String name, boolean enabled) {
+		return new PackFile(name, enabled, this.shadowDistance);
+	}
+
+	public PackFile withShadowDistance(int chunks) {
+		return new PackFile(this.name, this.enabled, chunks);
 	}
 }
