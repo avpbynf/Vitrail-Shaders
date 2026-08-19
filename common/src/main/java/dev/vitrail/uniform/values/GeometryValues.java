@@ -90,13 +90,13 @@ public final class GeometryValues {
 	 * {@code gl_TextureMatrix[1]} on the terrain, {@code SodiumTransformer.java:32}, and on every
 	 * family the game hands over as a render type, {@code VanillaTransformer.java:164}.
 	 * <p>
-	 * <strong>One family of Iris's gets the identity there instead, and it is a divergence this table
-	 * cannot express</strong>: Distant Horizons geometry, {@code DHTerrainTransformer.java:24} and
-	 * {@code DHGenericTransformer.java:24}, both replacing {@code gl_TextureMatrix[1]} with
-	 * {@code mat4(1.0)}. A {@code dh_} program of a pack therefore reads this matrix here and an
-	 * identity under Iris. What it costs is nothing today and the reason is not this file's doing:
-	 * no Distant Horizons pass of this engine runs at all, so no {@code dh_} program is ever handed
-	 * a block. The day one runs, this table has to be asked by family and not once for all of them.
+	 * <strong>One family answers the identity there instead, and on both sides</strong>: Distant
+	 * Horizons geometry, which Iris rewrites both {@code gl_TextureMatrix[0]} and {@code [1]} to
+	 * {@code mat4(1.0)} for ({@code DHTerrainTransformer.java:23-24} and
+	 * {@code DHGenericTransformer.java:23-24}). This engine answers the identity on that family
+	 * too, and hands the light map pair already normalised; the two halves only hold together as a
+	 * pair, and {@link dev.vitrail.glsl.DistantVertex} is where that is written. So the sixteen
+	 * numbers below are what every family reads except that one.
 	 * <p>
 	 * The third axis is scaled and translated with the other two, which is Iris's matrix rather than a
 	 * reading of what a light map needs: nothing samples a third coordinate out of a two dimensional
