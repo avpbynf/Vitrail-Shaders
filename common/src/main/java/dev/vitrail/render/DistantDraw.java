@@ -928,6 +928,14 @@ public final class DistantDraw {
 		 * second half wrote over would be the ones the first half draws from, and the two halves do
 		 * not see the same sections - a section carrying only water is in one list and not the
 		 * other, so slot for slot the two lists are not the same sections at all.
+		 * <p>
+		 * <strong>And the second mapping of one frame keeps what the first wrote, which is the
+		 * game's own arithmetic rather than a habit of ours.</strong> The ring hands the same buffer
+		 * object back until it turns, {@code MappableRingBuffer.currentBuffer} indexing an array it
+		 * only advances in {@code rotate}; and mapping one is a {@code vmaMapMemory} onto the live
+		 * allocation, the write flag being tested against the buffer's usage and nothing else
+		 * ({@code com/mojang/blaze3d/vulkan/VulkanGpuBuffer.java:118-146}). There is no orphaning
+		 * and no staging copy for a second mapping to start empty from.
 		 *
 		 * @param camera where the pass this belongs to measures its geometry from, which is the
 		 *               game's own camera and not DH's copy of it: everything else this engine

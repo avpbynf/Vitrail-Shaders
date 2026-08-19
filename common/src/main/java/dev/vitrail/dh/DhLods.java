@@ -575,12 +575,18 @@ public final class DhLods {
 	 * Checks that DH really wrote its vertices as wide as the format this engine declares over them,
 	 * once a session, and closes the road when it did not.
 	 * <p>
-	 * <strong>It is the one assumption in this package nothing else would catch.</strong> A buffer's
-	 * own length divided by the vertices DH says are in it IS the stride, so a DH that added an
-	 * element or widened one shows up here as a number; read through the wrong format, the same
-	 * buffer draws a far terrain out of the wrong bytes, which is a picture rather than a failure.
-	 * The road is closed rather than corrected: what a wider vertex means cannot be worked out from
-	 * its width.
+	 * <strong>A buffer's length divided by the vertices DH says are in it IS the stride, and the
+	 * division holds because DH leaves no slack for it to fall over.</strong> One call sets both:
+	 * {@code uploadVertexBuffer} keeps the count it is handed and allocates exactly the bytes the
+	 * builder left in front of it, {@code position} to {@code limit}
+	 * ({@code common/render/blaze/wrappers/buffer/BlazeVertexBufferWrapper.java:110} and
+	 * {@code :133-136}). What the quotient has to be is DH's own constant,
+	 * {@code LodQuadBuilder.BYTES_PER_VERTEX} at {@code :57}, and the six writes of
+	 * {@code putVertex} add up to it ({@code LodQuadBuilder.java:479-518}). So a DH that added an
+	 * element or widened one shows up here as another number; read through the wrong format, the
+	 * same buffer draws a far terrain out of the wrong bytes, which is a picture rather than a
+	 * failure. The road is closed rather than corrected: what a wider vertex means cannot be worked
+	 * out from its width.
 	 */
 	private static void checkStride(GpuBuffer vertices, int count) {
 		if (strideChecked || count <= 0) {
