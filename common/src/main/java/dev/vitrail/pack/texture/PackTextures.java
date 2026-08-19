@@ -8,6 +8,7 @@ import dev.vitrail.pack.target.TargetName;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -442,7 +443,7 @@ public final class PackTextures {
 			}
 		}
 
-		return Map.copyOf(flat);
+		return Collections.unmodifiableMap(flat);
 	}
 
 	private static boolean flattenable(PackTexture texture) {

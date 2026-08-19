@@ -14,6 +14,7 @@ import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -438,7 +439,7 @@ public final class GlslTranslator {
 		this.alphaTest = alphaTest;
 		this.coverage = coverage;
 		this.program = program;
-		this.volumes = Map.copyOf(volumes);
+		this.volumes = Collections.unmodifiableMap(new LinkedHashMap<>(volumes));
 
 		// Tokens cost far more than the text they came from, roughly seventy bytes each, so a unit
 		// the expander should never have produced has to be refused before it is read rather than
@@ -607,7 +608,7 @@ public final class GlslTranslator {
 		 * list of what the picture will be wrong about when it is not.
 		 */
 		public Map<String, String> synthesized() {
-			return Map.copyOf(this.translator.synthesized);
+			return Collections.unmodifiableMap(new LinkedHashMap<>(this.translator.synthesized));
 		}
 
 		/**
@@ -740,7 +741,7 @@ public final class GlslTranslator {
 		 * declares it again. Empty until that has run.
 		 */
 		public Map<String, String> unprovided() {
-			return Map.copyOf(this.translator.unprovidedInputs);
+			return Collections.unmodifiableMap(new LinkedHashMap<>(this.translator.unprovidedInputs));
 		}
 
 		/**
