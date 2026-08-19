@@ -31,6 +31,7 @@ the traps that were paid for once already.
 | Reading a pack: paths, includes, conditions, settings | [Pack loading](internals/pack-loading.md) |
 | Colour targets: formats, the flip, what the backend refuses | [Render targets](internals/render-targets.md) |
 | Drawing terrain on a mesh the engine does not own | [Terrain](internals/terrain.md) |
+| Geometry the game batches itself: mobs, block entities, the hand | [Entities](internals/entities.md) |
 | Serving uniforms, and how a value is proved correct | [Uniforms](internals/uniforms.md) |
 | Textures a pack supplies, and treating its paths as untrusted | [Pack textures](internals/pack-textures.md) |
 | The normal and specular maps a resource pack ships | [Material maps](internals/material-maps.md) |
