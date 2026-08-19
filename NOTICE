@@ -245,6 +245,16 @@ GNU Lesser General Public License version 3
   declaration matched and comes back out as the -1 every pack tests against. The reading of
   Sodium's vertex layout in the same file is this project's own and is not from Iris.
 
+  common/src/main/java/dev/vitrail/screen/VitrailDebugEntry.java,
+  common/src/main/java/dev/vitrail/mixin/DebugScreenEntriesMixin.java and
+  common/src/main/java/dev/vitrail/mixin/DebugScreenEntryListMixin.java follow the construction of
+  net.irisshaders.iris.gui.debug.IrisDebugEntry, of net.irisshaders.iris.mixin.MixinDebugEntries
+  and of net.irisshaders.iris.mixin.MixinDebugScreenEntriesList: the same two seams into the
+  game's F3 registry, an entry registered as the registry's class initializer returns, a display
+  status written only while the entry has none so that the player's own choice stands, and the
+  wording of the version, shaderpack and shaders-disabled lines. What is said when a pack is not
+  drawn is this project's own, following how its loader keeps the three reasons apart.
+
   common/src/main/java/dev/vitrail/glsl/LegacyGlsl.java reproduces what Iris puts in place of the
   fixed function vertex inputs of a full screen pass, in CompositeTransformer lines 47 to 71: the
   two attributes behind gl_Vertex and gl_MultiTexCoord0, a quad whose coordinates run from (0,0) to
