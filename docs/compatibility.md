@@ -340,10 +340,21 @@ When the far terrain goes back to that mod instead, the engine says so and names
 same line: a pack serving nothing for it is the common one, and every other refusal has a line of
 its own shape.
 
-Two limits stay whatever the log says. Past Distant Horizons' own far plane there is nothing
-drawn, and the picture there is the pack's sky, exactly as without the mod. And the far terrain
-does not enter the pack's shadow map yet, a pack's `dh_shadow` not being served, so what shades it
-is what its programs compute from the depth rather than a shadow the map carries.
+**The far terrain also enters the pack's shadow map**, where the pack ships a `dh_shadow` program
+and has not turned it off. Two things follow from a pack shipping one, and they are not the same
+thing: a far hill lays a shadow on the ground in front of it, and the far terrain is shaded by the
+map like everything else instead of only by what the pack computes from its own depth. Most packs
+ship none and write `dhShadow.enabled=false`, and the engine says so on its own line at load; one
+of them ships the program behind a setting it leaves switched off, so the setting has to be turned
+on before there is anything to see.
+
+What lands in the map is the distant land the CAMERA can see. Under Iris the mod builds a second
+list of its far terrain for the light, so a hill behind the camera lays a shadow on the ground in
+front of it there and does not here: the mod hands its geometry over once a frame, on its own pass,
+and there is no second list to ask for.
+
+One limit stays whatever the log says: past Distant Horizons' own far plane there is nothing drawn,
+and the picture there is the pack's sky, exactly as without the mod.
 
 ## What packs ask for that is unusual
 

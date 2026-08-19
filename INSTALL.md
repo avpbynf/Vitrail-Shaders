@@ -94,8 +94,9 @@ the first frame. This is not something Vitrail can work around: the fix belongs
 to that mod and not to this one.
 
 Given a build of it that draws on this backend, Vitrail hands its far terrain to
-the pack's own `dh_terrain` and `dh_water` programs and serves its depth beside
-the world's, which is the arrangement packs are written against. The changelog
+the pack's own programs, `dh_terrain` and `dh_water` for the picture and
+`dh_shadow` for the shadow map, and serves its depth beside the world's, which is
+the arrangement packs are written against. The changelog
 says what that changes and what it does not reach, and the log names each far
 terrain pass as the pack takes it over.
 
