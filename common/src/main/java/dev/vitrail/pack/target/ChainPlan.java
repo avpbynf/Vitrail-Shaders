@@ -291,10 +291,12 @@ public final class ChainPlan {
 	private final List<Integer> swapBack;
 	private final List<String> refusals;
 	private final List<String> notes;
+	private final List<String> history;
 
 	private ChainPlan(String place, List<Pass> passes, Pass last, Seed seed,
 			Map<Key, Pass> attachments, Map<TerrainPass, Key> terrainKeys, Map<String, Key> skyKeys,
-			List<Integer> swapBack, List<String> refusals, List<String> notes) {
+			List<Integer> swapBack, List<String> refusals, List<String> notes,
+			List<String> history) {
 		this.place = place;
 		this.passes = List.copyOf(passes);
 		this.last = last;
@@ -305,6 +307,7 @@ public final class ChainPlan {
 		this.swapBack = List.copyOf(swapBack);
 		this.refusals = List.copyOf(refusals);
 		this.notes = List.copyOf(notes);
+		this.history = List.copyOf(history);
 	}
 
 	public record Attachment(int target, TargetSchedule.Side side) {
@@ -445,6 +448,7 @@ public final class ChainPlan {
 		List<Pass> passes = new ArrayList<>();
 		List<String> refusals = new ArrayList<>(refused);
 		List<String> notes = new ArrayList<>();
+		List<String> history = new ArrayList<>();
 		Pass last = null;
 
 		for (String program : plan.running()) {
@@ -593,7 +597,7 @@ public final class ChainPlan {
 			}
 		}
 
-		verdicts(plan, painted, world, passes, last, notes);
+		verdicts(plan, painted, world, passes, last, notes, history);
 
 		Set<Integer> back = new TreeSet<>(plan.schedule().flippedAtEnd());
 		back.retainAll(plan.persistent());
@@ -610,7 +614,7 @@ public final class ChainPlan {
 		});
 
 		return new ChainPlan(plan.place(), passes, last, seed, answered, terrainKeys, skyKeys,
-				List.copyOf(back), refusals, notes);
+				List.copyOf(back), refusals, notes, history);
 	}
 
 	/**
@@ -879,9 +883,12 @@ public final class ChainPlan {
 	 *              clear colour where that family has just written, and a map holding a family that
 	 *              was switched off says the target is filled where nothing wrote it. The first is
 	 *              the one these lines exist to rule out; the second leaves no trace at all
+	 * @param notes what the picture will be wrong about
+	 * @param history the reads that land on what the frame before wrote, which is the pack's own
+	 *                doing rather than a fault of this engine. See {@link #history()}
 	 */
 	private static void verdicts(TargetPlan plan, Seed seed, Map<Key, Pass> world,
-			List<Pass> passes, Pass last, List<String> notes) {
+			List<Pass> passes, Pass last, List<String> notes, List<String> history) {
 		List<Pass> ordered = new ArrayList<>(passes);
 		if (last != null) {
 			ordered.add(last);
@@ -935,7 +942,8 @@ public final class ChainPlan {
 					continue;
 				}
 
-				notes.add(verdict(plan, undrawn, ordered, drawn, at, half, pass.program()));
+				Verdict said = verdict(plan, undrawn, ordered, drawn, at, half, pass.program());
+				(said.temporal() ? history : notes).add(said.text());
 			}
 
 			filled.addAll(pass.attachments());
@@ -964,8 +972,9 @@ public final class ChainPlan {
 	 * @param undrawn the targets geometry writes and no pass of this engine fills
 	 * @param drawn   the world's own passes, by the point of the frame they are drawn at
 	 */
-	private static String verdict(TargetPlan plan, Set<Integer> undrawn, List<Pass> ordered,
+	private static Verdict verdict(TargetPlan plan, Set<Integer> undrawn, List<Pass> ordered,
 			Map<Integer, Set<Pass>> drawn, int at, Attachment half, String reader) {
+		boolean kept = plan.persistent().contains(half.target());
 		String name = TargetName.canonical(half.target());
 		String clear = ", so " + reader + " reads what the clear left there";
 		String before = ", so " + reader + " reads the frame before, and the clear colour on the "
@@ -983,13 +992,14 @@ public final class ChainPlan {
 			// Which of the two the reader really gets is the clear directive's answer and never the
 			// order's: a target the pack clears is emptied on BOTH halves at the top of every frame,
 			// so nothing of the frame before is left there to be read.
-			return name + " is not written until " + later + ", later in the same frame"
-					+ (plan.persistent().contains(half.target()) ? before : clear);
+			return new Verdict(name + " is not written until " + later + ", later in the same frame"
+					+ (kept ? before : clear), kept);
 		}
 
 		String off = disabledWriter(plan, half.target());
 		if (off != null) {
-			return name + " is written by " + off + ", which this place does not run" + clear;
+			return new Verdict(name + " is written by " + off + ", which this place does not run"
+					+ clear, false);
 		}
 
 		if (undrawn.contains(half.target())) {
@@ -1010,17 +1020,28 @@ public final class ChainPlan {
 			// The tail is flat, and it is flat because of where this branch now sits: nothing later in
 			// the frame writes this half, so the pack keeping the target between frames buys the
 			// reader nothing - the frame before had nothing written there either.
-			return name + " is written by geometry, none of which this engine draws into the pack's "
-					+ "targets" + clear;
+			return new Verdict(name + " is written by geometry, none of which this engine draws into "
+					+ "the pack's targets" + clear, false);
 		}
 
 		// Nothing fills this half at any point of the frame. Whether that is a hole or a history
 		// buffer is decided by the pack's own clear directive and by nothing else.
-		return plan.persistent().contains(half.target())
-				? "nothing writes the half of " + name + " that " + reader + " reads, and the pack "
-						+ "keeps that target between frames" + before
-				: name + " is written by no program of this place, so it holds its clear colour for "
-						+ "ever, and " + reader + " reads that";
+		return kept
+				? new Verdict("nothing writes the half of " + name + " that " + reader + " reads, and "
+						+ "the pack keeps that target between frames" + before, true)
+				: new Verdict(name + " is written by no program of this place, so it holds its clear "
+						+ "colour for ever, and " + reader + " reads that", false);
+	}
+
+	/**
+	 * One verdict about a half nothing has filled by the time it is read.
+	 *
+	 * @param temporal whether the pack keeps that target between frames, so the read lands on what
+	 *                 the frame before wrote there rather than on a clear colour. That is a
+	 *                 mechanism of the pack, and Iris hands it the same one, so it belongs with the
+	 *                 facts and not with what the picture will be wrong about
+	 */
+	private record Verdict(String text, boolean temporal) {
 	}
 
 	/**
@@ -1193,5 +1214,20 @@ public final class ChainPlan {
 	/** What will be wrong once it is drawn, in the pack's own terms. */
 	public List<String> notes() {
 		return this.notes;
+	}
+
+	/**
+	 * The reads that land on what the frame before wrote, in the pack's own terms. Facts about the
+	 * pack and not faults of this engine, which is why they are handed back apart from
+	 * {@link #notes()}.
+	 * <p>
+	 * They used to be in that list, and the list is introduced to the reader as what the picture
+	 * will be wrong about. BSL's {@code colortex2} is the case that proved the cost: its line says
+	 * the target is not written until {@code composite7} and that {@code composite5} therefore reads
+	 * the frame before, which is exactly the temporal chain the pack is built on and exactly what
+	 * Iris gives it. Read among the faults it became a suspect, and stayed one for a fortnight.
+	 */
+	public List<String> history() {
+		return this.history;
 	}
 }

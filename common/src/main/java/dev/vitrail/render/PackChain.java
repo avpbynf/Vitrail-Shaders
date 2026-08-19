@@ -2276,6 +2276,14 @@ public final class PackChain {
 					back.size(), back);
 		}
 
+		// Beside the copy above, which is the other half of the same subject: what this pack carries
+		// from one frame to the next. Said at info and not with the warnings below, though they are
+		// the same walk's answers, because a pack reading a target it keeps is a mechanism of the
+		// pack rather than a hole in this engine, and Iris hands it exactly the same one. Read among
+		// the warnings, BSL's colortex2 line was taken for a defect of the temporal antialiasing and
+		// stayed a suspect for a fortnight.
+		unfolded.history().forEach(note -> Vitrail.logger().info("{}", note));
+
 		// The values the pack declares for itself, once for the whole chain: every program was
 		// built against the one catalogue, so a pass saying it would say it once per program.
 		this.values.notes().forEach(note -> Vitrail.logger().info("{}", note));
