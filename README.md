@@ -65,10 +65,10 @@ is earlier still. Point it at a pack and it loads it, settings and all,
 translates its programs once, and runs its frame in the order the format
 prescribes: terrain, water, shadows, sky, clouds, weather, particles, mobs,
 block entities and the held hand all go through the pack today, and so does
-the far terrain of Distant Horizons, given a build of that mod that can draw
-on this backend at all. A settings screen reads the pack's own menu layout,
-and a resource pack's normal and specular maps are served beside the blocks
-they belong to.
+the far terrain of Distant Horizons, given a build of that mod that draws on
+this backend; [Other mods](INSTALL.md#other-mods) names one. A settings
+screen reads the pack's own menu layout, and a resource pack's normal and
+specular maps are served beside the blocks they belong to.
 
 What is not through yet comes from the game instead, and that set moves from one
 release to the next, so a list here would go stale: when a place first draws,
