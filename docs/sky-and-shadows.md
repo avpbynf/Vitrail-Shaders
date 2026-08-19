@@ -160,10 +160,17 @@ are described once, under [the pack format](pack-format.md); they are not repeat
 
 ### The far terrain is drawn from the light too, out of sections kept from the frame
 
-A seventh family reaches the map and it is not one of those six keys. Where Distant Horizons is
-running and the pack ships a `dh_shadow`, its distant land is drawn into the map with that program,
-at the two moments the world's own chunk groups are drawn there. It is a seventh key of its own,
-`dhShadow.enabled`, and it is the one key of this family that is ON when a pack says nothing.
+A seventh family reaches the map. Where Distant Horizons is running and the pack ships a
+`dh_shadow`, its distant land is drawn into the map with that program, at the two moments the
+world's own chunk groups are drawn there. It has a key of its own, `dhShadow.enabled`, and it is the
+one key of this family that is ON when a pack says nothing.
+
+**It is held by three words rather than one**, and the two extra ones are not its own: its opaque
+half is drawn where `shadowTerrain` lets the opaque world in, and its water half where
+`shadowTranslucent` lets the near water in. That follows from where the mod hangs its own draws.
+They fire off the head of the call the shadow stage makes for each chunk group, and under Iris that
+call is inside the same two tests, so a pack that keeps the world out of its map keeps the distant
+land out with it.
 
 The geometry is not asked for a second time. That mod hands its terrain over once a frame, inside
 its own pass, which stands among the game's opaque chunks and is long over by the time the map is
@@ -172,10 +179,11 @@ light, in the pack's own shadow pair rather than in the volume that mod rasteris
 in.
 
 **What that costs is which sections are in the map**, and it is the one place this engine's map
-holds less than Iris's. Iris gets a second list: its shadow pass makes the mod build one for the
-light, and unless something binds a frustum that mod culls nothing at all for a shadow pass, so its
-map holds distant land the camera cannot see. Kept sections are the camera's list by construction,
-so a hill behind the camera lays no shadow on the ground in front of it.
+holds less than Iris's. Iris gets a second list: its shadow pass makes the mod build one, culled
+against a frustum of the light's that Iris binds for the length of that pass, and that mod culls
+nothing at all for a shadow pass when nobody binds one. Either way its map holds distant land the
+camera cannot see. Kept sections are the camera's list by construction, so a hill behind the camera
+lays no shadow on the ground in front of it.
 
 ### Culling for the light
 

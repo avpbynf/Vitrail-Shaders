@@ -380,7 +380,8 @@ public final class ViewMatrices implements ViewSource {
 		// ShadowMatrices.createOrthoMatrix is handed -DHCompat.getRenderDistance() * 16 and
 		// +the same (shadows/ShadowRenderer.java:429), and that call answers the game's render
 		// distance in CHUNKS while Distant Horizons is not drawing and that mod's own in BLOCKS
-		// while it is (compat/dh/DHCompatInternal.java:100-107). The sixteen therefore multiplies
+		// while it is (compat/dh/DHCompatInternal.java:102-109, reached through :111-113). The
+		// sixteen therefore multiplies
 		// two different units, which is exactly what dhRenderDistance already carries for the
 		// uniform of the same name, so the two cannot part company here.
 		//
@@ -388,9 +389,9 @@ public final class ViewMatrices implements ViewSource {
 		// always been, and with it the box along the light grows by that mod's own reach times
 		// sixteen. AND THE PACKS ASK FOR IT. A shadow plane of -1 is what a pack writes to hand the
 		// choice back, and Bliss writes both of them as -1 in the one branch its Distant Horizons
-		// shadow map setting opens: at the game's own render distance the box would be a hundred and
-		// twenty eight blocks deep, and every LOD of a far terrain that begins where the game's
-		// chunks end would be clipped out of the map the pack just asked to have it in.
+		// shadow map setting opens: at the game's own render distance the box would reach a hundred
+		// and twenty eight blocks either side of the camera, and a far terrain that BEGINS where the
+		// game's chunks end would be clipped out of the map the pack just asked to have it in.
 		float reach = dhRenderDistance() * 16.0F;
 		float near = plane(nearPlane, -reach);
 		float far = plane(farPlane, reach);

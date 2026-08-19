@@ -132,9 +132,17 @@ final class DistantProgram implements DumpedProgram {
 				// water does; the opaque half writes outright. DH's own two pipelines are built the
 				// same way, one withoutBlend and one with TRANSLUCENT
 				// (common/render/blaze/BlazeDhTerrainRenderer.java:140 and :148). Neither of the
-				// light's halves blends: what a map wants from a surface is the depth it stands at
-				// and the colour it tints the light with, both written outright, and Iris declares
-				// every shadow program of its own with BlendModeOverride.OFF.
+				// light's halves blends unless the pack says so: what a map wants from a surface is
+				// the depth it stands at and the colour it tints the light with, both written
+				// outright, and that is what the world's own shadow halves do here.
+				//
+				// It is the DEFAULT and not a rule, which is the whole of what this argument is:
+				// a blend directive the pack wrote for this program still wins, GeometryProgram
+				// asking the pack first. Iris has no default of its own to copy here - its
+				// dh_shadow key carries no blend override, alone among the shadow keys, which all
+				// carry BlendModeOverride.OFF (shaderpack/loading/ProgramId.java:13-19 against
+				// :57), so what its DH shadow program blends with is the pack's own directive or
+				// whatever state stands.
 				element.afterDeferred() ? Optional.of(BlendFunction.TRANSLUCENT)
 						: Optional.<BlendFunction>empty(),
 				// No coverage mask, and the class comment says what writes those pixels instead.
@@ -151,7 +159,7 @@ final class DistantProgram implements DumpedProgram {
 				//
 				// Nothing at all is culled in the map, which is the world's own answer there and
 				// Iris's, one _disableCull for the whole of its shadow stage
-				// (shadows/ShadowRenderer.java:500): what matters is which surface is nearest the
+				// (shadows/ShadowRenderer.java:501): what matters is which surface is nearest the
 				// light and not which way it faces, and a hill drawn on one side only leaks light
 				// through its back.
 				!element.afterDeferred() && !element.shadow(),
