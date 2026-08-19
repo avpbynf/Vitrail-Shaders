@@ -31,11 +31,6 @@ final class NeoForgePlatform implements VitrailPlatform {
 	}
 
 	@Override
-	public Path configDirectory() {
-		return FMLPaths.CONFIGDIR.get().resolve(Vitrail.MOD_ID);
-	}
-
-	@Override
 	public Path gameDirectory() {
 		return FMLPaths.GAMEDIR.get();
 	}
