@@ -13,6 +13,16 @@ what the next one holds.
 
 ## Unreleased
 
+### Fixed
+
+- **Complementary no longer falls back to its oldest code paths.** The engine told packs it was
+  Iris but never which one, and a pack that asks compares against zero: every "on an old Iris, do
+  it the old way" branch in Complementary Reimagined and Unbound was live. The engine now
+  announces the Iris release it behaves like, so those branches pick the modern side: rain and
+  thunder fade over the pack's own timer instead of a hardcoded three seconds, the sun and moon
+  stop leaning on a workaround for a renderer bug this engine never had, and reflections drop a
+  workaround for a texture bug fixed before the release this engine mirrors.
+
 ### Changed
 
 - **One download for both loaders.** The release now carries a single jar,
