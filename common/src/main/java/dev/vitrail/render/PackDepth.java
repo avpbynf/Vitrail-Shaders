@@ -569,7 +569,11 @@ final class PackDepth {
 		}
 
 		try {
-			// Both or neither, like the world's own pair and for the same reason.
+			// Both or neither, like the world's own pair and for the same reason. The written flags
+			// fall with the surfaces they described, or a getter would dereference an image this
+			// very block has just closed.
+			this.distantOpaqueWritten = false;
+			this.distantSceneWritten = false;
 			this.distantOpaque = close(this.distantOpaque);
 			this.distantScene = close(this.distantScene);
 			this.distantOpaque = new TargetSurface("Vitrail far terrain depth before its water",

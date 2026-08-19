@@ -119,10 +119,13 @@ final class DistantProgram implements DumpedProgram {
 				// No coverage mask, and the class comment says what writes those pixels instead.
 				// claimed: nothing of this family marks them either, for the same reason.
 				false, false, element.afterDeferred(), PrimitiveTopology.TRIANGLES,
-				// The opaque half is culled, which is DH's own answer, withFaceCulling(true) on its
-				// pipelines; the water half is not, which is Iris's and outranks it: Iris disables
-				// the cull for the transparent LOD pass (compat/dh/LodRendererEvents.java:346), so
-				// far water keeps a surface when seen from underneath or from inside it.
+				// The opaque half is culled, which is DH's own answer, one withFaceCulling(true) on
+				// the shared builder (common/render/blaze/BlazeDhTerrainRenderer.java:101); the
+				// water half is not, which is what a pack gets under Iris: a bare
+				// glDisable(GL_CULL_FACE) ahead of the transparent LOD pass
+				// (compat/dh/LodRendererEvents.java:346), never re-enabled by Iris itself and put
+				// back by the next state that asks for it. So far water keeps a surface when seen
+				// from underneath or from inside it.
 				!element.afterDeferred(), DEPTH, element.stage(), null,
 				// The one family with a value that belongs to the section rather than to the pass.
 				DistantVertex.SECTION_BLOCK,
