@@ -294,8 +294,8 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	}
 
 	/**
-	 * The one button with no room for a word: the eye that takes the screen away. Placed in whatever
-	 * space is left to the right of the button rows, which is Iris's arithmetic.
+	 * The eye that takes the screen away, placed in whatever space is left to the right of the
+	 * button rows, which is Iris's arithmetic.
 	 */
 	private Button eye() {
 		int x = besideRows(false);

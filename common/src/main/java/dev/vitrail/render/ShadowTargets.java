@@ -50,8 +50,10 @@ import java.util.List;
  * that follows from it is in one place each: the {@code FORWARD} pair the shadow programs are given,
  * and the compare op of their pipeline.
  * <p>
- * No texture view is ever held, for the same reason {@link ColorTargets} holds none: a resize closes
- * the views behind it and nothing on this backend notices a view that has outlived its texture.
+ * No caller ever holds a texture view, for the same reason {@link ColorTargets} hands none out: a
+ * resize closes the views behind it and nothing on this backend notices a view that has outlived its
+ * texture. The one view held here is the depth copy without the translucents, and it is safe because
+ * this map is square at the resolution the pack asked for and is never resized.
  */
 final class ShadowTargets {
 

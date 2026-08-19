@@ -63,7 +63,8 @@ final class EngineOptions {
 	 * one of {@code solid}, {@code cutout} and {@code translucent} for a chunk pass, two of which are
 	 * usually served by the one file and could not otherwise be told apart. The sky answers the same
 	 * way, by element rather than by file: {@code disc}, {@code dark}, {@code stars},
-	 * {@code sunrise}, {@code sun} and {@code moon}, four of the six being one file. The entities
+	 * {@code sunrise}, {@code sun}, {@code moon}, {@code endsky} and {@code endflash}, four of the
+	 * eight being one file. The entities
 	 * answer the same way, {@code cutout_cull}, {@code armor}, {@code item} and the rest, with the
 	 * block entity half carrying those same names under a {@code block_} in front and the two hand
 	 * passes under a {@code hand_} and a {@code hand_water_}. The weather is
@@ -73,10 +74,10 @@ final class EngineOptions {
 	 * {@code dump=gbuffers_block}, <strong>only where the pack really ships that file</strong>: the
 	 * line is matched against the file that ends up SERVING, so wherever the fallback tree leads
 	 * elsewhere the name matches nothing at all and the element names are the only way in.
-	 * <strong>Two of their element names cannot be reached at
+	 * <strong>Three of their element names cannot be reached at
 	 * all</strong>, and it is a property of the matching rather than a fault: the line is matched on
-	 * the TAIL of a label, the terrain is walked first, and its own passes are called {@code solid}
-	 * and {@code cutout}. Whichever is named, the file the dump writes says in its first line which
+	 * the TAIL of a label, the terrain is walked first, and its own passes are called {@code solid},
+	 * {@code cutout} and {@code translucent}. Whichever is named, the file the dump writes says in its first line which
 	 * program was really read.
 	 * <p>
 	 * One program and not several, because the point is to read the file rather than to search it,
@@ -275,7 +276,7 @@ final class EngineOptions {
 	 * the point: what is left is settings the pack declared.
 	 */
 	static Read take(Map<String, OptionValue> chosen) {
-		// The seed goes through the same reading as the other eight rather than keeping one of its
+		// The seed goes through the same reading as the other nine rather than keeping one of its
 		// own. It had one, and it was the only line here that took an unreadable word in silence:
 		// seed=0 left the seed drawing, and an experiment run to see the clears on their own would
 		// have concluded from a picture the seed had painted.

@@ -815,12 +815,12 @@ final class GeometryProgram {
 	}
 
 	/**
-	 * Binds this program's block and every sampler it declares, inside the pass Sodium opened.
+	 * Binds this program's block and every sampler it declares, inside the pass the family has just
+	 * opened.
 	 * <p>
 	 * Every name the layout carries has to be bound or the draw throws on the first one missing, so
-	 * a name this step has no answer for gets one pixel rather than being left out. Only two names
-	 * are answered with anything real: the block atlas, and the light map. Everything else is a
-	 * constant, which is why the criterion for this step is the albedo and nothing to do with light.
+	 * a name this step has no answer for gets one pixel rather than being left out. What stands
+	 * behind the rest, the pack's own targets among them, was settled by {@link #resolve}.
 	 * <p>
 	 * <strong>Only the names that follow the draw's own image are worked out here.</strong> The rest
 	 * were settled by {@link #resolve}, at the one point of a pass that stands outside it, and this
@@ -1023,7 +1023,7 @@ final class GeometryProgram {
 
 	/**
 	 * The image a pass draws with, where the pass has one of its own rather than the block atlas
-	 * { #prepare} was handed. Set before the bind and never during it.
+	 * {@link #prepare} was handed. Set before the bind and never during it.
 	 */
 	void atlas(GpuTextureView view) {
 		this.atlas = view;

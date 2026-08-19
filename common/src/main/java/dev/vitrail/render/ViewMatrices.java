@@ -330,9 +330,9 @@ public final class ViewMatrices implements ViewSource {
 	}
 
 	/**
-	 * The four shadow matrices, which are worth computing even though no shadow pass runs: they
-	 * are read by the composite stage of all eight packs of the corpus, and everything they need
-	 * is the camera position and the sun angle.
+	 * The four shadow matrices, which are read by the composite stage of all eight packs of the
+	 * corpus whether or not the light's own pass drew anything this frame: everything they need is
+	 * the camera position and the sun angle.
 	 * <p>
 	 * Ported from Iris {@code shadows/ShadowMatrices.java} and {@code shadows/ShadowRenderer.java}
 	 * at b0ae41c, with the pose stack and {@code com.mojang.math.Axis} written out in JOML.
