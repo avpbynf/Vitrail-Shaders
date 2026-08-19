@@ -12,7 +12,7 @@ plus, because each of them files an upload per loader and has nowhere else to pu
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
-## Unreleased
+## 0.4.1-beta.1
 
 ### Added
 
@@ -54,6 +54,10 @@ what the next one holds.
   those two draws once the pack's own terrain program does, so the setting read as live and moved
   nothing at all. It comes back the moment no pack is drawing the terrain. Anisotropic filtering is
   untouched and goes on working under a pack.
+
+- Naming a pack that is not in the Shader Packs folder now says so, in the chat line the reload key
+  answers, on the settings screen and in the log, with the name that went unanswered. It used to
+  read as if no pack had been asked for at all, so a renamed or deleted pack looked like a choice.
 
 ## 0.4.0-beta.1
 
