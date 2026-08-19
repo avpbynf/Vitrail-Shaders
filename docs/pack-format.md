@@ -152,6 +152,14 @@ two arms of one conditional, and some write a word whose value the pack's own se
 contradicts. Read flat, the answer is whichever line the file happens to end with, and the most
 used packs of the corpus lose their entity shadows to a line their settings had already killed.
 
+**`dhShadow.enabled` belongs to the same family and defaults the other way.** It says whether
+Distant Horizons' far terrain is drawn into the map, and a pack that ships a `dh_shadow` and writes
+nothing has asked for it: there is no second flag it could have meant. It is read through the
+conditionals like the six above, and there it matters more than for any of them, since the one pack
+of the corpus that ships the program writes the key three times, true once under a setting it leaves
+switched off and false twice. A pack that ships no `dh_shadow` needs no key at all, that name having
+no parent in the fallback tree to reach.
+
 `entityShadowDistanceMul` is read too, but as a `const float` of the pack's source rather than as a
 key of this file. It bounds how far from the camera a caster that moves may stand and still reach
 the map.

@@ -13,6 +13,17 @@ what the next one holds.
 
 ## Unreleased
 
+### Added
+
+- **Distant Horizons' far terrain now casts into the pack's shadow map.** A pack that ships a
+  `dh_shadow` program has it drawn, from the light, over the same distant land its `dh_terrain`
+  draws for the camera, so a far hill lays a shadow on the ground instead of only shading itself
+  out of its own depth. Packs that write `dhShadow.enabled=false` are taken at their word, which is
+  most of them; the one pack tried here that ships the program keeps it behind a setting of its own
+  and it has to be switched on. What the map holds is the distant land the camera can see, which is
+  narrower than under Iris: that mod gets a second list of it, built for the light, and there is no
+  second list to be had here.
+
 ### Changed
 
 - **Two things taken on every frame are no longer taken for a pack that cannot read them.** The
