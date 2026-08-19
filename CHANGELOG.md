@@ -23,6 +23,14 @@ what the next one holds.
   stop leaning on a workaround for a renderer bug this engine never had, and reflections drop a
   workaround for a texture bug fixed before the release this engine mirrors.
 
+- **On Fabric, the game no longer throws away every selected resource pack at boot when a slow
+  mod set is installed.** Reading the shader pack used to hold up the very first frame, and when
+  the boot's resource reload finished inside that pause the game stitched its atlases before it
+  had a frame's uniforms to do it with: "Missing uniform Globals", and every resource pack was
+  deselected. Seen with Distant Horizons installed, whose extra programs made the pack read long
+  enough to lose the race. The pack is now read once the boot reload is over, which is where
+  NeoForge always effectively had it.
+
 ### Changed
 
 - **One download for both loaders.** The release now carries a single jar,
