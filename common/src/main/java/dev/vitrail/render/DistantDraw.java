@@ -99,10 +99,12 @@ public final class DistantDraw {
 	 *                its own about it: DH draws its LODs from the head of the game's two chunk
 	 *                groups ({@code neoforge/mixins/client/MixinChunkSectionsToRender.java:67-74}),
 	 *                and Iris's shadow stage runs those very groups a second time
-	 *                ({@code shadows/ShadowRenderer.java:505-507} and {@code :599-601}), so every
+	 *                ({@code shadows/ShadowRenderer.java:508-511} and {@code :598-601}), so every
 	 *                LOD the camera pass drew is offered again from the light and bound to
 	 *                {@code dh_shadow} there ({@code compat/dh/LodRendererEvents.java:220-222} and
-	 *                {@code :332-334})
+	 *                {@code :332-334}). Each of those two calls sits inside the caster word that
+	 *                governs its own chunk group, and this family is drawn inside them for that
+	 *                reason
 	 */
 	public record Element(String element, String program, boolean water, boolean shadow) {
 
@@ -140,8 +142,8 @@ public final class DistantDraw {
 		 * A shadow half answers the same name as the half it shadows, which is the rule
 		 * {@code TerrainPass.stage} already follows and which is what Iris really hands over: its
 		 * shadow stage names its opaque chunk group {@code TERRAIN_SOLID} and its translucent one
-		 * {@code TERRAIN_TRANSLUCENT} ({@code shadows/ShadowRenderer.java:505-507} and
-		 * {@code :599-601}), and DH's LODs are drawn from inside those two calls.
+		 * {@code TERRAIN_TRANSLUCENT} ({@code shadows/ShadowRenderer.java:508-511} and
+		 * {@code :598-601}), and DH's LODs are drawn from inside those two calls.
 		 */
 		RenderStage stage() {
 			return this.water ? RenderStage.TERRAIN_TRANSLUCENT : RenderStage.TERRAIN_SOLID;
@@ -222,9 +224,14 @@ public final class DistantDraw {
 	private final Corners corners = new Corners("Vitrail far terrain sections");
 
 	/**
-	 * The same for the light's own two halves, which cannot share the ring above: they are recorded
-	 * once the frame has closed and the ring has turned, so they would be writing over the very
-	 * slots the camera's recorded passes hold slices of.
+	 * The same for the light's own two halves, which cannot share the ring above.
+	 * <p>
+	 * <strong>The turn is what forbids it, and not the frame boundary on its own.</strong> The ring
+	 * moves on in {@link #rotate}, which runs before the light's stage, so the light writes a
+	 * different buffer from the one the camera's recorded passes hold slices of - and that is
+	 * exactly the trouble: the ring would then be one turn ahead of itself, and the NEXT frame's
+	 * camera halves would map the buffer the light's own submission is still reading. A ring fences
+	 * a buffer where it turns, and one shared ring would be asked to turn twice a frame.
 	 */
 	private final Corners shadowCorners = new Corners("Vitrail far terrain shadow sections");
 
@@ -316,9 +323,11 @@ public final class DistantDraw {
 	 * there, because that is where Iris's are: DH hangs its LOD draws off the head of
 	 * {@code ChunkSectionsToRender.renderGroup}
 	 * ({@code neoforge/mixins/client/MixinChunkSectionsToRender.java:67-74}) and Iris's shadow stage
-	 * calls that very method for its own two groups ({@code shadows/ShadowRenderer.java:505-507} and
-	 * {@code :599-601}), so the water half lands after the copy the pack reads as
-	 * {@code shadowtex1}, exactly as the world's translucent half does.
+	 * calls that very method for its own two groups ({@code shadows/ShadowRenderer.java:508-511} and
+	 * {@code :598-601}), so the water half lands after the copy the pack reads as
+	 * {@code shadowtex1}, exactly as the world's translucent half does. Both of Iris's calls stand
+	 * inside the caster word that governs their own chunk group, and the caller draws this family
+	 * inside the same two words for that reason.
 	 * <p>
 	 * <strong>The sections are the ones DH culled against the CAMERA, and that is a divergence with
 	 * a cost.</strong> Under Iris the shadow pass makes DH build its list a second time, against a
@@ -385,8 +394,10 @@ public final class DistantDraw {
 		// frame's camera one wherever a pack asks for it by its gbuffers name.
 		RenderPipeline pipeline = program.prepare(device, null);
 		if (pipeline == null) {
-			refuseShadow(element, "prepare", "the " + element.element() + " program could not be "
-					+ "prepared, and the line above this one says which of its own reasons it was");
+			refuseShadow(element, "prepare", "its program could not be prepared. There are two "
+					+ "reasons for that and one of them says so on a line of its own above, the "
+					+ "program refusing to compile; the other is a map that is not allocated yet, "
+					+ "which passes on its own");
 
 			return;
 		}
@@ -438,9 +449,15 @@ public final class DistantDraw {
 		}
 	}
 
-	/** Says why one half of the far terrain is missing from the map, once per reason and per load. */
+	/**
+	 * Says why one half of the far terrain is missing from the map, once per reason and per load.
+	 * <p>
+	 * The half is part of the key and not only of the sentence: the two are refused independently,
+	 * and one line naming the opaque half would otherwise stand for a water half nobody was told
+	 * about.
+	 */
 	private void refuseShadow(Element element, String reason, String why) {
-		if (this.refused.add("shadow:" + reason)) {
+		if (this.refused.add("shadow:" + reason + ":" + element.element())) {
 			Vitrail.logger().warn("The {} half of the far terrain is not drawn into the shadow map "
 					+ "because {}", element.half(), why);
 		}
@@ -646,16 +663,42 @@ public final class DistantDraw {
 				this.programs.values().forEach(DistantProgram::release);
 				this.programs.clear();
 			} else if (served(true) == 0) {
-				Vitrail.logger().info("{} serves no dh_shadow in {}, so the far terrain casts nothing "
-						+ "into the pack's shadow map and what shades it is what the pack's own "
-						+ "programs work out of its depth", this.packPath.getFileName(),
-						this.place.isEmpty() ? "its root" : this.place);
+				sayNothingCastsIntoTheMap();
 			}
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the far terrain programs of "
 					+ this.packPath.getFileName() + ", so Distant Horizons keeps drawing it with its "
 					+ "own shader", e);
 		}
+	}
+
+	/**
+	 * Says why the far terrain casts nothing into the map, in the words of the reason it really is.
+	 * <p>
+	 * Three roads reach here and they are not the same fact. A session that draws no map at all is
+	 * SILENT: {@link #wanted} kept the light's halves out before the pack was ever read, and a line
+	 * about a program would send whoever reads it looking through a pack for something no map could
+	 * have used. A pack that ships a {@code dh_shadow} and asks for it not to be drawn is quoted on
+	 * its own directive rather than reported as shipping nothing, which is what this said before it
+	 * was split and which was false of the one pack of the corpus that ships one.
+	 */
+	private void sayNothingCastsIntoTheMap() {
+		if (!TerrainDraw.shadowsAsked()) {
+			return;
+		}
+
+		if (!this.values.dhShadow()) {
+			Vitrail.logger().info("{} asks with dhShadow.enabled that its far terrain stay out of "
+					+ "its shadow map, so nothing of it is drawn there and what shades it is what "
+					+ "the pack's own programs work out of its depth", this.packPath.getFileName());
+
+			return;
+		}
+
+		Vitrail.logger().info("{} serves no dh_shadow in {}, so the far terrain casts nothing into "
+				+ "the pack's shadow map and what shades it is what the pack's own programs work "
+				+ "out of its depth", this.packPath.getFileName(),
+				this.place.isEmpty() ? "its root" : this.place);
 	}
 
 	/**

@@ -515,9 +515,10 @@ public final class PackProgram {
 	 * {@link DistantVertex} says which of its six elements may be left off and why leaving one off is
 	 * forced rather than thrifty.
 	 * <p>
-	 * Both programs together and not one at a time, for the reason {@code loadGeometry} gives: the
-	 * plan reads thirty odd files whatever is asked of it, and the two here are one frame apart at
-	 * most, the opaque half and the one DH defers.
+	 * All of them together and not one at a time, for the reason {@code loadGeometry} gives: the
+	 * plan reads thirty odd files whatever is asked of it, and what is asked for here is drawn
+	 * inside one frame - the two halves the camera sees, the opaque one and the one DH defers, and
+	 * the same two again from the light where the caller asks for those.
 	 *
 	 * @param elements the halves to read, each carrying the name the pack is asked for and the key it
 	 *                 gets its answer back under. Every one of them has to be written against
