@@ -88,6 +88,17 @@ final class DistantProgram implements DumpedProgram {
 	private static final DepthStencilState DEPTH =
 			new DepthStencilState(CompareOp.GREATER_THAN, true);
 
+	/**
+	 * And the window the same geometry is drawn under from the light, which is the other way round.
+	 * <p>
+	 * The map stores the forward window, cleared to one, so its test runs the other way from the
+	 * scene's. It is {@code TerrainProgram.depthState}'s rule word for word, and getting the pair out
+	 * of step does not fail: it fills the map with the geometry FURTHEST from the light, which is a
+	 * shadow map of the far side of the world and reads as shadows in all the wrong places.
+	 */
+	private static final DepthStencilState SHADOW_DEPTH =
+			new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true);
+
 	private final GeometryProgram body;
 
 	private DistantProgram(GeometryProgram body) {
@@ -116,15 +127,19 @@ final class DistantProgram implements DumpedProgram {
 		VertexFormat format = DistantMesh.format(carried);
 
 		return new DistantProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
-				element.element(), NAMESPACE, DistantVertex.ANSWERED, false,
+				element.element(), NAMESPACE, DistantVertex.ANSWERED, element.shadow(),
 				// The half DH defers blends over what stands behind it, exactly as the world's own
 				// water does; the opaque half writes outright. DH's own two pipelines are built the
 				// same way, one withoutBlend and one with TRANSLUCENT
-				// (common/render/blaze/BlazeDhTerrainRenderer.java:140 and :148).
+				// (common/render/blaze/BlazeDhTerrainRenderer.java:140 and :148). Neither of the
+				// light's halves blends: what a map wants from a surface is the depth it stands at
+				// and the colour it tints the light with, both written outright, and Iris declares
+				// every shadow program of its own with BlendModeOverride.OFF.
 				element.afterDeferred() ? Optional.of(BlendFunction.TRANSLUCENT)
 						: Optional.<BlendFunction>empty(),
 				// No coverage mask, and the class comment says what writes those pixels instead.
-				// claimed: nothing of this family marks them either, for the same reason.
+				// claimed: nothing of this family marks them either, for the same reason. The mask
+				// is about the scene seed, which the light's halves are no part of at all.
 				false, false, element.afterDeferred(), PrimitiveTopology.TRIANGLES,
 				// The opaque half is culled, which is DH's own answer, one withFaceCulling(true) on
 				// the shared builder (common/render/blaze/BlazeDhTerrainRenderer.java:101); the
@@ -133,12 +148,24 @@ final class DistantProgram implements DumpedProgram {
 				// (compat/dh/LodRendererEvents.java:346), never re-enabled by Iris itself and put
 				// back by the next state that asks for it. So far water keeps a surface when seen
 				// from underneath or from inside it.
-				!element.afterDeferred(), DEPTH, element.stage(), null,
+				//
+				// Nothing at all is culled in the map, which is the world's own answer there and
+				// Iris's, one _disableCull for the whole of its shadow stage
+				// (shadows/ShadowRenderer.java:500): what matters is which surface is nearest the
+				// light and not which way it faces, and a hill drawn on one side only leaks light
+				// through its back.
+				!element.afterDeferred() && !element.shadow(),
+				element.shadow() ? SHADOW_DEPTH : DEPTH, element.stage(), null,
 				// The one family with a value that belongs to the section rather than to the pass.
 				DistantVertex.SECTION_BLOCK,
-				// And the one family drawn in DH's own volume, so the three dh matrices answer that
-				// volume here and the game's everywhere else.
-				true),
+				// And the one family drawn in DH's own volume - the camera's halves are, and the
+				// light's are not. A dh_shadow writes gl_ProjectionMatrix * gl_ModelViewMatrix like
+				// every other shadow program, and those two answer the shadow pair here because the
+				// pass is a shadow pass; Iris fills the same two names of its own DH shadow program
+				// with ShadowRenderer.PROJECTION and MODELVIEW and not with DH's volume
+				// (compat/dh/LodRendererEvents.java:304-307). The three dhProjection names answer
+				// DH's volume for every pass alike, as Iris serves them.
+				!element.shadow()),
 				bound, values, load, format, writes, targets, chainRuns));
 	}
 
@@ -146,7 +173,10 @@ final class DistantProgram implements DumpedProgram {
 	 * The pipeline the far terrain is drawn with, compiled before the pass is opened.
 	 *
 	 * @param projection the volume DH rasterises in, which both spellings of the projection a
-	 *                   {@code dh_} program may read have to answer
+	 *                   {@code dh_} program may read have to answer, or null for the frame's own.
+	 *                   Null is what the light's halves hand in: they are not drawn in DH's volume,
+	 *                   and what places them is the shadow pair the six fixed function names answer
+	 *                   with
 	 * @see GeometryProgram#prepare
 	 */
 	RenderPipeline prepare(GpuDevice device, Matrix4fc projection) {

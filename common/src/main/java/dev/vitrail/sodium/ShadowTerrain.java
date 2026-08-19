@@ -4,6 +4,7 @@ import dev.vitrail.mixin.MixinSodiumWorldRenderer;
 import dev.vitrail.mixin.RenderSectionManagerAccessor;
 import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.render.BlockStateIds;
+import dev.vitrail.render.DistantDraw;
 import dev.vitrail.render.ShadowCullPlan;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
@@ -231,6 +232,12 @@ public final class ShadowTerrain {
 
 		ShadowCasters casters = TerrainDraw.shadowCasters();
 
+		// Distant Horizons' far terrain, ahead of the world's own opaque group and outside the word
+		// that governs it. Both halves of that are Iris's: DH hangs its LOD draws off the HEAD of
+		// ChunkSectionsToRender.renderGroup, which is the very call the two lines below make, and
+		// nothing on that road consults shadowTerrain.
+		DistantDraw.shadow(false, camera);
+
 		// Refused by the pack rather than skipped for cheapness.
 		if (casters.terrain()) {
 			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.OPAQUE,
@@ -249,6 +256,11 @@ public final class ShadowTerrain {
 		// draw that comes next. The renderer closes its own render pass before returning, and the
 		// walk above closes its last one, so a copy here is outside one.
 		TerrainDraw.copyShadowDepth();
+
+		// And its water half after that copy, where the world's own translucent group stands, which
+		// is again where DH's own hook puts it: shadowtex1 is the map WITHOUT the translucents, and
+		// far water belongs on the same side of it as near water.
+		DistantDraw.shadow(true, camera);
 
 		if (casters.translucent()) {
 			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.TRANSLUCENT,
