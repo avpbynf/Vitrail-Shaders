@@ -99,6 +99,18 @@ the world's, which is the arrangement packs are written against. The changelog
 says what that changes and what it does not reach, and the log names each far
 terrain pass as the pack takes it over.
 
+There is such a build, and no published one does it: the far terrain rendering
+that works here is unreleased work in that mod's own tree, and on Fabric the two
+mods together crash at startup without a fix on top of it. So one is built from
+that tree and published, for 26.2, one jar for both loaders:
+[Distant Horizons patched for Vitrail][dh-build]. **It installs by hand**, no
+launcher will pull it: drop the jar in `mods` yourself and leave no other
+Distant Horizons jar beside it. It reports itself as `3.2.1-b-dev`, the version
+string an upstream dev build carries, so bug reports made with it do not belong
+to the Distant Horizons team; its three fixes are offered to them upstream.
+
+[dh-build]: https://gitlab.com/avpbynf/distant-horizons/-/releases/vitrail-26.2-1
+
 ## Building
 
 ```
