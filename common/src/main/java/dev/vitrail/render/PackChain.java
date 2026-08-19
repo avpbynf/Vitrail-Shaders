@@ -128,6 +128,19 @@ public final class PackChain {
 	private static volatile boolean packOff;
 
 	/**
+	 * Whether {@code pack.txt} named a pack this folder does not hold, which is the one way of
+	 * drawing nothing that is not a way of asking for nothing.
+	 * <p>
+	 * <strong>Held apart from {@link #packOff} because the two ended in the same place and mean
+	 * opposite things.</strong> A file saying {@code none} asked for the game's own image and got it,
+	 * so nothing is wrong and nothing is said. A file naming a pack that was renamed, deleted or
+	 * mistyped asked for a picture and got the game's, and it used to raise {@link #packOff} as well:
+	 * the screen then read "No shader pack: the game draws its own image", which says the player got
+	 * what they asked for at the moment they did not.
+	 */
+	private static volatile boolean packMissing;
+
+	/**
 	 * What {@code pack.txt} asked for at the last load, which is not the same question as what is
 	 * drawn: the screen highlights the pack that was chosen even while shaders are switched off, and
 	 * it needs the name to do it.
@@ -461,11 +474,17 @@ public final class PackChain {
 		removed = List.of();
 		packsFirst = true;
 		packOff = false;
-		// Cleared here rather than left to choose(), which the empty folder path below returns ahead of:
-		// without this, a folder emptied between two loads would leave the screen highlighting a pack
-		// that is no longer there.
+		packMissing = false;
+		// Emptied before the read below rather than after it, so that a file that cannot be read at
+		// all leaves the screen naming nothing rather than whatever the load before it asked for.
 		askedFor = PackFile.EMPTY;
 		try {
+			// Read here and no longer inside choose(), which the empty folder road below returns ahead
+			// of. That road is the one a player takes who has just renamed or deleted their only pack,
+			// and without the name this far up it is the one road that cannot say which of the two
+			// happened: the folder is empty, which is true, and is not what they did.
+			askedFor = PackFile.read(packFile(gameDirectory));
+
 			// Both ways out of the next two blocks end with no pack drawing anything, and NEITHER mesh
 			// carries what a pack reads once none wants it: said here as well as on the road that
 			// loads a pack, or picking None after a pack would leave the extra bytes on every vertex
@@ -477,23 +496,41 @@ public final class PackChain {
 			// mesh goes on carrying for a family nothing serves.
 			List<Path> packs = PackLoader.candidates(gameDirectory);
 			if (packs.isEmpty()) {
-				lastError = "No shader pack in " + PackLoader.directory(gameDirectory);
 				TerrainDraw.wanted(false);
 				EntityDraw.wanted(false);
 				HandDraw.wanted(false);
+				// The empty folder is the smaller half of the truth whenever a pack was named: what a
+				// player who has just deleted or renamed their only one needs told is which name went
+				// unanswered, and the folder being empty is why.
+				if (namedAPack()) {
+					packIsMissing(gameDirectory);
+
+					return;
+				}
+
+				lastError = "No shader pack in " + PackLoader.directory(gameDirectory);
 				Vitrail.logger().info("No shader pack in {}, nothing to draw",
 						PackLoader.directory(gameDirectory));
 				return;
 			}
 
-			Path pack = choose(gameDirectory, packs).orElse(null);
-			// Nothing is left behind and nothing is reported as an error: this is the same path as
-			// an empty folder, taken because it was asked for rather than because nothing was found.
+			Path pack = choose(packs, askedFor).orElse(null);
 			if (pack == null) {
-				packOff = true;
+				// Both roads out of here draw nothing, so both take the meshes down, and only then are
+				// they told apart: what parts them is whether nothing was asked for or whether what was
+				// asked for is not there.
 				TerrainDraw.wanted(false);
 				EntityDraw.wanted(false);
 				HandDraw.wanted(false);
+				if (namedAPack()) {
+					packIsMissing(gameDirectory);
+
+					return;
+				}
+
+				// Nothing is left behind and nothing is reported as an error: this is the same path as
+				// an empty folder, taken because it was asked for rather than because nothing was found.
+				packOff = true;
 				Vitrail.logger().info("No pack asked for, so none of the {} in {} is read and the game "
 						+ "draws its own image. Pick one in the settings screen, or name it in {}",
 						packs.size(), PackLoader.directory(gameDirectory), packFile(gameDirectory));
@@ -654,6 +691,41 @@ public final class PackChain {
 		}
 	}
 
+	/**
+	 * Whether {@code pack.txt} named a pack at all, as opposed to asking for none of them.
+	 * <p>
+	 * The one test the two roads out of a load that draws nothing are told apart by, so that they
+	 * cannot answer differently: shaders switched off and the word {@code none} are both a player
+	 * asking for the game's own image, and anything else in that file is a player asking for a
+	 * picture. It repeats the two refusals {@link #choose} makes on the same grounds and has to: that
+	 * method is not reached at all when the folder holds nothing to search.
+	 */
+	private static boolean namedAPack() {
+		PackFile asked = askedFor;
+
+		return asked.wantsPack() && !asked.namesNone();
+	}
+
+	/**
+	 * Says, once and in one place, that the pack a player named is not there.
+	 * <p>
+	 * Two roads run into this and they are one fault to the player: the folder holds packs and none
+	 * of them answers the name, or the folder holds nothing at all. Written twice, the two would say
+	 * it in two ways and then drift, and the difference between them is not one a player can act on.
+	 * <p>
+	 * The reason is kept on {@link #lastError} rather than only logged, which is what carries it to
+	 * the chat line the reload key says and to the screen's bottom line, both of which read that
+	 * field and neither of which the log reaches.
+	 */
+	private static void packIsMissing(Path gameDirectory) {
+		packMissing = true;
+		lastError = "No pack named '" + askedFor.name() + "' in "
+				+ PackLoader.directory(gameDirectory) + ", so nothing is drawn";
+		Vitrail.logger().error("{} names '{}', and no pack of that name is in {}, so nothing is drawn."
+				+ " Check the name, or pick a pack in the settings screen", packFile(gameDirectory),
+				askedFor.name(), PackLoader.directory(gameDirectory));
+	}
+
 	/** The file naming the pack to draw, written by the settings screen and edited by hand. */
 	public static Path packFile(Path gameDirectory) {
 		return gameDirectory.resolve(Vitrail.MOD_ID).resolve("pack.txt");
@@ -663,6 +735,12 @@ public final class PackChain {
 	 * Which pack to draw: the one {@code vitrail/pack.txt} names, by whole or partial name, and none
 	 * at all when it names nothing this folder has, when it says {@link #NO_PACK}, or when it is not
 	 * there.
+	 * <p>
+	 * <strong>Those three empty answers are not one answer.</strong> Only the last two asked for the
+	 * game's own image; the first asked for a picture and cannot be given one. Which of the three it
+	 * was is not said here and is not returned either: {@link #namedAPack} tells them apart from the
+	 * file alone, which is what lets the road that never reaches this method, an empty folder, answer
+	 * the same way rather than nearly the same way.
 	 * <p>
 	 * <strong>Nothing is loaded until something is asked for</strong>, which is the rule every
 	 * shader loader follows and the only one that does not surprise: dropping this mod into an
@@ -680,15 +758,12 @@ public final class PackChain {
 	 * on a fragment the shorter one would answer for both: the settings screen writes the whole
 	 * name for that reason and would otherwise be unable to reach the longer one at all.
 	 *
+	 * @param asked what {@code pack.txt} says, read by the caller: the folder is searched here and
+	 *              the file is not, so that the one road out of a load that never searches a folder
+	 *              still knows what was asked of it
 	 * @return empty when no pack is to be drawn
 	 */
-	private static Optional<Path> choose(Path gameDirectory, List<Path> packs) throws IOException {
-		Path file = packFile(gameDirectory);
-		PackFile asked = PackFile.read(file);
-		// Held whichever way this goes, because the screen highlights the pack that was chosen even
-		// while shaders are switched off, and that is the whole point of the file carrying two facts.
-		askedFor = asked;
-
+	private static Optional<Path> choose(List<Path> packs, PackFile asked) {
 		if (!asked.wantsPack()) {
 			return Optional.empty();
 		}
@@ -709,9 +784,6 @@ public final class PackChain {
 				return Optional.of(pack);
 			}
 		}
-
-		Vitrail.logger().warn("No pack in the folder matches '{}' from {}, so none is drawn", wanted,
-				file);
 
 		return Optional.empty();
 	}
@@ -898,6 +970,18 @@ public final class PackChain {
 	 */
 	public static boolean noPackWanted() {
 		return packOff;
+	}
+
+	/**
+	 * Whether the pack {@code pack.txt} names is one the folder no longer holds, which is the third
+	 * answer to "why is nothing being drawn" and the only one of the three that is a fault.
+	 * <p>
+	 * The name that was asked for is {@link #askedFor}'s to give, which it does whether or not it was
+	 * found: a screen saying this has to be able to name it, or it says no more than the empty folder
+	 * it is not.
+	 */
+	public static boolean packMissing() {
+		return packMissing;
 	}
 
 	/**

@@ -37,6 +37,7 @@
 	"options.vitrail.error": "%s",
 	"options.vitrail.no_pack": "Nessun pacchetto di shader caricato",
 	"options.vitrail.pack_off": "Nessun pacchetto di shader: il gioco disegna la propria immagine",
+	"options.vitrail.pack_missing": "Il pacchetto di shader \"%s\" non è nella cartella dei pacchetti di shader",
 	"key.vitrail.open_settings": "Apri le impostazioni del pacchetto di shader",
 	"key.vitrail.reload_pack": "Riavvia Shaders",
 	"options.vitrail.pack_reloaded": "Shaders Ricaricate!",

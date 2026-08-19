@@ -113,6 +113,13 @@ public final class ScreenText {
 	/** The other reason there is nothing to configure: the folder was left alone on purpose. */
 	public static final String PACK_OFF = "options.vitrail.pack_off";
 
+	/**
+	 * The third reason, and the only one that is a fault: a pack was named and the folder has no such
+	 * pack. One argument, the name that was asked for, without which this says no more than
+	 * {@link #NO_PACK} does.
+	 */
+	public static final String PACK_MISSING = "options.vitrail.pack_missing";
+
 	public static final String OPEN_SETTINGS = "key.vitrail.open_settings";
 
 	/**
