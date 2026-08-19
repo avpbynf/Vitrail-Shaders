@@ -54,6 +54,8 @@ replay_pid*.log
 !/INSTALL.md
 !/CONTRIBUTING.md
 !/CHANGELOG.md
+!/CODE_OF_CONDUCT.md
+!/SECURITY.md
 /*.tsv
 /.*/
 !/.github/

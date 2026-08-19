@@ -1,5 +1,9 @@
 # Contributing
 
+Interactions here are covered by the [code of conduct](CODE_OF_CONDUCT.md), and
+anything that looks exploitable goes through [SECURITY.md](SECURITY.md) rather
+than the issue tracker.
+
 ## Branches
 
 Two long-lived branches, and the difference between them is one question: has this been published?
