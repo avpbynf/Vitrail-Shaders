@@ -241,6 +241,52 @@ final class GeometryProgram {
 	private record Slot(Bound bound, ChainPlan.Attachment target, GpuFormat format) {
 	}
 
+	/**
+	 * One sampler this program declares, with everything about it that is settled at the load and the
+	 * pair the pass open resolved for it.
+	 * <p>
+	 * Walked in order rather than looked up by name, and that is the whole point of it: what a name
+	 * is answered with used to be worked out again for every name at every draw, and each of those
+	 * answers is a search through {@link PbrMap} by string, a second one through the plan's map, a
+	 * cascade of equals and a switch. Only two of the questions can move between two draws of one
+	 * pass, and both are the same question: which image this draw brought.
+	 */
+	private static final class Sampled {
+
+		/** The name the layout carries, which is what the bind spells. */
+		private final String name;
+
+		/** Which material map this name asks for, or null for every other name. */
+		private final PbrMap material;
+
+		/** Whether this name is the albedo of whatever this pass is drawing. */
+		private final boolean albedo;
+
+		/**
+		 * Whether this map is read through the albedo's own sampler, which is every one of them but
+		 * the specular under labPBR. Settled at the pass open: the format is the resource pack's, and
+		 * a resource reload stands outside every render pass.
+		 */
+		private boolean interpolates;
+
+		/** What answers this name where the draw brought no image, which for most names is all of it. */
+		private GpuTextureView view;
+
+		/** The sampler state that goes with it, on the same rule. */
+		private GpuSampler state;
+
+		Sampled(String name, PbrMap material, boolean albedo) {
+			this.name = name;
+			this.material = material;
+			this.albedo = albedo;
+		}
+
+		/** Whether the answer follows the DRAW's own image rather than the pass's. */
+		private boolean followsTheImage() {
+			return this.material != null || this.albedo;
+		}
+	}
+
 	private final Pass pass;
 	private final String path;
 
@@ -317,6 +363,12 @@ final class GeometryProgram {
 	private final PackValues values;
 	private final PackUniforms uniforms;
 	private final List<String> samplers;
+
+	/**
+	 * The same names in the same order, each carrying what the load settled about it and what the
+	 * pass open resolved for it. Read by the bind and by nothing else.
+	 */
+	private final Sampled[] bound;
 	private final RenderPipeline pipeline;
 	private final ShaderSource source;
 
@@ -520,6 +572,11 @@ final class GeometryProgram {
 		this.uniforms = new PackUniforms(loaded.program().uniforms(),
 				pass.shadow() ? values.shadowGeometryCatalog() : values.geometryCatalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
+		// Which map a name asks for, and whether it is the albedo, are questions about the NAME and
+		// about the plan the load built, so they are asked here once for the life of the program.
+		this.bound = this.samplers.stream()
+				.map(name -> new Sampled(name, material(name), ATLAS.contains(name)))
+				.toArray(Sampled[]::new);
 
 		String vertex = loaded.program().stages().get(ProgramStage.VERTEX).text();
 		String fragment = loaded.program().stages().get(ProgramStage.FRAGMENT).text();
@@ -748,6 +805,9 @@ final class GeometryProgram {
 					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, blockBytes());
 		}
 
+		// After the constants and never before them: what a name with no image is answered with is a
+		// view of one of those textures, and this is the call that makes them again after a release.
+		resolve();
 		announce();
 		writeBlock();
 
@@ -761,6 +821,10 @@ final class GeometryProgram {
 	 * a name this step has no answer for gets one pixel rather than being left out. Only two names
 	 * are answered with anything real: the block atlas, and the light map. Everything else is a
 	 * constant, which is why the criterion for this step is the albedo and nothing to do with light.
+	 * <p>
+	 * <strong>Only the names that follow the draw's own image are worked out here.</strong> The rest
+	 * were settled by {@link #resolve}, at the one point of a pass that stands outside it, and this
+	 * walks them in order out of an array rather than asking for each of them by name.
 	 */
 	void bind(RenderPass pass) {
 		// Once, and it is the one thing that tells a pass that draws from a pass that only compiled:
@@ -782,30 +846,121 @@ final class GeometryProgram {
 
 		pass.setUniform(UNIFORM_BLOCK, this.block.currentBuffer().slice(0, blockBytes()));
 
-		for (String sampler : this.samplers) {
-			pass.bindTexture(sampler, view(sampler), sampler(sampler));
+		for (Sampled one : this.bound) {
+			if (one.followsTheImage()) {
+				pass.bindTexture(one.name, imageView(one), imageSampler(one));
+			} else {
+				pass.bindTexture(one.name, one.view, one.state);
+			}
 		}
 	}
 
-	private GpuSampler sampler(String name) {
-		if (ATLAS.contains(name) && this.atlasSampler != null) {
-			return this.atlasSampler;
+	/**
+	 * Settles, for every name this program declares, the view and the sampler state a draw that
+	 * brought no image of its own is answered with.
+	 * <p>
+	 * <strong>Called from {@link #prepare} and nowhere else, and that is what says how long any of
+	 * this is held: exactly one pass.</strong> Prepare stands after the constants have been made or
+	 * made again, after the colour targets have been opened for the frame, and before the pass this
+	 * pair is bound into exists, and every family reaches it again before it opens the next one. So
+	 * there is no frontier for a stale answer to cross. A pack switch and a resource reload both go
+	 * through {@link #release}, which drops the textures these name and these with them; F3+T empties
+	 * the device's pipeline cache, and prepare recompiles and settles this again on the next pass
+	 * either way; and a program is only ever bound into a pass its own prepare handed the pipeline
+	 * back for.
+	 * <p>
+	 * What that leaves out is exactly the draw's own image and the maps stitched to match it, which
+	 * {@link #imageView} and {@link #imageSampler} answer over the top of what is settled here: one
+	 * pipeline draws every mob on screen and each of them brings its own skin.
+	 */
+	private void resolve() {
+		boolean labPbr = PbrAtlases.labPbr();
+		for (Sampled one : this.bound) {
+			one.interpolates = one.material != null && one.material.interpolates(labPbr);
+			one.view = passView(one);
+			one.state = passSampler(one);
+		}
+	}
+
+	/**
+	 * The image the draw about to be recorded brought, for the albedo and for the maps that follow
+	 * it, falling back on what the pass settled where it brought none.
+	 */
+	private GpuTextureView imageView(Sampled one) {
+		if (one.material != null) {
+			// The map that follows THIS pass's own image, which is how the block atlas, the particle
+			// atlas and every entity texture answer for themselves without this step knowing which of
+			// them it is drawing. Iris resolves it from the bound albedo for the same reason
+			// (pipeline/IrisRenderingPipeline.java:849-871).
+			//
+			// Two doors and not one, because the two shapes of image are read differently: a stitched
+			// atlas has its maps stitched to match it, and a texture of its own has them beside it
+			// under its own name. Iris keeps the same pair and picks between them by the class of the
+			// bound texture (pbr/loader/PBRTextureLoaderRegistry.java:15-16); here the atlas door
+			// answers only for an image it was built against, so asking it first picks the same one.
+			GpuTextureView served = PbrAtlases.view(this.atlas, one.material);
+			if (served == null) {
+				served = PbrTextures.view(this.atlas, one.material);
+			}
+
+			return served == null ? one.view : served;
 		}
 
-		PbrMap material = material(name);
-		if (material != null) {
-			// The albedo's own sampler, because a map is read at the albedo's own texture coordinate
-			// whichever door served it, so anything read differently would be read at a different
-			// place than the albedo beside it. What that means is not the same on the two doors: an
-			// atlas's maps ARE the atlas, the same size and the same chain with every sprite in the
-			// same slot, where a plain texture's cover the same whole range at a resolution of their
-			// own and carry no chain at all. A mipmapped sampler on the second is harmless rather
-			// than overlooked: the view carries one level, so the read is bounded by the image.
+		// One pixel where the pass has no atlas of its own, which is every cloud and the sky's own
+		// disc: a name bound to nothing at all throws at the bind. The sky's textured elements do
+		// have one, handed to them per draw by SkyProgram.texture.
+		//
+		// WHITE and not black, which is Iris's answer for the same case and is the one that leaves a
+		// picture. A pack multiplies the atlas into its albedo, so white is the neutral of what it is
+		// about to do and black is the value that erases the geometry: three packs of the corpus
+		// sample this name from their cloud stage, and with a black pixel behind it their clouds come
+		// out invisible. Nothing of the sky reads it - Body Camera declares the name in its skybasic
+		// and never samples it - so the sky sees no difference either way.
+		return this.atlas == null ? one.view : this.atlas;
+	}
+
+	/**
+	 * The sampler the game configured for the image this draw brought, where that image is read
+	 * through it, and what the pass settled everywhere else.
+	 * <p>
+	 * A map is read at the albedo's own texture coordinate whichever door served it, so anything read
+	 * differently would be read at a different place than the albedo beside it. The one exception is
+	 * the specular map under labPBR, and {@link #passSampler} says what that costs.
+	 */
+	private GpuSampler imageSampler(Sampled one) {
+		if (this.atlasSampler == null) {
+			return one.state;
+		}
+
+		return one.material == null || one.interpolates ? this.atlasSampler : one.state;
+	}
+
+	/**
+	 * What a name is answered with where the draw brought no image of its own, which for every name
+	 * but the albedo and its maps is the whole answer.
+	 * <p>
+	 * The albedo is not handled here at all and falls through to the plan below, which is where it
+	 * has always fallen when the game handed no sampler with the image: a name of the pack's own is
+	 * filtered as the pack asked for it, and taking over the albedo's name does not change that.
+	 */
+	private GpuSampler passSampler(Sampled one) {
+		String name = one.name;
+		if (one.material != null) {
+			// The albedo's own sampler is what imageSampler hands back over this, because a
+			// map is read at the albedo's own texture coordinate whichever door served it, so anything
+			// read differently would be read at a different place than the albedo beside it. What that
+			// means is not the same on the two doors: an atlas's maps ARE the atlas, the same size and
+			// the same chain with every sprite in the same slot, where a plain texture's cover the same
+			// whole range at a resolution of their own and carry no chain at all. A mipmapped sampler
+			// on the second is harmless rather than overlooked: the view carries one level, so the read
+			// is bounded by the image.
 			//
 			// Except the specular map under labPBR, where a filter that blends two texels of it
 			// produces a material that is in neither of them. Iris asks the same question here
 			// (pipeline/IrisRenderingPipeline.java:860-867) and answers it with
 			// GlSampler.MIPPED_NEAREST_NEAREST, which is NEAREST inside a level AND between levels.
+			// That map lands here rather than on the albedo's sampler, and so does every map on a pass
+			// the game handed no sampler for.
 			//
 			// THIS ONLY GETS HALF OF IT, and the half it misses is an obstacle of the API rather
 			// than a preference. What comes back here is nearest inside a level and LINEAR between
@@ -816,10 +971,6 @@ final class GeometryProgram {
 			// help either, GpuDevice.createSampler reaching the same constructor.
 			// What it costs: on a distant surface, where two levels are blended, the thresholds are
 			// crossed after all. Close up, where a level is read whole, they are not.
-			if (this.atlasSampler != null && material.interpolates(PbrAtlases.labPbr())) {
-				return this.atlasSampler;
-			}
-
 			return RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST, true);
 		}
 
@@ -1107,6 +1258,13 @@ final class GeometryProgram {
 		this.flatMaps.values().forEach(TextureTarget::destroyBuffers);
 		this.flatMaps.clear();
 		this.cleared = false;
+		// Dropped with the textures they name rather than left standing. Nothing binds a released
+		// program before it is prepared again, and prepare settles these afresh, so this only shortens
+		// the life of a reference; a view of a destroyed texture is not a thing to keep a field on.
+		for (Sampled one : this.bound) {
+			one.view = null;
+			one.state = null;
+		}
 	}
 
 	/**
@@ -1183,39 +1341,29 @@ final class GeometryProgram {
 		}
 	}
 
-	private GpuTextureView view(String sampler) {
-		PbrMap material = material(sampler);
-		if (material != null) {
-			// The map that follows THIS pass's own image, which is how the block atlas, the particle
-			// atlas and every entity texture answer for themselves without this step knowing which of
-			// them it is drawing. Iris resolves it from the bound albedo for the same reason
-			// (pipeline/IrisRenderingPipeline.java:849-871).
-			//
-			// Two doors and not one, because the two shapes of image are read differently: a stitched
-			// atlas has its maps stitched to match it, and a texture of its own has them beside it
-			// under its own name. Iris keeps the same pair and picks between them by the class of the
-			// bound texture (pbr/loader/PBRTextureLoaderRegistry.java:15-16); here the atlas door
-			// answers only for an image it was built against, so asking it first picks the same one.
-			GpuTextureView served = PbrAtlases.view(this.atlas, material);
-			if (served == null) {
-				served = PbrTextures.view(this.atlas, material);
-			}
-
-			return served == null ? this.flatMaps.get(material).getColorTextureView() : served;
+	/**
+	 * The image a name reads where the draw brought none of its own, which is the whole answer for
+	 * every name but the albedo and the maps stitched to match it.
+	 * <p>
+	 * Everything reached from here comes off the plan the load built, the colour targets, the shadow
+	 * pair or the game's own two images, and none of those can be replaced between two draws of one
+	 * pass: allocating or reallocating any of them records a barrier, which the encoder refuses while
+	 * a pass is open, so the frame's answer is already settled by the time {@link #resolve} asks.
+	 */
+	private GpuTextureView passView(Sampled one) {
+		String sampler = one.name;
+		if (one.material != null) {
+			// One texel of what the absence of this map means, for a sprite the resource pack ships
+			// nothing for and for every family drawn with no image at all. What is drawn over it when
+			// the draw does bring one is in imageView.
+			return this.flatMaps.get(one.material).getColorTextureView();
 		}
 
-		if (ATLAS.contains(sampler)) {
+		if (one.albedo) {
 			// One pixel where the pass has no atlas of its own, which is every cloud and the sky's
-			// own disc: a name bound to nothing at all throws at the bind. The sky's textured
-			// elements do have one, handed to them per draw by SkyProgram.texture.
-			//
-			// WHITE and not black, which is Iris's answer for the same case and is the one that
-			// leaves a picture. A pack multiplies the atlas into its albedo, so white is the neutral
-			// of what it is about to do and black is the value that erases the geometry: three packs
-			// of the corpus sample this name from their cloud stage, and with a black pixel behind it
-			// their clouds come out invisible. Nothing of the sky reads it - Body Camera declares the
-			// name in its skybasic and never samples it - so the sky sees no difference either way.
-			return this.atlas == null ? this.white.getColorTextureView() : this.atlas;
+			// own disc: a name bound to nothing at all throws at the bind. imageView says why it is
+			// white and not black.
+			return this.white.getColorTextureView();
 		}
 
 		if (OVERLAY.equals(sampler)) {
