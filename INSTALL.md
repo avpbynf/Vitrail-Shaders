@@ -58,8 +58,9 @@ the log rather than by the file.
 Some of Chloride's own settings decide what reaches this engine, in
 `config/chloride-client.toml`, and they are entries inside its tables rather than
 keys of their own. `tileEntities`, `entities` and `monsters`, under `[culling]`,
-decide on their own which block entities and which mobs are drawn at all, by
-distance: what they take out is never handed to the pack, so a chest, a sign or a
+decide on their own which block entities, which mobs and which other entities are
+drawn at all, by distance: what they take out is never handed to the pack, so a
+chest, a sign, a boat or a
 mob that is not there is those settings rather than anything the pack does.
 `chests` and `beds`, under `[fastBlocks]`, draw those blocks by a path this
 engine's final pass then covers over, so they go invisible with no other symptom.
@@ -94,8 +95,9 @@ the first frame. This is not something Vitrail can work around: the fix belongs
 to that mod and not to this one.
 
 Given a build of it that draws on this backend, Vitrail hands its far terrain to
-the pack's own programs, `dh_terrain` and `dh_water` for the picture and
-`dh_shadow` for the shadow map, and serves its depth beside the world's, which is
+the pack's own programs, `dh_terrain` and `dh_water` for the picture, and
+`dh_shadow` for the shadow map where the pack ships one and has not switched it
+off, and serves its depth beside the world's, which is
 the arrangement packs are written against. The changelog
 says what that changes and what it does not reach, and the log names each far
 terrain pass as the pack takes it over.
@@ -230,12 +232,10 @@ is what tells a wrong gbuffer from a wrong composite. `dump=` is the one that
 answers what no picture can, since a value can be non zero, plausible and wrong.
 
 A settings screen covers all of it in game: the video settings, where it sits
-under Vitrail in the list of pages, the I key, or the Config button in the mod
-list. It is the screen of the engine packs are written against, ported rather
+under Vitrail in the list of pages, the I key, or, on NeoForge, the Config button
+in the mod list. It is the screen of the engine packs are written against, ported rather
 than approximated, so it looks and behaves like that one. It opens on the pack
-list, reads each pack's own menu layout, and
-imports the settings file Iris left in `shaderpacks/` when a pack has none here
-yet. The row at the head of the list turns shaders off altogether and leaves the
+list and reads each pack's own menu layout. The row at the head of the list turns shaders off altogether and leaves the
 game drawing its own image. Clicking a pack only selects it: Apply writes what
 you changed and reads the pack again without closing, Done does both and closes,
 and Cancel throws the changes away. A program that fails to compile is reported

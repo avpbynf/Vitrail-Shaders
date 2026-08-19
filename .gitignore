@@ -39,7 +39,7 @@ replay_pid*.log
 # but none of it is part of what the project ships. Matched by shape rather than
 # listed by name: any Markdown at the root that is not one of the published pages,
 # any table of measurements written there, and any dotted directory that is not the
-# workflow definitions.
+# workflow definitions or the commit hooks.
 #
 # The tables earn their line the hard way: two of them sat at the root untracked for
 # a week, and every one is measured on shader packs that may not be redistributed.

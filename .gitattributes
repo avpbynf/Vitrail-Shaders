@@ -1,4 +1,5 @@
-# Normalise line endings in the repository, keep native ones in the working tree.
+# Normalise line endings to LF, in the repository and in the working tree alike, apart from the
+# batch scripts named below.
 * text=auto eol=lf
 
 *.java   text diff=java

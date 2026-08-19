@@ -378,17 +378,19 @@ anyone runs, then creates a GitHub release under the tag's own name and attaches
 that build produced, so what is downloaded is what this history compiles rather than what
 a machine had lying in `build/libs`.
 
-The same job then mirrors it to CurseForge, which is why there is no second workflow: a
-release this one creates is authored by the token it runs under, and such a release starts
-no further workflow, so a file listening for it would never wake. The mirror needs two
-secrets set in the repository settings, `CURSEFORGE_ID` and `CURSEFORGE_TOKEN`, and without
-either it says so and ends green rather than failing a release over it. The id is not a
-secret in any real sense (it is on the project's own page), and it lives there only so that
-both halves of the same configuration are found in the same place.
+The same job then mirrors it to CurseForge and to Modrinth, which is why there is no second
+workflow: a release this one creates is authored by the token it runs under, and such a
+release starts no further workflow, so a file listening for it would never wake. The mirror
+needs a pair per store set in the repository settings, `CURSEFORGE_ID` with
+`CURSEFORGE_TOKEN` and `MODRINTH_ID` with `MODRINTH_TOKEN`, and a store whose pair is
+incomplete is passed over with a notice rather than failing the release over it. Neither id
+is a secret in any real sense (both are on the project's own page): the CurseForge one lives
+in the secrets tab only so that both halves of the same configuration are found in the same
+place, and the Modrinth one is read from the variables tab as well.
 
-The release body is what CurseForge is given as the changelog, read back at the moment the
-run reaches it. A body written by hand after the tag went out therefore reaches CurseForge
-by running the workflow again on that tag, from the Actions tab, and by no other road.
+The release body is what both stores are given as the changelog, read back at the moment the
+run reaches it. A body written by hand after the tag went out therefore reaches them by
+running the workflow again on that tag, from the Actions tab, and by no other road.
 
 **Run it once for a given tag.** A second run rebuilds the same tag, and the archives here
 are built to be reproducible, so it offers CurseForge a file whose hash it already holds;
@@ -417,4 +419,5 @@ comparison link under a heading. A body corrected by hand on the release page af
 both stores by dispatching the workflow again on the same tag, since what the stores are handed is
 read back off the page rather than rebuilt.
 
-GitHub and CurseForge are the two places a build goes, and nothing else is automated.
+GitHub, CurseForge and Modrinth are the three places a build goes, and nothing else is
+automated.
