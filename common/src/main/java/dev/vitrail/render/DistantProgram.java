@@ -119,8 +119,11 @@ final class DistantProgram implements DumpedProgram {
 				// No coverage mask, and the class comment says what writes those pixels instead.
 				// claimed: nothing of this family marks them either, for the same reason.
 				false, false, element.afterDeferred(), PrimitiveTopology.TRIANGLES,
-				// Culled, which is DH's own answer: withFaceCulling(true) on both of its pipelines.
-				true, DEPTH, element.stage(), null,
+				// The opaque half is culled, which is DH's own answer, withFaceCulling(true) on its
+				// pipelines; the water half is not, which is Iris's and outranks it: Iris disables
+				// the cull for the transparent LOD pass (compat/dh/LodRendererEvents.java:346), so
+				// far water keeps a surface when seen from underneath or from inside it.
+				!element.afterDeferred(), DEPTH, element.stage(), null,
 				// The one family with a value that belongs to the section rather than to the pass.
 				DistantVertex.SECTION_BLOCK,
 				// And the one family drawn in DH's own volume, so the three dh matrices answer that

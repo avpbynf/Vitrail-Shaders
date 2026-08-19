@@ -412,23 +412,35 @@ final class PackDepth {
 	 * together.
 	 */
 	void release() {
-		this.opaque = close(this.opaque);
-		this.scene = close(this.scene);
-		this.preHand = close(this.preHand);
+		releaseWorld();
 		this.distantOpaque = close(this.distantOpaque);
 		this.distantScene = close(this.distantScene);
-		this.opaqueWritten = false;
-		this.sceneWritten = false;
-		this.preHandWritten = false;
-		this.preHandBroken = false;
 		this.distantOpaqueWritten = false;
 		this.distantSceneWritten = false;
 		this.distantBroken = false;
 	}
 
 	/**
+	 * Frees the world's three images and not the far terrain's pair, which has a lifecycle of its
+	 * own in {@link #ensureDistant}. The split is a defect a review caught: {@link #ensure} frees
+	 * whatever is stale when the world's pair moves, and the far terrain's image of this very frame
+	 * is taken EARLIER in it than the world's, so freeing the pair here destroyed an image already
+	 * filled and the deferred stage read the far plane on every frame the screen resized.
+	 */
+	private void releaseWorld() {
+		this.opaque = close(this.opaque);
+		this.scene = close(this.scene);
+		this.preHand = close(this.preHand);
+		this.opaqueWritten = false;
+		this.sceneWritten = false;
+		this.preHandWritten = false;
+		this.preHandBroken = false;
+	}
+
+	/**
 	 * Makes the pair every frame needs exist at the size of the screen, reallocating when it moved.
-	 * The third image is {@link #ensurePreHand}'s and rides on the {@link #release} this one does.
+	 * The third image is {@link #ensurePreHand}'s and rides on the {@link #releaseWorld} this one
+	 * does; the far terrain's pair does not, {@link #releaseWorld} says why.
 	 *
 	 * @return false when there is nothing to draw into, in which case every depth lookup of the pack
 	 *         falls back to the far plane
@@ -456,7 +468,7 @@ final class PackDepth {
 		try {
 			// Both or neither, and always the same size: one of them left at the old size would be
 			// read at the new one and stretch the depth over the screen rather than fail.
-			release();
+			releaseWorld();
 			this.opaque = new TargetSurface("Vitrail depth before the translucents", FORMAT, false,
 					width, height);
 			this.scene = new TargetSurface("Vitrail depth with the translucents", FORMAT, false,
@@ -465,7 +477,7 @@ final class PackDepth {
 			this.broken = true;
 			this.brokenWidth = width;
 			this.brokenHeight = height;
-			release();
+			releaseWorld();
 			Vitrail.logger().error("Vitrail could not allocate the two depth images the pack reads at "
 					+ "{}x{}, so every depthtex lookup of this pack reads the far plane until the "
 					+ "screen is another size", width, height, e);

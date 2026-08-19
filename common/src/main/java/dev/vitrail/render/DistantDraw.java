@@ -119,7 +119,8 @@ public final class DistantDraw {
 		ELEMENTS.put("distant_water", new Element("distant_water", "dh_water", true));
 	}
 
-	/** One vec3, rounded up to whatever this device lets a uniform binding start on. */
+	/** One vec3 under std140, which is what one slot HOLDS; how far apart slots start is the
+	 * device's answer and {@link #slotBytes} alone carries it. */
 	private static final int BLOCK_BYTES = 16;
 
 	/** What the far terrain's own depth image holds, which is the format the game's own depth has. */
@@ -170,6 +171,13 @@ public final class DistantDraw {
 
 	/** How many of those slots this frame has already written, which is where the next half starts. */
 	private int used;
+
+	/**
+	 * The most slots any one frame has spent, both halves together, so that a frame refused for
+	 * width is refused once: the guess below doubles the OPAQUE half, and a water half wider than
+	 * that would otherwise outgrow the buffer on every frame alike rather than only the first.
+	 */
+	private int peak;
 
 	DistantDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
 			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
@@ -234,6 +242,15 @@ public final class DistantDraw {
 
 		DistantProgram program = this.programs.get(element.element());
 		if (program == null) {
+			return false;
+		}
+
+		// The water half only over an opaque half this engine drew in the same frame. Handed back
+		// alone, DH would draw it into its own images, which hold nothing else, and its apply pass
+		// would composite that water over the pack's far terrain with no opaque LODs left in DH's
+		// depth to occlude it: water showing through the hills that stand in front of it. The same
+		// rule the other way round is read()'s, which serves the two halves together or not at all.
+		if (element.afterDeferred() && !this.drew) {
 			return false;
 		}
 
@@ -335,13 +352,18 @@ public final class DistantDraw {
 		// is doubled at the head of a frame: the second half of a frame cannot be given a wider buffer,
 		// the first half already holding slices of the one that stands. Sized off the half in hand
 		// alone, a frame whose two halves each carry sixty sections would fit the first and refuse the
-		// second on every frame for as long as the horizon stayed that wide.
-		int wanted = this.used == 0 ? 2 * sections.size() : this.used + sections.size();
+		// second on every frame for as long as the horizon stayed that wide. The peak covers the
+		// case the doubling cannot: a water half wider than twice the opaque one is refused once,
+		// and the frame after allocates what the refused frame really spent.
+		int wanted = Math.max(this.peak,
+				this.used == 0 ? 2 * sections.size() : this.used + sections.size());
 		if (this.sections == null || this.slots < wanted) {
 			// Not while a half of this frame is already drawn from it: closing the buffer that pass
-			// holds slices of would pull the ground out from under a recorded draw. The caller says so
-			// and the next frame is built wide enough for both halves.
+			// holds slices of would pull the ground out from under a recorded draw. The caller says
+			// so, and the refusal itself teaches the width: the next frame allocates what this one
+			// wanted rather than a guess that already fell short once.
 			if (this.used > 0) {
+				this.peak = Math.max(this.peak, wanted);
 				return -1;
 			}
 
@@ -409,6 +431,11 @@ public final class DistantDraw {
 				DEPTH_FORMAT, this.depthWidth, this.depthHeight, 1, 1);
 		this.depthView = device.createTextureView(this.depth);
 
+		// Emptied at birth and not only at the head of a frame: remade between the two halves of
+		// one frame, on a resize, the per frame clear has already run and the water half would
+		// otherwise rasterise against whatever the driver left here.
+		device.createCommandEncoder().clearDepthTexture(this.depth, 0.0);
+
 		return true;
 	}
 
@@ -437,8 +464,7 @@ public final class DistantDraw {
 			for (Element element : ELEMENTS.values()) {
 				PackProgram.Loaded one = distant.programs().get(element.element());
 				if (one == null) {
-					Vitrail.logger().info("{} serves nothing in {} for the {} half of the far terrain, "
-							+ "so Distant Horizons keeps drawing that half itself",
+					Vitrail.logger().info("{} serves nothing in {} for the {} half of the far terrain",
 							this.packPath.getFileName(), this.place.isEmpty() ? "its root" : this.place,
 							element.afterDeferred() ? "translucent" : "opaque");
 
@@ -451,6 +477,18 @@ public final class DistantDraw {
 							this.values, this.load, writes, this.chainTargets, this.targets,
 							this.chainRuns));
 				}
+			}
+
+			// The two halves together or not at all. One landscape drawn by two engines does not
+			// compose: whichever went back to DH is composited by DH's apply pass out of an image
+			// holding that half alone, with nothing left in its depth to occlude it, so far water
+			// would show through the hills in front of it. Rarely reached at all: a pack without
+			// one of the two files resolves it through its own fallback tree first.
+			if (this.programs.size() == 1) {
+				Vitrail.logger().info("The far terrain goes back to Distant Horizons whole: the pack "
+						+ "serves one half of it and the two only compose together");
+				this.programs.values().forEach(DistantProgram::release);
+				this.programs.clear();
 			}
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the far terrain programs of "
@@ -531,6 +569,8 @@ public final class DistantDraw {
 			this.slots = 0;
 			this.used = 0;
 		}
+
+		this.peak = 0;
 
 		releaseDepth();
 	}
