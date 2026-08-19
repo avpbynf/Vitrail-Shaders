@@ -196,8 +196,8 @@ narrower than it sounds, because Iris strips the normal's component out of every
 into a chunk mesh (that projection is on the chunk road alone, its entity and text tangents being
 stored as the mapping gave them) and substitutes an axis of its own when nothing is left of the
 tangent; but it is real, and it runs both ways, since this answer depends on the quad alone where
-that one depends on the order its bucket was filled in, and the two substituted axes are not the
-same axis. Nothing in the graphics API forces
+that one depends on the order its bucket was filled in, and on the quads where both engines do
+substitute, the two axes are not the same axis. Nothing in the graphics API forces
 any of it.
 
 How far those refusals reach is not known. Every `uv` rectangle in the game's own block models with

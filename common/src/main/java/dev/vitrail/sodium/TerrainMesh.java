@@ -620,10 +620,13 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * <strong>Neither refusal is a decision.</strong> Nothing in the API of 26.2 stands in the way of
 	 * answering as Iris answers, so both are divergences, and the terrain page says what they cost
 	 * and how little is known of how far they reach. The worst of it is not the rotated frame it
-	 * describes: when the first triangle has no area, Iris does not retry at all - it substitutes,
-	 * finds a direction, and its own handedness test lands on nothing, which it reads as {@code +1}
-	 * - where this refuses, retries, and takes the second triangle's sign, which can be the other
-	 * one. That is the handedness bit and not the direction.
+	 * describes: when the first triangle has no area but its mapping still points somewhere, Iris
+	 * does not retry - it substitutes, finds a direction, and its own handedness test lands on
+	 * nothing, which it reads as {@code +1} - where this refuses, retries, and takes the second
+	 * triangle's sign, which can be the other one. That is the handedness bit and not the
+	 * direction. A rectangle collapsed along {@code v} is the one degenerate shape Iris does retry:
+	 * there the substitution leaves nothing at all, its zero test fires, and the second triangle is
+	 * tried as it is here.
 	 */
 	private static boolean tangent(float[] frame, ChunkVertexEncoder.Vertex a,
 			ChunkVertexEncoder.Vertex b, ChunkVertexEncoder.Vertex c) {
@@ -711,19 +714,21 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * meshes, so what is carried in is an earlier quad of the same bucket and need not belong to
 	 * this mesh at all. Before any tangent has been computed it holds {@code (0,1,0)} with a
 	 * handedness of {@code +1}, which is the one place the reference states the value this file
-	 * starts from. What the pack reads is not the carried direction either: {@code encodeNormalTangent}
-	 * takes the normal's component out of it - out of every tangent it packs, not only a carried one
-	 * - and when nothing is left it substitutes an axis of a basis built from that normal, which is
-	 * a case this reaches for every quad that gets here.
+	 * starts from. {@code encodeNormalTangent} takes the normal's component out of every tangent it
+	 * packs, not only a carried one, but in a facing bucket that projection changes nothing: the
+	 * carried tangent lies at a right angle to the shared normal already, so the carried direction
+	 * is exactly what the pack reads. Only a carried tangent parallel to the normal leaves nothing,
+	 * and there an axis of a basis built from that normal takes its place: with the starting value
+	 * above, that is the first quads of the two vertical buckets, not every quad that gets here.
 	 * <p>
-	 * So the difference is narrower than a synthesized axis against a carried one, and it is real
-	 * twice over: this answer depends on the quad alone where that one depends on the order the
-	 * bucket was filled in, and the axis is not the same axis, Frisvad's basis against a cross with
-	 * whichever axis the normal is least aligned to. Nothing in 26.2 makes the carry-over
-	 * impossible, so it is a divergence rather than a choice.
+	 * So the difference is real twice over: this answer depends on the quad alone where that one
+	 * depends on the order the bucket was filled in, and on the quads where both engines do
+	 * substitute, the axis is not the same axis, Frisvad's basis against a cross with the less
+	 * aligned of the first two axes. Nothing in 26.2 makes the carry-over impossible, so it is a
+	 * divergence rather than a choice.
 	 */
 	private static void perpendicular(float[] frame) {
-		// Crossed with whichever axis the normal is least aligned to, so the result is never a zero.
+		// Crossed with the less aligned of the x and y axes, so the result is never a zero.
 		boolean upright = Math.abs(frame[1]) < Math.abs(frame[0]);
 		frame[3] = upright ? -frame[2] : 0.0F;
 		frame[4] = upright ? 0.0F : frame[2];
