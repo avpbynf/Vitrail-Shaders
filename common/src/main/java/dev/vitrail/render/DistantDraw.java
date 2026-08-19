@@ -67,10 +67,11 @@ import java.util.Set;
  * entirely.</strong> Nothing is drawn into DH's own colour or depth; DH's own apply pass then finds
  * its depth image exactly as it cleared it and discards every pixel of the screen
  * ({@code assets/distanthorizons/shaders/apply/blaze/frag.fsh} discarding on a depth of nought under
- * a reversed Z), so there is no compositing to switch off and no event to bind. What the far terrain
- * leaves here is what {@code render/PackDepth} converts into the pack's window and serves back
- * under {@code dhDepthTex}, in two takes that bracket the water half exactly as the world's own
- * depth is taken around its translucents.
+ * a reversed Z), so there is no compositing to switch off and no event to bind. Its two other post
+ * passes are held off all the same, for a reason that is cost rather than picture, on
+ * {@code dh/DhLods#mute}. What the far terrain leaves here is what {@code render/PackDepth} converts
+ * into the pack's window and serves back under {@code dhDepthTex}, in two takes that bracket the
+ * water half exactly as the world's own depth is taken around its translucents.
  * <p>
  * <strong>One value belongs to the section rather than to the pass</strong>, which is where DH keeps
  * a section's corner: three unsigned shorts cannot hold a world coordinate, so the vertex carries

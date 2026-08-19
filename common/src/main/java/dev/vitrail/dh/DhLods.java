@@ -62,6 +62,13 @@ public final class DhLods {
 	private static final String BUFFER_WRAPPER = "com.seibel.distanthorizons.common.render.blaze."
 			+ "wrappers.buffer.BlazeVertexBufferWrapper";
 
+	/** Where DH publishes what is only there once it has started, its proxy and its config alike. */
+	private static final String DELAYED = "com.seibel.distanthorizons.api.DhApi$Delayed";
+
+	/** The two DH post passes this engine holds off, and the answer of a config not published yet. */
+	private static final int SWITCHES = 2;
+	private static final int UNREACHED = -1;
+
 	private static boolean resolved;
 	private static boolean usable;
 
@@ -71,6 +78,17 @@ public final class DhLods {
 
 	/** Whether that switch has been thrown, which sticks until {@link #restore} lets go of it. */
 	private static boolean deferred;
+
+	/**
+	 * Whether the two switches of DH's own post passes have been REACHED, which is what makes
+	 * whatever took among them this engine's to hand back in {@link #restore}. Not whether both
+	 * took: DH answers each one on its own, and one that refused is still one asked once and not
+	 * every frame after.
+	 */
+	private static boolean muted;
+
+	/** False once the road to those two has been walked and failed, which it will fail again. */
+	private static boolean mutable = true;
 
 	/** The renderer DH bound for itself, which everything this engine does not serve falls back on. */
 	private static Object original;
@@ -149,6 +167,11 @@ public final class DhLods {
 				original = standing;
 				rendererField.set(lodRenderer, substitute);
 			}
+
+			// After the substitution and never instead of it: what it holds off is a cost, so a
+			// road to it that cannot be walked leaves the far terrain served all the same. Says so
+			// itself and throws nothing back here.
+			mute();
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 			usable = false;
 			Vitrail.logger().warn("Distant Horizons' far terrain cannot be taken over, so that mod "
@@ -181,6 +204,120 @@ public final class DhLods {
 				+ "which is where the pack's own dh_water pass stands");
 
 		return true;
+	}
+
+	/**
+	 * Holds off the two passes DH draws over its own image once the terrain is down, neither of
+	 * which anything downstream of here reads.
+	 * <p>
+	 * DH's third one, the apply, is already harmless for the reason {@code render/DistantDraw}
+	 * gives: nothing of this engine lands in DH's colour or depth, so its apply shader finds the
+	 * depth image as it cleared it and discards the whole screen. Its ambient occlusion and its fog
+	 * are not harmless, they are paid: three full screen passes over that same image between them,
+	 * the occlusion taking a second one to blur and apply itself
+	 * ({@code common/render/blaze/postProcessing/BlazeDhSsaoRenderer.java:113-117}), and both are on
+	 * by default ({@code core/config/Config.java:127} and {@code :447}), so an install that changed
+	 * nothing pays for three screens of work a frame that are thrown away one pass later. Iris
+	 * holds off the same two, through the same published config, at
+	 * {@code compat/dh/LodRendererEvents.java:274-275}, and clears them again at {@code :281}.
+	 * <p>
+	 * <strong>What the three cost is the passes and not their bodies, and only one of the three
+	 * even reaches its body.</strong> The image they read is DH's depth as it cleared it, which is
+	 * nought under a reversed Z: the occlusion's own shader tests that correctly and leaves every
+	 * pixel at once, while its apply and the fog both ask whether the depth is under one, which is
+	 * true of nought, so those two run their full body over a screen of sky. That second half is
+	 * DH's reversed Z defect rather than a cost of this engine, and a DH that fixes it would make
+	 * these three passes cheap rather than free. Held off either way: a pass that draws nothing
+	 * still binds, clears and stores its attachments.
+	 * <p>
+	 * Set rather than written: the API keeps its own value beside the player's, and {@link #restore}
+	 * hands it back, so a session that stops drawing a pack finds its DH menu as it left it. Quiet
+	 * about a road it cannot walk beyond one line, this being a cost and not a picture.
+	 */
+	private static void mute() {
+		if (muted || !mutable) {
+			return;
+		}
+
+		try {
+			int held = hold(Boolean.FALSE);
+			if (held == UNREACHED) {
+				return;
+			}
+
+			// Latched on having reached them rather than on their having taken, so that whichever
+			// DID take is handed back later. A switch forced and then forgotten would leave a
+			// player's own menu answering for this engine long after it stopped drawing.
+			muted = true;
+			if (held == SWITCHES) {
+				Vitrail.logger().info("Distant Horizons holds off its own ambient occlusion and "
+						+ "fog, both of which draw over an image this engine never reads");
+			} else {
+				Vitrail.logger().info("Distant Horizons lets {} of its {} post passes be held off "
+						+ "through its API, so it keeps drawing the rest over an image this engine "
+						+ "never reads", held, SWITCHES);
+			}
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			mutable = false;
+			Vitrail.logger().info("Distant Horizons keeps drawing its own ambient occlusion and fog "
+					+ "over an image this engine never reads, which costs a frame and shows "
+					+ "nothing: {}", e.toString());
+		}
+	}
+
+	/**
+	 * Sets both switches to one value, or hands both back to the player when it is null.
+	 * <p>
+	 * The road is resolved on the spot rather than kept in fields: it is walked twice for a pack
+	 * rather than once a frame, and one method that both callers share is worth more here than the
+	 * eight fields holding it would save.
+	 * <p>
+	 * A switch answers whether it took: DH refuses through this road any config its own menu keeps
+	 * to itself, and it says so rather than throwing. Counted rather than assumed, so that the line
+	 * this engine writes about the two says what really happened to them.
+	 *
+	 * @return how many of the two took, or {@link #UNREACHED} while DH has published no config yet
+	 */
+	private static int hold(Boolean value) throws ReflectiveOperationException {
+		Field field = Class.forName(DELAYED).getField("configs");
+		Object configs = field.get(null);
+		if (configs == null) {
+			return UNREACHED;
+		}
+
+		// Every step is asked of the type DECLARED at the step above it, which is an interface of
+		// DH's published API, rather than of the object in hand: the classes behind them are its
+		// own and need not be public for this to reach them.
+		Method graphics = field.getType().getMethod("graphics");
+		Object graphicsConfig = graphics.invoke(configs);
+
+		Method ambientOcclusion = graphics.getReturnType().getMethod("ambientOcclusion");
+		Method fog = graphics.getReturnType().getMethod("fog");
+
+		// The fog switch is the one DH points at rather than the one Iris still uses: its drawMode
+		// is deprecated in favour of this since API 4.0.0 and reaches the same config entry through
+		// a converter (core/api/external/methods/config/client/DhApiFogConfig.java:58-62), which is
+		// the entry LodRenderer reads the API's answer out of (render/renderer/LodRenderer.java:189).
+		Method enabled = ambientOcclusion.getReturnType().getMethod("enabled");
+		Method dhFog = fog.getReturnType().getMethod("enableDhFog");
+
+		// Both of DH's own setters answer with a boolean, and both are declared on the one config
+		// value interface, so a null value picks the one that gives a switch back to the player.
+		Class<?> configValue = enabled.getReturnType();
+		Method action = value == null
+				? configValue.getMethod("clearValue")
+				: configValue.getMethod("setValue", Object.class);
+		Object[] arguments = value == null ? new Object[0] : new Object[] { value };
+
+		int held = 0;
+		for (Object one : List.of(enabled.invoke(ambientOcclusion.invoke(graphicsConfig)),
+				dhFog.invoke(fog.invoke(graphicsConfig)))) {
+			if (Boolean.TRUE.equals(action.invoke(one, arguments))) {
+				held++;
+			}
+		}
+
+		return held;
 	}
 
 	/**
@@ -219,8 +356,7 @@ public final class DhLods {
 
 			// The switch is published API, so the road to it is short: the delayed holder and the
 			// one setter on the proxy's interface.
-			renderProxyField = Class.forName("com.seibel.distanthorizons.api.DhApi$Delayed")
-					.getField("renderProxy");
+			renderProxyField = Class.forName(DELAYED).getField("renderProxy");
 			deferTransparentMethod = renderProxyField.getType()
 					.getMethod("setDeferTransparentRendering", boolean.class);
 
@@ -348,6 +484,19 @@ public final class DhLods {
 				}
 			} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 				Vitrail.logger().debug("Distant Horizons' deferred water switch cannot be put back", e);
+			}
+		}
+
+		// And its own two post passes, which are worth having again the moment their image is the
+		// one on screen. Handed back to the PLAYER rather than set true: what the menu says is his,
+		// and this engine only ever stood in front of it.
+		if (muted) {
+			muted = false;
+			try {
+				hold(null);
+			} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+				Vitrail.logger().debug("Distant Horizons' own ambient occlusion and fog cannot be "
+						+ "handed back", e);
 			}
 		}
 	}

@@ -11,6 +11,17 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Changed
+
+- **Distant Horizons no longer draws its own ambient occlusion and fog while a pack is drawn.**
+  Between them they are three full screen passes over an image nothing downstream reads, so their
+  work was thrown away one pass later, and two of the three ran over the whole screen rather than
+  leaving it early. Both are on unless the DH menu says otherwise, so an install that changed
+  nothing was paying for them on every frame. They go back to whatever that menu says the moment a
+  pack is unloaded.
+
 ## 0.6.0-beta
 
 ### Added
