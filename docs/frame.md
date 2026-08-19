@@ -36,7 +36,7 @@ than an error.
 A pack's passes are not all run at the same moment. The chain is split, and each half hangs off one
 of the seams above:
 
-- the setup, begin and prepare stages, the seed, and the deferred stages run at **after opaque
+- the begin and prepare stages, the seed, and the deferred stages run at **after opaque
   features**, which is before the world's translucent geometry;
 - the composite stages and the final pass run at **after level**, once the whole world render is
   done.
@@ -51,9 +51,9 @@ world with translucents in it. Placing an effect in the wrong stage is not a sub
 ## Colour targets, and the rule that governs every read
 
 A pack declares colour targets and writes into them by naming attachments in its fragment stages.
-Targets that are both read and written in the same frame are **doubled**: there are two buffers
-behind one name, and passes alternate between them so that a pass never reads the buffer it is
-writing.
+A target is **doubled** when a full-screen pass writes it, or when a flip directive names it: there
+are two buffers behind one name, and passes alternate between them so that a pass never reads the
+buffer it is writing.
 
 One sentence governs the whole mechanism:
 
@@ -275,8 +275,8 @@ seam left. A layer of the kind above cannot help either: what it would catch is 
 already been lit by the game's shader over an image the pack finished.
 
 So the engine does not intercept the hand, it **moves** it. The game's own submission
-is suppressed and the hand is submitted twice from inside the level: the solid pass among the game's
-opaque features, before the deferred stage, and the blending pass at the end of the world, before
+is suppressed and the hand is submitted twice from inside the level: the solid pass just after the
+game's opaque features, before the deferred stage, and the blending pass at the end of the world, before
 the composites. Where each lands is what decides which half of every target it writes, and both are
 in the picture the composites read. This is where the reference puts them too.
 

@@ -90,8 +90,9 @@ of the corpus translates, or what each target resolves to) never fail at all by 
 what they produce is a number to compare against the last one rather than a yes or a no. Running one
 of those and seeing no error means nothing was asserted, not that everything held.
 
-**Every invariant has a negative control, and the control ships with it.** Each is a flag on the
-tool it belongs to, documented as *must exit non-zero*, naming the packs it is expected to break on.
+**Every invariant has a negative control.** Two of them ship as a flag on the tool they belong to,
+documented as *must exit non-zero* and naming the packs they are expected to break on; the rest are
+gestures spelled out beside the tool, a forced setting or a line put back, to be taken by hand.
 Run them: if a control reports nothing, the checker has stopped reading, and the green run beside it
 meant nothing. What controls exist is in what the tools print, which cannot fall out of date the way
 a list here would.

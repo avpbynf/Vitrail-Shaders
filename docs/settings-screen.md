@@ -122,7 +122,7 @@ pack. Emptying is what lets somebody watching the file see it go blank.
 ## Dropping files on it
 
 - **On the pack list**, a zip or a folder is copied into the pack folder and, when it is the only one
-  dropped, selected straight away. Anything that is not a pack is refused by name.
+  dropped, selected straight away. Anything that is not a pack is refused, by name when it was the only file dropped.
 - **On a page**, one settings file is imported. More than one at a time is refused, there being no
   sense in importing two.
 
@@ -327,4 +327,6 @@ which is worth knowing before planning around either extreme.
 **A trap worth knowing before measuring any of this yourself**: what Maven serves as Sodium's
 NeoForge artefact is a launcher shim (a few dozen classes, none of them the renderer), and the mod
 is a jar nested inside it. Looking for a package in the outer jar finds nothing and proves nothing.
-This project's own build script unpacks the nested jar for exactly that reason.
+This project compiles its common module against Sodium's plain Fabric artefact for exactly that
+reason: of the 688 classes the NeoForge jar carries, every one this module names is byte for byte
+the Fabric one.

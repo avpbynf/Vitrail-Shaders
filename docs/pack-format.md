@@ -181,7 +181,8 @@ A word this cannot read leaves the default standing, which is what the reference
 **How far the walk reaches is a separate question from the shape.** Whichever shape is chosen, a box
 around the camera is cut out of it wherever a distance bounds the walk, and that distance is
 `shadowDistance` times the `const float shadowDistanceRenderMul` of the pack's own source, or the
-player's Max Shadow Distance where the pack declares no multiplier. Two of the four states step
+player's Max Shadow Distance where the pack declares no multiplier or declares a negative one, the
+sign being the whole of the switch. Two of the four states step
 outside that arbitration and both do so in the reference: `false` reads the pack's product alone and
 never the player's setting, and the safe zone reads neither, its two boxes being the pack's
 throughout.
@@ -333,7 +334,9 @@ where it previously brought down every colour target of the pack.
 through, a typo in the pixel type made a sampler name resolve back onto the colour target of the
 same name, so the pack read the scene where it asked for its own lookup table. That is the exact
 shape of a plausible, wrong image. A key naming a stage and a sampler now takes that name whatever
-follows on the line; only an unreadable key takes nothing.
+pixel type follows on the line. Two things take nothing: a key this cannot read that far, and a value
+naming a file the pack does not ship, which the reference drops whole so that the name goes on
+meaning what it meant.
 
 **A three-dimensional volume is flattened onto a two-dimensional atlas**, its declaration rewritten
 under a forged name, and each read replaced by a helper that reads two slices and interpolates.

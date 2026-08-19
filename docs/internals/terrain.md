@@ -90,13 +90,13 @@ one word and fills it from the tint or from the pair according to that same dire
 vertex out of a global its encoder consults, which it can afford because nothing of its own warms up
 over several frames.
 
-So the directive is not a property of the mesh here, and nothing about it is worth a rebuilt world.
-Every vertex carries both colours whether the pack asked or not; what the directive decides is the
-one line of the translated vertex stage that fills `gl_Color`, and a pack that moves the directive is
-a pack whose programs are read again anyway. Two packs that both draw the terrain and disagree about
-it are then no different from any other change of pack. The price is four bytes a vertex on every
-mesh, which is the same bargain the appended elements below already make, and one of the two colour
-elements is declared but never read whichever way the choice falls. That second half is not free: an
+So the directive is not a property of the mesh's contents but of its layout. A pack that wrote
+`separateAo` gets a second colour element and a pack that did not gets none, which is one more answer
+the format takes from the pack and one more reason a change of pack rebuilds the world. What the
+directive decides beside that is the one line of the translated vertex stage that fills `gl_Color`,
+and where the second element is carried it costs four bytes a vertex, which is the same bargain the
+appended elements below already make. The renderer's own word is then declared and never read by the
+pack's stage. That second half is not free: an
 input a stage never reads can be dropped from the compiled module, and dropping one shifts the
 locations after it: the silent failure described in
 [vertex inputs are matched by name](#vertex-inputs-are-matched-by-name-and-one-direction-is-silent).
@@ -334,7 +334,7 @@ offset, the region age and the region id into whatever layout is currently bound
 
 The consequence for a substituted pipeline is severe and easy to miss: a pipeline named outside that
 namespace receives a push into a layout that has no range for it, the region offset never arrives,
-and the entire terrain draws stacked near the world origin. The remedy costs nothing and is not
+and the entire terrain draws stacked on top of the camera. The remedy costs nothing and is not
 another patch: the test is a substring, so any namespace that contains the renderer's name is
 enough.
 
