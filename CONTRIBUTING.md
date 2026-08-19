@@ -162,9 +162,9 @@ two years later, in a log where `git log --oneline` is the only thing they will 
 | `refactor` | no change of behaviour at all, dead code removed included |
 | `docs` | `docs/`, the changelog, this file, javadoc on its own |
 | `test` | the out-of-game harness and the corpus it runs over |
-| `build` | Gradle, the JDK, loader versions, what the build refuses |
+| `build` | Gradle, the JDK, loader versions, what the build refuses, the version bump |
 | `ci` | `.github/workflows` |
-| `chore` | whatever none of the others is, and the version bump, which is `chore(release):` |
+| `chore` | whatever none of the others is |
 
 The scope is optional and names a tree of code: `pack`, `glsl`, `uniform`, `render`, `screen`,
 `settings`, `sodium`, `mixin`, `platform`, or `neoforge` and `fabric` for a whole module. It is left
@@ -199,7 +199,7 @@ the one that can quietly stop being true without anything here changing.
 feat(render): read entityColor off the entity mesh overlay
 fix(pack)!: refuse a customTexture path that leaves the pack
 docs: correct five sentences against the source
-chore(release): raise the version to 0.5.0-beta
+build: raise the version to 0.5.0-beta
 ```
 
 A commit that changes a mechanism and the paragraph describing it is one commit under the type of
