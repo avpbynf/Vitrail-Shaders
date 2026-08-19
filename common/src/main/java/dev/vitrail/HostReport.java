@@ -14,9 +14,9 @@ import java.util.List;
  * graphics backend the game came up on, and which of Chloride's own settings are on.
  * <p>
  * They are said at startup because neither announces itself in the picture. A game running OpenGL
- * loads this mod and draws none of the world's passes; a mob Chloride culled is simply not there.
- * Both look like this engine failing, and a report about either would be filed against it and read
- * against its code. Said at the moment the log is still short enough to read, and only where there
+ * loads this mod and draws a picture that is credible and wrong; a mob Chloride culled is simply
+ * not there. Both look like this engine failing, and a report about either would be filed against
+ * it and read against its code. Said at the moment the log is still short enough to read, and only where there
  * is something to say.
  * <p>
  * Nothing here is fixed on the player's behalf, and that is the whole shape of it: the backend is
@@ -122,10 +122,12 @@ public final class HostReport {
 	}
 
 	/**
-	 * Said as an error rather than a warning because nothing a pack asks for reaches the screen. What
-	 * the line claims is the symptom this repository has seen and not a mechanism it has not: the mod
-	 * loads and none of the world's passes are drawn. What exactly the translated programs do on a
-	 * backend they were not translated for has never been established here, so the line does not say.
+	 * Said as an error rather than a warning because nothing a pack asks for can be trusted on the
+	 * screen. What the line claims is the symptom this repository has seen and not a mechanism it
+	 * has not: the passes can run on the other backend, and what they drew there was a picture both
+	 * credible and wrong, the programs having been translated against Vulkan's depth and clip
+	 * conventions. Credible and wrong reads as a pack fault, which is worse than a picture the game
+	 * draws alone, so the line owns it before the pack is blamed.
 	 */
 	private static void sayBackend() {
 		String backend = backend();
@@ -133,12 +135,14 @@ public final class HostReport {
 			return;
 		}
 
-		Vitrail.logger().error("This game is running the {} backend and {} draws on {} alone. The mod "
-				+ "loads, none of the world's passes are drawn, and the picture stays the game's own. "
-				+ "Set Graphics API to \"Prefer Vulkan (Experimental)\" under Options, Video Settings, "
-				+ "and restart. If it was already set there, either a launch argument forced this "
-				+ "backend, which the game says higher up, or the Vulkan boot failed and the game fell "
-				+ "back: the reason is in the lines the game logged before this one",
+		Vitrail.logger().error("This game is running the {} backend and {}'s programs are translated "
+				+ "for {} alone. The mod loads and may draw the pack's passes anyway, and the picture "
+				+ "they make is credible and wrong: the depth and clip conventions they were built "
+				+ "against are not this backend's, so a sky cut in two or a misdrawn hand is this and "
+				+ "not the pack. Set Graphics API to \"Prefer Vulkan (Experimental)\" under Options, "
+				+ "Video Settings, and restart. If it was already set there, either a launch argument "
+				+ "forced this backend, which the game says higher up, or the Vulkan boot failed and "
+				+ "the game fell back: the reason is in the lines the game logged before this one",
 				backend, Vitrail.MOD_NAME, VULKAN);
 	}
 
