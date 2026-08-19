@@ -178,9 +178,9 @@ have: an inverted octagonal cone between the two planes, drawn with the pack's o
 program. If you see the line, that geometry is not reaching your pack's shader.
 
 There are two cases where it is deliberately not drawn, and the log says so in the second: a pack
-that switches the sky disc off has taken away the pass the cone rides in, and a frame where the
-world's own geometry has not marked the pixels it wrote gets no cone, because one drawn there would
-cut the ground out of the picture instead.
+that wrote `sky=false` has said it draws the sky itself and is not handed a cone it did not ask for,
+and a frame where the world's own geometry has not marked the pixels it wrote gets no cone, because
+one drawn there would cut the ground out of the picture instead.
 
 The full mechanism is in [Sky and shadows](sky-and-shadows.md#the-horizon-gap).
 
@@ -246,8 +246,10 @@ and the second is the shorter list.
 It is a video setting of its own, which the Fabulous preset turns on everywhere except macOS. With
 it on, the game draws both of those into targets of its own and composes them itself, and this
 engine hands them back rather than attach the pack's targets beside an image it does not read. The
-log says so in those words, once for the rain and once for the particles. The entities are
-unaffected.
+log says so in those words, once for the rain and once for the particles. The entities are affected
+too, but by row rather than by family: with the setting on, the translucent half of a living entity,
+an experience orb, a translucent item sheet and the glint of an enchantment go back to the game the
+same way, while the opaque half is untouched.
 
 Two consequences follow from how that geometry reaches the pack, and both are worth recognising
 rather than reporting as separate bugs:
@@ -389,10 +391,11 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   shafts there and reads it back for every ray that reaches through something translucent, so a
   buffer it could not write filled every body of water with white.
 - **A pack can ask the engine not to draw a piece of the sky** because it draws that piece itself,
-  inside one of its own programs. Four such requests are honoured (the sun, the moon, the stars and
-  the sky disc), and honouring the last two is a **deviation from both references**, which take out
-  only the sun and the moon. It costs some packs the stars the references leave them,
-  and the NOTICE says so. The fifth request in that family is not one of those four and reads the
+  inside one of its own programs. Four such requests are read, and two of them take a piece away:
+  the sun and the moon, which is where both references stand. `stars=false` takes nothing, the
+  game's star field being drawn with the pack's own `gbuffers_skybasic` in the first place, and
+  `sky=false` costs the horizon cone alone rather than the game's disc, which is again what the
+  references do, and the NOTICE says so. The fifth request in that family is not one of those four and reads the
   other way round: `clouds` takes `off`, `fast` or `fancy` rather than a boolean, and it overrules
   the user's own cloud setting so that the pack's cloud program is handed the geometry it was
   written for. It is honoured only where this engine really draws the clouds, because with the

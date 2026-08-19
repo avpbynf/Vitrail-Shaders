@@ -313,8 +313,9 @@ texture coordinates would lose them.
 
 The only way to be sure is to compile each sky program once per format it can be drawn against and
 read the disassembly back, checking every element is still at the location its position gives it.
-**That check exists for the entity family and does not exist yet for the sky.** It is written here
-as a debt, not as a guarantee: the sky needs it before it is believed, not after.
+**That check exists for the sky as well as for the entity family**, in the out-of-game harness:
+each sky program is compiled once per format it can be drawn against and the disassembly read back,
+off the game.
 
 ### How a pack tells the elements apart
 
@@ -351,8 +352,8 @@ and uses both at once.
 
 Answer both from the same source and the rotation cancels: the sun sits at noon all night. So the
 pass supplies its own model-view, which feeds the fixed-function model-view, its inverse, the
-combined transform and the normal matrix, and *not* the camera uniform. The sky disc, the one
-element the game pushes nothing for, keeps the frame's matrix.
+combined transform and the normal matrix, and *not* the camera uniform. The sky disc and the End's
+own sky, the two elements the game pushes nothing for, keep the frame's matrix, one per branch.
 
 ### Two pipeline facts that break the world if missed
 
@@ -371,9 +372,9 @@ terrain's pipeline namespace pushes constants the pass cannot satisfy.
 Which buffers a sky program writes is keyed by program name, not by an enumeration of passes, since
 the game's sky passes share a small set of programs.
 
-One thing leaves a piece on the game's own target: a pack serving no program for it at all, in which
-case the game's own shader draws it and the piece reaches the pack's colour target through the
-full-screen layer instead of writing it.
+Two things leave a piece on the game's own target: a pack serving no program for it at all, in which
+case the game's own shader draws it, and a pack serving one the plan has no answer for. Either way
+the piece reaches the pack's colour target through the full-screen layer instead of writing it.
 
 **A program that declares no draw buffers is not that case, and used to be.** It is read as writing
 colortex0, which is what Iris reads it as, so the pack's shader draws and its output lands in the
@@ -383,8 +384,8 @@ nothing had no clouds at all, at any setting, and nothing said why.
 
 It is then all eight or none. If any piece the game still draws would stay behind, the whole sky
 keeps the game's target, because the layer is the only road left to a piece that stayed on it and the
-pieces that claim every pixel they span cut the layer where they land. A pack serving no program for
-the basic sky and one for the textured one (which the format allows) would otherwise get a sky
+pieces that claim every pixel they span cut the layer where they land. A pack serving a program for
+the basic sky and none for the textured one (which the format allows) would otherwise get a sky
 whose disc marks the whole frame and whose sun and moon are cut out of it.
 
 All eight and not the branch in hand, which costs one thing worth naming: a place serving one branch

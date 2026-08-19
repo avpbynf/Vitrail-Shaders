@@ -33,8 +33,8 @@ themselves: the terrain reads the block atlas's companions, a particle reads whi
 layer came off, and neither has to be told which it is.
 
 Only the geometry programs are served, which is what Iris does too. What a composite declaring one
-of the names reads is not the same on both sides: here it reads a flat texel, where Iris leaves the
-sampler unassigned and it falls to whatever texture unit nought holds.
+of the names reads is not the same on both sides: here it reads one black pixel, where Iris leaves
+the sampler unassigned and it falls to whatever texture unit nought holds.
 
 A sprite the resource pack ships no map for reads the same flat value the whole companion is cleared
 to: a normal pointing straight out of the face with nothing occluded, and a material that is nought
