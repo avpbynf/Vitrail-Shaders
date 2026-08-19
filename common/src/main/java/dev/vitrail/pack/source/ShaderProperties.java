@@ -363,6 +363,14 @@ public final class ShaderProperties {
 			return;
 		}
 
+		// The seventh word of that family, on the casters' rule and not the culling state's: a value
+		// this cannot read leaves the default standing, and the default is ON, so a line nothing
+		// could read has to stay visible rather than pass for a refusal that was honoured.
+		Matcher dhShadow = DH_SHADOW.matcher(line);
+		if (dhShadow.matches() && truth(dhShadow.group(1).trim()) != null) {
+			return;
+		}
+
 		// The culling state goes with separateAo below rather than with the casters above, and for
 		// that entry's reason: a word this cannot read is not stepped over, it is what puts the
 		// state back to the default, so the line is read whether the word is one of the four or not.
