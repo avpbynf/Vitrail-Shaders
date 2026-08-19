@@ -14,15 +14,16 @@ import java.util.Set;
  * coordinates inside the section, a word of meta carrying the light and a sub-block nudge, the
  * colour as four normalised bytes, a material byte, a face byte, and a texture tile nobody here
  * reads. The layout is DH's own,
- * {@code common/render/blaze/BlazeDhTerrainRenderer.java:120-127}, and the stride is checked at
+ * {@code common/render/blaze/BlazeDhTerrainRenderer.java:124-131}, and the stride is checked at
  * runtime against what DH's buffers really hold rather than trusted.
  * <p>
  * <strong>The position is a section's and not the world's, which is why this head reads a uniform
  * block.</strong> Three unsigned shorts cannot hold a world coordinate, so DH keeps the section's
  * own corner out of the mesh and hands it to the draw; every buffer of one section shares it. Iris
  * takes it the same way, off the event parameter and into a {@code modelOffset} uniform
- * ({@code compat/dh/IrisLodRenderProgram.java:124}), and turns it into the vertex a pack reads with
- * {@code getVertexPosition()} ({@code DHTerrainTransformer.java:88}). What arrives at
+ * ({@code compat/dh/IrisLodRenderProgram.java:126}, set per buffer at {@code :252-253}), and turns
+ * it into the vertex a pack reads with {@code getVertexPosition()}
+ * ({@code DHTerrainTransformer.java:84-85}). What arrives at
  * {@code gl_Vertex} is therefore the corner plus the local position minus the camera, which is the
  * camera relative world space every other family of this engine hands a pack.
  * <p>
@@ -45,8 +46,8 @@ import java.util.Set;
  * <p>
  * <strong>There is no texture coordinate at all.</strong> Iris answers
  * {@code gl_MultiTexCoord0} with {@code vec4(0.0, 0.0, 0.0, 1.0)} on this family
- * ({@code DHTerrainTransformer.java:38}), so an LOD is flat coloured and the atlas is never sampled
- * for it. DH's Blaze renderer does carry a tile identifier into an atlas of its own, which is what
+ * ({@code DHTerrainTransformer.java:32-33}), so an LOD is flat coloured and the atlas is never
+ * sampled for it. DH's Blaze renderer does carry a tile identifier into an atlas of its own, which is what
  * the sixth element is, and reading it here would put a texture on the far terrain that no pack
  * under Iris has ever seen.
  * <p>
@@ -105,7 +106,7 @@ public final class DistantVertex {
 
 	/**
 	 * How far a nudged corner moves, in blocks. DH's own renderer writes this number into its shared
-	 * block as a literal, {@code common/render/blaze/BlazeDhTerrainRenderer.java:236}, so there is
+	 * block as a literal, {@code common/render/blaze/BlazeDhTerrainRenderer.java:208}, so there is
 	 * nothing to read it out of: a constant here is that literal and not a taste. What it is for is
 	 * that two LOD faces meeting at a corner are pulled apart by a hundredth of a block, so the
 	 * seam between them does not flicker.
@@ -178,8 +179,8 @@ public final class DistantVertex {
 		// The six faces of a block, in the order DH's own directions number themselves: DOWN, UP,
 		// NORTH, SOUTH, WEST, EAST, which is the faceIndex of EDhDirection and what the builder puts
 		// on the vertex (LodQuadBuilder.java:392). Iris carries the same six in the same order
-		// (DHTerrainTransformer.java:119), and the order is read off DH rather than off Iris because
-		// a table copied out of the second would agree with the first only by luck.
+		// (DHTerrainTransformer.java:117, read at :133), and the order is read off DH rather than
+		// off Iris because a table copied out of the second would agree with the first only by luck.
 		if (carried.contains(NORMAL)) {
 			lines.add("const vec3 ofDistantFaces[6] = vec3[6](vec3(0.0, -1.0, 0.0), "
 					+ "vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, -1.0), vec3(0.0, 0.0, 1.0), "
@@ -200,7 +201,7 @@ public final class DistantVertex {
 		// The nudge, out of the six bits above the light: two a coordinate, the low one saying there
 		// is an offset and the high one saying it is negative. The Y pair is decoded by neither
 		// engine and is dropped here as well: DH's own stage leaves the line commented out
-		// (terrain/blaze/vert.vsh:57-58) and Iris works the term out and then leaves it out of the
+		// (terrain/blaze/vert.vsh:60-61 and :66) and Iris works the term out and then leaves it out of the
 		// position (DHTerrainTransformer.java:132). An LOD is a heightmap, so its horizontal seams
 		// are the ones a nudge is for.
 		lines.add("vec3 ofDistantNudge() {");
@@ -235,7 +236,7 @@ public final class DistantVertex {
 
 	/**
 	 * The material byte in the shape the pack declared the name under. Iris declares it an
-	 * {@code int} and assigns {@code int(irisExtra.x)} ({@code DHTerrainTransformer.java:133}); a
+	 * {@code int} and assigns {@code int(irisExtra.x)} ({@code DHTerrainTransformer.java:134}); a
 	 * pack that spelled it as something else gets that spelling, the way every other name a mesh
 	 * answers does.
 	 */
