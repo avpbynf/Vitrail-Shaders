@@ -27,6 +27,16 @@ public final class EngineDefines {
 	 */
 	public static final int DEFAULT_MC_VERSION = 260200;
 
+	/**
+	 * The Iris release whose behaviour this engine mirrors, 1.11.2 on the 26.1 branch, in the
+	 * same packed form. Packs compare against it to pick between an old-Iris workaround and the
+	 * behaviour the mirrored release fixed, so leaving it out sends every such test down the
+	 * workaround: an undefined name reads as zero, which claims an Iris older than any release.
+	 * The number comes alone: the capability symbols Iris posts beside it are promises, and each
+	 * stays unposted until the capability is served, as the note under IS_IRIS says.
+	 */
+	private static final int IRIS_VERSION = 11102;
+
 	/** The game's own default, four levels, until a caller says otherwise. */
 	private static final int DEFAULT_MIPMAP_LEVEL = 4;
 
@@ -102,6 +112,7 @@ public final class EngineDefines {
 		Map<String, String> defines = new LinkedHashMap<>();
 
 		defines.put("MC_VERSION", Integer.toString(environment.mcVersion()));
+		defines.put("IRIS_VERSION", Integer.toString(IRIS_VERSION));
 		defines.put("MC_GL_VERSION", "460");
 		defines.put("MC_GLSL_VERSION", "460");
 		defines.put(osSymbol(environment.os()), "");
