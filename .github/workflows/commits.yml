@@ -13,6 +13,12 @@
 #
 # Nothing older than the convention is ever read. The range is the branch's own commits, and the one
 # pull request that would carry the whole history, `dev` into `main`, is exempted below.
+#
+# A second step asks the other thing CONTRIBUTING asks of a branch, that a change a player would
+# notice arrive with its changelog entry. It warns and never fails, and the difference is not
+# timidity: the rule has a legitimate exception in every direction, a fix nobody sees owing no
+# entry, so a refusal would be wrong often enough to be routed around. What it is answering is
+# measured rather than imagined: the 0.5.0-beta.1 roll-up found three entries for twenty commits.
 
 name: commits
 
@@ -64,3 +70,37 @@ jobs:
           done
 
           exit $failed
+
+      # Asked of the branch and not of each commit, which is the whole difference between a warning
+      # that is read and one that is routed around. A branch may well carry one entry covering two
+      # fixes, and complaining about the second of them would be wrong; a branch carrying visible
+      # work and no entry at all is the case that has actually happened here, five times over.
+      #
+      # It runs even when the step above failed, so that one push answers both complaints.
+      - name: The changelog entry a branch owes
+        if: ${{ !cancelled() }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The three types whose subject claims something a player could notice. The other six owe
+          # no entry by construction, CONTRIBUTING being explicit that a refactor changing nothing
+          # visible gets none.
+          subjects="$(git log --format='%h %s' "origin/$BASE_REF..$HEAD_SHA")"
+          visible="$(echo "$subjects" | grep -E '^[0-9a-f]+ (feat|fix|perf)(\([a-z0-9-]+\))?!?: ' || true)"
+
+          if [ -z "$visible" ]; then
+            exit 0
+          fi
+
+          # Three dots, so what is asked is what the branch itself changed rather than what has
+          # happened on the base since it left.
+          if git diff --name-only "origin/$BASE_REF...$HEAD_SHA" | grep -qx CHANGELOG.md; then
+            exit 0
+          fi
+
+          # One per commit rather than one for the branch, so each lands on something a reader can
+          # click rather than on a count they have to go and resolve themselves.
+          echo "$visible" | while read -r line; do
+            echo "::warning::$line changes nothing in CHANGELOG.md, and nothing else on this branch does either"
+          done
