@@ -47,6 +47,14 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f modelViewInverse = new Matrix4f();
 	private final Matrix4f projection = new Matrix4f();
 	private final Matrix4f projectionInverse = new Matrix4f();
+
+	/**
+	 * The frame's projection as the device takes it, reversed Z over zero to one, kept because the
+	 * distant volume is built out of it: DH overwrites the z row of the RENDERED matrix, so the base
+	 * that row lands in has to be the rendered one, and converting the composition once is what
+	 * keeps the published pair singly converted whether or not a row arrived.
+	 */
+	private final Matrix4f rendered = new Matrix4f();
 	private final Matrix4f previousModelView = new Matrix4f();
 	private final Matrix4f previousProjection = new Matrix4f();
 
@@ -193,6 +201,7 @@ public final class ViewMatrices implements ViewSource {
 		this.modelView.set(bob).mul(view);
 		this.modelView.invert(this.modelViewInverse);
 
+		this.rendered.set(projection);
 		ClipSpace.toLegacyDepth(projection, this.projection);
 		this.projection.invert(this.projectionInverse);
 
@@ -262,13 +271,19 @@ public final class ViewMatrices implements ViewSource {
 	 * the z row DH really drew with.
 	 * <p>
 	 * <strong>The frame's matrix with its z row replaced, which is DH's matrix and not a rebuild of
-	 * it.</strong> {@code RenderUtil.setDhProjectionMatrix} takes the game's own matrix and
-	 * overwrites that one row with clip planes of its own, so the two share every other term: the
-	 * field of view, the aspect and the handedness are the frame's by construction rather than by
-	 * agreement. Iris rebuilds a perspective instead, out of the field of view read back off the
-	 * game's matrix and DH's two planes ({@code compat/dh/DHCompat.java:54} and
-	 * {@code compat/dh/LodRendererEvents.java:318}), which is the same volume for as long as the
-	 * game's own matrix is a plain perspective and is not one the day anything is composed into it.
+	 * it, and the rebuild is Iris's road, so this is a divergence and is written as one.</strong>
+	 * What Iris does: it rebuilds a perspective out of the field of view read back off the game's
+	 * matrix and two planes it asks DH for ({@code compat/dh/DHCompat.java:54} and
+	 * {@code compat/dh/LodRendererEvents.java:318}), and the near plane both of those roads answer
+	 * is {@code RenderUtil.getNearClipPlaneInBlocks()}, the value BEFORE the clamp to seven and a
+	 * half blocks the drawn matrix is really built with ({@code dh/DhDepth} carries the factor).
+	 * What is done here: the row DH really drew with, read off its render parameter, so the volume
+	 * published is the volume the image holds. What the difference costs the picture: nothing that
+	 * reaches it - the two volumes part only in how they spread depth within a few blocks of the
+	 * near plane, and every LOD fragment there was discarded by the pack's own overdraw cut a
+	 * hundred blocks further out - while the rebuild read as a depth would put the whole band a
+	 * factor out. {@code RenderUtil.setDhProjectionMatrix} overwrites that one row of the game's own
+	 * matrix and nothing else, so the two share every other term by construction.
 	 * <p>
 	 * <strong>What is replaced is the CLEAN projection's row, and the walk bob is what that
 	 * costs.</strong> This engine publishes a projection with the bob taken out of it and multiplied
@@ -287,7 +302,12 @@ public final class ViewMatrices implements ViewSource {
 			this.previousPublishedDistant.set(this.publishedDistant);
 		}
 
-		this.distantProjection.set(this.projection);
+		// The RENDERED matrix and not the published one, and the difference is a defect a review
+		// caught: the published matrix is already in the pack's window, so building the volume on
+		// it and converting below handed a doubly converted pair to every frame without a row,
+		// which is every session without Distant Horizons. On the frames with a row the two bases
+		// agree, the row being replaced either way.
+		this.distantProjection.set(this.rendered);
 		if (offset != 0.0F) {
 			// Row z, column z and column w, in JOML's column first spelling: what DH calls m22 and
 			// m23 are m22 and m32 here, and the two conventions number the pair the other way round.

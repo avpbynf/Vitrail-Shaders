@@ -65,6 +65,13 @@ public final class DhLods {
 	private static boolean resolved;
 	private static boolean usable;
 
+	/** The road to DH's own switch that moves its water half behind the deferred stage. */
+	private static Field renderProxyField;
+	private static Method deferTransparentMethod;
+
+	/** Whether that switch has been thrown, which sticks until {@link #restore} lets go of it. */
+	private static boolean deferred;
+
 	/** The renderer DH bound for itself, which everything this engine does not serve falls back on. */
 	private static Object original;
 
@@ -118,6 +125,18 @@ public final class DhLods {
 		}
 
 		try {
+			// Thrown BEFORE the substitution and required rather than best effort: without it DH
+			// draws its water half inside its FIRST pass, at the head of the game's opaque chunk
+			// group (core/render/renderer/LodRenderer.java:258-263 under a false
+			// getDeferTransparentRendering), so the half this engine records for the far side of
+			// the deferred stage would be recorded before that stage has run, and the depth taken
+			// as dhDepthTex1 would already carry the water. Iris throws the same switch for the
+			// same reason (compat/dh/LodRendererEvents.java:92). Null while DH is still starting,
+			// and then nothing is substituted this frame either: the two go together or not at all.
+			if (!deferred && !defer()) {
+				return;
+			}
+
 			Object standing = rendererField.get(lodRenderer);
 			if (standing != substitute) {
 				// Null while DH has not bound its renderers yet, which is every frame before the
@@ -135,6 +154,26 @@ public final class DhLods {
 			Vitrail.logger().warn("Distant Horizons' far terrain cannot be taken over, so that mod "
 					+ "keeps drawing it with its own shader for the rest of this session", e);
 		}
+	}
+
+	/**
+	 * Throws DH's own switch that moves its water half behind the deferred stage, where this
+	 * engine's model of the frame expects it.
+	 *
+	 * @return whether the switch is thrown, false while DH has not published its proxy yet
+	 */
+	private static boolean defer() throws ReflectiveOperationException {
+		Object proxy = renderProxyField.get(null);
+		if (proxy == null) {
+			return false;
+		}
+
+		deferTransparentMethod.invoke(proxy, true);
+		deferred = true;
+		Vitrail.logger().info("Distant Horizons defers its water half behind the deferred stage, "
+				+ "which is where the pack's own dh_water pass stands");
+
+		return true;
 	}
 
 	/**
@@ -170,6 +209,13 @@ public final class DhLods {
 			lodRenderer = lodRendererType.getField("INSTANCE").get(null);
 			rendererField = lodRendererType.getDeclaredField("terrainRenderer");
 			rendererField.setAccessible(true);
+
+			// The switch is published API, so the road to it is short: the delayed holder and the
+			// one setter on the proxy's interface.
+			renderProxyField = Class.forName("com.seibel.distanthorizons.api.DhApi$Delayed")
+					.getField("renderProxy");
+			deferTransparentMethod = renderProxyField.getType()
+					.getMethod("setDeferTransparentRendering", boolean.class);
 
 			resolveGeometry();
 
@@ -265,6 +311,21 @@ public final class DhLods {
 			// Nothing left to try: the field that was written once cannot be written back. Said at
 			// debug alone, the line that brought us here having already told the reader what is lost.
 			Vitrail.logger().debug("Distant Horizons' own far terrain renderer cannot be put back", e);
+		}
+
+		// And its own frame order with it, so a DH handed back draws exactly as it did before this
+		// engine stood in the way. Iris clears the same switch when it stops overriding
+		// (compat/dh/LodRendererEvents.java:92 setting it from a live condition).
+		if (deferred) {
+			deferred = false;
+			try {
+				Object proxy = renderProxyField.get(null);
+				if (proxy != null) {
+					deferTransparentMethod.invoke(proxy, false);
+				}
+			} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+				Vitrail.logger().debug("Distant Horizons' deferred water switch cannot be put back", e);
+			}
 		}
 	}
 

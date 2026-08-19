@@ -189,8 +189,8 @@ public final class ChainPlan {
 					// twice, and the two land on either side of it. Counted wherever its line is on,
 					// and what earns it is that particles are drawn in every place there is.
 					//
-					// And the last name of this list still riding on the seed: its opaque half never
-					// asks for a coverage mask, so its first output makes the trip through the game's
+					// And the last name of this list riding on the seed: its opaque half never asks
+					// for a coverage mask, so its first output makes the trip through the game's
 					// own target and reaches the pack's picture through the seed and nowhere else.
 					new NamedProgram("gbuffers_particles", false, true, Families::particles),
 					new NamedProgram("gbuffers_particles_translucent", true, false,
@@ -202,13 +202,12 @@ public final class ChainPlan {
 					// draw buffer and no other, which is what BSL was measured doing on 18 August
 					// 2026: it asks for colortex0 and colortex6 and colortex6 went nowhere.
 					//
-					// The opaque half rides the seed, and it is the second name to do so: its first
-					// output makes the trip through the game's own target because it never asks for a
-					// coverage mask, and render/DistantProgram says what would have to write that
-					// mask instead. Neither half is counted, for the reason no family with a switch
-					// is: the far terrain is drawn where that mod is installed and running, which is
-					// no place in particular.
-					new NamedProgram("dh_terrain", false, true, NOT_EVERYWHERE),
+					// Neither half rides the seed: the family owns its first draw buffer outright,
+					// as Iris binds its dh programs, and GeometryProgram says in the one place the
+					// rule is decided why the seed could not carry it. Neither half is counted, for
+					// the reason no family with a switch is: the far terrain is drawn where that mod
+					// is installed and running, which is no place in particular.
+					new NamedProgram("dh_terrain", false, false, NOT_EVERYWHERE),
 					new NamedProgram("dh_water", true, false, NOT_EVERYWHERE)))
 			.toList();
 
@@ -222,7 +221,7 @@ public final class ChainPlan {
 	 *                   coverage mask and not about the side of the stage: a family drawn before the
 	 *                   seed that writes the mask keeps the seed off the pixels it wrote and takes
 	 *                   its first draw buffer outright, so the seed's target is no longer its
-	 *                   business. Only the opaque particles are left on that road, which
+	 *                   business. Only the opaque particles ride it, which
 	 *                   {@code render/ParticleDraw} says in the same words and {@code GeometryProgram}
 	 *                   lists among the halves that never asked for a mask
 	 * @param everywhere whether this engine draws that family, with the switches it was handed, in
