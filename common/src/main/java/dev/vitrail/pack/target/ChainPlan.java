@@ -420,11 +420,17 @@ public final class ChainPlan {
 
 		/**
 		 * What a caller with no {@code options.txt} to read gets, which is the harness and the corpus
-		 * measurements: the entities off and the three others on, which is what {@code EngineOptions}
-		 * defaults those four lines to. Written out here rather than read, nothing in this package
-		 * having a game directory to read it from.
+		 * measurements: all four on, which is what {@code EngineOptions} defaults those four lines
+		 * to. Written out here rather than read, nothing in this package having a game directory to
+		 * read it from.
+		 * <p>
+		 * The entities stood false here long after their own line had gone on by default, so every
+		 * verdict taken without an {@code options.txt} was taken on a configuration nobody ships: a
+		 * target the entity programs write was read as one no geometry of this engine fills. BSL's
+		 * {@code colortex3} carried that note in all three of its places. The game itself never saw
+		 * it, {@code render/PackChain} handing the plan the lines that were really written.
 		 */
-		public static final Families DEFAULT = new Families(true, false, true, true);
+		public static final Families DEFAULT = new Families(true, true, true, true);
 	}
 
 	/** What a caller with no {@code options.txt} to read gets. See {@link Families#DEFAULT}. */
