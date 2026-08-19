@@ -55,7 +55,8 @@ GNU Lesser General Public License version 3
   and this one by its own stack of conditions, and on this corpus the two agree. The clouds directive
   is read the same way and applied where Iris applies it, at the head of Options.getCloudStatus:
   net.irisshaders.iris.mixin.sky.MixinOptions_CloudsOverride, read on 10 August 2026, along with the
-  priority of 1010 its own comment explains, Sodium replacing that accessor outright. The one thing
+  priority of 1010 its own comment explains, Sodium replacing that accessor outright;
+  common/src/main/java/dev/vitrail/mixin/OptionsCloudsMixin.java is that mixin here. The one thing
   not reproduced is the render distance gate that mixin carries, which guards a check 26.2 no longer
   makes.
 
@@ -95,6 +96,22 @@ GNU Lesser General Public License version 3
   legacy name up before the canonical one. One divergence: the two axes share a single relative
   flag here where Iris carries one each.
 
+  common/src/main/java/dev/vitrail/pack/texture/PackTextures.java and
+  common/src/main/java/dev/vitrail/pack/texture/PackTexture.java read the custom texture
+  directives with the rules of net.irisshaders.iris.shaderpack.ShaderPack.readTexture and of the
+  properties parsing beside it, because none of them can be reasoned out: a location is truncated
+  at its first dot, an override is looked up under every name of the unit, a word carrying a colon
+  names a texture of the game's rather than a file of the pack's, and a declaration naming a file
+  the pack does not ship is dropped whole, name included, rather than left reading black where
+  Iris reads the frame. What is not Iris's is written in the files as the divergences it is: a
+  blob shorter than the size it announces keeps its name here where Iris throws while reading it,
+  and the stage a directive names is not consulted.
+
+  common/src/main/java/dev/vitrail/pack/texture/TextureStage.java carries the seven stages of
+  net.irisshaders.iris.shaderpack.texture.TextureStage and what each of them covers, gbuffers
+  answering for the shadow passes and composite for the final, the set being closed in Iris and in
+  OptiFine both.
+
   common/src/main/java/dev/vitrail/pack/target/TargetPlan.java folds a dimension's directives in the
   order of net.irisshaders.iris.shaderpack.programs.ProgramSet.locateDirectives, setup programs
   left out of it as they are there. The order the frame runs in, which the same file also carries,
@@ -109,12 +126,33 @@ GNU Lesser General Public License version 3
   fall, and packs are written against that. SHADOWHPL, which is a comment directive rather than a
   const one, is not implemented.
 
+  common/src/main/java/dev/vitrail/render/ShadowTargets.java sizes the light's colour targets at
+  two, which is the count net.irisshaders.iris.shadows.ShadowRenderTargets gives a pack that does
+  not ask for HIGHER_SHADOWCOLOR, line 46, and keeps the rule that a clear turned off still leaves
+  a buffer starting life at its clear colour. The eight of HIGHER_SHADOWCOLOR are not implemented,
+  the one pack of the corpus asking being refused at load for a reason of its own; and all the
+  targets are made with the map where Iris builds each one the first time a framebuffer names it,
+  lines 127 and 136, which changes when memory is taken and nothing a pack can read.
+
+  common/src/main/java/dev/vitrail/render/PackPass.java binds what a full screen pass samples with
+  Iris's filters, the packs blurring and interpolating against them: the noise image LINEAR, a
+  shadow colour LINEAR outright, net.irisshaders.iris.samplers.IrisSamplers.addShadowSamplers, and
+  both shadow depth images LINEAR unless the pack asks otherwise, the nearest flag of
+  net.irisshaders.iris.shadows.ShadowRenderer.configureDepthSampler starting false. A final pass
+  is loaded and not cleared, as Iris has it: a final that does not cover every pixel leaves what
+  stood before.
+
   common/src/main/java/dev/vitrail/pack/option/EngineDefines.java classifies the operating system, the
   vendor and the driver into the symbols a pack branches on with the prefix lists of
   net.irisshaders.iris.gl.shader.StandardMacros, and emits the biome, category and precipitation
   symbols the way net.irisshaders.iris.shaderpack.IrisDefines emits them, adapted in August 2026.
   The lists are arguments here rather than calls into a device, so that the table can be built
   without one.
+
+  common/src/main/java/dev/vitrail/pack/program/RenderStage.java is
+  net.irisshaders.iris.pipeline.WorldRenderingPhase, reproduced in its order because the value a
+  pack reads is the ordinal and nothing else: a constant inserted in the middle would silently
+  renumber every branch every pack of the corpus takes.
 
   common/src/main/java/dev/vitrail/pack/program/TerrainPass.java carries the names, the alpha test
   defaults and the flip snapshot keying of net.irisshaders.iris.pipeline.programs.SodiumPrograms,
@@ -151,6 +189,31 @@ GNU Lesser General Public License version 3
   The ORDER in which the two halves are drawn is not Iris's, and that divergence is written out in
   common/src/main/java/dev/vitrail/render/FeatureLayer.java rather than here.
 
+  common/src/main/java/dev/vitrail/render/EntityMesh.java,
+  common/src/main/java/dev/vitrail/glsl/EntityVertex.java,
+  common/src/main/java/dev/vitrail/render/EntityIdentifiers.java,
+  common/src/main/java/dev/vitrail/render/EntityFrame.java,
+  common/src/main/java/dev/vitrail/sodium/EntityMeshSerializer.java,
+  common/src/main/java/dev/vitrail/mixin/BufferBuilderMixin.java and
+  common/src/main/java/dev/vitrail/mixin/RenderPipelineMixin.java extend the game's entity vertex
+  the way Iris extends it, read in August 2026, because the packs read the result. The shape is a
+  format apart rather than a lengthening of the game's own, which is what
+  net.irisshaders.iris.mixin.vertices.MixinBufferBuilder.iris$extendFormat hands back, and the
+  pipeline that keeps a draw a loaded pack does not serve is handed that format too, which is its
+  MixinRenderPipeline.iris$change. The three appended elements are Iris's three in Iris's order,
+  net.irisshaders.iris.vertices.IrisVertexFormats lines 49 to 60, the identifier element being the
+  four unsigned shorts of which three are read, line 30, and the values on it are Iris's numbers
+  as well: nought outside any entity, -1 for a name the pack never mapped, met on the mesh as the
+  65535 an unsigned lane carries. The tangent is worked out with the arithmetic of
+  net.irisshaders.iris.vertices.NormalHelper.computeTangent, the quad's normal taken across the
+  two diagonals as its computeFaceNormalManual takes it, and a cuboid run is walked quad by quad
+  the way net.irisshaders.iris.vertices.sodium.ModelToEntityVertexSerializer walks it, the
+  identifiers taken once per run. The divergences are written in the files with what they cost: a
+  polygon with no tangent to give is answered the x axis where Iris's two roads answer minus one
+  and nought, both of which a pack normalises into a NaN; near nought is refused where Iris tests
+  exact nought; and a run that is not a whole number of quads keeps the stand-in where Iris's loop
+  leaves the remainder unwritten.
+
   common/src/main/java/dev/vitrail/render/HandDraw.java takes the player's hand out of the game's
   late call and draws it inside the level the way net.irisshaders.iris.pathways.HandRenderer does,
   adapted in August 2026: the squeezing of the clip depth by its DEPTH constant, so that the arm
@@ -158,9 +221,9 @@ GNU Lesser General Public License version 3
   game's own not being re-entrant from inside the level. Which of the two hand passes a row answers
   with is Iris's keying, IrisPipelines lines 191 to 218. The test that decides whether a hand is
   drawn at all is that of net.irisshaders.iris.mixin.MixinItemInHandRenderer, lines 32 to 39, and
-  neoforge/src/main/java/dev/vitrail/neoforge/mixin/ItemInHandRendererMixin.java cancels the same
+  common/src/main/java/dev/vitrail/mixin/ItemInHandRendererMixin.java cancels the same
   head of the same per arm method on the same comparison, while
-  neoforge/src/main/java/dev/vitrail/neoforge/mixin/GameRendererHandMixin.java redirects the call
+  common/src/main/java/dev/vitrail/mixin/GameRendererHandMixin.java redirects the call
   net.irisshaders.iris.mixin.MixinGameRenderer redirects, line 75, so that the hand is neutralised
   where it is submitted rather than where it is drawn. Its moment in the frame, ahead of the
   deferred stage, is Iris's constraint as well, net.irisshaders.iris.mixin.MixinLevelRenderer lines
@@ -210,19 +273,31 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/render/WeatherDraw.java carries the alpha test of one tenth of
   the single weather key of ShaderKey, line 60, and the shape under which both of the game's weather
   pipelines reach that one key, IrisPipelines lines 70 and 71.
-  neoforge/src/main/java/dev/vitrail/neoforge/mixin/ClientLevelMixin.java hands the rain particle
+  common/src/main/java/dev/vitrail/mixin/ClientLevelMixin.java hands the rain particle
   count the frugal setting rather than skipping the walk, which is what
   net.irisshaders.iris.mixin.MixinWeatherRenderer does with the same word, lines 30 to 37. The
   method Iris hangs that on is gone in 26.2, the spawning having moved out of the weather renderer
   and into the level's own tick, so the setting is substituted into the local that still reads it.
+  common/src/main/java/dev/vitrail/mixin/WeatherEffectRendererMixin.java cancels the head of the
+  weather render for a pack writing weather=false, which is the method
+  net.irisshaders.iris.mixin.MixinWeatherRenderer cancels for the same word, and serves the
+  rain.depth directive where Iris serves it, ahead of the game's choice between its two weather
+  pipelines; the call it wraps moved between the two game versions the two engines target, so the
+  target is not the one Iris names, and what it decides is the same line of the same method.
 
-  neoforge/src/main/java/dev/vitrail/neoforge/mixin/BlockEntityRenderDispatcherMixin.java marks the
+  common/src/main/java/dev/vitrail/mixin/BlockEntityRenderDispatcherMixin.java marks the
   block entities around the dispatcher and not around each renderer, which is where
   net.irisshaders.iris.mixin.entity_render_context.MixinBlockEntityRenderDispatcher puts it, lines
   52 and 71: one method covers every block entity in the game and no renderer of them has to know.
   What the mark is used for, and the single boolean that carries it where Iris treats the nested
   case as impossible by contract and throws, are this project's own and are stated in
   common/src/main/java/dev/vitrail/render/BlockEntityGeometry.java.
+  common/src/main/java/dev/vitrail/mixin/EntityRenderDispatcherMixin.java marks the entity the
+  same way, around the dispatcher rather than around each renderer, which is where
+  net.irisshaders.iris.mixin.entity_render_context.MixinEntityRenderDispatcher puts it, lines 53
+  and 87, and drops the held item's number together with the entity's, lines 88 and 89, so that no
+  item's number outlives the mob that held it. The order of the two special names is Iris's as
+  well and decides what a cured zombie villager reads: the conversion is asked before the type.
 
   common/src/main/java/dev/vitrail/pack/source/DimensionSet.java ports the folder conventions of
   net.irisshaders.iris.shaderpack.ShaderPack, lines 132 to 148, defaults included: the overworld
@@ -239,6 +314,13 @@ GNU Lesser General Public License version 3
   substitution for folded continuations, and the putIfAbsent resolution walking the file from the
   top, under which the first declaration to match a block state wins. The order is the semantics,
   so it is reproduced rather than reinvented.
+
+  common/src/main/java/dev/vitrail/pack/id/NameIds.java reads item.properties and
+  entity.properties as one format differing in the keyword alone, which is how
+  net.irisshaders.iris.shaderpack.IdMap parses both through a single parseIdMap, lines 149 to 155,
+  and answers a name the pack never mapped with the -1 of its defaultReturnValue, line 162, which
+  a pack meets on the mesh carried unsigned. The tokens OptiFine matched by block state there are
+  skipped and reported rather than answered wrong.
 
   common/src/main/java/dev/vitrail/glsl/SodiumVertex.java packs and unpacks the block id the way
   Iris does, ((id + 1) << 1) | isFluid and its inverse term for term, so that nought means no
@@ -276,11 +358,44 @@ GNU Lesser General Public License version 3
   whole of what answers rather than the part this engine happened to need. All are in
   net.irisshaders.iris.pipeline.transform.transformer.
 
+  common/src/main/java/dev/vitrail/glsl/GlintVertex.java,
+  common/src/main/java/dev/vitrail/glsl/ParticleVertex.java,
+  common/src/main/java/dev/vitrail/glsl/VertexPrologue.java and
+  common/src/main/java/dev/vitrail/glsl/VertexInputs.java carry the rest of what Iris puts in
+  place of a vertex input the bound mesh has not got, family by family, because a pack reads those
+  values and no others. The saturated light map corner and the normal facing the viewer are
+  VanillaTransformer lines 104 to 105 and 152 to 154; the glint's colour is its
+  vec4(ColorModulator.rgb, ColorModulator.a * GlintAlpha), line 134, of which the alpha is the
+  living half here, the modulator being white for every draw the game prepares from a render type;
+  the texture units above the light map answer the constant Iris hands units four to seven, unit
+  three answered the same constant here where Iris aliases it to mc_midTexCoord, nothing of the
+  corpus reading either; and the full light of the eyes family is the pair
+  VanillaCoreTransformer.java:117-118 substitutes where ShaderAttributeInputs refused UV2,
+  together with the white pixel net.irisshaders.iris.samplers.IrisSamplers binds behind lightmap,
+  lines 202 to 206. The gate that decides where entityColor comes from, the bound format carrying
+  the overlay, is VanillaCoreTransformer lines 21 to 26.
+
+  common/src/main/java/dev/vitrail/glsl/ProgramTranslator.java takes one patch of
+  net.irisshaders.iris.pipeline.transform.transformer.CompatibilityTransformer whole rather than
+  adapted, lines 442 to 504: a varying the next stage kept and this stage never wrote is declared
+  for it, the interpolation qualifier carried over, and an initialiser to zero prepended to the
+  stage's main. The initialiser is not decoration: under Iris these varyings hold zero,
+  deterministically, and packs are written against that.
+
   common/src/main/java/dev/vitrail/uniform/Smoothed.java adapts the exponential smoothing of
   net.irisshaders.iris.uniforms.transforms.SmoothedFloat in August 2026, including its half life in
   deciseconds, its separate rise and fall constants and its lack of smoothing on the first value.
   The value, the half lives and the frame duration are passed in rather than pulled from a supplier
   and a global frame clock.
+
+  common/src/main/java/dev/vitrail/render/CenterDepth.java keeps centerDepthSmooth the way
+  net.irisshaders.iris.pathways.CenterDepthSampler keeps it, read in August 2026: one texel drawn
+  from the depth, mixed with what last frame drew, never read back by the processor, and handed to
+  the pack as a sampler behind every use of the name, which is the substitution of
+  net.irisshaders.iris.pipeline.transform.transformer.CompositeDepthTransformer. The guard against
+  a NaN settling into the accumulator is Iris's own test, taken every frame there as here; what
+  the first draw does with a finite leftover and what a half life of nought turns the factor into
+  are answered differently, and the file says how and why.
 
   common/src/main/java/dev/vitrail/uniform/NoiseTexture.java adapts the noise image of
   net.irisshaders.iris.targets.backed.NativeImageBackedNoiseTexture in August 2026, seed and loop
@@ -340,6 +455,9 @@ GNU Lesser General Public License version 3
   the ones that are mistakes there named as such. What is not reused is the surrounding machinery:
   the values are read into fields at one named point in the frame rather than pulled through
   suppliers at a registration frequency, and nothing here holds a uniform.
+  common/src/main/java/dev/vitrail/uniform/values/PlayerValues.java publishes the player half of
+  those readings under the same contract, the four ratios against their max absolutes and the
+  minus one sentinels outside survival, that being what Iris publishes and what a pack divides by.
 
   common/src/main/java/dev/vitrail/render/ViewMatrices.java builds the four shadow matrices with
   the construction of net.irisshaders.iris.shadows.ShadowMatrices and of
@@ -363,7 +481,7 @@ GNU Lesser General Public License version 3
   its stage, so a pipeline its shadow table has no key for keeps the game's shader and still writes
   the map; here what is not served is not drawn at all. That is a divergence, and the file carries
   it with what it costs the image.
-  neoforge/src/main/java/dev/vitrail/neoforge/sodium/ShadowTerrain.java draws everything that moves
+  common/src/main/java/dev/vitrail/sodium/ShadowTerrain.java draws everything that moves
   between the opaque world and the copy, which is where Iris puts it, ShadowRenderer line 584 then
   line 588, so that a caster that moves is in shadowtex1 as well as in shadowtex0.
 
@@ -394,6 +512,10 @@ GNU Lesser General Public License version 3
   to a padded radius rather than as the radius itself. And the branch the original takes for a pack
   that voxelises is not reachable here, no geometry stage being run at all, so it is answered rather
   than measured.
+  common/src/main/java/dev/vitrail/sodium/ShadowCull.java bounds the light's walk with the
+  axis-aligned cube of net.irisshaders.iris.shadows.frustum.BoxCuller, each axis tested
+  independently against the shadow distance, and hangs it off the same two of the four tests the
+  advanced frustum boxes, testAab and intersectAab, leaving the section tests to the planes alone.
 
   common/src/main/java/dev/vitrail/uniform/values/CelestialValues.java carries the celestial
   positions of net.irisshaders.iris.uniforms.CelestialUniforms, adapted in August 2026: the single
@@ -407,6 +529,13 @@ GNU Lesser General Public License version 3
   net.irisshaders.iris.pipeline.transform.transformer.CompositeTransformer as a literal, since it
   is what the packs are written for. Its inverse is written out rather than computed, because the
   matrix is singular and inverting it yields infinities; that constant is this project's own.
+
+  common/src/main/java/dev/vitrail/uniform/values/DhValues.java registers the six Distant Horizons
+  names without a condition, which is what Iris does, packs reading them outside the
+  DISTANT_HORIZONS guard; and while no far terrain has drawn, the two planes fall back to the 0.01
+  of net.irisshaders.iris.compat.dh.DHCompat, lines 94 and 104, deliberately a number no pack can
+  mistake for a distance, and the render distance to the game's own in chunks, line 114, which is
+  its fallback as well.
 
   common/src/main/java/dev/vitrail/render/BiomeClassifier.java reproduces the cascade of
   net.irisshaders.iris.uniforms.BiomeUniforms in August 2026, in its order, because the order is
@@ -478,20 +607,26 @@ GNU Lesser General Public License version 3
   title, the apply, reload and reset buttons, the pack list and its own title, and the profile pair.
   The rest is the game's vocabulary or this project's.
 
-  neoforge/src/main/java/dev/vitrail/neoforge/sodium/TerrainMesh.java squares the terrain's tangent
+  common/src/main/java/dev/vitrail/sodium/TerrainMesh.java squares the terrain's tangent
   against its normal the way net.irisshaders.iris.vertices.NormalHelper.packDiamondByte does, read in
   August 2026: the normal's own component is subtracted from the tangent, and where that leaves
   nothing the substitute is the first axis of the orthonormal basis its onbFromUnitNormal builds,
   written out term for term along with the epsilon of ten to the minus twenty compared on the
   squared length rather than on the length. The basis construction is Frisvad's, which Iris cites at
   that method; what is reused here is Iris's use of it, so that a pack reads the same frame under
-  both. What is NOT reused is the storage: Iris spends one byte on an angle in the plane that basis
-  leaves, and unpacks it in a patched vertex stage, where this engine writes the vector itself in
-  three bytes and has no patched text to unpack an angle in.
+  both. The storage follows the same bargain, and common/src/main/java/dev/vitrail/glsl/TangentFrame.java
+  carries it: once the normal is known the tangent is stored as one angle in the plane the basis
+  leaves, which is what NormalHelper.encodeNormalTangent stores, lines 512 to 520, at the twelve
+  bit octahedral scale of its snorm12. Two departures are argued in that file with what they cost:
+  the handedness takes a bit off the octahedral y, Iris reading it out of a material bit this
+  engine cannot carry through Sodium's sorter, and the angle is measured against the decoded
+  normal rather than the quad's own, which is what keeps the encoder and the generated decoder in
+  one basis.
 
   common/src/main/java/dev/vitrail/render/PbrMap.java,
-  common/src/main/java/dev/vitrail/render/PbrAtlas.java and
-  common/src/main/java/dev/vitrail/render/PbrAtlases.java build the normal and specular maps a
+  common/src/main/java/dev/vitrail/render/PbrAtlas.java,
+  common/src/main/java/dev/vitrail/render/PbrAtlases.java and
+  common/src/main/java/dev/vitrail/render/PbrTextures.java build the normal and specular maps a
   resource pack ships, and the following answers are Iris's, read in August 2026. The layout, one
   companion image per atlas with each map at the base sprite's own x and y, is that of
   net.irisshaders.iris.pbr.loader.AtlasPBRLoader, lines 55 to 74, with the suffixes and the two
@@ -525,6 +660,46 @@ GNU Lesser General Public License version 3
   against net.irisshaders.iris.pbr.mipmap.AbstractMipmapGenerator lines 22 to 27; the exchange
   cancels for the image and not for the functions, so its smoothness is thresholded as if it were
   porosity.
+
+  common/src/main/java/dev/vitrail/pack/menu/PackMenu.java,
+  common/src/main/java/dev/vitrail/pack/menu/MenuPage.java,
+  common/src/main/java/dev/vitrail/pack/menu/MenuValues.java,
+  common/src/main/java/dev/vitrail/pack/source/PackLang.java and
+  common/src/main/java/dev/vitrail/pack/option/SettingSet.java build a pack's settings menu on
+  Iris's rules, read in August 2026, the packs being laid out against them. A page gets three
+  columns past eighteen slots and two below,
+  net.irisshaders.iris.shaderpack.option.menu.OptionMenuElementScreen line 45. Profiles cycle from
+  the most constrained to the least, a profile's precedence being the number of settings it names,
+  net.irisshaders.iris.shaderpack.option.Profile line 21 and ProfileSet lines 29 and 101 to 102;
+  picking one queues the values it names and no profile name is stored anywhere, which is
+  Iris.queueShaderPackOptionsFromProfile. A value is applied where the pack declares it and
+  nowhere else, the walk of
+  net.irisshaders.iris.shaderpack.option.values.MutableOptionValues.addAll; a toggle is written
+  out as Boolean.toString because Iris's reader takes literally nothing else, Iris.java line 348,
+  so that one shared file draws one image under both engines. And a value shown on screen is
+  dressed with the pack's own prefix, value and suffix language entries in the order
+  net.irisshaders.iris.gui.element.widget.StringElementWidget dresses it, lines 43 to 76, a named
+  value dropping the suffix.
+
+  common/src/main/java/dev/vitrail/settings/SettingsFile.java,
+  common/src/main/java/dev/vitrail/settings/SettingsLayers.java,
+  common/src/main/java/dev/vitrail/settings/PackSession.java,
+  common/src/main/java/dev/vitrail/settings/PackFile.java and
+  common/src/main/java/dev/vitrail/sodium/ConfigEntry.java keep this engine's settings where Iris
+  keeps its own, so that the two engines share one state on one machine. A pack's values live in
+  shaderpacks/<pack file name>.txt, the path net.irisshaders.iris.Iris resolves at line 272, read
+  and written in the ISO-8859-1 OptiFine specifies, holding the values a profile chooses and never
+  its name. Which pack is chosen and whether shaders are on at all are two facts and not one, the
+  shaderPack and enableShaders of net.irisshaders.iris.config.IrisConfig, and the shadow distance
+  sits beside them as its maxShadowRenderDistance does, lines 178 and 206, offered over the nought
+  to thirty-two of
+  net.irisshaders.iris.gui.option.IrisVideoSettings, lines 15 and 50. The way into the video
+  settings is the reference's as well, one page under the mod's own name through Sodium's public
+  config API, the distance option built the way
+  net.irisshaders.iris.compat.sodium.config.IrisConfig builds it, lines 54 to 76, greyed out while
+  a pack forces a distance of its own. One divergence is deliberate and stated in the file: a name
+  the pack no longer declares is kept and reported here, where Iris drops it and a player trying a
+  new version of a pack and going back loses what they had set.
 
   common/src/main/resources/assets/vitrail/textures/gui/widgets.png is Iris's own widgets file,
   copied unchanged in August 2026, and the classes below cut their sprites at its coordinates.
@@ -607,6 +782,10 @@ GNU Lesser General Public License version 3
   binds it, with both of the lines Iris says in the chat afterwards, Iris.java:184 and Iris.java:191. The key that opens
   the settings screen is on I and is NOT Iris's, which binds that screen to O, Iris.java:787; the two
   it binds that have no counterpart here are toggleShaders on K and an unbound wireframe.
+  common/src/main/java/dev/vitrail/screen/ScreenText.java keeps the English of these screens word
+  for word wherever Iris has a string for the same thing, so that a player who has configured a
+  pack before reads the words they already know; what Iris has no string for is this project's
+  own.
 
   Three things on that screen are deliberately not Iris's, each of them put back after the port rather
   than kept from it. Its cells are skipped by the narrator, AbstractElementWidget.narrationPriority
