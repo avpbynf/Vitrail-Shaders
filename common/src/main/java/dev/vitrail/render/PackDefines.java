@@ -9,12 +9,14 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.Util;
+import net.minecraft.world.level.biome.Biomes;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Gathers what the machine is and hands it to {@link EngineDefines}, which is the one thing in
@@ -23,28 +25,26 @@ import java.util.Map;
  * The biome symbols are the reason this exists. A pack writes {@code if (biome == BIOME_DESERT)}
  * in its GLSL and {@code in(biome, BIOME_SAVANNA, BIOME_SAVANNA_PLATEAU)} in its properties, so
  * the number behind the symbol and the number the {@code biome} uniform carries have to be the
- * same one. {@link BiomeClassifier} is that number, and it is asked here rather than copied, which
- * is why this takes the classifier the frame state already holds instead of walking the registry
- * on its own.
+ * same one. {@link BiomeClassifier} is that number, and it is asked here rather than copied. Its
+ * table is filled from the {@code Biomes} class as it initialises, so the symbols exist from the
+ * first read of the first pack, before any world does; that is Iris's arrangement, whose map is
+ * filled the same way ({@code mixin/MixinBiomes.java:14-22}) and whose defines are written from it
+ * ({@code shaderpack/IrisDefines.java:28}).
  * <p>
- * The catch is when. Biomes are a data pack registry, so there is nothing to walk until a world
- * has been joined, which is long after the client finishes starting up and reads its first pack.
- * {@link #stale()} exists for that: it says the installed table was built against a different
- * registry, and the pass that watches {@code options.txt} for changes watches it too, so joining a
- * world costs the same half second reload as editing a setting does and the symbols are right
- * afterwards.
+ * The world-join reload stays even though the biome symbols no longer need it, because the
+ * symbols were never the only thing riding it: {@code block.properties} may name block TAGS, and
+ * {@code BlockStateIds} can only resolve those once the world's own registries exist
+ * ({@code BlockStateIds.java:86-88}, resolving through {@code BuiltInRegistries.BLOCK.getTags()}
+ * at {@code :249}). At startup there are none, so the first read of a session still has to be
+ * made again when a world arrives, and {@link #stale()}'s registry stamp is what notices that.
  * <p>
- * Distant Horizons rides the same road for the same reason. Whether its far terrain reaches the
- * pack is a thing the player changes from that mod's own screen, without leaving the world, so
- * {@link #stale()} watches it beside the registry rather than trusting what was true when the pack
- * was read.
- * <p>
- * Two biomes of different namespaces can carry the same path, and only the first of them gets the
- * symbol. Iris has the same limit, and a pack naming a modded biome is naming its path anyway.
+ * Distant Horizons is the one thing here a player can change without leaving the world, from that
+ * mod's own screen, so {@link #stale()} watches it beside the registry rather than trusting what
+ * was true when the pack was read.
  */
 public final class PackDefines {
 
-	/** Which registry the installed table was built from, so that a change of one is noticed. */
+	/** Which registry the last read was against, so that joining a world is noticed. */
 	private static volatile long installed;
 
 	/** And whether the far terrain was there, which the player can change without leaving. */
@@ -57,15 +57,15 @@ public final class PackDefines {
 	 * Reads the machine and installs it. Called once before a pack is read, and never per frame:
 	 * every symbol here is fixed for as long as the world is.
 	 */
-	public static void install(BiomeClassifier biomes) {
-		EngineDefines.machine(gather(biomes));
+	public static void install() {
+		EngineDefines.machine(gather());
 		settle();
 	}
 
 	/**
-	 * Takes this world's registry as the one the last read was against, without rebuilding the
-	 * table. For a read that could not happen at all: an empty pack folder must not be looked at
-	 * again every second for the rest of the session.
+	 * Takes this world's registry as the one the last read was against, without rebuilding
+	 * anything. For a read that could not happen at all: an empty pack folder must not be looked
+	 * at again every second for the rest of the session.
 	 */
 	public static void settle() {
 		installed = stamp();
@@ -73,9 +73,8 @@ public final class PackDefines {
 	}
 
 	/**
-	 * Whether the symbols the last pack was read against are the ones this world would give it.
-	 * False for the whole of a session that never changes world, which is what keeps this from
-	 * being a reload every second.
+	 * Whether the pack was last read against a world that is not this one, which is what decides
+	 * the one reload nobody can ask for.
 	 */
 	public static boolean stale() {
 		return stamp() != installed || distantHorizonsMoved();
@@ -83,16 +82,17 @@ public final class PackDefines {
 
 	/**
 	 * Whether it is the far terrain that moved rather than the world, which is the other half of
-	 * what Iris does with {@code DISTANT_HORIZONS}: it reads DH's rendering switch every frame and
-	 * reloads on the flip, {@code compat/dh/DHCompatInternal.java:143} and {@code :148}. Without
-	 * this the symbol would be whatever it was when the pack was read, and a player who switches
-	 * that mod's rendering off would keep a pack lighting a far terrain that is no longer drawn.
+	 * what Iris does with {@code DISTANT_HORIZONS}: it reads DH's rendering switch every frame
+	 * and reloads on the flip, {@code compat/dh/DHCompatInternal.java:143} and {@code :148}.
+	 * Without this the symbol would be whatever it was when the pack was read, and a player who
+	 * switches that mod's rendering off would keep a pack lighting a far terrain that is no longer
+	 * drawn.
 	 * <p>
 	 * What {@link #settle()} records is the live answer and not the one {@link #gather} compiled
 	 * with, so a flip inside the half second a pack takes to read is not noticed until the next
 	 * flip. Recording what the read compiled with instead would mean recording nothing when the
-	 * read could not happen at all, and that is the case this whole pair exists to keep out of a
-	 * reload every frame.
+	 * read could not happen at all, and that is the case this pair exists to keep out of a reload
+	 * every frame.
 	 */
 	public static boolean distantHorizonsMoved() {
 		return DhDepth.present() != distant;
@@ -105,7 +105,7 @@ public final class PackDefines {
 		return level == null ? 0L : System.identityHashCode(level.registryAccess());
 	}
 
-	private static EngineDefines.Environment gather(BiomeClassifier biomes) {
+	private static EngineDefines.Environment gather() {
 		Minecraft minecraft = Minecraft.getInstance();
 		GpuDevice device = RenderSystem.tryGetDevice();
 		String vendor = "";
@@ -124,23 +124,20 @@ public final class PackDefines {
 		// image or a projection out, or whose own rendering is switched off, leaves the far terrain
 		// flat, and a pack told otherwise would light a picture that has none.
 		return new EngineDefines.Environment(EngineDefines.DEFAULT_MC_VERSION, os(), vendor,
-				renderer, mipmap, DhDepth.present(), biomeIds(minecraft, biomes), categories());
+				renderer, mipmap, DhDepth.present(), biomeIds(), categories());
 	}
 
-	private static Map<String, Integer> biomeIds(Minecraft minecraft, BiomeClassifier biomes) {
-		ClientLevel level = minecraft == null ? null : minecraft.level;
-		if (level == null) {
-			// No world, no registry, and no symbol either. An invented number here would be a
-			// number the biome uniform never answers with, which is worse than an undefined name:
-			// the pack would compile and compare against nothing.
-			return Map.of();
-		}
+	private static Map<String, Integer> biomeIds() {
+		// Touches the game's class so that its registration has run by now: the table fills as
+		// Biomes initialises, nothing on a client's boot path promises that has happened before
+		// the first pack is read, and an empty table here would write no symbol and notice
+		// nothing later. Initialising it is free of everything but interning some keys.
+		Objects.requireNonNull(Biomes.THE_VOID);
 
-		biomes.refresh(level);
 		Map<String, Integer> ids = new LinkedHashMap<>();
-		List<String> names = biomes.names();
+		List<String> names = BiomeClassifier.names();
 		for (int id = 0; id < names.size(); id++) {
-			ids.putIfAbsent(names.get(id), id);
+			ids.put(names.get(id), id);
 		}
 
 		return ids;
