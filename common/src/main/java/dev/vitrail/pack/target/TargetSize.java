@@ -47,7 +47,9 @@ public record TargetSize(boolean relative, float width, float height) {
 	 *                {@code size.buffer.colortex1 = REFLECTION_RES REFLECTION_RES}
 	 */
 	public static Optional<TargetSize> parse(String value, Map<String, String> defines) {
-		String[] parts = value.trim().split("\\s+", -1);
+		// One space, as Iris splits size.buffer, and not a run of whitespace: two words separated by
+		// more than one space make three there, and the directive is refused instead of resized.
+		String[] parts = value.trim().split(" ", -1);
 		if (parts.length != 2) {
 			return Optional.empty();
 		}

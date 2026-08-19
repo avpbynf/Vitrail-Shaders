@@ -84,7 +84,11 @@ public record AlphaTest(Function function, float reference) {
 
 		// A third token is ignored rather than refused, which is what Iris does with it: a trailing
 		// comment on the line would otherwise cost the pack its threshold.
-		String[] parts = value.split("\\s+", -1);
+		//
+		// One space and not a run of whitespace, because that is the separator Iris gives this
+		// directive: a value written with a tab or a double space parses into empty words there, and
+		// reading it here would accept a line the reference refuses.
+		String[] parts = value.split(" ", -1);
 		if (parts.length < 2) {
 			return Optional.empty();
 		}

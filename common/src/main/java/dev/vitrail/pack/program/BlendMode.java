@@ -42,7 +42,10 @@ public record BlendMode(boolean off, String srcRgb, String dstRgb, String srcAlp
 			return Optional.of(OFF);
 		}
 
-		List<String> factors = List.of(trimmed.toUpperCase(Locale.ROOT).split("\\s+", -1));
+		// One space, the separator Iris gives the blend directives, and not a run of whitespace: a
+		// double space between two factors leaves an empty word between them there, so the value
+		// stops being four factors and the override is dropped.
+		List<String> factors = List.of(trimmed.toUpperCase(Locale.ROOT).split(" ", -1));
 		if (factors.size() == 4) {
 			return Optional.of(new BlendMode(false, factors.get(0), factors.get(1), factors.get(2),
 					factors.get(3)));
