@@ -375,8 +375,19 @@ public final class DhLods {
 					new Class<?>[] { rendererType }, new Handler());
 
 			usable = true;
+			// And the second half of that sentence, because standing in DH's place takes something
+			// away as well: DH's own pass fires one DhApiBeforeBufferRenderEvent per buffer
+			// (common/render/blaze/BlazeDhTerrainRenderer.java:313-323) and this substitute records
+			// the draws itself, so the event stays quiet for a HALF the pack really draws. The
+			// granularity is the half and not the frame: a half handed back to DH, no program for
+			// it, a broken chain or empty sections (DistantDraw.draw answering false), goes through
+			// DH's own renderer and fires the event as ever, and so does everything while install
+			// has not landed, this line being logged before either of install's early returns.
+			// Said rather than fired: what an outside consumer wants from it is DH's own draw
+			// about to happen, and none is about to happen for a half the pack has taken.
 			Vitrail.logger().info("Distant Horizons found, its far terrain will be read where that "
-					+ "mod hands it to its own renderer");
+					+ "mod hands it to its own renderer; that mod's own per buffer render event "
+					+ "stays quiet for a half a pack draws, and still fires for one handed back");
 		} catch (ClassNotFoundException e) {
 			// The ordinary case: DH is simply not installed. Not worth a line above debug.
 			usable = false;
@@ -581,8 +592,8 @@ public final class DhLods {
 	 * builder left in front of it, {@code position} to {@code limit}
 	 * ({@code common/render/blaze/wrappers/buffer/BlazeVertexBufferWrapper.java:110} and
 	 * {@code :133-136}). What the quotient has to be is DH's own constant,
-	 * {@code LodQuadBuilder.BYTES_PER_VERTEX} at {@code :57}, and the six writes of
-	 * {@code putVertex} add up to it ({@code LodQuadBuilder.java:479-518}). So a DH that added an
+	 * {@code LodQuadBuilder.BYTES_PER_VERTEX} at {@code :57}, and the six vertex elements
+	 * {@code putVertex} writes add up to it ({@code LodQuadBuilder.java:479-518}). So a DH that added an
 	 * element or widened one shows up here as another number; read through the wrong format, the
 	 * same buffer draws a far terrain out of the wrong bytes, which is a picture rather than a
 	 * failure. The road is closed rather than corrected: what a wider vertex means cannot be worked
