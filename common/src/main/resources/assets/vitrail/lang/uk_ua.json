@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "Пакети шейдерів",
+	"options.vitrail.shadow_distance": "Макс. відстань тіней",
+	"options.vitrail.shadow_distance_tooltip": "Дозволяє змінювати максимальну відстань для тіней. Місцевість та сутності за межами цієї відстані не відкидають тіні. Зменшення відстані тіней може значно підвищити продуктивність.",
+	"options.vitrail.shadow_distance_forced": "Ваш поточний пакет шейдерів уже встановив відстань візуалізації для тіней; ви не можете змінити це.",
 	"pack.vitrail.select_title": "Виберіть шейдери",
 	"pack.vitrail.configure_title": "Налаштувати",
 	"options.vitrail.title": "Налаштування пакета шейдерів",

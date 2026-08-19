@@ -30,6 +30,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.stream.IntStream;
 
@@ -51,6 +52,9 @@ import java.util.stream.IntStream;
  * anything per frame.
  */
 public final class PackValues {
+
+	/** How many blocks a chunk is wide, which is the whole of the conversion between the two units. */
+	private static final int CHUNK_BLOCKS = 16;
 
 	private final FrameState state = new FrameState();
 
@@ -277,14 +281,124 @@ public final class PackValues {
 	}
 
 	/**
-	 * How far from the camera a caster that moves may still be and reach the map, or a value that is
-	 * not positive where the pack sets no bound of its own beyond the light's.
+	 * How far from the camera the light still gathers the world, IN BLOCKS, or minus one where
+	 * nothing bounds it beyond the light's own frustum.
+	 * <p>
+	 * <strong>Zero is a distance and not the absence of one</strong>, which is why the two are told
+	 * apart by a sentinel rather than by a sign: a player who drags the setting to the bottom is
+	 * asking for a shadow map with nothing in it, and Iris gathers nothing there too, its box culler
+	 * being built at zero like any other value ({@code shadows/ShadowRenderer.java:354}).
+	 * <p>
+	 * <strong>This is where the two units meet, and they are not the same unit.</strong> The pack
+	 * declares a half plane in BLOCKS, {@code shadowDistance}, and multiplies it by
+	 * {@code shadowDistanceRenderMul} to say how far the walk goes. The player's setting is in
+	 * CHUNKS, because that is the unit the game's own render distance is offered in and the unit
+	 * Iris offers this one in ({@code gui/option/IrisVideoSettings.java:50}, a range of 0 to 32).
+	 * The conversion is one multiplication and it is done here and nowhere else:
+	 * <strong>blocks = chunks x 16</strong>, which is Iris's own
+	 * {@code IrisVideoSettings.shadowDistance * 16} at {@code shadows/ShadowRenderer.java:337}.
+	 * <p>
+	 * Who wins is decided exactly as Iris decides it:
+	 * <ul>
+	 * <li>the pack, where it declared a multiplier it means
+	 *     ({@link PackDirectives#forcesShadowRenderDistance()}). The distance is then its own half
+	 *     plane times its own multiplier, and the player's setting is not consulted at all;</li>
+	 * <li>the player otherwise, which covers both the pack that never wrote the line and the pack
+	 *     that wrote a negative one. Iris takes the same branch for both, on the sign of the
+	 *     multiplier alone ({@code shadows/ShadowRenderer.java:336});</li>
+	 * <li>nobody, where whoever won asks for at least as far as the world is loaded. Iris drops the
+	 *     bound entirely there ({@code shadows/ShadowRenderer.java:341-345}), and so does this: a
+	 *     box that cannot cut anything is a test paid for on every section for nothing. The setting
+	 *     starts at 32 chunks, the largest render distance the game offers, so a player who never
+	 *     touches it lands here and the light is walked against its own frustum alone.</li>
+	 * </ul>
+	 * <p>
+	 * <strong>A default slider is NOT the same thing as no bound, and most of the corpus proves
+	 * it.</strong> Seven of the eight packs tested declare {@code shadowDistanceRenderMul}, six of
+	 * them at one, so they take the first branch and are bounded at their own half plane whatever
+	 * the slider says. That is the pack getting the distance it asked for and was tuned against; it
+	 * is parity, and it is a walk that stops earlier than this engine used to stop it.
+	 *
+	 * @param userChunks           what the player asked for, in chunks
+	 * @param renderDistanceChunks the game's effective render distance, in chunks, which is as far
+	 *                             as there is a world to gather
 	 */
-	public float entityShadowDistance() {
-		float multiplier = this.state.directives().entityShadowDistanceMul();
+	public float shadowRenderDistance(int userChunks, int renderDistanceChunks) {
+		return distanceFor(this.state.directives().shadowDistanceRenderMul(), userChunks,
+				renderDistanceChunks);
+	}
 
-		return multiplier == 1.0F || multiplier < 0.0F ? -1.0F
+	/**
+	 * One multiplier turned into a distance in blocks, which is the whole of Iris's
+	 * {@code createShadowFrustum} ({@code shadows/ShadowRenderer.java:333-345}) and is asked twice:
+	 * once for the world and once, under a different multiplier, for the casters that move.
+	 * <p>
+	 * <strong>The sign is the switch and the value is only read when it is not negative.</strong>
+	 * Iris branches on nothing else ({@code :336}), which is what makes a pack that never declared
+	 * the directive and a pack that declared a negative one the same case: the default is minus one.
+	 */
+	private float distanceFor(float multiplier, int userChunks, int renderDistanceChunks) {
+		float blocks = multiplier < 0.0F
+				? userChunks * (float) CHUNK_BLOCKS
 				: this.state.directives().shadowDistance() * multiplier;
+
+		return blocks >= renderDistanceChunks * (float) CHUNK_BLOCKS ? -1.0F : blocks;
+	}
+
+	/**
+	 * How far the pack itself insists the light gathers, in CHUNKS and rounded up, or empty where it
+	 * leaves the distance to the player. What a settings screen greys its slider out on.
+	 * <p>
+	 * Rounded up rather than truncated, and by Iris's own arithmetic
+	 * ({@code pipeline/IrisRenderingPipeline.java:287-289}): a pack asking for 161 blocks is asking
+	 * for more than ten chunks, and a slider that reads ten would be reading a lie.
+	 * <p>
+	 * <strong>One thing is answered differently from Iris and it is the screen alone.</strong> Iris
+	 * fills this whenever the line was WRITTEN, including with a negative value, and hands out minus
+	 * one in that case ({@code pipeline/IrisRenderingPipeline.java:292}); its slider then greys out
+	 * while {@code ShadowRenderer} goes on reading the player's number, so the screen says the pack
+	 * decides and the image says otherwise. Here the answer is empty in that case, which is what the
+	 * image does. Nothing the pack can read changes either way.
+	 */
+	public OptionalInt forcedShadowRenderDistanceChunks() {
+		PackDirectives directives = this.state.directives();
+		if (!directives.forcesShadowRenderDistance()) {
+			return OptionalInt.empty();
+		}
+
+		int blocks = (int) (directives.shadowDistance() * directives.shadowDistanceRenderMul());
+
+		return OptionalInt.of((blocks + CHUNK_BLOCKS - 1) / CHUNK_BLOCKS);
+	}
+
+	/**
+	 * How far from the camera a caster that MOVES may still be and reach the map, in blocks, or
+	 * minus one where nothing bounds it beyond the light's own frustum.
+	 * <p>
+	 * <strong>The two multipliers are multiplied together, they are not the smaller of the two.</strong>
+	 * Iris builds this frustum by handing {@code createShadowFrustum} the product
+	 * {@code renderDistanceMultiplier * entityShadowDistanceMultiplier}
+	 * ({@code shadows/ShadowRenderer.java:540}), so a pack asking for half the world and half again
+	 * for its mobs gets a quarter, not a half.
+	 * <p>
+	 * <strong>And the product carries the sign, which is what makes the pack's entity multiplier
+	 * DISAPPEAR whenever the player governs.</strong> The world multiplier is minus one then, so the
+	 * product is negative whatever the entity one says, and the branch taken is the player's own
+	 * distance: the casters that move are bounded exactly as the world is. That is not a rounding of
+	 * Iris, it is Iris, and it falls out of the same line.
+	 * <p>
+	 * One multiplier and one only is short-circuited before any of that: one, and anything negative,
+	 * mean the pack asks nothing extra of its moving casters, and the answer is then the world's own
+	 * bound rather than a second computation ({@code shadows/ShadowRenderer.java:536-537}).
+	 */
+	public float entityShadowDistance(int userChunks, int renderDistanceChunks) {
+		float multiplier = this.state.directives().entityShadowDistanceMul();
+		if (multiplier == 1.0F || multiplier < 0.0F) {
+			return shadowRenderDistance(userChunks, renderDistanceChunks);
+		}
+
+		return distanceFor(this.state.directives().shadowDistanceRenderMul() * multiplier,
+				userChunks, renderDistanceChunks);
 	}
 
 	/**

@@ -160,7 +160,15 @@ public final class ShadowTerrain {
 		manager.prepareRender();
 		try {
 			FogParameters fog = ((MixinSodiumWorldRenderer) renderer).vitrail$lastFogParameters();
-			Viewport viewport = new Viewport(new SimpleFrustum(new FrustumIntersection(light)),
+			// The light's own volume, and a box around the camera cut out of it wherever a shadow
+			// distance bounds the walk. Negative means nothing bounds it, and then the walk is the
+			// volume alone. Which of the two happens is the pack's business at least as often as the
+			// player's: most of the corpus declares a render multiplier and is bounded at its own
+			// half plane whatever the slider says.
+			float bound = TerrainDraw.shadowRenderDistance();
+			FrustumIntersection volume = new FrustumIntersection(light);
+			Viewport viewport = new Viewport(
+					bound < 0.0F ? new SimpleFrustum(volume) : new ShadowCull(volume, bound),
 					new Vector3d(camera.x, camera.y, camera.z));
 			manager.finalizeRenderLists(minecraft.gameRenderer.mainCamera(), viewport,
 					fog == null ? FogParameters.NONE : fog, true);

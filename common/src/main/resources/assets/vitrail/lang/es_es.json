@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "Shader Packs",
+	"options.vitrail.shadow_distance": "Máxima Distancia de Sombras",
+	"options.vitrail.shadow_distance_tooltip": "Te permite cambiar la distáncia máxima para las sombras. El terreno y las entidades tras esta distáncia no emitirán sombras. Reducir la distáncia de sombras puede incrementar el rendimiento significativamente.",
+	"options.vitrail.shadow_distance_forced": "Tu shader pack ya ha establecido una distáncia de renderizado para las sombreas; no puedes cambiarla.",
 	"pack.vitrail.select_title": "Seleccionar",
 	"pack.vitrail.configure_title": "Configurar",
 	"options.vitrail.title": "Configuración del Shader Pack",

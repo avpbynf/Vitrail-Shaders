@@ -30,6 +30,17 @@ public final class ScreenText {
 	 */
 	public static final String PACKS_TITLE = "options.vitrail.packs_title";
 
+	/**
+	 * How far the light reaches, on the video settings page this engine owns, with its two
+	 * tooltips: what the setting does, and what it says instead while a pack has taken the distance
+	 * out of the player's hands. Iris's {@code options.iris.shadowDistance} and its
+	 * {@code .enabled} and {@code .disabled}. The page's own name is the game's
+	 * {@code options.videoTitle} and is not repeated here.
+	 */
+	public static final String SHADOW_DISTANCE = "options.vitrail.shadow_distance";
+	public static final String SHADOW_DISTANCE_TOOLTIP = "options.vitrail.shadow_distance_tooltip";
+	public static final String SHADOW_DISTANCE_FORCED = "options.vitrail.shadow_distance_forced";
+
 	/** The grey line under the title, one per view. */
 	public static final String SELECT_TITLE = "pack.vitrail.select_title";
 	public static final String CONFIGURE_TITLE = "pack.vitrail.configure_title";

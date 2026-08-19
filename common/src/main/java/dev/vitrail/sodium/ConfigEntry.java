@@ -1,15 +1,21 @@
 package dev.vitrail.sodium;
 
-import dev.vitrail.Vitrail;
+import dev.vitrail.render.PackChain;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.ScreenText;
 import dev.vitrail.screen.SettingsScreen;
+import dev.vitrail.settings.PackFile;
+import dev.vitrail.Vitrail;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.ConfigState;
+import net.caffeinemc.mods.sodium.api.config.option.OptionImpact;
+import net.caffeinemc.mods.sodium.api.config.option.Range;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
+import net.caffeinemc.mods.sodium.api.config.structure.OptionBuilder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.TextureFilteringMethod;
+import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
@@ -25,10 +31,11 @@ import java.util.Set;
  * <p>
  * This is the same entry the reference takes, {@code IrisConfig} in its own tree, and by the same
  * public API rather than by reaching into Sodium: one page under the mod's own name, which opens
- * this screen with the video settings as the screen to come back to. What the reference has and this
- * does not is a second page of its own video options, because everything this engine has to offer is
- * the pack's own and lives on the pack's pages. The one thing registered here that is not a page is
- * an overlay over an option of Sodium's own, whose reason is written where it is registered.
+ * this screen with the video settings as the screen to come back to, and a second page for the
+ * settings that are this engine's own rather than a pack's. That second page is thin on purpose:
+ * almost everything this engine has to offer is the pack's and lives on the pack's pages, and only
+ * what a player sets over every pack belongs here. The one thing registered that is not a page is an
+ * overlay over an option of Sodium's own, whose reason is written where it is registered.
  * <p>
  * Each loader's metadata names this class, and each reaches it its own way: on NeoForge Sodium is
  * handed the name and builds an instance by reflection, on Fabric the loader's own entry point
@@ -58,6 +65,10 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	/** Sodium's own texture filtering selector, the one option here has anything to say about. */
 	private static final Identifier FILTERING = Identifier.parse("sodium:quality.filtering_mode");
 
+	/** What this engine's own option is known by, to Sodium and to anything overlaying it later. */
+	private static final Identifier SHADOW_DISTANCE =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "shadow_distance");
+
 	/** What the selector offers while the pack draws the world, and what it offers otherwise. */
 	private static final Set<TextureFilteringMethod> WITHOUT_RGSS =
 			Set.of(TextureFilteringMethod.NONE, TextureFilteringMethod.ANISOTROPIC);
@@ -75,6 +86,11 @@ public final class ConfigEntry implements ConfigEntryPoint {
 						.setName(Component.translatable(ScreenText.PACKS_TITLE))
 						.setScreenConsumer(parent ->
 								Minecraft.getInstance().gui.setScreen(new SettingsScreen(parent))))
+				// Named by the game's own key rather than by one of ours: it is the words the game
+				// already writes over its video settings, translated everywhere this mod is not.
+				.addPage(builder.createOptionPage()
+						.setName(Component.translatable("options.videoTitle"))
+						.addOptionGroup(builder.createOptionGroup().addOption(shadowDistance(builder))))
 				// RGSS is shader code, written into the game's own terrain shader and into Sodium's,
 				// so it is worth nothing while the pack's terrain program is the one drawing: the
 				// player moves the selector and the image does not move. ANISOTROPIC keeps working,
@@ -99,5 +115,48 @@ public final class ConfigEntry implements ConfigEntryPoint {
 								.setAllowedValuesProvider(
 										state -> TerrainDraw.asked() ? WITHOUT_RGSS : EVERY_METHOD,
 										ConfigState.UPDATE_ON_REBUILD));
+	}
+
+	/**
+	 * How far the light reaches, in CHUNKS, which is the one video setting this engine has of its
+	 * own and the cheapest thing a player can trade for frames.
+	 * <p>
+	 * It is the reference's option, built the same way and over the same range,
+	 * {@code compat/sodium/config/IrisConfig.java:54-76}: zero to thirty-two, thirty-two by default,
+	 * greyed out while the pack forces a distance of its own, and shown as the pack's number then
+	 * rather than as the player's. What the two numbers mean and which of them wins is
+	 * {@code PackValues.shadowRenderDistance}, and the conversion into blocks lives there too.
+	 * <p>
+	 * <strong>The forced number is clamped into the slider's range before it is shown.</strong> Not
+	 * cosmetic: Sodium validates whatever the binding hands back, and writes the correction out
+	 * through the same binding when it has to ({@code StatefulOption.resetFromBinding}). A pack
+	 * asking for more than thirty-two chunks would come back clamped and be SAVED over the player's
+	 * own number, which they never touched and cannot see.
+	 */
+	private static OptionBuilder shadowDistance(ConfigBuilder builder) {
+		return builder.createIntegerOption(SHADOW_DISTANCE)
+				.setName(Component.translatable(ScreenText.SHADOW_DISTANCE))
+				.setTooltip(_ -> Component.translatable(
+						TerrainDraw.forcedShadowDistanceChunks().isPresent()
+								? ScreenText.SHADOW_DISTANCE_FORCED
+								: ScreenText.SHADOW_DISTANCE_TOOLTIP))
+				.setDefaultValue(PackFile.DEFAULT_SHADOW_DISTANCE)
+				.setRange(new Range(PackFile.MIN_SHADOW_DISTANCE, PackFile.MAX_SHADOW_DISTANCE, 1))
+				.setBinding(chunks -> PackChain.shadowDistance(Vitrail.platform().gameDirectory(),
+								chunks),
+						() -> Math.clamp(TerrainDraw.shadowDistanceChunks(),
+								PackFile.MIN_SHADOW_DISTANCE, PackFile.MAX_SHADOW_DISTANCE))
+				// Zero is not a short distance, it is no shadow map worth drawing, so it is named
+				// rather than counted. Both the word and the unit are the game's own strings, so
+				// they read in the player's language on a client this mod ships no translation for.
+				.setValueFormatter(chunks -> chunks <= 0
+						? CommonComponents.OPTION_OFF
+						: Component.translatable("options.chunks", chunks))
+				// Asked again whenever the screen rebuilds, like the overlay above and for the same
+				// reason: a pack loaded or dropped while the game is up decides whether this slider
+				// still belongs to the player.
+				.setEnabledProvider(_ -> TerrainDraw.forcedShadowDistanceChunks().isEmpty(),
+						ConfigState.UPDATE_ON_REBUILD)
+				.setImpact(OptionImpact.HIGH);
 	}
 }

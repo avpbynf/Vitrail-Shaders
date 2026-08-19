@@ -50,6 +50,8 @@ public final class PackDirectives {
 	private final int noiseTextureResolution;
 	private final int shadowMapResolution;
 	private final float shadowDistance;
+	private final float shadowDistanceRenderMul;
+	private final boolean forcesShadowRenderDistance;
 	private final float entityShadowDistanceMul;
 	private final float shadowNearPlane;
 	private final float shadowFarPlane;
@@ -85,6 +87,8 @@ public final class PackDirectives {
 		this.noiseTextureResolution = builder.noiseTextureResolution;
 		this.shadowMapResolution = builder.shadowMapResolution;
 		this.shadowDistance = builder.shadowDistance;
+		this.shadowDistanceRenderMul = builder.shadowDistanceRenderMul;
+		this.forcesShadowRenderDistance = builder.forcesShadowRenderDistance;
 		this.entityShadowDistanceMul = builder.entityShadowDistanceMul;
 		this.shadowNearPlane = builder.shadowNearPlane;
 		this.shadowFarPlane = builder.shadowFarPlane;
@@ -195,6 +199,34 @@ public final class PackDirectives {
 	}
 
 	/**
+	 * What the pack multiplies {@link #shadowDistance()} by to get how far the light still gathers
+	 * geometry, which is a different question from how far its projection reaches: the projection is
+	 * the half plane above, and this bounds the WALK that fills it.
+	 * <p>
+	 * Minus one unless the pack declares it, and a negative value is not a distance at all: it is the
+	 * pack saying it has no opinion, and the player's own setting decides instead
+	 * ({@code shadows/ShadowRenderer.java:336-339}, the {@code renderMultiplier < 0} branch). Read
+	 * beside {@link #forcesShadowRenderDistance()}, which is what tells a declared minus one from a
+	 * pack that never wrote the line.
+	 */
+	public float shadowDistanceRenderMul() {
+		return this.shadowDistanceRenderMul;
+	}
+
+	/**
+	 * Whether the pack really declared {@code shadowDistanceRenderMul} with a value it means, which
+	 * is what takes the choice away from the player.
+	 * <p>
+	 * Both halves are needed, exactly as Iris asks them
+	 * ({@code pipeline/IrisRenderingPipeline.java:285-295}): the line has to have been written AND
+	 * to carry a value that is not negative. A pack that writes a negative one has declared that it
+	 * wants the player's setting, so it forces nothing.
+	 */
+	public boolean forcesShadowRenderDistance() {
+		return this.forcesShadowRenderDistance && this.shadowDistanceRenderMul >= 0.0F;
+	}
+
+	/**
 	 * How much shorter the light reaches for the casters that MOVE than for the world, one unless the
 	 * pack says otherwise.
 	 * <p>
@@ -294,6 +326,8 @@ public final class PackDirectives {
 		private int noiseTextureResolution = 256;
 		private int shadowMapResolution = 1024;
 		private float shadowDistance = 160.0F;
+		private float shadowDistanceRenderMul = -1.0F;
+		private boolean forcesShadowRenderDistance;
 		private float entityShadowDistanceMul = 1.0F;
 		private float shadowNearPlane = -100.05F;
 		private float shadowFarPlane = 156.0F;
@@ -332,6 +366,13 @@ public final class PackDirectives {
 						value -> this.noiseTextureResolution = Math.clamp(value, 1, MAX_NOISE_RESOLUTION));
 				case "shadowMapResolution" -> asInt(directive, value -> this.shadowMapResolution = value);
 				case "shadowDistance" -> asFloat(directive, value -> this.shadowDistance = value);
+				// The flag is raised inside the setter and not beside it, so that it follows the
+				// value: a line whose type or number does not parse is dropped without a word here
+				// as it is in Iris, and dropped means the pack never said anything at all.
+				case "shadowDistanceRenderMul" -> asFloat(directive, value -> {
+					this.shadowDistanceRenderMul = value;
+					this.forcesShadowRenderDistance = true;
+				});
 				case "entityShadowDistanceMul" -> asFloat(directive,
 						value -> this.entityShadowDistanceMul = value);
 				case "shadowNearPlane" -> asFloat(directive, value -> this.shadowNearPlane = value);

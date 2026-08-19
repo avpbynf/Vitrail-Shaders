@@ -99,8 +99,13 @@ public final class ShadowGeometry {
 	private static boolean emittersOnly;
 
 	/**
-	 * How far a caster that moves may stand from the camera and still reach the map, or a value that
-	 * is not positive where the pack asks for no bound beyond the light's own.
+	 * How far a caster that moves may stand from the camera and still reach the map, or a NEGATIVE
+	 * value where nothing bounds it beyond the light's own frustum.
+	 * <p>
+	 * Negative and not "not positive", because zero is a bound like any other: a pack that writes
+	 * {@code entityShadowDistanceMul 0}, or a player who drags the shadow distance to the bottom, is
+	 * asking for no moving caster in the map at all, and Iris hands both of them a box culler built
+	 * at zero rather than no culler ({@code shadows/ShadowRenderer.java:333-354}).
 	 */
 	private static float reach = -1.0F;
 
@@ -167,6 +172,11 @@ public final class ShadowGeometry {
 		// against a SECOND, shorter frustum where the pack asked for one, built at the shadow
 		// distance times entityShadowDistanceMul (shadows/ShadowRenderer.java:536-541); here the
 		// shape stays the light's and only the reach is cut, which is what the multiplier means.
+		//
+		// It is one bound and not two: the shadow distance the player set is folded into this same
+		// number rather than applied beside it, because Iris builds the entity frustum out of the
+		// PRODUCT of the two multipliers (:540) and the world's own is negative whenever the player
+		// governs. PackValues.entityShadowDistance carries that arithmetic and its sign.
 		reach = TerrainDraw.entityShadowDistance();
 
 		// The light's own camera, built the way Iris builds it and NOT the frame's borrowed: a state
@@ -491,7 +501,7 @@ public final class ShadowGeometry {
 			return false;
 		}
 
-		if (reach > 0.0F && (Math.abs(entity.getX() - at.x) > reach
+		if (reach >= 0.0F && (Math.abs(entity.getX() - at.x) > reach
 				|| Math.abs(entity.getY() - at.y) > reach
 				|| Math.abs(entity.getZ() - at.z) > reach)) {
 			return false;

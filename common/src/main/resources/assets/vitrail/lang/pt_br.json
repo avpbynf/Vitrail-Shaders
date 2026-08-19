@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "Pacotes de sombreadores",
+	"options.vitrail.shadow_distance": "Distância das sombras",
+	"options.vitrail.shadow_distance_tooltip": "Permite alterar a distância máxima das sombras. O terreno e as entidades além dessa distância não projetarão sombras. O desempenho do jogo pode ser melhorado significativamente ao reduzir este valor.",
+	"options.vitrail.shadow_distance_forced": "Seu pacote de sombreadores já definiu um valor da distância das sombras e você não poderá alterá-lo.",
 	"pack.vitrail.select_title": "Selecionar um pacote",
 	"pack.vitrail.configure_title": "Configurando um pacote",
 	"options.vitrail.title": "Configurações do pacote de sombreadores",

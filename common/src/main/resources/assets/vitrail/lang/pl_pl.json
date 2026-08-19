@@ -1,5 +1,8 @@
 {
 	"options.vitrail.packs_title": "Pakiety shaderów",
+	"options.vitrail.shadow_distance": "Maksymalna odległość cieni",
+	"options.vitrail.shadow_distance_tooltip": "Umożliwia zmianę maksymalnej odległości wyświetlania cieni. Teren i obiekty znajdujące się poza tą odległością nie będą rzucać cieni. Zmniejszenie odległości cieni może znacznie zwiększyć wydajność.",
+	"options.vitrail.shadow_distance_forced": "Twój aktualny pakiet Shaderów ma już ustawioną odległość renderowania cieni; nie możesz jej zmienić.",
 	"pack.vitrail.select_title": "Wybierz",
 	"pack.vitrail.configure_title": "Konfiguracja",
 	"options.vitrail.title": "Ustawienia pakietu shaderów",

@@ -14,6 +14,24 @@ what the next one holds.
 
 ## Unreleased
 
+### Added
+
+- **A Max Shadow Distance slider in the video settings, under Vitrail.** Pulling it in is the
+  cheapest frame rate a shader pack has to offer: the world is walked a second time for the light
+  every frame, and this decides how much of it. It goes from 32 chunks down to none at all. At none
+  the shadow pass does not run: the shadow depth every pack reads is emptied to its far plane, so
+  nothing casts a shadow, and the only thing left standing is a `shadowcolor` buffer the pack asked
+  to keep between frames, which holds the last one drawn until the setting moves again.
+
+- **A pack that fixes its own shadow render distance now gets it.** `shadowDistanceRenderMul` was
+  read by no part of this engine, so the light gathered the whole world it could see whatever a pack
+  asked. Seven of the eight packs tested declare that line, and the shadow walk now stops where they
+  meant it to: Mellow and Body Camera at 96 blocks, Complementary and Reverie at 192, BSL at 256.
+  How many of them that changes anything for depends on your render distance, since a shadow walk
+  asking for more than the world you have loaded is left alone: at 12 chunks it bites on the shorter
+  three and not on the rest. Those packs decide the distance, so the slider greys out and says so;
+  it is the packs that stay silent, Sildur's among them, where it is the player's to move.
+
 ### Fixed
 
 - The texture filtering selector in the video settings no longer offers RGSS while a pack draws the

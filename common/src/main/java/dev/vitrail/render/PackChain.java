@@ -148,6 +148,18 @@ public final class PackChain {
 	private static volatile PackFile askedFor = PackFile.EMPTY;
 
 	/**
+	 * How far the player asked the light to reach, in chunks, the one line of {@code pack.txt} that
+	 * is not about which pack to draw.
+	 * <p>
+	 * Held apart from {@link #askedFor} rather than read off it, because the slider moves it with no
+	 * load behind it: that one is what the last load was asked for, and writing a screen's number
+	 * into it would have it answer for a pack choice nobody made. This one is written wherever the
+	 * number comes from, the file at load and the slider afterwards, and the shadow walk reads it
+	 * either way.
+	 */
+	private static volatile int shadowDistance = PackFile.DEFAULT_SHADOW_DISTANCE;
+
+	/**
 	 * Whether this frame's values have been moved on yet.
 	 * <p>
 	 * The frame used to begin where the chain draws, which is after the world. A terrain program runs
@@ -484,6 +496,10 @@ public final class PackChain {
 			// and without the name this far up it is the one road that cannot say which of the two
 			// happened: the folder is empty, which is true, and is not what they did.
 			askedFor = PackFile.read(packFile(gameDirectory));
+			// Off that same read rather than a second one, and before anything can refuse the load:
+			// this line belongs to the player and not to the pack, and every return below is reached
+			// with no pack drawn and the shadow distance still theirs.
+			shadowDistance = askedFor.shadowDistance();
 
 			// Both ways out of the next two blocks end with no pack drawing anything, and NEITHER mesh
 			// carries what a pack reads once none wants it: said here as well as on the road that
@@ -993,6 +1009,37 @@ public final class PackChain {
 	 */
 	public static PackFile askedFor() {
 		return askedFor;
+	}
+
+	/**
+	 * How far the player asked the light to reach, in CHUNKS. Read every frame the shadow map is
+	 * walked, so it answers from memory rather than from the file.
+	 */
+	public static int shadowDistance() {
+		return shadowDistance;
+	}
+
+	/**
+	 * Takes a new one and puts it away, and takes effect on the next shadow walk rather than on a
+	 * reload: nothing about a pack changes, only how far the walk that is already happening goes.
+	 * <p>
+	 * The file is READ BEFORE IT IS WRITTEN, and it is not tidiness: the settings screen writes the
+	 * two pack lines of this same file, so building a record out of what this side holds would hand
+	 * back whatever pack was chosen when this class last looked. Reading first also means a file
+	 * edited by hand between two moves of the slider keeps its edit.
+	 */
+	public static void shadowDistance(Path gameDirectory, int chunks) {
+		// Taken on first and put away second, so that a folder that cannot be written still moves
+		// the image the player just asked to move. What they lose then is the next session, not
+		// this one, and the line below is what says so.
+		shadowDistance = PackFile.EMPTY.withShadowDistance(chunks).shadowDistance();
+
+		Path file = packFile(gameDirectory);
+		try {
+			PackFile.write(file, PackFile.read(file).withShadowDistance(chunks));
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().error("Vitrail could not write the shadow distance to {}", file, e);
+		}
 	}
 
 	/**
