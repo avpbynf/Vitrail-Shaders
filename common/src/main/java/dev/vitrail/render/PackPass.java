@@ -685,9 +685,10 @@ final class PackPass {
 					+ "the " + PUSH_DESCRIPTORS + " a device commonly allows pushed at once");
 		}
 
-		// What the block could not be given, said as the two different things it is rather than as
-		// one number. A name the pack declares for itself is ours to resolve and the reason is a
-		// line above this one; only what is left is a value this engine owes.
+		// What the block could not be given, said as the three different things it is rather than
+		// as one number. A name the pack declares for itself is ours to resolve and the reason is a
+		// line above this one; a name no engine answers is nobody's; what is left is a value this
+		// engine owes.
 		PackValues.Gaps gaps = this.values.classify(this.uniforms.unsupplied());
 		if (!gaps.engine().isEmpty()) {
 			this.notes.add(this.path + " reads " + gaps.engine().size() + " values written as "
@@ -700,7 +701,15 @@ final class PackPass {
 					+ "declarations survived: " + gaps.pack());
 		}
 
-		// Underneath the two, the members that count as supplied and are not: a zero that
+		// And beside those, the names that are nobody's debt: the pack reads them under Iris as
+		// well and gets the same nought, so saying this engine owes them would send a reader
+		// looking through Iris for a source that was never written.
+		if (!gaps.nobody().isEmpty()) {
+			this.notes.add(this.path + " reads " + gaps.nobody().size() + " values no engine "
+					+ "answers, Iris included, so they are zeroes there too: " + gaps.nobody());
+		}
+
+		// Underneath the three, the members that count as supplied and are not: a zero that
 		// arrived through a registered source is the one failure a screenshot can never show.
 		PackValues.standIns(this.loaded.program().uniforms().stream()
 						.map(TranslatedUnit.Uniform::name)

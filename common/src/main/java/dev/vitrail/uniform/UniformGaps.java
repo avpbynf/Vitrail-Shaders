@@ -11,7 +11,9 @@ import java.util.Map;
  * itself. It can be a name nothing in the table answers, which {@link UniformBlock#unanswered()}
  * already reports. Or it can be a name the table answers with a stand-in, which reports as supplied
  * and is the dangerous one: a zero that arrived through a registered source looks exactly like a
- * measured value.
+ * measured value. Beside those two stands a name that is not wrong at all, one NO engine answers,
+ * Iris included; naming those here is what keeps the log from claiming them as debts and sending a
+ * reader through Iris for a source that was never written.
  * <p>
  * Nothing here is guessed, and nothing here is in the table merely because it is a constant.
  * {@code renderStage} was in that sentence and has left it: the passes that draw the world and the
@@ -21,7 +23,7 @@ import java.util.Map;
  * that stops being a stand-in has to be taken out, and that is the point: a list somebody has to
  * maintain is a list somebody reads.
  * <p>
- * <strong>There used to be two lists here and there is one, which is what a list like this looks
+ * <strong>The stand-ins used to be two lists and are one, which is what a list like this looks
  * like when it works.</strong> The second held the names that were a right answer under a full
  * screen pass and a stand-in under the entity mesh, so that listing them everywhere would not put a
  * false alarm on every composite: {@code entityColor} first, then the three identifiers. Both are
@@ -35,6 +37,9 @@ public final class UniformGaps {
 	/** Registered, and answered with something that is not the value, whatever pass reads it. */
 	private static final Map<String, String> STAND_INS = standIns();
 
+	/** Read by a pack, answered by nobody, Iris included. */
+	private static final Map<String, String> UNANSWERABLE = unanswerable();
+
 	private UniformGaps() {
 	}
 
@@ -44,6 +49,41 @@ public final class UniformGaps {
 	 */
 	public static String standIn(String name) {
 		return STAND_INS.get(name);
+	}
+
+	/**
+	 * Why no engine answers this name, or null when it is one the engine really owes.
+	 * <p>
+	 * <strong>A name is here to keep the log from claiming a debt that is not one.</strong> What
+	 * the block does with such a name is exactly what it does with a real gap, zeroes, and that is
+	 * right: it is what the pack reads under Iris as well, an unset uniform being nought there. What
+	 * is not right is calling it a value this engine does not supply YET, which reads as work owed
+	 * and sends whoever follows the log looking through Iris for a source that was never written.
+	 * Measured on 19 August 2026: the one line about {@code farPlane} sent a reader through the
+	 * whole Distant Horizons path of two packs.
+	 */
+	public static String unanswerable(String name) {
+		return UNANSWERABLE.get(name);
+	}
+
+	private static Map<String, String> unanswerable() {
+		Map<String, String> reasons = new LinkedHashMap<>();
+
+		// Bliss reads it in the two passes that mix Distant Horizons' depth with the world's,
+		// dimensions/composite1.fsh:777 and dimensions/composite3.fsh:248, both times as the far
+		// argument of a linearisation. Iris registers dhFarPlane, dhNearPlane and dhRenderDistance
+		// beside each other (uniforms/CommonUniforms.java:184-186) and near and far in
+		// uniforms/CameraUniforms.java:26-27; a farPlane UNIFORM is in none of them, the name
+		// living in that repository only as shadow arithmetic and a pack directive
+		// (shaderpack/properties/PackShadowDirectives.java:38 among others). So the pack reads
+		// nought there too, and what that does to it, it does under Iris as well: the guard the
+		// linearisation feeds is a disjunction (composite1.fsh:783), a far plane of nought kills
+		// only the half that compares the linearised depths, and the depthOpaque >= 1.0 half keeps
+		// deciding on both engines alike.
+		reasons.put("farPlane", "no engine answers it, Iris included, so a pack reads the same "
+				+ "nought there");
+
+		return Map.copyOf(reasons);
 	}
 
 	private static Map<String, String> standIns() {

@@ -1854,6 +1854,13 @@ final class GeometryProgram {
 					gaps.engine().size(), gaps.engine());
 		}
 
+		// Said apart from those, and at info: the pack reads these under Iris as well and gets the
+		// same nought there, so they are nobody's debt and a warning would read as one.
+		if (!gaps.nobody().isEmpty()) {
+			Vitrail.logger().info("{} reads {} values no engine answers, Iris included, so they are "
+					+ "zeroes there too: {}", this.path, gaps.nobody().size(), gaps.nobody());
+		}
+
 		// Underneath that, and it is not the same list: these are members a source really answered,
 		// with something that is not the value. They count as supplied wherever a count is taken,
 		// which is the whole reason for naming them, and a full screen pass has named them since the

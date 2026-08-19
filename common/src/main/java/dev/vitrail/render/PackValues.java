@@ -611,23 +611,27 @@ public final class PackValues {
 	}
 
 	/**
-	 * Sorts the names a program's block could not be given into the two things they can mean. They
+	 * Sorts the names a program's block could not be given into the three things they can mean. They
 	 * read as one list otherwise and they are not one problem: a name the pack declares for itself
-	 * is ours to resolve, and what is left is a value the engine owes.
+	 * is ours to resolve, a name no engine answers is nobody's, and what is left is a value the
+	 * engine owes.
 	 */
 	public Gaps classify(List<String> unanswered) {
 		List<String> engine = new ArrayList<>();
 		List<String> pack = new ArrayList<>();
+		List<String> nobody = new ArrayList<>();
 
 		for (String name : unanswered) {
 			if (this.declared.contains(name)) {
 				pack.add(name);
+			} else if (UniformGaps.unanswerable(name) != null) {
+				nobody.add(name);
 			} else {
 				engine.add(name);
 			}
 		}
 
-		return new Gaps(List.copyOf(engine), List.copyOf(pack));
+		return new Gaps(List.copyOf(engine), List.copyOf(pack), List.copyOf(nobody));
 	}
 
 	/**
@@ -701,7 +705,9 @@ public final class PackValues {
 	 *
 	 * @param engine names the engine owes and does not answer
 	 * @param pack   names the pack declares itself, whose declaration did not survive
+	 * @param nobody names no engine answers, Iris included, so a pack reads the same nought under
+	 *               it. {@link UniformGaps#unanswerable} carries why each one is here
 	 */
-	public record Gaps(List<String> engine, List<String> pack) {
+	public record Gaps(List<String> engine, List<String> pack, List<String> nobody) {
 	}
 }
