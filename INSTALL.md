@@ -5,10 +5,10 @@ installed on one.
 
 ## Getting the jar
 
-Built jars are attached to the [releases](https://github.com/avpbynf/Vitrail-Shaders/releases),
+The built jar is attached to the [releases](https://github.com/avpbynf/Vitrail-Shaders/releases),
 one per tag, built by the tag itself rather than uploaded by hand, and mirrored to
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) by that
-same run, so whichever of the two you take is the same file. A version
+same run, so whichever of the two places you take it from serves the same file. A version
 carrying an identifier after a dash is marked as a pre-release, which is what it
 is. Building from source is below and gives the same thing for whatever commit you
 are on.
@@ -24,11 +24,11 @@ are on.
 | Chloride | any 26.2 build, to run on the Vulkan backend at all |
 | Java | 25, to build (the game brings its own runtime) |
 
-One jar per loader, and they carry the same engine: `vitrail-neoforge` and
-`vitrail-fabric`. On Fabric, three modules of Fabric API are declared as
+One jar for both loaders: each loader reads its own metadata out of it and
+ignores the rest. On Fabric, two modules of Fabric API are declared as
 required, and they are the whole of what this mod takes from it: the key
-mapping, the screen and the client tick, which is what the settings screen is
-opened by. Nothing of the world's rendering goes through Fabric API.
+mapping and the client tick, which is what the settings screen is opened by.
+Nothing of the world's rendering goes through Fabric API.
 
 Sodium and Chloride are both declared as required dependencies, so the game will
 refuse to start without either of them. Do not update Sodium past 0.9.x: it has
@@ -106,17 +106,19 @@ gradlew.bat build
 ```
 
 The first build decompiles Minecraft and takes a couple of minutes. After that it
-is a few seconds. Both jars are built, and each lands in two places that are
-identical, named for the version in `gradle.properties` and the Minecraft version
-beside it:
+is a few seconds. Three jars land in `build/libs`, named for the version in
+`gradle.properties` and the Minecraft version beside it. The first is the one a
+release ships and runs on either loader; the other two are the slices it is
+merged from, one per loader, kept beside it for whoever wants only theirs:
 
 ```
+build/libs/vitrail-<version>+mc<minecraft>.jar
 build/libs/vitrail-<loader>-<version>+mc<minecraft>.jar
-<loader>/build/libs/vitrail-<loader>-<version>+mc<minecraft>.jar
 ```
 
-`gradlew.bat :neoforge:build` builds that one alone, and `:fabric:build` the
-other.
+`gradlew.bat :neoforge:build` builds the NeoForge slice alone, into that
+module's own `neoforge/build/libs`, and `:fabric:build` the other; only the
+full build refreshes `build/libs`.
 
 To run the mod in a development client instead of installing it:
 
@@ -126,15 +128,17 @@ gradlew.bat :neoforge:runClient
 
 ## Installing into an instance
 
-Copy the jar into the `mods` folder of a NeoForge 26.2 instance, next to Sodium.
-For a CurseForge instance that is:
+Copy the jar into the `mods` folder of a NeoForge or Fabric 26.2 instance, next
+to Sodium. For a CurseForge instance that is:
 
 ```
 <instances>/<instance name>/mods/
 ```
 
 Remove any other shader engine from that folder first. Iris and Vitrail both want
-to own the frame, and there is no reason to have both.
+to own the frame, and there is no reason to have both. An older Vitrail goes too:
+the per-loader `vitrail-neoforge-*` and `vitrail-fabric-*` jars carry the same
+mod as the merged one, and a loader that finds it twice refuses to start.
 
 Shader packs go into the `shaderpacks/` folder at the root of the instance, the
 same folder OptiFine and Iris use, zipped or unpacked. The mod keeps its own

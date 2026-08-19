@@ -202,8 +202,77 @@ tasks.named("check") {
 	dependsOn tasks.named("checkText")
 }
 
-// Loader jars are what gets shipped, so gather them at the root rather than making
-// people dig through each module.
+// One jar that runs under either loader. Each loader opens its own metadata file and walks past
+// the other's - NeoForge reads META-INF/neoforge.mods.toml, Fabric reads fabric.mod.json - so a
+// jar carrying both is a mod to each of them, and the other loader's classes lie fallow: Fabric
+// instantiates only what fabric.mod.json names, and FML, which scans every class in the jar,
+// acts on its own annotations, which the Fabric-side classes do not carry. Merging takes nothing
+// more than the union of the two loader jars: from 26.2 on there is one set of names, so neither
+// jar is remapped and nothing has to be relocated or rewritten on the way in.
+def loaderJars = ["neoforge", "fabric"].collect { module ->
+	project(":$module").tasks.named("jar", Jar)
+}
+
+tasks.register("mergedJar", Jar) {
+	group = "build"
+	description = "Assembles the one jar that runs under either loader."
+
+	archiveBaseName = "vitrail"
+	archiveVersion = "${project.mod_version}+mc${project.minecraft_version}"
+
+	// Aimed at build/libs itself, because the base plugin's home for a root archive is
+	// build/distributions, and everything this build makes is read out of one directory.
+	destinationDirectory = layout.buildDirectory.dir("libs")
+
+	// The subprojects block pins these on every archive a module builds. This task is the root's
+	// own, outside that block, so it says the same thing itself.
+	preserveFileTimestamps = false
+	reproducibleFileOrder = true
+
+	loaderJars.each { loaderJar ->
+		from(loaderJar.map { zipTree(it.archiveFile) }) {
+			// So that this jar gets a manifest of its own instead of whichever copy was walked
+			// first.
+			exclude "META-INF/MANIFEST.MF"
+		}
+	}
+
+	// What the two trees share is the common module's output and the licence files, one copy in
+	// each loader jar out of the same build, so keeping the first copy of each is keeping the only
+	// bytes there are. That is an assumption worth a check rather than a comment, and the check is
+	// below: a path present in both jars with different bytes fails the merge, instead of one copy
+	// silently standing in for both.
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+	doFirst {
+		def entries = [:]
+
+		loaderJars.each { loaderJar ->
+			def archive = loaderJar.get().archiveFile.get().asFile
+
+			new java.util.zip.ZipFile(archive).withCloseable { zip ->
+				for (entry in zip.entries()) {
+					// The manifest is excluded from the merge above, so a difference there is not
+					// a difference in what ships.
+					if (entry.directory || entry.name == "META-INF/MANIFEST.MF") {
+						continue
+					}
+
+					def before = entries.put(entry.name, entry.crc)
+					if (before != null && before != entry.crc) {
+						throw new GradleException("${entry.name} differs between the loader jars, "
+								+ "so neither copy can stand for both")
+					}
+				}
+			}
+		}
+	}
+}
+
+// The merged jar is what a release ships, and it lands in build/libs by the line above. The
+// loader jars are copied in beside it because a slice for one loader is still the smaller thing
+// to hand a test instance, and because a reader of build/libs should see everything the build
+// makes without digging through each module.
 tasks.register("collectJars", Copy) {
 	from project(":neoforge").tasks.named("jar")
 	from project(":fabric").tasks.named("jar")
@@ -211,5 +280,5 @@ tasks.register("collectJars", Copy) {
 }
 
 tasks.named("assemble") {
-	dependsOn tasks.named("collectJars")
+	dependsOn tasks.named("mergedJar"), tasks.named("collectJars")
 }

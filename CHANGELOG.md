@@ -6,11 +6,23 @@ it is in `docs/`.
 
 A version number here, the tag that released it and the number inside the jar are one number: the
 release workflow refuses a tag that disagrees with `mod_version` in `gradle.properties` rather than
-publishing a jar named after one thing and built from another. The stores add the loader after a
-plus, because each of them files an upload per loader and has nowhere else to put the distinction.
+publishing a jar named after one thing and built from another.
 
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
+
+## Unreleased
+
+### Changed
+
+- **One download for both loaders.** The release now carries a single jar,
+  `vitrail-<version>+mc<minecraft>`, that runs on NeoForge and on Fabric alike; each loader reads
+  its own metadata out of it and ignores the rest. It is the same engine the two per-loader jars
+  carried, in one file, and the per-loader downloads stop being published. Nothing changes in
+  game, and nothing changes about what has to sit next to it: Sodium, Chloride, and on Fabric the
+  Fabric API. Upgrading means replacing: delete the old `vitrail-neoforge-*` or `vitrail-fabric-*`
+  jar when this one goes in, because the two carry the same mod and a loader that finds it twice
+  refuses to start.
 
 ## 0.4.1-beta.1
 
