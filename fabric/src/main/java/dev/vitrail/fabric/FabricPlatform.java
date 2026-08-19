@@ -30,11 +30,6 @@ final class FabricPlatform implements VitrailPlatform {
 	}
 
 	@Override
-	public Path configDirectory() {
-		return FabricLoader.getInstance().getConfigDir().resolve(Vitrail.MOD_ID);
-	}
-
-	@Override
 	public Path gameDirectory() {
 		return FabricLoader.getInstance().getGameDir();
 	}

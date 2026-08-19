@@ -590,10 +590,6 @@ final class ColorTargets {
 		return this.shadowMap;
 	}
 
-	Set<Integer> doubled() {
-		return this.doubled;
-	}
-
 	long bytes() {
 		return sum(TargetSurface::bytes);
 	}

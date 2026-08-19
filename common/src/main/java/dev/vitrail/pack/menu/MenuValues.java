@@ -229,17 +229,6 @@ public final class MenuValues {
 	}
 
 	/**
-	 * The profile the pack was last built with, which is what the world on screen amounts to. A
-	 * screen needs both this and {@link #profile()} to tell a chosen profile from an applied one,
-	 * exactly as it does for a single setting.
-	 */
-	public String appliedProfile() {
-		String over = this.forced.get(PROFILE_KEY);
-
-		return over == null ? match(this::applied) : over;
-	}
-
-	/**
 	 * Back to the value the pack ships, not to the value the profile or the file would give. That
 	 * is what a shift click means, and it is also what makes the line disappear from the file
 	 * rather than being written out with the default in it.

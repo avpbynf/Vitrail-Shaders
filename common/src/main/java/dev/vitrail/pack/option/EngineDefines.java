@@ -192,10 +192,6 @@ public final class EngineDefines {
 		return defines;
 	}
 
-	public static int count() {
-		return table(DEFAULT_MC_VERSION).size();
-	}
-
 	private static String osSymbol(Os os) {
 		return switch (os) {
 			case MAC -> "MC_OS_MAC";
