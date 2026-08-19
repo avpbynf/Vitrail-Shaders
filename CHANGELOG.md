@@ -11,7 +11,7 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
-## Unreleased
+## 0.6.0-beta
 
 ### Added
 
@@ -20,7 +20,8 @@ what the next one holds.
   draws for the camera, so a far hill lays a shadow on the ground instead of only shading itself
   out of its own depth. Packs that write `dhShadow.enabled=false` are taken at their word, which is
   most of them; the one pack tried here that ships the program keeps it behind a setting of its own
-  and it has to be switched on. What the map holds is the distant land the camera can see, which is
+  and it has to be switched on. It also follows the two words that govern the near world in the map,
+  so a pack that keeps the world out of its own shadow map keeps the distant land out with it. What the map holds is the distant land the camera can see, which is
   narrower than under Iris: that mod gets a second list of it, built for the light, and there is no
   second list to be had here.
 
