@@ -67,13 +67,15 @@ translates its programs once, and runs its frame on the Vulkan backend in the
 order the format prescribes. Drawn through the pack's own programs today: the
 world's terrain and water, the shadow map, the sky in the overworld and in the
 End, the overworld's clouds, the weather, the particles, the entities, which
-covers the mobs and the block entities alike, and the player's own hand. A settings screen reads the pack's own
-menu layout, and a resource pack's normal and specular maps are served beside the
-blocks they belong to.
+covers the mobs and the block entities alike, and the player's own hand. So is
+the far terrain of Distant Horizons, through the pack's own distant programs,
+given a build of that mod that can draw on this backend at all. A settings
+screen reads the pack's own menu layout, and a resource pack's normal and
+specular maps are served beside the blocks they belong to.
 
-Several families still come from the game, and a few of the ones that do go
-through reach the pack with an identifier held constant, which shows as a mob
-shaded like something it is not. Rather than a list here that would go stale
+Several families still come from the game, and a handful of the values a pack
+can ask about the frame, what the player holds among them, are answered with a
+documented stand-in rather than measured. Rather than a list here that would go stale
 between releases, the engine states it itself: when a place first draws, it logs
 which families still come from the game. That line is the authority, and
 [pack compatibility](docs/compatibility.md) starts from what you are seeing and
@@ -116,20 +118,13 @@ Both jars land in `build/libs`.
 ## How it works
 
 A shader pack is GLSL written against OpenGL conventions that no Vulkan driver
-will accept. Vitrail rewrites it: version bump, `varying` and `attribute` into
-`in` and `out`, loose uniforms gathered into a block, `gl_FragData[N]` into
-outputs declared one per colour attachment, legacy sampler calls, fixed-function
-builtins.
-
-That rewriting happens **once, when the pack is loaded**. What reaches the
-driver afterwards is SPIR-V, and there is no translation layer left between the
-game and the GPU. The distinction matters: this is a compiler that runs at load
-time, not a shim that runs per frame.
-
-The SPIR-V itself is not ours. Minecraft already embeds shaderc and SPIRV-Cross,
-and its device accepts an arbitrary shader source, so the game does its own
-compilation, reflection and binding assignment on our output exactly as it does
-on its own shaders.
+will accept. Vitrail rewrites every program into Vulkan GLSL **once, when the
+pack is loaded**, and hands it to the compiler the game already embeds, which
+turns it into SPIR-V exactly as it does for the game's own shaders. There is no
+translation layer left between the game and the GPU while a frame is drawn:
+this is a compiler that runs at load time, not a shim that runs per frame. What
+that one idea costs, buys and implies is the opening page of
+[the documentation](docs/README.md).
 
 ## Read more
 
