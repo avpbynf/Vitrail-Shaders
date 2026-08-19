@@ -109,7 +109,7 @@ public final class PackValues {
 	public static PackValues read(Path packPath, String dimension, Map<String, OptionValue> chosen,
 			String profile) throws IOException {
 		PackValues values = new PackValues();
-		PackDefines.install(values.state.biomes());
+		PackDefines.install();
 
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			OptionIndex options = OptionIndex.build(source);

@@ -1047,12 +1047,12 @@ public final class PackChain {
 	 * a file having changed and is the only reload nobody can ask for.
 	 * <p>
 	 * Two moments, and both are the pack being read against something it could not see before. The
-	 * pack is read while the client starts up, with no biome symbol to compile against, so it takes
-	 * the branch meant for an engine that cannot answer them; joining a world is what makes those
-	 * symbols exist. And a dimension directory replaces the root rather than layering over it, so
-	 * walking through a portal changes half of what a pack is.
+	 * pack is read while the client starts up, when the data pack registries do not exist yet, so a
+	 * {@code block.properties} naming a block TAG resolved it against nothing; joining a world is
+	 * what makes those tags resolvable. And a dimension directory replaces the root rather than
+	 * layering over it, so walking through a portal changes half of what a pack is.
 	 * <p>
-	 * The two are asked apart rather than folded together: the registry the symbols hang on is the
+	 * The two are asked apart rather than folded together: the registry the tags hang on is the
 	 * very same object on both sides of a portal in single player, so a dimension change would slip
 	 * past a chain that only watched them.
 	 * <p>
@@ -1078,8 +1078,8 @@ public final class PackChain {
 					+ "the pack is read again against DISTANT_HORIZONS: the symbol is what a pack "
 					+ "branches its distant land on, and it cannot be right for both");
 		} else {
-			Vitrail.logger().info("The world's own symbols are known now, reloading the pack against "
-					+ "them");
+			Vitrail.logger().info("The world's own registries are here now, reloading the pack so "
+					+ "what names a tag resolves against them");
 		}
 
 		// Straight to the reading, without forgetting the report first, and this is the one road
@@ -1141,7 +1141,7 @@ public final class PackChain {
 	 *
 	 * @return whether a pack was drawn, so that the caller knows to fall back to its own chain.
 	 *         The world check runs first and before the refusal below, or a pack that failed to
-	 *         compile would never be read again against the symbols joining a world gives it.
+	 *         compile would never be read again against the registries joining a world gives it.
 	 */
 	public static boolean draw(Path gameDirectory) {
 		reloadIfTheWorldMoved(gameDirectory);
@@ -1361,7 +1361,7 @@ public final class PackChain {
 	 * the terrain and the entities all open the frame while the world is being drawn, whichever of
 	 * the three comes first, so they allocate everything back
 	 * before {@code draw} reaches {@link #reloadIfTheWorldMoved} at the end of it; a world joined
-	 * with symbols this engine has not seen then reloads and makes the same work again. One extra
+	 * with registries this engine has not seen then reloads and makes the same work again. One extra
 	 * allocation and one extra translation, on the frame the world appears, which is the frame
 	 * already carrying every other first cost there is.
 	 */

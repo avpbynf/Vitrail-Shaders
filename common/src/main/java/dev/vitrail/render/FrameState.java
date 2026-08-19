@@ -93,7 +93,6 @@ public final class FrameState implements WorldState {
 
 	/** Refilled every frame by the reading of Distant Horizons, and never read outside it. */
 	private final Vector2f distantPlanes = new Vector2f();
-	private final BiomeClassifier biomes = new BiomeClassifier();
 	private final CameraShift shift = new CameraShift();
 
 	private PackDirectives directives = PackDirectives.defaults();
@@ -288,15 +287,6 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
-	 * The biome table. Exposed so that whoever writes the {@code BIOME_*} defines writes them from
-	 * the same numbering the {@code biome} uniform carries, because two tables that agree today is
-	 * the shape of a failure nobody finds.
-	 */
-	public BiomeClassifier biomes() {
-		return this.biomes;
-	}
-
-	/**
 	 * Called once per frame, before anything reads the state. The named point the rest of the
 	 * engine's idea of a frame boundary hangs off.
 	 */
@@ -382,15 +372,13 @@ public final class FrameState implements WorldState {
 	 * Forgets the world as well as the frame, for a client that has left one rather than moved
 	 * between two.
 	 * <p>
-	 * Both things this drops are held by identity, which is what makes them worth dropping: the level
-	 * of the last frame, so that the change is noticed again when one is joined, and the registry the
-	 * biome numbers were walked from. A client sitting in the menu was keeping the whole
-	 * {@code ClientLevel} it had just left alive through the pair of them.
+	 * What this drops is held by identity, which is what makes it worth dropping: the level of the
+	 * last frame, so that the change is noticed again when one is joined. A client sitting in the
+	 * menu was keeping the whole {@code ClientLevel} it had just left alive through it.
 	 */
 	public void leaveWorld() {
 		reset();
 		this.lastLevel = null;
-		this.biomes.forget();
 	}
 
 	/**
@@ -877,7 +865,7 @@ public final class FrameState implements WorldState {
 		// different when the camera has backed through a wall.
 		BlockPos position = player.blockPosition();
 		Holder<Biome> holder = level.getBiome(position);
-		this.biomeId = this.biomes.identify(level, holder);
+		this.biomeId = BiomeClassifier.identify(holder);
 		this.biomeCategory = BiomeClassifier.categoryOf(holder);
 		this.biomePrecipitation =
 				switch (holder.value().getPrecipitationAt(position, level.getSeaLevel())) {
