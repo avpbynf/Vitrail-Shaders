@@ -55,10 +55,12 @@ import java.util.Optional;
  * this family, and it has to KEEP OFF it: the world's depth holds nothing where an LOD stands, so
  * without a cut of its own the seed reads those pixels as unanswered and paints the game's sky
  * over the albedo this family just wrote. That is what bleached Bliss's far terrain chalk white,
- * and only Bliss's: every other pack's sky claims those pixels into the coverage mask and the
- * seed already kept off, while Bliss's {@code gbuffers_skybasic} is the one sky the translation
- * cannot give a mask to. {@link SceneSeed} carries the cut, against this family's own depth
- * image, so the far terrain no longer depends on the sky in front of it having claimed the mask.
+ * and on the corpus only Bliss's: measured today, its {@code gbuffers_skybasic} is the one sky
+ * left without a coverage mask, so every other pack's sky claims those pixels and the seed
+ * already kept off. The ways a sky loses the mask are structural and not Bliss's
+ * ({@code GeometryProgram.covers} names four), so the observation is the corpus's and not a
+ * rule. {@link SceneSeed} carries the cut, against this family's own depth image, so the far
+ * terrain no longer depends on the sky in front of it having claimed the mask.
  * <p>
  * <strong>Its namespace is ours and has no {@code sodium} in it</strong>, for the reason
  * {@link SkyProgram} gives: the word is what makes Sodium's mixin push twenty bytes of region offset

@@ -141,9 +141,11 @@ final class SceneSeed {
 
 	/**
 	 * How a depth image says something was really rasterised into it, told from its clear. The
-	 * game clears reversed depth to nought and the far terrain's image follows it, so a real
-	 * fragment is strictly past the clear; the sentinel of an absent image sits outside the range
-	 * on the same side as the clear and reads as nothing drawn through the same test.
+	 * game clears reversed depth to nought and the far terrain's image follows it; the sentinel
+	 * of an absent image sits outside the range on the same side as the clear and reads as
+	 * nothing drawn through the same test. A fragment landing exactly on the far plane reads as
+	 * the clear and is missed - DH's own apply stage discards on the same equality - which is a
+	 * set of measure nought and not a case the cut leans on.
 	 */
 	private static final String REAL = ClipSpace.REVERSED.z < 0.0F ? "> 0.0" : "< 1.0";
 
@@ -177,12 +179,21 @@ final class SceneSeed {
 	 * it is rasterised in DH's own volume, whose near plane stands blocks out, so its numbers and
 	 * the world's are two windows onto one scene and comparing them would put a hill a thousand
 	 * blocks off at arm's length. It does not need to. The far terrain begins where the world's
-	 * chunks end, so anything the game really drew stands in front of it, and the one question
-	 * left is yes or no twice: did the far terrain write here, and did the game write anything at
-	 * all. Where the first is yes and the second no, the pixel is the pack's own picture already,
-	 * written by its {@code dh_} programs, and the seed painting the game's sky over it is what
-	 * bleached the far terrain chalk white under Bliss while its water half, drawn after the
-	 * deferred stage, kept its colour.
+	 * chunks end, so anything the game drew AND DEPTH-WROTE stands in front of it, and the one
+	 * question left is yes or no twice: did the far terrain write here, and did the game write any
+	 * depth at all. Where the first is yes and the second no, the pixel is the pack's own picture
+	 * already, written by its {@code dh_} programs, and the seed painting the game's sky over it
+	 * is what bleached the far terrain chalk white under Bliss while its water half, drawn after
+	 * the deferred stage, kept its colour.
+	 * <p>
+	 * <strong>What the depth-write clause costs, and it is paid knowingly:</strong> the game
+	 * paints some things without writing the world's depth, the default rain and snow first among
+	 * them ({@code WeatherDraw} carries why no pack of the corpus asks for the depth writing
+	 * pipeline), and those the cut cannot see. On a run where the seed stands in for the weather,
+	 * the game's rain is therefore cut away exactly where the far terrain is its backdrop, and
+	 * kept over the near world and the sky. The trade is the far terrain's whole picture against
+	 * rain streaks on a pack that serves no weather program, and the far terrain wins; the day a
+	 * depthless family matters more, the cut needs a mask of its own rather than a wider guess.
 	 */
 	private static final String FRAGMENT = String.format(Locale.ROOT, """
 			#version 460 core
