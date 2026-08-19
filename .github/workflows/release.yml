@@ -99,10 +99,21 @@ jobs:
             exit 1
           fi
 
+          # Three numbers, then either -alpha, or -beta, or nothing, which is the shape CONTRIBUTING
+          # describes under Branches. Asked of a tag push alone: a release already out was named
+          # under whatever rule stood on its day, and this job is dispatched again on old tags to
+          # resend a corrected body, which refusing the shape would take away.
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta))?$'; then
+              echo "::error::$version is not three numbers followed by -alpha, -beta or nothing"
+              exit 1
+            fi
+          fi
+
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
           # What marks a release as a pre-release is the version itself: an identifier after a dash
-          # is what 0.1.0-alpha.1 has and what a finished version does not.
+          # is what 0.5.0-beta has and what a finished version does not.
           case "$version" in
             *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
             *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
