@@ -570,8 +570,9 @@ GNU Lesser General Public License version 3
   it, line 12, on the terrain and on every family the game hands over as a render type. The sixteen
   numbers are worked out here from the texel centres rather than read off Iris, and they agree with
   the sixteen it carries; what is taken is the rule that gl_TextureMatrix[1] is answered with them
-  at all, which is what a pack expects. One family is answered the identity here instead, and the
-  file names that as a divergence.
+  at all, which is what a pack expects. One family is answered the identity instead, Distant
+  Horizons geometry, and that is Iris's answer too rather than a divergence: it rewrites both
+  gl_TextureMatrix[0] and [1] to mat4(1.0) there.
 
   common/src/main/java/dev/vitrail/glsl/GlslTranslator.java sends a read of gl_TextureMatrix[0] to
   the game's own per draw transforms on the entity family, which is where
