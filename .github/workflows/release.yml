@@ -141,7 +141,11 @@ jobs:
       - name: Find the jars
         id: jars
         run: |
+          # The loaders a release is expected to carry, named once. Adding a third is this word
+          # plus a mirror step of its own further down, since a store files a loader per upload.
           shopt -s nullglob
+          expected=0
+
           for loader in neoforge fabric; do
             glob="build/libs/vitrail-$loader-*.jar"
             jars=($glob)
@@ -153,8 +157,21 @@ jobs:
               exit 1
             fi
 
+            expected=$((expected + 1))
             echo "$loader=${jars[0]}" >> "$GITHUB_OUTPUT"
           done
+
+          # The same silence read from the other end. The check above catches a jar that stopped
+          # being built; this one catches a jar that is built and answers to no loader on the list,
+          # which is what a module added to settings.gradle looks like on the day it lands. Without
+          # it that jar reaches neither store and nothing says so, the run ending as green as one
+          # where everything shipped. Counting is enough to find it: the patterns above share the
+          # vitrail- prefix and part at the loader, so no jar is claimed by two of them.
+          built=(build/libs/*.jar)
+          if [ ${#built[@]} -ne "$expected" ]; then
+            echo "::error::the list names $expected jars, and build/libs holds: $(ls build/libs)"
+            exit 1
+          fi
 
       - name: Publish on GitHub
         env:
