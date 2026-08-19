@@ -4,6 +4,7 @@ import dev.vitrail.mixin.MixinSodiumWorldRenderer;
 import dev.vitrail.mixin.RenderSectionManagerAccessor;
 import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.render.BlockStateIds;
+import dev.vitrail.render.ShadowCullPlan;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.Vitrail;
@@ -17,7 +18,6 @@ import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
 import net.caffeinemc.mods.sodium.client.render.chunk.lists.ChunkRenderList;
 import net.caffeinemc.mods.sodium.client.render.chunk.lists.SortedRenderLists;
-import net.caffeinemc.mods.sodium.client.render.viewport.frustum.SimpleFrustum;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
 import net.caffeinemc.mods.sodium.client.util.GameRendererStorage;
@@ -30,13 +30,15 @@ import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.joml.Vector3d;
+import org.joml.Vector3f;
 
 /**
  * Draws the chunk renderer once more, at the very end of the frame, into the shadow map the next
  * frame will read.
  * <p>
  * The stage stands at the end of a frame and not at its top, and that placement is the culling
- * design. The world is walked a second time under the light's frustum, which reuses the very lists
+ * design. The world is walked a second time for the light, under the shape
+ * {@link ShadowCullFrustum} chooses for it, which reuses the very lists
  * the camera's walk just filled: {@code ChunkRenderList} is one persistent object per region, so
  * there is nothing to save and restore, only an order to respect. Advancing the frame counter first
  * is what lets the second walk of a frame reset those lists instead of overflowing them, and raising
@@ -72,6 +74,10 @@ public final class ShadowTerrain {
 
 	/** Scratch for the light's cull matrix, one per process rather than one per frame. */
 	private static final Matrix4f LIGHT = new Matrix4f();
+
+	/** The same, for the camera's volume and the light's direction the walk's shape is built from. */
+	private static final Matrix4f CAMERA = new Matrix4f();
+	private static final Vector3f LIGHT_VECTOR = new Vector3f();
 
 	private static Vec3 camera;
 
@@ -138,7 +144,11 @@ public final class ShadowTerrain {
 		RenderSectionManager manager =
 				((MixinSodiumWorldRenderer) renderer).vitrail$renderSectionManager();
 		Matrix4f light = TerrainDraw.shadowFrustum(LIGHT);
-		if (manager == null || light == null) {
+		// Read here, in the same breath as the light's own matrix and off the same frame: the shape
+		// the terrain is walked against is built from the camera's volume and the light's direction,
+		// and the record's own note says what taking one of them a frame later would keep and drop.
+		ShadowCullPlan plan = TerrainDraw.shadowCullPlan(LIGHT_VECTOR, CAMERA);
+		if (manager == null || light == null || plan == null) {
 			return;
 		}
 
@@ -160,15 +170,16 @@ public final class ShadowTerrain {
 		manager.prepareRender();
 		try {
 			FogParameters fog = ((MixinSodiumWorldRenderer) renderer).vitrail$lastFogParameters();
-			// The light's own volume, and a box around the camera cut out of it wherever a shadow
-			// distance bounds the walk. Negative means nothing bounds it, and then the walk is the
-			// volume alone. Which of the two happens is the pack's business at least as often as the
-			// player's: most of the corpus declares a render multiplier and is bounded at its own
-			// half plane whatever the slider says.
-			float bound = TerrainDraw.shadowRenderDistance();
-			FrustumIntersection volume = new FrustumIntersection(light);
-			Viewport viewport = new Viewport(
-					bound < 0.0F ? new SimpleFrustum(volume) : new ShadowCull(volume, bound),
+			// The shape the pack asked for, and a box around the camera cut out of it wherever a
+			// shadow distance bounds the walk. By default that shape is the camera's own volume swept
+			// along the light rather than the light's own: a section that cannot drop anything onto
+			// what the camera can see is thrown away before it is drawn. Whether a bound applies at
+			// all is the pack's business at least as often as the player's, most of the corpus
+			// declaring a render multiplier and being held at its own half plane whatever the slider
+			// says, and the plan carries the arbitration already made.
+			ShadowCullFrustum.Chosen cull =
+					ShadowCullFrustum.of(plan, new FrustumIntersection(light));
+			Viewport viewport = new Viewport(cull.frustum(),
 					new Vector3d(camera.x, camera.y, camera.z));
 			manager.finalizeRenderLists(minecraft.gameRenderer.mainCamera(), viewport,
 					fog == null ? FogParameters.NONE : fog, true);
@@ -193,8 +204,8 @@ public final class ShadowTerrain {
 			if (measured != BlockStateIds.generation() && seen > 0) {
 				measured = BlockStateIds.generation();
 				Vitrail.logger().info("Shadow cull walked {} sections for the light against {} "
-						+ "for the camera, on block table {}", sections(manager.getRenderLists()),
-						seen, measured);
+						+ "for the camera, on block table {}, culling {}",
+						sections(manager.getRenderLists()), seen, measured, cull.culling());
 			}
 
 			draw(renderer, minecraft, camera);

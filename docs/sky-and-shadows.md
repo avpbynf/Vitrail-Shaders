@@ -195,17 +195,56 @@ Finally, per-face batch culling has to be disabled for the shadow pass, and the 
 not enough to do it: batches choose which faces to submit before any pipeline exists, and a face
 the camera cannot see is exactly the face standing between the sun and the ground.
 
+### The shape the light measures a section against
+
+The obvious shape is the box the map is drawn in, and it is the wrong one. The map only ever gets
+sampled where the camera can see, so a section that cannot drop anything onto anything visible pays
+for a draw whose result nothing reads. What replaces it is the camera's own volume swept along the
+light: keep the faces of the camera frustum whose inward normal points towards the light, since they
+are its far side as the light sees it; drop the faces looking at the light, since a caster in front
+of those still casts into view; and close the silhouette with a plane swept along the light for every
+edge between a kept face and a dropped one. With the sun overhead that removes the lid of the camera
+frustum and keeps its floor, which is exactly right: what stands above you casts down into what you
+see, what stands below you does not.
+
+The assumption underneath is worth knowing, because it is where the shape stops being conservative:
+the map is taken to be read for direct shadowing and for volumetrics, not for light bouncing off a
+caster you cannot see. That is the reference's assumption, and packs are written against it.
+
+**The shape is the pack's to choose**, through `shadow.culling`, and the four states and their words
+are described once under [the pack format](pack-format.md). The distance is a separate axis and
+composes with all of them: whichever shape is chosen, the box a shadow distance asks for is cut out
+of it, so the sweep and the bound never have to know about each other.
+
+Two things about the arithmetic are recorded here because a reader will look for them. The planes are
+pulled out of the camera's view projection, and the clip volume that matrix targets decides what
+comes out: the reference works against OpenGL, minus one to one, while this engine rasterises with a
+reversed Z over zero to one. The matrix handed to the extraction is therefore the **published**
+projection, the one already put into the pack's volume once a frame, and not the one the frame was
+drawn with; against the published one the reference's six lines are right exactly as they stand, and
+the extraction converts nothing. Both ways of doubting that cost something and neither shows on
+screen: handed the drawn matrix, those lines lose the far plane outright and keep every section
+behind it, while converting a second time leaves the far plane right by accident and pushes the near
+plane from `n` out to `2nf / (n + f)`. And the planes come out in camera-relative world space rather
+than in the light's clip space, which is also the space the boxes arrive in, so no further conversion
+is owed anywhere: the light's own volume never enters the cull at all.
+
+What this buys has to be read off the log rather than off the screen, and the shadow stage prints it:
+how many sections the light walked, how many the camera walked, and which shape was used. The picture
+is the place it will NOT show, because keeping a section too many costs a draw and not a pixel.
+
 All of the above is about the terrain. What moves is culled separately, and there is an open
 divergence there worth stating plainly, because it is a gap and not a workaround. A caster is
-measured against the light's own frustum, the same matrix the terrain is culled against, and where
-the pack asked for a shorter reach, that reach is cut as an axis-aligned box about the camera tested
-on the caster's position. Iris instead rebuilds a whole second shadow frustum for the movers, at a
-shorter distance, and tests the caster's bounding box against it
+measured against the light's own frustum, the box the map is drawn in, and where the pack asked for a
+shorter reach, that reach is cut as an axis-aligned box about the camera tested on the caster's
+position. Iris instead measures the movers against the same swept shape as the terrain, rebuilt at
+a shorter distance, and tests the caster's bounding box against it
 (`shadows/ShadowRenderer.java:536-541` then `:703`). The two keep-sets are different shapes, so the
 difference runs both ways: a caster inside the light's frustum and inside the box but outside that
 narrower frustum is kept here and dropped there, and one whose box grazes Iris's bound while its
 position sits outside ours is the reverse. Nothing makes Iris's shape impossible here; it has simply
-not been written yet.
+not been written yet, and since the terrain moved to the swept shape the two halves of the walk no
+longer measure against the same thing.
 
 ### The experiment that separates the two failure modes
 

@@ -52,6 +52,7 @@ public final class PackDirectives {
 	private final float shadowDistance;
 	private final float shadowDistanceRenderMul;
 	private final boolean forcesShadowRenderDistance;
+	private final float voxelDistance;
 	private final float entityShadowDistanceMul;
 	private final float shadowNearPlane;
 	private final float shadowFarPlane;
@@ -89,6 +90,7 @@ public final class PackDirectives {
 		this.shadowDistance = builder.shadowDistance;
 		this.shadowDistanceRenderMul = builder.shadowDistanceRenderMul;
 		this.forcesShadowRenderDistance = builder.forcesShadowRenderDistance;
+		this.voxelDistance = builder.voxelDistance;
 		this.entityShadowDistanceMul = builder.entityShadowDistanceMul;
 		this.shadowNearPlane = builder.shadowNearPlane;
 		this.shadowFarPlane = builder.shadowFarPlane;
@@ -227,6 +229,16 @@ public final class PackDirectives {
 	}
 
 	/**
+	 * How far out the pack's own voxel grid reaches, nought unless it says otherwise, and read for
+	 * the one state that needs it: a pack asking for {@code shadow.culling=safe_zone} keeps everything
+	 * within this distance whatever the light's own frustum says of it
+	 * ({@code shaderpack/properties/PackShadowDirectives.java:66,311}).
+	 */
+	public float voxelDistance() {
+		return this.voxelDistance;
+	}
+
+	/**
 	 * How much shorter the light reaches for the casters that MOVE than for the world, one unless the
 	 * pack says otherwise.
 	 * <p>
@@ -328,6 +340,7 @@ public final class PackDirectives {
 		private float shadowDistance = 160.0F;
 		private float shadowDistanceRenderMul = -1.0F;
 		private boolean forcesShadowRenderDistance;
+		private float voxelDistance;
 		private float entityShadowDistanceMul = 1.0F;
 		private float shadowNearPlane = -100.05F;
 		private float shadowFarPlane = 156.0F;
@@ -373,6 +386,7 @@ public final class PackDirectives {
 					this.shadowDistanceRenderMul = value;
 					this.forcesShadowRenderDistance = true;
 				});
+				case "voxelDistance" -> asFloat(directive, value -> this.voxelDistance = value);
 				case "entityShadowDistanceMul" -> asFloat(directive,
 						value -> this.entityShadowDistanceMul = value);
 				case "shadowNearPlane" -> asFloat(directive, value -> this.shadowNearPlane = value);

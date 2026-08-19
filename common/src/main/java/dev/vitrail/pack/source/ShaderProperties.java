@@ -85,18 +85,13 @@ public final class ShaderProperties {
 	// writes shadowEntities and shadowBlockEntities once each, under an #ifndef its own settings
 	// file defines, so both lines are dead and a flat read turns the most used pack of the corpus
 	// into one with no entity shadows.
-	//
-	// shadow.culling belongs to the same family by its name and is deliberately NOT read, which is a
-	// refusal rather than a gap, so a pack that writes it is told nothing about it and gets a line
-	// among the keys nothing reads. Six of the eight write it. Its four answers are not four ways of
-	// walking one frustum: they pick between a box culler at the shadow distance, a box culler at
-	// the VOXEL distance, no culling at all and culling everything, each with its own capping
-	// against the render distance (Iris shadows/ShadowRenderer.java:302-355), and each of those
-	// rests on distance directives this engine does not read. Reading the word and walking one
-	// frustum anyway would put casters in a map the pack asked to keep them out of.
 	private static final Pattern SHADOW_CASTER = Pattern.compile(
 			"^\\s*(shadowTerrain|shadowTranslucent|shadowEntities|shadowPlayer|shadowBlockEntities"
 					+ "|shadowLightBlockEntities)\\s*=\\s*(.*)$");
+	// Which shape the light measures a section against. Of the same family by its name, and read on
+	// the live lines for the same reason, but it is not a caster word and it is not a boolean: the
+	// value is one of four states, and ShadowCullState carries what each of the written words means.
+	private static final Pattern SHADOW_CULLING = Pattern.compile("^\\s*shadow\\.culling\\s*=\\s*(.*)$");
 	// Whether the terrain's ambient occlusion is kept out of the vertex colour. Read on the live
 	// lines like every other directive of this file, and the note on RAIN_DEPTH says why that is
 	// what the reference does too.
@@ -358,6 +353,14 @@ public final class ShaderProperties {
 		// see that it was not understood.
 		Matcher caster = SHADOW_CASTER.matcher(line);
 		if (caster.matches() && truth(caster.group(2).trim()) != null) {
+			return;
+		}
+
+		// The culling state goes with separateAo below rather than with the casters above, and for
+		// that entry's reason: a word this cannot read is not stepped over, it is what puts the
+		// state back to the default, so the line is read whether the word is one of the four or not.
+		Matcher culling = SHADOW_CULLING.matcher(line);
+		if (culling.matches()) {
 			return;
 		}
 
@@ -1177,6 +1180,30 @@ public final class ShaderProperties {
 
 		return new ShadowCasters(terrain, translucent, entities, player, blockEntities,
 				lightBlockEntities);
+	}
+
+	/**
+	 * Which shape the pack wants the light to measure a section against, live lines only, and
+	 * {@link ShadowCullState#DEFAULT} unless it says otherwise. Six packs of the eight tested write
+	 * the key.
+	 * <p>
+	 * The last live line decides, and a word this cannot read leaves the default standing rather
+	 * than the line before it. That is Iris's reading and not a simplification of it: it loads the
+	 * preprocessed file into a map and runs its switch once, on the key's last value alone, and the
+	 * arm for an unknown word logs and touches nothing
+	 * ({@code shaderpack/properties/ShaderProperties.java:180-186}). The one thing not carried over
+	 * is that log line, this module having no logger and no business acquiring one.
+	 *
+	 * @param defines the pack's settings, which decide which lines of the file are alive at all
+	 */
+	public ShadowCullState shadowCull(Map<String, String> defines) {
+		ShadowCullState asked = ShadowCullState.DEFAULT;
+		for (Matcher line : live(SHADOW_CULLING, defines)) {
+			ShadowCullState state = ShadowCullState.of(line.group(1).trim());
+			asked = state == null ? ShadowCullState.DEFAULT : state;
+		}
+
+		return asked;
 	}
 
 	/**

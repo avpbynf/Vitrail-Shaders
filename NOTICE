@@ -361,11 +361,37 @@ GNU Lesser General Public License version 3
   into its shadow map. The set a pack asks for by saying nothing is Iris's own, and the pair of
   directives is tested in the shape Iris tests it in, before anything is extracted.
 
+  common/src/main/java/dev/vitrail/pack/source/ShadowCullState.java carries the four states of
+  net.irisshaders.iris.shaderpack.properties.ShadowCullState together with the mapping from the
+  words a pack writes, which is the switch of
+  net.irisshaders.iris.shaderpack.properties.ShaderProperties, adapted in August 2026. The mapping
+  is reused rather than reasoned out because none of the three words means what it reads as.
+
+  common/src/main/java/dev/vitrail/sodium/ShadowCullFrustum.java measures a section against the
+  camera's own volume swept along the light, and chooses which shape each state asks for. It is
+  adapted in August 2026 from
+  net.irisshaders.iris.shadows.frustum.advanced.AdvancedShadowCullingFrustum and its neighbours
+  BaseClippingPlanes and NeighboringPlaneSet, from
+  net.irisshaders.iris.shadows.frustum.advanced.SafeZoneCullingFrustum, and from the state machine
+  of ShadowRenderer.createShadowFrustum that picks between them, whose distances live beside every
+  other distance in common/src/main/java/dev/vitrail/render/PackValues.java.
+  The algorithm itself is L. Spiro's, credited in the original and through it here.
+  Three things are this project's own and are marked in the file. The plane extraction is taken as
+  written and is fed the matrix this engine republishes in the original's own clip volume, rather
+  than the reversed Z one it rasterises with; either handing over the drawn matrix or converting the
+  extraction a second time is wrong, and the file works both out. The expanded section test reads
+  its argument the way the Sodium version this engine compiles against reads it, as what is added
+  to a padded radius rather than as the radius itself. And the branch the original takes for a pack
+  that voxelises is not reachable here, no geometry stage being run at all, so it is answered rather
+  than measured.
+
   common/src/main/java/dev/vitrail/uniform/values/CelestialValues.java carries the celestial
   positions of net.irisshaders.iris.uniforms.CelestialUniforms, adapted in August 2026: the single
   step of wrapping, the starting vector of length one hundred, the unread y of the moon, and the w
   of zero on the up vector. Same rewriting of the rotations, and the two calls into Iris's own
-  pipeline object are replaced by questions to the world state.
+  pipeline object are replaced by questions to the world state. The world space light vector is the
+  same file's getShadowLightPositionInWorldSpace, which is the eye space answer without the model
+  view, and is kept apart from it here for the reason it is kept apart there.
 
   common/src/main/java/dev/vitrail/uniform/values/DrawValues.java takes the quad projection of
   net.irisshaders.iris.pipeline.transform.transformer.CompositeTransformer as a literal, since it
