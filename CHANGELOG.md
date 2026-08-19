@@ -12,7 +12,7 @@ plus, because each of them files an upload per loader and has nowhere else to pu
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
-## Unreleased
+## 0.4.0-beta.1
 
 ### Added
 
