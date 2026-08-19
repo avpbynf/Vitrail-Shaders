@@ -157,6 +157,11 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				// still belongs to the player.
 				.setEnabledProvider(_ -> TerrainDraw.forcedShadowDistanceChunks().isEmpty(),
 						ConfigState.UPDATE_ON_REBUILD)
+				// Sodium refuses to build an option without one, at the loading screen and not at
+				// compile time. It has nothing left to do here: the binding above writes pack.txt
+				// as it is moved, where the reference's binding only moves a field and its handler
+				// saves the whole config file afterwards, IrisConfig.java:67.
+				.setStorageHandler(() -> {})
 				.setImpact(OptionImpact.HIGH);
 	}
 }
