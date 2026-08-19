@@ -37,6 +37,7 @@
 	"options.vitrail.error": "%s",
 	"options.vitrail.no_pack": "No shader pack is loaded",
 	"options.vitrail.pack_off": "No shader pack: the game draws its own image",
+	"options.vitrail.pack_missing": "Shader pack \"%s\" is not in your Shader Packs folder",
 	"key.vitrail.open_settings": "Open shader pack settings",
 	"key.vitrail.reload_pack": "Reload Shaders",
 	"options.vitrail.pack_reloaded": "Shaders Reloaded!",

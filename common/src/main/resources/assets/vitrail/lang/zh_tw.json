@@ -37,6 +37,7 @@
 	"options.vitrail.error": "%s",
 	"options.vitrail.no_pack": "未載入光影包",
 	"options.vitrail.pack_off": "無光影包：遊戲繪製自己的畫面",
+	"options.vitrail.pack_missing": "「%s」光影包不在光影包資料夾中",
 	"key.vitrail.open_settings": "開啟光影包設定",
 	"key.vitrail.reload_pack": "重新載入光影",
 	"options.vitrail.pack_reloaded": "已重新載入光影！",

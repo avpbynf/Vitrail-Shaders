@@ -95,10 +95,13 @@ public final class SettingsKey {
 	 * that same question. Iris says both lines too, {@code Iris.java:184} and {@code Iris.java:191},
 	 * off a catch rather than off a question because throwing is what its own reload does.
 	 * <p>
-	 * <b>One reading that failed still answers as one that worked</b>, and it is the engine's answer
-	 * rather than this line's: a {@code pack.txt} naming a pack the folder no longer holds is warned
-	 * about and then treated as no pack having been asked for, so nothing is left to ask. The screen's
-	 * own bottom line says "no shader pack" in that same case, for the same reason.
+	 * <b>A reading that read nothing because the named pack is gone answers as a failure</b>, which it
+	 * did not always: a {@code pack.txt} naming a pack the folder no longer holds used to be warned
+	 * about and then treated as no pack having been asked for, so this line said "Shaders Reloaded!"
+	 * over a reading that had opened nothing, and the screen's own bottom line went further and said
+	 * the game was drawing its own image on purpose. Asking for no pack at all is still no failure and
+	 * still says the first line, which is the whole distinction: {@code PackChain.packMissing} holds
+	 * it.
 	 */
 	private static void reload() {
 		Path directory = PackChain.session()

@@ -538,7 +538,17 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 		button.setTooltip(button.active ? null : Tooltip.create(noPackReason()));
 	}
 
+	/**
+	 * Why there is nothing to configure, for the tooltip on the dead view switch, and the pack that
+	 * was named is named back rather than folded into either of the other two answers. It used to
+	 * fall into {@link ScreenText#PACK_OFF}, "the game draws its own image", which is what a file
+	 * saying {@code none} means and the opposite of what a mistyped or renamed pack did.
+	 */
 	private static Component noPackReason() {
+		if (PackChain.packMissing()) {
+			return Component.translatable(ScreenText.PACK_MISSING, PackChain.askedFor().name());
+		}
+
 		return Component.translatable(
 				PackChain.noPackWanted() ? ScreenText.PACK_OFF : ScreenText.NO_PACK);
 	}
