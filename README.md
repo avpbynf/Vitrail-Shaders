@@ -55,38 +55,30 @@ OptiFine-format packs, unmodified, on the Vulkan backend, so that turning Vulkan
 on does not mean giving up the packs you already use.
 
 It is a side project by one person, and it started as a question: whether packs
-written for OpenGL over more than a decade could be made to run, untouched, on
-the renderer that now ships with the game. The answer turned out to be yes, well
-enough to play with.
+written for OpenGL over more than a decade could run, untouched, on the renderer
+that now ships with the game. Well enough to play with, it turns out.
 
 ## Status
 
 The backend this runs on is marked experimental by the game itself, and Vitrail
 is earlier still. Point it at a pack and it loads it, settings and all,
-translates its programs once, and runs its frame on the Vulkan backend in the
-order the format prescribes. Drawn through the pack's own programs today: the
-world's terrain and water, the shadow map, the sky in the overworld and in the
-End, the overworld's clouds, the weather, the particles, the entities, which
-covers the mobs and the block entities alike, and the player's own hand. So is
-the far terrain of Distant Horizons, through the pack's own distant programs,
-given a build of that mod that can draw on this backend at all. A settings
-screen reads the pack's own menu layout, and a resource pack's normal and
-specular maps are served beside the blocks they belong to.
+translates its programs once, and runs its frame in the order the format
+prescribes: terrain, water, shadows, sky, clouds, weather, particles, mobs,
+block entities and the held hand all go through the pack today, and so does
+the far terrain of Distant Horizons, given a build of that mod that can draw
+on this backend at all. A settings screen reads the pack's own menu layout,
+and a resource pack's normal and specular maps are served beside the blocks
+they belong to.
 
-Several families still come from the game, and a handful of the values a pack
-can ask about the frame, what the player holds among them, are answered with a
-documented stand-in rather than measured. Rather than a list here that would go stale
-between releases, the engine states it itself: when a place first draws, it logs
-which families still come from the game. That line is the authority, and
+What is not through yet comes from the game instead, and that set moves from one
+release to the next, so a list here would go stale: when a place first draws,
+the engine logs which families still come from the game, and
 [pack compatibility](docs/compatibility.md) starts from what you are seeing and
-names the cause.
-
-So packs run but do not yet look entirely like themselves, and the picture a
-given pack produces changes from one release to the next. If what you want today
-is a finished picture, use [Iris](https://github.com/IrisShaders/Iris) on the
-OpenGL backend instead. It does that job well, and it is the reference this
-engine is checked against. Vitrail is for people who want the Vulkan backend on
-and will trade image quality for it in the meantime.
+names the cause. If what you want today is a finished picture, use
+[Iris](https://github.com/IrisShaders/Iris) on the OpenGL backend instead; it
+does that job well, and it is the reference this engine is checked against.
+Vitrail is for people who want the Vulkan backend on and will trade some image
+quality for it in the meantime.
 
 ## Quick start
 
