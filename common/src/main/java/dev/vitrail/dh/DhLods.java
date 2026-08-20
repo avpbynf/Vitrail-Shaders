@@ -219,7 +219,7 @@ public final class DhLods {
 	 * by default ({@code core/config/Config.java:127} and {@code :447}), so an install that changed
 	 * nothing pays for three screens of work a frame that are thrown away one pass later. Iris
 	 * holds off the same two, through the same published config, at
-	 * {@code compat/dh/LodRendererEvents.java:274-275}, and clears them again at {@code :281}.
+	 * {@code compat/dh/LodRendererEvents.java:274-275}, and clears them again at {@code :281-282}.
 	 * <p>
 	 * <strong>What the three cost is the passes and not their bodies, and only one of the three
 	 * even reaches its body.</strong> The image they read is DH's depth as it cleared it, which is
@@ -258,6 +258,15 @@ public final class DhLods {
 						+ "never reads", held, SWITCHES);
 			}
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			// hold sets the two switches one after the other, so a throw between them has already
+			// forced the first with muted still false, and nothing later would ever hand it back.
+			// Clearing returns whatever DID take, and a second throw changes nothing.
+			try {
+				hold(null);
+			} catch (ReflectiveOperationException | RuntimeException | LinkageError swallowed) {
+				e.addSuppressed(swallowed);
+			}
+
 			mutable = false;
 			Vitrail.logger().info("Distant Horizons keeps drawing its own ambient occlusion and fog "
 					+ "over an image this engine never reads, which costs a frame and shows "
@@ -491,9 +500,13 @@ public final class DhLods {
 		// one on screen. Handed back to the PLAYER rather than set true: what the menu says is his,
 		// and this engine only ever stood in front of it.
 		if (muted) {
-			muted = false;
 			try {
-				hold(null);
+				// Cleared only where the clearing really ran: a throw leaves the debt standing,
+				// and so does UNREACHED, so the next restore tries again rather than forgetting
+				// that a switch of the player's is still overridden.
+				if (hold(null) != UNREACHED) {
+					muted = false;
+				}
 			} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 				Vitrail.logger().debug("Distant Horizons' own ambient occlusion and fog cannot be "
 						+ "handed back", e);
