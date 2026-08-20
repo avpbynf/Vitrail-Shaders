@@ -169,10 +169,21 @@ public record PackFile(String name, boolean enabled, int shadowDistance) {
 						+ SHADOW_DISTANCE_KEY + "=" + chosen.shadowDistance() + "\n",
 				StandardCharsets.UTF_8);
 		try {
-			Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING,
-					StandardCopyOption.ATOMIC_MOVE);
-		} catch (AtomicMoveNotSupportedException e) {
-			Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+			try {
+				Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING,
+						StandardCopyOption.ATOMIC_MOVE);
+			} catch (AtomicMoveNotSupportedException e) {
+				Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+			}
+		} catch (IOException e) {
+			// A move that failed for any other reason would leave the .part beside the file for
+			// ever, and nothing else ever looks at it.
+			try {
+				Files.deleteIfExists(temporary);
+			} catch (IOException swallowed) {
+				e.addSuppressed(swallowed);
+			}
+			throw e;
 		}
 	}
 
