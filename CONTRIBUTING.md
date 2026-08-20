@@ -254,6 +254,12 @@ name and at the head of every subject the branch carries. `docs/correct-a-page` 
 and a branch whose commits are mostly `fix` with a `refactor` among them is labelled `fix`, the same
 way its name was settled.
 
+**The repository poses that one itself**, off the branch name and at the moment the request is
+opened (`.github/workflows/label.yml`). A label derived rather than decided has no reason to be
+asked of anybody, and this one held only for as long as it was remembered: nine of the first
+eighty-eight requests carry it and none of the twenty-seven after them do. Where it posts nothing,
+the branch opens on a word this convention does not know, and `commits.yml` is what says so.
+
 **An issue carries what it is about instead**, being a report rather than a change:
 
 | label | what it marks |
