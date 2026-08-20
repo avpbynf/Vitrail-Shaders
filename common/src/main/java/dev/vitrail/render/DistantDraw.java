@@ -553,6 +553,24 @@ public final class DistantDraw {
 				pass.setUniform(DistantVertex.SECTION_BLOCK, this.corners.slot(device, base + index));
 
 				for (DhLods.Piece piece : sections.get(index).pieces()) {
+					// The shadow half's guard, asked here for what it says as much as for what
+					// it spares. The capture looks at the vertex buffer alone and nothing has
+					// ever looked at the index one, so a piece whose index buffer DH closed
+					// before it handed the set over is drawn from freed memory two submissions
+					// later, which is a device loss with no exception and no line to its name.
+					// Which of the two it names is the whole of what this is here to learn.
+					if (piece.vertices().isClosed() || piece.indices().isClosed()) {
+						String closed = piece.vertices().isClosed() ? "vertex" : "index";
+						if (this.refused.add("closed:" + closed + ":" + element.element())) {
+							Vitrail.logger().warn("A piece of the {} half of the far terrain reached "
+									+ "this frame's draw with its {} buffer closed, and is dropped. "
+									+ "Distant Horizons closed it between its own pass and this one",
+									element.half(), closed);
+						}
+
+						continue;
+					}
+
 					pass.setIndexBuffer(piece.indices(), IndexType.INT);
 					pass.setVertexBuffer(0, piece.vertices().slice());
 					pass.drawIndexed(piece.indexCount(), 1, 0, 0, 0);
