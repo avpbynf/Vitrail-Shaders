@@ -39,14 +39,21 @@ public final class ShadowCull implements Frustum {
 	private final Frustum planes;
 	private final float distance;
 
+	/** Half the side of the box the shape keeps whole whatever the distance says, or negative. */
+	private final float safeZone;
+
 	/**
 	 * @param planes   the shape the walk measures against before the box is cut out of it, which
 	 *                 {@link ShadowCullFrustum#of} chooses from what the pack asked for
 	 * @param distance how far from the camera the walk still gathers, in blocks
+	 * @param safeZone the same pack's {@code voxelDistance}, or negative where it asked for no safe
+	 *                 zone. Carried here and not left to the shape because the two boxes have to be
+	 *                 weighed against each other, which neither can do alone
 	 */
-	public ShadowCull(Frustum planes, float distance) {
+	public ShadowCull(Frustum planes, float distance, float safeZone) {
 		this.planes = planes;
 		this.distance = distance;
+		this.safeZone = safeZone;
 	}
 
 	@Override
@@ -66,17 +73,22 @@ public final class ShadowCull implements Frustum {
 	 * by the world; what escapes is every section under such a box, however far past the shadow
 	 * distance it lies, and each one is drawn into the map.
 	 * <p>
-	 * <strong>Where this parts from Iris, and it is the one state that does.</strong> Under
-	 * {@link dev.vitrail.pack.source.ShadowCullState#SAFE_ZONE} a box wholly inside the safe zone
-	 * answers {@code INSIDE} at Iris whatever the distance says short of {@code OUTSIDE}
-	 * ({@code shadows/frustum/advanced/SafeZoneCullingFrustum.java:74-78}), where this downgrades it
-	 * like any other. It costs nothing while the safe zone is the shorter of the two, such a box
-	 * being wholly within the distance as well, and it drops sections Iris would draw once
-	 * {@code voxelDistance} passes {@code shadowDistance}, which {@code PackValues:331-332} works
-	 * out apart without bounding either by the other. <strong>Iris is not of one mind on that box
-	 * itself</strong>: its {@code testAab} cuts by distance FIRST ({@code :54-56}) and drops what
-	 * its own {@code intersectAab} keeps whole, so there is no single behaviour of the reference to
-	 * follow here. What is written is the one the walk can hold to on every one of its four tests.
+	 * <strong>The safe zone is the one box that outranks the distance</strong>, and only here.
+	 * Under {@link dev.vitrail.pack.source.ShadowCullState#SAFE_ZONE} a box the safe zone holds
+	 * whole answers {@code INSIDE} at Iris the moment the distance is anything but {@code OUTSIDE}
+	 * ({@code shadows/frustum/advanced/SafeZoneCullingFrustum.java:74-78}), and that order is kept.
+	 * It settles nothing while the safe zone is the shorter of the two, such a box being wholly
+	 * within the distance as well; it is what a pack asking for a voxel grid WIDER than its shadow
+	 * distance is owed, and {@code PackValues:331-332} works the two out apart without bounding
+	 * either by the other. Four packs of the corpus reach for this shape behind their voxelised
+	 * light, and one of them, Bliss, holds {@code voxelDistance} at 64 while offering a shadow
+	 * distance down to 32.
+	 * <p>
+	 * <strong>{@link #testAab} does NOT carry that exception, and Iris does not carry it there
+	 * either</strong> ({@code SafeZoneCullingFrustum.java:54-56}, the distance cut first). The two
+	 * tests are therefore asymmetric on one box: wholly in the safe zone and wholly past the
+	 * distance. Nothing reaches it, that box being {@code OUTSIDE} by the distance in both methods
+	 * before either exception is looked at.
 	 */
 	@Override
 	public int intersectAab(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
@@ -86,9 +98,21 @@ public final class ShadowCull implements Frustum {
 
 		int shape = this.planes.intersectAab(minX, minY, minZ, maxX, maxY, maxZ);
 
-		return shape == FrustumIntersection.INSIDE && !within(minX, minY, minZ, maxX, maxY, maxZ)
-				? FrustumIntersection.INTERSECT
-				: shape;
+		if (shape != FrustumIntersection.INSIDE) {
+			return shape;
+		}
+
+		// The safe zone outranks the distance on a box it holds whole, which is Iris's order and not
+		// a softening of the line above: its safe zone frustum answers INSIDE off that box alone the
+		// moment the distance is anything but OUTSIDE (SafeZoneCullingFrustum.java:74-78). It is
+		// reachable and not a corner: four packs of the corpus ask for this shape behind their
+		// voxelised light, and Bliss holds voxelDistance at 64 while offering a shadow distance down
+		// to 32, so a player who lowers one below the other would lose casters Iris draws.
+		return within(this.distance, minX, minY, minZ, maxX, maxY, maxZ)
+				|| (this.safeZone >= 0.0F
+						&& within(this.safeZone, minX, minY, minZ, maxX, maxY, maxZ))
+				? FrustumIntersection.INSIDE
+				: FrustumIntersection.INTERSECT;
 	}
 
 	@Override
@@ -109,11 +133,11 @@ public final class ShadowCull implements Frustum {
 				&& maxZ >= -this.distance && minZ <= this.distance;
 	}
 
-	/** Whether a camera-relative box is wholly within the distance, on all three axes. */
-	private boolean within(float minX, float minY, float minZ,
+	/** Whether a camera-relative box is wholly within a half size, on all three axes. */
+	private static boolean within(float half, float minX, float minY, float minZ,
 			float maxX, float maxY, float maxZ) {
-		return minX >= -this.distance && maxX <= this.distance
-				&& minY >= -this.distance && maxY <= this.distance
-				&& minZ >= -this.distance && maxZ <= this.distance;
+		return minX >= -half && maxX <= half
+				&& minY >= -half && maxY <= half
+				&& minZ >= -half && maxZ <= half;
 	}
 }

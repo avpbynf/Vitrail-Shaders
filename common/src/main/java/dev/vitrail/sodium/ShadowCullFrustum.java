@@ -211,7 +211,7 @@ public final class ShadowCullFrustum implements Frustum {
 		}
 
 		return plan.bound() < 0.0F ? new Chosen(frustum, shape)
-				: new Chosen(new ShadowCull(frustum, plan.bound()),
+				: new Chosen(new ShadowCull(frustum, plan.bound(), plan.safeZone()),
 						shape + ", within " + plan.bound() + " blocks");
 	}
 
