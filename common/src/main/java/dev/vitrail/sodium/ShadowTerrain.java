@@ -153,7 +153,15 @@ public final class ShadowTerrain {
 			return;
 		}
 
-		int seen = sections(manager.getRenderLists());
+		// Counted only on the frame that will print it. It has to be taken HERE, the walk below
+		// replacing the camera's render lists with the light's, but every other frame was walking
+		// those lists for a line printed once per block table.
+		//
+		// Read once rather than again at the print, so a table installed between the two is named
+		// on the next frame instead of at once. That is the right way round: the count in hand was
+		// taken against the table that was standing when it was taken.
+		boolean measuring = measured != BlockStateIds.generation();
+		int seen = measuring ? sections(manager.getRenderLists()) : 0;
 
 		// Which entities the light can see is worked out here, and for them the position settles
 		// nothing: they are kept or dropped by a frustum and by a section's own state, neither of
@@ -202,7 +210,7 @@ public final class ShadowTerrain {
 			// numbers mean the cull did not happen, and nothing on screen would say so. The table is
 			// named because a second load of the same pack prints this again, word for word: it is
 			// what tells the two readings apart, not a property of the cull itself.
-			if (measured != BlockStateIds.generation() && seen > 0) {
+			if (measuring && seen > 0) {
 				measured = BlockStateIds.generation();
 				Vitrail.logger().info("Shadow cull walked {} sections for the light against {} "
 						+ "for the camera, on block table {}, culling {}",
