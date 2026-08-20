@@ -861,6 +861,17 @@ public final class DistantDraw {
 		releaseDepth();
 	}
 
+	/**
+	 * Frees the two rings that every {@link #release} deliberately kept, at the one instant no
+	 * recorded pass can still hold a slice of them: the client's shutdown, while the device is
+	 * alive. Without this the rings outlive their last frame in silence, which shows as nothing
+	 * in play and as two straggling buffers under validation layers.
+	 */
+	static void close() {
+		CORNERS.close();
+		SHADOW_CORNERS.close();
+	}
+
 	private void releaseDepth() {
 		if (this.depthView != null) {
 			this.depthView.close();
@@ -1003,6 +1014,14 @@ public final class DistantDraw {
 		void forget() {
 			this.used = 0;
 			this.peak = 0;
+		}
+
+		/** Frees the ring itself, which only {@link DistantDraw#close()} may ask for. */
+		void close() {
+			if (this.buffer != null) {
+				this.buffer.close();
+				this.buffer = null;
+			}
 		}
 	}
 }

@@ -1352,6 +1352,10 @@ public final class PackChain {
 		if (chain != null) {
 			chain.release();
 		}
+
+		// The far terrain's two corner rings survive every release on purpose, so the shutdown
+		// is the one caller that really frees them.
+		DistantDraw.close();
 	}
 
 	/**
