@@ -29,6 +29,7 @@
 		"GameRendererBlurMixin",
 		"GameRendererHandMixin",
 		"GameRendererMixin",
+		"GpuDeviceAccessor",
 		"ItemFeatureRendererMixin",
 		"ItemInHandRendererMixin",
 		"ItemModelResolverMixin",
@@ -41,6 +42,7 @@
 		"OptionsCloudsMixin",
 		"ProjectionMatrixBufferMixin",
 		"QuadParticleFeatureRendererMixin",
+		"RenderPipelineAccessor",
 		"RenderPipelineMixin",
 		"RenderSectionManagerAccessor",
 		"RenderTypeFeatureRendererGroupMixin",
@@ -52,6 +54,7 @@
 		"StagedVertexBufferDrawMixin",
 		"TextureManagerAccessor",
 		"VKDrawContextMixin",
+		"VulkanDeviceMixin",
 		"WeatherEffectRendererMixin"
 	]
 }

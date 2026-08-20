@@ -11,6 +11,19 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **The hand and the entities no longer stretch into giant triangles after a pack turns on or
+  off.** The 0.7.1 entry below called what its crash fix left behind cosmetic and brief, and it
+  was neither: the game's own entity pipelines keep the previous vertex layout until a resource
+  reload, so anything they drew over the rebuilt mesh, the hand with its switch off, every mob
+  and hand for the seconds a chain takes to compile, smeared across the screen and stayed that
+  way for the rest of the session. The engine now takes those pipelines out of the device's cache
+  the moment the layout moves and compiles them again on the spot; what left the cache is freed
+  at the next reload, the one safe moment the crash fix established, so the crash stays gone.
+
 ## 0.7.1-beta
 
 ### Fixed
@@ -22,11 +35,10 @@ what the next one holds.
   a pack that draws the entities or the hand emptied the graphics device's whole pipeline cache at
   an instant where work already recorded still named what was destroyed. Nothing empties that cache
   any more: the game does it itself on every resource reload, which is the one moment it is safe.
-  What that leaves is cosmetic and brief: after turning a pack on or off in a world, an entity or
-  the hand drawn by the game's own shader can look wrong for the second or two a pack takes to
-  finish compiling, and a resource reload clears it. Tried at length on both loaders, turning packs
-  off and on and switching between four of them, where one to four such gestures used to end the
-  session.
+  What that leaves is visual, and worse than this entry first said: an entity or the hand drawn by
+  the game's own shader can look wrong from then on, until a resource reload clears it, which the
+  entry above is what removed. Tried at length on both loaders, turning packs off and on and
+  switching between four of them, where one to four such gestures used to end the session.
 
 ## 0.7.0-beta
 

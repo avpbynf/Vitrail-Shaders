@@ -1,13 +1,19 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.EntityVertex;
+import dev.vitrail.mixin.GpuDeviceAccessor;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.systems.GpuDevice;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
 import net.minecraft.client.Minecraft;
+
+import java.util.List;
 
 import org.jspecify.annotations.Nullable;
 
@@ -79,9 +85,10 @@ import org.jspecify.annotations.Nullable;
  * So there is one answer in force and {@link #settle()} is the only thing that moves it. Its
  * instant is the one {@code TerrainMesh.settle} already uses, the head of Sodium's
  * {@code initRenderer}, reached from the extract that consumes {@code LevelExtractor.allChanged}.
- * That instant is safe for moving a format answer and for nothing wider: the game's own compiled
- * pipelines are NOT discarded here, and the body of {@code settle} says what discarding them cost
- * and which road pays that debt instead.
+ * That instant is safe for moving a format answer and for map work, and destruction is neither: the
+ * game's compiled entity pipelines are dropped from the device's cache and compiled again here, but
+ * what leaves the cache is destroyed only at the next safe purge, and the body of {@code settle}
+ * says why that split is load-bearing.
  * <p>
  * <strong>Asking is all a switch does</strong>, which is what makes the one place that writes
  * {@code EntityDraw.wanted} directly safe: an entity program that threw stops being offered at once
@@ -230,24 +237,53 @@ public final class EntityMesh {
 		// Where it did move, a drop is owed: the game precompiles every static pipeline at every
 		// resource load and caches it by identity (ShaderManager.apply, VulkanDevice.pipelineCache),
 		// this backend bakes the stride in at compile, so the entity ones standing here carry the
-		// other answer's stride.
+		// other answer's stride. Left standing they read the mesh at the wrong offsets from now on,
+		// which on screen is the hand and every fallback entity as triangles stretched across the
+		// picture, and it does not heal: the cache is only emptied at a resource reload, so the
+		// defect holds for the rest of the session. Measured before it was believed: hand=off on a
+		// stock bench, one world join, and the artefacts stood until a pack toggle forced the
+		// reload.
 		//
-		// AND NOTHING IS DROPPED HERE ALL THE SAME, which was this engine's half of issue 111. The
-		// cache can only be emptied whole, the emptying waits the device idle and destroys the
-		// game's pipelines with ours, and there is no instant of a running session where that is
-		// safe: this backend records continuously, so at any positional hook something already
-		// recorded still names what the purge destroys. Emptied here, on a pack load in a running
+		// AND NOTHING IS DESTROYED HERE ALL THE SAME, which was this engine's half of issue 111.
+		// Destruction waits the device idle, and there is no instant of a running session where
+		// that is safe: this backend records continuously, so at any positional hook something
+		// already recorded still names what a purge frees. Freed here, on a pack load in a running
 		// world, the device was lost seconds later with nothing in the log; moved to the head of
-		// the frame, it took the boot's world join down instead. The one road that empties it
-		// safely is the game's own, ShaderManager.apply, which quiesces rendering first - so the
-		// debt is left to it, and it pays at every resource reload. Until then the stale pipelines
-		// cost what a warmup already shows: an entity or hand drawn by the game's own shader over
-		// a mesh of the other stride, for the frames a chain takes to compile, and only after the
-		// answer has moved in a running world.
+		// the frame, it took the boot's world join down instead. So the two halves of eviction are
+		// split along what each one can bear. Leaving the map is map work, safe anywhere, and
+		// enough on its own: what no lookup can answer with, no NEW draw binds. The compiled
+		// pipelines wait in the mixin for clearPipelineCache, the game's one safe road, which
+		// quiesces first and now frees them with the rest. And the recompile happens at once
+		// rather than lazily at the next bind. The null asks the backend's default source, and it
+		// is never read: a source is only consulted on a miss of the device's shader module cache
+		// (VulkanDevice.getOrCompileShader, keyed by id, type and defines), the drop leaves that
+		// cache standing, and the moved answer changes none of the three keys. The recompile
+		// therefore reuses the very modules the last resource load compiled, core shaders a
+		// resource pack replaced included, and only the pipeline around them takes the new stride.
+		//
+		// The GL backend is left exactly as it stood, debt included, and the old line still says
+		// the answer moved there. Whether GL owes the same eviction is UNPROVEN in both
+		// directions: its encoder rebuilds the vertex array from the live getter at every draw
+		// (GlCommandEncoder), which reads as immune, but GlProgram.link binds attribute locations
+		// once from the format it is handed, which reads as the same bake by another name. Nobody
+		// has drawn the artefact there, and an eviction shipped unmeasured would be this fix's own
+		// plausible-and-wrong.
 		if (moved) {
-			Vitrail.logger().info("The game's entity pipelines keep the previous stride until the "
-					+ "next resource reload, which empties the device's pipeline cache on the one "
-					+ "road that is safe");
+			GpuDevice device = RenderSystem.getDevice();
+			if (((GpuDeviceAccessor) device).vitrail$backend() instanceof StalePipelines stale) {
+				List<RenderPipeline> dropped = stale.vitrail$dropEntityPipelines();
+				for (RenderPipeline pipeline : dropped) {
+					device.precompilePipeline(pipeline, null);
+				}
+
+				Vitrail.logger().info("{} entity pipelines of the game carried the previous "
+						+ "stride: compiled again at the one now in force, the old ones set "
+						+ "aside for the next safe purge", dropped.size());
+			} else {
+				Vitrail.logger().info("The game's entity pipelines were compiled under the "
+						+ "previous answer and stand until the next resource reload; this "
+						+ "backend takes no eviction, and what the stand costs it is unmeasured");
+			}
 		}
 
 		if (!asked) {
