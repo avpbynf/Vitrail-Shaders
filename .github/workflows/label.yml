@@ -1,0 +1,56 @@
+# The label a pull request carries, posed by the repository instead of remembered by whoever opens
+# it. CONTRIBUTING says a request carries the type of its branch and only that, which makes the
+# label a fact already written in the branch name rather than an opinion about the change. There is
+# nothing to decide here, and that is exactly what makes it forgettable.
+#
+# It was forgotten. Nine of the first eighty-eight requests carry a label and none of the
+# twenty-seven after them do: the rule held for as long as somebody remembered it, and no longer.
+# Every one of those twenty-seven had its type written in its branch name and at the head of every
+# subject it carried, so nothing was ever missing except the gesture.
+#
+# It refuses nothing. A branch whose first word is not one of the nine types is already refused, by
+# `.githooks/commit-msg` and by `commits.yml` running that same file, so a second complaint here
+# would be one rule living in two places. What this does when it meets one is say so and stop,
+# leaving the request unlabelled and the other workflow to fail it.
+#
+# `pull_request_target` and not `pull_request`, because a request opened from a fork is given a
+# token that may only read. Nothing of the request is checked out or run here: what is read is the
+# name of its branch, and all that is done with it is a match against nine words written below. A
+# name matching none of them reaches no command at all.
+
+name: label
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: The type in the branch name, on the request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          type="${BRANCH%%/*}"
+          case "$type" in
+            feat|fix|perf|refactor|docs|test|build|ci|chore)
+              gh pr edit "$NUMBER" --repo "$REPOSITORY" --add-label "$type"
+              echo "Labelled $type, which is what the branch $BRANCH opens with."
+              ;;
+            release)
+              # A release request carries no type. What lands from such a branch is the version
+              # bump, and the request itself is the record of a fast-forward rather than a change.
+              echo "A release request carries no type label."
+              ;;
+            *)
+              echo "::notice::$BRANCH opens with no type CONTRIBUTING knows, so nothing is posed."
+              echo "::notice::The branch name itself is answered by commits.yml, not here."
+              ;;
+          esac
