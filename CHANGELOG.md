@@ -31,6 +31,15 @@ what the next one holds.
 
 ### Fixed
 
+- **Turning the shaders off and back on, or picking another pack, takes the game down far less
+  often.** Two rings the far terrain writes its section corners into were closed the moment a pack
+  was unloaded, while a pass already recorded still held slices of them, and the graphics device was
+  lost a few seconds later with nothing in the log to say why. They belong to the engine now rather
+  than to the pack, so a load has nothing to close. It is not the whole of that crash: a second
+  fault of the same family survives it, and where the pack could not be put back once before, it now
+  takes somewhere between one and four goes. Issue 111 follows what is left, and until it is closed
+  a pack changed in game remains a thing that can end the session.
+
 - **The same pack now translates to the same text on every start.** Four tables the translator
   walks to write a shader were handed back in an order the runtime picks afresh each time the game
   starts: the varyings a stage is owed, the vertex inputs a mesh has not got, and the volume
