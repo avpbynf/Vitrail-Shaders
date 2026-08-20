@@ -2,8 +2,10 @@ package dev.vitrail.settings;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
 /**
@@ -65,6 +67,14 @@ public record PackFile(String name, boolean enabled, int shadowDistance) {
 	 * What the file says, or {@link #EMPTY} when it is not there. A line that is neither a comment nor
 	 * one of the three keys is ignored rather than refused: this file is edited by hand.
 	 * <p>
+	 * Decoded through the {@code String} constructor rather than through {@code Files.readString},
+	 * which THROWS on a byte that is not UTF-8. The rule the three lines below are read under, that
+	 * one bad character must not cost the player the pack they had chosen, does not hold if the read
+	 * itself cannot survive one: what is unreadable is one character of one value, and every other
+	 * line still says what it said. A byte order mark is taken off for the same reason it is in
+	 * {@code SettingsLayers}: nothing throws on it, and left where it is it rides on the first key,
+	 * which here is the pack's own name.
+	 * <p>
 	 * Handed the file rather than the game directory, so that where it lives stays the render layer's
 	 * business: this package names no folder of the installation and imports nothing that does.
 	 */
@@ -73,7 +83,7 @@ public record PackFile(String name, boolean enabled, int shadowDistance) {
 			return EMPTY;
 		}
 
-		String content = Files.readString(file, StandardCharsets.UTF_8);
+		String content = text(file);
 		// The one line format, which is what every file written before this class looks like. Told
 		// apart by having no key at all rather than by counting lines, so that a stray blank line or a
 		// trailing newline does not change which format a file is read as.
@@ -118,6 +128,13 @@ public record PackFile(String name, boolean enabled, int shadowDistance) {
 		return new PackFile(name, enabled, shadowDistance);
 	}
 
+	/** The file's text, decoded rather than refused, with any byte order mark taken off. */
+	private static String text(Path file) throws IOException {
+		String text = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+
+		return text.startsWith("\uFEFF") ? text.substring(1) : text;
+	}
+
 	private static int number(String value, int fallback) {
 		try {
 			return Integer.parseInt(value);
@@ -135,15 +152,28 @@ public record PackFile(String name, boolean enabled, int shadowDistance) {
 	 * other's line through, which is why both go through a read of the file first rather than
 	 * building a record out of what they happen to hold.
 	 * <p>
+	 * Through a temporary and an {@code ATOMIC_MOVE} in the same folder, so that a crash between the
+	 * two writes cannot leave a truncated file: what this one holds is the pack the player chose,
+	 * and half a line of it reads as no pack at all. {@code SettingsFile.write} has carried the same
+	 * pair since it was written, over a file that matters less.
+	 * <p>
 	 * In LF and without a byte order mark, like every other file this mod writes.
 	 */
 	public static void write(Path file, PackFile chosen) throws IOException {
 		Files.createDirectories(file.getParent());
-		Files.writeString(file,
+
+		Path temporary = file.resolveSibling(file.getFileName() + ".part");
+		Files.writeString(temporary,
 				NAME_KEY + "=" + chosen.name() + "\n"
 						+ ENABLED_KEY + "=" + chosen.enabled() + "\n"
 						+ SHADOW_DISTANCE_KEY + "=" + chosen.shadowDistance() + "\n",
 				StandardCharsets.UTF_8);
+		try {
+			Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING,
+					StandardCopyOption.ATOMIC_MOVE);
+		} catch (AtomicMoveNotSupportedException e) {
+			Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+		}
 	}
 
 	/**

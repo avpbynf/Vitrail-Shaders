@@ -3,6 +3,7 @@ package dev.vitrail.settings;
 import dev.vitrail.pack.option.OptionValue;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -73,7 +74,7 @@ public final class SettingsLayers {
 		}
 
 		Map<String, OptionValue> chosen = new LinkedHashMap<>();
-		for (String line : Files.readAllLines(file)) {
+		for (String line : text(file).split("\\r?\\n", -1)) {
 			String trimmed = line.trim();
 			int equals = trimmed.indexOf('=');
 			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {
@@ -85,6 +86,26 @@ public final class SettingsLayers {
 		}
 
 		return Collections.unmodifiableMap(chosen);
+	}
+
+	/**
+	 * The file's text, decoded rather than refused.
+	 * <p>
+	 * Through the {@code String} constructor and not {@code Files.readAllLines}, which THROWS on a
+	 * byte that is not UTF-8. This file is edited by hand, in whichever editor the player has, and
+	 * that throw does not stop at the line it cannot read: it leaves {@code forced}, reaches
+	 * {@code PackChain.open}, and NO PACK LOADS AT ALL, under a message naming neither the file nor
+	 * the encoding. What one stray byte costs instead is one character of one value.
+	 * {@code SettingsFile.lines} reads its own file this way already, for the same reason.
+	 * <p>
+	 * A byte order mark is taken off rather than replaced, and that is the half nothing throws on.
+	 * Left where it is it rides on the first key, so a first line naming {@code profile} declares a
+	 * setting no pack has and no reserved line matches.
+	 */
+	private static String text(Path file) throws IOException {
+		String text = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+
+		return text.startsWith("\uFEFF") ? text.substring(1) : text;
 	}
 
 	/**
