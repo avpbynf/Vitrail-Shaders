@@ -33,6 +33,14 @@ what the next one holds.
   line about mesh elements a program computes from and does not get also listed its names in a
   different order each run.
 
+- **One character no editor should have written no longer costs the player every pack.**
+  `vitrail/options.txt` was read as strict UTF-8, so a single byte from another encoding stopped
+  ANY pack from loading, under a message that named neither the file nor the encoding. A byte order
+  mark, which several editors add on their own, threw nothing and quietly ate the first setting of
+  the file. Both now cost one character of one value at worst, and `vitrail/pack.txt` is read that
+  way too. That file is also written through a temporary and moved into place, so a crash while it
+  is being written can no longer leave half a line behind, which read as no pack chosen at all.
+
 ## 0.6.0-beta
 
 ### Added
