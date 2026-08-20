@@ -3,8 +3,9 @@
 # label a fact already written in the branch name rather than an opinion about the change. There is
 # nothing to decide here, and that is exactly what makes it forgettable.
 #
-# It was forgotten. Nine of the first eighty-eight requests carry a label and none of the
-# twenty-seven after them do: the rule held for as long as somebody remembered it, and no longer.
+# It was forgotten. Of the requests opened before this workflow existed, nine of the first
+# eighty-eight carry a label and none of the twenty-seven that followed do: the rule held for as
+# long as somebody remembered it, and no longer.
 # Every one of those twenty-seven had its type written in its branch name and at the head of every
 # subject it carried, so nothing was ever missing except the gesture.
 #
@@ -41,8 +42,14 @@ jobs:
           type="${BRANCH%%/*}"
           case "$type" in
             feat|fix|perf|refactor|docs|test|build|ci|chore)
-              gh pr edit "$NUMBER" --repo "$REPOSITORY" --add-label "$type"
-              echo "Labelled $type, which is what the branch $BRANCH opens with."
+              # The fallback keeps the header's promise: a pose that fails, label deleted, API
+              # down or token short, leaves a notice and a green run on a request that broke no
+              # rule. The label can always be put on by hand.
+              if gh pr edit "$NUMBER" --repo "$REPOSITORY" --add-label "$type"; then
+                echo "Labelled $type, which is what the branch $BRANCH opens with."
+              else
+                echo "::notice::Posing the label $type failed, so nothing is posed."
+              fi
               ;;
             release)
               # A release request carries no type. What lands from such a branch is the version
