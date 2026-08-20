@@ -221,8 +221,19 @@ public final class DistantDraw {
 	 */
 	private boolean broken;
 
-	/** The section corners of the halves recorded this frame, one aligned slot each. */
-	private final Corners corners = new Corners("Vitrail far terrain sections");
+	/**
+	 * The section corners of the halves recorded this frame, one aligned slot each.
+	 * <p>
+	 * <strong>It outlives the pack, and that is the point.</strong> A recorded pass binds
+	 * slices of this ring, so destroying it is only safe where nothing holds one, which
+	 * {@link Corners#write} already refuses to do while a half of the frame in hand has been
+	 * drawn from it. A pack load has no such knowledge: it tears the chain down in the middle
+	 * of a frame whose passes are already recorded against these very slices, and a ring
+	 * closed there takes the device with it a few frames later. Kept across loads there is
+	 * nothing to close, and it costs a few dozen kilobytes: the ring sizes itself to the
+	 * widest horizon it has seen, and every slot is written again before it is read.
+	 */
+	private static final Corners CORNERS = new Corners("Vitrail far terrain sections");
 
 	/**
 	 * The same for the light's own two halves, which cannot share the ring above.
@@ -233,8 +244,10 @@ public final class DistantDraw {
 	 * exactly the trouble: the ring would then be one turn ahead of itself, and the NEXT frame's
 	 * camera halves would map the buffer the light's own submission is still reading. A ring fences
 	 * a buffer where it turns, and one shared ring would be asked to turn twice a frame.
+	 * <p>
+	 * It outlives the pack for the reason the ring above does.
 	 */
-	private final Corners shadowCorners = new Corners("Vitrail far terrain shadow sections");
+	private static final Corners SHADOW_CORNERS = new Corners("Vitrail far terrain shadow sections");
 
 	/** What DH has handed over on the frame being drawn, one list per half of its geometry. */
 	private List<DhLods.Section> opaqueSections = List.of();
@@ -414,7 +427,7 @@ public final class DistantDraw {
 			return;
 		}
 
-		int base = this.shadowCorners.write(device, sections, camera);
+		int base = SHADOW_CORNERS.write(device, sections, camera);
 		if (base < 0) {
 			refuseShadow(element, "sections", "the far terrain grew wider than the block holding its "
 					+ "section corners between the two halves of one stage, and the wider block "
@@ -430,7 +443,7 @@ public final class DistantDraw {
 
 			for (int index = 0; index < sections.size(); index++) {
 				pass.setUniform(DistantVertex.SECTION_BLOCK,
-						this.shadowCorners.slot(device, base + index));
+						SHADOW_CORNERS.slot(device, base + index));
 
 				for (DhLods.Piece piece : sections.get(index).pieces()) {
 					// Asked again here and not only where the section was taken, which is the one
@@ -534,7 +547,7 @@ public final class DistantDraw {
 		// else this engine places is placed against the game's, and a far terrain placed against a
 		// second reading of the same position would stand a fraction of a block away from the near
 		// terrain it meets.
-		int base = this.corners.write(device, sections, minecraft.gameRenderer.mainCamera().position());
+		int base = CORNERS.write(device, sections, minecraft.gameRenderer.mainCamera().position());
 		if (base < 0) {
 			return refuse(element, "sections", "the far terrain grew wider than the block holding its "
 					+ "section corners between the two halves of one frame, and the wider block cannot "
@@ -550,7 +563,7 @@ public final class DistantDraw {
 			program.bind(pass);
 
 			for (int index = 0; index < sections.size(); index++) {
-				pass.setUniform(DistantVertex.SECTION_BLOCK, this.corners.slot(device, base + index));
+				pass.setUniform(DistantVertex.SECTION_BLOCK, CORNERS.slot(device, base + index));
 
 				for (DhLods.Piece piece : sections.get(index).pieces()) {
 					pass.setIndexBuffer(piece.indices(), IndexType.INT);
@@ -803,8 +816,8 @@ public final class DistantDraw {
 		this.shadowWater = this.waterSections;
 		this.opaqueSections = List.of();
 		this.waterSections = List.of();
-		this.corners.rotate();
-		this.shadowCorners.rotate();
+		CORNERS.rotate();
+		SHADOW_CORNERS.rotate();
 		this.programs.values().forEach(DistantProgram::rotate);
 	}
 
@@ -821,8 +834,11 @@ public final class DistantDraw {
 		this.waterSections = List.of();
 		this.shadowOpaque = List.of();
 		this.shadowWater = List.of();
-		this.corners.close();
-		this.shadowCorners.close();
+		// NOT closed, which is the whole of issue 111: a recorded pass holds slices of these
+		// two rings, and a load tears the chain down in the middle of a frame that has
+		// already bound them. What is dropped here is what this load wrote into them.
+		CORNERS.forget();
+		SHADOW_CORNERS.forget();
 
 		releaseDepth();
 	}
@@ -962,14 +978,12 @@ public final class DistantDraw {
 			}
 		}
 
-		void close() {
-			if (this.buffer != null) {
-				this.buffer.close();
-				this.buffer = null;
-				this.slots = 0;
-				this.used = 0;
-			}
-
+		/**
+		 * Drops what a load wrote here, and destroys nothing: see the two fields this
+		 * stands behind for why a ring is never closed on a reload.
+		 */
+		void forget() {
+			this.used = 0;
 			this.peak = 0;
 		}
 	}
