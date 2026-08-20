@@ -54,6 +54,13 @@ public final class PackNameIds {
 	 */
 	private static volatile Object2IntMap<EntityType<?>> byType = emptyCache();
 
+	/**
+	 * The same for an item, and for the same reason with one more: the table is keyed by the
+	 * name's TEXT, so without this every submission of every item spells one out again, where the
+	 * entity half beside it has never spelt one out twice.
+	 */
+	private static volatile Object2IntMap<Identifier> byName = emptyCache();
+
 	private PackNameIds() {
 	}
 
@@ -62,6 +69,7 @@ public final class PackNameIds {
 		entities = entityIds;
 		items = itemIds;
 		byType = emptyCache();
+		byName = emptyCache();
 	}
 
 	/** Whether the pack named the camera's own player, which is what makes that case worth asking. */
@@ -102,18 +110,33 @@ public final class PackNameIds {
 		return id;
 	}
 
-	/** The pack's number for an item, named by its model identifier or by its registry key. */
+	/**
+	 * The pack's number for an item, named by its model identifier or by its registry key, and
+	 * worked out once each.
+	 * <p>
+	 * A name the pack named nowhere is remembered as {@link NameIds#NONE} as well, which is what
+	 * the lookup tells apart from a real one by asking whether the key is there at all.
+	 */
 	public static int item(Identifier name) {
-		return items.id(name.toString());
+		Object2IntMap<Identifier> cache = byName;
+		int known = cache.getInt(name);
+		if (known != NameIds.NONE || cache.containsKey(name)) {
+			return known;
+		}
+
+		int id = items.id(name.toString());
+		cache.put(name, id);
+
+		return id;
 	}
 
 	/**
-	 * A cache with nothing in it, answering {@link NameIds#NONE} for a type it has not been asked
-	 * about, which is what the lookup above tells apart from a real {@code NONE} by asking whether
+	 * A cache with nothing in it, answering {@link NameIds#NONE} for a key it has not been asked
+	 * about, which is what the lookups above tell apart from a real {@code NONE} by asking whether
 	 * the key is there at all.
 	 */
-	private static Object2IntMap<EntityType<?>> emptyCache() {
-		Object2IntMap<EntityType<?>> cache = new Object2IntOpenHashMap<>();
+	private static <K> Object2IntMap<K> emptyCache() {
+		Object2IntMap<K> cache = new Object2IntOpenHashMap<>();
 		cache.defaultReturnValue(NameIds.NONE);
 
 		return cache;

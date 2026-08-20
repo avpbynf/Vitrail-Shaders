@@ -199,6 +199,8 @@ public final class FrameState implements WorldState {
 	private float playerMaxAir = -1.0F;
 	private final Vector3f selectedBlockPos = new Vector3f(NOTHING_SELECTED);
 	private final Vector4f lightningBoltPosition = new Vector4f();
+	/** The tick the position beside this was searched for on, so a frame does not do it again. */
+	private long lightningTick = Long.MIN_VALUE;
 	private int heldBlockLight;
 	private int heldBlockLight2;
 
@@ -366,6 +368,12 @@ public final class FrameState implements WorldState {
 		this.frameCounter = 0;
 		this.frameTime = 0.0F;
 		this.frameTimeCounter = 0.0F;
+		// The bolt with them, and it is the tick beside it that makes this necessary rather than
+		// tidy: a client that leaves a save and rejoins it comes back at the tick it left on, so a
+		// counter kept across that would match, the search would be skipped, and the position of
+		// the session before would be served as this one's.
+		this.lightningTick = Long.MIN_VALUE;
+		this.lightningBoltPosition.zero();
 	}
 
 	/**
@@ -806,7 +814,23 @@ public final class FrameState implements WorldState {
 				|| held.canPlaceOnBlockInAdventureMode(inWorld));
 	}
 
+	/**
+	 * Once a tick and not once a frame, which is the frequency the reference publishes this at
+	 * ({@code uniforms/IrisExclusiveUniforms.java:91}, {@code PER_TICK}) and the whole of what it
+	 * buys: the search is a pass over every entity the level would render, made to find the one
+	 * kind of entity that is almost never there.
+	 * <p>
+	 * What is held between two ticks is what the reference holds too, the camera subtracted
+	 * included: it builds the whole camera relative vector inside that same per tick supplier, so
+	 * a bolt stands still for a walking player on both engines rather than only on this one.
+	 */
 	private void readLightning(ClientLevel level, float pt) {
+		long tick = level.getGameTime();
+		if (tick == this.lightningTick) {
+			return;
+		}
+
+		this.lightningTick = tick;
 		this.lightningBoltPosition.zero();
 		for (Entity entity : level.entitiesForRendering()) {
 			if (entity instanceof LightningBolt) {

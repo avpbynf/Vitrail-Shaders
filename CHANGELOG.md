@@ -22,6 +22,13 @@ what the next one holds.
   nothing was paying for them on every frame. They go back to whatever that menu says the moment a
   pack is unloaded.
 
+- **Three things taken on every frame are now taken when something reads them.** The search for a
+  lightning bolt walked every entity the world would draw, on every frame, to find the one kind of
+  entity that is almost never there; it runs once a tick now, which is the rate the reference
+  publishes that value at. The count of what the camera saw was taken on every frame for a line
+  printed once per pack. And the pack's number for an item was spelt out again at every submission,
+  where the number for a kind of entity had been remembered since it was written.
+
 ### Fixed
 
 - **The same pack now translates to the same text on every start.** Four tables the translator
