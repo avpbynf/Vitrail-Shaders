@@ -74,7 +74,7 @@ public final class SettingsLayers {
 		}
 
 		Map<String, OptionValue> chosen = new LinkedHashMap<>();
-		for (String line : text(file).split("\\r?\\n", -1)) {
+		for (String line : text(file).lines().toList()) {
 			String trimmed = line.trim();
 			int equals = trimmed.indexOf('=');
 			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {
@@ -101,6 +101,12 @@ public final class SettingsLayers {
 	 * A byte order mark is taken off rather than replaced, and that is the half nothing throws on.
 	 * Left where it is it rides on the first key, so a first line naming {@code profile} declares a
 	 * setting no pack has and no reserved line matches.
+	 * <p>
+	 * Cut by {@code lines} and not by a split on {@code \r?\n}, because {@code readAllLines} ends a
+	 * line on a lone carriage return as well ({@code BufferedReader.readLine}) and a split on that
+	 * pattern does not. A file saved with the old Mac endings would come back as ONE line, the
+	 * first key swallowing every value after it in silence. {@code PackFile} reads its own file
+	 * this way for the same reason.
 	 */
 	private static String text(Path file) throws IOException {
 		String text = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
