@@ -1119,15 +1119,22 @@ public final class PackChain {
 	 * already forgotten is what decides whether one is printed.
 	 */
 	private static void readAgain(Path gameDirectory) {
+		// The chain stops answering BEFORE anything of it is freed, and the order is the whole
+		// of issue 111. Every accessor below reads this field, and a pass of the frame in
+		// hand asks one of them: the sky asks for its own draw as it opens its render pass.
+		// Freed first, that pass was handed a chain whose colour targets had just been closed
+		// and built its descriptor on the views of them, which is a pointer into freed memory
+		// and a lost device seconds later. Cleared first, the same pass finds nothing, and
+		// falls back to the game's own shader for the one frame it takes to reload.
 		PackChain previous = active;
-		if (previous != null) {
-			previous.release();
-		}
-
 		active = null;
 		// Cleared as well, so that a pack that failed to compile can be fixed and tried again
 		// without leaving the game.
 		disabled = false;
+
+		if (previous != null) {
+			previous.release();
+		}
 		load(gameDirectory);
 		// Taken whatever the load did with them. A pack that cannot be read at all settled nothing,
 		// and without these it would be read again on the very next frame, and every frame after
