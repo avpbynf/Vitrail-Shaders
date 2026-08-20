@@ -11,6 +11,23 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## 0.7.1-beta
+
+### Fixed
+
+- **Removing, picking or reloading a shader pack in a running world no longer crashes the game.**
+  The 0.7.0 entry below said the crash was reduced and not gone, and this closes what remained,
+  which was two more faults of the same family. A reload freed the pack's images a moment before it
+  stopped answering for them, so a pass of that very frame could still be handed them; and loading
+  a pack that draws the entities or the hand emptied the graphics device's whole pipeline cache at
+  an instant where work already recorded still named what was destroyed. Nothing empties that cache
+  any more: the game does it itself on every resource reload, which is the one moment it is safe.
+  What that leaves is cosmetic and brief: after turning a pack on or off in a world, an entity or
+  the hand drawn by the game's own shader can look wrong for the second or two a pack takes to
+  finish compiling, and a resource reload clears it. Tried at length on both loaders, turning packs
+  off and on and switching between four of them, where one to four such gestures used to end the
+  session.
+
 ## 0.7.0-beta
 
 ### Changed
