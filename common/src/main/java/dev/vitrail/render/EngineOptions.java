@@ -63,8 +63,8 @@ final class EngineOptions {
 	 * one of {@code solid}, {@code cutout} and {@code translucent} for a chunk pass, two of which are
 	 * usually served by the one file and could not otherwise be told apart. The sky answers the same
 	 * way, by element rather than by file: {@code disc}, {@code dark}, {@code stars},
-	 * {@code sunrise}, {@code sun}, {@code moon}, {@code endsky} and {@code endflash}, four of the
-	 * eight being one file. The entities
+	 * {@code sunrise}, {@code sun}, {@code moon}, {@code endsky} and {@code endflash}, the eight
+	 * splitting four and four over the two sky files. The entities
 	 * answer the same way, {@code cutout_cull}, {@code armor}, {@code item} and the rest, with the
 	 * block entity half carrying those same names under a {@code block_} in front and the two hand
 	 * passes under a {@code hand_} and a {@code hand_water_}. The weather is

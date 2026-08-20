@@ -114,7 +114,7 @@ will accept. Vitrail rewrites every program into Vulkan GLSL **once, before it
 ever draws**, and hands it to the compiler the game already embeds, which
 turns it into SPIR-V exactly as it does for the game's own shaders. There is no
 translation layer left between the game and the GPU while a frame is drawn:
-this is a compiler that runs at load time, not a shim that runs per frame. What
+this is a compiler that runs before the frame, not a shim that runs inside it. What
 that one idea costs, buys and implies is the opening page of
 [the documentation](docs/README.md).
 

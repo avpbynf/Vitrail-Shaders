@@ -79,7 +79,7 @@ public final class ShadowCull implements Frustum {
 	 * ({@code shadows/frustum/advanced/SafeZoneCullingFrustum.java:74-78}), and that order is kept.
 	 * It settles nothing while the safe zone is the shorter of the two, such a box being wholly
 	 * within the distance as well; it is what a pack asking for a voxel grid WIDER than its shadow
-	 * distance is owed, and {@code PackValues:331-332} works the two out apart without bounding
+	 * distance is owed, and {@code PackValues:332-333} works the two out apart without bounding
 	 * either by the other. Four packs of the corpus reach for this shape behind their voxelised
 	 * light, and one of them, Bliss, holds {@code voxelDistance} at 64 while offering a shadow
 	 * distance down to 32.

@@ -60,8 +60,8 @@ Some of Chloride's own settings decide what reaches this engine, in
 keys of their own. `tileEntities`, `entities` and `monsters`, under `[culling]`,
 decide on their own which block entities, which mobs and which other entities are
 drawn at all, by distance: what they take out is never handed to the pack, so a
-chest, a sign, a boat or a
-mob that is not there is those settings rather than anything the pack does.
+chest, a sign, a boat or a mob that is not there is those settings rather than
+anything the pack does.
 `chests` and `beds`, under `[fastBlocks]`, draw those blocks by a path this
 engine's final pass then covers over, so they go invisible with no other symptom.
 Which of the five a given Chloride writes on is its own business and changes with
@@ -95,7 +95,10 @@ pack drawn and without one. On NeoForge that same build unwraps a GPU texture
 into an OpenGL handle as the lightmap renders, its NeoForge wrapper alone doing
 so, and dies on the first frame of a world with a `ClassCastException` naming
 `VulkanGpuTexture`: there the [patched build][dh-build] below is still the one
-to install, by hand and with no other Distant Horizons jar beside it. While a pack
+to install, by hand and with no other Distant Horizons jar beside it. That build
+reports itself as `3.2.1-b-dev`, the same string an upstream development build
+carries, so bug reports made with it belong on this tracker and not with the
+Distant Horizons team. While a pack
 is up, Vitrail hands its far terrain to the pack's own programs, `dh_terrain`
 and `dh_water` for the picture, and `dh_shadow` for the shadow map where the
 pack ships one and has not switched it off, and serves its depth beside the
@@ -105,9 +108,10 @@ terrain pass as the pack takes it over.
 
 With shaders off, that mod draws its far terrain itself and this engine is not
 involved. Beyond the NeoForge death above, the patched build changes one more
-thing: how that mod's own fog and ambient occlusion read an empty depth buffer,
-a divergence seen in its code and never yet in a picture. On Fabric it is
-optional and that is all it would buy.
+thing: how that mod's own fog and ambient occlusion read a reverse depth
+buffer, a divergence seen in its code, reachable only while no pack is drawn,
+and never yet seen in a picture. On Fabric it is optional and that is all it
+would buy.
 
 [dh-build]: https://gitlab.com/avpbynf/distant-horizons/-/releases/vitrail-26.2-1
 
@@ -232,8 +236,8 @@ A settings screen covers all of it in game: the video settings, where it sits
 under Vitrail in the list of pages, the I key, or, on NeoForge, the Config button
 in the mod list. It is the screen of the engine packs are written against, ported rather
 than approximated, so it looks and behaves like that one. It opens on the pack
-list and reads each pack's own menu layout. The row at the head of the list turns shaders off altogether and leaves the
-game drawing its own image. Clicking a pack only selects it: Apply writes what
+list and reads each pack's own menu layout. The row at the head of the list turns shaders off
+altogether and leaves the game drawing its own image. Clicking a pack only selects it: Apply writes what
 you changed and reads the pack again without closing, Done does both and closes,
 and Cancel throws the changes away. A program that fails to compile is reported
 in the log and the game keeps its own rendering rather than crashing.

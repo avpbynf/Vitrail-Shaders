@@ -458,7 +458,7 @@ public final class TargetPlan {
 		return this.dimension;
 	}
 
-	/** Where the entry points were actually read from: the dimension, or the root when it ships none. */
+	/** Where the entry points were read from: the dimension, or the root when the folder is absent. */
 	public String place() {
 		return this.place;
 	}

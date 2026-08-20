@@ -93,9 +93,10 @@ of those and seeing no error means nothing was asserted, not that everything hel
 **Every invariant has a negative control.** Two of them ship as a flag on the tool they belong to,
 documented as *must exit non-zero* and naming the packs they are expected to break on; the rest are
 gestures spelled out beside the tool, a forced setting or a line put back, to be taken by hand.
-Run them: if a control reports nothing, the checker has stopped reading, and the green run beside it
-meant nothing. What controls exist is in what the tools print, which cannot fall out of date the way
-a list here would.
+Those tools live on the maintainer's bench rather than in this tree, so what a reader here can take
+away is the rule itself: if a control reports nothing, the checker has stopped reading, and the
+green run beside it meant nothing. What controls exist is in what the tools print, which cannot
+fall out of date the way a list here would.
 
 **A rule is confronted with a second, independent reading of itself.** The frame chain is rewritten
 from the specification without consulting the classes that implement it, then the two answers are

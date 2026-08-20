@@ -123,8 +123,9 @@ constructor; refusing the one declaration is narrower and keeps the rest of the 
 A declaration whose file the pack does not ship no longer claims the name at all: the target that
 name would otherwise have carried keeps its ordinary binding, which is what Iris does by leaving the
 sampler out of the stage's map. A file that is there and cannot be read keeps the name and reads one
-black pixel, and so does a path that points outside the pack. Claiming the name and binding black was this engine's own answer
-and it was worse than either: the pack lost a colour target it had said nothing wrong about.
+black pixel, and so does a path that points outside the pack. Claiming the name and binding black
+was this engine's own answer and it was worse than either: the pack lost a colour target it had
+said nothing wrong about.
 
 ## A refusal must still consume the name it claimed
 

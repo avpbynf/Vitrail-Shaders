@@ -256,9 +256,10 @@ way its name was settled.
 
 **The repository poses that one itself**, off the branch name and at the moment the request is
 opened (`.github/workflows/label.yml`). A label derived rather than decided has no reason to be
-asked of anybody, and this one held only for as long as it was remembered: nine of the first
-eighty-eight requests carry it and none of the twenty-seven after them do. Where it posts nothing,
-the branch opens on a word this convention does not know, and `commits.yml` is what says so.
+asked of anybody, and this one held only for as long as it was remembered: of the requests opened
+before the workflow existed, nine of the first eighty-eight carry it and none of the twenty-seven
+that followed do. Where it posts nothing, the branch either carries a release, which takes no type
+label, or opens on a word this convention does not know, and `commits.yml` is what says so.
 
 **An issue carries what it is about instead**, being a report rather than a change:
 

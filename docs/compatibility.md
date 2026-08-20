@@ -247,9 +247,11 @@ It is a video setting of its own, which the Fabulous preset turns on everywhere 
 it on, the game draws both of those into targets of its own and composes them itself, and this
 engine hands them back rather than attach the pack's targets beside an image it does not read. The
 log says so in those words, once for the rain and once for the particles. The entities are affected
-too, but by row rather than by family: with the setting on, the translucent half of a living entity,
-an experience orb, a translucent item sheet and the glint of an enchantment go back to the game the
-same way, while the opaque half is untouched.
+too, but by row rather than by family: with the setting on, the see-through ghost of an invisible
+mob (the game only draws one where the body is hidden but not hidden from you), an experience orb,
+a translucent item sheet and the translucent glint of an enchantment go back to the game the same
+way. An ordinarily visible mob keeps all of its rows, translucent ones included: its render types
+name no target of their own.
 
 Two consequences follow from how that geometry reaches the pack, and both are worth recognising
 rather than reporting as separate bugs:
@@ -426,8 +428,8 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   the sun and the moon, which is where both references stand. `stars=false` takes nothing, the
   game's star field being drawn with the pack's own `gbuffers_skybasic` in the first place, and
   `sky=false` costs the horizon cone alone rather than the game's disc, which is again what the
-  references do, and the NOTICE says so. The fifth request in that family is not one of those four and reads the
-  other way round: `clouds` takes `off`, `fast` or `fancy` rather than a boolean, and it overrules
+  references do, and the NOTICE says so. The fifth request in that family is not one of those four
+  and reads the other way round: `clouds` takes `off`, `fast` or `fancy` rather than a boolean, and it overrules
   the user's own cloud setting so that the pack's cloud program is handed the geometry it was
   written for. It is honoured only where this engine really draws the clouds, because with the
   game's own shader behind it `off` would take the clouds away and put nothing in their place.

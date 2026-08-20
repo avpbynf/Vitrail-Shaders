@@ -276,8 +276,8 @@ already been lit by the game's shader over an image the pack finished.
 
 So the engine does not intercept the hand, it **moves** it. The game's own submission
 is suppressed and the hand is submitted twice from inside the level: the solid pass just after the
-game's opaque features, before the deferred stage, and the blending pass at the end of the world, before
-the composites. Where each lands is what decides which half of every target it writes, and both are
+game's opaque features, before the deferred stage, and the blending pass at the end of the world,
+before the composites. Where each lands is what decides which half of every target it writes, and both are
 in the picture the composites read. This is where the reference puts them too.
 
 Moving it costs three things worth knowing. The hand needs a projection of its own (the head-up

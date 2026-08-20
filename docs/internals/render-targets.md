@@ -28,9 +28,12 @@ that multiplies by the sampled alpha loses the whole target and nothing anywhere
 **That correction applies to the engine's default and not to a colour the pack wrote.** A target the
 pack gave a clear colour to is cleared to exactly that colour, alpha included, promoted or not: the
 pack wrote four components and is handed the four it wrote. The correction only decides the default
-the engine stands in with when the pack named nothing. That default follows the reference: the
-first target starts at the frame's fog colour, the second at opaque white, and every other one at
-transparent black, or at opaque black where the format gained an alpha channel. The shadow colour buffer answers the same way, and it is worth
+the engine stands in with when the pack named nothing. That default follows the reference as far as
+the reference goes: the first target starts at the frame's fog colour, the second at opaque white,
+and every other one at transparent black, whatever its format, which is all Iris ever does
+(`ClearPassCreator` hands every later buffer the same four zeroes). Raising that default to opaque
+black where a three-channel format gained an alpha channel is this engine's correction alone, and
+the log names it when it happens. The shadow colour buffer answers the same way, and it is worth
 saying because it was the one place that did not: a correction meant to fill a blank is not a
 correction once it starts overruling something the pack was explicit about.
 
