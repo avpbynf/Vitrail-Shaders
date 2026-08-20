@@ -4,8 +4,6 @@ import dev.vitrail.glsl.EntityVertex;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
-import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
@@ -78,12 +76,12 @@ import org.jspecify.annotations.Nullable;
  * built under one answer bound by a pipeline compiled under the other, which is the same wrong stride
  * by another road.
  * <p>
- * So there is one answer in force, {@link #settle()} is the only thing that moves it, and it discards
- * the game's compiled pipelines on the way. Its instant is the one {@code TerrainMesh.settle} already
- * uses, the head of Sodium's {@code initRenderer}: it is reached from the extract that consumes
- * {@code LevelExtractor.allChanged}, which is after the previous frame was submitted and presented
- * and before this one has bound a single pipeline, so {@code clearPipelineCache} and the
- * {@code waitIdle} inside it have nothing in flight to tear down.
+ * So there is one answer in force and {@link #settle()} is the only thing that moves it. Its
+ * instant is the one {@code TerrainMesh.settle} already uses, the head of Sodium's
+ * {@code initRenderer}, reached from the extract that consumes {@code LevelExtractor.allChanged}.
+ * That instant is safe for moving a format answer and for nothing wider: the game's own compiled
+ * pipelines are NOT discarded here, and the body of {@code settle} says what discarding them cost
+ * and which road pays that debt instead.
  * <p>
  * <strong>Asking is all a switch does</strong>, which is what makes the one place that writes
  * {@code EntityDraw.wanted} directly safe: an entity program that threw stops being offered at once
@@ -229,15 +227,27 @@ public final class EntityMesh {
 		// settles false onto false and has nothing to drop: dropping anyway is a full recompile of
 		// every static pipeline at the first world join, for a stride that did not change.
 		//
-		// Where it did move, the drop is owed. The game precompiles every static pipeline at every
+		// Where it did move, a drop is owed: the game precompiles every static pipeline at every
 		// resource load and caches it by identity (ShaderManager.apply, VulkanDevice.pipelineCache),
-		// so the entity ones standing here were compiled under the other answer, and this backend
-		// bakes the stride into them. Emptying the cache is what ShaderManager itself does before it
-		// recompiles, and what is dropped comes back on demand through the same shader source the
-		// device was built with.
-		GpuDevice device = moved ? RenderSystem.tryGetDevice() : null;
-		if (device != null) {
-			device.clearPipelineCache();
+		// this backend bakes the stride in at compile, so the entity ones standing here carry the
+		// other answer's stride.
+		//
+		// AND NOTHING IS DROPPED HERE ALL THE SAME, which was this engine's half of issue 111. The
+		// cache can only be emptied whole, the emptying waits the device idle and destroys the
+		// game's pipelines with ours, and there is no instant of a running session where that is
+		// safe: this backend records continuously, so at any positional hook something already
+		// recorded still names what the purge destroys. Emptied here, on a pack load in a running
+		// world, the device was lost seconds later with nothing in the log; moved to the head of
+		// the frame, it took the boot's world join down instead. The one road that empties it
+		// safely is the game's own, ShaderManager.apply, which quiesces rendering first - so the
+		// debt is left to it, and it pays at every resource reload. Until then the stale pipelines
+		// cost what a warmup already shows: an entity or hand drawn by the game's own shader over
+		// a mesh of the other stride, for the frames a chain takes to compile, and only after the
+		// answer has moved in a running world.
+		if (moved) {
+			Vitrail.logger().info("The game's entity pipelines keep the previous stride until the "
+					+ "next resource reload, which empties the device's pipeline cache on the one "
+					+ "road that is safe");
 		}
 
 		if (!asked) {
