@@ -89,8 +89,13 @@ Sodium has no API for any of that, which is why its version is pinned above.
 Every family drawn since takes one or two more, and the whole list is the mixin
 config shipped in the jar rather than anything summarised here.
 
-Distant Horizons installs from the launcher like any other mod: 3.2.0-b runs
-beside Vitrail on this backend, with a pack drawn and without one. While a pack
+Which Distant Horizons build works depends on the loader. On Fabric, 3.2.0-b
+installs from the launcher like any other mod and runs beside Vitrail, with a
+pack drawn and without one. On NeoForge that same build unwraps a GPU texture
+into an OpenGL handle as the lightmap renders, its NeoForge wrapper alone doing
+so, and dies on the first frame of a world with a `ClassCastException` naming
+`VulkanGpuTexture`: there the [patched build][dh-build] below is still the one
+to install, by hand and with no other Distant Horizons jar beside it. While a pack
 is up, Vitrail hands its far terrain to the pack's own programs, `dh_terrain`
 and `dh_water` for the picture, and `dh_shadow` for the shadow map where the
 pack ships one and has not switched it off, and serves its depth beside the
@@ -99,10 +104,10 @@ what that changes and what it does not reach, and the log names each far
 terrain pass as the pack takes it over.
 
 With shaders off, that mod draws its far terrain itself and this engine is not
-involved. A [patched build][dh-build] stays published from the days this page
-required one; what it still changes is how that mod's own fog and ambient
-occlusion read an empty depth buffer, a divergence seen in its code and never
-yet in a picture. Nothing needs it any more.
+involved. Beyond the NeoForge death above, the patched build changes one more
+thing: how that mod's own fog and ambient occlusion read an empty depth buffer,
+a divergence seen in its code and never yet in a picture. On Fabric it is
+optional and that is all it would buy.
 
 [dh-build]: https://gitlab.com/avpbynf/distant-horizons/-/releases/vitrail-26.2-1
 
