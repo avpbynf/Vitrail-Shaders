@@ -48,6 +48,13 @@ what the next one holds.
   way too. That file is also written through a temporary and moved into place, so a crash while it
   is being written can no longer leave half a line behind, which read as no pack chosen at all.
 
+- **The shadow distance now bounds every chunk it is meant to, and not only the ones weighed one by
+  one.** A group of chunks that merely reached into the distance was handed to the walk whole, so
+  everything standing under that group was drawn into the shadow map however far past the distance
+  it stood. Lowering the distance, from the pack or from the video settings, therefore saved less
+  than it should have, on the second walk of the world, which is the most expensive thing a frame
+  does here.
+
 ## 0.6.0-beta
 
 ### Added
