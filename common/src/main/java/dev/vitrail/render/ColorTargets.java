@@ -108,7 +108,6 @@ final class ColorTargets {
 	private static final Vector4fc OPAQUE_BLACK = new Vector4f(0.0F, 0.0F, 0.0F, 1.0F);
 	private static final Vector4fc OPAQUE_WHITE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private static final Vector4fc MID_GREY = new Vector4f(0.5F, 0.5F, 0.5F, 1.0F);
-	private static final Vector4fc NOTHING = new Vector4f(0.0F, 0.0F, 0.0F, 0.0F);
 
 	/** The sentinel above as a clear colour: one channel, and the mask reads the first of them. */
 	private static final Vector4fc UNWRITTEN =
