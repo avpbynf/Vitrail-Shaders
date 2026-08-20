@@ -55,11 +55,40 @@ public final class ShadowCull implements Frustum {
 				&& this.planes.testAab(minX, minY, minZ, maxX, maxY, maxZ);
 	}
 
+	/**
+	 * <strong>A whole answer only from a box wholly within the distance</strong>, which is how Iris
+	 * combines the two ({@code AdvancedShadowCullingFrustum.java:442-444}: {@code INSIDE} from
+	 * both, or {@code INTERSECT}). It reads like a detail and is not one. Sodium takes
+	 * {@code INSIDE} for "this shape holds the whole subtree", raises {@code INSIDE_FRUSTUM} on it,
+	 * and nothing below that node is measured against the shape again
+	 * ({@code chunk/tree/TraversableTree.java:197,210-221}). Its own render distance is still
+	 * tested on every node ({@code :224-243}), which is why the leak is bounded by the tree and not
+	 * by the world; what escapes is every section under such a box, however far past the shadow
+	 * distance it lies, and each one is drawn into the map.
+	 * <p>
+	 * <strong>Where this parts from Iris, and it is the one state that does.</strong> Under
+	 * {@link dev.vitrail.pack.source.ShadowCullState#SAFE_ZONE} a box wholly inside the safe zone
+	 * answers {@code INSIDE} at Iris whatever the distance says short of {@code OUTSIDE}
+	 * ({@code shadows/frustum/advanced/SafeZoneCullingFrustum.java:74-78}), where this downgrades it
+	 * like any other. It costs nothing while the safe zone is the shorter of the two, such a box
+	 * being wholly within the distance as well, and it drops sections Iris would draw once
+	 * {@code voxelDistance} passes {@code shadowDistance}, which {@code PackValues:331-332} works
+	 * out apart without bounding either by the other. <strong>Iris is not of one mind on that box
+	 * itself</strong>: its {@code testAab} cuts by distance FIRST ({@code :54-56}) and drops what
+	 * its own {@code intersectAab} keeps whole, so there is no single behaviour of the reference to
+	 * follow here. What is written is the one the walk can hold to on every one of its four tests.
+	 */
 	@Override
 	public int intersectAab(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
-		return inside(minX, minY, minZ, maxX, maxY, maxZ)
-				? this.planes.intersectAab(minX, minY, minZ, maxX, maxY, maxZ)
-				: FrustumIntersection.OUTSIDE;
+		if (!inside(minX, minY, minZ, maxX, maxY, maxZ)) {
+			return FrustumIntersection.OUTSIDE;
+		}
+
+		int shape = this.planes.intersectAab(minX, minY, minZ, maxX, maxY, maxZ);
+
+		return shape == FrustumIntersection.INSIDE && !within(minX, minY, minZ, maxX, maxY, maxZ)
+				? FrustumIntersection.INTERSECT
+				: shape;
 	}
 
 	@Override
@@ -78,5 +107,13 @@ public final class ShadowCull implements Frustum {
 		return maxX >= -this.distance && minX <= this.distance
 				&& maxY >= -this.distance && minY <= this.distance
 				&& maxZ >= -this.distance && minZ <= this.distance;
+	}
+
+	/** Whether a camera-relative box is wholly within the distance, on all three axes. */
+	private boolean within(float minX, float minY, float minZ,
+			float maxX, float maxY, float maxZ) {
+		return minX >= -this.distance && maxX <= this.distance
+				&& minY >= -this.distance && maxY <= this.distance
+				&& minZ >= -this.distance && maxZ <= this.distance;
 	}
 }
