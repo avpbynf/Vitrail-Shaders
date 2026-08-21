@@ -45,5 +45,6 @@
 	"key.vitrail.reload_pack": "Recargar Shaders",
 	"options.vitrail.pack_reloaded": "¡Shaders recargados!",
 	"options.vitrail.reload_failed": "¡Error al recargar los Shaders! Razón: %s",
+	"options.vitrail.other_backend": "Vitrail no dibuja nada en el backend %s: sus shaders solo funcionan en Vulkan. Ajusta %s a \"%s\" en Opciones, Ajustes de vídeo, y reinicia el juego.",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

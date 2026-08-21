@@ -74,6 +74,7 @@ public final class EngineStages {
 	 */
 	public static void clientTick() {
 		SettingsKey.poll();
+		HostReport.sayInWorld();
 	}
 
 	/**

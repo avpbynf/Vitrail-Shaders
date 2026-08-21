@@ -45,5 +45,6 @@
 	"key.vitrail.reload_pack": "Recarregar sombreadores",
 	"options.vitrail.pack_reloaded": "Sombreadores recarregados!",
 	"options.vitrail.reload_failed": "Falha ao recarregar sombreadores! Motivo: %s",
+	"options.vitrail.other_backend": "O Vitrail não desenha nada no backend %s: seus shaders só funcionam em Vulkan. Defina %s como \"%s\" em Opções, Configurações de vídeo, e reinicie o jogo.",
 	"key.category.vitrail.keybinds": "Vitrail"
 }
