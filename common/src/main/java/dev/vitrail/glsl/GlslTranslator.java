@@ -164,25 +164,38 @@ public final class GlslTranslator {
 	private static final String SHADOW_COMPARE = "ofShadowCompare";
 
 	/**
-	 * What a call to {@code sin} or {@code cos} becomes: a sine of this translation's own, exact
-	 * enough to survive the hash idiom, and never the driver's.
+	 * What a call to {@code sin} or {@code cos} becomes: a sine of this translation's own, and
+	 * never the driver's.
 	 * <p>
-	 * The packs feed these two whole world coordinates. BSL's waving noise hashes with
-	 * {@code fract(sin(dot(floor(pos), K)) * 43758.5453)}, hands the sine thousands of radians and
-	 * amplifies whatever the sine got wrong by five orders of magnitude. Under Iris the GL driver's
-	 * sine stands up to that; under the game's shaderc-to-SPIR-V chain it does not, the field the
-	 * hash paints comes out structured instead of white, and foliage riding the field skips as it
-	 * crosses the structure, measured in game on BSL. Nor can a plain reduction feed the driver's
-	 * sine a clean small angle: one fp32 two-pi sheds the low bits of a large argument, and the
-	 * uniformity test rejects the field it leaves at 427 where white noise scores 15. What holds up,
-	 * scored 11 to 14 alongside an exact-sine reference on the same test, is the form emitted here:
-	 * a Cody-Waite reduction through two constants, a fold to the quarter turn, and an odd
-	 * polynomial - no driver sine left anywhere in the call.
+	 * Packs feed these two whole world coordinates. A single fp32 two-pi sheds the low bits of a
+	 * large argument, and the uniformity test rejects the field that reduction leaves at 427 where
+	 * white noise scores 15. The form emitted here, a Cody-Waite reduction through two constants,
+	 * a fold to the quarter turn, and an odd polynomial, scores 11 to 14 alongside an exact-sine
+	 * reference. No driver sine is left anywhere in the call.
+	 * <p>
+	 * The goldberg hash {@code fract(sin(dot(p, K)) * 43758.5453)} is not sent through this helper.
+	 * See {@link #HASH}.
 	 */
 	private static final String REDUCED_SIN = "ofReducedSin";
 
 	/** See {@link #REDUCED_SIN}. */
 	private static final String REDUCED_COS = "ofReducedCos";
+
+	/**
+	 * What the goldberg hash idiom becomes.
+	 * <p>
+	 * Iris leaves {@code fract(sin(dot(p, K)) * 43758.5453)} as written; the GL driver computes it.
+	 * This backend compiles through shaderc to SPIR-V. Feeding that idiom to {@link #REDUCED_SIN}
+	 * still jumps in game on BSL: a time-only waving pack that keeps the hash skips, and the same
+	 * pack with {@code sin} in place of the hash does not. Complementary never writes the idiom and
+	 * was already smooth. Nested {@code fma} on the reduction does not change that. So the call is
+	 * replaced by a hash of the argument's bits, which is stable from frame to frame and
+	 * uncorrelated from one lattice point to the next.
+	 * <p>
+	 * What it costs the image is a different noise field, not Iris's gusts. The interpolation
+	 * around the lattice, and the amplitude the pack asked for, stay the pack's.
+	 */
+	private static final String HASH = "ofHash";
 
 	/** What a lookup on a volume the pack ships is called once the volume has been laid out flat. */
 	private static final String VOLUME_LOOKUP = "ofTexture3D_";
@@ -353,6 +366,9 @@ public final class GlslTranslator {
 
 	/** Calls to {@code sin} or {@code cos} sent through the reduced-argument helpers. */
 	private int trigCalls;
+
+	/** Goldberg hash idioms rewritten onto {@link #HASH} instead of through a sine. */
+	private int hashCalls;
 
 	/**
 	 * Reads of {@code gl_TextureMatrix[0]} sent to the game's own per draw block instead of to the
@@ -540,6 +556,10 @@ public final class GlslTranslator {
 		synthesizeAttributes();
 		dropVersionAndExtensions();
 		rewriteIdentifiers();
+		// After the identifiers, because the goldberg idiom's sine has become ofReducedSin by then
+		// and that is how the site is recognised. Taking it earlier would leave the sine standing
+		// and the helper below would wrap a call this pass was about to erase.
+		rewriteGoldbergHash();
 		// After the identifiers and before the depth, and both halves of that matter: the legacy
 		// spellings have to have become texture() before a lookup can be recognised, and what comes
 		// out of here is a call under a name of ours that the depth pass will not look at twice.
@@ -1104,6 +1124,126 @@ public final class GlslTranslator {
 		for (int at : closings) {
 			this.tokens.add(at, new Token(Kind.RAW, ")", null));
 		}
+	}
+
+	/**
+	 * Replaces {@code fract(sin(dot(p, K)) * 43758.5453)} with a hash of {@code p}'s bits.
+	 * <p>
+	 * The constant is the fingerprint. Packs copy this one number into a hash they mean as white
+	 * noise on a lattice; a sine that then fails is not a sine they asked to see, and feeding it
+	 * to {@link #REDUCED_SIN} still skips in game. The first argument of {@code dot} is the lattice
+	 * point (or the continuous coordinate, for the same idiom on stars and puddles). The second
+	 * argument is thrown away: it exists only to mix those two channels into the sine.
+	 */
+	private void rewriteGoldbergHash() {
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (!token.identifier("fract") || token.directive() != null) {
+				continue;
+			}
+
+			int fractOpen = callOpener(index);
+			int sine = fractOpen < 0 ? -1 : significantAfter(fractOpen);
+			if (sine < 0 || !goldbergSine(this.tokens.get(sine))) {
+				continue;
+			}
+
+			int sineOpen = callOpener(sine);
+			int dot = sineOpen < 0 ? -1 : significantAfter(sineOpen);
+			if (dot < 0 || !this.tokens.get(dot).identifier("dot")) {
+				continue;
+			}
+
+			int dotOpen = callOpener(dot);
+			int comma = firstCallComma(dotOpen);
+			int argStart = dotOpen < 0 ? -1 : significantAfter(dotOpen);
+			int argEnd = comma < 0 ? -1 : significantBefore(comma);
+			int sineClose = matchingBracket(sineOpen);
+			int times = sineClose < 0 ? -1 : significantAfter(sineClose);
+			int scale = times < 0 ? -1 : significantAfter(times);
+			int fractClose = matchingBracket(fractOpen);
+			if (argStart < 0 || argEnd < argStart || times < 0 || scale < 0 || fractClose < 0
+					|| !this.tokens.get(times).operator("*")
+					|| !goldbergScale(this.tokens.get(scale))) {
+				continue;
+			}
+
+			int afterScale = significantAfter(scale);
+			if (afterScale != fractClose) {
+				continue;
+			}
+
+			boolean reduced = this.tokens.get(sine).identifier(REDUCED_SIN);
+			String argument = tokenText(argStart, argEnd);
+			blankRange(index, fractClose);
+			inject(index, HASH + "(" + argument + ")");
+			if (reduced && this.trigCalls > 0) {
+				this.trigCalls--;
+			}
+
+			this.hashCalls++;
+		}
+	}
+
+	private boolean goldbergSine(Token token) {
+		return token.identifier(REDUCED_SIN)
+				|| (token.identifier("sin") && !this.declaredNames.contains("sin"));
+	}
+
+	/**
+	 * The goldberg scale is this one number, copied through the corpus. Anything else multiplied
+	 * by a sine is a sine the pack meant to keep.
+	 */
+	private static boolean goldbergScale(Token token) {
+		if (token.kind() != Kind.NUMBER) {
+			return false;
+		}
+
+		String text = token.text();
+		if (text.endsWith("f") || text.endsWith("F")) {
+			text = text.substring(0, text.length() - 1);
+		}
+
+		try {
+			return Math.abs(Double.parseDouble(text) - 43758.5453) < 2.0;
+		} catch (NumberFormatException ignored) {
+			return false;
+		}
+	}
+
+	/** The comma that separates the first argument of the call that opens here, or -1. */
+	private int firstCallComma(int open) {
+		int close = matchingBracket(open);
+		if (open < 0 || close < 0) {
+			return -1;
+		}
+
+		int depth = 0;
+		for (int scan = open; scan < close; scan++) {
+			Token inner = this.tokens.get(scan);
+			if (inner.kind() != Kind.OPERATOR) {
+				continue;
+			}
+
+			if (inner.operator("(") || inner.operator("[") || inner.operator("{")) {
+				depth++;
+			} else if (inner.operator(")") || inner.operator("]") || inner.operator("}")) {
+				depth--;
+			} else if (inner.operator(",") && depth == 1) {
+				return scan;
+			}
+		}
+
+		return -1;
+	}
+
+	private String tokenText(int start, int end) {
+		StringBuilder text = new StringBuilder();
+		for (int at = start; at <= end; at++) {
+			text.append(this.tokens.get(at).text());
+		}
+
+		return text.toString();
 	}
 
 	/**
@@ -3452,6 +3592,29 @@ public final class GlslTranslator {
 				lines.add(shape + " " + REDUCED_COS + "(" + shape + " ofX) {"
 						+ " return " + REDUCED_SIN + "(ofX + 1.5707964); }");
 			}
+		}
+
+		// One overload per vector the idiom hashes. The bits are hashed rather than the sine of a
+		// huge argument, which is the whole of rewriteGoldbergHash.
+		if (this.hashCalls > 0) {
+			lines.add("float " + HASH + "(vec2 ofP) {"
+					+ " uvec2 ofV = floatBitsToUint(ofP);"
+					+ " uint ofN = (ofV.x * 1597334677u) ^ (ofV.y * 3812015801u);"
+					+ " ofN ^= ofN >> 16u;"
+					+ " ofN *= 2246822519u;"
+					+ " ofN ^= ofN >> 13u;"
+					+ " ofN *= 3266489917u;"
+					+ " ofN ^= ofN >> 16u;"
+					+ " return float(ofN) * 2.3283064365386963e-10; }");
+			lines.add("float " + HASH + "(vec3 ofP) {"
+					+ " uvec3 ofV = floatBitsToUint(ofP);"
+					+ " uint ofN = ofV.x ^ (ofV.y * 1597334677u) ^ (ofV.z * 3812015801u);"
+					+ " ofN ^= ofN >> 16u;"
+					+ " ofN *= 2246822519u;"
+					+ " ofN ^= ofN >> 13u;"
+					+ " ofN *= 3266489917u;"
+					+ " ofN ^= ofN >> 16u;"
+					+ " return float(ofN) * 2.3283064365386963e-10; }");
 		}
 
 		// Only where a lookup was moved. A stage carrying the declaration and never reading it, which
