@@ -432,6 +432,27 @@ public final class TerrainDraw {
 	}
 
 	/**
+	 * Whether the shadow map is being drawn: the stage is on and every shadow pass has a program
+	 * that can still be served.
+	 * <p>
+	 * What it decides is whether a mob keeps the game's own ground oval. Iris takes that oval away
+	 * for as long as its shadow renderer stands ({@code pipeline/IrisRenderingPipeline.java:1101-1104}),
+	 * and the renderer is made with the shadow targets ({@code :451-469}), whatever the distance is
+	 * set to. Two edges of that condition are not read the same way here, and both are on the side
+	 * of the stage rather than of this line. Iris allocates the targets for a pack that merely
+	 * samples {@code shadowtex} from a composite ({@code :767-768}), with no shadow program at all,
+	 * and takes the oval away under it; here a pack without a shadow program gets no stage and keeps
+	 * its oval. And Iris reads a {@code shadow.enabled} line of the pack's properties ({@code :464}),
+	 * which this engine reads nowhere: the stage stands on the programs alone. What either costs is
+	 * one oval more or less under a pack of which the corpus has none.
+	 */
+	public static boolean shadowMapServed() {
+		TerrainDraw self = PackChain.terrain();
+
+		return self != null && shadows() && self.shadowsServed();
+	}
+
+	/**
 	 * Takes the copy the pack reads as {@code shadowtex1}. The caller invokes it between the opaque
 	 * halves of the shadow map and the translucent one, which is the only moment the two names mean
 	 * different things, and outside any render pass: the renderer closes its own before returning.

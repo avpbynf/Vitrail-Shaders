@@ -271,7 +271,10 @@ off by identity **before** the blend is looked at, so it is in neither half. And
 never goes through the sort at all: it goes into a phase of its own that the translucent execution
 runs first. It reaches the door regardless, its renderer inheriting the same `executeGroup`, and that
 was proved rather than assumed, since it is the one that could plausibly have had a group loop of its
-own the way the particles do.
+own the way the particles do. Where it is submitted at all, that is: while the pack draws a shadow
+map the oval is kept off the mob at the dispatcher, which is the reference's rule, so under a pack
+with a map no oval reaches any door, and under a pack without one the oval is the only shadow a mob
+has and keeps its row.
 
 From that one table three more are derived, row for row but one, and the reason is always
 the same: a row too many is a compiled module nobody selects, a row too few is geometry silently
@@ -346,12 +349,13 @@ Seen from the light the tables collapse to **one program** for the lot. The bloc
 the same pipelines and answers one key for every entity one, so there is no block row for anything
 this engine draws.
 
-The ground oval is left out because the reference leaves it out, and what a row would add is worth
-knowing and is not the obvious answer: that pipeline writes no depth at all, so it would lay no
-occluder under anything and would only paint into the map's colour. The eyes are in, and that is
-exactly what they reach. Neither eye pipeline writes depth, and the table keeps the write exactly, so
-an eye paints into the map's colour and lays nothing under itself: it is not an occluder and it
-darkens no shadow. What the row buys is a pack that reads the map's colour seeing the eyes where it
+The ground oval has no twin because nothing submits it while the map is drawn: the dispatcher keeps
+it off the mob for as long as the pack draws a map, and the light's walk submits through that same
+dispatcher, so a row would be a module nobody selects. The reference's shadow table has no key for
+it either. The eyes are in, and what they reach is worth knowing, because it is not the obvious
+answer. Neither eye pipeline writes depth, and the table keeps the write exactly, so an eye paints
+into the map's colour and lays nothing under itself: it is not an occluder and it darkens no
+shadow. What the row buys is a pack that reads the map's colour seeing the eyes where it
 used to see a dropped draw. They take the ordinary caster's row rather than the full light of their
 camera side, the reference's shadow key being declared with the light map where the two camera keys
 are declared full bright.

@@ -28,6 +28,12 @@ what the next one holds.
   the grain, which writes it into the second argument of the idiom, and left a pattern stuck to the
   screen. The rewrite now only fires on a constant second argument; BSL's waving is untouched.
 
+- **No more dark oval under a mob when the pack draws its own shadows.** The game's flat entity
+  shadow was still drawn, lit as a translucent entity, under every mob the pack was already
+  shading with its shadow map. It now goes away for as long as the pack has a map, which is what
+  Iris does, and stays under a pack without one. The defect only showed with Entity Shadows on in
+  the video settings.
+
 ## 0.7.3-beta
 
 ### Fixed

@@ -141,11 +141,11 @@ middle of the draw, so there is nothing to hand back to. What it costs is a cast
 shadow; the alternative costs worse, the pass open at that moment carrying the finished picture, so
 the caster would be painted across the frame the player is looking at.
 
-The ground oval under a mob is left out on purpose, as Iris leaves it out: neither engine has a
-shadow row for that pipeline. It is worth knowing what serving it would and would not do, because
-the answer is not the obvious one: that pipeline writes no depth, and the shadow table keeps the
-write exactly, so a row for it would put nothing at all into the depth a pack reads its shadows
-from. It would not lay a disc of occluder under every mob.
+The ground oval under a mob is not in the map and not under the mob either, for as long as the pack
+draws a map: the dispatcher never submits it then, which is Iris's rule. A pack with a map lights the
+ground under a mob with that map, and the game's oval on top of it would be a second shadow no pack
+author ever saw under their own pack. Under a pack without a map the oval is the only shadow a mob
+has, and it stays, drawn with the translucent entity program as Iris draws it.
 
 The two halves of that second walk are gathered at different moments, and it is not a tidiness.
 The entities are worked out before the light's own walk of the sections, since nothing that decides
