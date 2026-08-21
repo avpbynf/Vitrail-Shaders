@@ -107,6 +107,15 @@ is the part worth knowing before changing either: a squash is linear, so the rul
 happily, and it is the button setting that rules it out. The same ruleset refuses the deletion of
 either branch.
 
+Two more rulesets require status checks, and they are what turns a check into a refusal. On `dev`:
+`build`, `commits` and `label`, so a request from a branch outside the naming form above, or one
+whose subjects fail, cannot merge, and a commit pushed straight onto `dev` without having passed
+them is refused. On `main`: `build` and `main-from-dev`, the second being a workflow that fails
+every request not opened from `dev`, so what the fast-forward moves onto `main` is exactly what a
+green request from `dev` carried, and a commit pushed onto `main` from anywhere else is refused.
+Repairing either branch by hand therefore means switching its ruleset off for the length of the
+push, which is a deliberate act rather than a slip.
+
 `.github/pull_request_template.md` is what a request opens with, and its four headings are the four
 questions this repository answers before anything lands. Three of them are ordinary. The one that
 is not is the second, "how it differs from the reference": packs are written against Iris, so a
