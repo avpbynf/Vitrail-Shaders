@@ -11,6 +11,16 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Added
+
+- **A GPU profile of the frame, per render pass, in the log.** Start the game with
+  `-Dvitrail.passTimings=5` among the JVM arguments and every five seconds the log gets a table of
+  where the card's time went, one row per pass label, the game's passes and Sodium's beside the
+  pack's, sorted by cost. Off unless asked for. What a slow pack costs is now a question the log
+  answers instead of a frame counter.
+
 ## 0.7.4-beta
 
 ### Changed
