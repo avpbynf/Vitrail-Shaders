@@ -12,6 +12,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.FrameGraphSetupEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.TextureAtlasStitchedEvent;
@@ -38,6 +39,8 @@ public final class VitrailNeoForge {
 		VitrailKeys.register(modBus);
 
 		modBus.addListener(FMLClientSetupEvent.class, _ -> EngineStages.clientSetup());
+
+		NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, _ -> EngineStages.clientTick());
 
 		// Posted at the end of TextureAtlas.upload, once per atlas and once per resource reload,
 		// with the stitched texture already made and no render pass open. It is where the sprites of
