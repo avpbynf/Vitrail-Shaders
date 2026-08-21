@@ -45,5 +45,6 @@
 	"key.vitrail.reload_pack": "Herlaad Shaders",
 	"options.vitrail.pack_reloaded": "Shaders herladen!",
 	"options.vitrail.reload_failed": "Shaders herladen is mislukt! Reden: %s",
+	"options.vitrail.other_backend": "Vitrail tekent niets op de %s-backend: zijn shaders draaien alleen op Vulkan. Zet %s onder Opties, Video-instellingen op \"%s\" en herstart het spel.",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

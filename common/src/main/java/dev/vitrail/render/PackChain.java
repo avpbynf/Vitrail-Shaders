@@ -19,6 +19,7 @@ import dev.vitrail.settings.SettingsFile;
 import dev.vitrail.settings.SettingsLayers;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
+import dev.vitrail.HostReport;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -586,6 +587,25 @@ public final class PackChain {
 			EngineOptions.Read engine = EngineOptions.take(chosen);
 			packsFirst = engine.packsFirst();
 			chainWanted = engine.chain();
+
+			// Read and shown, and not drawn. On a backend this engine is not written for, the pack
+			// is published to the screen above so that it can be picked and configured ahead of the
+			// restart that will draw it, and every switch below stays down so that nothing of it
+			// reaches a mesh or a frame: the programs are translated against Vulkan's depth and
+			// clip conventions, and what they drew when let run elsewhere was a picture credible
+			// and wrong, which reads as a pack fault. The game's own image is the better answer.
+			// HostReport says it once in the log at startup and once in chat on entering a world;
+			// what this road adds is the screen's bottom line, through lastError, and nothing else.
+			if (HostReport.otherBackend()) {
+				TerrainDraw.wanted(false);
+				EntityDraw.wanted(false);
+				HandDraw.wanted(false);
+				lastError = ShaderPackSource.nameOf(pack) + " is not drawn on the "
+						+ HostReport.backend() + " backend: set Graphics API to \"Prefer Vulkan "
+						+ "(Experimental)\" under Options, Video Settings, and restart";
+				return;
+			}
+
 			TerrainDraw.wanted(engine.terrain());
 			TerrainDraw.shadowWanted(engine.shadow());
 			SkyDraw.wanted(engine.sky());

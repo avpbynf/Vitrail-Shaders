@@ -45,5 +45,6 @@
 	"key.vitrail.reload_pack": "Shader neu laden",
 	"options.vitrail.pack_reloaded": "Shader neu geladen!",
 	"options.vitrail.reload_failed": "Shader konnte nicht neu geladen werden! Grund: %s",
+	"options.vitrail.other_backend": "Vitrail zeichnet auf dem %s-Backend nichts: seine Shader laufen nur auf Vulkan. Setze %s unter Optionen, Grafikeinstellungen auf \"%s\" und starte das Spiel neu.",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

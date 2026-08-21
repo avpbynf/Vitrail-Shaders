@@ -45,5 +45,6 @@
 	"key.vitrail.reload_pack": "Перезагрузить шейдеры",
 	"options.vitrail.pack_reloaded": "Шейдеры перезагружены.",
 	"options.vitrail.reload_failed": "Не удалось перезагрузить шейдеры. Причина: %s",
+	"options.vitrail.other_backend": "Vitrail ничего не рисует на бэкенде %s: его шейдеры работают только на Vulkan. Установите %s в значение \"%s\" в меню Настройки, Настройки графики, и перезапустите игру.",
 	"key.category.vitrail.keybinds": "Vitrail"
 }
