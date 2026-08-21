@@ -178,6 +178,15 @@ default is the tightest of them rather than the loosest.
 
 A word this cannot read leaves the default standing, which is what the reference does with it.
 
+**The safe zone's box is nought blocks wide here, and that is worth knowing before you write against
+it.** The width comes from a `const float voxelDistance`, which only counts where it sits on a line
+that survives the pack's own preprocessor and where it is wider than the shadow distance. Neither
+holds for the packs asking for this state today: most put the declaration behind
+`IRIS_FEATURE_CUSTOM_IMAGES`, which this engine poses for nothing it does not serve, and where one
+declares it live it is shorter than the shortest shadow distance the same pack offers. The state is
+still chosen and the sweep still runs. It is the widening that does not happen, and it will start
+happening on its own the day custom images are served.
+
 **How far the walk reaches is a separate question from the shape.** Whichever shape is chosen, a box
 around the camera is cut out of it wherever a distance bounds the walk, and that distance is
 `shadowDistance` times the `const float shadowDistanceRenderMul` of the pack's own source, or the

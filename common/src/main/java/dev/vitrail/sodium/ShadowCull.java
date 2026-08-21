@@ -80,9 +80,22 @@ public final class ShadowCull implements Frustum {
 	 * It settles nothing while the safe zone is the shorter of the two, such a box being wholly
 	 * within the distance as well; it is what a pack asking for a voxel grid WIDER than its shadow
 	 * distance is owed, and {@code PackValues:332-333} works the two out apart without bounding
-	 * either by the other. Four packs of the corpus reach for this shape behind their voxelised
-	 * light, and one of them, Bliss, holds {@code voxelDistance} at 64 while offering a shadow
-	 * distance down to 32.
+	 * either by the other.
+	 * <p>
+	 * <strong>No pack of the corpus reaches it on this engine, and one flag is the whole
+	 * reason.</strong> Bliss, BSL, both Complementary and Reverie ask for this shape behind their
+	 * voxelised light, so the STATE is reached; what never arrives is its WIDTH. A pack declares
+	 * that as {@code voxelDistance}, and Bliss puts the declaration itself behind
+	 * {@code IRIS_FEATURE_CUSTOM_IMAGES} ({@code lib/settings.glsl}) where both Complementary reach
+	 * it through {@code COLORED_LIGHTING_INTERNAL}, a define the same flag alone turns on
+	 * ({@code lib/common.glsl}). {@link dev.vitrail.pack.option.EngineDefines} poses no
+	 * {@code IRIS_FEATURE_} for anything this engine does not serve, and
+	 * {@code ConstDirectives.read} keeps live lines only, so for those three the value never arrives
+	 * and the box is nought blocks wide. BSL declares one on a live line and it is SHORTER than the
+	 * smallest shadow distance it offers, which is the case just above that settles nothing. Reverie
+	 * requires the flag outright and is refused whole before a program is translated. So what stands
+	 * below is the reference's order held against the day custom images are served, and not a state
+	 * a player can put this engine in today.
 	 * <p>
 	 * <strong>{@link #testAab} does NOT carry that exception, and Iris does not carry it there
 	 * either</strong> ({@code SafeZoneCullingFrustum.java:54-56}, the distance cut first). The two
@@ -104,10 +117,10 @@ public final class ShadowCull implements Frustum {
 
 		// The safe zone outranks the distance on a box it holds whole, which is Iris's order and not
 		// a softening of the line above: its safe zone frustum answers INSIDE off that box alone the
-		// moment the distance is anything but OUTSIDE (SafeZoneCullingFrustum.java:74-78). It is
-		// reachable and not a corner: four packs of the corpus ask for this shape behind their
-		// voxelised light, and Bliss holds voxelDistance at 64 while offering a shadow distance down
-		// to 32, so a player who lowers one below the other would lose casters Iris draws.
+		// moment the distance is anything but OUTSIDE (SafeZoneCullingFrustum.java:74-78). No pack
+		// of the corpus can put a width behind it here, the javadoc above naming what stops each of
+		// them, so nothing below this line answers differently today; it is kept because it is what
+		// the reference does and what a served voxel grid would need.
 		return within(this.distance, minX, minY, minZ, maxX, maxY, maxZ)
 				|| (this.safeZone >= 0.0F
 						&& within(this.safeZone, minX, minY, minZ, maxX, maxY, maxZ))
