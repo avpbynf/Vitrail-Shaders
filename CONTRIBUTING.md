@@ -267,8 +267,13 @@ way its name was settled.
 opened (`.github/workflows/label.yml`). A label derived rather than decided has no reason to be
 asked of anybody, and this one held only for as long as it was remembered: of the requests opened
 before the workflow existed, nine of the first eighty-eight carry it and none of the twenty-seven
-that followed do. Where it posts nothing, the branch either carries a release, which takes no type
-label, or opens on a word this convention does not know, and `commits.yml` is what says so.
+that followed do. Where it posts nothing, the branch opens on a word this convention does not know,
+and `commits.yml` is what says so.
+
+**A release request carries `release` and no type**, posed by that same workflow. Two requests carry
+it: `release/<version>` into `dev`, which lands the bump, and `dev` into `main`, which records the
+fast-forward. Neither is a change of the kind the nine words classify, the first carrying a number
+and the second nothing that did not enter `dev` under a label of its own.
 
 **An issue carries what it is about instead**, being a report rather than a change:
 
