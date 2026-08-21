@@ -208,8 +208,6 @@ final class GeometryProgram {
 	private static final Vector4f OPAQUE_WHITE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private static final Vector4f MID_GREY = new Vector4f(0.5F, 0.5F, 0.5F, 1.0F);
 
-	private static final String SHADOW_LABEL = "Vitrail shadow";
-
 	/** Where one colour attachment of a world pass takes its image from. */
 	private enum Bound {
 
@@ -292,6 +290,7 @@ final class GeometryProgram {
 	/** Labels for the debugger, built from the family so that two of them are never one name. */
 	private final Supplier<String> blockLabel;
 	private final Supplier<String> passLabel;
+	private final Supplier<String> shadowLabel;
 
 	/**
 	 * The attachments this pass adds to or takes instead of the game's target: every draw buffer
@@ -420,6 +419,7 @@ final class GeometryProgram {
 		this.gameTransforms = loaded.readsGameTransforms();
 		this.blockLabel = () -> "Vitrail " + pass.family() + " OfGlobals";
 		this.passLabel = () -> "Vitrail " + pass.family();
+		this.shadowLabel = () -> "Vitrail shadow " + pass.family();
 		TranslatedUnit.Notes notes = loaded.program().stages().get(ProgramStage.FRAGMENT).notes();
 		int outputs = notes.fragmentOutputs();
 
@@ -1194,7 +1194,7 @@ final class GeometryProgram {
 			return null;
 		}
 
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> SHADOW_LABEL);
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.shadowLabel);
 		for (int index : this.shadowColours) {
 			// One attachment per state the pipeline carries, and in the same order. The images are
 			// allocated together with the depth, so this is null only where the depth above is, and
