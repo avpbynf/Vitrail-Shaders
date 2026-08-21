@@ -37,6 +37,18 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card and driver
+      description: >
+        The log names both, on its line "Using graphics backend Vulkan, using drivers". Everything
+        here is tried on one NVIDIA card, and a crash that comes with every pack is most often
+        something another card's driver refuses, so this is the line that tells.
+      placeholder: NVIDIA GeForce RTX 3060, driver 610.88
+    validations:
+      required: true
+
   - type: dropdown
     id: without
     attributes:
