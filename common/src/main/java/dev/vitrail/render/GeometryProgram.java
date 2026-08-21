@@ -91,7 +91,7 @@ final class GeometryProgram {
 
 	/**
 	 * Everything one family of geometry answers differently, so that the rest of this class can be
-	 * written once. Each of these is read below exactly where the enum of a family used to be.
+	 * written once.
 	 *
 	 * @param family       what the log calls this geometry, {@code chunk} for a chunk pass. One word,
 	 *                     and it lands in the middle of a sentence
@@ -133,10 +133,9 @@ final class GeometryProgram {
 	 *                     cone would have closed: the lower half of the stars, the sunrise fan, a
 	 *                     rising or setting sun or moon. Or the disc's own mask is turned down,
 	 *                     which is {@code covers} below, and then nothing of the sky marks anything
-	 *                     and the seed repaints the whole of it. Both were already true before this
-	 *                     field existed, the blend alone having granted the same pixels: a defect it
-	 *                     records rather than one it introduces, and what the field buys is that it
-	 *                     is written down somewhere
+	 *                     and the seed repaints the whole of it. The blend alone grants those pixels
+	 *                     either way, so this is a defect the field records rather than one it
+	 *                     introduces, and what the field buys is that it is written down somewhere
 	 * @param afterDeferred whether the pass is drawn after the deferred stage, which is what decides
 	 *                     that a depth sampler can be answered with the opaque world's image
 	 * @param topology     how the mesh is assembled, which is the game's answer and not a choice:

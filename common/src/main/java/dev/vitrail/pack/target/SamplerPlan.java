@@ -19,7 +19,7 @@ import java.util.Set;
  * backend throws {@code Missing sampler} the moment a name in the layout is not bound. So a name
  * this engine has no answer for cannot be dropped; it has to come back as {@link Kind#UNSERVED}
  * and be given something harmless, and it has to be named in the log rather than quietly given
- * the scene, which is what made the first pass look as though it worked.
+ * the scene, which draws a program that looks as though it works.
  * <p>
  * The side of a colour target is answered here too, from the schedule and for this program, so
  * that no caller has to work out where the ping pong stands.

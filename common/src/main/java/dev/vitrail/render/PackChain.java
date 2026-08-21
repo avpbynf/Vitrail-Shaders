@@ -64,16 +64,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * this class: two answers to "which half does this pass write" produce no error at all, only a
  * picture that is plausible and wrong.
  * <p>
- * What it cannot do yet has to be said rather than covered up, and this paragraph said something
- * else for a while: it claimed no geometry program runs at all, which {@link TerrainDraw},
- * {@link GeometryProgram} and {@link SkyDraw} have all contradicted since. What is true is narrower.
- * The families that still come from the game reach the pack's first target through
- * {@link SceneSeed}, carrying the game's finished frame, and every other buffer starts from its
- * clear colour underneath them. A pass reading normals or a material id off one of those pixels
- * reads nothing of the sort. Which families those are is {@link #announceSeed}'s to say and not
- * this comment's, a list written twice being a list that drifts; and that line does not always
- * appear, since a place with no seed in its plan and a run with the seed switched off both leave
- * the target on its clear colour instead, and both say so in their own words.
+ * What it cannot do yet has to be said rather than covered up. The families that still come from
+ * the game reach the pack's first target through {@link SceneSeed}, carrying the game's finished
+ * frame, and every other buffer starts from its clear colour underneath them: a pass reading
+ * normals or a material id off one of those pixels reads nothing of the sort. Which families those
+ * are is {@link #announceSeed}'s to say and not this comment's, a list written twice being a list
+ * that drifts, and it is not always said at all, a place with no seed in its plan and a run with
+ * the seed switched off both leaving the target on its clear colour instead. What the seed costs
+ * the image is in {@code docs/frame.md}.
  * <p>
  * Two lifecycle traps are paid for here rather than rediscovered. The device caches a compiled
  * module under an identifier, a stage and a set of defines, never under the source, so every load
@@ -132,12 +130,12 @@ public final class PackChain {
 	 * Whether {@code pack.txt} named a pack this folder does not hold, which is the one way of
 	 * drawing nothing that is not a way of asking for nothing.
 	 * <p>
-	 * <strong>Held apart from {@link #packOff} because the two ended in the same place and mean
-	 * opposite things.</strong> A file saying {@code none} asked for the game's own image and got it,
-	 * so nothing is wrong and nothing is said. A file naming a pack that was renamed, deleted or
-	 * mistyped asked for a picture and got the game's, and it used to raise {@link #packOff} as well:
-	 * the screen then read "No shader pack: the game draws its own image", which says the player got
-	 * what they asked for at the moment they did not.
+	 * <strong>Held apart from {@link #packOff}, near enough to be folded into it and meaning the
+	 * opposite.</strong> A file saying {@code none} asked for the game's own image and got it, so
+	 * nothing is wrong and nothing is said. A file naming a pack that was renamed, deleted or
+	 * mistyped asked for a picture and got the game's, and answering that one with {@code packOff}
+	 * puts "No shader pack: the game draws its own image" on the screen, which tells the player they
+	 * got what they asked for at the moment they did not.
 	 */
 	private static volatile boolean packMissing;
 
@@ -163,11 +161,10 @@ public final class PackChain {
 	/**
 	 * Whether this frame's values have been moved on yet.
 	 * <p>
-	 * The frame used to begin where the chain draws, which is after the world. A terrain program runs
-	 * during the world and reads the same block, so whichever of the two comes first opens the frame
-	 * and {@link #draw} closes it. Two advances in one frame would shift the previous frame's
-	 * matrices twice and make every {@code smooth()} in the pack fade at twice the speed, with
-	 * nothing on screen to say so.
+	 * A terrain program runs during the world and reads the same block the chain reads after it, so
+	 * whichever of the two comes first opens the frame and {@link #draw} closes it. Two advances in
+	 * one frame would shift the previous frame's matrices twice and make every {@code smooth()} in
+	 * the pack fade at twice the speed, with nothing on screen to say so.
 	 * <p>
 	 * The chain's own and not the class's, because the store it guards is the chain's own. A reload
 	 * runs at the top of {@link #draw}, in the middle of a frame the terrain has already opened, and
@@ -267,12 +264,11 @@ public final class PackChain {
 	 * Whether {@link #openFeatures()} really posed the game's overrides, which is the one thing
 	 * {@link #closeFeatures()} may take back down and compose on.
 	 * <p>
-	 * Held here rather than read back off {@code RenderSystem.outputColorTextureOverride}, which is
-	 * where it used to be read from. That field is the game's own and the game sets it for its own
-	 * always-on-top features, and openFeatures now has a reason of its own to refuse: the two
-	 * questions were the same only while it never did. Read off the wrong one, a refused frame
-	 * composes a layer nothing drew into, the frame before's, the clear living in the open that
-	 * refusal skipped.
+	 * Held here rather than read back off {@code RenderSystem.outputColorTextureOverride}. That field
+	 * is the game's own and the game sets it for its own always-on-top features, and
+	 * {@link #openFeatures()} has a reason of its own to refuse, so the two questions are not one.
+	 * Read off the game's, a refused frame composes a layer nothing drew into, the frame before's,
+	 * the clear living in the open that refusal skipped.
 	 */
 	private boolean redirected;
 
