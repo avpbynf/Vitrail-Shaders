@@ -11,6 +11,15 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **Grass and leaves no longer skip while they sway under BSL.** Packs that hash their waving
+  with a huge sine were jumping on this backend and smooth on the reference. That hash is now
+  taken from the vertex bits instead. Complementary was already smooth; it never wrote that
+  idiom.
+
 ## 0.7.2-beta
 
 ### Fixed

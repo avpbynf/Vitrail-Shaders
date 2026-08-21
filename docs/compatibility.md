@@ -35,6 +35,7 @@ rather than guess.
 | A hard straight line across the sky near the horizon | [The horizon line](#the-horizon-line) |
 | Something that moves looks flat, unlit, or the wrong colour | [Anything that moves](#anything-that-moves) |
 | The sky turns into a flat grey sheet at sunrise | [The sky goes flat](#the-sky-goes-flat) |
+| Grass or leaves skip while swaying | [The waving grass jumps](#the-waving-grass-jumps) |
 | Blocks wave, glow or cast wrong shadows after switching packs | [You just changed packs](#you-just-changed-packs) |
 | The terrain is uniformly too dark | [Terrain that is too dark](#terrain-that-is-too-dark) |
 | Distant land is there but reads as sky: no fog, wrong focus | [The far terrain is flat](#the-far-terrain-is-flat) |
@@ -280,34 +281,37 @@ target it never asked for.
 
 ## The waving grass jumps
 
-**Under BSL, grass and leaves sway smoothly, then skip forward or snap back to where the sway
-started, and then go on smoothly again.** The player and the camera stand still, the rest of the
-picture is steady, and nothing else the pack animates does it. It is this engine's defect and not
-the pack's: the reference is smooth on the same pack at the same place, and Complementary is smooth
-here.
-
-**It is a jump in the position of the sway, not a tremble in the pixels it lands on**, and that
-distinction is the whole of the diagnosis. Reading it as a shimmer sends you to the pack's temporal
-anti-aliasing, which has nothing to do with it: giving another pack BSL's exact jitter table, index
-and amplitude leaves that pack smooth.
+**A jump in the sway, not a tremble in the pixels.** Under BSL, grass and leaves used to skip
+forward or snap back while the camera stood still. That was this engine's goldberg hash under
+SPIR-V, not the pack: the reference never jumped, and Complementary was already smooth here because
+it never writes the idiom. The hash is rewritten now. Reading a remaining jump as a shimmer still
+sends you to the pack's temporal anti-aliasing, which has nothing to do with it: giving another
+pack BSL's exact jitter table, index and amplitude leaves that pack smooth.
 
 **Some of what looks like the defect is BSL's own wave.** Its interpolation has a zero derivative at
 every lattice crossing, roughly once a second, so the foliage can sit nearly still for a couple of
 dozen frames, at irregular intervals, entirely by design. Those stillnesses are in the pack and are
 there under any implementation. What is worth reporting is a jump on top of them.
 
-**Nothing a pack setting or a video setting takes away, and none of these is the cause:** the frame
-rate, capped or free running; the clock this engine hands the pack, which advances once per
-presented frame, never repeats and never goes backwards; the rounding of that clock to the
-millisecond, which the reference does identically and which shrinks the frame-to-frame velocity step
-rather than growing it; the world position, which cancels exactly against the camera position; the
-noise hash and the precision it is computed in; the write into the terrain's uniform block, which
-happens once a frame with a fresh value; and the moment a frame is handed to the swapchain against
-the moment its content is dated, which stay rigid to within a fraction of a frame even with the
-frame rate unlocked and nothing pacing the loop.
+**The goldberg hash is rewritten.** BSL (and any pack that copies
+`fract(sin(dot(p, K)) * 43758.5453)`) hashes with a sine of a huge argument. Iris leaves that as
+written and the GL driver computes it. This backend compiles through shaderc to SPIR-V; the same
+idiom, even after a Cody-Waite reduction, still skips in game. A time-only waving pack that keeps
+the hash jumps here and is smooth on the reference; the same pack with `sin` in place of the hash
+is smooth on both. Complementary never writes the idiom and was already smooth here.
 
-So a report about this is only useful if it carries something none of those explain: another pack
-that does it, a machine or a driver where it stops, or a setting that changes its rhythm.
+So the call becomes a hash of the argument's bits. The interpolation around the lattice, and the
+amplitude the pack asked for, stay the pack's. The gusts are not Iris's field.
+
+**None of these is the cause of a jump that remains:** the frame rate, capped or free running; the
+clock this engine hands the pack, which advances once per presented frame, never repeats and never
+goes backwards; the rounding of that clock to the millisecond; the world position, which cancels
+exactly against the camera position; the write into the terrain's uniform block; and the moment a
+frame is handed to the swapchain against the moment its content is dated.
+
+A report about a jump that remains is only useful if it carries something none of those explain:
+another pack that still does it, a machine or a driver where it stops, or a setting that changes
+its rhythm.
 
 ## The sky goes flat
 
