@@ -146,7 +146,7 @@ final class EngineOptions {
 	 * names it at each load.
 	 * <p>
 	 * Iris routes the same geometry with nothing to switch,
-	 * {@code shaderpack/loading/ProgramId.java:40-41}, so this line is no longer a divergence from it
+	 * {@code shaderpack/loading/ProgramId.java:40-41}, so this line is not a divergence from it
 	 * at the default; it stays a line because turning a family off in one word is what tells a wrong
 	 * picture from a wrong family, without a rebuild.
 	 */
@@ -156,18 +156,15 @@ final class EngineOptions {
 	 * Takes the player's own hand out of the game's late call and draws it inside the level, with the
 	 * pack's own {@code gbuffers_hand} and {@code gbuffers_hand_water}. On, with the entities.
 	 * <p>
-	 * It was off for the entities' reason and for one of its own. The entities' reason is above and
-	 * has shrunk with it: the hand comes in by the same door and through the same vertex format, so
+	 * The hand comes in by the same door and through the same vertex format as the entities, so
 	 * what a pack reads as a constant here is what it reads as a constant there, and
-	 * {@code currentRenderedItemId}, the one that names what is being held, is no longer among them.
-	 * Its own was that the half that blends served the
-	 * ARM alone, and that one is spent: the entities' blending rows landed, every row of that table
-	 * has a hand twin ({@link EntityDraw}), so a translucent block held in hand goes through the water
-	 * pass with the arm and both are the pack's. What still goes back to the game there goes back
-	 * everywhere else too, the rows naming the item entity target under the game's improved
-	 * transparency.
+	 * {@code currentRenderedItemId}, the one that names what is being held, is not among them.
+	 * Every row of that table has a hand twin ({@link EntityDraw}), so a translucent block held in
+	 * hand goes through the water pass with the arm and both are the pack's. What still goes back to
+	 * the game there goes back everywhere else too, the rows naming the item entity target under the
+	 * game's improved transparency.
 	 * <p>
-	 * <strong>It carries the position as well as the shading, and that is what changed.</strong> The
+	 * <strong>It carries the position as well as the shading.</strong> The
 	 * solid half is drawn where the reference draws it, after the game's own opaque features and
 	 * before the deferred stage, with the depth taken past it first; the blending half goes in ahead
 	 * of the chain rather than after it, so what it draws is in the picture the composites read. Off,
@@ -180,7 +177,7 @@ final class EngineOptions {
 	/**
 	 * Draws the game's clouds with the pack's own program. On, like most of these.
 	 * <p>
-	 * <strong>It was off for one evening and that was one evening too long.</strong> A line of this
+	 * <strong>On rather than off, and the default is the decision.</strong> A line of this
 	 * file is a thing somebody wrote and knows about; a default is what everyone else gets. Off, the
 	 * picture a reader sees on cloning is not the picture this engine was judged on, and every
 	 * report about it is about a configuration nobody shipped.

@@ -54,8 +54,8 @@ public final class ShaderProperties {
 	private static final Pattern SCREEN = Pattern.compile("^\\s*screen(\\.\\w+)?\\s*=\\s*(.*)$");
 	// Both are read before SCREEN, and in this order. "screen.columns=2" matches SCREEN as well,
 	// as a page named columns, which is how a page nobody can reach appears in the one pack that
-	// writes the line; and "screen.NAME.columns=1" matches neither, so it used to be counted as an
-	// unknown key. Packs indent these lines and put spaces around the equals sign, both of which
+	// writes the line; and "screen.NAME.columns=1" matches neither, so it would otherwise be counted
+	// as an unknown key. Packs indent these lines and put spaces around the equals sign, both of which
 	// are why the pattern has to be this loose.
 	private static final Pattern MAIN_COLUMNS = Pattern.compile("^\\s*screen\\.columns\\s*=\\s*(\\d+)\\s*$");
 	private static final Pattern PAGE_COLUMNS = Pattern.compile("^\\s*screen\\.(\\w+)\\.columns\\s*=\\s*(\\d+)\\s*$");
@@ -1215,10 +1215,10 @@ public final class ShaderProperties {
 				case "shadowPlayer" -> player = value;
 				case "shadowBlockEntities" -> blockEntities = value;
 				case "shadowLightBlockEntities" -> lightBlockEntities = value;
-				// Named one by one rather than letting the last word be the catch-all, which is what
-				// this switch used to do: a seventh alternative added to the pattern without its own
-				// arm would have been written into the sixth family in silence, and a caster read
-				// into the wrong family is a caster in a map the pack asked to keep it out of.
+				// Named one by one rather than letting the last word be the catch-all: a seventh
+				// alternative added to the pattern without its own arm would be written into the
+				// sixth family in silence, and a caster read into the wrong family is a caster in a
+				// map the pack asked to keep it out of.
 				default -> { }
 			}
 		}
@@ -1269,7 +1269,7 @@ public final class ShaderProperties {
 	 * {@code handleBooleanDirective} takes {@code true}, {@code 1}, {@code false} and {@code 0} and
 	 * warns at anything else without touching the field ({@code :636-648}).
 	 * <p>
-	 * That is the whole of the difference an earlier reading here would have made, and it takes a
+	 * That is the whole of the difference the other reading would make, and it takes a
 	 * pack writing the key twice to see it: on {@code separateAo=true} followed by
 	 * {@code separateAo=yes}, keeping the last line this can read answers true where the reference
 	 * leaves its default standing and answers false.
@@ -1319,8 +1319,8 @@ public final class ShaderProperties {
 	 * {@link #screens()} and {@link #screenTokens()} keep the shape and the role they had, because
 	 * the measurements this project compares itself against were taken with them, and they drop the
 	 * three hundred and eighteen tokens of the corpus that are not an option name. They lose one
-	 * thing: reading {@code screen.columns} now consumes that line, so it no longer leaves behind a
-	 * page named {@code columns} that nothing could reach. Bliss is the one pack that writes it, and
+	 * thing: reading {@code screen.columns} consumes that line, so it leaves behind no page named
+	 * {@code columns} that nothing could reach. Bliss is the one pack that writes it, and
 	 * it goes from sixty three pages to sixty two. This is the form a screen reads. Pages come in
 	 * the order the pack declares them, the one it opens on being "".
 	 */

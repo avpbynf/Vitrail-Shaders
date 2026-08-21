@@ -206,7 +206,7 @@ final class PbrAtlas implements AutoCloseable {
 					.orElseGet(() -> new FrameSize(read.getWidth(), read.getHeight()));
 		} catch (IOException | RuntimeException e) {
 			// The whole read in one try, the close of the stream included: a failure between the
-			// decode and the metadata used to leave the image allocated with nothing holding it, and
+			// decode and the metadata leaves the image allocated with nothing holding it, and
 			// native memory nothing points at is not memory anything gets back.
 			if (image != null) {
 				image.close();

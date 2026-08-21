@@ -952,7 +952,7 @@ public final class GlslTranslator {
 	 * between the two questions. Entry {@code n} of this list is where output {@code n} lands, so
 	 * an entry past the eighth belongs to an output that cannot exist; but the entries themselves
 	 * name colour targets and Reverie names {@code colortex19}, which a bound of sixteen on the
-	 * value used to drop, moving every attachment declared after it.
+	 * value would drop, moving every attachment declared after it.
 	 */
 	private void collectDrawBuffers() {
 		DrawBuffers.parse(this.unit).stream().limit(MAX_FRAGMENT_OUTPUTS).forEach(this.drawBuffers::add);

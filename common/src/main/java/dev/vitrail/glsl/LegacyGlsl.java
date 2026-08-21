@@ -230,7 +230,7 @@ public final class LegacyGlsl {
 	 * <strong>The glint is what made this necessary, because it is the first family whose depth test
 	 * is an EQUALITY.</strong> Its depth test is {@code EQUAL} and it writes no depth
 	 * ({@code RenderPipelines.java:434}), so a glint whose vertex lands a last bit away from the
-	 * armour under it does not z-fight, it VANISHES. Two things used to put it there and both are
+	 * armour under it does not z-fight, it VANISHES. Two things put a vertex there and both are
 	 * closed by reading this matrix on both sides. The nudge: its one pipeline carries two, since
 	 * {@code ARMOR_ENTITY_GLINT} sets {@code LayeringTransform.VIEW_OFFSET_Z_LAYERING} and the other
 	 * three set none ({@code rendertype/RenderTypes.java:252} against {@code :255,263,270}), so no

@@ -32,8 +32,8 @@ import java.util.Map;
  * holding it.
  * <p>
  * Read and written in ISO-8859-1, which is what OptiFine specifies for these files and what Iris
- * does on both sides. Strict UTF-8 threw on any byte past 0x7F, and the file is no longer ours
- * alone to keep in ASCII. The one exception is the file {@link #migrate} carries over, read as the
+ * does on both sides. Strict UTF-8 throws on any byte past 0x7F, and the file is not ours alone to
+ * keep in ASCII. The one exception is the file {@link #migrate} carries over, read as the
  * UTF-8 this engine wrote it in.
  * <p>
  * A name the pack no longer declares is kept and reported once. Dropping it, which is what Iris
@@ -232,7 +232,7 @@ public final class SettingsFile {
 	 * lets a file written by Iris, whose first line is the date it wrote it, be read as is.
 	 * <p>
 	 * {@link #PROFILE_KEY} is dropped, and only {@link #migrate} ever does anything else with it.
-	 * Nothing writes it any more, and kept it would stop being the name of a set of values and
+	 * Nothing writes it, and kept it would stop being the name of a set of values and
 	 * become one: it would go down with the settings, and a pack declaring an option literally
 	 * called {@code profile} would have that declaration rewritten to the profile's name. What
 	 * dropping it costs is the same pack, whose {@code profile} setting can then not be chosen from

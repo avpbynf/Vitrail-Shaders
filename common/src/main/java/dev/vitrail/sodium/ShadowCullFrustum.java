@@ -107,9 +107,8 @@ import org.joml.Vector4f;
  * {@code -109.125}, giving {@code -21.83 + 77.16 = 55.33 >= 0}. Kept, as it must be, being in plain
  * sight.</li>
  * <li>Behind the camera, centre {@code (0, -40, 100)}: the left plane {@code (-0.7071, 0, -0.7071,
- * 0)} gives {@code 6.45 - 64.25 = -57.80 < 0}. Dropped. Under the box the light was culled with
- * before this class existed it was kept, and that one section is the whole of what this change
- * buys.</li>
+ * 0)} gives {@code 6.45 - 64.25 = -57.80 < 0}. Dropped. Under the light's own box alone it would be
+ * kept, and that one section is the whole of what this class buys.</li>
  * <li>Above the camera and out of its view, centre {@code (0, 80, -20)}: the camera's own top plane
  * {@code (0, -0.7071, -0.7071, 0)} gives {@code -50.12 + 20.59 = -29.53 < 0}, so the camera cannot
  * see it, while the bottom plane gives {@code 63.02 + 20.59 = 83.61 >= 0} and every other kept plane

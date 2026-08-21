@@ -131,11 +131,11 @@ final class PackDump {
 				return;
 			}
 
-			// Said once and the line left armed, which is not what this did: it used to turn the
-			// dump off outright, and that was right only while everything a place draws with was read
-			// on its first frame. Three families are read at the moment the world first draws one, so
-			// naming a piece of the sky or an entity was refused before the thing existed and stayed
-			// refused for the rest of the session. What is listed is therefore what has been read SO
+			// Said once and the line left armed, rather than turning the dump off outright: that
+			// would be right only while everything a place draws with is read on its first frame.
+			// Three families are read at the moment the world first draws one, so naming a piece of
+			// the sky or an entity would be refused before the thing existed and stay refused for
+			// the rest of the session. What is listed is therefore what has been read SO
 			// FAR and the line says as much, since another family reading later still answers.
 			said = true;
 			Vitrail.logger().warn("{}={} names nothing read so far, so nothing is dumped yet. Read so "

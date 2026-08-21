@@ -61,12 +61,12 @@ import net.minecraft.client.Minecraft;
  * on the boundary between the two at the tail of the first one, and the plan never puts the world
  * past that boundary: the rank counts the begins and the prepares, and {@code deferredEnd()} counts
  * those and the deferred stage after them. A place shipping no deferred at all has the two equal,
- * and it is that equality the walk used to lose: on a half open interval alone the seed missed the
- * first half and led the second, at {@code AfterLevel}, by which time the clouds, the weather and
- * the particles are in the game's target and the mask would have taken them. Measured on the corpus
- * before it was fixed: one place in twenty five, Body Camera's overworld. The same state is
- * reachable on any pack through {@code passes=}, which removes passes from the running list exactly
- * as {@code terrain=off} removes the terrain, and it is no longer a state that costs anything.
+ * and it is that equality a half open interval loses: the seed would miss the first half and lead
+ * the second, at {@code AfterLevel}, by which time the clouds, the weather and the particles are in
+ * the game's target and the mask would have taken them. Measured on the corpus: one place in twenty
+ * five, Body Camera's overworld. The same state is reachable on any pack through {@code passes=},
+ * which removes passes from the running list exactly as {@code terrain=off} removes the terrain,
+ * and it costs nothing here.
  * <p>
  * <strong>The one thing that would be lost is the world itself</strong>, and only where the world
  * reaches the pack's colour target through that same seed rather than writing it. There the cone
@@ -142,7 +142,7 @@ final class HorizonCone {
 	 * comment gives in full. An answer nobody has given yet counts as no, and costs the first frame
 	 * of a world its cone: the geometry is read where the chunk renderer picks its shader, which is
 	 * after the sky in the frame, so the first sky of a world is drawn before the world has said
-	 * anything. That frame then looks exactly as it looked before this class existed, which is the
+	 * anything. That frame then looks exactly as it does without this class, which is the
 	 * one wrong answer that cannot make a picture worse.
 	 *
 	 * @param program what is drawing it, for the one line that says it happened

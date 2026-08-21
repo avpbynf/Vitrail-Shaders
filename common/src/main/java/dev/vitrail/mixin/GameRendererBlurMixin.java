@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
  * option, carried to the shader in the sixth argument of {@code GlobalSettingsUniform.update},
  * {@code menuBlurRadius}. A screen that fades the first half alone therefore fades nothing: the
  * widgets go in one frame, the blur stays at its full width for as long as the fade takes to fall
- * under one, and then goes out in a single frame. That is what the eye looked like before this.
+ * under one, and then goes out in a single frame. That is what the eye sees without this.
  * <p>
  * Iris does both halves and this is its second one, {@code MixinGameRenderer.iris$modifyBlur} at
  * line 67 of its own tree, on the same call and the same argument.

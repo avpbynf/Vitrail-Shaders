@@ -57,7 +57,7 @@ import java.util.Optional;
  * every real depth is in front of, so those pixels take the game's picture through the same
  * comparison and owe no test of their own. That is the whole of why the mask is a depth: the two
  * questions a flag needed - did the pack write here, and has anything moved closer since - are one
- * number and one test, and the depth the pack's geometry left no longer has to be copied into an
+ * number and one test, and the depth the pack's geometry left does not have to be copied into an
  * image of its own before the game's features overwrite it.
  * <p>
  * This is not a fallback and should not be read as one. The first draw buffer of the terrain pass
@@ -67,12 +67,12 @@ import java.util.Optional;
  * through {@code gbuffers_textured}, whose draw buffers start at colortex4. The whole class goes
  * away the day the gbuffers run, and the mask with it.
  * <p>
- * <strong>The other draw buffers of that program are emptied wherever the scene lands on top of
- * it, or the pixel carries half a gbuffer.</strong> A gbuffers program fills all of its targets in
- * one draw, so a pixel it touched carries a set of targets that agree with one another. The seed
- * used to write the first of them alone, and where the mask is set and the game drew in front - a
- * mob standing against a wall - the colour became the mob's while the normal, the specular and the
- * lightmap stayed the wall's, and the deferred stage lit the one with the other. Those are the only
+ * <strong>The other draw buffers of that program are emptied wherever the scene lands on top of it,
+ * or the pixel carries half a gbuffer.</strong> A gbuffers program fills all of its targets in one
+ * draw, so a pixel it touched carries a set of targets that agree with one another. A seed writing
+ * the first of them alone would leave the colour the mob's while the normal, the specular and the
+ * lightmap stay the wall's, wherever the mask is set and the game draws in front - a mob standing
+ * against a wall - and the deferred stage would light the one with the other. Those are the only
  * pixels emptied, and the reason for the narrowness is the same one: everywhere else the pack's own
  * geometry wrote nothing at all into those targets, and whatever is there is a prepare's or the
  * clear's and none of the seed's business.

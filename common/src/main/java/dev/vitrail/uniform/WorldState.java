@@ -276,9 +276,9 @@ public interface WorldState extends ViewSource {
 	 * {@code wetnessHalflife} and the {@code drynessHalflife} directives fail to reach, so no pack
 	 * can change it, and packs are written against that.
 	 * <p>
-	 * Never return the pack's own directive here. Measured on the corpus rather than guessed at, and
-	 * an earlier version of this line guessed: the three packs that declare one disagree with the
-	 * constant in BOTH directions, BSL at 5 and both Complementary at 300. Honouring the declaration
+	 * Never return the pack's own directive here, and the reason is measured rather than guessed at:
+	 * the three packs that declare one disagree with the constant in BOTH directions, BSL at 5 and
+	 * both Complementary at 300. Honouring the declaration
 	 * would make the fall forty times faster on one and half again slower on the other two, so there
 	 * is no single wrong direction to argue about - only three packs tuned against what they get.
 	 */

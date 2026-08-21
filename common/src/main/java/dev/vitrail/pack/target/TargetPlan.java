@@ -278,13 +278,13 @@ public final class TargetPlan {
 	 * attachment zero when a fragment declares none, and the packs are written against that, so a
 	 * program with no directive is sent to colortex0 and colortex0 is allocated for it.
 	 * <p>
-	 * <strong>Geometry is inferred too, and it used to be left out.</strong> The reason it was left
-	 * out expired: nothing of it was drawn, so the inference would have paid for a target on behalf of
-	 * a program that never ran. The terrain, the sky, the clouds, the weather, the particles and the
-	 * entities are drawn now, and what the exemption really bought was a program of the pack drawing
-	 * into the GAME'S target instead of the pack's, where nothing of the chain reports it back. Body
-	 * Camera is the measured case and it is total rather than cosmetic: it
-	 * has no clouds at all, at either setting of the pack, because its {@code gbuffers_clouds}
+	 * <strong>Geometry is inferred too, and leaving it out is the tempting exemption.</strong> It
+	 * would hold only while nothing of it is drawn, the inference otherwise paying for a target on
+	 * behalf of a program that never runs. The terrain, the sky, the clouds, the weather, the
+	 * particles and the entities are all drawn, so what that exemption buys is a program of the pack
+	 * drawing into the GAME'S target instead of the pack's, where nothing of the chain reports it
+	 * back. Body Camera is the measured case and it is total rather than cosmetic: it has no clouds
+	 * at all, at either setting of the pack, because its {@code gbuffers_clouds}
 	 * declares no draw buffer and its image goes somewhere nothing collects. Iris reads the same file
 	 * as {@code /* DRAWBUFFERS:0 *}{@code /}, {@code shaderpack/properties/ProgramDirectives.java:55}.
 	 * <p>

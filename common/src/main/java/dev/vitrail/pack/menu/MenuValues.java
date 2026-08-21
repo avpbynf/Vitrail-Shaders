@@ -179,7 +179,7 @@ public final class MenuValues {
 	 * ({@code ProfileSet.scan}): the honest answer to "which profile is this" is the one the values
 	 * give. Storing the name instead makes a screen answer "none" the moment the file holding it is
 	 * deleted, while the values on screen are exactly the ones a profile names, which is what
-	 * pressing Reset used to look like.
+	 * pressing Reset looks like.
 	 * <p>
 	 * The most constrained profile wins, as it does there, because one profile is usually another
 	 * plus a setting or two and the looser of the pair would otherwise answer for both. Two profiles

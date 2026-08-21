@@ -160,7 +160,7 @@ public final class GeometryValues {
 		// the game puts the sun where it is by pushing a rotation onto its own stack, and a pack reads
 		// that rotation here while reading the camera under gbufferModelView, using both at once.
 		//
-		// The families the entity door records from the camera no longer read this name at all: their
+		// The families the entity door records from the camera do not read this name at all: their
 		// gl_ModelViewMatrix goes to the game's own per draw block, LegacyGlsl.readsDrawModelView
 		// saying which and why. What they still take from here is the inverse and the normal matrix
 		// below, which Iris also leaves on its own per pass answer.

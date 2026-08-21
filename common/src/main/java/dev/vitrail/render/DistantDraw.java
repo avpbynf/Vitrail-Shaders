@@ -47,8 +47,8 @@ import java.util.Set;
  * with its.
  * <p>
  * <strong>This is the whole of what the far terrain was missing, and what it was missing was the
- * light.</strong> The colour used to be DH's, so the two halves of one landscape were lit by two
- * engines and met at a seam no pack could close. The geometry {@code dh/DhLods} takes over is drawn
+ * light.</strong> Left to itself the colour is DH's, so the two halves of one landscape are lit by
+ * two engines and meet at a seam no pack can close. The geometry {@code dh/DhLods} takes over is drawn
  * here instead, once per half of the frame, with {@code dh_terrain} and {@code dh_water} - the two
  * names every pack of the corpus ships, and two of the four Iris serves
  * ({@code compat/dh/DHCompatInternal.java:67-79}; the one still missing here is its
@@ -291,8 +291,8 @@ public final class DistantDraw {
 	 * Draws one half of the far terrain with the pack's own program.
 	 * <p>
 	 * The one door {@code dh/DhLods} comes through, and the answer decides what DH does next: false
-	 * hands the half back, and DH draws it with its own shader exactly as it did before this engine
-	 * stood in the way.
+	 * hands the half back, and DH draws it with its own shader exactly as it does where this engine
+	 * does not stand in the way.
 	 *
 	 * @param opaque   which half this is, taken from DH's own call rather than worked out here
 	 * @param sections every section of the far terrain, in the order DH sorted them
@@ -372,7 +372,7 @@ public final class DistantDraw {
 		} catch (RuntimeException e) {
 			// Latched on its own, and the picture keeps going: what stops here is the far terrain's
 			// entry into the map, so the LOD is lit by what the pack computes from its own depth,
-			// which is the whole of what it had before this half existed.
+			// which is the whole of what it has without this half.
 			draw.shadowBroken = true;
 			Vitrail.logger().error("Vitrail stopped drawing the far terrain into the shadow map after "
 					+ "an error, so nothing of it casts into the map for the rest of this pack", e);

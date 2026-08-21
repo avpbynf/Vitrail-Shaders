@@ -10,9 +10,9 @@ package dev.vitrail.pack.program;
  * every pack of the corpus takes. It is Iris's {@code pipeline/WorldRenderingPhase}, reproduced
  * as it stands and for the reason everything else of Iris's is: packs are written against it.
  * <p>
- * One table and not two. The names and the numbers used to be written out a second time in
- * {@code EngineDefines}, which is the shape of a failure nobody finds: two lists that agree today
- * and are edited on different days.
+ * One table and not two. Writing the names and the numbers out a second time in
+ * {@code EngineDefines} is the shape of a failure nobody finds: two lists that agree today and are
+ * edited on different days.
  * <p>
  * <strong>Rather more of these are unreachable than reachable</strong>, and the list of which is not
  * kept here: it is whatever the engine really poses, and a list written down would be one more pair

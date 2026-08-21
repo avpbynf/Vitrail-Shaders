@@ -49,11 +49,11 @@ import java.util.Set;
  * takes the buffer by writing the coverage mask, which carries the depth its fragment left and is
  * what the seed is cut against; {@link EntityDraw.Element#covers} is where that is decided and why.
  * <p>
- * <strong>That is what the trip through the game's target used to cost, and it is Bliss's
- * albedo.</strong> The writing half was in the position the opaque chunk passes were in before the
- * mask existed: its colour went to the game's target and reached the pack through the seed, eight
- * bits a channel. A pack packing two values into each channel of a sixteen bit target loses the
- * first of them there, and reads the second back as the albedo. What it always kept is every other
+ * <strong>That is what a trip through the game's target costs, and it is Bliss's albedo.</strong>
+ * A writing half with no mask stands where an opaque chunk pass with none stands: its colour goes
+ * to the game's target and reaches the pack through the seed, eight bits a channel. A pack packing
+ * two values into each channel of a sixteen bit target loses the first of them there, and reads the
+ * second back as the albedo. What it keeps either way is every other
  * draw buffer, which is where a pack keeps the normal, the specular map and the material it lights
  * an entity by, and which is the whole of what {@code the entities still come from the game} meant.
  * <p>
@@ -280,7 +280,7 @@ final class EntityProgram implements DumpedProgram {
 	 *
 	 * @param modelView  the matrix this pass is drawn under, which is the frame's camera for every
 	 *                   piece but the hand's and null for those. It is what the derived uniforms are
-	 *                   built from and no longer what places the geometry: {@code EntityDraw.Element}
+	 *                   built from and not what places the geometry: {@code EntityDraw.Element}
 	 *                   says why the depth nudge of a render type is not in it
 	 * @param bob        the bob that placed this piece, or null for the frame's. Only the hand passes
 	 *                   one, and it must: the projection above is built with the walk bob and the

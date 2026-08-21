@@ -309,10 +309,10 @@ public final class FrameState implements WorldState {
 			// A different world, so nothing carried over from the previous frame means anything:
 			// the camera has jumped a dimension's worth of coordinates and the shift, the history
 			// and every motion vector built from them would be one frame of nonsense. The clock is
-			// part of that and used to be the half left out, which only shows on a dimension the
+			// part of that and the half easiest to leave out, which only shows on a dimension the
 			// pack serves out of the directory it was already loaded from: nothing is read again
-			// there, so the first frame on the far side published a frameTime measuring the whole
-			// change, seconds of it, into every value a pack integrates over one.
+			// there, so the first frame on the far side would publish a frameTime measuring the
+			// whole change, seconds of it, into every value a pack integrates over one.
 			this.lastLevel = level;
 			reset();
 		}
@@ -453,8 +453,8 @@ public final class FrameState implements WorldState {
 		// And the volume itself, which is the row rather than the pair of planes the planes were
 		// worked out from: a row put back together out of two planes would be the same arithmetic
 		// done twice and rounded twice. Handed a zero offset where there is no row to be had, and
-		// then the volume published is the frame's own, which is what a pack read before this engine
-		// drew a far terrain at all.
+		// then the volume published is the frame's own, which is what a pack reads where this engine
+		// draws no far terrain at all.
 		boolean row = DhDepth.zRow(this.distantPlanes);
 		this.view.advanceDistantVolume(row ? this.distantPlanes.x : 0.0F,
 				row ? this.distantPlanes.y : 0.0F);

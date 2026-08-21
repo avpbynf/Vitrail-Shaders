@@ -40,7 +40,7 @@ import java.util.List;
  * can be built against, and tying the repository to one jar on one machine is worse than a
  * reflective road that stays quiet on a DH which cannot answer it. Nothing here throws into a frame.
  * Every failure resolves once, says so once, and leaves DH drawing its own far terrain for the rest
- * of the session, which is the picture this engine had before this class existed.
+ * of the session, which is the picture this engine draws without this class.
  */
 public final class DhLods {
 
@@ -492,8 +492,8 @@ public final class DhLods {
 			Vitrail.logger().debug("Distant Horizons' own far terrain renderer cannot be put back", e);
 		}
 
-		// And its own frame order with it, so a DH handed back draws exactly as it did before this
-		// engine stood in the way. Iris clears the same switch when it stops overriding
+		// And its own frame order with it, so a DH handed back draws exactly as it does where this
+		// engine does not stand in the way. Iris clears the same switch when it stops overriding
 		// (compat/dh/LodRendererEvents.java:92 setting it from a live condition).
 		if (deferred) {
 			deferred = false;

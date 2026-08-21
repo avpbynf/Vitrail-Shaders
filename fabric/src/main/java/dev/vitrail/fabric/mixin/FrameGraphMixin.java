@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * At the head of the method rather than in the middle of the graph being built, which is a few
  * statements earlier than the event and reads the same two values: both are parameters of this
  * method and nothing between the two points writes to either. What the position of the event buys
- * there is the targets it also carries, and this engine no longer puts a pass of its own in the
+ * there is the targets it also carries, and this engine puts no pass of its own in the
  * graph, so nothing here needs them.
  */
 @Mixin(LevelRenderer.class)

@@ -103,13 +103,13 @@ public final class SettingSet {
 	 * where the pack declares it and nowhere else, so a name the pack declares nowhere is applied
 	 * nowhere.
 	 * <p>
-	 * Such a name is dropped rather than written into the head of each unit, which is what this
-	 * engine used to do and what Iris has never done: {@code MutableOptionValues.addAll} walks the
-	 * options the PACK declares and looks each one up in the values it was handed
+	 * Such a name is dropped rather than written into the head of each unit, which is not what Iris
+	 * does either: {@code MutableOptionValues.addAll} walks the options the PACK declares and looks
+	 * each one up in the values it was handed
 	 * ({@code shaderpack/option/values/MutableOptionValues.java:49-97}), so a name no option carries
 	 * is never read at all.
 	 * <p>
-	 * Writing it was worse than useless, and this was measured rather than reasoned. A settings name
+	 * Writing it is worse than useless, and that was measured rather than reasoned. A settings name
 	 * is an identifier and a pack uses identifiers for its own things: a build that did not yet know
 	 * {@code hand} as a line of its own forced it as a setting of the pack, the header define landed
 	 * on the local {@code float hand} of BSL's composite stages, and the whole pack was refused at
