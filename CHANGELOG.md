@@ -13,6 +13,14 @@ what the next one holds.
 
 ## Unreleased
 
+### Added
+
+- **A GPU profile of the frame, per render pass, in the log.** Start the game with
+  `-Dvitrail.passTimings=5` among the JVM arguments and every five seconds the log gets a table of
+  where the card's time went, one row per pass label, the game's passes and Sodium's beside the
+  pack's, sorted by cost. Off unless asked for. What a slow pack costs is now a question the log
+  answers instead of a frame counter.
+
 ### Fixed
 
 - **A pack that declares many textures and samples few of them can compile on Apple Silicon.**
@@ -29,7 +37,6 @@ what the next one holds.
 - **Sodium 0.9.2 no longer crashes when a pack extends the chunk mesh.** Its new arena allocator
   was sized for Sodium's own twenty bytes and refused the wider mesh a pack needs. The allocator
   now takes the same format the rest of the renderer already asked for. 0.9.1 is unchanged.
-
 ## 0.7.4-beta
 
 ### Changed
