@@ -95,15 +95,9 @@ final class SkyProgram implements DumpedProgram {
 				// discard at exactly those pixels, on the mask their own siblings wrote: no stars, no
 				// sun, no moon and no flash.
 				//
-				// WHAT IT DOES NOT COVER, and the repository already knew: the game draws the dark
-				// disc only while the eye is under the world's horizon height and not underwater,
-				// and the top disc stops at atan(16/512) over the horizontal, so nothing of the
-				// game's marks the band that the lower half of the stars, the sunrise fan and a
-				// rising or setting sun stand in. What marks it is ours, HorizonCone, which shares
-				// the disc's pass and its mask - and which is drawn only for a pack whose world
-				// writes the colour target rather than reaching it through the seed. There, and
-				// over the whole sky wherever the disc's own mask is turned down, the overworld's
-				// four are repainted, exactly as they were before this field existed.
+				// The band the game's own discs leave open is marked by ours, HorizonCone, which
+				// shares the disc's pass and its mask. What that still does not cover is written
+				// where the field is declared, GeometryProgram.Pass#claimed.
 				element.covers(), true, false, element.topology(),
 				// Five pipelines under the eight passes, the disc sharing one with the dark plane and
 				// the End's flash sharing another with the sun and the moon, and not one of the five

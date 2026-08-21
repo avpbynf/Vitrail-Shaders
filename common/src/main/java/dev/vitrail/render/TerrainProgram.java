@@ -38,15 +38,15 @@ import java.util.Optional;
  * The work of drawing one is {@link GeometryProgram}'s and is not done here twice: this class is
  * what makes that work Sodium's. It reads the three programs out of the pack, answers
  * {@link GeometryProgram.Pass} out of {@link TerrainPass}, and checks that the mesh is still the one
- * the prologue decodes. Everything else it is asked for it hands straight on, and the surface it
- * keeps is the one {@link TerrainDraw} and {@link PackDump} were already written against.
+ * the prologue decodes. Everything else it is asked for it hands straight on, keeping the surface
+ * {@link TerrainDraw} and {@link PackDump} call.
  * <p>
- * Nothing of the mesh is changed: the attributes it carries are decoded and the names it does not
- * carry are given constants, which {@link SodiumVertex} spells out. What separates the three is not
- * the geometry but the pass, and {@link TerrainPass} holds all of it: which program the pack serves
- * it with, what alpha the fragment stage discards at, and whether the result is blended. The first
- * two are settled at translation and reach here already written into the text; only the blend is a
- * property of the pipeline, and it is one of the answers passed on below.
+ * The mesh is left as it stands, as it is for every family, and which names Sodium's really carries
+ * is {@link SodiumVertex}'s to spell out. What separates the three is not the geometry but the
+ * pass, and {@link TerrainPass} holds all of it: which program the pack serves it with, what alpha
+ * the fragment stage discards at, and whether the result is blended. The first two are settled at
+ * translation and reach here already written into the text; only the blend is a property of the
+ * pipeline, and it is one of the answers passed on below.
  * <p>
  * <strong>The pipeline is named in a namespace containing {@code sodium}, and that is not a
  * cosmetic.</strong> blaze3d never declares a push constant range; Sodium adds one by a mixin on

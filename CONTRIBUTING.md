@@ -311,6 +311,12 @@ is where it is and what would break if it moved, and a figure says what was meas
 arrive at it. What is not wanted is the other kind, the comment that restates the line
 below it.
 
+Two more go with that one. A comment says what holds now and not how the code got there, so
+"this used to read", "for a while" and the story of the batch that changed it belong to the
+history, which keeps them better and keeps them out of the way. And a mechanism has one home
+in `docs/`, so a comment that explains one a second time is a copy that will drift out of
+step with the page: point at the page, and keep only the trap the page does not carry.
+
 ## Verifying a change
 
 Where a change lands decides how it can be checked, and the split is worth knowing before
