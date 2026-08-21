@@ -11,6 +11,14 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **Body Camera's film grain moves again.** The 0.7.3 hash rewrite took the frame time out of
+  the grain, which writes it into the second argument of the idiom, and left a pattern stuck to the
+  screen. The rewrite now only fires on a constant second argument; BSL's waving is untouched.
+
 ## 0.7.3-beta
 
 ### Fixed

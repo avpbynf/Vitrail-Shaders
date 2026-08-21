@@ -1134,6 +1134,11 @@ public final class GlslTranslator {
 	 * to {@link #REDUCED_SIN} still skips in game. The first argument of {@code dot} is the lattice
 	 * point (or the continuous coordinate, for the same idiom on stars and puddles). The second
 	 * argument is thrown away: it exists only to mix those two channels into the sine.
+	 * <p>
+	 * Only while that second argument is a literal. Body Camera writes the frame time into it,
+	 * {@code vec2(12.9898, 78.233 * frameTimeCounter)}, and means its film grain to move: a hash of
+	 * the first argument alone would freeze it. Such a call is not the lattice idiom and keeps its
+	 * sine.
 	 */
 	private void rewriteGoldbergHash() {
 		for (int index = 0; index < this.tokens.size(); index++) {
@@ -1155,6 +1160,7 @@ public final class GlslTranslator {
 			}
 
 			int dotOpen = callOpener(dot);
+			int dotClose = matchingBracket(dotOpen);
 			int comma = firstCallComma(dotOpen);
 			int argStart = dotOpen < 0 ? -1 : significantAfter(dotOpen);
 			int argEnd = comma < 0 ? -1 : significantBefore(comma);
@@ -1164,7 +1170,8 @@ public final class GlslTranslator {
 			int fractClose = matchingBracket(fractOpen);
 			if (argStart < 0 || argEnd < argStart || times < 0 || scale < 0 || fractClose < 0
 					|| !this.tokens.get(times).operator("*")
-					|| !goldbergScale(this.tokens.get(scale))) {
+					|| !goldbergScale(this.tokens.get(scale))
+					|| !literalVector(comma + 1, dotClose - 1)) {
 				continue;
 			}
 
@@ -1188,6 +1195,33 @@ public final class GlslTranslator {
 	private boolean goldbergSine(Token token) {
 		return token.identifier(REDUCED_SIN)
 				|| (token.identifier("sin") && !this.declaredNames.contains("sin"));
+	}
+
+	/**
+	 * Whether the tokens in this range spell a vector of numbers and nothing else, such as
+	 * {@code vec2(12.9898, 4.1414)}. A name in there is a value that moves.
+	 */
+	private boolean literalVector(int start, int end) {
+		boolean number = false;
+		for (int at = start; at <= end; at++) {
+			Token token = this.tokens.get(at);
+			if (token.trivia() || token.kind() == Kind.NEWLINE) {
+				continue;
+			}
+
+			if (token.kind() == Kind.NUMBER) {
+				number = true;
+			} else if (token.kind() == Kind.IDENTIFIER) {
+				if (!token.identifier("vec2") && !token.identifier("vec3") && !token.identifier("vec4")) {
+					return false;
+				}
+			} else if (!token.operator("(") && !token.operator(")") && !token.operator(",")
+					&& !token.operator("-") && !token.operator("+")) {
+				return false;
+			}
+		}
+
+		return number;
 	}
 
 	/**

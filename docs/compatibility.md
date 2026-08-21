@@ -294,7 +294,7 @@ dozen frames, at irregular intervals, entirely by design. Those stillnesses are 
 there under any implementation. What is worth reporting is a jump on top of them.
 
 **The goldberg hash is rewritten.** BSL (and any pack that copies
-`fract(sin(dot(p, K)) * 43758.5453)`) hashes with a sine of a huge argument. Iris leaves that as
+`fract(sin(dot(p, K)) * 43758.5453)` with a constant `K`) hashes with a sine of a huge argument. Iris leaves that as
 written and the GL driver computes it. This backend compiles through shaderc to SPIR-V; the same
 idiom, even after a Cody-Waite reduction, still skips in game. A time-only waving pack that keeps
 the hash jumps here and is smooth on the reference; the same pack with `sin` in place of the hash
