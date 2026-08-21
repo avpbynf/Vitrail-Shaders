@@ -58,6 +58,10 @@ It is a side project by one person, and it started as a question: whether packs
 written for OpenGL over more than a decade could run, untouched, on the renderer
 that now ships with the game. Well enough to play with, it turns out.
 
+Much of the code was written with Claude. The design, the testing
+against real packs, the decisions about where this renderer differs from OpenGL
+and the licensing are mine.
+
 ## Status
 
 The backend this runs on is marked experimental by the game itself, and Vitrail
