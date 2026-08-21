@@ -45,5 +45,6 @@
 	"key.vitrail.reload_pack": "Shaderları Yenile",
 	"options.vitrail.pack_reloaded": "Shaderlar Yeniden Yüklendi!",
 	"options.vitrail.reload_failed": "Shaderları yenileme başarısız! Sebep: %s",
+	"options.vitrail.other_backend": "Vitrail %s arka ucunda hiçbir şey çizmez: shaderları yalnızca Vulkan üzerinde çalışır. Seçenekler, Görüntü Ayarları altında %s ayarını \"%s\" yapın ve oyunu yeniden başlatın.",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

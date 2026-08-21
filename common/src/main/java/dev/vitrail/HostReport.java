@@ -1,7 +1,12 @@
 package dev.vitrail;
 
+import dev.vitrail.screen.ScreenText;
+
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,10 +19,14 @@ import java.util.List;
  * graphics backend the game came up on, and which of Chloride's own settings are on.
  * <p>
  * They are said at startup because neither announces itself in the picture. A game running OpenGL
- * loads this mod and draws a picture that is credible and wrong; a mob Chloride culled is simply
- * not there. Both look like this engine failing, and a report about either would be filed against
- * it and read against its code. Said at the moment the log is still short enough to read, and only where there
- * is something to say.
+ * loads this mod and is then drawn by the game alone, the pack read and inert; a mob Chloride culled
+ * is simply not there. Both look like this engine failing, and a report about either would be filed
+ * against it and read against its code. Said at the moment the log is still short enough to read,
+ * and only where there is something to say.
+ * <p>
+ * The backend is the one of the two said a second time, in chat, the first time a world is shown:
+ * the log is read by whoever goes looking, and a player whose pack does nothing at all is not yet
+ * looking. Once a session and not once a world, since the answer cannot change between them.
  * <p>
  * Nothing here is fixed on the player's behalf, and that is the whole shape of it: the backend is
  * the game's to choose and is chosen before this runs, and Chloride's file belongs to Chloride.
@@ -54,6 +63,12 @@ public final class HostReport {
 	 * go and edit it.
 	 */
 	private static final String CHLORIDE_CONFIG = "config/chloride-client.toml";
+
+	/**
+	 * Whether the chat line has been said, or found to have nothing to say, which closes it for the
+	 * session either way.
+	 */
+	private static volatile boolean saidInWorld;
 
 	/**
 	 * The entries of Chloride's file this engine has something to say about. Three of them take
@@ -112,6 +127,56 @@ public final class HostReport {
 	}
 
 	/**
+	 * Whether the game is known to have come up on a backend this mod was not written for. No both
+	 * on Vulkan and before the device exists, {@link #UNKNOWN} being a word rather than a backend:
+	 * what answers yes here is refused a picture, and a backend nobody can name is not one to refuse
+	 * it over.
+	 */
+	public static boolean otherBackend() {
+		String backend = backend();
+
+		return !UNKNOWN.equals(backend) && !VULKAN.equals(backend);
+	}
+
+	/**
+	 * Says in chat, once a session, that nothing of the pack is drawn on this backend and which
+	 * setting draws it. Asked every tick and answering nothing until a world is on the screen with
+	 * no screen over it: said from the login packet, the line would land behind the loading
+	 * terrain screen and be fading by the time the world appears.
+	 * <p>
+	 * Added to the chat as a message of the client's own rather than sent to the player the way the
+	 * reload key's line is: {@code LocalPlayer.sendSystemMessage} hands it to the chat listener as
+	 * a server message, and a chat set to hidden drops those, {@code ChatListener.handleSystemMessage}
+	 * checking {@code canReceiveSystemMessages} first. The client's own source is the one
+	 * {@code ChatAbilities.selectVisibleMessages} always lets through, and a line about the whole
+	 * picture being missing is not one to leave to a chat setting.
+	 * <p>
+	 * The setting and its entry are named by the game's own labels rather than by a translation of
+	 * ours, so that the words match the screen the player is sent to whatever language the game is
+	 * in.
+	 */
+	public static void sayInWorld() {
+		if (saidInWorld) {
+			return;
+		}
+
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft.player == null || minecraft.gui.screen() != null) {
+			return;
+		}
+
+		saidInWorld = true;
+		if (!otherBackend()) {
+			return;
+		}
+
+		minecraft.gui.hud.getChat().addClientSystemMessage(Component.translatable(
+				ScreenText.OTHER_BACKEND, backend(), Component.translatable(ScreenText.GRAPHICS_API),
+				Component.translatable(ScreenText.GRAPHICS_API_VULKAN))
+				.withStyle(ChatFormatting.RED));
+	}
+
+	/**
 	 * Says what an install decides for this mod, once, and only where it decides something. A backend
 	 * that is Vulkan and a Chloride with nothing on cost no line at all: the log is read by whoever is
 	 * chasing something else, and a line saying that all is well is one more to step over.
@@ -122,28 +187,27 @@ public final class HostReport {
 	}
 
 	/**
-	 * Said as an error rather than a warning because nothing a pack asks for can be trusted on the
-	 * screen. What the line claims is the symptom this repository has seen and not a mechanism it
-	 * has not: the passes can run on the other backend, and what they drew there was a picture both
-	 * credible and wrong, the programs having been translated against Vulkan's depth and clip
-	 * conventions. Credible and wrong reads as a pack fault, which is worse than a picture the game
-	 * draws alone, so the line owns it before the pack is blamed.
+	 * Said as an error rather than a warning because the pack a player asks for is not drawn at all,
+	 * and that is the engine's doing: {@code PackChain.load} reads whichever one is named, publishes
+	 * it to the settings screen and stops there. It stops because of what the passes drew when they were let run on the
+	 * other backend, the symptom this repository has seen there: a picture both credible and wrong,
+	 * the programs having been translated against Vulkan's depth and clip conventions. Credible and
+	 * wrong reads as a pack fault, which is worse than a picture the game draws alone, so nothing is
+	 * drawn and the line says why.
 	 */
 	private static void sayBackend() {
-		String backend = backend();
-		if (UNKNOWN.equals(backend) || VULKAN.equals(backend)) {
+		if (!otherBackend()) {
 			return;
 		}
 
 		Vitrail.logger().error("This game is running the {} backend and {}'s programs are translated "
-				+ "for {} alone. The mod loads and may draw the pack's passes anyway, and the picture "
-				+ "they make is credible and wrong: the depth and clip conventions they were built "
-				+ "against are not this backend's, so a sky cut in two or a misdrawn hand is this and "
-				+ "not the pack. Set Graphics API to \"Prefer Vulkan (Experimental)\" under Options, "
-				+ "Video Settings, and restart. If it was already set there, either a launch argument "
-				+ "forced this backend, which the game says higher up, or the Vulkan boot failed and "
-				+ "the game fell back: the reason is in the lines the game logged before this one",
-				backend, Vitrail.MOD_NAME, VULKAN);
+				+ "for {} alone. The mod loads, a pack it is asked for is read and shown in its "
+				+ "settings screen, and nothing of it is drawn: the game keeps its own image. Set "
+				+ "Graphics API to \"Prefer Vulkan (Experimental)\" under Options, Video Settings, "
+				+ "and restart. If it was already set there, either a launch argument forced this "
+				+ "backend, which the game says higher up, or the Vulkan boot failed and the game "
+				+ "fell back: the reason is in the lines the game logged before this one",
+				backend(), Vitrail.MOD_NAME, VULKAN);
 	}
 
 	/**

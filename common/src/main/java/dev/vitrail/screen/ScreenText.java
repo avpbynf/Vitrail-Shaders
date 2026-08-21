@@ -142,6 +142,18 @@ public final class ScreenText {
 	public static final String RELOAD_FAILED = "options.vitrail.reload_failed";
 
 	/**
+	 * The chat line said once, the first time a world is shown on a backend this engine is not
+	 * written for. Three arguments: the backend's name, then the two labels the game itself ships
+	 * for the setting and for its Vulkan entry. Those two are the game's keys and not ours, the one
+	 * exception to the rule above that a label the game ships is not repeated here: there is no
+	 * constant for them, and naming the setting in the player's own language is the whole of why
+	 * they are passed in rather than written into the sentence.
+	 */
+	public static final String OTHER_BACKEND = "options.vitrail.other_backend";
+	public static final String GRAPHICS_API = "options.graphicsApi";
+	public static final String GRAPHICS_API_VULKAN = "options.graphicsApi.vulkan";
+
+	/**
 	 * The group that key sits in. Nothing names it and nothing can: the game builds it from the
 	 * category's identifier, in {@code KeyMapping.Category.label()}, so what decides this string is
 	 * the path of the identifier {@code VitrailKeys} registers, not the name of the field holding

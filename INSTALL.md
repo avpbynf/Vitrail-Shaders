@@ -50,10 +50,11 @@ the same run and keeps your setting, so `options.txt` goes on saying `vulkan`
 while the session is not on it: the file cannot answer the question. And a game
 that dies before it reaches the title screen leaves a mark that the *next* start
 reads, which sets `preferredGraphicsBackend` back to `default` and saves over
-whatever you had written. Either way Vitrail loads without drawing the world's
-passes. It says which backend it came up on at startup, and says it as an error
-when that backend is not Vulkan, so a picture that did not change is answered by
-the log rather than by the file.
+whatever you had written. Either way Vitrail loads, reads the pack and draws
+nothing of it: the game keeps its own image. It says which backend it came up on
+at startup, says it as an error when that backend is not Vulkan, and says it once
+more in chat the first time a world is shown, naming the setting to change, so a
+picture that did not change is answered on the screen rather than by the file.
 
 Some of Chloride's own settings decide what reaches this engine, in
 `config/chloride-client.toml`, and they are entries inside its tables rather than

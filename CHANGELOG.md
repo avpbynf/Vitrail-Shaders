@@ -11,6 +11,17 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Changed
+
+- **On a backend other than Vulkan, nothing of the pack is drawn any more.** The pack is still
+  read and still shown in its settings screen, so it can be picked and configured ahead of the
+  restart, but the game keeps its own image: the passes used to run there and draw a picture that
+  was credible and wrong. A chat line the first time a world is shown says so and names the setting
+  to change, Graphics API to "Prefer Vulkan (Experimental)" under Video Settings, beside the error
+  the log already carried.
+
 ## 0.7.3-beta
 
 ### Fixed
