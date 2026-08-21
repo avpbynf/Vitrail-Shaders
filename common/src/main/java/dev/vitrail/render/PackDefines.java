@@ -31,7 +31,7 @@ import java.util.Objects;
  * filled the same way ({@code mixin/MixinBiomes.java:14-22}) and whose defines are written from it
  * ({@code shaderpack/IrisDefines.java:28}).
  * <p>
- * The world-join reload stays even though the biome symbols no longer need it, because the
+ * The world-join reload stays even though the biome symbols do not need it, because the
  * symbols were never the only thing riding it: {@code block.properties} may name block TAGS, and
  * {@code BlockStateIds} can only resolve those once the world's own registries exist
  * ({@code BlockStateIds.java:86-88}, resolving through {@code BuiltInRegistries.BLOCK.getTags()}

@@ -518,7 +518,7 @@ public final class ParticleDraw {
 	 * Where the outputs of one half belong, in draw buffer order and each on the half of the schedule
 	 * its side of the deferred stage gives it, or null when this place cannot answer for it.
 	 * <p>
-	 * Empty is not a refusal, and it is no longer the pack's silence: a program that declares no draw
+	 * Empty is not a refusal, and it is not the pack's silence: a program that declares no draw
 	 * buffer is answered colortex0, as Iris answers it. What is left is the plan having no answer at
 	 * all for the file that serves this half, and what puts a file there is the one list
 	 * {@link ChainPlan#geometry} carries. No place of the corpus is in that case.

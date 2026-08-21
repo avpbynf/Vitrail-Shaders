@@ -397,7 +397,7 @@ public final class PackValues {
 	 * it.</strong> Seven of the eight packs tested declare {@code shadowDistanceRenderMul}, six of
 	 * them at one, so they take the first branch and are bounded at their own half plane whatever
 	 * the slider says. That is the pack getting the distance it asked for and was tuned against; it
-	 * is parity, and it is a walk that stops earlier than this engine used to stop it.
+	 * is parity, and it is a walk that stops earlier than the slider on its own would.
 	 *
 	 * @param userChunks           what the player asked for, in chunks
 	 * @param renderDistanceChunks the game's effective render distance, in chunks, which is as far

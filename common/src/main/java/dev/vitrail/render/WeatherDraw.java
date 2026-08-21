@@ -458,7 +458,7 @@ public final class WeatherDraw {
 	 * Where the outputs of the file that serves the weather belong, in draw buffer order and each on
 	 * the half the schedule gives it, or null when this place cannot answer at all.
 	 * <p>
-	 * Empty is not a refusal, and it is no longer the pack's silence: a program that declares no draw
+	 * Empty is not a refusal, and it is not the pack's silence: a program that declares no draw
 	 * buffer is answered colortex0, as Iris answers it, and the curtain then lands in the pack's own
 	 * target rather than on the game's. What is left is the plan having no answer at all for the file
 	 * that serves the weather, and what puts a file there is the one list

@@ -144,7 +144,7 @@ final class PackImages {
 
 	/**
 	 * One texture, decoded. Null when it cannot be, with the reason in the notes: a name nothing
-	 * could be read for reads black rather than reading whatever that name used to mean.
+	 * could be read for reads black rather than whatever that name meant before the pack took it over.
 	 */
 	private static Image decode(PackTexture texture, VolumeAtlas atlas, ShaderPackSource source,
 			List<String> notes) {

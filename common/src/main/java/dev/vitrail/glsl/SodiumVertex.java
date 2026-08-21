@@ -31,8 +31,8 @@ import java.util.Set;
  * <strong>Every name a pack reads of this geometry is now in the mesh.</strong> The block id, the
  * middle of the sprite, the offset to the middle of the block and the tangent frame are four
  * elements of this engine's own; {@link #TINT_AND_AO} is a fifth, and the one that answers no name
- * of the pack's but the shape of a name it already reads. The facing that used to stand in for a
- * normal, in the spare bits of the material byte, is gone with the last thing that read it.
+ * of the pack's but the shape of a name it already reads. Nothing stands in for a normal in the
+ * spare bits of the material byte.
  * <p>
  * <strong>Which of the five a mesh really carries follows the pack</strong>, and the format is
  * therefore anything from twenty bytes to forty. {@link #reads} says what one vertex stage
@@ -173,7 +173,7 @@ public final class SodiumVertex {
 	 * Every texture unit above the light map. Declared whether the pack mentions them or not costs
 	 * nothing; not declaring one the pack does mention costs the program.
 	 * <p>
-	 * {@code of_Normal} used to be here and is not any more: the mesh carries a normal of its own.
+	 * {@code of_Normal} is not here: the mesh carries a normal of its own.
 	 */
 	private static final Map<String, String> FIXED = fixed();
 
@@ -339,11 +339,11 @@ public final class SodiumVertex {
 		lines.add("\tof_MultiTexCoord0 = vec4(vec2(a_TexCoord & 32767u) / 32768.0"
 				+ " + ofInward * of_TexShrink, 0.0, 1.0);");
 		// The light map RAW, as the mesh carries it, which is a pair of levels from nought to two
-		// hundred and forty. This used to divide by 256 here, and dividing here is the same mistake
-		// as answering gl_TextureMatrix[1] with the identity, seen from the other end: the scale
-		// belongs in that matrix, where the pack applies it itself and where the half texel that
-		// centres the sample on its level comes with it. Iris carries the raw pair too,
-		// SodiumTransformer.java:228, and every other family of this engine already did.
+		// hundred and forty. Dividing by 256 here is the same mistake as answering
+		// gl_TextureMatrix[1] with the identity, seen from the other end: the scale belongs in that
+		// matrix, where the pack applies it itself and where the half texel that centres the sample
+		// on its level comes with it. Iris carries the raw pair too, SodiumTransformer.java:228,
+		// and so does every other family of this engine.
 		lines.add("\tof_MultiTexCoord1 = vec4(vec2(a_LightAndData.xy), 0.0, 1.0);");
 		// Asked of the carried list and not of ANSWERED, this being the one name of the head that is
 		// no spelling of the pack's. A pack no chunk program of which reads gl_Normal leaves the

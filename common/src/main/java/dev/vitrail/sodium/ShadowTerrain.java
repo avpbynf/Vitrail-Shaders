@@ -170,9 +170,9 @@ public final class ShadowTerrain {
 		ShadowCasters casters = TerrainDraw.shadowCasters();
 		ShadowGeometry.gather(light, camera, casters);
 
-		// The frame counter first, and it is the piece the three failed designs before this one
-		// were missing: the per region lists only reset themselves for the first walk of a frame,
-		// so a second walk under the same number appends to the camera's lists until it overflows
+		// The frame counter first, and it is the piece easiest to miss: the per region lists only
+		// reset themselves for the first walk of a frame, so a second walk under the same number
+		// appends to the camera's lists until it overflows
 		// them. The walk itself is the synchronous fallback, which is the one path that neither
 		// consults the asynchronous occlusion tree, empty for a viewport it has never seen, nor
 		// waits for it.

@@ -214,7 +214,7 @@ public final class TerrainDraw {
 	 * <p>
 	 * A reading that throws takes the terrain down rather than the pack: the sky and the entities are
 	 * read from the same archive and have their own answer about it, and a world drawn by the game
-	 * under a pack's sky is what this used to leave behind.
+	 * under a pack's sky is what this would otherwise leave behind.
 	 */
 	void read() {
 		if (!wanted) {
@@ -247,9 +247,9 @@ public final class TerrainDraw {
 	 * renderer again and where {@code TerrainMesh.settle} takes this answer.
 	 * <p>
 	 * <strong>Two packs that both draw the terrain are the case this exists for.</strong> The flag
-	 * above does not move between them, and the ids moving is what used to rebuild the world;
-	 * two packs reading different names of the mesh with the same {@code block.properties} would have
-	 * left the sections at a stride nothing was writing.
+	 * above does not move between them, and a rebuild that hung on the ids moving would not fire:
+	 * two packs reading different names of the mesh with the same {@code block.properties} would
+	 * leave the sections at a stride nothing writes.
 	 * <p>
 	 * Silent before a world is joined, where nothing has been meshed and the first reading answers
 	 * itself.
@@ -554,12 +554,12 @@ public final class TerrainDraw {
 	 * stage is declared open.
 	 * <p>
 	 * {@link #shadowsServed} is a promise the first compilation can still break, because
-	 * {@code broken} is raised by that compilation and it used to happen inside the pass the renderer
-	 * had already opened. A refusal there is safe for a camera pass and is the opposite here: with
-	 * nothing of ours handed back, Sodium opens its own pass on the target {@code vitrail$target}
-	 * gave it, the game's own, and the shadow half repaints the whole opaque world over the finished
-	 * image, coplanar and under the same reversed Z so nothing stops it. Asked here, the same
-	 * refusal only closes the stage.
+	 * {@code broken} is raised by that compilation, and raising it inside the pass the renderer has
+	 * already opened is what this avoids. A refusal there is safe for a camera pass and is the
+	 * opposite here: with nothing of ours handed back, Sodium opens its own pass on the target
+	 * {@code vitrail$target} gave it, the game's own, and the shadow half repaints the whole opaque
+	 * world over the finished image, coplanar and under the same reversed Z so nothing stops it.
+	 * Asked here, the same refusal only closes the stage.
 	 * <p>
 	 * Everything it does is done again by the real prepare a few lines of the renderer later, and
 	 * every bit of it is idempotent: {@code precompilePipeline} is a computeIfAbsent, the three

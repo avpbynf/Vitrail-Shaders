@@ -244,9 +244,10 @@ public final class TerrainMesh implements ChunkVertexType {
 
 		said = carried;
 		if (carried.isEmpty()) {
-			// Said out loud, and it used to be the silent branch. Without naming a cause, because
-			// there are three and this cannot tell them apart: a terrain= line, no pack chosen yet,
-			// which is every first launch of a fresh instance, and a terrain program that threw.
+			// Said out loud, this being the branch that would otherwise be silent. Without naming a
+			// cause, because there are three and this cannot tell them apart: a terrain= line, no
+			// pack chosen yet, which is every first launch of a fresh instance, and a terrain
+			// program that threw.
 			Vitrail.logger().info("The pack's own terrain program is not wanted, so the mesh keeps the "
 					+ "format Sodium gave it and carries none of {}",
 					Arrays.stream(Extra.values()).map(Extra::attribute).toList());
@@ -283,9 +284,9 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * a whole number of words, which is what makes the id four bytes wide where two would do.
 	 * <p>
 	 * Ours are laid out one word after another in the order they are handed in, which is also where
-	 * the encoder writes them: both read {@code offsets}, and the two used to be a walk over the
-	 * sizes here and a literal offset for each there, agreeing because every element happens to
-	 * be one word and for no other reason.
+	 * the encoder writes them: both read {@code offsets}, rather than a walk over the sizes here and
+	 * a literal offset for each there, which would agree because every element happens to be one
+	 * word and for no other reason.
 	 *
 	 * @param extras the ones of {@link Extra} this pack asked for, in {@link Extra}'s own order.
 	 *               An element left out closes the gap rather than leaving a hole: the shader
@@ -402,7 +403,7 @@ public final class TerrainMesh implements ChunkVertexType {
 	}
 
 	/**
-	 * @param materialBits Sodium's own, untouched. Nothing of this engine rides there any more:
+	 * @param materialBits Sodium's own, untouched. Nothing of this engine rides there:
 	 *                     everything it adds is on the vertices, because a translucent quad reaches
 	 *                     this encoder from the sorter, under a material Sodium chose itself
 	 */
@@ -484,8 +485,8 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * <p>
 	 * The tangent is the direction the texture's own U axis points in, taken from the two edges and
 	 * their texture coordinates, and then squared up against the normal by {@link #orthogonalise}. It
-	 * is what every normal map on the terrain is read through, and this engine used to hand back a
-	 * constant, which tilts every one of them the same wrong way. Its handedness says which way the
+	 * is what every normal map on the terrain is read through, and handing back a constant instead
+	 * tilts every one of them the same wrong way. Its handedness says which way the
 	 * third axis of that frame goes and is the difference between a bump and a dent.
 	 * <p>
 	 * A quad whose texture coordinates are degenerate, the two edges mapping to the same direction,
@@ -559,10 +560,10 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * normalising here does is give that cross product a length of one as well, and the handedness
 	 * bit goes on meaning what {@link #handedness} says it means.
 	 * <p>
-	 * <strong>Nothing of that difference is left in the quantisation any more.</strong> This used to
-	 * store the vector itself as three rounded bytes, so the dot product with the normal came back at
-	 * a few thousandths rather than at nought and the work below was undone by the rounding.
-	 * {@link Extra#TANGENT_FRAME} now stores the angle in the plane, which is what Iris stores, so
+	 * <strong>Nothing of that difference is left in the quantisation.</strong> Storing the vector
+	 * itself as three rounded bytes brings the dot product with the normal back at a few thousandths
+	 * rather than at nought, and the work below is then undone by the rounding.
+	 * {@link Extra#TANGENT_FRAME} stores the angle in the plane, which is what Iris stores, so
 	 * what a pack reads is perpendicular to the last bit on both engines and this projection is what
 	 * decides the angle rather than a step on the way to it.
 	 */

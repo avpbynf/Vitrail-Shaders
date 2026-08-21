@@ -81,7 +81,7 @@ public final class EngineStages {
 	 * While the level's frame graph is being built, which is the one moment the model view and the
 	 * camera position of this frame are both to hand and neither has been pushed anywhere yet.
 	 * <p>
-	 * The frame graph no longer carries a pass of ours, only this reading: the shadow map is drawn
+	 * The frame graph carries no pass of ours, only this reading: the shadow map is drawn
 	 * at the end of the frame, for the next one, and this is what the stage needs from here.
 	 * <p>
 	 * It is also the top of the level frame, which is a second thing entirely and is why the first
@@ -111,9 +111,9 @@ public final class EngineStages {
 		// Opens the one window the entities are served in. It has to be a window, because the
 		// screen is drawn by the same feature renderers, with the same pipelines and into the same
 		// target, out of a submit storage GameRenderer hands them after the level: nothing about one
-		// of those draws says it is not an entity, and only the moment does. The hand used to be the
-		// other one this kept out and no longer is: HandDraw submits it inside the level with a mark
-		// of its own, so it is served rather than excluded.
+		// of those draws says it is not an entity, and only the moment does. The hand is not the
+		// other one this keeps out: HandDraw submits it inside the level with a mark of its own, so
+		// it is served rather than excluded.
 		EntityDraw.opaqueFeatures(true);
 	}
 
@@ -128,10 +128,10 @@ public final class EngineStages {
 	 * the prepares, the scene seed and the deferred stage. Then redirects the game's translucent
 	 * features into the layer that hands them to the pack's image.
 	 * <p>
-	 * Not a refinement of where it used to run. BSL's {@code gbuffers_water} reads {@code gaux1},
-	 * which its own {@code deferred} writes, and discards every fragment where it reads nought: with
-	 * the whole chain running after the world, that read found a clear colour and the water was
-	 * thrown away in its entirety.
+	 * The placement itself and not a refinement of it. BSL's {@code gbuffers_water} reads
+	 * {@code gaux1}, which its own {@code deferred} writes, and discards every fragment where it
+	 * reads nought: with the whole chain running after the world, that read finds a clear colour and
+	 * the water is thrown away in its entirety.
 	 */
 	public static void afterOpaqueFeatures() {
 		// First, and before anything of this engine draws: everything after this point is either the

@@ -60,7 +60,7 @@ import java.util.stream.Collectors;
  * them may repeat. The device caches a compiled module under the identifier, the stage and the
  * defines, and never under the source, so two programs given one identifier are one program: the
  * second is not compiled at all, the first one's SPIR-V is drawn with the second one's targets
- * and samplers, and nothing says so. A chain is ten programs where a final alone used to be one,
+ * and samplers, and nothing says so. A chain is ten programs where a final alone is one,
  * and it is reloaded every time a setting is forced, so the constructor refuses a name it has
  * already handed out rather than trusting the rule to hold.
  * <p>
@@ -498,7 +498,7 @@ final class PackPass {
 				// White where no image is there, and white is the far plane rather than a
 				// placeholder: what a depth lookup reads is now an image already in the pack's own
 				// window, where one is the far plane, and the whole world would otherwise be drawn
-				// against the camera. It follows the image and no longer the convention of the
+				// against the camera. It follows the image rather than the convention of the
 				// target, which is what makes it the same answer as the shadow map's.
 				case DEPTH -> depth(binding.sampler(), targets, depthView);
 				// White where the map is not there, and white is the far plane rather than a
@@ -527,7 +527,7 @@ final class PackPass {
 				// layout carries it either way and the draw throws on the first name it misses.
 				//
 				// A pack texture reaches this line only when the pack took the name over and
-				// nothing could be read for it, which no longer covers a file the pack simply does
+				// nothing could be read for it, which does not cover a file the pack simply does
 				// not ship: that case hands the name back and the colour target keeps its ordinary
 				// binding, as it does under Iris. What is left here is a declaration that named
 				// something real and could not be turned into an image, and black is the honest
@@ -545,17 +545,18 @@ final class PackPass {
 			// that came through stained glass and water, which a pack blurs across a penumbra; read
 			// NEAREST it steps in blocks the size of a shadow texel.
 			//
-			// The shadow DEPTH is LINEAR for a reason of its own, and the reason it used to be
-			// NEAREST was wrong. An averaged depth would indeed be a comparison against a surface
-			// standing nowhere, but that is true of an ordinary sampler and not of a comparison one,
-			// where the hardware compares first and averages the RESULTS; and the comparison this
-			// engine makes for itself takes its four texels with textureGather, which no bound
-			// filter reaches either way. What the filter really decides is the other read, the one
-			// every pack of the corpus makes: a PCF loop that samples shadowtex as a plain
-			// sampler2D and expects each of its taps to be smoothed over a texel. Iris filters both
-			// depth images LINEAR unless the pack asks otherwise, since SamplingSettings.nearest
-			// starts false (ShadowRenderer.configureDepthSampler), so read NEAREST every edge of
-			// such a loop walks in texels of the map however many taps it pays for.
+			// The shadow DEPTH is LINEAR for a reason of its own, and the reason a reader reaches
+			// for to keep it NEAREST does not hold. An averaged depth would indeed be a comparison
+			// against a surface standing nowhere, but that is true of an ordinary sampler and not
+			// of a comparison one, where the hardware compares first and averages the RESULTS; and
+			// the comparison this engine makes for itself takes its four texels with textureGather,
+			// which no bound filter reaches either way. What the filter really decides is the other
+			// read, the one every pack of the corpus makes: a PCF loop that samples shadowtex as a
+			// plain sampler2D and expects each of its taps to be smoothed over a texel. Iris
+			// filters both depth images LINEAR unless the pack asks otherwise, since
+			// SamplingSettings.nearest starts false (ShadowRenderer.configureDepthSampler), so read
+			// NEAREST every edge of such a loop walks in texels of the map however many taps it
+			// pays for.
 			//
 			// The three names that would ask for NEAREST back - shadowtexNearest, shadowtexNNearest
 			// and shadowNMinMagNearest - are not read: no pack of the corpus writes one.

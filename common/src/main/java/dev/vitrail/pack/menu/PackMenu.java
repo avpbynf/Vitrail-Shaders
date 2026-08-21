@@ -66,7 +66,7 @@ public final class PackMenu {
 	 * them in, which is six of the eight in the corpus and BSL among them, BSL's five profiles all
 	 * naming eight settings. Sildur's declares none. Body Camera is the one pack that moves: its
 	 * three night vision profiles name twenty eight settings against the twenty five of the other
-	 * three, so the cycle reaches them first here and reached them last before this.
+	 * three, so the cycle reaches them first here and last in the order the pack declares them.
 	 * <p>
 	 * Iris's own {@code ProfileSet.java:17} calls the declared order "the order that profiles should
 	 * cycle through", and its code does not: only {@code forEach} reads that map.

@@ -488,7 +488,7 @@ public final class PackChain {
 		// all leaves the screen naming nothing rather than whatever the load before it asked for.
 		askedFor = PackFile.EMPTY;
 		try {
-			// Read here and no longer inside choose(), which the empty folder road below returns ahead
+			// Read here rather than inside choose(), which the empty folder road below returns ahead
 			// of. That road is the one a player takes who has just renamed or deleted their only pack,
 			// and without the name this far up it is the one road that cannot say which of the two
 			// happened: the folder is empty, which is true, and is not what they did.
@@ -556,9 +556,8 @@ public final class PackChain {
 			// through here, on the render thread, and neither has anything new to report.
 			//
 			// Never fatal either, and that is the whole reason for the catch. It is a report and not
-			// the drawing: it used to swallow its own failures and the pack was prepared anyway, and
-			// letting one reach the catch below would turn a diagnosis that could not be taken into
-			// a pack that is not drawn.
+			// the drawing, so its own failures stop here: letting one reach the catch below would
+			// turn a diagnosis that could not be taken into a pack that is not drawn.
 			if (!pack.equals(reported)) {
 				try {
 					PackReport.log(PackLoader.load(pack));
@@ -621,10 +620,10 @@ public final class PackChain {
 			// than an incomplete one.
 			//
 			// **Here and not one line earlier**, and TerrainDraw.wanted above is the reason. It settles
-			// what the chunk mesh carries, and returning before it left that answer at its
-			// default, so a refused pack decided the mesh for whichever pack was picked after it.
-			// That used to last the whole run; the mesh follows the pack now, so what it costs is a
-			// rebuilt world rather than a session. The session is published by then as well, so the
+			// what the chunk mesh carries, and returning ahead of it would leave that answer at its
+			// default, so a refused pack would decide the mesh for whichever pack was picked after
+			// it. The mesh follows the pack, so what that costs is a rebuilt world rather than a
+			// session. The session is published by then as well, so the
 			// settings screen shows the pack it is refusing rather than an empty list, which is
 			// where the two other refusals of this method stand.
 			//
@@ -1377,8 +1376,8 @@ public final class PackChain {
 	/**
 	 * Called when the client leaves a world, on the render thread and between two frames.
 	 * <p>
-	 * Nothing of this engine used to hear about it, and the whole of what a pack costs stayed
-	 * allocated for as long as the player sat in the menu: the colour targets, the shadow map, the two
+	 * Nothing of this engine hearing about it leaves the whole of what a pack costs allocated for as
+	 * long as the player sits in the menu: the colour targets, the shadow map, the two
 	 * depth images, the feature layer and every ring buffer, which is about a hundred megabytes of
 	 * video memory on BSL at 1080p, held for a screen that draws a panorama. What is freed here is
 	 * exactly what a reload frees, and everything of it is made again by the first frame of the next
@@ -1560,7 +1559,7 @@ public final class PackChain {
 	 * The OptiFine frame runs shadow, prepare, opaque geometry, deferred, translucent geometry,
 	 * composite, final, and packs are written against exactly that: BSL's {@code gbuffers_water}
 	 * reads {@code gaux1}, which its own {@code deferred} writes, and discards every fragment where
-	 * it reads nought. Run after the world, as the whole chain used to be, that read finds a clear
+	 * it reads nought. Run after the world, that read finds a clear
 	 * colour and the water is thrown away in its entirety.
 	 * <p>
 	 * Called once a frame, from {@code AfterOpaqueFeatures}, which is the moment the game has
@@ -1613,7 +1612,7 @@ public final class PackChain {
 		// this is the one point of the frame reached exactly when DH's far terrain matters to a
 		// pack. What it costs is that a takeover lands on the NEXT frame, DH having drawn its LODs
 		// long before this line; nothing of the picture turns on that, the frame before it being
-		// the picture this engine drew before this door existed.
+		// what this engine draws with the door shut.
 		DhLods.install();
 
 		GpuTextureView served = chain.distant.served();
@@ -2327,11 +2326,9 @@ public final class PackChain {
 	private void announceSeed(boolean seeding) {
 		Optional<ChainPlan.Seed> where = this.chain.chain().seed();
 		if (seeding && where.isPresent()) {
-			// What the seed still carries is not a constant any more, and this line is where docs/
-			// sends a reader for it. Composed from the switches rather than written out, or it goes
-			// stale the day the next family lands, in the one place that must not. It DID go stale
-			// exactly that way once, naming the weather after the weather had landed and never
-			// naming the particles at all, which is why the list is now built rather than branched.
+			// What the seed still carries is not a constant, and this line is where docs/ sends a
+			// reader for it. Composed from the switches rather than written out, or it goes stale
+			// the day the next family lands, in the one place that must not.
 			//
 			// The switch and NOT what the pack turned out to serve, which is a real limit and not a
 			// shortcut: this runs when the chain is built and the entity programs are read at the

@@ -429,13 +429,13 @@ public final class SkyDraw {
 	 * Reads the pack for all eight pieces at once, at the first of them the game draws, and settles
 	 * where every one of them is drawn.
 	 * <p>
-	 * All eight and not the one being asked for, which is what this used to do. The game reaches four
+	 * All eight and not the one being asked for. The game reaches four
 	 * of these pieces at moments of its own choosing: the band is skipped until its alpha passes a
 	 * thousandth, the stars until their brightness leaves nought, the void plane until the eye goes
 	 * under the world's horizon, and the End's flash until its own clock brings one round, which it
 	 * does once every six hundred ticks for a stretch drawn at random. Read one at a time, the pack
-	 * was opened, expanded and translated inside the frame the sun first neared the horizon, on the
-	 * render thread and in the middle of the world. The compiling is not moved with it and still
+	 * would be opened, expanded and translated inside the frame the sun first neared the horizon, on
+	 * the render thread and in the middle of the world. The compiling is not moved with it and still
 	 * falls where the piece is first drawn, one module a piece.
 	 * <p>
 	 * The two branches of the game's sky pass are read together and neither waits for the other, which
@@ -561,7 +561,7 @@ public final class SkyDraw {
 	 * <p>
 	 * A piece is one of these for either of two reasons, and they weigh the same: the pack serves no
 	 * program for it, so the game's own shader draws it, or it serves one the plan has no answer for.
-	 * The second is no longer the pack's silence, a program that declares no draw buffer being
+	 * The second is not the pack's silence, a program that declares no draw buffer being
 	 * answered colortex0 as Iris answers it: what puts a file there is the one list
 	 * {@link ChainPlan#geometry} carries, plus the targets the pack asked to be scaled, which
 	 * {@link #writes} turns down above. Both leave that piece reaching the pack's colour target

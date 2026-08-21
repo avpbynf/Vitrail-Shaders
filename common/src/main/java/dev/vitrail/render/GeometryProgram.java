@@ -245,9 +245,9 @@ final class GeometryProgram {
 	 * pair the pass open resolved for it.
 	 * <p>
 	 * Walked in order rather than looked up by name, and that is the whole point of it: what a name
-	 * is answered with used to be worked out again for every name at every draw, and each of those
-	 * answers is a search through {@link PbrMap} by string, a second one through the plan's map, a
-	 * cascade of equals and a switch. Only two of the questions can move between two draws of one
+	 * is answered with, worked out again for every name at every draw, is a search through
+	 * {@link PbrMap} by string, a second one through the plan's map, a cascade of equals and a
+	 * switch, each time. Only two of the questions can move between two draws of one
 	 * pass, and both are the same question: which image this draw brought.
 	 */
 	private static final class Sampled {
@@ -347,7 +347,7 @@ final class GeometryProgram {
 	 * that says what it costs the BLEND rather than what it costs the colour. Kept as a field
 	 * because it is answered where {@code owns} is in scope and said where it is not.
 	 * <p>
-	 * <strong>It no longer has a cause of its own, and that is worth saying rather than leaving a
+	 * <strong>It has no cause of its own, and that is worth saying rather than leaving a
 	 * reader to work out.</strong> Every blending pass drawn before the seed either writes the mask
 	 * or has an opaque sibling of its own family marking those pixels, so what is left here is a
 	 * pass that asked for a mask and could not be given one, which the constructor has already
@@ -432,8 +432,8 @@ final class GeometryProgram {
 		// drawn and then thrown away: the final overwrites that target with the image the chain
 		// composed out of a colortex the water never reached.
 		//
-		// Every opaque half used to keep it on the game's target and reach the pack's colortex
-		// through the seed, which was one conversion too many. What a gbuffers program puts in draw
+		// Keeping every opaque half on the game's target and reaching the pack's colortex through
+		// the seed is one conversion too many. What a gbuffers program puts in draw
 		// buffer nought is not a colour but whatever the pack packed there, and the game's target is
 		// eight bits a channel: Bliss packs two values into each channel of a sixteen bit colortex1,
 		// and the trip through the game's target quantised its albedo away entirely, leaving the
@@ -521,7 +521,7 @@ final class GeometryProgram {
 		// no output at all - its whole body is one discard test, so the count is nought - and a pass
 		// with no colour attachment is one the encoder accepts on the strength of its depth while
 		// the pipeline substitutes a state of its own, which is the mismatch this file refuses by
-		// name elsewhere. It draws into the map and into nought, exactly as before this rule.
+		// name elsewhere. It draws into the map and into nought, exactly as it would without this rule.
 		//
 		// And never more than a pipeline holds states for. The builder writes them into an array of
 		// that length, so one rank past it is an index out of bounds where the program is built
@@ -1680,8 +1680,8 @@ final class GeometryProgram {
 		// is continuous in the same way, carrying the light that came through glass and water
 		// across a penumbra, and both OptiFine and Iris filter it linearly.
 		//
-		// The shadow DEPTH is LINEAR too, and the reason that used to be given here for keeping it
-		// NEAREST was wrong: where the compare mode is on, a sampler averages the RESULTS of the
+		// The shadow DEPTH is LINEAR too, and the reason a reader reaches for to keep it NEAREST
+		// does not hold: where the compare mode is on, a sampler averages the RESULTS of the
 		// four tests and never the depths, so nothing is ever compared against a surface that exists
 		// nowhere. Iris filters this LINEAR whatever the pack asks, its SamplingSettings starting at
 		// nearest=false, and adds GL_COMPARE_REF_TO_TEXTURE on top only where the pack writes

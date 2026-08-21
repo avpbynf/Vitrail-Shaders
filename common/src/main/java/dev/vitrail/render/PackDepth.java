@@ -44,7 +44,7 @@ import java.util.Optional;
  * reason: {@link ShadowTargets} writes the forward window so that a {@code shadowtex} lookup never
  * has to be wrapped. This is that rule applied to the world's depth as well.
  * <p>
- * Nothing is lost against what the shader used to compute. The operation is the same one, in the
+ * Nothing is lost against a shader computing it itself. The operation is the same one, in the
  * same place in the order, applied before any filtering: {@code |readA|} is one, the image is bound
  * NEAREST, and a {@code textureGather} or a {@code texelFetch} therefore comes back bit for bit
  * what it came back before. What is spent is memory, a full screen image of one float per moment
@@ -486,7 +486,7 @@ final class PackDepth {
 		}
 
 		// Said out loud rather than left to be discovered: this is two full screen images of a float
-		// each where there used to be one copy of the game's depth, about eight more mebibytes at
+		// each in place of one copy of the game's depth, about eight more mebibytes at
 		// 1080p and thirty-two at 4K.
 		Vitrail.logger().info("The world's depth is converted into the pack's window in two images at "
 				+ "{}x{}, {} MiB", width, height,

@@ -101,9 +101,9 @@ public final class BlockStateIds {
 				// Refused rather than truncated. A number that does not fit would come back out of
 				// the mesh as a different number, which lights the wrong blocks and says nothing.
 				// Weighed on the id and not on its packed form, which overflows an int long before
-				// it passes the mask: block.1073741924 used to be accepted here, the encoder cut it
-				// down, and the shader read the pack's own id 100. The file writes block. followed
-				// by digits, so there is no negative number to weigh.
+				// it passes the mask: weighed on its packed form, block.1073741924 is accepted, the
+				// encoder cuts it down, and the shader reads the pack's own id 100. The file writes
+				// block. followed by digits, so there is no negative number to weigh.
 				unknown.add("block." + entry.id() + ", too large for the mesh to carry");
 			} else if (entry.tag()) {
 				addTag(entry, built, unknown, widened);

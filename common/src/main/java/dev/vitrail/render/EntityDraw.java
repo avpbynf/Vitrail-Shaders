@@ -113,7 +113,7 @@ import java.util.stream.Stream;
  * none of them is a row here. The shadow map is a family of its own and is NOT in either window, a
  * pass of its own that neither bracket reaches.
  * <p>
- * <strong>The eyes were among them and are not any more</strong>: they alone of the four bind
+ * <strong>The eyes are not among them</strong>: they alone of the four bind
  * {@code DefaultVertexFormat.ENTITY}, so they come in by this door with a table of their own,
  * {@link #FIXED}, which says why it is not the mob table.
  * <p>
@@ -151,10 +151,10 @@ public final class EntityDraw {
 	 * finished. Every one of them reaches this class with the same pipelines and the same main
 	 * target, so nothing about a draw says which of the three it belongs to; only the moment does.
 	 * <p>
-	 * <strong>The hand is no longer among what this window has to keep out, and the window is kept
-	 * all the same.</strong> {@link HandDraw} takes it off that late call and submits it inside the
-	 * level with a dispatcher of its own, so it now arrives with a mark of its own and is served
-	 * rather than excluded. What is left after the level is the screen, which has none and would
+	 * <strong>The hand is not among what this window has to keep out, and the window is kept all
+	 * the same.</strong> {@link HandDraw} takes it off that late call and submits it inside the
+	 * level with a dispatcher of its own, so it arrives with a mark of its own and is served rather
+	 * than excluded. What is left after the level is the screen, which has none and would
 	 * otherwise be drawn as a mob, so nothing about this window may be relaxed.
 	 * <p>
 	 * Measured rather than reasoned about, and it cost a session: with this open all the time, every
@@ -304,7 +304,7 @@ public final class EntityDraw {
 		 * its texture coordinates off whatever the format really carries, without a word being said.
 		 * {@link #decodable} is where the claim is checked against the pipeline in hand.
 		 * <p>
-		 * The entity one is {@link EntityMesh}'s and no longer the game's own: this is what a pipeline
+		 * The entity one is {@link EntityMesh}'s rather than the game's own: this is what a pipeline
 		 * of this engine's is built to bind, and it is what the game's own entity pipelines report
 		 * while the mesh carries. The rows are only ever read while it does, {@link #served} refusing
 		 * the whole family otherwise, so the two answers cannot be taken under different ones. The
@@ -352,8 +352,8 @@ public final class EntityDraw {
 		 * Which side of the deferred stage this piece's PASS is drawn on, which is not always what
 		 * its own pipeline blends.
 		 * <p>
-		 * <strong>One question, three answers, and asked HERE because it used to be written out
-		 * twice and the two copies disagreed.</strong> An entity row is asked of its pipeline, the
+		 * <strong>One question, three answers, and asked HERE and nowhere else, two copies of it
+		 * being two answers that drift apart.</strong> An entity row is asked of its pipeline, the
 		 * game sorting its own submissions that way. A hand row is asked of its row, a hand pass
 		 * being drawn wholly on one side whatever its rows blend, which is what {@link
 		 * #afterDeferred} carries and what the javadoc of that field says. A shadow row is neither:
@@ -416,8 +416,7 @@ public final class EntityDraw {
 		 * of it</strong>, and a held banner's pattern is the one that is reachable ({@code
 		 * BANNER_PATTERN}, {@code RenderPipelines.java:319}). The mask takes the hand's own squeezed
 		 * depth and the attachment keeps what stands behind the hand, which is farther, so the cut
-		 * finds nothing in front and leaves the pixel alone. That is the piece the seed used to throw
-		 * away outright.
+		 * finds nothing in front and leaves the pixel alone.
 		 * <p>
 		 * A piece drawn after the stage owes no mask, the seed having run long before, and a shadow
 		 * row is in neither position: it is drawn into the map, which no seed ever paints.
@@ -548,7 +547,7 @@ public final class EntityDraw {
 	 * <p>
 	 * <strong>Read as a list here and not as a blend, and the swirl is why.</strong> It is the one row
 	 * of the table that blends and still asks for the writing half's name; asking the blend first,
-	 * which is what {@link #blockTwin} used to do, would give it {@code gbuffers_block_translucent}
+	 * which is what {@link #blockTwin} must not do, would give it {@code gbuffers_block_translucent}
 	 * where Iris keeps {@code gbuffers_entities}.
 	 * <p>
 	 * <strong>The hand does not read this list, and that is a divergence this engine already
@@ -796,7 +795,7 @@ public final class EntityDraw {
 	 * row again. Both are the pack's in the water pass.
 	 * <p>
 	 * That row is {@code ENTITY_TRANSLUCENT} and not {@code ENTITY_SOLID}, which is worth saying
-	 * because this file used to say the other and the demotion of draw buffer nought turns on it:
+	 * because the demotion of draw buffer nought turns on it:
 	 * {@code AvatarRenderer.renderHand} submits the arm with {@code RenderTypes.entityTranslucent}
 	 * ({@code AvatarRenderer.java:288}), and that pipeline blends.
 	 */
@@ -1033,7 +1032,7 @@ public final class EntityDraw {
 	 * one, and {@code EntityProgram.intoMap} keeps the write exactly. So an eye paints into
 	 * {@code shadowcolor} and lays nothing under itself: it is not an occluder and it darkens no
 	 * shadow, which is the same reading this file gives the ground oval. What the row buys is a pack
-	 * that reads the map's colour seeing the eyes where it used to see a dropped draw.
+	 * that reads the map's colour seeing the eyes rather than a dropped draw.
 	 * <p>
 	 * <strong>Nor at full light, and that side of it is the camera's alone.</strong> The shadow key is
 	 * declared {@code LightingModel.LIGHTMAP} ({@code pipeline/programs/ShaderKey.java:79}) where the
@@ -1395,7 +1394,7 @@ public final class EntityDraw {
 		// submitted by this engine itself, twice, and both of those moments fall outside the
 		// windows. Each family is guarded by its own switch and neither borrows the other's.
 		//
-		// Asked of the ROW and no longer of the moment, which is what carrying a fixed table costs:
+		// Asked of the ROW rather than of the moment, which is what carrying a fixed table costs:
 		// an eyes row is the answer even inside a hand pass, and it is not a hand row, so it may not
 		// take the hand's switch. What it does take is its own window, and inside a hand pass that
 		// window is shut, so the game keeps that draw. Iris would serve it, gbuffers_spidereyes being
@@ -1669,7 +1668,7 @@ public final class EntityDraw {
 	/**
 	 * Hands one draw back to the game and says why, once per reason and per load.
 	 * <p>
-	 * <strong>Every one of these used to be silent, and that is what made the defect they cause
+	 * <strong>None of these is silent, silence being what makes the defect they cause
 	 * undiagnosable.</strong> A draw handed back is drawn by the game's own shader, so an entity is
 	 * lit by the game where everything around it is lit by the pack, with nothing anywhere to say
 	 * which reason it was. That is the exact shape of failure this engine exists to refuse, and it
@@ -2055,11 +2054,11 @@ public final class EntityDraw {
 	 * Where the outputs of one file that serves a half belong, in draw buffer order and each on the
 	 * side the schedule gives it, or null when this place cannot answer for it.
 	 * <p>
-	 * <strong>Empty is not a refusal, and it no longer means what it used to.</strong> It makes the
+	 * <strong>Empty is not a refusal, and it is not one thing either.</strong> It makes the
 	 * piece write ONE output, to the game's target, and it covers three quite different things. A key
 	 * the plan never walked, which is a name missing from its {@code NAMED_PROGRAMS}. A program the
-	 * plan holds no draw buffers for at all, which since the inference means a program drawn from the
-	 * light or a file the expander could not read ({@code ChainPlan.geometryOf}). And a
+	 * plan holds no draw buffers for at all, which, the plan inferring geometry, means a program
+	 * drawn from the light or a file the expander could not read ({@code ChainPlan.geometryOf}). And a
 	 * walk the plan REFUSED, which is five cases of its own: more than eight draw buffers, the same
 	 * target named twice, no schedule step, a target nothing allocates, or two sizes in one pass -
 	 * the one list {@code ChainPlan.attachmentsOf} carries.
@@ -2067,7 +2066,7 @@ public final class EntityDraw {
 	 * The last of those three is the one worth naming, because it is a fault dressed as a default: a
 	 * pack whose entity program the plan refused is served with one output and loses its normals and
 	 * its specular map without this file saying anything, the plan having put its reason in the notes
-	 * rather than here. <strong>What is NOT in that list any more is the ordinary pack.</strong> A
+	 * rather than here. <strong>What is NOT in that list is the ordinary pack.</strong> A
 	 * pack that simply declares no directive arrives with colortex0, as it does under Iris, so it
 	 * never reaches this branch at all: Body Camera's {@code world1} and {@code world-1} are that
 	 * case, their entities falling back on a {@code gbuffers_textured} that declares nothing, and

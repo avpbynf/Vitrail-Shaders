@@ -97,7 +97,7 @@ public abstract class DefaultFluidRendererMixin {
 		// contradicting itself inside one log.
 		int table = BlockStateIds.generation();
 		if (TerrainDraw.asked() && vitrail$said.getAndSet(table) != table) {
-			// The table is named, because this line is no longer the only one of the run: two loads
+			// The table is named, because this line is not the only one of the run: two loads
 			// of the same pack print it twice, word for word, and nothing else would say which
 			// reading belongs to which table.
 			Vitrail.logger().info("The first fluid meshed against block table {} is {} and it "

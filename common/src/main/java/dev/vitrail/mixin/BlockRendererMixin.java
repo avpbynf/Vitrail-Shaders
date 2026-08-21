@@ -15,15 +15,15 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
  * Writes what a pack needs about each block a quad came from: the number
  * {@code block.properties} gave it, where it stands in its section, and what it emits.
  * <p>
- * <strong>All of it rides on the vertices, and it has to.</strong> The id used to travel in the bits
- * above the material byte, which is right for everything opaque and quietly wrong for everything
+ * <strong>All of it rides on the vertices, and it has to.</strong> Carrying the id in the bits
+ * above the material byte is right for everything opaque and quietly wrong for everything
  * translucent: the second branch below hands a translucent quad to the sorter and returns before the
  * push is reached, and the sorter writes it out later under a constant material. Anything left on
  * the material is gone by then, and nothing says so. {@link TerrainVertex} spells out why the
  * vertices are the one place that survives.
  * <p>
- * The quad's own facing used to ride on that material byte too, to stand in for a normal. It does
- * not any more, and nothing here writes it: the mesh carries a normal taken from the corners
+ * The quad's own facing does not ride on that material byte to stand in for a normal, and nothing
+ * here writes it: the mesh carries a normal taken from the corners
  * themselves, which is right for a plant, a sloped fluid and a custom model where an axis was not,
  * and which reaches a translucent quad like everything else here.
  * <p>

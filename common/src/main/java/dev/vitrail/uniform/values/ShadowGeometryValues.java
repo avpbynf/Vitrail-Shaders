@@ -43,7 +43,7 @@ public final class ShadowGeometryValues {
 				out.set(new Matrix4f(world.drawnShadowProjection())
 						.mul(world.drawnShadowModelView())));
 
-		// The shadow model view carries the grid snap as a translation, so this is no longer the
+		// The shadow model view carries the grid snap as a translation, so this is not the
 		// transpose of a pure rotation and computing it is the only way to get it right.
 		builder.add("of_NormalMatrix", UniformShape.MAT3, (world, out) ->
 				out.set(new Matrix3f().set(world.drawnShadowModelView()).invert().transpose()));

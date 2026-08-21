@@ -413,7 +413,7 @@ public final class ChainPlan {
 	 *                  stage that writes no coverage mask, so off it takes the seed's own target with
 	 *                  it and hands the opaque particles back to the game, which is
 	 *                  {@code render/ParticleDraw.writes} refusing on the same answer. The entities
-	 *                  are no longer on that road: they write the mask and take their first draw
+	 *                  are not on that road: they write the mask and take their first draw
 	 *                  buffer in the pack's own targets, so this switch moves nothing for them
 	 */
 	public record Families(boolean terrain, boolean entities, boolean particles, boolean seed) {
@@ -481,10 +481,10 @@ public final class ChainPlan {
 		//
 		// One walk fills the three: the answers land in the shared table and each family keeps the
 		// keys it reaches. A program serving two families, which is the ordinary case for a pack
-		// whose sky falls back on gbuffers_basic, is therefore walked once where the two families
-		// used to memoise apart and walk it twice, saying anything it had to say twice with it. No
-		// pack of the corpus reaches that case, so nothing moved in the measurements; it is the
-		// shared table that now guarantees it rather than each family's own bookkeeping.
+		// whose sky falls back on gbuffers_basic, is therefore walked once, where memoising the two
+		// families apart would walk it twice and say anything it had to say twice with it. No pack
+		// of the corpus reaches that case, so nothing of it shows in the measurements; it is the
+		// shared table that guarantees it rather than each family's own bookkeeping.
 		Map<Key, Pass> attachments = new LinkedHashMap<>();
 		Map<TerrainPass, Key> terrainKeys = terrainKeysOf(plan, resolver, notes, attachments);
 		Map<NamedProgram, Key> namedKeys = namedKeysOf(plan, resolver, notes, attachments);
@@ -516,7 +516,7 @@ public final class ChainPlan {
 		// anywhere and the gate is what this depends on, not the name. Both branches of that pass
 		// are served now, the End's two methods as much as the other six, RenderPipelines.END_SKY
 		// being assigned gbuffers_skytextured as Iris assigns it (IrisPipelines.java:69), so what
-		// keeps the sky out of this count is that one gate and no longer two. The clouds are held
+		// keeps the sky out of this count is that one gate and not two. The clouds are held
 		// out by something else entirely: a pass of their own, opened on the cloud setting and on
 		// the alpha of the cloud colour (LevelRenderer:220-233) and in the overworld alone.
 		// The weather is drawn only where the level has weather,
@@ -758,7 +758,7 @@ public final class ChainPlan {
 	 * {@code attachmentsOf} - are down to two cases since the inference took the geometry in, and both
 	 * are honest: a program drawn from the light, whose draw buffers name shadow targets this plan
 	 * does not hold, and a file the expander could not read at all. A pack that simply declares no
-	 * directive no longer arrives here - it arrives with colortex0, as it does under Iris, and its
+	 * directive does not arrive here - it arrives with colortex0, as it does under Iris, and its
 	 * name is in the one line {@link #notes()} carries for the lot.
 	 */
 	private static Pass geometryOf(TargetPlan plan, String program, List<String> notes,
@@ -1010,7 +1010,7 @@ public final class ChainPlan {
 
 		if (undrawn.contains(half.target())) {
 			// What ends up here is the geometry no pass of this engine fills in EVERY place: the sky's
-			// three, held out by two gates and no longer by one, since a place whose skybox is none
+			// three, held out by two gates rather than one, since a place whose skybox is none
 			// opens no sky pass at all and the clouds hang off a pass of their own that the game
 			// opens in the overworld alone, the weather, which is drawn only where the level has
 			// weather, and every family whose line is off - the entity halves by default, and the
@@ -1018,10 +1018,10 @@ public final class ChainPlan {
 			// that is the question, and what holding each out was measured to cost, is where the
 			// verdicts are handed their map.
 			//
-			// The particles used to be here and no longer are. The sentence went on saying no geometry
-			// of ours reached the pack's targets while a particle program of the pack was writing them,
-			// which is a note that reads like a diagnosis and is a lie: Bliss's colortex9 carried it in
-			// all three of its places.
+			// The particles are NOT here, and putting them back would have the sentence say that no
+			// geometry of ours reaches the pack's targets while a particle program of the pack is
+			// writing them: a note that reads like a diagnosis and is a lie, Bliss's colortex9
+			// carrying it in all three of its places.
 			//
 			// The tail is flat, and it is flat because of where this branch now sits: nothing later in
 			// the frame writes this half, so the pack keeping the target between frames buys the
@@ -1137,7 +1137,7 @@ public final class ChainPlan {
 	 * before anything is added, and the line naming it belongs to {@code TargetPlan.notes()}, which
 	 * is a different list.
 	 * <p>
-	 * <strong>A pack that declares no draw buffer is not one of them and used to be</strong>: it is
+	 * <strong>A pack that declares no draw buffer is not one of them</strong>: it is
 	 * answered colortex0, as Iris answers it. Measured on the corpus in August 2026, no place answers
 	 * empty for any family at all.
 	 */
@@ -1227,11 +1227,11 @@ public final class ChainPlan {
 	 * pack and not faults of this engine, which is why they are handed back apart from
 	 * {@link #notes()}.
 	 * <p>
-	 * They used to be in that list, and the list is introduced to the reader as what the picture
-	 * will be wrong about. BSL's {@code colortex2} is the case that proved the cost: its line says
-	 * the target is not written until {@code composite7} and that {@code composite5} therefore reads
-	 * the frame before, which is exactly the temporal chain the pack is built on and exactly what
-	 * Iris gives it. Read among the faults it became a suspect, and stayed one for a fortnight.
+	 * Kept out of that list because the list is introduced to the reader as what the picture will be
+	 * wrong about, and these are not. BSL's {@code colortex2} is the case that shows the cost: its
+	 * line says the target is not written until {@code composite7} and that {@code composite5}
+	 * therefore reads the frame before, which is exactly the temporal chain the pack is built on and
+	 * exactly what Iris gives it. Read among the faults, it is a suspect until somebody checks.
 	 */
 	public List<String> history() {
 		return this.history;

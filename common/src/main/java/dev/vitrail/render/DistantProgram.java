@@ -60,7 +60,7 @@ import java.util.Optional;
  * already kept off. The ways a sky loses the mask are structural and not Bliss's
  * ({@code GeometryProgram.covers} names four), so the observation is the corpus's and not a
  * rule. {@link SceneSeed} carries the cut, against this family's own depth image, so the far
- * terrain no longer depends on the sky in front of it having claimed the mask.
+ * terrain does not depend on the sky in front of it having claimed the mask.
  * <p>
  * <strong>Its namespace is ours and has no {@code sodium} in it</strong>, for the reason
  * {@link SkyProgram} gives: the word is what makes Sodium's mixin push twenty bytes of region offset

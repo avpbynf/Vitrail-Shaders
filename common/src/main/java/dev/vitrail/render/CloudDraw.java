@@ -49,8 +49,8 @@ import java.util.Optional;
  * and the pack's own colour target already holds the world, which is what a {@code gbuffers_clouds}
  * expects to blend onto. A pack that declares no draw buffer on the program is answered colortex0,
  * as Iris answers it, so the clouds land in a target of the pack's like any other piece; what leaves
- * them on the game's target, where the full screen layer brings them across flat exactly as it did
- * before this class existed, is the plan having no answer for the program at all, which
+ * them on the game's target, where the full screen layer brings them across flat exactly as it does
+ * without this class, is the plan having no answer for the program at all, which
  * {@link ChainPlan#geometry} lists the causes of.
  */
 public final class CloudDraw {
@@ -127,7 +127,7 @@ public final class CloudDraw {
 	 * {@link SkyDraw#sunPathRotation()} and like {@link SkyDraw#draws}. The word is a pack saying
 	 * "draw them this way, I have written for it", and with nothing of ours behind it
 	 * {@code clouds=off} would take the game's clouds away and put nothing in their place. That is
-	 * exactly what this engine refused to honour while no program here drew a cloud.
+	 * exactly what this engine refuses to honour while no program here draws a cloud.
 	 * <p>
 	 * It is read at the head of the game's own accessor, so it reaches the frame graph as well as the
 	 * renderer: a pack that switched them off has no cloud pass opened for it at all.

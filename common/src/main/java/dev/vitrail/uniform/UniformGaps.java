@@ -16,21 +16,21 @@ import java.util.Map;
  * reader through Iris for a source that was never written.
  * <p>
  * Nothing here is guessed, and nothing here is in the table merely because it is a constant.
- * {@code renderStage} was in that sentence and has left it: the passes that draw the world and the
- * sky each say what they are, and a full screen pass says the phase Iris calls NONE because that is
+ * {@code renderStage} is not one of them: the passes that draw the world and the sky each say what
+ * they are, and a full screen pass says the phase Iris calls NONE because that is
  * what it is. A name is listed because the accessor that answers it says in its own javadoc why it
  * cannot do better, and the sentence is carried across so that the two do not drift apart. A name
  * that stops being a stand-in has to be taken out, and that is the point: a list somebody has to
  * maintain is a list somebody reads.
  * <p>
- * <strong>The stand-ins used to be two lists and are one, which is what a list like this looks
- * like when it works.</strong> The second held the names that were a right answer under a full
- * screen pass and a stand-in under the entity mesh, so that listing them everywhere would not put a
- * false alarm on every composite: {@code entityColor} first, then the three identifiers. Both are
- * now made where the mesh carries them, out of an element apiece, so neither is a stand-in anywhere
- * and the question the second list answered has no instance left. It is not kept warm for the day
- * one turns up: an empty list is a distinction nobody can check, and the reason it existed is
- * written here rather than in code nothing reaches.
+ * <strong>The stand-ins are one list and not two, which is what a list like this looks like when it
+ * works.</strong> A second list would hold the names that are a right answer under a full screen
+ * pass and a stand-in under the entity mesh, so that listing them everywhere would not put a false
+ * alarm on every composite: {@code entityColor} and the three identifiers. Neither is a stand-in
+ * anywhere, both being made where the mesh carries them out of an element apiece, so that list has
+ * no instance left to hold. It is not kept warm for the day one turns up: an empty list is a
+ * distinction nobody can check, and the reason it would exist is written here rather than in code
+ * nothing reaches.
  */
 public final class UniformGaps {
 

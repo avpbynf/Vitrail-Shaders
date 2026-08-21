@@ -29,8 +29,8 @@ import org.joml.Vector3fc;
  * is the matrix the world was really drawn with, so the geometry lands in exactly the same pixels,
  * and a position rebuilt from {@code depthtex0} comes back to the same place it started.
  * <p>
- * Rebuilding the four from game state was considered by an earlier reading and rightly rejected,
- * {@code spinningEffectTime} and {@code spinningEffectSpeed} being private with no accessor. This is
+ * Rebuilding the four from game state is not open here, {@code spinningEffectTime} and
+ * {@code spinningEffectSpeed} being private with no accessor. This is
  * the third way: the multiplications themselves are intercepted, so nothing is reconstructed and
  * nothing is guessed.
  */
