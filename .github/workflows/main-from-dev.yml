@@ -1,0 +1,28 @@
+# main takes one branch and no other: dev, moved onto it by a fast-forward at a release. This job
+# fails every pull request opened against main from anywhere else, and the ruleset that requires
+# it on main turns that failure into a refusal, of the merge button and of a direct push alike: a
+# commit reaches main only once it has passed here on a request from dev. prefix.yml is the check
+# after the fact, this one is the check before.
+name: main-from-dev
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  main-from-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: The request comes from dev
+        env:
+          HEAD: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD" = "dev" ]; then
+            echo "The request comes from dev, which is the one branch main takes."
+            exit 0
+          fi
+          echo "::error::main takes dev and nothing else, and this request comes from $HEAD. Open it"
+          echo "::error::against dev; the release moves main onto dev by a fast-forward once it is in."
+          exit 1
