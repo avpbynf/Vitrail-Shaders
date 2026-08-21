@@ -47,8 +47,8 @@ import org.joml.Matrix4f;
  * <p>
  * <strong>What is not served here is not drawn here, and that is a divergence from Iris.</strong>
  * Iris binds the shadow framebuffer for the whole of its stage, so a pipeline its shadow table has
- * no key for keeps the game's own shader and still writes the map ({@code pipeline/IrisPipelines
- * .java:85-134} names no {@code ENTITY_SHADOW}, and a null key leaves the vanilla shader standing).
+ * no key for keeps the game's own shader and still writes the map (a null key of
+ * {@code pipeline/IrisPipelines.java:85-134} leaves the vanilla shader standing).
  * Here the target is chosen per draw, off {@code PreparedRenderType.outputTarget()}, and the game's
  * pipeline declares one colour state at the main target's format: steering it onto the map's
  * attachments is refused by name at {@code setPipeline}, in the middle of the draw. So a draw the

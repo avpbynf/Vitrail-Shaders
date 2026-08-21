@@ -88,7 +88,10 @@ import java.util.stream.Stream;
  * had to be proved rather than assumed, its renderer being the one that could have had an
  * {@code executeGroup} of its own as the particles do:
  * {@code ShadowFeatureRenderer extends RenderTypeFeatureRenderer}
- * ({@code feature/ShadowFeatureRenderer.java:19}), inheriting it.
+ * ({@code feature/ShadowFeatureRenderer.java:19}), inheriting it. Where it is submitted at all,
+ * that is: {@code EntityRenderDispatcherMixin} keeps it off a mob for as long as the pack draws a
+ * shadow map, which is Iris's rule, so its row is reached under a pack without one and under no
+ * other.
  * <p>
  * <strong>What that costs the two halves is not the same thing, and it is the whole of why they
  * are two.</strong> The opaque half is drawn before the deferred stage, so it takes its first draw
@@ -833,13 +836,11 @@ public final class EntityDraw {
 	 * The name exists in Iris and only {@code END_PORTAL} and {@code END_GATEWAY} reach it
 	 * ({@code :129-130}), and neither is a row of the table above.
 	 * <p>
-	 * <strong>The ground shadow is left out, and it is left out because Iris leaves it out.</strong>
-	 * {@code ENTITY_SHADOW} is assigned in the main table and appears nowhere in the shadow one, so a
-	 * mob's dark oval keeps the game's own shader when the map is drawn. What serving it would add is
-	 * not an occluder: the pipeline writes no depth at all
-	 * ({@code RenderPipelines.java:375}, {@code DepthStencilState(GREATER_THAN_OR_EQUAL, false)}),
-	 * and this table keeps the write exactly, so nothing of it would reach the depth a pack reads its
-	 * shadows from.
+	 * <strong>The ground shadow has no twin, because nothing submits it while the map is
+	 * drawn.</strong> {@code EntityRenderDispatcherMixin} keeps the oval off a mob for as long as the
+	 * pack draws a shadow map, which is Iris's own rule, and the light's walk goes through that same
+	 * dispatcher: a row here would be a module nobody ever selects. Iris's shadow table has no key
+	 * for {@code ENTITY_SHADOW} either, and for the same reason.
 	 * <p>
 	 * <strong>Every row discards at a tenth and none of them blends</strong>, both read rather than
 	 * chosen: the key carries {@code ONE_TENTH_ALPHA} whatever threshold its main twin had, and every
@@ -1730,22 +1731,12 @@ public final class EntityDraw {
 		}
 
 		// The deliberate one is named apart from the rest, because reporting a parity choice as a
-		// fault is how a reader is sent hunting something that is working. Iris assigns
-		// ENTITY_SHADOW in its main table and nowhere in its shadow one, so a mob's ground oval
-		// keeps the game's shader there. The walk also submits name tags, text and other geometry no
-		// shadow table anywhere has a row for, and those are the same silence the camera's table
-		// gives them.
-		if (pipeline == RenderPipelines.ENTITY_SHADOW) {
-			Vitrail.logger().info("The ground oval under a mob is left out of the shadow map, which "
-					+ "is what Iris does: it has no shadow row for that pipeline either. What a row "
-					+ "would add is worth knowing and is not the obvious answer: the pipeline writes "
-					+ "no depth, so it would lay no occluder under anything and would only paint into "
-					+ "the map's colour, which is what a mob's eyes do there");
-
-			return;
-		}
-
-		// The second deliberate one, and it is nearly a match rather than the gap it first reads as.
+		// fault is how a reader is sent hunting something that is working. The walk also submits
+		// name tags, text and other geometry no shadow table anywhere has a row for, and those are
+		// the same silence the camera's table gives them. A mob's ground oval is not among what
+		// reaches here: EntityRenderDispatcherMixin keeps it off the mob while the map is drawn.
+		//
+		// It is nearly a match rather than the gap it first reads as.
 		// Iris carries a shadow row for the glint (pipeline/IrisPipelines.java:111) and then cancels
 		// the foil while the map is filled (mixin/ItemStackMixin.java:14-17, whose comment is that a
 		// glint is not visible in a shadow anyway). That cancel is on ItemStack.hasFoil, and it
