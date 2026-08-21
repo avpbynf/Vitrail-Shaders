@@ -16,7 +16,7 @@
 #
 # `pull_request_target` and not `pull_request`, because a request opened from a fork is given a
 # token that may only read. Nothing of the request is checked out or run here: what is read is the
-# name of its branch, and all that is done with it is a match against nine words written below. A
+# name of its branch, and all that is done with it is a match against eleven words written below. A
 # name matching none of them reaches no command at all.
 
 name: label
@@ -51,10 +51,15 @@ jobs:
                 echo "::notice::Posing the label $type failed, so nothing is posed."
               fi
               ;;
-            release)
-              # A release request carries no type. What lands from such a branch is the version
-              # bump, and the request itself is the record of a fast-forward rather than a change.
-              echo "A release request carries no type label."
+            release|dev)
+              # A release request carries no type, and `release` instead. Two branches open one:
+              # `release/<version>`, which lands the bump in dev, and `dev` itself, which main
+              # takes by a fast-forward and no other branch opens a request from.
+              if gh pr edit "$NUMBER" --repo "$REPOSITORY" --add-label release; then
+                echo "Labelled release, which is what a request from $BRANCH is."
+              else
+                echo "::notice::Posing the label release failed, so nothing is posed."
+              fi
               ;;
             *)
               echo "::notice::$BRANCH opens with no type CONTRIBUTING knows, so nothing is posed."
