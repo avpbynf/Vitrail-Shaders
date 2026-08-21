@@ -256,6 +256,19 @@ has diverged from the plan, and the pack is not the suspect.
 **Shader sources under the instance are read live.** Changing GLSL needs no rebuild. Only engine
 changes need one.
 
+**The card's time per pass is in the log on request.** Started with `-Dvitrail.passTimings=N`
+among the JVM arguments, the game prints every N seconds a table of GPU time per render pass
+label, the game's and Sodium's passes beside the pack's, sorted by cost, with the share of the pass
+total each takes and how many times a frame it ran. The header compares three numbers: the sum of
+the passes, the span from the first pass of the frame to the last, and the interval between frames.
+The gap between the first two is copies, clears and barriers between passes; the gap to the third
+is the CPU, the limiter or vertical sync. The timestamps are the device's own, read back a few
+frames late without waiting, so the table costs nothing to speak of, and nothing at all when the
+property is absent. A reading is only as good as the run around it: compare runs taken in the same
+state, and remember that the game lowers its own frame rate after a while without input (the
+inactivity limit in the video settings), which moves every per-second number and none of the
+per-pass milliseconds.
+
 ## Rules that were paid for
 
 Each of these cost a wrong conclusion before it was written down.
