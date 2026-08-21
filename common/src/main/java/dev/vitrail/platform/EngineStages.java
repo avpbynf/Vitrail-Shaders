@@ -8,6 +8,7 @@ import dev.vitrail.render.PbrTextures;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.sodium.EntityMeshSerializer;
+import dev.vitrail.screen.SettingsKey;
 import dev.vitrail.sodium.ShadowTerrain;
 import dev.vitrail.HostReport;
 import dev.vitrail.Vitrail;
@@ -63,6 +64,16 @@ public final class EngineStages {
 		// The report of the pack goes with the reading of it, in PackChain, where which pack is
 		// being drawn is known.
 		PackChain.load(Vitrail.platform().gameDirectory());
+	}
+
+	/**
+	 * At the end of every client tick, in a world or out of one. The one moment of the engine that
+	 * is not a point of the frame, and it is listed here for the same reason the others are: what
+	 * is asked once a tick has to be the same list on both loaders, and each of them reaches it
+	 * through an event of its own.
+	 */
+	public static void clientTick() {
+		SettingsKey.poll();
 	}
 
 	/**
