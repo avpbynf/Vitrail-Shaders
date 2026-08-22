@@ -60,7 +60,10 @@ public final class ProgramTranslator {
 	 * Every stage of one program, translated, with what the pipeline will have to declare.
 	 *
 	 * @param uniforms    the block every stage declares, in the order a std140 buffer is filled in
-	 * @param samplers    every opaque uniform any stage binds, which is what the pipeline declares
+	 * @param samplers    every opaque uniform any stage binds, which is what the pipeline declares.
+	 *                    Names a stage actually samples come first, so their bindings stay inside
+	 *                    Metal's sixteen sampler slots; unused declarations follow rather than
+	 *                    pushing a used name onto slot 17
 	 * @param synthesized vertex inputs the mesh has not got, answered with a constant, by name and
 	 *                    with the type the pack declared them under. Empty for every pass drawn over
 	 *                    a quad, which is every pass this engine drew before milestone six
@@ -243,7 +246,7 @@ public final class ProgramTranslator {
 		}
 
 		List<TranslatedUnit.Uniform> block = fixedFunctionFirst(uniforms);
-		List<TranslatedUnit.Uniform> bound = List.copyOf(samplers.values());
+		List<TranslatedUnit.Uniform> bound = sampledFirst(samplers, prepared);
 		Set<String> elements = clashingElements(prepared, inputs);
 
 		Map<ProgramStage, TranslatedUnit> translated = new LinkedHashMap<>();
@@ -421,5 +424,35 @@ public final class ProgramTranslator {
 		}
 
 		return List.copyOf(block);
+	}
+
+	/**
+	 * Names a stage samples first, unused declarations after, so the compiler assigns the used
+	 * ones the lowest bindings. Metal numbers a sampler by that binding and only accepts 0
+	 * through 15; a used name sitting behind sixteen unused ones is refused even when the
+	 * shader samples a single texture.
+	 */
+	private static List<TranslatedUnit.Uniform> sampledFirst(
+			Map<String, TranslatedUnit.Uniform> samplers,
+			Map<ProgramStage, GlslTranslator.Stage> prepared) {
+		Set<String> sampled = new LinkedHashSet<>();
+		for (GlslTranslator.Stage stage : prepared.values()) {
+			sampled.addAll(stage.sampled());
+		}
+
+		List<TranslatedUnit.Uniform> bound = new ArrayList<>();
+		for (TranslatedUnit.Uniform sampler : samplers.values()) {
+			if (sampled.contains(sampler.name())) {
+				bound.add(sampler);
+			}
+		}
+
+		for (TranslatedUnit.Uniform sampler : samplers.values()) {
+			if (!sampled.contains(sampler.name())) {
+				bound.add(sampler);
+			}
+		}
+
+		return List.copyOf(bound);
 	}
 }

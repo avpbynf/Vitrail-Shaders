@@ -626,6 +626,16 @@ public final class GlslTranslator {
 		}
 
 		/**
+		 * Sampler names this stage reads, not merely declares. A pack include can name twenty
+		 * textures of which the body samples one, and those unused declarations still occupy a slot
+		 * in the bind group if they are listed first: MoltenVK numbers a Metal sampler by that
+		 * slot, and only sixteen exist.
+		 */
+		public Set<String> sampled() {
+			return this.translator.sampledNames();
+		}
+
+		/**
 		 * Vertex inputs this stage declared that the mesh it is drawn from has not got, with the type
 		 * the pack gave them. Empty for anything not drawn from a mesh of the engine's own, and the
 		 * list of what the picture will be wrong about when it is not.
@@ -3966,6 +3976,46 @@ public final class GlslTranslator {
 		}
 
 		return names;
+	}
+
+	/**
+	 * Sampler names this stage reads outside their uniform declaration. An include can declare
+	 * twenty textures of which the body samples one: those unused names still occupy identifier
+	 * tokens at the declaration, and counting every identifier would treat them as used.
+	 */
+	private Set<String> sampledNames() {
+		boolean[] declared = new boolean[this.tokens.size()];
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (!token.identifier("uniform") || token.directive() != null
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			FileScope scope = fileScopeDeclaration(index);
+			if (scope == null) {
+				continue;
+			}
+
+			for (int at = scope.start(); at <= scope.end() && at < declared.length; at++) {
+				declared[at] = true;
+			}
+		}
+
+		Set<String> sampled = new LinkedHashSet<>();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			if (declared[index]) {
+				continue;
+			}
+
+			Token token = this.tokens.get(index);
+			if (token.kind() == Kind.IDENTIFIER && this.samplers.containsKey(token.text())) {
+				sampled.add(token.text());
+			}
+		}
+
+		return sampled;
 	}
 
 	/**
