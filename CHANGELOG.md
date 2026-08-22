@@ -15,6 +15,12 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack that declares many textures and samples few of them can compile on Apple Silicon.**
+  Metal only has sixteen sampler slots, numbered by the layout rather than by how many the shader
+  actually reads, so a single used texture sitting behind unused declarations used to land on
+  slot 17 and the pipeline was refused. The names a program samples now take the first slots. A
+  program that samples more than sixteen textures still cannot run there.
+
 - **A pack that marks a computed matrix as `const` loads instead of falling back to vanilla.**
   Vulkan will not take `transpose` of a literal, or a uniform, as a constant initialiser, and one
   such pass used to fail the compile and take the whole pack with it. The keyword comes off and
