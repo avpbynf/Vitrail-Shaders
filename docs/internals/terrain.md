@@ -40,6 +40,12 @@ notice. So the engine takes the answer at the single instant the chunk renderer 
 from nothing, and merely repeats it everywhere else. Turning the terrain switch on or off asks the
 game to rebuild the world, which is the same door F3+A uses; it does not ask for a restart.
 
+Sodium 0.9.2 added a shared geometry arena that does not call the accessor. It bakes the compact
+stride at construction and then refuses any other width, so a pack's mesh (thirty-two to forty bytes)
+dies with `Unsupported stride` on the first upload. A mixin on that constructor asks the accessor
+instead, at the same instant the section manager is built. 0.9.1 has no such class, and the mixin
+is skipped there.
+
 **One thing outlives that rebuild, and it is a pipeline.** The chunk renderer memoises its own
 pipeline in a map keyed by render pass, the map is static and the three passes are immortal, and a
 pipeline declares the vertex format of whichever renderer built it. Nothing ever empties it, so the

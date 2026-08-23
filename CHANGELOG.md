@@ -11,6 +11,14 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **Sodium 0.9.2 no longer crashes when a pack extends the chunk mesh.** Its new arena allocator
+  was sized for Sodium's own twenty bytes and refused the wider mesh a pack needs. The allocator
+  now takes the same format the rest of the renderer already asked for. 0.9.1 is unchanged.
+
 ## 0.7.4-beta
 
 ### Changed
