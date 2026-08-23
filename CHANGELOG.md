@@ -61,12 +61,15 @@ what the next one holds.
   pass already open**, the way Iris leaves the default framebuffer bound. A leftover pass is
   never adopted: its viewport and scissor would be whoever opened it.
 
-- **Geometry programs compile one a frame during the same warm-up as the chain**, before the pack
-  is drawn. The first hand, the first mob and the first rain are no longer a hitch inside a
-  running pack. Complementary Unbound is not translated all at once at load.
+- **Geometry programs compile during the same warm-up as the chain**, before the pack is drawn.
+  Families translate on a worker while composites compile. The overlay lifts once the composites
+  and the terrain are in the device cache. Leftover families compile on their first draw, which
+  is what kept Complementary Unbound on the overlay for the better part of a minute. shaderc
+  stays on the render thread: the device cache is not safe off it.
 
 - **The wait for a pack uses the game's loading overlay.** The world is not drawn at two frames
-  a second while programs compile. Several programs compile a frame instead of one.
+  a second while programs compile. Several programs compile a frame instead of one. The overlay
+  leaves on the logo after the red drops, without drawing the world underneath a second time.
 
 ### Fixed
 

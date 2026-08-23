@@ -36,6 +36,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.util.Mth;
+import net.minecraft.util.Util;
 
 import org.joml.Vector4f;
 
@@ -261,7 +262,8 @@ public final class PackChain {
 	private CompiledRenderPipeline head;
 	private int blockBytes;
 	private int warmed;
-	private int familyCursor;
+	private boolean familyPrefetchStarted;
+	private volatile int familiesReady;
 	private boolean geometryReady;
 	private boolean announced;
 
@@ -698,12 +700,12 @@ public final class PackChain {
 			announceRemoved(chain);
 			active = new PackChain(chain, values, world, engine.seed(), pack, chosen,
 					settings.profile());
-			// Terrain first: the chunk mesh carries what those programs read, and Sodium takes the
-			// format where it builds its renderer, before any pass asks for a shader. The other
-			// families stay unread until something draws them: translating Complementary Unbound's
-			// whole sky, entities, weather and distant set at this moment holds the render thread
-			// until the game looks frozen.
+			// Terrain first, and it finishes before the other families start: two readers on one
+			// zip at once is a race, and Sodium takes the mesh format here before any pass asks
+			// for a shader. The other families then translate on a worker, so Complementary
+			// Unbound's entities overlap the composite compiles and never sit on the render thread.
 			active.terrain.read();
+			active.startFamilyPrefetch();
 			turnOffImprovedTransparency();
 			if (!chainWanted) {
 				EngineOptions.announceChainOff();
@@ -1263,8 +1265,9 @@ public final class PackChain {
 	 * program a frame was the wait the player sat through at two frames per second; several a
 	 * frame, with the world not drawn, is the same work without that picture.
 	 * <p>
-	 * Complementary Unbound is still not compiled all at once: a family translation that costs a
-	 * whole frame still costs that frame, and the overlay keeps ticking around it.
+	 * Complementary Unbound is still not compiled all at once. Its families translate on a worker
+	 * while this thread compiles the composites and the terrain; leftover pipelines compile on
+	 * their first draw rather than holding the overlay.
 	 */
 	public static void pumpWarmup() {
 		PackChain chain = active;
@@ -1305,6 +1308,16 @@ public final class PackChain {
 		} while (System.nanoTime() < deadline);
 	}
 
+	/** The loading overlay is still up, including the beat after compile while the red drops. */
+	public static boolean coveringWarmup() {
+		return PackWarmup.covering();
+	}
+
+	/** Drops the overlay at the end of its first fade beat, before vanilla would blink. */
+	public static void tickWarmupOverlay() {
+		PackWarmup.dismissIfDue();
+	}
+
 	/**
 	 * How far {@link #pumpWarmup} has got, for the overlay bar. Grows as families are translated,
 	 * because those programs do not exist until then.
@@ -1315,7 +1328,7 @@ public final class PackChain {
 			return 0.0F;
 		}
 
-		int done = chain.warmed + Math.min(chain.familyCursor, FAMILIES) + chain.compiledGeometry();
+		int done = chain.warmed + Math.min(chain.familiesReady, FAMILIES) + chain.compiledGeometry();
 		int total = chain.programs.size() + FAMILIES + chain.geometryCount();
 
 		return total == 0 ? 1.0F : Math.min(1.0F, (float) done / (float) total);
@@ -2228,10 +2241,11 @@ public final class PackChain {
 	 * emptied its cache, which it does at every resource reload: the alternative is to ask for all
 	 * of them every frame, which pays the whole compilation in the one frame after a reload.
 	 * <p>
-	 * After the composites, one unread geometry family is translated a call, then one geometry
-	 * pipeline is compiled a call. {@link #pumpWarmup} repeats that for as long as a short budget
-	 * on the frame allows. It is not a compile-all at load: Unbound's sky, entities, weather and
-	 * distant set stay off that stack, and shaderc never runs off the render thread.
+	 * After the composites, terrain pipelines compile a call. The other families translate on a
+	 * worker and shaderc on their first draw: Complementary Unbound's leftover pipelines are the
+	 * minute between packs, and holding the overlay for them is that minute. {@link #pumpWarmup}
+	 * repeats the compiles for as long as a short budget on the frame allows. shaderc itself stays
+	 * on the render thread: the device cache is not safe off it.
 	 *
 	 * @return false while a program is still missing, in which case nothing of the chain is drawn.
 	 *         What the screen holds for those frames is the terrain's answer and not this one, and
@@ -2267,17 +2281,17 @@ public final class PackChain {
 			return false;
 		}
 
-		if (prefetchFamily()) {
-			return false;
-		}
+		startFamilyPrefetch();
 
-		if (compileOneGeometry(device)) {
+		// Terrain is the world frame. Complementary Unbound's leftover families are the minute
+		// between packs; they compile on their first draw. Terrain is a handful of pipelines, and
+		// the first world frame hitch without them.
+		if (compileNext(device, this.terrain.programs())) {
 			return false;
 		}
 
 		if (!this.geometryReady) {
-			Vitrail.logger().info("The pack's geometry is compiled ({} pipelines), the chain can draw",
-					compiledGeometry());
+			Vitrail.logger().info("The pack's composites and terrain are compiled, the chain can draw");
 		}
 
 		this.geometryReady = true;
@@ -2287,40 +2301,53 @@ public final class PackChain {
 
 	private static final int FAMILIES = 6;
 
-	/** Long enough for several cheap compiles, short enough that the overlay still ticks. */
-	private static final long WARM_BUDGET_NANOS = 30_000_000L;
+	/** Long enough for several compiles, short enough that the overlay still ticks. */
+	private static final long WARM_BUDGET_NANOS = 80_000_000L;
 
 	/**
-	 * Translates one unread family a call. Translation is not shaderc: Complementary Unbound's
-	 * entities still cost a frame, and that frame is this one rather than the first cow.
+	 * Translates the six families on a worker. Translation does not touch the device; shaderc
+	 * does, and stays on the render thread. Complementary Unbound's entities still cost, and
+	 * that cost is this worker rather than the overlay freeze.
 	 */
-	private boolean prefetchFamily() {
-		switch (this.familyCursor) {
-			case 0 -> this.sky.prefetch();
-			case 1 -> this.entities.prefetch();
-			case 2 -> this.clouds.prefetch();
-			case 3 -> this.particles.prefetch();
-			case 4 -> this.weather.prefetch();
-			case 5 -> this.distant.prefetch();
-			default -> {
-				return false;
+	private void startFamilyPrefetch() {
+		synchronized (this) {
+			if (this.familyPrefetchStarted) {
+				return;
 			}
+
+			this.familyPrefetchStarted = true;
 		}
 
-		this.familyCursor++;
-
-		return true;
+		Util.backgroundExecutor().execute(() -> {
+			prefetchFamily(this.sky::prefetch);
+			prefetchFamily(this.entities::prefetch);
+			prefetchFamily(this.clouds::prefetch);
+			prefetchFamily(this.weather::prefetch);
+			prefetchFamily(this.particles::prefetch);
+			prefetchFamily(this.distant::prefetch);
+		});
 	}
 
-	/** Compiles one geometry pipeline that is not in the device cache yet. */
-	private boolean compileOneGeometry(GpuDevice device) {
-		return compileNext(device, this.terrain.programs())
-				|| compileNext(device, this.sky.programs())
-				|| compileNext(device, this.entities.programs())
-				|| compileNext(device, this.clouds.programs())
-				|| compileNext(device, this.weather.programs())
-				|| compileNext(device, this.particles.programs())
-				|| compileNext(device, this.distant.programs());
+	private void prefetchFamily(Runnable prefetch) {
+		try {
+			prefetch.run();
+		} catch (RuntimeException e) {
+			Vitrail.logger().error("Translating a pack family failed", e);
+		}
+
+		this.familiesReady++;
+	}
+
+	private Collection<? extends DumpedProgram> familyPrograms(int index) {
+		return switch (index) {
+			case 0 -> this.sky.programs();
+			case 1 -> this.entities.programs();
+			case 2 -> this.clouds.programs();
+			case 3 -> this.weather.programs();
+			case 4 -> this.particles.programs();
+			case 5 -> this.distant.programs();
+			default -> List.of();
+		};
 	}
 
 	private static boolean compileNext(GpuDevice device,
@@ -2339,12 +2366,10 @@ public final class PackChain {
 	private void forgetGeometry() {
 		this.geometryReady = false;
 		forgetCompiled(this.terrain.programs());
-		forgetCompiled(this.sky.programs());
-		forgetCompiled(this.entities.programs());
-		forgetCompiled(this.clouds.programs());
-		forgetCompiled(this.weather.programs());
-		forgetCompiled(this.particles.programs());
-		forgetCompiled(this.distant.programs());
+		int ready = this.familiesReady;
+		for (int i = 0; i < ready && i < FAMILIES; i++) {
+			forgetCompiled(familyPrograms(i));
+		}
 	}
 
 	private static void forgetCompiled(Collection<? extends DumpedProgram> programs) {
@@ -2352,23 +2377,23 @@ public final class PackChain {
 	}
 
 	private int compiledGeometry() {
-		return countCompiled(this.terrain.programs())
-				+ countCompiled(this.sky.programs())
-				+ countCompiled(this.entities.programs())
-				+ countCompiled(this.clouds.programs())
-				+ countCompiled(this.weather.programs())
-				+ countCompiled(this.particles.programs())
-				+ countCompiled(this.distant.programs());
+		int count = countCompiled(this.terrain.programs());
+		int ready = this.familiesReady;
+		for (int i = 0; i < ready && i < FAMILIES; i++) {
+			count += countCompiled(familyPrograms(i));
+		}
+
+		return count;
 	}
 
 	private int geometryCount() {
-		return this.terrain.programs().size()
-				+ this.sky.programs().size()
-				+ this.entities.programs().size()
-				+ this.clouds.programs().size()
-				+ this.weather.programs().size()
-				+ this.particles.programs().size()
-				+ this.distant.programs().size();
+		int count = this.terrain.programs().size();
+		int ready = this.familiesReady;
+		for (int i = 0; i < ready && i < FAMILIES; i++) {
+			count += familyPrograms(i).size();
+		}
+
+		return count;
 	}
 
 	private static int countCompiled(Collection<? extends DumpedProgram> programs) {
@@ -2391,8 +2416,8 @@ public final class PackChain {
 	 * the plan; whether it will is this, and the two are not the same question. {@link #warm}
 	 * compiles one program a frame, so every load, every resource reload and every portal used to
 	 * spend {@code programs.size()} frames with the world drawn into a target nothing read: three
-	 * seconds of a screen with no world in it, at every F3+T. Geometry pipelines take that same
-	 * road after the composites, so the first hand is not a hitch inside a drawable pack.
+	 * seconds of a screen with no world in it, at every F3+T. Terrain pipelines take that same
+	 * road after the composites. Leftover families compile on their first draw.
 	 * <p>
 	 * The empty chain answers no rather than yes on a vacuous count. A place with no program has no
 	 * final either, so nothing would ever bring that target back, and {@link #warm} refuses it in
@@ -2401,7 +2426,6 @@ public final class PackChain {
 	boolean drawable() {
 		return this.programs != null && !this.programs.isEmpty()
 				&& this.warmed == this.programs.size()
-				&& this.familyCursor >= FAMILIES
 				&& this.geometryReady;
 	}
 
