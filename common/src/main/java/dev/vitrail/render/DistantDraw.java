@@ -633,6 +633,17 @@ public final class DistantDraw {
 	}
 
 	/**
+	 * Reads the pack for the far terrain, without compiling. One call is enough; a reading that
+	 * served nothing is still one. The chain asks during its warm-up so shaderc does not land on
+	 * the first draw.
+	 */
+	void prefetch() {
+		if (!this.read) {
+			read();
+		}
+	}
+
+	/**
 	 * Reads the pack for every half at once, at the first frame the far terrain is drawn.
 	 * <p>
 	 * All of them and not the one being asked for, for the reason every other family reads all of

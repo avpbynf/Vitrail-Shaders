@@ -181,6 +181,17 @@ public final class WeatherDraw {
 	}
 
 	/**
+	 * Reads the pack for this family, without compiling. One call is enough; a reading that served
+	 * nothing is still one. The chain asks during its warm-up so shaderc does not land on the first
+	 * draw.
+	 */
+	void prefetch() {
+		if (!this.read && wanted()) {
+			read();
+		}
+	}
+
+	/**
 	 * Whether the game is to draw its rain and snow at all, which is the pack's to refuse.
 	 * <p>
 	 * <strong>Not the same question as which shader draws it</strong>, and it is the sun and the

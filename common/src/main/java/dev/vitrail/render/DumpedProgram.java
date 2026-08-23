@@ -2,6 +2,8 @@ package dev.vitrail.render;
 
 import dev.vitrail.uniform.WorldState;
 
+import com.mojang.blaze3d.systems.GpuDevice;
+
 /**
  * What {@link PackDump} needs of a program to be able to name it and read it back.
  * <p>
@@ -25,4 +27,19 @@ interface DumpedProgram {
 
 	/** This frame's uniform block, read back as text. */
 	String decoded(WorldState world);
+
+	/**
+	 * Compiles this program into the device cache, with no atlas, no block and no draw.
+	 *
+	 * @return false when the program will never be drawn
+	 */
+	boolean compile(GpuDevice device);
+
+	/** Whether {@link #compile} has already paid shaderc for this pipeline. */
+	boolean compiled();
+
+	/**
+	 * A resource reload emptied the device cache, so the next {@link #compile} has to pay again.
+	 */
+	void forgetCompiled();
 }

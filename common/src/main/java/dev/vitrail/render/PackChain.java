@@ -45,6 +45,7 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -260,6 +261,8 @@ public final class PackChain {
 	private CompiledRenderPipeline head;
 	private int blockBytes;
 	private int warmed;
+	private int familyCursor;
+	private boolean geometryReady;
 	private boolean announced;
 
 	/**
@@ -2149,10 +2152,15 @@ public final class PackChain {
 	/**
 	 * Compiles at most one program a frame, and says whether the chain may be drawn.
 	 * <p>
-	 * The first program is asked for every frame whatever happens, and its compiled form is
+	 * The first composite is asked for every frame whatever happens, and its compiled form is
 	 * compared with the one from the frame before. That is the only way to notice that the device
 	 * emptied its cache, which it does at every resource reload: the alternative is to ask for all
 	 * of them every frame, which pays the whole compilation in the one frame after a reload.
+	 * <p>
+	 * After the composites, one unread geometry family is translated a frame, then one geometry
+	 * pipeline is compiled a frame. That is the first-draw hitch paid here instead, while the game
+	 * still shows its own world. It is not a compile-all at load: Unbound's sky, entities, weather
+	 * and distant set stay off that stack, and shaderc never runs off the render thread.
 	 *
 	 * @return false while a program is still missing, in which case nothing of the chain is drawn.
 	 *         What the screen holds for those frames is the terrain's answer and not this one, and
@@ -2172,8 +2180,9 @@ public final class PackChain {
 		if (first != this.head) {
 			this.head = first;
 			this.warmed = 1;
+			forgetGeometry();
 
-			return this.warmed == this.programs.size();
+			return false;
 		}
 
 		if (this.warmed < this.programs.size()) {
@@ -2183,9 +2192,110 @@ public final class PackChain {
 			}
 
 			this.warmed++;
+
+			return false;
 		}
 
-		return this.warmed == this.programs.size();
+		if (prefetchFamily()) {
+			return false;
+		}
+
+		if (compileOneGeometry(device)) {
+			return false;
+		}
+
+		if (!this.geometryReady) {
+			Vitrail.logger().info("The pack's geometry is compiled ({} pipelines), the chain can draw",
+					compiledGeometry());
+		}
+
+		this.geometryReady = true;
+
+		return true;
+	}
+
+	private static final int FAMILIES = 6;
+
+	/**
+	 * Translates one unread family a call. Translation is not shaderc: Complementary Unbound's
+	 * entities still cost a frame, and that frame is this one rather than the first cow.
+	 */
+	private boolean prefetchFamily() {
+		switch (this.familyCursor) {
+			case 0 -> this.sky.prefetch();
+			case 1 -> this.entities.prefetch();
+			case 2 -> this.clouds.prefetch();
+			case 3 -> this.particles.prefetch();
+			case 4 -> this.weather.prefetch();
+			case 5 -> this.distant.prefetch();
+			default -> {
+				return false;
+			}
+		}
+
+		this.familyCursor++;
+
+		return true;
+	}
+
+	/** Compiles one geometry pipeline that is not in the device cache yet. */
+	private boolean compileOneGeometry(GpuDevice device) {
+		return compileNext(device, this.terrain.programs())
+				|| compileNext(device, this.sky.programs())
+				|| compileNext(device, this.entities.programs())
+				|| compileNext(device, this.clouds.programs())
+				|| compileNext(device, this.weather.programs())
+				|| compileNext(device, this.particles.programs())
+				|| compileNext(device, this.distant.programs());
+	}
+
+	private static boolean compileNext(GpuDevice device,
+			Collection<? extends DumpedProgram> programs) {
+		for (DumpedProgram program : programs) {
+			if (!program.compiled()) {
+				program.compile(device);
+
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private void forgetGeometry() {
+		this.geometryReady = false;
+		forgetCompiled(this.terrain.programs());
+		forgetCompiled(this.sky.programs());
+		forgetCompiled(this.entities.programs());
+		forgetCompiled(this.clouds.programs());
+		forgetCompiled(this.weather.programs());
+		forgetCompiled(this.particles.programs());
+		forgetCompiled(this.distant.programs());
+	}
+
+	private static void forgetCompiled(Collection<? extends DumpedProgram> programs) {
+		programs.forEach(DumpedProgram::forgetCompiled);
+	}
+
+	private int compiledGeometry() {
+		return countCompiled(this.terrain.programs())
+				+ countCompiled(this.sky.programs())
+				+ countCompiled(this.entities.programs())
+				+ countCompiled(this.clouds.programs())
+				+ countCompiled(this.weather.programs())
+				+ countCompiled(this.particles.programs())
+				+ countCompiled(this.distant.programs());
+	}
+
+	private static int countCompiled(Collection<? extends DumpedProgram> programs) {
+		int count = 0;
+		for (DumpedProgram program : programs) {
+			if (program.compiled()) {
+				count++;
+			}
+		}
+
+		return count;
 	}
 
 	/**
@@ -2197,7 +2307,8 @@ public final class PackChain {
 	 * the plan; whether it will is this, and the two are not the same question. {@link #warm}
 	 * compiles one program a frame, so every load, every resource reload and every portal used to
 	 * spend {@code programs.size()} frames with the world drawn into a target nothing read: three
-	 * seconds of a screen with no world in it, at every F3+T.
+	 * seconds of a screen with no world in it, at every F3+T. Geometry pipelines take that same
+	 * road after the composites, so the first hand is not a hitch inside a drawable pack.
 	 * <p>
 	 * The empty chain answers no rather than yes on a vacuous count. A place with no program has no
 	 * final either, so nothing would ever bring that target back, and {@link #warm} refuses it in
@@ -2205,7 +2316,9 @@ public final class PackChain {
 	 */
 	boolean drawable() {
 		return this.programs != null && !this.programs.isEmpty()
-				&& this.warmed == this.programs.size();
+				&& this.warmed == this.programs.size()
+				&& this.familyCursor >= FAMILIES
+				&& this.geometryReady;
 	}
 
 	/**
