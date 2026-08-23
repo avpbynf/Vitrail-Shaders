@@ -69,8 +69,9 @@ import java.util.stream.Collectors;
  * A target the schedule turns over carries two textures, and which half a program reads and
  * writes is the schedule's answer rather than a flag kept here. The one thing this class owes the
  * ping pong is {@link #swapBack}: a target the pack keeps between frames and that the chain left
- * on the alternate half has to come back to the main one, because the next frame starts its walk
- * from an empty flipped set and would read the half nothing wrote.
+ * on the alternate half has to become the main one, because the next frame starts its walk
+ * from an empty flipped set and would otherwise read the half nothing wrote. The two surfaces
+ * swap names. Copying the texels would be another GPU stop for the same fact.
  * <p>
  * The files the pack ships as textures of its own live here too, and for one reason: they are
  * allocated, uploaded and freed at exactly the moments the constants are, and a second holder
@@ -517,33 +518,27 @@ final class ColorTargets {
 	}
 
 	/**
-	 * Copies the alternate half back over the main one, for the targets the plan named and no
-	 * others. Must run outside any render pass, and after the last one of the frame.
+	 * Makes the alternate half the main one, for the targets the plan named and no others. After
+	 * the last pass of the frame, and only a name swap: the next frame walks the chain from an
+	 * empty flipped set, so it reads the main half of everything before anything has written it.
+	 * Without this the pack would be handed, once per frame, the half it filled two frames ago.
 	 * <p>
-	 * Only a target the pack keeps between frames is ever in that list. The next frame walks the
-	 * chain from an empty flipped set, so it reads the main half of everything before anything has
-	 * written it; without this the pack would be handed, once per frame, the half it filled two
-	 * frames ago. Both halves carry the same format, so this is a copy of bits that mean the same
-	 * thing on both sides rather than a reinterpretation.
+	 * The texels stay where they are. A copy would be a GPU stop, and both halves already carry
+	 * the same format. Mip levels past nought are rebuilt from nought before any program reads
+	 * one, the same as they were when this used to copy.
 	 */
-	void swapBack(CommandEncoder encoder, List<Integer> targets) {
+	void swapBack(List<Integer> targets) {
 		for (int index : targets) {
 			TargetSurface alt = this.altSide.get(index);
 			TargetSurface main = this.mainSide.get(index);
 			if (alt == null || main == null) {
-				note("nothing to copy back for " + TargetName.canonical(index) + ": the plan asks "
+				note("nothing to swap back for " + TargetName.canonical(index) + ": the plan asks "
 						+ "for it and only one half of it exists");
 				continue;
 			}
 
-			GpuTexture from = alt.texture();
-			GpuTexture to = main.texture();
-			if (from != null && to != null) {
-				// Level nought alone, chain or no chain. The levels past it are rebuilt from it
-				// before any program reads one, so copying them here would be work whose result is
-				// overwritten before it can be read.
-				encoder.copyTextureToTexture(from, to, 0, 0, 0, 0, 0, main.width(), main.height());
-			}
+			this.mainSide.put(index, alt);
+			this.altSide.put(index, main);
 		}
 	}
 

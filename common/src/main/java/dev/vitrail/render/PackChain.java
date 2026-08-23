@@ -2167,9 +2167,9 @@ public final class PackChain {
 				this.targets.depth().distantScene());
 
 		// Outside any pass, and after the last one. Only the targets the pack keeps between frames
-		// and that the chain left on the far half are copied: the next frame walks from an empty
+		// and that the chain left on the far half swap names: the next frame walks from an empty
 		// flipped set and would otherwise be handed what was written two frames ago.
-		this.targets.swapBack(device.createCommandEncoder(), this.chain.chain().swapBack());
+		this.targets.swapBack(this.chain.chain().swapBack());
 	}
 
 	/**

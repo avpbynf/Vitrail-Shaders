@@ -49,9 +49,10 @@ what the next one holds.
 
 - **A pack's frame opens fewer GPU stops.** Clears ride as the first pass's load, leftover
   sampled-before-write clears share one empty pass per size, mip chains blit instead of drawing
-  each level, consecutive geometry that writes the same images stays in one pass, and our own
-  passes wait only for sample-after-write. Same picture. Written for the extra submits a Mac
-  report was counting; whether the frame rate moves is still that machine's to measure.
+  each level, consecutive geometry that writes the same images stays in one pass, ping-pong
+  targets swap names instead of copying texels back, and our own passes wait only for
+  sample-after-write. Same picture. Written for the extra submits a Mac report was counting;
+  whether the frame rate moves is still that machine's to measure.
 
 - **Improved transparency is turned off while a pack draws**, the same refusal Iris makes. That
   option opens a second colour target for translucent items, and every leftover feature that
