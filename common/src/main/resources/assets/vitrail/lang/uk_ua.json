@@ -51,5 +51,7 @@
 	"options.vitrail.pack_reloaded": "Шейдери перезавантажено!",
 	"options.vitrail.reload_failed": "Не вдалося перезавантажити шейдери! Причина: %s",
 	"options.vitrail.other_backend": "Vitrail нічого не малює на бекенді %s: його шейдери працюють лише на Vulkan. Установіть %s у значення \"%s\" у меню Налаштування, Налаштування графіки, і перезапустіть гру.",
+	"overlay.vitrail.compiling": "Vitrail досі компілює шейдери",
+	"overlay.vitrail.compiled": "Шейдери Vitrail скомпільовано",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

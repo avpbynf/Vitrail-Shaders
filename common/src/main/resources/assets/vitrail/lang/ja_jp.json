@@ -51,5 +51,7 @@
 	"options.vitrail.pack_reloaded": "シェーダーを再読み込みしました！",
 	"options.vitrail.reload_failed": "シェーダーの再読み込みに失敗しました！ 理由: %s",
 	"options.vitrail.other_backend": "Vitrail は %s バックエンドでは何も描画しません。シェーダーは Vulkan でのみ動作します。設定、ビデオ設定で %s を \"%s\" にしてゲームを再起動してください。",
+	"overlay.vitrail.compiling": "Vitrailはまだシェーダーをコンパイルしています",
+	"overlay.vitrail.compiled": "Vitrailのシェーダーのコンパイルが完了しました",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

@@ -51,5 +51,7 @@
 	"options.vitrail.pack_reloaded": "Shaders Ricaricate!",
 	"options.vitrail.reload_failed": "Impossibile ricaricare le shaders! Motivo: %s",
 	"options.vitrail.other_backend": "Vitrail non disegna nulla sul backend %s: le sue shader funzionano solo su Vulkan. Imposta %s su \"%s\" in Opzioni, Impostazioni video, e riavvia il gioco.",
+	"overlay.vitrail.compiling": "Vitrail sta ancora compilando gli shader",
+	"overlay.vitrail.compiled": "Shader di Vitrail compilati",
 	"key.category.vitrail.keybinds": "Vitrail"
 }
