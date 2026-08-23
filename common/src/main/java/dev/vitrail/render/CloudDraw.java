@@ -120,6 +120,17 @@ public final class CloudDraw {
 	}
 
 	/**
+	 * Reads the pack for this family, without compiling. One call is enough; a reading that served
+	 * nothing is still one. The chain asks during its warm-up so shaderc does not land on the first
+	 * draw.
+	 */
+	void prefetch() {
+		if (!this.read && wanted()) {
+			read();
+		}
+	}
+
+	/**
 	 * What the loaded pack asked the game's cloud setting to be, or empty to leave the user's own
 	 * alone.
 	 * <p>

@@ -236,6 +236,17 @@ public final class SkyDraw {
 	}
 
 	/**
+	 * Reads the pack for this family, without compiling. One call is enough; a reading that served
+	 * nothing is still one. The chain asks during its warm-up so shaderc does not land on the first
+	 * draw.
+	 */
+	void prefetch() {
+		if (!this.read && wanted()) {
+			read();
+		}
+	}
+
+	/**
 	 * Whether the sky of this frame is a pack's to draw, asked outside the frame's own passes.
 	 * <p>
 	 * The head of {@link #element} without the pieces only a pass can answer, and the difference does

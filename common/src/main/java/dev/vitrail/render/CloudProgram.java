@@ -148,6 +148,24 @@ final class CloudProgram implements DumpedProgram {
 		return this.body.owns(bound);
 	}
 
+	/** @see GeometryProgram#compile */
+	@Override
+	public boolean compile(GpuDevice device) {
+		return this.body.compile(device);
+	}
+
+	/** @see GeometryProgram#compiled */
+	@Override
+	public boolean compiled() {
+		return this.body.compiled();
+	}
+
+	/** @see GeometryProgram#forgetCompiled */
+	@Override
+	public void forgetCompiled() {
+		this.body.forgetCompiled();
+	}
+
 	/** @see GeometryProgram#decoded */
 	@Override
 	public String decoded(WorldState world) {

@@ -1209,6 +1209,16 @@ public final class EntityDraw {
 	}
 
 	/**
+	 * Reads the pack for the entities and the hand, without compiling. One call is enough. The chain
+	 * asks during its warm-up so shaderc does not land on the first draw.
+	 */
+	void prefetch() {
+		if (!this.read && (wanted() || HandDraw.wanted())) {
+			read();
+		}
+	}
+
+	/**
 	 * Opens and closes the first of the two windows this family is served in, which the caller
 	 * brackets with the game's own two events: the opaque chunks are finished at the first and the
 	 * opaque features are finished at the second.

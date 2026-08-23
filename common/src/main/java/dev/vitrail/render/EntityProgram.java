@@ -339,6 +339,24 @@ final class EntityProgram implements DumpedProgram {
 		this.body.bind(pass);
 	}
 
+	/** @see GeometryProgram#compile */
+	@Override
+	public boolean compile(GpuDevice device) {
+		return this.body.compile(device);
+	}
+
+	/** @see GeometryProgram#compiled */
+	@Override
+	public boolean compiled() {
+		return this.body.compiled();
+	}
+
+	/** @see GeometryProgram#forgetCompiled */
+	@Override
+	public void forgetCompiled() {
+		this.body.forgetCompiled();
+	}
+
 	/**
 	 * Whether this program reads the game's own per draw transforms, and so whether the draw about to
 	 * be recorded has to bind them.

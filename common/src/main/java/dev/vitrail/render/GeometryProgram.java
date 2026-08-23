@@ -407,6 +407,7 @@ final class GeometryProgram {
 	private boolean announced;
 	private boolean drew;
 	private boolean broken;
+	private boolean compiled;
 
 	/** Targets already reported as read on the half this pass writes. Said once each, not per frame. */
 	private final Set<Integer> collisions = new HashSet<>();
@@ -818,9 +819,13 @@ final class GeometryProgram {
 	 *
 	 * @return false when the program will never be drawn
 	 */
-	boolean compile(GpuDevice device) {
+	synchronized boolean compile(GpuDevice device) {
 		if (this.broken) {
 			return false;
+		}
+
+		if (this.compiled) {
+			return true;
 		}
 
 		CompiledRenderPipeline compiled = device.precompilePipeline(this.pipeline, this.source);
@@ -838,7 +843,21 @@ final class GeometryProgram {
 			return false;
 		}
 
+		this.compiled = true;
+
 		return true;
+	}
+
+	/** Whether {@link #compile} has already paid shaderc for this pipeline. */
+	boolean compiled() {
+		return this.compiled || this.broken;
+	}
+
+	/**
+	 * A resource reload emptied the device cache, so the next {@link #compile} has to pay again.
+	 */
+	void forgetCompiled() {
+		this.compiled = false;
 	}
 
 	/**

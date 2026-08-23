@@ -61,6 +61,10 @@ what the next one holds.
   pass already open**, the way Iris leaves the default framebuffer bound. A leftover pass is
   never adopted: its viewport and scissor would be whoever opened it.
 
+- **Geometry programs compile one a frame during the same warm-up as the chain**, before the pack
+  is drawn. The first hand, the first mob and the first rain are no longer a hitch inside a
+  running pack. Complementary Unbound is not translated all at once at load.
+
 ### Fixed
 
 - **Keeping consecutive geometry in one pass no longer leaves Sodium's last region scissor on

@@ -243,8 +243,21 @@ public final class TerrainProgram implements DumpedProgram {
 	}
 
 	/** @see GeometryProgram#compile */
-	boolean compile(GpuDevice device) {
+	@Override
+	public boolean compile(GpuDevice device) {
 		return this.body.compile(device);
+	}
+
+	/** @see GeometryProgram#compiled */
+	@Override
+	public boolean compiled() {
+		return this.body.compiled();
+	}
+
+	/** @see GeometryProgram#forgetCompiled */
+	@Override
+	public void forgetCompiled() {
+		this.body.forgetCompiled();
 	}
 
 	/**
