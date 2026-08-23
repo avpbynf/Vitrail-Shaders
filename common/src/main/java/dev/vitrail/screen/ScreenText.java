@@ -172,6 +172,17 @@ public final class ScreenText {
 	public static final String GRAPHICS_API_OPENGL = "options.graphicsApi.opengl";
 
 	/**
+	 * The action-bar line while a pack is still compiling. What replaced the loading overlay:
+	 * the HUD stays, and this is the one line that says why the world is late.
+	 */
+	public static final String COMPILING = "overlay.vitrail.compiling";
+
+	/**
+	 * The same line once the world can be drawn. Said once, then vanilla fades it.
+	 */
+	public static final String COMPILED = "overlay.vitrail.compiled";
+
+	/**
 	 * The group that key sits in. Nothing names it and nothing can: the game builds it from the
 	 * category's identifier, in {@code KeyMapping.Category.label()}, so what decides this string is
 	 * the path of the identifier {@code VitrailKeys} registers, not the name of the field holding

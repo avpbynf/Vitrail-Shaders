@@ -62,21 +62,25 @@ what the next one holds.
   never adopted: its viewport and scissor would be whoever opened it.
 
 - **Geometry programs compile during the same warm-up as the chain**, before the pack is drawn.
-  Families translate on a worker while composites compile. The overlay lifts once the composites
-  and the terrain are in the device cache. Leftover families compile on their first draw, which
-  is what kept Complementary Unbound on the overlay for the better part of a minute. shaderc
-  stays on the render thread: the device cache is not safe off it.
+  Families translate on a worker while composites compile. The world waits until the composites
+  and the terrain are in the device cache; leftover families compile on their first draw, which
+  is what kept Complementary Unbound behind a loading overlay for the better part of a minute.
+  shaderc stays on the render thread: the device cache is not safe off it. A line above the HUD
+  says the pack is still compiling while the world waits, then that it is done, and is gone
+  once the player can walk.
 
-- **The wait for a pack uses the game's loading overlay.** The world is not drawn at two frames
-  a second while programs compile. Several programs compile a frame instead of one. The overlay
-  leaves on the logo after the red drops, without drawing the world underneath a second time.
+- **The wait for a pack skips the world, not the HUD.** Several programs compile a frame instead
+  of one, so the wait is not a two-frame-per-second vanilla picture of the same work.
 
 ### Fixed
 
+- **Opening a world no longer crashes while leftover families are still being translated.**
+  The frame used to walk those program maps as soon as the composites and the terrain were
+  ready, which is the same moment the worker is still filling them.
+
 - **Keeping consecutive geometry in one pass no longer leaves Sodium's last region scissor on
-  the next family.** The viewport is put back to the pass area and the scissor is cleared each
-  time the hold is reused, which is the band that copied the top of the screen onto the bottom
-  as chunks streamed.
+  the next family.** The scissor is cleared each time the hold is reused, which is the band
+  that copied the top of the screen onto the bottom as chunks streamed.
 
 ## 0.7.5-beta
 

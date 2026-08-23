@@ -51,5 +51,7 @@
 	"options.vitrail.pack_reloaded": "Przeładowano Shadery!",
 	"options.vitrail.reload_failed": "Nie udało się przeładować Shaderów! Powód: %s",
 	"options.vitrail.other_backend": "Vitrail nic nie rysuje na backendzie %s: jego shadery działają tylko na Vulkanie. Ustaw %s na \"%s\" w Opcje, Ustawienia grafiki, i uruchom grę ponownie.",
+	"overlay.vitrail.compiling": "Vitrail nadal kompiluje shadery",
+	"overlay.vitrail.compiled": "Shadery Vitrail skompilowane",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

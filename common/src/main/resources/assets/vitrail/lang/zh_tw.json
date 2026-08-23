@@ -51,5 +51,7 @@
 	"options.vitrail.pack_reloaded": "已重新載入光影！",
 	"options.vitrail.reload_failed": "無法重新載入光影！原因：%s",
 	"options.vitrail.other_backend": "Vitrail 在 %s 後端下不會繪製任何內容：其光影只能在 Vulkan 上執行。請在選項、影像設定中將 %s 設為 \"%s\"，然後重新啟動遊戲。",
+	"overlay.vitrail.compiling": "Vitrail 仍在編譯著色器",
+	"overlay.vitrail.compiled": "Vitrail 著色器已編譯完成",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

@@ -51,5 +51,7 @@
 	"options.vitrail.pack_reloaded": "셰이더를 다시 불러왔습니다.",
 	"options.vitrail.reload_failed": "셰이더를 새로고침하지 못하였습니다: %s",
 	"options.vitrail.other_backend": "Vitrail은 %s 백엔드에서 아무것도 그리지 않습니다. 셰이더는 Vulkan에서만 작동합니다. 설정, 비디오 설정에서 %s을(를) \"%s\"(으)로 설정하고 게임을 다시 시작하세요.",
+	"overlay.vitrail.compiling": "Vitrail이 셰이더를 아직 컴파일하고 있습니다",
+	"overlay.vitrail.compiled": "Vitrail 셰이더 컴파일이 끝났습니다",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

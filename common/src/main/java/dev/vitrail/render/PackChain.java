@@ -19,6 +19,7 @@ import dev.vitrail.settings.SettingsFile;
 import dev.vitrail.settings.SettingsLayers;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
+import dev.vitrail.screen.ScreenText;
 import dev.vitrail.HostReport;
 import dev.vitrail.Vitrail;
 
@@ -35,6 +36,7 @@ import net.minecraft.client.GraphicsPreset;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.renderer.MappableRingBuffer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
 
@@ -1188,6 +1190,7 @@ public final class PackChain {
 		// falls back to the game's own shader for the one frame it takes to reload.
 		PackChain previous = active;
 		active = null;
+		compileHintShown = false;
 		// Cleared as well, so that a pack that failed to compile can be fixed and tried again
 		// without leaving the game.
 		disabled = false;
@@ -1250,14 +1253,23 @@ public final class PackChain {
 	}
 
 	/**
-	 * A pack is loaded and still compiling, so the world must not be drawn under the loading
-	 * overlay. The overlay is what makes this wait look like a load; skipping the world is what
-	 * keeps it from also being a two-frame-per-second picture of the same vanilla terrain.
+	 * A pack is loaded and still compiling, so the world must not be drawn. Skipping it is what
+	 * keeps this wait from being a two-frame-per-second picture of the same vanilla terrain. The
+	 * HUD stays up, and {@link #tickCompileHint} is the line that says why.
 	 */
 	public static boolean warming() {
 		PackChain chain = active;
+		if (disabled || !chainWanted || chain == null) {
+			return false;
+		}
 
-		return !disabled && chainWanted && chain != null && !chain.drawable();
+		// An empty composite list will never become drawable. Skipping the world for it would
+		// leave the player in a black pause with nothing left to compile.
+		if (chain.programs != null && chain.programs.isEmpty()) {
+			return false;
+		}
+
+		return !chain.drawable();
 	}
 
 	/**
@@ -1267,25 +1279,19 @@ public final class PackChain {
 	 * <p>
 	 * Complementary Unbound is still not compiled all at once. Its families translate on a worker
 	 * while this thread compiles the composites and the terrain; leftover pipelines compile on
-	 * their first draw rather than holding the overlay.
+	 * their first draw rather than holding the world back.
 	 */
 	public static void pumpWarmup() {
 		PackChain chain = active;
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Minecraft minecraft = Minecraft.getInstance();
 		if (disabled || !chainWanted || chain == null || device == null || minecraft == null) {
-			PackWarmup.finish();
-
 			return;
 		}
 
 		if (chain.drawable()) {
-			PackWarmup.finish();
-
 			return;
 		}
-
-		PackWarmup.show();
 
 		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
 		if (main == null || main.getColorTexture() == null) {
@@ -1294,6 +1300,10 @@ public final class PackChain {
 
 		long deadline = System.nanoTime() + WARM_BUDGET_NANOS;
 		do {
+			if (disabled) {
+				return;
+			}
+
 			if (chain.programs == null) {
 				chain.build(device);
 			}
@@ -1302,36 +1312,40 @@ public final class PackChain {
 				continue;
 			}
 
-			PackWarmup.finish();
-
 			return;
 		} while (System.nanoTime() < deadline);
 	}
 
-	/** The loading overlay is still up, including the beat after compile while the red drops. */
-	public static boolean coveringWarmup() {
-		return PackWarmup.covering();
-	}
-
-	/** Drops the overlay at the end of its first fade beat, before vanilla would blink. */
-	public static void tickWarmupOverlay() {
-		PackWarmup.dismissIfDue();
-	}
-
 	/**
-	 * How far {@link #pumpWarmup} has got, for the overlay bar. Grows as families are translated,
-	 * because those programs do not exist until then.
+	 * Keeps the action-bar line up while the world is waiting on this pack, then says once that
+	 * it is done. Leftover families compile on their first draw and must not bring either line
+	 * back once the player is already walking.
 	 */
-	static float warmupProgress() {
-		PackChain chain = active;
-		if (chain == null || chain.programs == null || chain.programs.isEmpty()) {
-			return 0.0F;
+	private static boolean compileHintShown;
+
+	public static void tickCompileHint() {
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft.player == null || minecraft.gui.hud.isHidden()) {
+			return;
 		}
 
-		int done = chain.warmed + Math.min(chain.familiesReady, FAMILIES) + chain.compiledGeometry();
-		int total = chain.programs.size() + FAMILIES + chain.geometryCount();
+		if (warming()) {
+			compileHintShown = true;
+			minecraft.gui.hud.setOverlayMessage(Component.translatable(ScreenText.COMPILING), false);
+			return;
+		}
 
-		return total == 0 ? 1.0F : Math.min(1.0F, (float) done / (float) total);
+		if (!compileHintShown) {
+			return;
+		}
+
+		compileHintShown = false;
+		PackChain chain = active;
+		if (disabled || !chainWanted || chain == null || !chain.drawable()) {
+			return;
+		}
+
+		minecraft.gui.hud.setOverlayMessage(Component.translatable(ScreenText.COMPILED), false);
 	}
 
 	/**
@@ -1488,12 +1502,34 @@ public final class PackChain {
 		}
 
 		this.terrain.rotate();
-		this.sky.rotate();
-		this.entities.rotate();
-		this.clouds.rotate();
-		this.weather.rotate();
-		this.particles.rotate();
-		this.distant.rotate();
+		// Only families the worker has finished translating. drawable() is true once the
+		// composites and the terrain are compiled, which is earlier than leftover families
+		// have been read, and walking those maps while the worker still fills them is the
+		// crash at world join.
+		int ready = this.familiesReady;
+		if (ready > 0) {
+			this.sky.rotate();
+		}
+
+		if (ready > 1) {
+			this.entities.rotate();
+		}
+
+		if (ready > 2) {
+			this.clouds.rotate();
+		}
+
+		if (ready > 3) {
+			this.weather.rotate();
+		}
+
+		if (ready > 4) {
+			this.particles.rotate();
+		}
+
+		if (ready > 5) {
+			this.distant.rotate();
+		}
 	}
 
 	/** Called when the client shuts down, while the device is still alive. */
@@ -2243,7 +2279,7 @@ public final class PackChain {
 	 * <p>
 	 * After the composites, terrain pipelines compile a call. The other families translate on a
 	 * worker and shaderc on their first draw: Complementary Unbound's leftover pipelines are the
-	 * minute between packs, and holding the overlay for them is that minute. {@link #pumpWarmup}
+	 * minute between packs, and holding the world for them is that minute. {@link #pumpWarmup}
 	 * repeats the compiles for as long as a short budget on the frame allows. shaderc itself stays
 	 * on the render thread: the device cache is not safe off it.
 	 *
@@ -2301,13 +2337,13 @@ public final class PackChain {
 
 	private static final int FAMILIES = 6;
 
-	/** Long enough for several compiles, short enough that the overlay still ticks. */
+	/** Long enough for several compiles, short enough that the HUD still ticks. */
 	private static final long WARM_BUDGET_NANOS = 80_000_000L;
 
 	/**
 	 * Translates the six families on a worker. Translation does not touch the device; shaderc
 	 * does, and stays on the render thread. Complementary Unbound's entities still cost, and
-	 * that cost is this worker rather than the overlay freeze.
+	 * that cost is this worker rather than holding the world back.
 	 */
 	private void startFamilyPrefetch() {
 		synchronized (this) {
@@ -2374,37 +2410,6 @@ public final class PackChain {
 
 	private static void forgetCompiled(Collection<? extends DumpedProgram> programs) {
 		programs.forEach(DumpedProgram::forgetCompiled);
-	}
-
-	private int compiledGeometry() {
-		int count = countCompiled(this.terrain.programs());
-		int ready = this.familiesReady;
-		for (int i = 0; i < ready && i < FAMILIES; i++) {
-			count += countCompiled(familyPrograms(i));
-		}
-
-		return count;
-	}
-
-	private int geometryCount() {
-		int count = this.terrain.programs().size();
-		int ready = this.familiesReady;
-		for (int i = 0; i < ready && i < FAMILIES; i++) {
-			count += familyPrograms(i).size();
-		}
-
-		return count;
-	}
-
-	private static int countCompiled(Collection<? extends DumpedProgram> programs) {
-		int count = 0;
-		for (DumpedProgram program : programs) {
-			if (program.compiled()) {
-				count++;
-			}
-		}
-
-		return count;
 	}
 
 	/**
