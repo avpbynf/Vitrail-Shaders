@@ -201,7 +201,7 @@ public final class DistantDraw {
 	private List<String> carried = List.of();
 
 	/** Whether the pack has been read for its far terrain. A reading that served nothing is still one. */
-	private boolean read;
+	private volatile boolean read;
 
 	/** The reasons this engine has already said something about, one line each and not one a frame. */
 	private final Set<String> refused = new LinkedHashSet<>();
@@ -480,7 +480,7 @@ public final class DistantDraw {
 	private boolean record(GpuDevice device, Minecraft minecraft, Element element,
 			List<DhLods.Section> sections) {
 		if (!this.read) {
-			read();
+			return false;
 		}
 
 		DistantProgram program = this.programs.get(element.element());
@@ -652,8 +652,6 @@ public final class DistantDraw {
 	 * cannot be settled one half at a time.
 	 */
 	private void read() {
-		this.read = true;
-
 		try {
 			List<Element> asked = ELEMENTS.values().stream().filter(this::wanted).toList();
 			PackProgram.Distant distant = PackProgram.loadDistant(this.packPath, this.place,
@@ -712,6 +710,8 @@ public final class DistantDraw {
 			Vitrail.logger().error("Could not prepare the far terrain programs of "
 					+ this.packPath.getFileName() + ", so Distant Horizons keeps drawing it with its "
 					+ "own shader", e);
+		} finally {
+			this.read = true;
 		}
 	}
 
@@ -847,7 +847,9 @@ public final class DistantDraw {
 		this.waterSections = List.of();
 		CORNERS.rotate();
 		SHADOW_CORNERS.rotate();
-		this.programs.values().forEach(DistantProgram::rotate);
+		if (this.read) {
+			this.programs.values().forEach(DistantProgram::rotate);
+		}
 	}
 
 	void release() {

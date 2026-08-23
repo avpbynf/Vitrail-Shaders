@@ -197,8 +197,9 @@ public final class SkyDraw {
 	 */
 	private final HorizonCone horizon = new HorizonCone();
 
-	/** Whether the pack has been read for its sky. A reading that served nothing is still one. */
-	private boolean read;
+	/** Whether the pack has been read for its sky. Volatile so the render thread sees it only after
+	 * {@link #read} has filled the map. */
+	private volatile boolean read;
 
 	/** The program of the pass being recorded, between the moment it is prepared and its bind. */
 	private SkyProgram drawing;
@@ -458,81 +459,71 @@ public final class SkyDraw {
 	 * {@code world1}, Body Camera through the fallback tree rather than with a file of its own.
 	 */
 	private void read() {
-		this.read = true;
-
-		// Here and not at the load, because here is the first moment it is true. This runs only
-		// where the sky is really this engine's to draw, which is a place the game opens a sky pass
-		// in and a run with the option on: said at the load it would be said once per place and
-		// would say the opposite of the code with sky=off, the game drawing the piece after all.
-		//
-		// Off the elements and not off the four words the pack may write, because only two of them
-		// take a piece away: a pack that wrote stars=false still gets its stars drawn, and saying so
-		// here would be a line the picture contradicts.
-		//
-		// Worded as a condition and not as an event, because the table is read whole and the two
-		// pieces a word can take out are both the overworld's: in the End this line names a sun and
-		// a moon nothing was going to draw there anyway.
-		List<String> off = ELEMENTS.values().stream()
-				.map(Element::directive)
-				.filter(directive -> !directive.isEmpty()
-						&& !this.values.skyElements().allows(directive))
-				.toList();
-		if (!off.isEmpty()) {
-			Vitrail.logger().info("{} draws its own {}, so where the game draws one this engine "
-					+ "draws neither it nor a shader of the pack's in its place",
-					this.packPath.getFileName(), String.join(" and ", off));
-		}
-
 		try {
-			Map<String, PackProgram.Loaded> loaded = PackProgram.loadSky(this.packPath, this.place,
-					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
-
-			// Asked once per PROGRAM and not once per piece: four of the eight are drawn with
-			// gbuffers_skybasic and the other four with gbuffers_skytextured, and the plan would
-			// answer for each of the two four times over.
-			Map<String, List<ChainPlan.Attachment>> byProgram = new LinkedHashMap<>();
-			ELEMENTS.values()
-					.forEach(element -> byProgram.computeIfAbsent(element.program(), this::writes));
-
-			// All of them or none of them, for the reason the class comment gives.
-			//
-			// Body Camera is the pack this was decided for and it NO LONGER REACHES IT, which is
-			// worth knowing before reading a log that never says its name again: it declares
-			// DRAWBUFFERS:012 on gbuffers_skybasic and nothing on gbuffers_skytextured, and since a
-			// geometry program declaring nothing is read as writing colortex0, its sun and its moon
-			// have a target of their own. Its whole sky went from the game's target to the pack's
-			// with that reading, which is where Iris puts it. What still reaches this branch is a
-			// pack whose sky programs are not all served, or whose targets this place cannot carry.
-			List<String> behind = behind(loaded, byProgram);
-			if (!behind.isEmpty()) {
-				Vitrail.logger().info("{} has nowhere of its own for the {} of its sky, so the whole "
-						+ "of the sky keeps the game's target and the scene seed brings it across",
-						this.packPath.getFileName(), String.join(", ", behind));
-				byProgram.clear();
-			}
-
-			ELEMENTS.values().stream()
-					.filter(element -> loaded.containsKey(element.element()))
-					.forEach(element -> this.programs.put(element.label(), SkyProgram.of(
-							loaded.get(element.element()), element, this.values, this.load,
-							byProgram.getOrDefault(element.program(), List.of()), this.chainTargets,
-							this.targets, this.chainRuns)));
-
-			// Both branches again, and worded for it: a place takes only the half of this list its
-			// own branch reaches, so in the End the four pieces of gbuffers_skybasic can be named
-			// here without the game ever having drawn one of them.
-			List<String> missing = ELEMENTS.values().stream()
-					.filter(element -> !loaded.containsKey(element.element()))
-					.map(Element::element)
+			List<String> off = ELEMENTS.values().stream()
+					.map(Element::directive)
+					.filter(directive -> !directive.isEmpty()
+							&& !this.values.skyElements().allows(directive))
 					.toList();
-			if (!missing.isEmpty()) {
-				Vitrail.logger().info("{} serves nothing in {} for the {} of its sky, so where the "
-						+ "game draws one it keeps its own shader", this.packPath.getFileName(),
-						this.place.isEmpty() ? "its root" : this.place, String.join(", ", missing));
+			if (!off.isEmpty()) {
+				Vitrail.logger().info("{} draws its own {}, so where the game draws one this engine "
+						+ "draws neither it nor a shader of the pack's in its place",
+						this.packPath.getFileName(), String.join(" and ", off));
 			}
-		} catch (IOException | RuntimeException e) {
-			Vitrail.logger().error("Could not prepare the sky programs of "
-					+ this.packPath.getFileName() + ", so the game keeps its own sky", e);
+
+			try {
+				Map<String, PackProgram.Loaded> loaded = PackProgram.loadSky(this.packPath, this.place,
+						ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
+
+				// Asked once per PROGRAM and not once per piece: four of the eight are drawn with
+				// gbuffers_skybasic and the other four with gbuffers_skytextured, and the plan would
+				// answer for each of the two four times over.
+				Map<String, List<ChainPlan.Attachment>> byProgram = new LinkedHashMap<>();
+				ELEMENTS.values()
+						.forEach(element -> byProgram.computeIfAbsent(element.program(), this::writes));
+
+				// All of them or none of them, for the reason the class comment gives.
+				//
+				// Body Camera is the pack this was decided for and it NO LONGER REACHES IT, which is
+				// worth knowing before reading a log that never says its name again: it declares
+				// DRAWBUFFERS:012 on gbuffers_skybasic and nothing on gbuffers_skytextured, and since a
+				// geometry program declaring nothing is read as writing colortex0, its sun and its moon
+				// have a target of their own. Its whole sky went from the game's target to the pack's
+				// with that reading, which is where Iris puts it. What still reaches this branch is a
+				// pack whose sky programs are not all served, or whose targets this place cannot carry.
+				List<String> behind = behind(loaded, byProgram);
+				if (!behind.isEmpty()) {
+					Vitrail.logger().info("{} has nowhere of its own for the {} of its sky, so the whole "
+							+ "of the sky keeps the game's target and the scene seed brings it across",
+							this.packPath.getFileName(), String.join(", ", behind));
+					byProgram.clear();
+				}
+
+				ELEMENTS.values().stream()
+						.filter(element -> loaded.containsKey(element.element()))
+						.forEach(element -> this.programs.put(element.label(), SkyProgram.of(
+								loaded.get(element.element()), element, this.values, this.load,
+								byProgram.getOrDefault(element.program(), List.of()), this.chainTargets,
+								this.targets, this.chainRuns)));
+
+				// Both branches again, and worded for it: a place takes only the half of this list its
+				// own branch reaches, so in the End the four pieces of gbuffers_skybasic can be named
+				// here without the game ever having drawn one of them.
+				List<String> missing = ELEMENTS.values().stream()
+						.filter(element -> !loaded.containsKey(element.element()))
+						.map(Element::element)
+						.toList();
+				if (!missing.isEmpty()) {
+					Vitrail.logger().info("{} serves nothing in {} for the {} of its sky, so where the "
+							+ "game draws one it keeps its own shader", this.packPath.getFileName(),
+							this.place.isEmpty() ? "its root" : this.place, String.join(", ", missing));
+				}
+			} catch (IOException | RuntimeException e) {
+				Vitrail.logger().error("Could not prepare the sky programs of "
+						+ this.packPath.getFileName() + ", so the game keeps its own sky", e);
+			}
+		} finally {
+			this.read = true;
 		}
 	}
 
@@ -594,7 +585,7 @@ public final class SkyDraw {
 	private RenderPipeline prepare(GpuDevice device, Element element, Matrix4fc modelView,
 			Vector4fc colour) {
 		if (!this.read) {
-			read();
+			return null;
 		}
 
 		SkyProgram program = this.programs.get(element.label());
@@ -642,6 +633,10 @@ public final class SkyDraw {
 	/** Rotates the ring buffers. Called once the frame's sky draws have been recorded. */
 	void rotate() {
 		this.drawing = null;
+		if (!this.read) {
+			return;
+		}
+
 		this.programs.values().forEach(SkyProgram::rotate);
 	}
 
