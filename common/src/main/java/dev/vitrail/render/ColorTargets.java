@@ -453,6 +453,11 @@ final class ColorTargets {
 		return colour == null ? Optional.empty() : Optional.of(colour);
 	}
 
+	/** True while a colour texture is still owed a clear this frame. */
+	boolean hasPendingClears() {
+		return !this.pendingClears.isEmpty();
+	}
+
 	/**
 	 * Standalone clear only for a texture this pass is about to sample and will not write. A write
 	 * is a load-op; a texture nobody has read yet stays pending for the pass that first attaches it.
@@ -462,6 +467,10 @@ final class ColorTargets {
 	 */
 	void flushSampled(CommandEncoder encoder, Iterable<GpuTextureView> sampled,
 			Iterable<GpuTextureView> written) {
+		if (this.pendingClears.isEmpty()) {
+			return;
+		}
+
 		IdentityHashMap<GpuTexture, Boolean> keep = new IdentityHashMap<>();
 		for (GpuTextureView view : written) {
 			if (view != null) {

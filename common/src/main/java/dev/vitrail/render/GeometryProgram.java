@@ -412,6 +412,11 @@ final class GeometryProgram {
 	/** Targets already reported as read on the half this pass writes. Said once each, not per frame. */
 	private final Set<Integer> collisions = new HashSet<>();
 
+	/** Reused while a descriptor is built: Sodium asks for one per region, not once a frame. */
+	private final List<GpuTextureView> sampledViews = new ArrayList<>();
+	private final List<GpuTextureView> attachedViews = new ArrayList<>();
+	private final List<GpuTextureView> writtenViews = new ArrayList<>();
+
 	GeometryProgram(Pass pass, PackProgram.Loaded loaded, PackValues values, int load,
 			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets,
 			boolean chainRuns) {
@@ -1158,15 +1163,18 @@ final class GeometryProgram {
 		}
 
 		if (plain()) {
-			this.targets.flushSampled(RenderSystem.getDevice().createCommandEncoder(),
-					sampledColour(), List.of());
+			if (this.targets.hasPendingClears()) {
+				this.targets.flushSampled(RenderSystem.getDevice().createCommandEncoder(),
+						sampledColour(), List.of());
+			}
+
 			return null;
 		}
 
-		List<GpuTextureView> attached = new ArrayList<>(this.slots.size());
+		this.attachedViews.clear();
 		for (Slot slot : this.slots) {
 			if (slot.bound() == Bound.UNUSED) {
-				attached.add(null);
+				this.attachedViews.add(null);
 				continue;
 			}
 
@@ -1177,23 +1185,25 @@ final class GeometryProgram {
 				return null;
 			}
 
-			attached.add(view);
+			this.attachedViews.add(view);
 		}
 
 		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.passLabel);
-		List<GpuTextureView> written = new ArrayList<>(attached.size());
-		for (GpuTextureView view : attached) {
+		this.writtenViews.clear();
+		for (GpuTextureView view : this.attachedViews) {
 			if (view == null) {
 				descriptor.withUnusedColorAttachment();
 				continue;
 			}
 
-			written.add(view);
+			this.writtenViews.add(view);
 			descriptor.withColorAttachment(view, this.targets.takeClear(view));
 		}
 
-		this.targets.flushSampled(RenderSystem.getDevice().createCommandEncoder(), sampledColour(),
-				written);
+		if (this.targets.hasPendingClears()) {
+			this.targets.flushSampled(RenderSystem.getDevice().createCommandEncoder(), sampledColour(),
+					this.writtenViews);
+		}
 
 		// Never left out: the encoder refuses a descriptor without one outright, and it refuses it
 		// at the first draw rather than at load time. The size is the screen's, and stays the
@@ -1207,7 +1217,7 @@ final class GeometryProgram {
 
 	/** Colour targets this program samples, for a pending clear that cannot wait for a write. */
 	private List<GpuTextureView> sampledColour() {
-		List<GpuTextureView> views = new ArrayList<>();
+		this.sampledViews.clear();
 		for (String sampler : this.samplers) {
 			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 			if (binding.kind() != SamplerPlan.Kind.COLORTEX) {
@@ -1216,11 +1226,11 @@ final class GeometryProgram {
 
 			GpuTextureView view = this.targets.view(binding.index(), binding.side());
 			if (view != null) {
-				views.add(view);
+				this.sampledViews.add(view);
 			}
 		}
 
-		return views;
+		return this.sampledViews;
 	}
 
 	/**

@@ -57,6 +57,9 @@ what the next one holds.
 - **Pass uniforms reuse scratch matrices** instead of allocating a model-view-projection and a
   normal matrix on every fill. Same numbers.
 
+- **Sodium region draws skip leftover sampled clears** once nothing is still owed one, and the
+  shadow sweep reuses its plane scratch. Same picture.
+
 - **Improved transparency is turned off while a pack draws**, the same refusal Iris makes. That
   option opens a second colour target for translucent items, and every leftover feature that
   writes it is an Immediate draw this engine would otherwise keep as its own GPU stop.

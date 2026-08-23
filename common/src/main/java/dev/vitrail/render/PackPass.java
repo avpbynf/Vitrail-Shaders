@@ -122,6 +122,8 @@ final class PackPass {
 	private final ShaderSource source;
 	private final Supplier<String> label;
 	private final List<String> notes = new ArrayList<>();
+	private final List<GpuTextureView> sampledViews = new ArrayList<>();
+	private final List<GpuTextureView> attachedViews = new ArrayList<>();
 	private final int outputs;
 	private final int offset;
 	private final boolean last;
@@ -422,13 +424,13 @@ final class PackPass {
 					+ "drawn through drawFinal");
 		}
 
-		List<GpuTextureView> attached = new ArrayList<>(this.attachments.size());
+		this.attachedViews.clear();
 		for (ChainPlan.Attachment attachment : this.attachments) {
-			attached.add(view(targets, attachment));
+			this.attachedViews.add(view(targets, attachment));
 		}
 
 		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.label);
-		for (GpuTextureView view : attached) {
+		for (GpuTextureView view : this.attachedViews) {
 			descriptor.withColorAttachment(view, targets.takeClear(view));
 		}
 
@@ -441,7 +443,9 @@ final class PackPass {
 		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0,
 				this.pass.size().width(screenWidth), this.pass.size().height(screenHeight)));
 
-		targets.flushSampled(encoder, sampledColour(targets), attached);
+		if (targets.hasPendingClears()) {
+			targets.flushSampled(encoder, sampledColour(targets), this.attachedViews);
+		}
 
 		try (RenderPass pass = encoder.createRenderPass(descriptor)) {
 			record(pass, targets, depthView, distantView, quad, uniforms);
@@ -677,7 +681,7 @@ final class PackPass {
 	}
 
 	private List<GpuTextureView> sampledColour(ColorTargets targets) {
-		List<GpuTextureView> views = new ArrayList<>();
+		this.sampledViews.clear();
 		for (String sampler : this.samplers) {
 			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 			if (binding.kind() != SamplerPlan.Kind.COLORTEX) {
@@ -686,11 +690,11 @@ final class PackPass {
 
 			GpuTextureView view = targets.view(binding.index(), binding.side());
 			if (view != null) {
-				views.add(view);
+				this.sampledViews.add(view);
 			}
 		}
 
-		return views;
+		return this.sampledViews;
 	}
 
 	private void noteGaps(int declared) {

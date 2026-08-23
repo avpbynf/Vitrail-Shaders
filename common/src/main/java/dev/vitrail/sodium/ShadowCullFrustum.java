@@ -149,7 +149,18 @@ public final class ShadowCullFrustum implements Frustum {
 	/** What Sodium pads a section's half size to, which is where its own frustum starts. */
 	private static final float SECTION_HALF_SIZE = Viewport.CHUNK_SECTION_PADDED_RADIUS;
 
-	private final float[][] planes = new float[MAX_PLANES][];
+	private static final Matrix4f TRANSPOSED = new Matrix4f();
+	private static final Vector4f[] FACES = {
+			new Vector4f(), new Vector4f(), new Vector4f(),
+			new Vector4f(), new Vector4f(), new Vector4f()
+	};
+	private static final Vector3f EDGE = new Vector3f();
+	private static final Vector3f NORMAL = new Vector3f();
+	private static final Vector3f POINT = new Vector3f();
+	private static final Vector3f FRONT_NORMAL = new Vector3f();
+
+	private final float[][] planes = new float[MAX_PLANES][4];
+	private final boolean[] back = new boolean[6];
 	private final Vector3f light = new Vector3f();
 
 	/** Half the side of the box the safe zone keeps whatever the sweep says, or negative for none. */
@@ -224,7 +235,6 @@ public final class ShadowCullFrustum implements Frustum {
 
 	private void build(Matrix4fc camera) {
 		Vector4f[] faces = faces(camera);
-		boolean[] back = new boolean[faces.length];
 
 		// The faces whose inward normal points towards the light, which are the far side of the
 		// camera's volume as the light sees it and the only ones that still bound the casters. A
@@ -233,7 +243,7 @@ public final class ShadowCullFrustum implements Frustum {
 		for (int index = 0; index < faces.length; index++) {
 			Vector4f face = faces[index];
 			float towards = face.x * this.light.x + face.y * this.light.y + face.z * this.light.z;
-			back[index] = towards > 0.0F;
+			this.back[index] = towards > 0.0F;
 
 			if (towards >= 0.0F) {
 				add(face.x, face.y, face.z, face.w);
@@ -242,12 +252,12 @@ public final class ShadowCullFrustum implements Frustum {
 
 		// And the silhouette: every edge between a kept face and a dropped one, swept along the light.
 		for (int index = 0; index < faces.length; index++) {
-			if (!back[index]) {
+			if (!this.back[index]) {
 				continue;
 			}
 
 			for (int neighbour : NEIGHBOURS[index >>> 1]) {
-				if (!back[neighbour]) {
+				if (!this.back[neighbour]) {
 					edge(faces[index], faces[neighbour]);
 				}
 			}
@@ -267,23 +277,23 @@ public final class ShadowCullFrustum implements Frustum {
 	 * changes; what it is not is a plane in the metric sense, and no distance may be read off one.
 	 */
 	private static Vector4f[] faces(Matrix4fc camera) {
-		Matrix4f transposed = new Matrix4f(camera).transpose();
+		TRANSPOSED.set(camera).transpose();
+		face(FACES[0], TRANSPOSED, -1.0F, 0.0F, 0.0F, 1.0F);
+		face(FACES[1], TRANSPOSED, 1.0F, 0.0F, 0.0F, 1.0F);
+		face(FACES[2], TRANSPOSED, 0.0F, -1.0F, 0.0F, 1.0F);
+		face(FACES[3], TRANSPOSED, 0.0F, 1.0F, 0.0F, 1.0F);
+		// The far face, rowW - rowZ, and the near one, rowW + rowZ. Iris's own two lines, and
+		// they are right here because the matrix is already in Iris's volume. The class note
+		// carries what a second conversion would move and what the drawn matrix would lose.
+		face(FACES[4], TRANSPOSED, 0.0F, 0.0F, -1.0F, 1.0F);
+		face(FACES[5], TRANSPOSED, 0.0F, 0.0F, 1.0F, 1.0F);
 
-		return new Vector4f[] {
-			face(transposed, -1.0F, 0.0F, 0.0F, 1.0F),
-			face(transposed, 1.0F, 0.0F, 0.0F, 1.0F),
-			face(transposed, 0.0F, -1.0F, 0.0F, 1.0F),
-			face(transposed, 0.0F, 1.0F, 0.0F, 1.0F),
-			// The far face, rowW - rowZ, and the near one, rowW + rowZ. Iris's own two lines, and
-			// they are right here because the matrix is already in Iris's volume. The class note
-			// carries what a second conversion would move and what the drawn matrix would lose.
-			face(transposed, 0.0F, 0.0F, -1.0F, 1.0F),
-			face(transposed, 0.0F, 0.0F, 1.0F, 1.0F),
-		};
+		return FACES;
 	}
 
-	private static Vector4f face(Matrix4fc transposed, float x, float y, float z, float w) {
-		return new Vector4f(x, y, z, w).mul(transposed).normalize();
+	private static void face(Vector4f into, Matrix4fc transposed, float x, float y, float z,
+			float w) {
+		into.set(x, y, z, w).mul(transposed).normalize();
 	}
 
 	/**
@@ -296,19 +306,22 @@ public final class ShadowCullFrustum implements Frustum {
 	 * Overflow answer it credits in place ({@code AdvancedShadowCullingFrustum.addEdgePlane}).
 	 */
 	private void edge(Vector4f back, Vector4f front) {
-		Vector3f edge = new Vector3f(back.x, back.y, back.z)
-				.cross(front.x, front.y, front.z);
-		Vector3f normal = new Vector3f(edge).cross(this.light);
+		EDGE.set(back.x, back.y, back.z).cross(front.x, front.y, front.z);
+		NORMAL.set(EDGE).cross(this.light);
+		FRONT_NORMAL.set(front.x, front.y, front.z);
+		POINT.set(EDGE).cross(back.x, back.y, back.z).mul(-front.w)
+				.add(FRONT_NORMAL.cross(EDGE).mul(-back.w))
+				.mul(1.0F / EDGE.lengthSquared());
 
-		Vector3f point = new Vector3f(edge).cross(back.x, back.y, back.z).mul(-front.w)
-				.add(new Vector3f(front.x, front.y, front.z).cross(edge).mul(-back.w))
-				.mul(1.0F / edge.lengthSquared());
-
-		add(normal.x, normal.y, normal.z, -normal.dot(point));
+		add(NORMAL.x, NORMAL.y, NORMAL.z, -NORMAL.dot(POINT));
 	}
 
 	private void add(float x, float y, float z, float w) {
-		this.planes[this.planeCount] = new float[] { x, y, z, w };
+		float[] plane = this.planes[this.planeCount];
+		plane[0] = x;
+		plane[1] = y;
+		plane[2] = z;
+		plane[3] = w;
 		this.planeCount += 1;
 	}
 
