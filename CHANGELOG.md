@@ -53,6 +53,21 @@ what the next one holds.
   passes wait only for sample-after-write. Same picture. Written for the extra submits a Mac
   report was counting; whether the frame rate moves is still that machine's to measure.
 
+- **Improved transparency is turned off while a pack draws**, the same refusal Iris makes. That
+  option opens a second colour target for translucent items, and every leftover feature that
+  writes it is an Immediate draw this engine would otherwise keep as its own GPU stop.
+
+- **Leftover Immediate draws and Distant Horizons' GenericObjectRenderer stay in the geometry
+  pass already open**, the way Iris leaves the default framebuffer bound. A leftover pass is
+  never adopted: its viewport and scissor would be whoever opened it.
+
+### Fixed
+
+- **Keeping consecutive geometry in one pass no longer leaves Sodium's last region scissor on
+  the next family.** The viewport is put back to the pass area and the scissor is cleared each
+  time the hold is reused, which is the band that copied the top of the screen onto the bottom
+  as chunks streamed.
+
 ## 0.7.5-beta
 
 ### Added

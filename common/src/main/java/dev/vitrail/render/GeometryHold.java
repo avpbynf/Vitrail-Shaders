@@ -9,6 +9,8 @@ import org.joml.Vector4fc;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.function.Supplier;
 
 /**
  * Keeps one Vulkan render pass open across geometry that Iris would have drawn into the same FBO.
@@ -49,6 +51,8 @@ public final class GeometryHold {
 	 */
 	public static RenderPass open(CommandEncoder encoder, RenderPassDescriptor descriptor) {
 		if (matches(descriptor)) {
+			resetArea(current);
+
 			return current;
 		}
 
@@ -70,6 +74,29 @@ public final class GeometryHold {
 	 */
 	public static boolean keep(RenderPass pass) {
 		return pass == current;
+	}
+
+	/**
+	 * Hands back the pass already recording when a leftover Immediate draw or Distant Horizons'
+	 * {@code GenericObjectRenderer} writes the same images, with no clear of its own.
+	 * <p>
+	 * Iris leaves {@code defaultFB} bound; those draws then land in it. Here each one is a
+	 * {@code createRenderPass}. Folding them into the hold that is already open is that bind.
+	 * The leftover pass is never adopted: its viewport and scissor are whoever opened it, and
+	 * keeping them is the band that copies the top of the screen onto the bottom. Only a hold
+	 * this class opened is reused, and the area is reset first.
+	 *
+	 * @return the held pass, or {@code null} to let the encoder open a new one
+	 */
+	public static RenderPass leftover(RenderPassDescriptor descriptor) {
+		if (opening || current == null || clears(descriptor) || !leftoverLabel(descriptor)
+				|| !matches(descriptor)) {
+			return null;
+		}
+
+		resetArea(current);
+
+		return current;
 	}
 
 	/** Ends the hold so a copy, a clear, a composite or a different framebuffer can run. */
@@ -148,5 +175,48 @@ public final class GeometryHold {
 		GpuTextureView view = attachment.textureView();
 
 		return view == null ? null : view.texture();
+	}
+
+	/**
+	 * Sodium scissors each region inside the pass. Keeping the hold without clearing that scissor
+	 * leaves the next family's draws clipped to the last region's rectangle: half the screen of
+	 * stale colour, which is the band that comes and goes as chunks stream.
+	 */
+	private static void resetArea(RenderPass pass) {
+		pass.disableScissor();
+	}
+
+	private static boolean leftoverLabel(RenderPassDescriptor descriptor) {
+		Supplier<String> label = descriptor.label();
+		if (label == null) {
+			return false;
+		}
+
+		String name = label.get();
+
+		return name != null && (name.startsWith("Immediate draw")
+				|| name.equals("distantHorizons:GenericObjectRenderer"));
+	}
+
+	private static boolean clears(RenderPassDescriptor descriptor) {
+		for (RenderPassDescriptor.Attachment<Optional<Vector4fc>> attachment
+				: descriptor.colorAttachments()) {
+			if (attachment != null && present(attachment.clearValue())) {
+				return true;
+			}
+		}
+
+		RenderPassDescriptor.Attachment<OptionalDouble> depthAttachment =
+				descriptor.depthAttachment();
+
+		return depthAttachment != null && present(depthAttachment.clearValue());
+	}
+
+	private static boolean present(Object clear) {
+		return switch (clear) {
+			case Optional<?> colour -> colour.isPresent();
+			case OptionalDouble depth -> depth.isPresent();
+			case null, default -> false;
+		};
 	}
 }

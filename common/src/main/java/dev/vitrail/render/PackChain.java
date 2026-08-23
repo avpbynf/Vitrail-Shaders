@@ -31,7 +31,9 @@ import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import net.minecraft.client.GraphicsPreset;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.util.Mth;
 
@@ -699,6 +701,7 @@ public final class PackChain {
 			// whole sky, entities, weather and distant set at this moment holds the render thread
 			// until the game looks frozen.
 			active.terrain.read();
+			turnOffImprovedTransparency();
 			if (!chainWanted) {
 				EngineOptions.announceChainOff();
 			}
@@ -763,6 +766,40 @@ public final class PackChain {
 	/** The file naming the pack to draw, written by the settings screen and edited by hand. */
 	public static Path packFile(Path gameDirectory) {
 		return gameDirectory.resolve(Vitrail.MOD_ID).resolve("pack.txt");
+	}
+
+	/**
+	 * Whether a pack is loaded and still drawable.
+	 * <p>
+	 * Iris asks its config; this engine asks the chain. Same question: is a pack drawing, so the
+	 * game's own improved-transparency path must stay off.
+	 */
+	public static boolean drawingPack() {
+		return active != null && !disabled;
+	}
+
+	/**
+	 * Turns off improved transparency while a pack draws, which is Iris's
+	 * {@code MixinDisableFabulousGraphics}.
+	 * <p>
+	 * That option opens a second colour target for translucent items
+	 * ({@code ITEM_ENTITY_TARGET}). Each leftover feature that writes it is an Immediate draw, a
+	 * GPU stop OpenGL never paid. Packs already composite their own translucency; Iris therefore
+	 * refuses the option ({@code mixin/fabulous/MixinDisableFabulousGraphics.java:37-40}), and this
+	 * engine does the same. The setter rebuilds the world renderer, which is what tears that target
+	 * down; calling this at pack load is what Vitrail needs extra, because enabling a pack here is
+	 * not a renderer reload.
+	 */
+	public static void turnOffImprovedTransparency() {
+		if (!drawingPack()) {
+			return;
+		}
+
+		Options options = Minecraft.getInstance().options;
+		if (options.improvedTransparency().get()) {
+			options.improvedTransparency().set(false);
+			options.graphicsPreset().set(GraphicsPreset.CUSTOM);
+		}
 	}
 
 	/**

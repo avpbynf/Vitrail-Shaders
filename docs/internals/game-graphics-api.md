@@ -255,3 +255,7 @@ Whether a pack's own compute is served is a separate question, answered where th
   own go past its pipeline-layout interception untouched, which is what makes it safe to build them
   differently from its own. It is also a fact about one version of another mod, so it is worth
   re-checking whenever that one moves.
+- **Sodium scissors each region inside a pass.** Reusing that pass for the next family without
+  putting the viewport back and disabling the scissor clips those draws to the last region's
+  rectangle. The leftover half of the screen keeps the previous image, which reads as a band
+  that copies the top onto the bottom.
