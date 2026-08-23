@@ -151,7 +151,7 @@ public final class ParticleDraw {
 	private final Map<String, ParticleProgram> programs = new LinkedHashMap<>();
 
 	/** Whether the pack has been read for its particles. A reading that served nothing is still one. */
-	private boolean read;
+	private volatile boolean read;
 
 	/**
 	 * The reasons this engine has already said something about a group, one line each and not one a
@@ -374,7 +374,7 @@ public final class ParticleDraw {
 	private RenderPipeline prepare(GpuDevice device, Element element, GpuTextureView colour,
 			GpuTextureView depth) {
 		if (!this.read) {
-			read();
+			return null;
 		}
 
 		forget();
@@ -464,8 +464,6 @@ public final class ParticleDraw {
 	 * expansion of the whole pack.
 	 */
 	private void read() {
-		this.read = true;
-
 		try {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(this.packPath, this.place,
 					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
@@ -503,6 +501,8 @@ public final class ParticleDraw {
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the particle programs of "
 					+ this.packPath.getFileName() + ", so the game keeps its own shader for them", e);
+		} finally {
+			this.read = true;
 		}
 	}
 
@@ -596,6 +596,10 @@ public final class ParticleDraw {
 	/** Rotates the ring buffers. Called once the frame's particle draws have been recorded. */
 	void rotate() {
 		forget();
+		if (!this.read) {
+			return;
+		}
+
 		this.programs.values().forEach(ParticleProgram::rotate);
 	}
 

@@ -1149,8 +1149,9 @@ public final class EntityDraw {
 	 * for a pack this place can serve no entity with at all. */
 	private final Map<String, EntityProgram> programs = new LinkedHashMap<>();
 
-	/** Whether the pack has been read for its entities. A reading that served nothing is still one. */
-	private boolean read;
+	/** Whether the pack has been read for its entities. A reading that served nothing is still one.
+	 * Volatile so the render thread sees it only after {@link #read} has filled the map. */
+	private volatile boolean read;
 
 	/** The reasons a draw has already been handed back to the game. One line each, not one a frame. */
 	private final Set<String> refused = new LinkedHashSet<>();
@@ -1517,7 +1518,7 @@ public final class EntityDraw {
 	private boolean record(GpuDevice device, Element element, PreparedRenderType prepared,
 			StagedVertexBuffer.ExecuteInfo info) {
 		if (!this.read) {
-			read();
+			return false;
 		}
 
 		EntityProgram program = this.programs.get(element.element());
@@ -1837,8 +1838,14 @@ public final class EntityDraw {
 	 * hand on, reads as a fault of the pack.
 	 */
 	private void read() {
-		this.read = true;
+		try {
+			readPrograms();
+		} finally {
+			this.read = true;
+		}
+	}
 
+	private void readPrograms() {
 		List<Element> served = ELEMENTS.values().stream().filter(EntityDraw::decodable).toList();
 
 		// Asked once for the four pieces that share the glint's one pipeline, and only where a switch
@@ -2209,6 +2216,10 @@ public final class EntityDraw {
 		end();
 		opaqueFeatures(false);
 		translucentFeatures(false);
+		if (!this.read) {
+			return;
+		}
+
 		this.programs.values().forEach(EntityProgram::rotate);
 	}
 

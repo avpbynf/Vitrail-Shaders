@@ -81,7 +81,7 @@ public final class CloudDraw {
 	private final Map<Boolean, CloudProgram> programs = new LinkedHashMap<>();
 
 	/** Whether the pack has been read for its clouds. A reading that served nothing is still one. */
-	private boolean read;
+	private volatile boolean read;
 
 	/** Whether what the pack asks of the cloud setting has been said. Once a load, not once a frame. */
 	private volatile boolean announced;
@@ -264,8 +264,6 @@ public final class CloudDraw {
 	 * program it never draws.
 	 */
 	private void read() {
-		this.read = true;
-
 		try {
 			Optional<PackProgram.Loaded> loaded =
 					PackProgram.loadClouds(this.packPath, this.place, this.chosen, this.profile);
@@ -294,6 +292,8 @@ public final class CloudDraw {
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the cloud program of "
 					+ this.packPath.getFileName() + ", so the game keeps its own clouds", e);
+		} finally {
+			this.read = true;
 		}
 	}
 
@@ -323,7 +323,7 @@ public final class CloudDraw {
 
 	private RenderPipeline prepare(GpuDevice device, boolean fancy) {
 		if (!this.read) {
-			read();
+			return null;
 		}
 
 		CloudProgram program = this.programs.get(fancy);
@@ -355,6 +355,10 @@ public final class CloudDraw {
 	/** Rotates the ring buffers. Called once the frame's cloud draw has been recorded. */
 	void rotate() {
 		this.drawing = null;
+		if (!this.read) {
+			return;
+		}
+
 		this.programs.values().forEach(CloudProgram::rotate);
 	}
 

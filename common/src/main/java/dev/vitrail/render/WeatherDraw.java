@@ -138,7 +138,7 @@ public final class WeatherDraw {
 	private final Map<String, WeatherProgram> programs = new LinkedHashMap<>();
 
 	/** Whether the pack has been read for its weather. A reading that served nothing is still one. */
-	private boolean read;
+	private volatile boolean read;
 
 	/** The reasons the curtain has already been handed back to the game. One line each, not one a
 	 * frame. The entities' rule, and this family owed it as much as they did: a curtain drawn by the
@@ -329,7 +329,7 @@ public final class WeatherDraw {
 	private RenderPipeline prepare(GpuDevice device, Element element, GpuTextureView colour,
 			GpuTextureView depth) {
 		if (!this.read) {
-			read();
+			return null;
 		}
 
 		this.descriptor = null;
@@ -433,8 +433,6 @@ public final class WeatherDraw {
 	 * the middle of a storm.
 	 */
 	private void read() {
-		this.read = true;
-
 		try {
 			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(this.packPath, this.place,
 					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
@@ -462,6 +460,8 @@ public final class WeatherDraw {
 			Vitrail.logger().error("Could not prepare the weather program of "
 					+ this.packPath.getFileName() + ", so the game keeps its own shader for the rain "
 					+ "and the snow", e);
+		} finally {
+			this.read = true;
 		}
 	}
 
@@ -513,6 +513,10 @@ public final class WeatherDraw {
 	void rotate() {
 		this.drawing = null;
 		this.descriptor = null;
+		if (!this.read) {
+			return;
+		}
+
 		this.programs.values().forEach(WeatherProgram::rotate);
 	}
 
