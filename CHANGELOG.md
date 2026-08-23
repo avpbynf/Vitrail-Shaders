@@ -65,6 +65,9 @@ what the next one holds.
   is drawn. The first hand, the first mob and the first rain are no longer a hitch inside a
   running pack. Complementary Unbound is not translated all at once at load.
 
+- **The wait for a pack uses the game's loading overlay.** The world is not drawn at two frames
+  a second while programs compile. Several programs compile a frame instead of one.
+
 ### Fixed
 
 - **Keeping consecutive geometry in one pass no longer leaves Sodium's last region scissor on

@@ -1248,6 +1248,80 @@ public final class PackChain {
 	}
 
 	/**
+	 * A pack is loaded and still compiling, so the world must not be drawn under the loading
+	 * overlay. The overlay is what makes this wait look like a load; skipping the world is what
+	 * keeps it from also being a two-frame-per-second picture of the same vanilla terrain.
+	 */
+	public static boolean warming() {
+		PackChain chain = active;
+
+		return !disabled && chainWanted && chain != null && !chain.drawable();
+	}
+
+	/**
+	 * Compiles as many programs as a short budget on this frame will take, then returns. One
+	 * program a frame was the wait the player sat through at two frames per second; several a
+	 * frame, with the world not drawn, is the same work without that picture.
+	 * <p>
+	 * Complementary Unbound is still not compiled all at once: a family translation that costs a
+	 * whole frame still costs that frame, and the overlay keeps ticking around it.
+	 */
+	public static void pumpWarmup() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		Minecraft minecraft = Minecraft.getInstance();
+		if (disabled || !chainWanted || chain == null || device == null || minecraft == null) {
+			PackWarmup.finish();
+
+			return;
+		}
+
+		if (chain.drawable()) {
+			PackWarmup.finish();
+
+			return;
+		}
+
+		PackWarmup.show();
+
+		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+		if (main == null || main.getColorTexture() == null) {
+			return;
+		}
+
+		long deadline = System.nanoTime() + WARM_BUDGET_NANOS;
+		do {
+			if (chain.programs == null) {
+				chain.build(device);
+			}
+
+			if (!chain.prepare(device, main) || !chain.warm(device)) {
+				continue;
+			}
+
+			PackWarmup.finish();
+
+			return;
+		} while (System.nanoTime() < deadline);
+	}
+
+	/**
+	 * How far {@link #pumpWarmup} has got, for the overlay bar. Grows as families are translated,
+	 * because those programs do not exist until then.
+	 */
+	static float warmupProgress() {
+		PackChain chain = active;
+		if (chain == null || chain.programs == null || chain.programs.isEmpty()) {
+			return 0.0F;
+		}
+
+		int done = chain.warmed + Math.min(chain.familyCursor, FAMILIES) + chain.compiledGeometry();
+		int total = chain.programs.size() + FAMILIES + chain.geometryCount();
+
+		return total == 0 ? 1.0F : Math.min(1.0F, (float) done / (float) total);
+	}
+
+	/**
 	 * The loaded chain's terrain program, or null when there is nothing to draw with.
 	 * <p>
 	 * The one place {@link TerrainDraw} reaches the running chain from, so that which pack is loaded
@@ -1483,12 +1557,9 @@ public final class PackChain {
 			build(device);
 		}
 
-		// One pipeline a frame at most, and nothing of the chain is drawn until every one of them is
-		// ready: the game keeps its own image for the handful of frames that takes, which is a fade
-		// rather than the three second freeze compiling nine programs at once would be, and that
-		// freeze would be paid again at every resource reload. The terrain stands aside for those
-		// frames too, through drawable(), or the world would be drawn into a colour target this has
-		// no final ready to bring back and the fade would be a fade to nothing.
+		// Pipelines compile before anything of the chain is drawn. The loading overlay is what the
+		// player sees for those frames, and drawable() keeps the terrain aside or the world would
+		// be drawn into a colour target this has no final ready to bring back.
 		//
 		// The targets and the buffers first and the compilation second, which is not the order this
 		// had. What the warm up holds back is the drawing and not the frame, so the block ring and
@@ -2157,10 +2228,10 @@ public final class PackChain {
 	 * emptied its cache, which it does at every resource reload: the alternative is to ask for all
 	 * of them every frame, which pays the whole compilation in the one frame after a reload.
 	 * <p>
-	 * After the composites, one unread geometry family is translated a frame, then one geometry
-	 * pipeline is compiled a frame. That is the first-draw hitch paid here instead, while the game
-	 * still shows its own world. It is not a compile-all at load: Unbound's sky, entities, weather
-	 * and distant set stay off that stack, and shaderc never runs off the render thread.
+	 * After the composites, one unread geometry family is translated a call, then one geometry
+	 * pipeline is compiled a call. {@link #pumpWarmup} repeats that for as long as a short budget
+	 * on the frame allows. It is not a compile-all at load: Unbound's sky, entities, weather and
+	 * distant set stay off that stack, and shaderc never runs off the render thread.
 	 *
 	 * @return false while a program is still missing, in which case nothing of the chain is drawn.
 	 *         What the screen holds for those frames is the terrain's answer and not this one, and
@@ -2215,6 +2286,9 @@ public final class PackChain {
 	}
 
 	private static final int FAMILIES = 6;
+
+	/** Long enough for several cheap compiles, short enough that the overlay still ticks. */
+	private static final long WARM_BUDGET_NANOS = 30_000_000L;
 
 	/**
 	 * Translates one unread family a call. Translation is not shaderc: Complementary Unbound's
@@ -2285,6 +2359,16 @@ public final class PackChain {
 				+ countCompiled(this.weather.programs())
 				+ countCompiled(this.particles.programs())
 				+ countCompiled(this.distant.programs());
+	}
+
+	private int geometryCount() {
+		return this.terrain.programs().size()
+				+ this.sky.programs().size()
+				+ this.entities.programs().size()
+				+ this.clouds.programs().size()
+				+ this.weather.programs().size()
+				+ this.particles.programs().size()
+				+ this.distant.programs().size();
 	}
 
 	private static int countCompiled(Collection<? extends DumpedProgram> programs) {
