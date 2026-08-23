@@ -427,10 +427,9 @@ public final class ProgramTranslator {
 	}
 
 	/**
-	 * Names a stage samples first, unused declarations after, so the compiler assigns the used
-	 * ones the lowest bindings. Metal numbers a sampler by that binding and only accepts 0
-	 * through 15; a used name sitting behind sixteen unused ones is refused even when the
-	 * shader samples a single texture.
+	 * Names a stage samples first, unused declarations after, so both the bind group and the
+	 * shader text meet the used names first. The compiler assigns bindings in the order it first
+	 * meets a name, and MoltenVK turns that into a Metal sampler that only accepts 0 through 15.
 	 */
 	private static List<TranslatedUnit.Uniform> sampledFirst(
 			Map<String, TranslatedUnit.Uniform> samplers,

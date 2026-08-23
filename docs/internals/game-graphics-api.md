@@ -179,13 +179,13 @@ Over-declaring is therefore free and under-declaring fails at compile time, whic
 direction is a generous layout. That is what makes it practical to serve a large uniform surface
 without declaring it pipeline by pipeline.
 
-**MoltenVK is the exception that makes the order of that layout load-bearing.** Metal numbers a
-sampler by the binding the compiler assigned, not by how many the shader actually samples, and it
-only accepts 0 through 15. A layout that lists twenty unused names ahead of the one texture the
-body reads still hands that texture binding 17, and the pipeline is refused. The translator
-therefore puts the names a program samples first and the unused declarations after. A program that
-samples more than sixteen textures is still refused there: that is Metal's own cap, the same one
-Iris documented for macOS.
+**MoltenVK is the exception that makes the order of those declarations load-bearing.** Metal numbers
+a sampler by the binding the compiler assigned from the order it first met the name, not by how
+many the shader actually samples, and it only accepts 0 through 15. A shader that declares twenty
+unused names ahead of the one texture the body reads still hands that texture binding 17, and the
+pipeline is refused. The translator therefore writes the names a program samples first in the
+header, unused declarations after. A program that samples more than sixteen textures is still
+refused there: that is Metal's own cap, the same one Iris documented for macOS.
 
 The asymmetry does not extend to the draw. A sampler that is declared and used, but not bound when
 the draw happens, throws, so the layout can be generous while the binding cannot be sloppy.

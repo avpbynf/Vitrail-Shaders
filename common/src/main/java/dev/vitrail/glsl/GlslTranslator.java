@@ -627,9 +627,8 @@ public final class GlslTranslator {
 
 		/**
 		 * Sampler names this stage reads, not merely declares. A pack include can name twenty
-		 * textures of which the body samples one, and those unused declarations still occupy a slot
-		 * in the bind group if they are listed first: MoltenVK numbers a Metal sampler by that
-		 * slot, and only sixteen exist.
+		 * textures of which the body samples one; those unused names still occupy a Metal slot if
+		 * they are declared first, and only sixteen exist.
 		 */
 		public Set<String> sampled() {
 			return this.translator.sampledNames();
@@ -818,7 +817,7 @@ public final class GlslTranslator {
 	private TranslatedUnit render(List<TranslatedUnit.Uniform> block,
 			List<TranslatedUnit.Uniform> samplers, Set<String> varyings, Set<String> shadowed) {
 		return new TranslatedUnit(this.unit.entry(), this.stage,
-				header(block, varyings, shadowed) + body(shadowed) + "\n", notes(),
+				header(block, samplers, varyings, shadowed) + body(shadowed) + "\n", notes(),
 				List.copyOf(this.drawBuffers), List.copyOf(block), List.copyOf(samplers));
 	}
 
@@ -2812,9 +2811,9 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Moves every plain uniform into one block, because Vulkan takes no other kind. Samplers and
-	 * images stay where they are: they are opaque, they are allowed loose, and they are the one
-	 * thing here whose declaration the pack got right.
+	 * Moves every plain uniform into one block, because Vulkan takes no other kind. Samplers stay
+	 * opaque and loose, but their declarations leave the body the same way: the header writes them
+	 * in the order the program handed over, sampled names first, so MoltenVK numbers those first.
 	 * <p>
 	 * Brace depth is not consulted. A uniform is only legal at file scope, {@code uniform} is a
 	 * reserved word so it can be nothing else, and a pack that opens a brace in one branch of an
@@ -2889,8 +2888,8 @@ public final class GlslTranslator {
 
 		String type = this.tokens.get(parts.get(cursor)).text();
 
-		// An opaque uniform is read the same way but keeps its declaration where it stands. It is
-		// still recorded, because the engine has to name every sampler it binds.
+		// An opaque uniform is recorded the same way, then taken out of the body: the header
+		// writes every sampler in the order the program settled, which is what MoltenVK numbers.
 		boolean opaque = LegacyGlsl.isOpaqueType(type);
 
 		// The comparison is already out of the token stream by now, taken there by
@@ -2901,9 +2900,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		if (!opaque) {
-			blankRange(start, end);
-		}
+		blankRange(start, end);
 	}
 
 	/**
@@ -3573,8 +3570,8 @@ public final class GlslTranslator {
 	}
 
 
-	private String header(List<TranslatedUnit.Uniform> block, Set<String> varyings,
-			Set<String> shadowed) {
+	private String header(List<TranslatedUnit.Uniform> block, List<TranslatedUnit.Uniform> samplers,
+			Set<String> varyings, Set<String> shadowed) {
 		List<String> lines = new ArrayList<>();
 		lines.add(VERSION);
 
@@ -3606,11 +3603,11 @@ public final class GlslTranslator {
 			lines.addAll(LegacyGlsl.GAME_TRANSFORMS_BLOCK);
 		}
 
-		// The texel centerDepthSmooth was moved onto. Declared here and not left in the body, because
-		// the member was taken out of a statement that may still declare other names of the pack's
-		// own. Iris puts its own before the declarations for the same reason.
-		if (this.centerDepthTexel != null) {
-			lines.add("uniform " + SAMPLER_2D + " " + this.centerDepthTexel + ";");
+		// Written here, in the order the program handed over, rather than left in the body. The
+		// compiler numbers a sampler by the order it first meets the name, and MoltenVK turns that
+		// number into a Metal slot that only accepts 0 through 15. Sampled names come first.
+		for (TranslatedUnit.Uniform sampler : samplers) {
+			lines.add("uniform " + sampler.declaration() + ";");
 		}
 
 		// Attributes stay a matter for the stage that has them. Only a vertex shader has inputs
@@ -3756,10 +3753,6 @@ public final class GlslTranslator {
 				lines.add("flat " + (this.stage == ProgramStage.VERTEX ? "out" : "in") + " int "
 						+ identifier + ";");
 			}
-		}
-
-		if (this.makesOverlayColour) {
-			lines.add("uniform " + SAMPLER_2D + " " + OVERLAY + ";");
 		}
 
 		// From zero up with no gaps, because a location the game finds nothing declared at is not
