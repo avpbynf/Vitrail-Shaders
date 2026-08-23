@@ -112,6 +112,8 @@ public final class GeometryValues {
 
 	/** The six units that are not the light map's, which the fixed function pipeline left alone. */
 	private static final Matrix4f IDENTITY = new Matrix4f();
+	private static final Matrix4f MODEL_VIEW_PROJECTION = new Matrix4f();
+	private static final Matrix3f NORMAL = new Matrix3f();
 
 	private GeometryValues() {
 	}
@@ -184,14 +186,14 @@ public final class GeometryValues {
 		// and its ftransform() are the same matrix, which is why this reads the pass's projection and
 		// not the frame's: the two factors have to be the two the pack would have multiplied.
 		builder.add("of_ModelViewProjectionMatrix", UniformShape.MAT4, (world, out) ->
-				out.set(new Matrix4f(world.passProjection()).mul(world.passModelView())));
+				out.set(MODEL_VIEW_PROJECTION.set(world.passProjection()).mul(world.passModelView())));
 
 		// The inverse transpose of the model view's rotation. The level's model view is a pure
 		// rotation, so this is its transpose, but it is computed rather than assumed: a shadow pass
 		// or a pack directive could put a scale in it, and normalising a normal afterwards hides
 		// the difference exactly until it does not.
 		builder.add("of_NormalMatrix", UniformShape.MAT3, (world, out) ->
-				out.set(new Matrix3f().set(world.passModelView()).invert().transpose()));
+				out.set(NORMAL.set(world.passModelView()).invert().transpose()));
 
 		// Six identities and the light map's twice, where the engine table answers eight identities.
 		// That is the whole of the difference between a pass drawn over the world and one drawn over a

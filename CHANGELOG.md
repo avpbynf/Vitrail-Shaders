@@ -54,6 +54,9 @@ what the next one holds.
   sample-after-write. Same picture. Written for the extra submits a Mac report was counting;
   whether the frame rate moves is still that machine's to measure.
 
+- **Pass uniforms reuse scratch matrices** instead of allocating a model-view-projection and a
+  normal matrix on every fill. Same numbers.
+
 - **Improved transparency is turned off while a pack draws**, the same refusal Iris makes. That
   option opens a second colour target for translucent items, and every leftover feature that
   writes it is an Immediate draw this engine would otherwise keep as its own GPU stop.

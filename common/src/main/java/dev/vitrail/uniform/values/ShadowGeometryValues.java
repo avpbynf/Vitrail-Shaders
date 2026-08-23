@@ -26,6 +26,9 @@ import org.joml.Matrix4f;
  */
 public final class ShadowGeometryValues {
 
+	private static final Matrix4f MODEL_VIEW_PROJECTION = new Matrix4f();
+	private static final Matrix3f NORMAL = new Matrix3f();
+
 	private ShadowGeometryValues() {
 	}
 
@@ -40,13 +43,13 @@ public final class ShadowGeometryValues {
 				(world, out) -> out.set(world.drawnShadowProjectionInverse()));
 
 		builder.add("of_ModelViewProjectionMatrix", UniformShape.MAT4, (world, out) ->
-				out.set(new Matrix4f(world.drawnShadowProjection())
+				out.set(MODEL_VIEW_PROJECTION.set(world.drawnShadowProjection())
 						.mul(world.drawnShadowModelView())));
 
 		// The shadow model view carries the grid snap as a translation, so this is not the
 		// transpose of a pure rotation and computing it is the only way to get it right.
 		builder.add("of_NormalMatrix", UniformShape.MAT3, (world, out) ->
-				out.set(new Matrix3f().set(world.drawnShadowModelView()).invert().transpose()));
+				out.set(NORMAL.set(world.drawnShadowModelView()).invert().transpose()));
 
 		builder.add("shadowModelView", UniformShape.MAT4,
 				(world, out) -> out.set(world.drawnShadowModelView()));
