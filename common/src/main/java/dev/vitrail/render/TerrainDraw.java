@@ -538,11 +538,12 @@ public final class TerrainDraw {
 			return false;
 		}
 
-		shadow.clear(device.createCommandEncoder());
+		shadow.defer();
 
-		// After the clear, so that a refusal below leaves the map emptied without a second clear of
-		// its own, and before the stage is declared open, which is the whole point of the step.
+		// After the defer, so that a refusal below still empties the map, and before the stage is
+		// declared open, which is the whole point of the step.
 		if (!self.shadowsPrepared(device)) {
+			shadow.flushPending(device.createCommandEncoder());
 			return false;
 		}
 
@@ -874,6 +875,10 @@ public final class TerrainDraw {
 
 		GpuDevice device = RenderSystem.tryGetDevice();
 		if (device == null) {
+			return null;
+		}
+
+		if (!program.compile(device)) {
 			return null;
 		}
 

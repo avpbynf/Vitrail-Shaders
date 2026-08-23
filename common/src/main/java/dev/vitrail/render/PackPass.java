@@ -408,8 +408,8 @@ final class PackPass {
 	/**
 	 * Opens and closes its own render pass, which is what makes the next one able to read what
 	 * this one wrote: the Vulkan backend ends a pass with a full memory barrier. Nothing is
-	 * allocated here, and the attachments are loaded rather than cleared, since the clears for the
-	 * whole frame have already run and an earlier pass may have written these very pixels.
+	 * allocated here. The first write of a target this frame loads as a clear, which is
+	 * {@code glClear} as the FBO is bound; later writes load what the last pass left.
 	 */
 	void draw(CommandEncoder encoder, ColorTargets targets, GpuTextureView depthView,
 			GpuTextureView distantView, GpuBuffer quad, GpuBufferSlice uniforms, int screenWidth,
@@ -422,9 +422,14 @@ final class PackPass {
 					+ "drawn through drawFinal");
 		}
 
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.label);
+		List<GpuTextureView> attached = new ArrayList<>(this.attachments.size());
 		for (ChainPlan.Attachment attachment : this.attachments) {
-			descriptor.withColorAttachment(view(targets, attachment));
+			attached.add(view(targets, attachment));
+		}
+
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.label);
+		for (GpuTextureView view : attached) {
+			descriptor.withColorAttachment(view, targets.takeClear(view));
 		}
 
 		// Always at the tail. The encoder asserts that attachment zero is there, and a pipeline
@@ -435,6 +440,8 @@ final class PackPass {
 
 		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0,
 				this.pass.size().width(screenWidth), this.pass.size().height(screenHeight)));
+
+		targets.flushSampled(encoder, sampledColour(targets), attached);
 
 		try (RenderPass pass = encoder.createRenderPass(descriptor)) {
 			record(pass, targets, depthView, distantView, quad, uniforms);
@@ -667,6 +674,23 @@ final class PackPass {
 		}
 
 		return view;
+	}
+
+	private List<GpuTextureView> sampledColour(ColorTargets targets) {
+		List<GpuTextureView> views = new ArrayList<>();
+		for (String sampler : this.samplers) {
+			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+			if (binding.kind() != SamplerPlan.Kind.COLORTEX) {
+				continue;
+			}
+
+			GpuTextureView view = targets.view(binding.index(), binding.side());
+			if (view != null) {
+				views.add(view);
+			}
+		}
+
+		return views;
 	}
 
 	private void noteGaps(int declared) {

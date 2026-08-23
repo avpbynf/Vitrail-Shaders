@@ -1,6 +1,7 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.render.CloudDraw;
+import dev.vitrail.render.GeometryHold;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -89,7 +90,7 @@ public abstract class CloudRendererMixin {
 
 		return descriptor == null
 				? original.call(encoder, label, colour, clearColour, depth, clearDepth)
-				: encoder.createRenderPass(descriptor);
+				: GeometryHold.open(encoder, descriptor);
 	}
 
 	@WrapOperation(method = "render",

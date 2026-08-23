@@ -7,13 +7,18 @@ import dev.vitrail.Vitrail;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalDouble;
 
 /**
  * The shadow map: one depth image the world is drawn into from the light, and the colour targets
@@ -129,6 +134,10 @@ final class ShadowTargets {
 
 	private boolean broken;
 
+	/** Load-ops waiting for the first shadow pass of the frame, or a standalone encode if none opens. */
+	private final Vector4fc[] pendingColour = new Vector4fc[COLOURS];
+	private boolean pendingDepth;
+
 	ShadowTargets(int resolution, List<PackDirectives.ShadowColour> asked) {
 		// Clamped rather than refused: a directive that survived a setting nobody expanded can be
 		// any number at all, and a shadow map is not worth taking the pack down for.
@@ -226,26 +235,100 @@ final class ShadowTargets {
 	 * the pack then reads is the image this call just took to the far plane, at no cost per frame.
 	 */
 	void clear(CommandEncoder encoder) {
-		this.copied = false;
+		stash();
+		flushPending(encoder);
+	}
+
+	/**
+	 * Remembers this frame's empties without encoding them, so the first shadow pass can load-op
+	 * them the way OpenGL clears as it binds the FBO.
+	 */
+	void defer() {
+		stash();
+	}
+
+	Optional<Vector4fc> takeColourClear(int index) {
+		Vector4fc colour = this.pendingColour[index];
+		this.pendingColour[index] = null;
+		return colour == null ? Optional.empty() : Optional.of(colour);
+	}
+
+	OptionalDouble takeDepthClear() {
+		if (!this.pendingDepth) {
+			return OptionalDouble.empty();
+		}
+
+		this.pendingDepth = false;
+		return OptionalDouble.of(FAR);
+	}
+
+	/** Standalone clears for whatever the pass about to open will not write. */
+	void flushPending(CommandEncoder encoder) {
 		if (this.target == null) {
 			return;
 		}
 
-		// Each buffer takes its own directive, which is why this is a loop and not one test: Mellow
-		// asks for nought to be kept between frames and says nothing about one, and a pack may say
-		// the opposite. The depth rides on nought because they are one object here, and it is
-		// emptied whichever way that directive reads.
-		if (wanted(0)) {
-			encoder.clearColorAndDepthTextures(this.target.getColorTexture(), this.clearColours.get(0),
-					this.target.getDepthTexture(), FAR);
-		} else {
+		List<GpuTextureView> colours = new ArrayList<>(COLOURS);
+		List<Vector4fc> colourValues = new ArrayList<>(COLOURS);
+		for (int index = 0; index < COLOURS; index++) {
+			if (this.pendingColour[index] == null) {
+				continue;
+			}
+
+			GpuTextureView view = colour(index);
+			if (view == null) {
+				continue;
+			}
+
+			colours.add(view);
+			colourValues.add(this.pendingColour[index]);
+			this.pendingColour[index] = null;
+		}
+
+		boolean depth = this.pendingDepth;
+		this.pendingDepth = false;
+		if (colours.isEmpty() && !depth) {
+			return;
+		}
+
+		if (colours.isEmpty()) {
 			encoder.clearDepthTexture(this.target.getDepthTexture(), FAR);
+			return;
+		}
+
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> ColorTargets.CLEAR_LABEL);
+		for (int index = 0; index < colours.size(); index++) {
+			descriptor.withColorAttachment(colours.get(index), Optional.of(colourValues.get(index)));
+		}
+
+		if (depth) {
+			descriptor.withDepthAttachment(this.target.getDepthTextureView(), OptionalDouble.of(FAR));
+		}
+
+		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0, this.resolution, this.resolution));
+		encoder.createRenderPass(descriptor).close();
+	}
+
+	private void stash() {
+		this.copied = false;
+		this.pendingDepth = false;
+		for (int index = 0; index < COLOURS; index++) {
+			this.pendingColour[index] = null;
+		}
+
+		if (this.target == null) {
+			return;
+		}
+
+		this.pendingDepth = true;
+		if (wanted(0)) {
+			this.pendingColour[0] = this.clearColours.get(0);
 		}
 
 		for (int index = 1; index < COLOURS; index++) {
 			TargetSurface surface = this.rest[index - 1];
 			if (surface != null && wanted(index)) {
-				encoder.clearColorTexture(surface.texture(), this.clearColours.get(index));
+				this.pendingColour[index] = this.clearColours.get(index);
 			}
 		}
 	}

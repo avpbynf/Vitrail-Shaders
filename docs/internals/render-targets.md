@@ -185,13 +185,16 @@ capped at eight, with holes padding the tail on both sides at once. Packs that d
 than the directive gives them targets exist, so the two counts genuinely differ.
 
 **Clears and copies.** Clearing a colour texture is refused while a pass is open and requires the
-target to carry both render-attachment and copy-destination usage. Allocation and clearing
-therefore happen outside any pass, and being outside one is the caller's job, not something the
-refusal will catch. The device hands back a **fresh encoder wrapper on every call**, over one
-backend, and the "in a render pass" guard is a field of the wrapper: an encoder taken for a clear
-knows nothing of a pass another wrapper opened. Each site here takes its own encoder, which is
-cheap and correct where it stands, and worth nothing as a check. That a copy does not convert
-formats is covered in [The frame](../frame.md).
+target to carry both render-attachment and copy-destination usage. Allocation therefore happens
+outside any pass. Pack colour and shadow clears are remembered until the first pass that writes
+them and become that pass's load operation, which is `glClear` as the FBO is bound. A target this
+pass samples and will not write is flushed as one empty pass per size, eight attachments at a
+time, still a load-op rather than `clearColorTexture`. Being outside a pass is the caller's job,
+not something the refusal will catch. The device hands back a **fresh encoder wrapper on every
+call**, over one backend, and the "in a render pass" guard is a field of the wrapper: an encoder
+taken for a clear knows nothing of a pass another wrapper opened. Each site here takes its own
+encoder, which is cheap and correct where it stands, and worth nothing as a check. That a copy does
+not convert formats is covered in [The frame](../frame.md).
 
 **Allocation.** The game's render target allocates depth only when asked, wires the usage set that
 the clear and copy paths require, and throws outside a range bounded by the device's maximum
@@ -199,11 +202,12 @@ texture size. Resizing destroys and recreates the buffers, so any texture view h
 is dead and nothing says so.
 
 **Synchronisation is free and it is not cheap.** The Vulkan command encoder places a global memory
-barrier after every render pass, and again after every clear and every copy. Writing a target in
-one pass and reading it in the next therefore requires nothing at all from this engine, and images
-stay in one layout end to end with no transitions to manage. The other side of that coin is that a
-chain of N passes is N full pipeline serialisations, and clears and copies add their own; that is
-the real cost model for anything that adds a pass.
+barrier after every render pass the game itself closes, and again after every clear and every copy.
+Passes this engine labels close with a write-then-sample barrier instead. Writing a target in one
+pass and reading it in the next therefore requires nothing at all from this engine, and images stay
+in one layout end to end with no transitions to manage. The other side of that coin is that each
+closed pass, each standalone clear and each copy is still a GPU stop; that is the real cost model
+for anything that adds one, and the reason matching geometry is kept in one pass.
 
 ## The device renumbers fragment output locations
 

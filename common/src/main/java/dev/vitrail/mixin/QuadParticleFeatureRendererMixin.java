@@ -1,5 +1,6 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.render.GeometryHold;
 import dev.vitrail.render.ParticleDraw;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -74,7 +75,7 @@ public abstract class QuadParticleFeatureRendererMixin {
 
 		return descriptor == null
 				? original.call(encoder, label, colour, clearColour, depth, clearDepth)
-				: encoder.createRenderPass(descriptor);
+				: GeometryHold.open(encoder, descriptor);
 	}
 
 	@WrapOperation(method = "drawLayers", require = 1,

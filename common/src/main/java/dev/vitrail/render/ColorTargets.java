@@ -16,6 +16,8 @@ import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -25,9 +27,11 @@ import org.joml.Vector4fc;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.ToLongFunction;
@@ -43,9 +47,11 @@ import java.util.stream.Collectors;
  * the decisions on the pack side is what lets them be measured against the eight packs without
  * starting the game.
  * <p>
- * Allocating and clearing both have to happen outside a render pass. Creating a texture records
- * a barrier into the very command buffer a pass would be recording into, and the clear commands
- * refuse outright while one is open.
+	 * Allocating has to happen outside a render pass. Creating a texture records a barrier into the
+	 * very command buffer a pass would be recording into. Clears of the pack's colour targets are
+	 * remembered until the first pass that writes them, and become that pass's load operation: a
+	 * standalone texture clear is a GPU stop of its own on this backend, which OpenGL's
+	 * {@code glClear} as the FBO is bound is not.
  * <p>
  * No caller ever holds a texture view. A resize destroys and recreates the texture behind a target
  * and closes every view onto it, and nothing on the Vulkan backend checks that a bound view is
@@ -115,6 +121,15 @@ final class ColorTargets {
 
 	/** Past this much the log says so once. Refusing to allocate would trade a stutter for a black screen. */
 	private static final long LOUD_BYTES = 512L * 1024L * 1024L;
+
+	/**
+	 * Colour attachments one pass can carry. The encoder refuses a pipeline whose state count
+	 * differs, and eight is what a pack's own draw buffers already use; a sampled-before-write
+	 * flush that needs more opens a second pass.
+	 */
+	private static final int MAX_COLOR_ATTACHMENTS = 8;
+
+	static final String CLEAR_LABEL = "Vitrail pending clears";
 
 	/**
 	 * What one sampler is handed for a texture the pack ships: the image, and how the pack asked for
@@ -209,6 +224,13 @@ final class ColorTargets {
 	private int screenHeight;
 	private boolean clearOwed;
 	private boolean broken;
+
+	/**
+	 * Colour textures still owed a clear this frame. Folded into the load-op of the first pass that
+	 * writes them, which is the OpenGL equivalent of {@code glClear} as the FBO is bound; a
+	 * standalone {@code clearColorTexture} is a GPU stop of its own on this backend.
+	 */
+	private final Map<GpuTexture, Vector4fc> pendingClears = new IdentityHashMap<>();
 
 	/**
 	 * The megabytes the last announcement carried, or -1 before there has been one. Held so that a
@@ -388,11 +410,13 @@ final class ColorTargets {
 			this.packSurfaces.forEach((image, surface) -> upload(encoder, surface, image.rgba()));
 		}
 
+		this.pendingClears.clear();
+
 		// Every frame and never conditionally: the mask answers a question about THIS frame, and an
 		// answer carried over from the last one is worse than no answer at all. Left standing, last
 		// frame's depths would be compared with this frame's, the camera having moved between the
 		// two, and the seed would repaint the pack's geometry over most of the screen.
-		clear(encoder, this.coverage, UNWRITTEN);
+		defer(this.coverage, UNWRITTEN);
 
 		for (int index : this.plan.ordered()) {
 			// A full clear ignores colortexNClear: a target that is kept from one frame to the
@@ -404,8 +428,8 @@ final class ColorTargets {
 			Vector4fc colour = this.fogCleared && index == FOG_TARGET
 					? fog
 					: this.clearColours.get(index);
-			clear(encoder, this.mainSide.get(index), colour);
-			clear(encoder, this.altSide.get(index), colour);
+			defer(this.mainSide.get(index), colour);
+			defer(this.altSide.get(index), colour);
 		}
 
 		// Last, so the debt is only ever paid off by a clear that got all the way through. Written
@@ -413,6 +437,83 @@ final class ColorTargets {
 		// - left the pack sampling whatever the driver had put in a texture nobody had written, for
 		// the rest of the session and without a line to say so.
 		this.clearOwed = false;
+	}
+
+	/**
+	 * The clear colour of this view, once, for the pass that first writes it. Empty when the
+	 * texture was already cleared or is kept from the last frame.
+	 */
+	Optional<Vector4fc> takeClear(GpuTextureView view) {
+		if (view == null) {
+			return Optional.empty();
+		}
+
+		Vector4fc colour = this.pendingClears.remove(view.texture());
+		return colour == null ? Optional.empty() : Optional.of(colour);
+	}
+
+	/**
+	 * Standalone clear only for a texture this pass is about to sample and will not write. A write
+	 * is a load-op; a texture nobody has read yet stays pending for the pass that first attaches it.
+	 * <p>
+	 * Encoded as one empty pass per size, load-op clear, which is {@code glClear} as the FBO is
+	 * bound. One {@code clearColorTexture} apiece would each be a GPU stop of its own.
+	 */
+	void flushSampled(CommandEncoder encoder, Iterable<GpuTextureView> sampled,
+			Iterable<GpuTextureView> written) {
+		IdentityHashMap<GpuTexture, Boolean> keep = new IdentityHashMap<>();
+		for (GpuTextureView view : written) {
+			if (view != null) {
+				keep.put(view.texture(), Boolean.TRUE);
+			}
+		}
+
+		record Pending(GpuTextureView view, Vector4fc colour) {
+		}
+
+		List<Pending> pending = new ArrayList<>();
+		for (GpuTextureView view : sampled) {
+			if (view == null) {
+				continue;
+			}
+
+			GpuTexture texture = view.texture();
+			if (keep.containsKey(texture)) {
+				continue;
+			}
+
+			Vector4fc colour = this.pendingClears.remove(texture);
+			if (colour != null) {
+				pending.add(new Pending(view, colour));
+			}
+		}
+
+		if (pending.isEmpty()) {
+			return;
+		}
+
+		LinkedHashMap<Long, List<Pending>> bySize = new LinkedHashMap<>();
+		for (Pending one : pending) {
+			GpuTexture texture = one.view().texture();
+			long key = ((long) texture.getWidth(0) << 32) | (texture.getHeight(0) & 0xFFFFFFFFL);
+			bySize.computeIfAbsent(key, ignored -> new ArrayList<>()).add(one);
+		}
+
+		for (List<Pending> group : bySize.values()) {
+			int width = group.get(0).view().texture().getWidth(0);
+			int height = group.get(0).view().texture().getHeight(0);
+			for (int from = 0; from < group.size(); from += MAX_COLOR_ATTACHMENTS) {
+				int to = Math.min(from + MAX_COLOR_ATTACHMENTS, group.size());
+				RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> CLEAR_LABEL);
+				for (int index = from; index < to; index++) {
+					Pending one = group.get(index);
+					descriptor.withColorAttachment(one.view(), Optional.of(one.colour()));
+				}
+
+				descriptor.withRenderArea(new RenderPass.RenderArea(0, 0, width, height));
+				encoder.createRenderPass(descriptor).close();
+			}
+		}
 	}
 
 	/**
@@ -633,6 +734,7 @@ final class ColorTargets {
 		this.shadowMap.release();
 		this.depth.release();
 		this.centerDepth.release();
+		this.pendingClears.clear();
 
 		// Whatever is allocated next is a first allocation again, and it has to say what it costs
 		// even when it happens to cost the same as what was just let go.
@@ -901,15 +1003,24 @@ final class ColorTargets {
 	}
 
 	/**
+	 * Remembers a clear for the first pass that writes this surface. A standalone texture clear is
+	 * a full GPU stop on this backend; a load-op on the pass that first attaches it is not.
+	 */
+	private void defer(TargetSurface surface, Vector4fc colour) {
+		GpuTexture texture = surface == null ? null : surface.texture();
+		if (texture != null) {
+			this.pendingClears.put(texture, colour);
+		}
+	}
+
+	/**
 	 * Clears the whole chain, and that is the backend's choice rather than ours: there is no level
 	 * argument on {@code clearColorTexture}, and {@code VulkanCommandEncoder} sets the subresource
 	 * range's {@code levelCount} to the texture's full mip count. So a mipmapped target costs about
 	 * four thirds of a clear rather than one.
 	 * <p>
-	 * Left alone rather than worked around. Clearing only the base would mean opening a render pass
-	 * on its view for what a clear command already does, and the levels past it are rebuilt from the
-	 * base before any program reads one; what the extra work buys is that they hold the clear colour
-	 * instead of the last frame's reduction, which is defined either way.
+	 * Used for the one-pixel constants, which no pack pass writes and which therefore cannot fold
+	 * into a load-op.
 	 */
 	private static void clear(CommandEncoder encoder, TargetSurface surface, Vector4fc colour) {
 		GpuTexture texture = surface == null ? null : surface.texture();

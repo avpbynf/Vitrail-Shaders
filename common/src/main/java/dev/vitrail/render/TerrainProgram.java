@@ -242,6 +242,11 @@ public final class TerrainProgram implements DumpedProgram {
 		return this.body.prepare(device, atlas);
 	}
 
+	/** @see GeometryProgram#compile */
+	boolean compile(GpuDevice device) {
+		return this.body.compile(device);
+	}
+
 	/**
 	 * Binds this program's block and every sampler it declares, inside the pass just opened.
 	 *

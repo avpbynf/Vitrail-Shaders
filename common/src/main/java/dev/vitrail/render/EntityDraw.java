@@ -1658,7 +1658,7 @@ public final class EntityDraw {
 		this.open = descriptor == null
 				? encoder.createRenderPass(() -> LABEL, colour, Optional.empty(), depth,
 						OptionalDouble.empty())
-				: encoder.createRenderPass(descriptor);
+				: GeometryHold.open(encoder, descriptor);
 		this.drawing = program;
 		this.bound = pipeline;
 
