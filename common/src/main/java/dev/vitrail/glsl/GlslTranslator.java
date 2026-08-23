@@ -566,6 +566,9 @@ public final class GlslTranslator {
 		flattenVolumes();
 		convertDepth();
 		dropPrecision();
+		// After precision, so a leftover highp does not sit between const and the type this pass
+		// matches on, and before outputs are rewritten, which do not use const.
+		demoteNonConstantInitialisers();
 		rewriteFragmentOutputs();
 		liftFragmentOutputs();
 		// Before the lifting and after the depth, and both halves matter: the declarator it takes out
@@ -1802,6 +1805,70 @@ public final class GlslTranslator {
 	private void takePassColour() {
 		record(this.blockMembers, PASS_COLOUR, "vec4 " + PASS_COLOUR);
 		this.injectedNames.add(PASS_COLOUR);
+	}
+
+	/**
+	 * {@code const} on a variable demands a compile-time constant under Vulkan, and OpenGL drivers
+	 * accepted a lot that is not one: {@code transpose} of a matrix literal, a constructor from a
+	 * uniform, {@code normalize} of a vector the pack treated as immutable. The keyword is the lie,
+	 * not the value, so it comes off and the declaration stays.
+	 * <p>
+	 * An array size still needs a real constant, so a declaration whose initialiser is only literals
+	 * and type constructors is left alone. Parameters keep {@code const}: that spelling means
+	 * immutable, not compile-time, and the language allows it.
+	 */
+	private void demoteNonConstantInitialisers() {
+		int parens = 0;
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() != null) {
+				continue;
+			}
+
+			if (token.operator("(")) {
+				parens++;
+				continue;
+			}
+
+			if (token.operator(")")) {
+				parens--;
+				continue;
+			}
+
+			if (parens != 0 || !token.identifier("const")) {
+				continue;
+			}
+
+			int end = statementEnd(index);
+			if (end >= 0 && nonConstantInitialiser(index, end)) {
+				blank(index);
+			}
+		}
+	}
+
+	/**
+	 * Whether this {@code const} declaration assigns something Vulkan will not take as a constant
+	 * expression: any identifier that is not a type constructor.
+	 */
+	private boolean nonConstantInitialiser(int keyword, int end) {
+		boolean seenEquals = false;
+		for (int scan = keyword; scan <= end; scan++) {
+			Token token = this.tokens.get(scan);
+			if (token.operator("=")) {
+				seenEquals = true;
+				continue;
+			}
+
+			if (!seenEquals || token.kind() != Kind.IDENTIFIER) {
+				continue;
+			}
+
+			if (!LegacyGlsl.TYPE_NAMES.contains(token.text())) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

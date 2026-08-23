@@ -68,6 +68,11 @@ Iris draws Reverie. It refuses a required flag only when the name is unknown to 
 cannot serve it, and it has built every one of the ones Reverie asks for: some outright, some
 wherever the driver supports them.
 
+**A full-screen pass that fails to compile takes the whole pack with it**, and the log names the
+program. One shape of that was a `const` whose initialiser Vulkan will not take as a constant,
+which OpenGL drivers accepted as merely immutable; that spelling is now rewritten, see
+[Translation](translation.md). Other compile failures still refuse the pack.
+
 **A single pass can be refused without the pack being refused.** If a program's fragment stage
 genuinely *reads* an input its vertex stage does not provide, that one program fails to link and the
 engine falls back to the game's rendering for that surface. You get the game's version of that one
