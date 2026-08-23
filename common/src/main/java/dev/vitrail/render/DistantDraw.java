@@ -437,7 +437,7 @@ public final class DistantDraw {
 			return;
 		}
 
-		try (RenderPass pass = device.createCommandEncoder().createRenderPass(descriptor)) {
+		try (RenderPass pass = GeometryHold.open(device.createCommandEncoder(), descriptor)) {
 			pass.setPipeline(pipeline);
 			program.bind(pass);
 
@@ -558,7 +558,7 @@ public final class DistantDraw {
 				? encoder.createRenderPass(() -> "Vitrail " + element.element(),
 						main.getColorTextureView(), Optional.empty(), this.depthView,
 						java.util.OptionalDouble.empty())
-				: encoder.createRenderPass(descriptor)) {
+				: GeometryHold.open(encoder, descriptor)) {
 			pass.setPipeline(pipeline);
 			program.bind(pass);
 

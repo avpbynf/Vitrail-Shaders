@@ -478,6 +478,7 @@ public final class PackChain {
 	 * starts up, off the render thread, so it touches files and nothing else.
 	 */
 	public static void load(Path gameDirectory) {
+		PassTimings.resetCensus();
 		session = null;
 		lastError = null;
 		removed = List.of();
@@ -692,9 +693,11 @@ public final class PackChain {
 			announceRemoved(chain);
 			active = new PackChain(chain, values, world, engine.seed(), pack, chosen,
 					settings.profile());
-			// The one family read here rather than on demand, and the order is the whole reason: the
-			// chunk mesh carries what this pack's chunk programs read, and Sodium takes the format
-			// where it builds its chunk renderer, which is well before any pass asks for a shader.
+			// Terrain first: the chunk mesh carries what those programs read, and Sodium takes the
+			// format where it builds its renderer, before any pass asks for a shader. The other
+			// families stay unread until something draws them: translating Complementary Unbound's
+			// whole sky, entities, weather and distant set at this moment holds the render thread
+			// until the game looks frozen.
 			active.terrain.read();
 			if (!chainWanted) {
 				EngineOptions.announceChainOff();
@@ -1197,6 +1200,9 @@ public final class PackChain {
 
 		// Outside the try: a frame that failed halfway still owes its flags and its ring buffers.
 		chain.closeFrame();
+		if (chainWanted && chain.drawable()) {
+			PassTimings.finishCensus();
+		}
 
 		return chainWanted;
 	}
@@ -1262,6 +1268,7 @@ public final class PackChain {
 	void beginFrame() {
 		if (!this.advanced) {
 			this.advanced = true;
+			PassTimings.armCensus();
 			this.values.advance();
 			PackDump.take(this.chain.place(), this.load,
 					this.programs == null ? List.of() : this.programs, this.values.world(),
@@ -1331,6 +1338,7 @@ public final class PackChain {
 	 * blocks into the buffer this turn moved on to, and the next frame's turn is what fences them.
 	 */
 	private void closeFrame() {
+		GeometryHold.flush();
 		this.advanced = false;
 		this.opened = false;
 		this.early = false;

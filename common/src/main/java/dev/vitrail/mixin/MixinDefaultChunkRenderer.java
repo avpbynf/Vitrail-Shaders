@@ -2,6 +2,7 @@ package dev.vitrail.mixin;
 
 import dev.vitrail.sodium.SodiumPasses;
 import dev.vitrail.pack.program.TerrainPass;
+import dev.vitrail.render.GeometryHold;
 import dev.vitrail.render.RingTimings;
 import dev.vitrail.render.TerrainDraw;
 
@@ -131,6 +132,6 @@ public abstract class MixinDefaultChunkRenderer {
 
 		return descriptor == null
 				? original.call(encoder, label, colour, clearColour, depth, clearDepth)
-				: encoder.createRenderPass(descriptor);
+				: GeometryHold.open(encoder, descriptor);
 	}
 }

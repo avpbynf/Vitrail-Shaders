@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.mixin.CommandEncoderAccessor;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
@@ -11,6 +12,7 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.CommandEncoderBackend;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -28,26 +30,22 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Fills the mip chain of a colour target, one level at a time, by averaging each level into the
- * next. Nothing of the pack takes part: this is the engine's own pipeline and its own two shaders.
+ * Fills the mip chain of a colour target. Nothing of the pack takes part.
  * <p>
- * It exists because 26.2 has no way to generate a mip chain. There is no {@code generateMipmaps} on
- * the command encoder and no other path to one, so a directive like {@code colortex0MipmapEnabled}
- * was read, counted and dropped. What the packs do with those levels is not decoration: BSL drives
- * its automatic exposure from {@code texture2DLod(colortex0, vec2(0.5), log2(viewHeight * R))},
- * which without a chain reads level nought at the centre of the screen, so the whole image is
- * exposed for one pixel and darkens wholesale the moment a jump moves that pixel from the ground to
- * the sky. The same pack reads lods for its depth of field and for the tiles of its bloom.
+ * It exists because the public encoder has no {@code generateMipmaps}. Iris pays one
+ * {@code glGenerateMipmap} per chain; the Vulkan equivalent is a blit of each level into the next
+ * on the frame's command buffer. That path is taken first. The draw below is the fallback if the
+ * backend is not Vulkan or the blit is refused.
  * <p>
- * One render pass per level, which is what makes the chain correct rather than merely written. The
- * Vulkan backend ends a pass with a full memory barrier, so level N-1 is finished before the pass
- * that reads it to write level N begins; the two views are disjoint subresources of one image, and
- * a single pass writing what it samples would be a hazard rather than a saving.
+ * What the packs do with those levels is not decoration: BSL drives its automatic exposure from
+ * {@code texture2DLod(colortex0, vec2(0.5), log2(viewHeight * R))}, which without a chain reads
+ * level nought at the centre of the screen, so the whole image is exposed for one pixel and darkens
+ * wholesale the moment a jump moves that pixel from the ground to the sky. The same pack reads lods
+ * for its depth of field and for the tiles of its bloom.
  * <p>
- * The filter is a plain box of four texels, which is what {@code glGenerateMipmap} gave the packs
- * this is imitating. It is taken as four explicit fetches rather than as one bilinear fetch of the
- * level below: the two agree only while both dimensions are even, and a target sized on an odd
- * screen would otherwise drift towards one corner as the chain descends.
+ * The blit uses the hardware linear filter, which is what {@code glGenerateMipmap} gave the packs.
+ * The fallback draw is a box of four texels taken as explicit fetches, for the same reason: a
+ * single bilinear fetch of the level below agrees only while both dimensions are even.
  * <p>
  * One pipeline per format, and no more: the colour state of a pipeline has to agree with the format
  * of the attachment exactly or {@code setPipeline} throws, and a pack's targets are not all of one
@@ -135,6 +133,12 @@ final class MipmapReduction {
 			return false;
 		}
 
+		GeometryHold.flush();
+		if (blit(encoder, surface)) {
+			surface.chainWritten(true);
+			return true;
+		}
+
 		RenderPipeline pipeline = pipelineFor(device, surface.texture().getFormat());
 		if (pipeline == null) {
 			return false;
@@ -165,6 +169,13 @@ final class MipmapReduction {
 		surface.chainWritten(true);
 
 		return true;
+	}
+
+	/** Iris's {@code glGenerateMipmap}: one blit chain, not a pass per level. */
+	private static boolean blit(CommandEncoder encoder, TargetSurface surface) {
+		CommandEncoderBackend backend = ((CommandEncoderAccessor) encoder).vitrail$backend();
+		return backend instanceof MipmapCommands commands
+				&& commands.vitrail$generateMipmaps(surface.texture());
 	}
 
 	/**

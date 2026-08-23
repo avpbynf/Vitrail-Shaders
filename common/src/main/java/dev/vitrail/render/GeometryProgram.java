@@ -782,18 +782,14 @@ final class GeometryProgram {
 			return null;
 		}
 
-		CompiledRenderPipeline compiled = device.precompilePipeline(this.pipeline, this.source);
-		if (!compiled.isValid()) {
-			// Handing back an invalid pipeline throws inside setPipeline, in the middle of Sodium's
-			// own pass, which reads as a Sodium failure. Refused here instead, once.
-			this.broken = true;
-			// The PASS and not "the terrain", which it said from the day only the terrain came through
-			// here, and not the family either: the family is one word for all twenty entity pieces,
-			// so it would not say which failed. The same words as the storage block refusal above,
-			// because the two latch the same flag and a reader meeting either has the same question.
-			Vitrail.logger().error("{} did not compile, so the {} pass keeps the game's own shader",
-					this.path, this.pass.name());
+		// Creating a texture or clearing one records into the command buffer a pass would be
+		// recording into. The hold has to end first; after that this program's block exists and
+		// the next prepare of it can run while the next geometry program keeps that pass open.
+		if (this.block == null || !this.cleared) {
+			GeometryHold.flush();
+		}
 
+		if (!compile(device)) {
 			return null;
 		}
 
@@ -811,6 +807,38 @@ final class GeometryProgram {
 		writeBlock();
 
 		return this.pipeline;
+	}
+
+	/**
+	 * Compiles the pipeline into the device cache, with no atlas, no block and no log line.
+	 * <p>
+	 * {@link #prepare} still does the rest at the first real draw. {@code precompilePipeline} is a
+	 * computeIfAbsent: after a resource reload emptied the cache this compiles again, and while the
+	 * cache holds it this is a lookup.
+	 *
+	 * @return false when the program will never be drawn
+	 */
+	boolean compile(GpuDevice device) {
+		if (this.broken) {
+			return false;
+		}
+
+		CompiledRenderPipeline compiled = device.precompilePipeline(this.pipeline, this.source);
+		if (!compiled.isValid()) {
+			// Handing back an invalid pipeline throws inside setPipeline, in the middle of Sodium's
+			// own pass, which reads as a Sodium failure. Refused here instead, once.
+			this.broken = true;
+			// The PASS and not "the terrain", which it said from the day only the terrain came through
+			// here, and not the family either: the family is one word for all twenty entity pieces,
+			// so it would not say which failed. The same words as the storage block refusal above,
+			// because the two latch the same flag and a reader meeting either has the same question.
+			Vitrail.logger().error("{} did not compile, so the {} pass keeps the game's own shader",
+					this.path, this.pass.name());
+
+			return false;
+		}
+
+		return true;
 	}
 
 	/**
@@ -1111,13 +1139,15 @@ final class GeometryProgram {
 		}
 
 		if (plain()) {
+			this.targets.flushSampled(RenderSystem.getDevice().createCommandEncoder(),
+					sampledColour(), List.of());
 			return null;
 		}
 
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.passLabel);
+		List<GpuTextureView> attached = new ArrayList<>(this.slots.size());
 		for (Slot slot : this.slots) {
 			if (slot.bound() == Bound.UNUSED) {
-				descriptor.withUnusedColorAttachment();
+				attached.add(null);
 				continue;
 			}
 
@@ -1128,8 +1158,23 @@ final class GeometryProgram {
 				return null;
 			}
 
-			descriptor.withColorAttachment(view);
+			attached.add(view);
 		}
+
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.passLabel);
+		List<GpuTextureView> written = new ArrayList<>(attached.size());
+		for (GpuTextureView view : attached) {
+			if (view == null) {
+				descriptor.withUnusedColorAttachment();
+				continue;
+			}
+
+			written.add(view);
+			descriptor.withColorAttachment(view, this.targets.takeClear(view));
+		}
+
+		this.targets.flushSampled(RenderSystem.getDevice().createCommandEncoder(), sampledColour(),
+				written);
 
 		// Never left out: the encoder refuses a descriptor without one outright, and it refuses it
 		// at the first draw rather than at load time. The size is the screen's, and stays the
@@ -1139,6 +1184,24 @@ final class GeometryProgram {
 				this.targets.screenWidth(), this.targets.screenHeight()));
 
 		return depth == null ? descriptor : descriptor.withDepthAttachment(depth);
+	}
+
+	/** Colour targets this program samples, for a pending clear that cannot wait for a write. */
+	private List<GpuTextureView> sampledColour() {
+		List<GpuTextureView> views = new ArrayList<>();
+		for (String sampler : this.samplers) {
+			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+			if (binding.kind() != SamplerPlan.Kind.COLORTEX) {
+				continue;
+			}
+
+			GpuTextureView view = this.targets.view(binding.index(), binding.side());
+			if (view != null) {
+				views.add(view);
+			}
+		}
+
+		return views;
 	}
 
 	/**
@@ -1194,28 +1257,33 @@ final class GeometryProgram {
 			return null;
 		}
 
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.shadowLabel);
+		List<GpuTextureView> colours = new ArrayList<>(this.shadowColours.size());
 		for (int index : this.shadowColours) {
 			// One attachment per state the pipeline carries, and in the same order. The images are
 			// allocated together with the depth, so this is null only where the depth above is, and
 			// the test is kept all the same because the two failures are not equal: a pass short of
 			// an attachment the pipeline names is setPipeline refusing in the middle of the world,
 			// where a null descriptor out of this method is the shadow stage not opening at all.
-			// Neither is safe here - openShadowStage settles that question outside the pass, and
-			// TerrainDraw.shown says what a refusal from the light would cost - so this line is the
-			// second lock on a door the stage already holds shut.
 			GpuTextureView colour = this.shadow.colour(index);
 			if (colour == null) {
 				return null;
 			}
 
-			descriptor.withColorAttachment(colour);
+			colours.add(colour);
 		}
 
-		return descriptor
-				.withDepthAttachment(depth)
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.shadowLabel);
+		int at = 0;
+		for (int index : this.shadowColours) {
+			descriptor.withColorAttachment(colours.get(at), this.shadow.takeColourClear(index));
+			at++;
+		}
+
+		descriptor.withDepthAttachment(depth, this.shadow.takeDepthClear())
 				.withRenderArea(new RenderPass.RenderArea(0, 0, this.shadow.resolution(),
 						this.shadow.resolution()));
+		this.shadow.flushPending(RenderSystem.getDevice().createCommandEncoder());
+		return descriptor;
 	}
 
 	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */

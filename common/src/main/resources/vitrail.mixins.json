@@ -18,6 +18,7 @@
 		"ChunkVertexMixin",
 		"ClientLevelMixin",
 		"CloudRendererMixin",
+		"CommandEncoderAccessor",
 		"CommandEncoderMixin",
 		"CustomFeatureRendererMixin",
 		"CustomSubmitMixin",
@@ -46,6 +47,7 @@
 		"OptionsCloudsMixin",
 		"ProjectionMatrixBufferMixin",
 		"QuadParticleFeatureRendererMixin",
+		"RenderPassMixin",
 		"RenderPipelineAccessor",
 		"RenderPipelineMixin",
 		"RenderSectionManagerAccessor",
@@ -58,6 +60,7 @@
 		"StagedVertexBufferDrawMixin",
 		"TextureManagerAccessor",
 		"VKDrawContextMixin",
+		"VulkanCommandEncoderMixin",
 		"VulkanDeviceMixin",
 		"WeatherEffectRendererMixin"
 	]

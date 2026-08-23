@@ -107,20 +107,26 @@ to the next.
 
 On top of that, submitting a render pass ends it with a **full memory barrier**: all commands to
 all commands, memory read and memory write. The other operations that touch textures (clearing,
-copying, uploading) end the same way.
+copying, uploading) end the same way. That is still what the game does for its own passes.
 
-The practical consequence is that reading in pass N+1 what pass N wrote requires no synchronisation
-code at all: close, open, bind. But the barrier exists only if the pass is genuinely closed, since
-it is closing that submits. A pass left open by an early return or an exception path skips its
-barrier and stays open besides, so passes belong in try-with-resources without exception.
+Passes this engine labels (`Vitrail ...`) close with a write-then-sample barrier instead. Consecutive
+geometry that writes the same colour and depth images stays in one pass, which is what Iris does by
+leaving `defaultFB` bound (`IrisRenderingPipeline.bindDefault`). A later composite, a copy, or a
+different framebuffer ends that hold first. Mip chains are filled with `vkCmdBlitImage` on the
+frame's command buffer, the Vulkan form of `glGenerateMipmap`, rather than a pass per level.
 
-The price is the part to keep in mind as a chain grows: that barrier is a complete GPU
-serialisation, once per pass, and the API offers no finer instrument: no per-resource barrier, no
-subpass, no way to overlap two passes that do not touch the same texture. Cost scales with the
-number of passes rather than with what they read. Note that this is a structural statement, not a
-measured one: comparing two frames rendered from different viewpoints measures nothing, so any
-figure has to come from the same position, orientation and world seed with the chain switched on
-and off.
+The practical consequence is that reading in pass N+1 what pass N wrote still requires no
+synchronisation code of our own: close, open, bind. But the barrier exists only if the pass is
+genuinely closed, since it is closing that submits. A pass left open by an early return or an
+exception path skips its barrier and stays open besides, so passes belong in try-with-resources
+without exception.
+
+The price still scales with the number of GPU stops rather than with what they read: each closed
+pass, each standalone clear, each copy. Folding a clear into a load-op, blitting a mip chain, and
+holding matching geometry in one pass are how this engine spends fewer of those stops. Note that
+this is a structural statement, not a measured one: comparing two frames rendered from different
+viewpoints measures nothing, so any figure has to come from the same position, orientation and
+world seed with the chain switched on and off.
 
 ## What the API does not do
 

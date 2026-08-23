@@ -1,5 +1,6 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.render.GeometryHold;
 import dev.vitrail.render.PassTimings;
 
 import com.mojang.blaze3d.systems.CommandEncoder;
@@ -12,16 +13,29 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Brackets every render pass with the two timestamps {@link PassTimings} reads, at the two points
- * where the game's own Tracy profiler pushes and pops a zone: just before the backend records the
- * pass and just after it has submitted it. Both sit outside the pass, on the frame's command
- * buffer, exactly as the profiler's own do.
+ * Counts every render pass, texture clear and texture copy the encoder is asked for, and brackets
+ * each pass with the two timestamps {@link PassTimings} reads when the timed report is on.
  * <p>
  * Every overload of {@code createRenderPass} funnels into the descriptor one, so one injection
- * sees every pass whoever opens it.
+ * sees every pass whoever opens it. Clears and copies each end with the same full memory barrier
+ * the backend puts after a pass, which is why they are counted beside it.
+ * <p>
+ * A geometry hold must end before any of those: a copy or a clear cannot be recorded inside a
+ * pass, and a composite that samples what geometry just wrote has to see the store.
  */
 @Mixin(CommandEncoder.class)
 public abstract class CommandEncoderMixin {
+
+	@Inject(method = "createRenderPass(Lcom/mojang/blaze3d/systems/RenderPassDescriptor;)"
+			+ "Lcom/mojang/blaze3d/systems/RenderPass;",
+			at = @At("HEAD"),
+			require = 1)
+	private void vitrail$flushHold(RenderPassDescriptor descriptor,
+			CallbackInfoReturnable<RenderPass> cir) {
+		if (!GeometryHold.opening()) {
+			GeometryHold.flush();
+		}
+	}
 
 	@Inject(method = "createRenderPass(Lcom/mojang/blaze3d/systems/RenderPassDescriptor;)"
 			+ "Lcom/mojang/blaze3d/systems/RenderPass;",
@@ -37,5 +51,41 @@ public abstract class CommandEncoderMixin {
 	@Inject(method = "submitRenderPass", at = @At("TAIL"), require = 1)
 	private void vitrail$closePass(CallbackInfo ci) {
 		PassTimings.close((CommandEncoder) (Object) this);
+	}
+
+	@Inject(method = "clearColorTexture", at = @At("HEAD"), require = 1)
+	private void vitrail$clearColour(CallbackInfo ci) {
+		GeometryHold.flush();
+		PassTimings.censusClear();
+	}
+
+	@Inject(method = "clearDepthTexture", at = @At("HEAD"), require = 1)
+	private void vitrail$clearDepth(CallbackInfo ci) {
+		GeometryHold.flush();
+		PassTimings.censusClear();
+	}
+
+	@Inject(method = "clearColorAndDepthTextures("
+			+ "Lcom/mojang/blaze3d/textures/GpuTexture;Lorg/joml/Vector4fc;"
+			+ "Lcom/mojang/blaze3d/textures/GpuTexture;D)V",
+			at = @At("HEAD"), require = 1)
+	private void vitrail$clearColourAndDepth(CallbackInfo ci) {
+		GeometryHold.flush();
+		PassTimings.censusClear();
+	}
+
+	@Inject(method = "clearColorAndDepthTextures("
+			+ "Lcom/mojang/blaze3d/textures/GpuTexture;Lorg/joml/Vector4fc;"
+			+ "Lcom/mojang/blaze3d/textures/GpuTexture;DIIII)V",
+			at = @At("HEAD"), require = 1)
+	private void vitrail$clearColourAndDepthRegion(CallbackInfo ci) {
+		GeometryHold.flush();
+		PassTimings.censusClear();
+	}
+
+	@Inject(method = "copyTextureToTexture", at = @At("HEAD"), require = 1)
+	private void vitrail$copyTexture(CallbackInfo ci) {
+		GeometryHold.flush();
+		PassTimings.censusCopy();
 	}
 }

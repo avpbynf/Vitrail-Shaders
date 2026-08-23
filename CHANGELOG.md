@@ -22,6 +22,10 @@ what the next one holds.
   under Video Settings picks what to come back to, and it comes back to Vulkan unless told
   otherwise.
 
+- **The log names the first full frame's GPU stops.** One line says how many render passes opened,
+  how many textures were cleared and how many were copied, then the labels, most frequent first.
+  Always on, once per pack load. That is the number a Mac trace of queue submits is counting.
+
 ### Changed
 
 - **Chloride is no longer required, on either loader.** One thing was behind that
@@ -42,6 +46,12 @@ what the next one holds.
 - **The shadow walk no longer rotates Sodium's command ring a second time in the same frame.**
   The lists still reset so the light does not append onto the camera's; the ring waits for the
   next camera walk. Same shadows.
+
+- **A pack's frame opens fewer GPU stops.** Clears ride as the first pass's load, leftover
+  sampled-before-write clears share one empty pass per size, mip chains blit instead of drawing
+  each level, consecutive geometry that writes the same images stays in one pass, and our own
+  passes wait only for sample-after-write. Same picture. Written for the extra submits a Mac
+  report was counting; whether the frame rate moves is still that machine's to measure.
 
 ## 0.7.5-beta
 
