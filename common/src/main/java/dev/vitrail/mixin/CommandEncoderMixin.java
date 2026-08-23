@@ -21,7 +21,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * the backend puts after a pass, which is why they are counted beside it.
  * <p>
  * A geometry hold must end before any of those: a copy or a clear cannot be recorded inside a
- * pass, and a composite that samples what geometry just wrote has to see the store.
+ * pass, and a composite that samples what geometry just wrote has to see the store. Leftover
+ * Immediate draws and Distant Horizons' GenericObjectRenderer that write the same images are
+ * the exception: they keep the hold, the way Iris leaves the default framebuffer bound.
  */
 @Mixin(CommandEncoder.class)
 public abstract class CommandEncoderMixin {
@@ -29,9 +31,17 @@ public abstract class CommandEncoderMixin {
 	@Inject(method = "createRenderPass(Lcom/mojang/blaze3d/systems/RenderPassDescriptor;)"
 			+ "Lcom/mojang/blaze3d/systems/RenderPass;",
 			at = @At("HEAD"),
+			cancellable = true,
 			require = 1)
 	private void vitrail$flushHold(RenderPassDescriptor descriptor,
 			CallbackInfoReturnable<RenderPass> cir) {
+		RenderPass leftover = GeometryHold.leftover(descriptor);
+		if (leftover != null) {
+			cir.setReturnValue(leftover);
+
+			return;
+		}
+
 		if (!GeometryHold.opening()) {
 			GeometryHold.flush();
 		}

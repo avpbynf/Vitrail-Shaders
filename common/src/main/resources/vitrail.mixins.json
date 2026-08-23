@@ -39,6 +39,7 @@
 		"ItemModelResolverMixin",
 		"ItemStackRenderStateMixin",
 		"ItemSubmitMixin",
+		"LevelExtractorMixin",
 		"LevelRendererFrameMixin",
 		"LevelRendererMixin",
 		"LevelRendererSkyMixin",
