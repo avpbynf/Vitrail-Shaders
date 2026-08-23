@@ -15,6 +15,11 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack that marks a computed matrix as `const` loads instead of falling back to vanilla.**
+  Vulkan will not take `transpose` of a literal, or a uniform, as a constant initialiser, and one
+  such pass used to fail the compile and take the whole pack with it. The keyword comes off and
+  the value stays. Seen on Lux v1.2, a BSL derivative.
+
 - **Sodium 0.9.2 no longer crashes when a pack extends the chunk mesh.** Its new arena allocator
   was sized for Sodium's own twenty bytes and refused the wider mesh a pack needs. The allocator
   now takes the same format the rest of the renderer already asked for. 0.9.1 is unchanged.
