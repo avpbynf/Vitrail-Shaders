@@ -33,6 +33,7 @@
 		"GameRendererBlurMixin",
 		"GameRendererHandMixin",
 		"GameRendererMixin",
+		"GameRendererWarmupMixin",
 		"GpuDeviceAccessor",
 		"ItemFeatureRendererMixin",
 		"ItemInHandRendererMixin",
