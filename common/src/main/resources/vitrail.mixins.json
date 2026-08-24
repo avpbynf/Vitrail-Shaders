@@ -62,6 +62,7 @@
 		"StagedVertexBufferDrawMixin",
 		"TextureManagerAccessor",
 		"VKDrawContextMixin",
+		"VulkanBackendMixin",
 		"VulkanCommandEncoderMixin",
 		"VulkanDeviceMixin",
 		"VulkanQueueSubmitMixin",
