@@ -2345,7 +2345,18 @@ public final class PackChain {
 
 		// Terrain is the world frame. Complementary Unbound's leftover families are the minute
 		// between packs; they compile on their first draw. Terrain is a handful of pipelines, and
-		// the first world frame hitch without them.
+		// the first world frame hitches without them.
+		//
+		// THE LEFTOVERS ARE NOT COMPILED AHEAD, and that is a decision rather than an omission.
+		// Doing it a program a frame, here, cost two minutes at two frames a second on entering a
+		// world with Complementary Unbound: one shaderc compile is about half a second and a frame
+		// is worth sixteen milliseconds, so there is no per-frame budget it fits in and spreading
+		// it only spaces the stalls out. It also pays for families the session may never draw. On
+		// first draw the cost is bounded by what is actually on screen.
+		//
+		// What would remove it rather than move it is compiling off the render thread, which turns
+		// on whether the device call underneath is safe there; nothing here has established that,
+		// and this engine has already paid for device work on the wrong thread.
 		if (compileNext(device, this.terrain.programs())) {
 			return false;
 		}
