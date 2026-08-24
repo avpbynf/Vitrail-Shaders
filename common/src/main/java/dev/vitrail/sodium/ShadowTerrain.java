@@ -176,7 +176,10 @@ public final class ShadowTerrain {
 		// them. The walk itself is the synchronous fallback, which is the one path that neither
 		// consults the asynchronous occlusion tree, empty for a viewport it has never seen, nor
 		// waits for it.
-		manager.prepareRender();
+		//
+		// prepareRender would then rotate the indirect command ring. The camera already did that
+		// at the top of the frame; a second rotate in the same frame is the stall #115 names.
+		((RenderSectionManagerAccessor) manager).vitrail$beginSecondWalk();
 		try {
 			FogParameters fog = ((MixinSodiumWorldRenderer) renderer).vitrail$lastFogParameters();
 			// The shape the pack asked for, and a box around the camera cut out of it wherever a

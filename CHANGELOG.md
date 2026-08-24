@@ -39,6 +39,10 @@ what the next one holds.
   picked while the loaded one goes on drawing, and Apply is the only thing that costs. A profile
   chosen before applying is the one that lands.
 
+- **The shadow walk no longer rotates Sodium's command ring a second time in the same frame.**
+  The lists still reset so the light does not append onto the camera's; the ring waits for the
+  next camera walk. Same shadows.
+
 ## 0.7.5-beta
 
 ### Added
