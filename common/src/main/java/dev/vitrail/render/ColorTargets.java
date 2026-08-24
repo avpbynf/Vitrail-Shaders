@@ -16,8 +16,10 @@ import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -124,11 +126,10 @@ final class ColorTargets {
 	private static final long LOUD_BYTES = 512L * 1024L * 1024L;
 
 	/**
-	 * Colour attachments one pass can carry. The encoder refuses a pipeline whose state count
-	 * differs, and eight is what a pack's own draw buffers already use; a sampled-before-write
-	 * flush that needs more opens a second pass.
+	 * What to assume a pass can carry before there is a device to ask. Eight is what a pack's own
+	 * draw buffers already use.
 	 */
-	private static final int MAX_COLOR_ATTACHMENTS = 8;
+	private static final int ASSUMED_COLOR_ATTACHMENTS = 8;
 
 	static final String CLEAR_LABEL = "Vitrail pending clears";
 
@@ -509,11 +510,12 @@ final class ColorTargets {
 			bySize.computeIfAbsent(key, ignored -> new ArrayList<>()).add(one);
 		}
 
+		int perPass = maxColorAttachments();
 		for (List<Pending> group : bySize.values()) {
 			int width = group.get(0).view().texture().getWidth(0);
 			int height = group.get(0).view().texture().getHeight(0);
-			for (int from = 0; from < group.size(); from += MAX_COLOR_ATTACHMENTS) {
-				int to = Math.min(from + MAX_COLOR_ATTACHMENTS, group.size());
+			for (int from = 0; from < group.size(); from += perPass) {
+				int to = Math.min(from + perPass, group.size());
 				RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> CLEAR_LABEL);
 				for (int index = from; index < to; index++) {
 					Pending one = group.get(index);
@@ -524,6 +526,22 @@ final class ColorTargets {
 				encoder.createRenderPass(descriptor).close();
 			}
 		}
+	}
+
+	/**
+	 * How many colour attachments one pass may carry, asked of the device rather than assumed.
+	 * <p>
+	 * The Vulkan minimum a driver has to offer is four, not eight, and the count that matters here
+	 * is whatever this device reports: a pass built with more attachments than it allows is not a
+	 * slow pass, it is an invalid one. Asked per call rather than held, because the only cost is a
+	 * record field and a device can be replaced under this class.
+	 */
+	private static int maxColorAttachments() {
+		GpuDevice device = RenderSystem.tryGetDevice();
+
+		return device == null
+				? ASSUMED_COLOR_ATTACHMENTS
+				: Math.max(1, device.getDeviceInfo().limits().maxColorAttachments());
 	}
 
 	/**
