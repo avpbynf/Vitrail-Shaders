@@ -1,5 +1,10 @@
 {
 	"options.vitrail.packs_title": "Shader Packs",
+	"options.vitrail.crash_graphics_api": "Backend after a crash",
+	"options.vitrail.crash_graphics_api_tooltip": "Controls which graphics backend is used again when the previous startup did not finish. Otherwise the game falls back to OpenGL, where shader packs are not drawn at all.",
+	"options.vitrail.crash_graphics_api.vulkan": "Vulkan",
+	"options.vitrail.crash_graphics_api.opengl": "OpenGL",
+	"options.vitrail.crash_graphics_api.game": "Game default",
 	"options.vitrail.shadow_distance": "Max Shadow Distance",
 	"options.vitrail.shadow_distance_tooltip": "Allows you to change the maximum distance for shadows. Terrain and entities beyond this distance will not cast shadows. Lowering the shadow distance can significantly increase performance.",
 	"options.vitrail.shadow_distance_forced": "Your current shader pack has already set a render distance for shadows; you cannot change it.",

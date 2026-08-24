@@ -1,5 +1,10 @@
 {
 	"options.vitrail.packs_title": "シェーダーパック",
+	"options.vitrail.crash_graphics_api": "Backend after a crash",
+	"options.vitrail.crash_graphics_api_tooltip": "Controls which graphics backend is used again when the previous startup did not finish. Otherwise the game falls back to OpenGL, where shader packs are not drawn at all.",
+	"options.vitrail.crash_graphics_api.vulkan": "Vulkan",
+	"options.vitrail.crash_graphics_api.opengl": "OpenGL",
+	"options.vitrail.crash_graphics_api.game": "Game default",
 	"options.vitrail.shadow_distance": "影の最大描画距離",
 	"options.vitrail.shadow_distance_tooltip": "影が描画される最大の距離を設定できます。 指定された値より遠くの地形やエンティティには影が描画されません。 最大描画距離を下げることで、パフォーマンスが向上することがあります。",
 	"options.vitrail.shadow_distance_forced": "お使いのシェーダーパックでは既に最大描画距離が設定されているため、ここでは変更できません。",

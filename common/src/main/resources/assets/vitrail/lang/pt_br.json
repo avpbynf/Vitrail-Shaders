@@ -1,5 +1,10 @@
 {
 	"options.vitrail.packs_title": "Pacotes de sombreadores",
+	"options.vitrail.crash_graphics_api": "Backend after a crash",
+	"options.vitrail.crash_graphics_api_tooltip": "Controls which graphics backend is used again when the previous startup did not finish. Otherwise the game falls back to OpenGL, where shader packs are not drawn at all.",
+	"options.vitrail.crash_graphics_api.vulkan": "Vulkan",
+	"options.vitrail.crash_graphics_api.opengl": "OpenGL",
+	"options.vitrail.crash_graphics_api.game": "Game default",
 	"options.vitrail.shadow_distance": "Distância das sombras",
 	"options.vitrail.shadow_distance_tooltip": "Permite alterar a distância máxima das sombras. O terreno e as entidades além dessa distância não projetarão sombras. O desempenho do jogo pode ser melhorado significativamente ao reduzir este valor.",
 	"options.vitrail.shadow_distance_forced": "Seu pacote de sombreadores já definiu um valor da distância das sombras e você não poderá alterá-lo.",

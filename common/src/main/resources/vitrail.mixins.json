@@ -23,6 +23,7 @@
 		"CustomSubmitMixin",
 		"DebugScreenEntriesMixin",
 		"DebugScreenEntryListMixin",
+		"MinecraftStartupGuardMixin",
 		"MixinDefaultChunkRenderer",
 		"DefaultFluidRendererMixin",
 		"EntityRenderDispatcherMixin",

@@ -1,5 +1,10 @@
 {
 	"options.vitrail.packs_title": "Наборы шейдеров",
+	"options.vitrail.crash_graphics_api": "Backend after a crash",
+	"options.vitrail.crash_graphics_api_tooltip": "Controls which graphics backend is used again when the previous startup did not finish. Otherwise the game falls back to OpenGL, where shader packs are not drawn at all.",
+	"options.vitrail.crash_graphics_api.vulkan": "Vulkan",
+	"options.vitrail.crash_graphics_api.opengl": "OpenGL",
+	"options.vitrail.crash_graphics_api.game": "Game default",
 	"options.vitrail.shadow_distance": "Дальность теней",
 	"options.vitrail.shadow_distance_tooltip": "Позволяет изменять максимальное расстояние видимости теней. Блоки и сущности за его пределами не будут иметь теней. Снижая этот параметр, вы можете значительно улучшить производительность.",
 	"options.vitrail.shadow_distance_forced": "Ваш текущий набор шейдеров уже установил своё расстояние для теней; вы не сможете его изменить.",
