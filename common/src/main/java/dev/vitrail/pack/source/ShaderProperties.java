@@ -124,6 +124,8 @@ public final class ShaderProperties {
 	// The noise image is answered here because everything else about it is settled: one path, one
 	// sampler, every stage. The general family is not, and is read by customTextures instead.
 	private static final Pattern TEXTURE_NOISE = Pattern.compile("^\\s*texture\\.noise\\s*=\\s*(.*)$");
+	private static final Pattern SHADOW_ENABLED =
+			Pattern.compile("^\\s*shadow\\.enabled\\s*=\\s*(.*)$");
 	private static final Pattern CUSTOM_TEXTURE =
 			Pattern.compile("^\\s*((?:texture|customTexture)\\.[^=\\s]+)\\s*=\\s*(.*)$");
 	private static final Pattern IMAGE = Pattern.compile("^\\s*image\\.[^=\\s.]+\\s*=\\s*(.*)$");
@@ -470,6 +472,13 @@ public final class ShaderProperties {
 			return;
 		}
 
+		// Consumed on the casters' rule: a value that is not a boolean is honoured nowhere, so
+		// it has to stay visible among the keys nothing reads. The state itself comes out of
+		// shadowEnabled, under the conditionals.
+		Matcher shadowEnabled = SHADOW_ENABLED.matcher(line);
+		if (shadowEnabled.matches() && truth(shadowEnabled.group(1).trim()) != null) {
+			return;
+		}
 
 		// Consumed and not kept: the rest of the family is read by customTextures, which walks the
 		// conditionals. Falling through here would leave those lines among the keys nothing reads
@@ -1412,6 +1421,23 @@ public final class ShaderProperties {
 		return overrides;
 	}
 
+	/**
+	 * Whether the pack switches its whole shadow map on or off, {@code shadow.enabled}, under the
+	 * conditionals. Empty when the pack says nothing, which leaves the stage standing on its
+	 * programs; the reference reads it the same way and only an explicit {@code false} moves
+	 * anything there ({@code IrisRenderingPipeline.java:464}, {@code orElse(true)}).
+	 */
+	public Optional<Boolean> shadowEnabled(Map<String, String> defines) {
+		Boolean state = null;
+		for (Matcher line : live(SHADOW_ENABLED, defines)) {
+			Boolean value = truth(line.group(1).trim());
+			if (value != null) {
+				state = value;
+			}
+		}
+
+		return Optional.ofNullable(state);
+	}
 
 	/**
 	 * The {@code alphaTest} lines that name neither a function and a reference nor {@code off}.
