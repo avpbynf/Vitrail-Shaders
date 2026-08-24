@@ -71,8 +71,8 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: Vitrail and its loader, Minecraft, Sodium, Chloride, and anything else in `mods/`.
-      placeholder: Vitrail 0.6.0-beta on NeoForge, MC 26.2, Sodium 0.9.1, Chloride 1.4.0
+      description: Vitrail and its loader, Minecraft, Sodium, and anything else in `mods/`.
+      placeholder: Vitrail 0.6.0-beta on NeoForge, MC 26.2, Sodium 0.9.1
     validations:
       required: true
 

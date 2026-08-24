@@ -22,11 +22,16 @@ what the next one holds.
   under Video Settings picks what to come back to, and it comes back to Vulkan unless told
   otherwise.
 
-- **Fabric no longer requires Chloride.** It never had anything to do there: what Chloride is for
-  is the loading window NeoForge opens before the game, which Fabric has no equivalent of. NeoForge
-  still needs it.
-
 ### Changed
+
+- **Chloride is no longer required, on either loader.** One thing was behind that
+  requirement: NeoForge opens a loading window before the game exists, that window carries an
+  OpenGL context, and the game takes it over instead of making one, so the Vulkan surface is
+  asked for on a window built for OpenGL. Vitrail now refuses that window itself when the
+  backend is Vulkan, takes it off FML's hands at the end of mod loading, and closes it once
+  the game has drawn its first frame. Fabric opens no such window and never needed the help.
+  Chloride remains worth installing, its settings are still read and reported, and running it
+  alongside changes nothing.
 
 - **Opening a pack's settings no longer applies it.** Looking at another pack's pages used to load
   it first, on its own default profile, so anybody meaning to open a heavy pack, turn it down and
