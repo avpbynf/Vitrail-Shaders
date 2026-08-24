@@ -37,6 +37,13 @@ what the next one holds.
   Chloride remains worth installing, its settings are still read and reported, and running it
   alongside changes nothing.
 
+- **The odd corners of a pack's properties read the way Iris reads them.** An `alphaTest.`, a
+  `texture.noise` or a `dimension.properties` line written under a setting's `#if` now comes and
+  goes with the setting, a world declared twice keeps the last declaration instead of the first,
+  a page laid out twice keeps its last line instead of both, and a pack writing
+  `shadow.enabled=false` gets what it asked for: nothing is ever drawn from the light. No known
+  pack is changed by any of this today.
+
 - **The settings screen reads a pack's layout the way Iris does.** The `*` token now pours out
   every setting no other page names, where the pack put it; a pack without a `screen=` line gets
   one page holding everything instead of an empty one; and a name Iris refuses to configure, a
