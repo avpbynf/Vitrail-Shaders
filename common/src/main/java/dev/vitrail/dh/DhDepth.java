@@ -146,7 +146,9 @@ public final class DhDepth {
 	 * unclamped one the class comment carries, and since the clamp only ever pulls that plane in, it
 	 * is always the further out of the two. Its far is out by the ratio of the two formulas.
 	 *
-	 * @param dest filled with the near plane and then the far one, and left alone on false
+	 * @param dest filled with the near plane and then the far one. Left alone where {@link #zRow}
+	 *             answered nothing, but carrying that row where this refused it for its shape, so a
+	 *             caller reads the pair only on true
 	 */
 	public static boolean planes(Vector2f dest) {
 		if (!zRow(dest)) {
@@ -165,15 +167,49 @@ public final class DhDepth {
 	}
 
 	/**
-	 * How far DH draws, in blocks, or -1 when it cannot be asked. Blocks and not chunks, because
-	 * blocks is what a pack does arithmetic with and what Iris publishes under the same name.
+	 * How far DH draws, in blocks, or -1 for the game's own distance to stand in: because that mod's
+	 * rendering is switched off, or because it can no longer be asked. Not because it has yet to
+	 * draw, which is the point of asking it here rather than off a drawn matrix. Blocks and not chunks, because blocks is
+	 * what a pack does arithmetic with and what Iris publishes under the same name.
+	 * <p>
+	 * <strong>The question asked here is Iris's, to the term.</strong> It answers
+	 * {@code getEffectiveRenderDistance()} on {@code configs == null || !dhEnabled} and
+	 * {@code chunkRenderDistance * 16} otherwise, {@code compat/dh/DHCompatInternal.java:102-109},
+	 * and its {@code dhEnabled} is a kept copy of {@code configs.graphics().renderingEnabled()},
+	 * {@code compat/dh/DHCompatInternal.java:141-154}.
+	 * <p>
+	 * <strong>The switch half is read here because the number is consumed on this side of the
+	 * engine too</strong>, and not only by a pack that could be told the far terrain is gone by the
+	 * {@code DISTANT_HORIZONS} symbol dropping. {@code render/ViewMatrices} resolves a shadow plane
+	 * a pack left at -1 off this value, under no symbol at all, so a player turning that mod's
+	 * rendering off would otherwise keep a shadow box sized for a far terrain nothing is drawing.
+	 * Iris sizes that same box off the same gated answer, {@code shadows/ShadowRenderer.java:429}.
+	 * <p>
+	 * <strong>Iris looks its own compat layer up by name too</strong>, one layer further out and
+	 * over its own classes rather than that mod's, {@code compat/dh/DHCompat.java:57-86}, and
+	 * answers the game's own distance once that lookup has failed, {@code :113-114}. <strong>It is
+	 * not the same latch, and the difference is the interesting half.</strong> Iris only lets that
+	 * failure stand quietly where the mod is absent; with the mod loaded it rethrows,
+	 * {@code :78-82}, so a player either gets the far terrain or gets a crash naming it. The latches
+	 * here degrade instead, mid-session and on a warning, which is deliberate: the reads are of that
+	 * mod's own private fields by name, so they can fail on a version this repository has never
+	 * seen, and a far terrain that goes flat is a picture while a frame that throws is not.
+	 * <p>
+	 * <strong>Where this parts from Iris on the switch itself:</strong> Iris keeps one copy of it
+	 * and feeds both the preprocessor symbol and this number from that copy, so the two cannot
+	 * disagree. Here the switch is read live at every asking, twice in an ordinary frame and several
+	 * times more in one that rereads the pack, and every one of those reads sits on the render
+	 * thread with the pack reread between them synchronously
+	 * ({@code render/PackChain} does it in the frame that saw the flip). A frame whose symbol and
+	 * whose number disagreed would need that mod to write its configuration off the render thread,
+	 * which has not been observed here and is not something this can rule out.
 	 */
 	public static int renderDistanceBlocks() {
 		if (!resolved) {
 			resolve();
 		}
 
-		if (!usable || !distanceUsable) {
+		if (!usable || !distanceUsable || !renderingEnabled()) {
 			return -1;
 		}
 
@@ -188,11 +224,31 @@ public final class DhDepth {
 			return (valueMethod.invoke(value) instanceof Integer chunks) ? chunks * CHUNK : -1;
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 			distanceUsable = false;
-			Vitrail.logger().warn("Distant Horizons' render distance cannot be read, so a pack is "
-					+ "given the game's own distance and clip planes instead of that mod's, for the "
-					+ "rest of this session", e);
+			Vitrail.logger().warn("Distant Horizons' render distance cannot be read, so for the rest "
+					+ "of this session a pack is given the game's own distance, counted in CHUNKS, "
+					+ "while it is still told the far terrain is there and still given that mod's "
+					+ "clip planes. A pack that measures a length against that distance will fog "
+					+ "the far terrain far too close", e);
 			return -1;
 		}
+	}
+
+	/**
+	 * Whether this engine is still reading that mod at all, which is a question about the latches
+	 * and not about the far terrain.
+	 * <p>
+	 * It exists for the frame rather than for a pack: the three answers a frame takes are three
+	 * separate reads, any of which can drop this on a reflective failure, and the frame that drop
+	 * lands in would otherwise go out holding answers from both sides of it.
+	 * {@code render/FrameState} takes all three, then asks this, then publishes, and takes the whole
+	 * fallback where it is false. No reflection here, only the flag.
+	 * <p>
+	 * <strong>It answers for this latch and not for the narrower one beside it.</strong>
+	 * {@link #renderDistanceBlocks} has a latch of its own that leaves this standing, and that one
+	 * is not an incoherent frame but a lasting parting, written up where it is warned about.
+	 */
+	public static boolean usable() {
+		return usable;
 	}
 
 	/**

@@ -168,8 +168,11 @@ public interface ViewSource {
 	float dhFarPlane();
 
 	/**
-	 * How far the far terrain reaches, in BLOCKS while Distant Horizons is drawing one and in
-	 * CHUNKS while it is not. The change of unit is Iris's own and packs are written against it:
+	 * How far the far terrain reaches, in BLOCKS while Distant Horizons' rendering is switched on
+	 * and this engine can still read it, and in CHUNKS otherwise. It does not wait on that mod
+	 * having drawn: the distance is a setting rather than something read off a drawn matrix, which
+	 * is the whole of what {@code render/ViewMatrices.advanceDistant} carries. The change of unit
+	 * is Iris's own and packs are written against it:
 	 * without the mod the name answers {@code getEffectiveRenderDistance} and with it, that mod's
 	 * own chunk setting times sixteen.
 	 */

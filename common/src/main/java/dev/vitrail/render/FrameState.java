@@ -434,30 +434,57 @@ public final class FrameState implements WorldState {
 				renderDistance);
 
 		// And what Distant Horizons drew with, which is nothing at all on the sessions that have no
-		// far terrain. The three are taken together or not at all, the distance first: advanceDistant
-		// says what a frame that served two of them from DH and the third from the game costs.
+		// far terrain. The distance answers on its own and the two planes answer on theirs, which is
+		// how Iris asks them, and advanceDistant carries what the pair being short of the distance
+		// costs.
 		//
-		// What they carry is the projection DH drew the PREVIOUS frame with, and that is worth
+		// What the planes carry is the projection DH drew the PREVIOUS frame with, and that is worth
 		// saying rather than hiding. DH fills its render parameter from the opaque chunk pass, while
 		// the pack's frame opens ahead of it at the first sky draw. Reading them later would not
 		// mend it: the block is written once, here, so a value taken after it would reach a pack one
 		// frame later still. What it costs is nothing measurable, both planes moving with DH's own
 		// settings and with the player's height above the world rather than with the camera.
+		//
+		// And the volume beside them, which is the row rather than the pair of planes the planes
+		// were worked out from: a row put back together out of two planes would be the same
+		// arithmetic done twice and rounded twice. Handed a zero offset where there is no row to be
+		// had, and then the volume published is the frame's own, which is what a pack reads where
+		// this engine draws no far terrain at all.
+		//
+		// ALL THREE ARE TAKEN BEFORE ANY OF THEM IS PUBLISHED, and that is what stands in for the
+		// coupling rather than the coupling itself. Each of the three reads can latch this engine's
+		// whole view of that mod off on a reflective failure, and the frame that latch lands in is
+		// the only frame that could hold answers from both sides of it: far terrain still on screen,
+		// and the numbers that place it disagreeing. Ordering the reads mends nothing, it only
+		// chooses which of them is the stale one, so the frame asks after all three instead and
+		// takes the fallback whole. On a latch inside the distance or inside the planes that is what
+		// this method already did while the three moved together. On a latch inside the row it is
+		// new: that read used to come after the pair was published, so the frame went out with a
+		// real distance, real planes and a volume that had given up.
+		//
+		// It does NOT cover the three partings that OUTLIVE the coupling: the ordinary one this
+		// batch exists for, one that is Iris's own answer, and one that is a hole older than any of
+		// this. They are named one by one in ViewMatrices.advanceDistant.
 		int distance = DhDepth.renderDistanceBlocks();
-		if (distance >= 0 && DhDepth.planes(this.distantPlanes)) {
-			this.view.advanceDistant(this.distantPlanes.x, this.distantPlanes.y, distance);
-		} else {
-			this.view.advanceDistant(ViewMatrices.FALLBACK_PLANE, ViewMatrices.FALLBACK_PLANE, -1);
+
+		boolean planes = DhDepth.planes(this.distantPlanes);
+		float near = planes ? this.distantPlanes.x : ViewMatrices.FALLBACK_PLANE;
+		float far = planes ? this.distantPlanes.y : ViewMatrices.FALLBACK_PLANE;
+
+		boolean row = DhDepth.zRow(this.distantPlanes);
+		float scale = row ? this.distantPlanes.x : 0.0F;
+		float offset = row ? this.distantPlanes.y : 0.0F;
+
+		if (!DhDepth.usable()) {
+			distance = -1;
+			near = ViewMatrices.FALLBACK_PLANE;
+			far = ViewMatrices.FALLBACK_PLANE;
+			scale = 0.0F;
+			offset = 0.0F;
 		}
 
-		// And the volume itself, which is the row rather than the pair of planes the planes were
-		// worked out from: a row put back together out of two planes would be the same arithmetic
-		// done twice and rounded twice. Handed a zero offset where there is no row to be had, and
-		// then the volume published is the frame's own, which is what a pack reads where this engine
-		// draws no far terrain at all.
-		boolean row = DhDepth.zRow(this.distantPlanes);
-		this.view.advanceDistantVolume(row ? this.distantPlanes.x : 0.0F,
-				row ? this.distantPlanes.y : 0.0F);
+		this.view.advanceDistant(near, far, distance);
+		this.view.advanceDistantVolume(scale, offset);
 
 		this.view.advanceShadow(sunAngle(isDay()) / 360.0F, this.directives.sunPathRotation(),
 				this.directives.shadowIntervalSize(), this.shift.unshifted(),
