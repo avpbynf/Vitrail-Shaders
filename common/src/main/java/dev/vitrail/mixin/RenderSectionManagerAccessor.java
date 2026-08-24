@@ -38,16 +38,4 @@ public interface RenderSectionManagerAccessor {
 
 	@Invoker("invalidateRenderLists")
 	void vitrail$invalidateRenderLists();
-
-	/**
-	 * The first two steps of {@code prepareRender}: bump the frame so the light's walk replaces
-	 * the camera's lists, and invalidate those lists if the camera moved. Does not rotate the
-	 * draw ring.
-	 */
-	default void vitrail$beginSecondWalk() {
-		vitrail$setFrame(vitrail$getFrame() + 1);
-		if (vitrail$cameraChanged()) {
-			vitrail$invalidateRenderLists();
-		}
-	}
 }
