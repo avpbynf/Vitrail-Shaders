@@ -11,6 +11,21 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Added
+
+- **A crash during startup no longer takes the graphics backend with it.** The game resets the
+  preferred graphics API, and the fullscreen mode, whenever the previous startup did not finish,
+  and it does that for any crash rather than for a backend that failed. Since nothing of this mod
+  is drawn off Vulkan, that turned one crash into a restart to set it back by hand. A selector
+  under Video Settings picks what to come back to, and it comes back to Vulkan unless told
+  otherwise.
+
+- **Fabric no longer requires Chloride.** It never had anything to do there: what Chloride is for
+  is the loading window NeoForge opens before the game, which Fabric has no equivalent of. NeoForge
+  still needs it.
+
 ## 0.7.5-beta
 
 ### Added
