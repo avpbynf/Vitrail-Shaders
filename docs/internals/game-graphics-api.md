@@ -204,6 +204,31 @@ assigns them and an intermediate module rewrites them afterwards. The same refle
 decides how a vertex stage's outputs meet a fragment stage's inputs, with an asymmetry of its own
 that is sharper still: that one is in [translation](../translation.md).
 
+## Compute and storage images: the facade vs the backend
+
+The Java device has no compute. Its shader-type enumeration is a vertex stage and a fragment stage,
+precompile accepts a render pipeline and nothing else, a texture's usage bits are copy, sample,
+attachment and cubemap, and bind-group reflection enumerates uniform buffers and sampled images.
+A pack compute unit that went through that path would compile as a vertex shader or not at all,
+and a storage image it declared would be bound to nothing. That is still true, and it is why this
+engine poses no `IRIS_FEATURE_` for custom images.
+
+The Vulkan backend behind that facade already has the rest. The device object hands out the
+`VkDevice`, the VMA allocator, and a graphics queue created with both the graphics and compute
+bits. It also creates a dedicated compute queue when the hardware has a spare family, and it
+enables `VK_KHR_push_descriptor` as a required extension. The GLSL compiler it embeds is shaderc,
+which has a compute kind the game never passes only because the Java enumeration has no constant
+for it. None of that needs a mixin: those methods are public.
+
+What does need going around is texture creation. The usage-bit mapping never sets the Vulkan
+storage bit, so a storage image has to be allocated through VMA rather than through
+`createTexture`. That is an extension of how the device is used, not of the device class.
+
+None of this is inference. A compute shader built with that shaderc, dispatched against a storage
+image allocated through VMA, writes texels the same frame reads back unchanged: the road is open,
+and what is missing is a stage in this engine that walks it rather than anything in the backend.
+Whether a pack's own compute is served is a separate question, answered where the pack's chain is.
+
 ## Small things that cost a lot to rediscover
 
 - **The shared sampler cache hands out shared objects.** Never close one; the cache owns it.
