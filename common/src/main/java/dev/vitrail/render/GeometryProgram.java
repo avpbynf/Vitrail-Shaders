@@ -11,6 +11,7 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.DrawBuffers;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
+import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.TextSink;
@@ -361,6 +362,7 @@ final class GeometryProgram {
 	private final PackValues values;
 	private final PackUniforms uniforms;
 	private final List<String> samplers;
+	private final List<String> storage;
 
 	/**
 	 * The same names in the same order, each carrying what the load settled about it and what the
@@ -583,6 +585,10 @@ final class GeometryProgram {
 		this.uniforms = new PackUniforms(loaded.program().uniforms(),
 				pass.shadow() ? values.shadowGeometryCatalog() : values.geometryCatalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
+		this.storage = loaded.storageBlocks().stream()
+				.distinct()
+				.filter(StorageBuffers::named)
+				.toList();
 		// Which map a name asks for, and whether it is the albedo, are questions about the NAME and
 		// about the plan the load built, so they are asked here once for the life of the program.
 		this.bound = this.samplers.stream()
@@ -619,6 +625,7 @@ final class GeometryProgram {
 		}
 
 		this.samplers.forEach(bindings::withSampler);
+		this.storage.forEach(name -> bindings.withUniform(name, UniformType.UNIFORM_BUFFER));
 
 		// Everything but the shaders, the bind group, the attachments and the two lines below is
 		// Sodium's own, taken from ShaderChunkRenderer.createShader: the pass this is bound into was
@@ -688,12 +695,16 @@ final class GeometryProgram {
 
 		this.pipeline = builder.build();
 
-		// A storage block is the one refusal that does not announce itself. An unbindable sampler
-		// stops the pipeline from being built and this class already falls back on that; a storage
-		// block compiles, never enters a bind group, and leaves the descriptor on the binding the
-		// pack wrote, which is a draw against nothing. The chain refuses one by name and so does
-		// this, so that the world keeps the game's own shader instead.
-		List<String> storage = loaded.storageBlocks();
+		// A storage block this engine has no bufferObject for is the one refusal that does not
+		// announce itself. An unbindable sampler stops the pipeline from being built and this class
+		// already falls back on that; a storage block compiles, never enters a bind group, and
+		// leaves the descriptor on the binding the pack wrote, which is a draw against nothing.
+		// The chain refuses one by name and so does this, so that the world keeps the game's own
+		// shader instead. Complementary's blockDataBuffer is served, and stays off this list.
+		List<String> storage = loaded.storageBlocks().stream()
+				.distinct()
+				.filter(name -> !StorageBuffers.named(name))
+				.toList();
 		if (!storage.isEmpty()) {
 			this.broken = true;
 			Vitrail.logger().error("{} declares the storage block {}, which nothing binds, so the "
@@ -902,6 +913,7 @@ final class GeometryProgram {
 		}
 
 		pass.setUniform(UNIFORM_BLOCK, blockSlice());
+		StorageBuffers.bind(pass, this.storage);
 
 		for (Sampled one : this.bound) {
 			if (one.followsTheImage()) {
@@ -1768,6 +1780,7 @@ final class GeometryProgram {
 
 		return ATLAS.contains(sampler) || LIGHTMAP.equals(sampler) || OVERLAY.equals(sampler)
 				|| kind == SamplerPlan.Kind.COLORTEX
+				|| kind == SamplerPlan.Kind.CUSTOM_IMAGE
 				|| kind == SamplerPlan.Kind.NOISE
 				|| (kind == SamplerPlan.Kind.DEPTH && (this.pass.afterDeferred()
 						|| (SamplerPlan.preHandCopy(sampler)
@@ -1812,8 +1825,15 @@ final class GeometryProgram {
 		// since every tap of such a loop rides on this filter. It has to match PackPass, which binds
 		// the same name for the full screen passes: the two halves of one frame reading one map
 		// through two filters is a difference nothing would ever explain.
+		// A custom image follows its format, which is Iris's rule (GlImage filters a non-integer
+		// image LINEAR): the floodfill volumes are rgba16f and the light they carry is continuous,
+		// so NEAREST turns every voxel into a lit brick with a hard edge. An integer volume keeps
+		// NEAREST, since ids do not average.
 		return switch (binding.kind()) {
 			case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
+			case CUSTOM_IMAGE -> CustomImages.image(sampler)
+					.map(image -> image.internalFormat().used().integer())
+					.orElse(true) ? FilterMode.NEAREST : FilterMode.LINEAR;
 			default -> FilterMode.NEAREST;
 		};
 	}
