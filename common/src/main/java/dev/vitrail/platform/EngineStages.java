@@ -102,6 +102,16 @@ public final class EngineStages {
 		}
 
 		ShadowTerrain.capture(modelView, cameraPosition);
+
+		// The pack's shadow compute, HERE at the head of the frame and not beside the shadow map
+		// that feeds it, and the placement is the parity contract. Complementary's floodfill
+		// ping-pongs on frameCounter % 2, writing one half and having this frame's gbuffers read
+		// the other. Dispatched at the end of the frame it runs under the WRITER's parity, and
+		// every reader is a frame late forever after: the coloured light smears and snaps as the
+		// player walks. Run here it shares the frame, and so the parity, of its readers, which is
+		// the moment Iris gives it inside its own shadow render. The volumes it propagates are the
+		// previous frame's shadow-geometry writes, one frame late like the shadow map itself.
+		PackChain.dispatchShadowCompute();
 	}
 
 	/**

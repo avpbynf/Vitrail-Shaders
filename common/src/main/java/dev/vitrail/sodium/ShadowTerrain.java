@@ -8,6 +8,7 @@ import dev.vitrail.render.DistantDraw;
 import dev.vitrail.render.RingTimings;
 import dev.vitrail.render.ShadowCullPlan;
 import dev.vitrail.render.ShadowGeometry;
+import dev.vitrail.render.PackChain;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.Vitrail;
 
@@ -140,6 +141,11 @@ public final class ShadowTerrain {
 		// below hands them to the light, and from that point on the camera has to be given them
 		// back whatever else happens.
 		if (!TerrainDraw.openShadowStage()) {
+			// Complementary Ultra still samples floodfill and WSR from gbuffers. The shadow
+			// programs may be refused so the stage never opens, but the clear still has to run
+			// or the voxel volume keeps stale writes; the compute itself runs at the head of
+			// the frame, from the frame graph setup, whatever this stage does.
+			PackChain.clearCustomImages();
 			return;
 		}
 
@@ -255,6 +261,10 @@ public final class ShadowTerrain {
 		GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR, true);
 
 		ShadowCasters casters = TerrainDraw.shadowCasters();
+
+		// Before geometry writes, matching Iris clearing custom images at the head of the
+		// shadow stage. Complementary's voxel volume is marked clear; the floodfill is not.
+		PackChain.clearCustomImages();
 
 		// Refused by the pack rather than skipped for cheapness.
 		if (casters.terrain()) {
