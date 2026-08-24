@@ -258,8 +258,13 @@ public final class ShaderProperties {
 			// The name of the page, "" for the one the pack opens on. A sub page is referred to
 			// from its parent by its own name, so the two are joined by name rather than nested.
 			String page = screen.group(1) == null ? "" : screen.group(1).substring(1);
-			List<String> layout = builder.screens.computeIfAbsent(page, _ -> new ArrayList<>());
-			List<ScreenToken> slots = builder.screenLayout.computeIfAbsent(page, _ -> new ArrayList<>());
+			// A second line for the same page REPLACES the first, which is how the reference
+			// reads the pair: the last assignment of a key is the key. Only the layout starts
+			// over; the token census below keeps counting what the pack wrote, dead line or not.
+			List<String> layout = new ArrayList<>();
+			List<ScreenToken> slots = new ArrayList<>();
+			builder.screens.put(page, layout);
+			builder.screenLayout.put(page, slots);
 
 			// A run of SPACES and not a run of whitespace. The list directives are the only ones Iris
 			// splits on more than one space, and even there a tab is not a separator; every other
