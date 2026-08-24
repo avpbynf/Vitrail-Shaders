@@ -2231,6 +2231,16 @@ public final class PackChain {
 		// frame, so a frame no program of the pack drew in is served an empty one rather than the
 		// last one that was written.
 		GpuTextureView covered = this.targets.coverage();
+		// The mask's own emptying is owed HERE when nothing else has paid it. It rides the load-op
+		// of the first geometry pass that attaches it, which is free and is the whole point, but a
+		// frame in which the pack's geometry opens no pass at all never reaches that load-op. The
+		// mask would then still hold the LAST frame's depths, compared against this frame's with
+		// the camera moved in between, and the seed would repaint the pack's geometry over most of
+		// the screen. A standalone clear is a GPU stop, and on those frames it is the right price.
+		if (covered != null) {
+			this.targets.flushSampled(encoder, List.of(covered), List.of());
+		}
+
 		// The far terrain's own depth rides the same fallback: a frame it drew nothing in reads as
 		// nothing of the pack's standing there, through the sentinel sitting outside the range on
 		// the clear's side.
