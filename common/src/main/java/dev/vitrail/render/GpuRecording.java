@@ -55,9 +55,12 @@ final class GpuRecording {
 	}
 
 	/**
-	 * Makes what shaders and transfers did to an image before this point visible to a
-	 * {@code vkCmdClearColorImage} about to rewrite it. Without it the clear races the previous
-	 * frame's sampled reads and the previous dispatch's stores on the same volume.
+	 * Makes what shaders and transfers did to an image before this point visible to a transfer
+	 * about to rewrite it or read it. Without it the clear races the previous frame's sampled reads
+	 * and the previous dispatch's stores on the same volume.
+	 * <p>
+	 * The read half is not spare. A volume moved onto this frame's anchor is COPIED OUT of first,
+	 * and what it is copied out of is exactly the previous frame's shadow geometry stores.
 	 */
 	static void beforeTransfer(VkCommandBuffer commands, MemoryStack stack) {
 		VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack).sType$Default();
@@ -69,7 +72,8 @@ final class GpuRecording {
 				| VK13.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
 				| VK13.VK_ACCESS_2_TRANSFER_WRITE_BIT);
 		barrier.dstStageMask(VK13.VK_PIPELINE_STAGE_2_TRANSFER_BIT);
-		barrier.dstAccessMask(VK13.VK_ACCESS_2_TRANSFER_WRITE_BIT);
+		barrier.dstAccessMask(VK13.VK_ACCESS_2_TRANSFER_WRITE_BIT
+				| VK13.VK_ACCESS_2_TRANSFER_READ_BIT);
 		VkDependencyInfo dependency = VkDependencyInfo.calloc(stack).sType$Default();
 		dependency.pMemoryBarriers(barrier);
 		KHRSynchronization2.vkCmdPipelineBarrier2KHR(commands, dependency);
@@ -89,6 +93,23 @@ final class GpuRecording {
 		barrier.dstAccessMask(VK13.VK_ACCESS_2_SHADER_STORAGE_READ_BIT
 				| VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
 				| VK13.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+		VkDependencyInfo dependency = VkDependencyInfo.calloc(stack).sType$Default();
+		dependency.pMemoryBarriers(barrier);
+		KHRSynchronization2.vkCmdPipelineBarrier2KHR(commands, dependency);
+	}
+
+	/**
+	 * Orders one copy against the next, which neither of the two above does: they carry a transfer
+	 * on one side only, and a volume copied out and back reads on the transfer side what the
+	 * transfer side has just written.
+	 */
+	static void betweenTransfers(VkCommandBuffer commands, MemoryStack stack) {
+		VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack).sType$Default();
+		barrier.srcStageMask(VK13.VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+		barrier.srcAccessMask(VK13.VK_ACCESS_2_TRANSFER_WRITE_BIT);
+		barrier.dstStageMask(VK13.VK_PIPELINE_STAGE_2_TRANSFER_BIT);
+		barrier.dstAccessMask(VK13.VK_ACCESS_2_TRANSFER_READ_BIT
+				| VK13.VK_ACCESS_2_TRANSFER_WRITE_BIT);
 		VkDependencyInfo dependency = VkDependencyInfo.calloc(stack).sType$Default();
 		dependency.pMemoryBarriers(barrier);
 		KHRSynchronization2.vkCmdPipelineBarrier2KHR(commands, dependency);
