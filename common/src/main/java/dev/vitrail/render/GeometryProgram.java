@@ -379,6 +379,13 @@ final class GeometryProgram {
 	private final boolean gameTransforms;
 
 	private MappableRingBuffer block;
+
+	/** The whole block as one slice, and the buffer it was cut from. See {@link #blockSlice}. */
+	private GpuBufferSlice blockSlice;
+
+	private GpuBuffer blockSliceOf;
+
+	private int blockSliceBytes;
 	private TextureTarget black;
 	private TextureTarget white;
 	private TextureTarget grey;
@@ -894,7 +901,7 @@ final class GeometryProgram {
 							: "");
 		}
 
-		pass.setUniform(UNIFORM_BLOCK, this.block.currentBuffer().slice(0, blockBytes()));
+		pass.setUniform(UNIFORM_BLOCK, blockSlice());
 
 		for (Sampled one : this.bound) {
 			if (one.followsTheImage()) {
@@ -1327,6 +1334,11 @@ final class GeometryProgram {
 			this.block = null;
 		}
 
+		// With the ring and not after it: a slice outliving the buffer it names is memory that reads
+		// as valid.
+		this.blockSlice = null;
+		this.blockSliceOf = null;
+
 		this.black = release(this.black);
 		this.white = release(this.white);
 		this.grey = release(this.grey);
@@ -1373,6 +1385,41 @@ final class GeometryProgram {
 
 	private int blockBytes() {
 		return Math.max(16, this.uniforms.size());
+	}
+
+	/**
+	 * The whole of this program's uniform block, as the one slice that names it.
+	 * <p>
+	 * Both its arguments are fixed for as long as the ring hands back the same buffer: the offset is
+	 * nought and the length is the block's own size, which is what the ring was built against. Built
+	 * again at every bind, it was one object per entity submitted and per Sodium region drawn, twice
+	 * over on a frame with a shadow map. Kept beside the buffer it was cut from, it is one a frame:
+	 * the ring turns once, at the close of the frame, and a turn is the only thing that can make the
+	 * old one name the wrong memory.
+	 * <p>
+	 * {@link #release} drops it with the ring, so a slice never outlives the buffer under it.
+	 */
+	private GpuBufferSlice blockSlice() {
+		GpuBuffer buffer = this.block.currentBuffer();
+		if (PassTimings.keepRedoneWork()) {
+			PassTimings.censusSlice();
+
+			return buffer.slice(0, blockBytes());
+		}
+
+		int bytes = blockBytes();
+		// The length as well as the buffer, though only the buffer can move today: the block's size
+		// is settled at translation and a translation goes through release, which drops the ring.
+		// Comparing it costs one integer and takes a silent wrong answer off the table if that ever
+		// stops being true.
+		if (this.blockSlice == null || this.blockSliceOf != buffer || this.blockSliceBytes != bytes) {
+			PassTimings.censusSlice();
+			this.blockSlice = buffer.slice(0, bytes);
+			this.blockSliceOf = buffer;
+			this.blockSliceBytes = bytes;
+		}
+
+		return this.blockSlice;
 	}
 
 	private void writeBlock() {
