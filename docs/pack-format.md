@@ -178,13 +178,21 @@ default is the tightest of them rather than the loosest.
 
 A word this cannot read leaves the default standing, which is what the reference does with it.
 
-**The safe zone's box widens on the width test alone now.** The width comes from a `const float
-voxelDistance`, which only counts where it sits on a line that survives the pack's own
-preprocessor and where it is wider than the shadow distance. The first condition is met for the
-corpus since custom images are served: `IRIS_FEATURE_CUSTOM_IMAGES` is posed, so the declarations
-behind it are live. What remains is the second, per pack: a `voxelDistance` narrower than the
-same pack's shadow distance still leaves the box nought blocks wide, the state chosen and the
-sweep running unchanged.
+**The safe zone's box can have a width now, where for most of the corpus it could not.** The width
+comes from a `const float voxelDistance`, and it only counts where it sits on a line that survives
+the pack's own preprocessor. Most packs that write one put it behind `IRIS_FEATURE_CUSTOM_IMAGES`,
+directly or through the coloured lighting the same flag gates, and while no such define was posed
+those lines were dead: the value never arrived, and the box came out nought blocks wide with the
+state still chosen, so the shape said safe zone and behaved as the plain sweep. Custom images being
+served, a pack that also turns its own coloured lighting on brings a width. A pack that declares the
+width outside any such condition always had one.
+
+That box is normally shorter than the shadow distance, so it settles nothing about how far the walk
+reaches. What it settles is what the SWEEP would have thrown away: a section inside it is kept
+whatever the sweep says. That is what a pack sampling its own voxel grid is owed, because the sweep
+is built from what the CAMERA can see extended towards the light, and a grid is read from places the
+camera cannot see at all. Without the box, a pack's voxel grid reads air where the world has blocks,
+anywhere outside that view.
 
 **How far the walk reaches is a separate question from the shape.** Whichever shape is chosen, a box
 around the camera is cut out of it wherever a distance bounds the walk, and that distance is

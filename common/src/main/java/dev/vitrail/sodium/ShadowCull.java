@@ -78,30 +78,33 @@ public final class ShadowCull implements Frustum {
 	 * whole answers {@code INSIDE} at Iris the moment the distance is anything but {@code OUTSIDE}
 	 * ({@code shadows/frustum/advanced/SafeZoneCullingFrustum.java:74-78}), and that order is kept.
 	 * It settles nothing while the safe zone is the shorter of the two, such a box being wholly
-	 * within the distance as well; it is what a pack asking for a voxel grid WIDER than its shadow
-	 * distance is owed, and {@code PackValues:332-333} works the two out apart without bounding
+	 * within the distance as well. It is what a pack asking for a voxel grid WIDER than its shadow
+	 * distance is owed, and {@code PackValues:347-351} works the two out apart without bounding
 	 * either by the other.
 	 * <p>
-	 * <strong>No pack of the corpus reaches it on this engine, and one flag is the whole
-	 * reason.</strong> Bliss, BSL, both Complementary and Reverie ask for this shape behind their
-	 * voxelised light, so the STATE is reached; what never arrives is its WIDTH. A pack declares
-	 * that as {@code voxelDistance}, and Bliss puts the declaration itself behind
-	 * {@code IRIS_FEATURE_CUSTOM_IMAGES} ({@code lib/settings.glsl}) where both Complementary reach
-	 * it through {@code COLORED_LIGHTING_INTERNAL}, a define the same flag alone turns on
-	 * ({@code lib/common.glsl}). {@link dev.vitrail.pack.option.EngineDefines} poses no
-	 * {@code IRIS_FEATURE_} for anything this engine does not serve, and
-	 * {@code ConstDirectives.read} keeps live lines only, so for those three the value never arrives
-	 * and the box is nought blocks wide. BSL declares one on a live line and it is SHORTER than the
-	 * smallest shadow distance it offers, which is the case just above that settles nothing. Reverie
-	 * requires the flag outright and is refused whole before a program is translated. So what stands
-	 * below is the reference's order held against the day custom images are served, and not a state
-	 * a player can put this engine in today.
+	 * <strong>Three packs of the corpus could not reach it until the storage images were served, and
+	 * one always could.</strong> The width is a {@code const float voxelDistance}. Both Complementary
+	 * write it behind their coloured lighting, which {@code lib/common.glsl} gates on
+	 * {@code IRIS_FEATURE_CUSTOM_IMAGES} among other conditions and which
+	 * {@code program/gbuffers_terrain} then declares the width behind, and Bliss writes it behind
+	 * that flag directly, inside its own light volume switch ({@code lib/settings.glsl}). With no
+	 * {@code IRIS_FEATURE_} posed at all those lines were dead, {@code ConstDirectives.read} keeping
+	 * live lines only, and the box came out nought blocks wide while the STATE was still reached: the
+	 * shape said safe zone and behaved as the plain sweep. The flag being posed, a pack that also
+	 * turns its own switch on brings a width and the box has a side.
 	 * <p>
-	 * <strong>{@link #testAab} does NOT carry that exception, and Iris does not carry it there
-	 * either</strong> ({@code SafeZoneCullingFrustum.java:54-56}, the distance cut first). The two
-	 * tests are therefore asymmetric on one box: wholly in the safe zone and wholly past the
-	 * distance. Nothing reaches it, that box being {@code OUTSIDE} by the distance in both methods
-	 * before either exception is looked at.
+	 * BSL is the fourth and it never depended on any of that: it declares the width on a line held
+	 * by nothing but the stage it is in ({@code program/final.glsl}), so the value has always
+	 * arrived, and its safe zone hangs off a setting of its own rather than off a feature flag. It
+	 * is also the case the paragraph above says settles nothing, its box being shorter than the
+	 * smallest shadow distance it offers.
+	 * <p>
+	 * <strong>{@link #testAab} carries the exception too, one layer down.</strong> Iris takes a box
+	 * reaching into the safe zone AT ALL for visible there, without asking its planes
+	 * ({@code SafeZoneCullingFrustum.java:58-60}, after the distance cut at :54-56), and
+	 * {@link ShadowCullFrustum#testAab} answers exactly that, so the composition below is the same
+	 * pair of questions in the same order. What is left to this method is the distance, which Iris
+	 * asks first as well.
 	 */
 	@Override
 	public int intersectAab(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
@@ -117,10 +120,7 @@ public final class ShadowCull implements Frustum {
 
 		// The safe zone outranks the distance on a box it holds whole, which is Iris's order and not
 		// a softening of the line above: its safe zone frustum answers INSIDE off that box alone the
-		// moment the distance is anything but OUTSIDE (SafeZoneCullingFrustum.java:74-78). No pack
-		// of the corpus can put a width behind it here, the javadoc above naming what stops each of
-		// them, so nothing below this line answers differently today; it is kept because it is what
-		// the reference does and what a served voxel grid would need.
+		// moment the distance is anything but OUTSIDE (SafeZoneCullingFrustum.java:74-78).
 		return within(this.distance, minX, minY, minZ, maxX, maxY, maxZ)
 				|| (this.safeZone >= 0.0F
 						&& within(this.safeZone, minX, minY, minZ, maxX, maxY, maxZ))
