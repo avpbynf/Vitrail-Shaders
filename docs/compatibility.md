@@ -51,7 +51,9 @@ The engine refuses a pack rather than drawing something wrong with it, and it na
 **A pack can be refused for using a graphics feature this backend does not have.** Compute shaders,
 shader storage buffers, storage images, and one- or three-dimensional samplers are closed by the
 game's own compiler, not by missing effort here. A pack built around voxel lighting or GPU-side
-data structures will hit this.
+data structures will hit this. The Vulkan device can already run a compute dispatch and write a
+storage image when asked outside that compiler; that is a fact about the backend, not a pack
+feature, and no capability define is posed for it.
 
 Of the packs used for testing, Reverie is the one in that position, and it says so itself. A pack
 can declare the features it cannot be drawn without, and Reverie declares several. That line is read

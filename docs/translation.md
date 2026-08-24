@@ -287,22 +287,28 @@ that shadows a builtin name is refused rather than resolved by precedence.
 
 Not every remaining failure is a translation gap, and the distinction is worth making.
 
-**Closed by the game's own rendering API.** Compute shaders, shader storage buffers, storage images,
-and one- and three-dimensional samplers. Same conclusion, three different mechanisms, and it is
-worth knowing which:
+**Closed by the game's own rendering API, for a pack that goes through the facade.** Compute shaders,
+shader storage buffers, storage images, and one- and three-dimensional samplers. Same conclusion
+for that path, three different mechanisms, and it is worth knowing which:
 
 - **Samplers are refused by name.** The compiler takes one as two-dimensional or as a cube, or as a
   texel buffer where the pipeline declared that name as a uniform rather than as a sampler, and
   rejects every other dimensionality.
-- **Compute has nowhere to go.** The game's shader-type enumeration carries a vertex stage and a
-  fragment stage and nothing else, and the device exposes no way to precompile anything but a render
-  pipeline.
-- **Storage buffers and storage images are worse than refused: they are ignored.** Reflection asks
-  for uniform buffers, sampled images, outputs and inputs, and never enumerates them. They pass
-  compilation and are then bound to nothing.
+- **Compute has nowhere to go through the Java facade.** The game's shader-type enumeration carries
+  a vertex stage and a fragment stage and nothing else, and the device exposes no way to precompile
+  anything but a render pipeline. The Vulkan backend behind that facade already has a compute-capable
+  queue, a public `VkDevice`, and the shaderc the game embeds, whose compute kind the facade never
+  passes. That path has been made to dispatch and to write. Translating a pack's own compute unit
+  is a separate question, because a translated unit still needs a stage that schedules it.
+- **Storage buffers and storage images are worse than refused on the facade: they are ignored.**
+  Reflection asks for uniform buffers, sampled images, outputs and inputs, and never enumerates
+  them. They pass compilation and are then bound to nothing. A storage image allocated through VMA
+  and bound as a push descriptor can still be written by a compute shader; the game's texture usage
+  bits never set the Vulkan storage flag, so `createTexture` cannot be that image.
 
-No amount of translation work makes any of the three pass. Vulkan itself supports all of them; it is
-the layer above that does not.
+No amount of translation work makes a pack compute unit or a pack storage image pass through the
+facade. Vulkan itself supports all of them. The layer above does not, and the backend below it
+does; [the game's graphics API](internals/game-graphics-api.md) says where the split sits.
 
 **Defects in the pack itself.** A conditional directive with no name is a pack bug and stays a
 failure.
