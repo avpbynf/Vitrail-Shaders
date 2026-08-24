@@ -95,9 +95,9 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 * @param comparedSamplers   the samplers the pack asked the hardware to compare and that are
 	 *                           declared here as ordinary ones. Read off the declarations rather
 	 *                           than off {@code samplers}, whose types have already been rewritten
-	 * @param storageBlocks      the storage blocks this unit declares at file scope, which nothing
-	 *                           binds and no rewrite can help: they are what refuses the program
-	 *                           that carries one
+	 * @param storageBlocks      the storage blocks this unit declares at file scope. A
+	 *                           {@code bufferObject} that matches one is bound; the rest refuse
+	 *                           the program that carries them
 	 * @param volumeLookups      lookups on a volume the pack ships, moved onto the flat atlas it was
 	 *                           laid out in
 	 * @param volumesLeftAlone   volumes this unit reaches some way the rewrite does not cover, and
