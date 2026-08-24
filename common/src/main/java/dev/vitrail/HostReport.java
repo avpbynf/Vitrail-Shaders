@@ -64,6 +64,9 @@ public final class HostReport {
 	 */
 	private static final String CHLORIDE_CONFIG = "config/chloride-client.toml";
 
+	/** Chloride, asked for by id because it is optional and most installs will not have it. */
+	private static final String CHLORIDE_ID = "chloride";
+
 	/**
 	 * Whether the chat line has been said, or found to have nothing to say, which closes it for the
 	 * session either way.
@@ -183,7 +186,13 @@ public final class HostReport {
 	 */
 	public static void say(Path gameDirectory) {
 		sayBackend();
-		sayChloride(gameDirectory.resolve(CHLORIDE_CONFIG));
+
+		// Asked before the file is looked for, and that question is the difference between a mod
+		// that is installed and has not written its settings yet, which is worth a line because its
+		// defaults are then in play, and a mod that is simply not there, which is worth none.
+		if (Vitrail.platform().isModLoaded(CHLORIDE_ID)) {
+			sayChloride(gameDirectory.resolve(CHLORIDE_CONFIG));
+		}
 	}
 
 	/**
@@ -211,8 +220,8 @@ public final class HostReport {
 	}
 
 	/**
-	 * Reads Chloride's file rather than Chloride, which nothing here calls into and which is depended
-	 * on for its window alone.
+	 * Reads Chloride's file rather than Chloride, which nothing here calls into and which the caller
+	 * has already established is installed.
 	 * <p>
 	 * <strong>An entry that is not there is said as well, and that is not tidiness.</strong> Some of
 	 * them are ones Chloride starts with on, so answering a missing line the way a line written
