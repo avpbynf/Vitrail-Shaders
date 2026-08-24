@@ -261,13 +261,19 @@ final class FeatureLayer {
 	 * Composes the layer over {@code into}, premultiplied. Must run outside any render pass, after
 	 * the redirected draws and before the world's translucents, which is the order vanilla drew
 	 * them in.
+	 * <p>
+	 * {@code clear} is the emptying {@code into} is still owed, when this pass is the frame's first
+	 * to attach it: the debt is paid as this pass's load-op, exactly as a geometry pass pays it.
+	 * Left owed instead, the layer would land on the LAST frame's texels, and the deferred flush
+	 * that later settles every remaining debt would erase the composition it sits under.
 	 */
-	void compose(CommandEncoder encoder, GpuBuffer quad, GpuTextureView into) {
+	void compose(CommandEncoder encoder, GpuBuffer quad, GpuTextureView into,
+			Optional<Vector4fc> clear) {
 		if (this.layer == null || quad == null || into == null) {
 			return;
 		}
 
-		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into, Optional.empty())) {
+		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into, clear)) {
 			pass.setPipeline(this.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());

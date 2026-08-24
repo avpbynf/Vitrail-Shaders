@@ -459,44 +459,47 @@ final class ColorTargets {
 		return !this.pendingClears.isEmpty();
 	}
 
+	/** One surface still owed its emptying, and the colour it is owed. */
+	private record Pending(GpuTextureView view, Vector4fc colour) {
+	}
+
 	/**
-	 * Standalone clear only for a texture this pass is about to sample and will not write. A write
-	 * is a load-op; a texture nobody has read yet stays pending for the pass that first attaches it.
+	 * Empties every colour target still owed it. A pass about to open never finds its own targets
+	 * here: it took theirs through {@code takeClear} while building its descriptor, so what is left
+	 * is owed by surfaces nothing this frame is attaching.
+	 * <p>
+	 * <strong>Everything at once, and that is the point.</strong> Clearing only what one program
+	 * samples left the rest pending, so the next program that needed one opened another pass for
+	 * it, and a pass opened here ENDS THE GEOMETRY HOLD: the run of programs writing the same
+	 * images that this engine works to keep in a single pass is cut at every one of those. Measured
+	 * on Complementary Reimagined, a frame paid two of these passes and the entity family opened
+	 * four to six passes where the terrain, which meets none of them, opened two.
+	 * <p>
+	 * The trade is paid by the target a LATER pass of the same frame writes: it used to keep its
+	 * debt and ride that pass's load-op for free, and it is now emptied here, a full-surface write
+	 * ahead of one more. Fewer passes, more cleared texels, and the frame comes out ahead because
+	 * a pass is a GPU stop while a clear is bandwidth.
+	 * <p>
+	 * Doing them together also puts the emptying back where it was before it was deferred, at the
+	 * head of the frame rather than scattered through it, which is the order the rest of this class
+	 * was written against.
 	 * <p>
 	 * Encoded as one empty pass per size, load-op clear, which is {@code glClear} as the FBO is
 	 * bound. One {@code clearColorTexture} apiece would each be a GPU stop of its own.
 	 */
-	void flushSampled(CommandEncoder encoder, Iterable<GpuTextureView> sampled,
-			Iterable<GpuTextureView> written) {
+	void flushPending(CommandEncoder encoder) {
 		if (this.pendingClears.isEmpty()) {
 			return;
 		}
 
-		IdentityHashMap<GpuTexture, Boolean> keep = new IdentityHashMap<>();
-		for (GpuTextureView view : written) {
-			if (view != null) {
-				keep.put(view.texture(), Boolean.TRUE);
-			}
-		}
-
-		record Pending(GpuTextureView view, Vector4fc colour) {
-		}
-
 		List<Pending> pending = new ArrayList<>();
-		for (GpuTextureView view : sampled) {
-			if (view == null) {
-				continue;
-			}
+		collectPending(this.coverage, pending);
+		for (TargetSurface surface : this.mainSide.values()) {
+			collectPending(surface, pending);
+		}
 
-			GpuTexture texture = view.texture();
-			if (keep.containsKey(texture)) {
-				continue;
-			}
-
-			Vector4fc colour = this.pendingClears.remove(texture);
-			if (colour != null) {
-				pending.add(new Pending(view, colour));
-			}
+		for (TargetSurface surface : this.altSide.values()) {
+			collectPending(surface, pending);
 		}
 
 		if (pending.isEmpty()) {
@@ -525,6 +528,22 @@ final class ColorTargets {
 				descriptor.withRenderArea(new RenderPass.RenderArea(0, 0, width, height));
 				encoder.createRenderPass(descriptor).close();
 			}
+		}
+	}
+
+	/**
+	 * Takes this surface's owed emptying. Silent on a surface that is not there or owes nothing,
+	 * which is the ordinary case for most of them.
+	 */
+	private void collectPending(TargetSurface surface, List<Pending> into) {
+		GpuTexture texture = surface == null ? null : surface.texture();
+		if (texture == null) {
+			return;
+		}
+
+		Vector4fc colour = this.pendingClears.remove(texture);
+		if (colour != null) {
+			into.add(new Pending(surface.view(), colour));
 		}
 	}
 

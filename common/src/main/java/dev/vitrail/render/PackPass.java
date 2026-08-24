@@ -122,7 +122,6 @@ final class PackPass {
 	private final ShaderSource source;
 	private final Supplier<String> label;
 	private final List<String> notes = new ArrayList<>();
-	private final List<GpuTextureView> sampledViews = new ArrayList<>();
 	private final List<GpuTextureView> attachedViews = new ArrayList<>();
 	private final int outputs;
 	private final int offset;
@@ -444,7 +443,7 @@ final class PackPass {
 				this.pass.size().width(screenWidth), this.pass.size().height(screenHeight)));
 
 		if (targets.hasPendingClears()) {
-			targets.flushSampled(encoder, sampledColour(targets), this.attachedViews);
+			targets.flushPending(encoder);
 		}
 
 		try (RenderPass pass = encoder.createRenderPass(descriptor)) {
@@ -678,23 +677,6 @@ final class PackPass {
 		}
 
 		return view;
-	}
-
-	private List<GpuTextureView> sampledColour(ColorTargets targets) {
-		this.sampledViews.clear();
-		for (String sampler : this.samplers) {
-			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
-			if (binding.kind() != SamplerPlan.Kind.COLORTEX) {
-				continue;
-			}
-
-			GpuTextureView view = targets.view(binding.index(), binding.side());
-			if (view != null) {
-				this.sampledViews.add(view);
-			}
-		}
-
-		return this.sampledViews;
 	}
 
 	private void noteGaps(int declared) {
