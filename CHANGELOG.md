@@ -37,6 +37,12 @@ what the next one holds.
   Chloride remains worth installing, its settings are still read and reported, and running it
   alongside changes nothing.
 
+- **The settings screen reads a pack's layout the way Iris does.** The `*` token now pours out
+  every setting no other page names, where the pack put it; a pack without a `screen=` line gets
+  one page holding everything instead of an empty one; and a name Iris refuses to configure, a
+  constant off its closed list, a toggle nothing tests or a value without a list of choices,
+  shows the same blank it shows there instead of becoming a slider or a toggle Iris never had.
+
 - **Opening a pack's settings no longer applies it.** Looking at another pack's pages used to load
   it first, on its own default profile, so anybody meaning to open a heavy pack, turn it down and
   then apply it paid the heavy profile in full first. The pages now open on the pack that was
