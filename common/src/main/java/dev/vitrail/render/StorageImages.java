@@ -22,6 +22,7 @@ import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.vulkan.VK12;
 import org.lwjgl.vulkan.VkClearColorValue;
 import org.lwjgl.vulkan.VkCommandBuffer;
+import org.lwjgl.vulkan.VkImageCopy;
 import org.lwjgl.vulkan.VkImageCreateInfo;
 import org.lwjgl.vulkan.VkImageMemoryBarrier;
 import org.lwjgl.vulkan.VkImageSubresourceRange;
@@ -126,10 +127,20 @@ public final class StorageImages implements AutoCloseable {
 					continue;
 				}
 
+				boolean movable = movable(image);
 				try {
 					this.allocated.add(Allocated.create(vulkan, image, image.width(), image.height(),
-							Math.max(image.depth(), 1)));
-					Vitrail.logger().info("storage image {}", image.describe());
+							Math.max(image.depth(), 1), movable));
+					// Which volumes follow the camera and which do not, said once per pack rather
+					// than left to be guessed from the picture: a volume left behind keeps a frame
+					// of lag at every block crossed, and a volume that follows costs a second
+					// image of its own size. Neither shows as itself on screen.
+					Vitrail.logger().info("storage image {}{}", image.describe(), movable
+							? ", moved onto each frame's camera block for " + scratchCost(image)
+									+ " more"
+							: image.clear() && image.depth() > 1
+									? ", left on the frame that filled it"
+									: "");
 				} catch (RuntimeException e) {
 					Vitrail.logger().warn("storage image {} could not be allocated: {}",
 							image.describe(), e.toString());
@@ -158,7 +169,9 @@ public final class StorageImages implements AutoCloseable {
 				int width = Math.max(1, (int) (screenWidth * image.relativeWidth()));
 				int height = Math.max(1, (int) (screenHeight * image.relativeHeight()));
 				try {
-					this.allocated.add(Allocated.create(vulkan, image, width, height, 1));
+					// Never movable: a relative image is a screen and not a volume, and it goes
+					// back and is built again on every resize.
+					this.allocated.add(Allocated.create(vulkan, image, width, height, 1, false));
 					Vitrail.logger().info("storage image {} at {}x{}", image.describe(), width,
 							height);
 				} catch (RuntimeException e) {
@@ -201,6 +214,166 @@ public final class StorageImages implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * What a second image of this one's shape costs, for the line that says a volume follows. In
+	 * mebibytes where there is a whole one and in kibibytes below that: the smallest volume the
+	 * corpus declares is half a mebibyte, and a line reading "0 MiB more" says the move is free.
+	 */
+	private static String scratchCost(ImageInformation image) {
+		long texels = (long) Math.max(image.width(), 1) * Math.max(image.height(), 1)
+				* Math.max(image.depth(), 1);
+		long bytes = texels * image.internalFormat().used().bytesPerPixel();
+
+		return bytes >= 1024L * 1024L
+				? bytes / (1024L * 1024L) + " MiB"
+				: bytes / 1024L + " KiB";
+	}
+
+	/**
+	 * Whether a volume may be moved by a count of BLOCKS, which is the one thing this class has to
+	 * settle before {@link #reanchor} may touch anything: a custom image is a grid whose scale the
+	 * pack keeps to itself, and the engine sees only three extents.
+	 * <p>
+	 * The rule is a volume the pack CLEARS whose three extents match a volume it does NOT clear.
+	 * What that buys: an uncleared volume survives frames, so it is the pack that carries it
+	 * forward, and it does so by the blocks the camera crossed and nothing else,
+	 * {@code pos - (floor(previousCameraPosition) - floor(cameraPosition))} in Complementary's
+	 * {@code program/shadowcomp.glsl}. One texel a block, and a cleared volume declared at that same
+	 * extent is the identity half of the same grid. Three packs of the corpus are built that way,
+	 * each with its identity volume beside the light volumes it feeds: Complementary, BSL and Bliss,
+	 * and all three anchor on the fractional part of the camera position plus half the volume, which
+	 * only the first of them writes under the {@code cameraPositionBestFract} name.
+	 * <p>
+	 * <strong>Anything else is left where it is, and the counter-example is in the same pack.</strong>
+	 * Complementary's coarse reflection volume is stored at a QUARTER of the voxel position
+	 * ({@code lib/voxelization/reflectionVoxelization.glsl}), one cell per four blocks, and it is
+	 * cleared each stage exactly like the identity volume. Moved by a block count it would land four
+	 * cells out in the direction of travel, which is worse than the frame of lag it carries today,
+	 * and nothing in an {@code image.} directive tells the two apart. It has no uncleared twin, so
+	 * the rule excludes it.
+	 * <p>
+	 * <strong>The rule is sufficient and not necessary, and the log says so.</strong> The same
+	 * pack's full-scale reflection volume IS one texel a block, and it is left behind at every
+	 * setting but the smallest, being the only one where its height happens to equal the floodfill's.
+	 * Widening the rule to catch it means guessing from two extents out of three, which is the guess
+	 * that would have caught the quarter-scale volume as well.
+	 */
+	private boolean movable(ImageInformation image) {
+		if (!image.clear() || image.relative() || image.depth() <= 1) {
+			return false;
+		}
+
+		for (ImageInformation other : this.declared.images()) {
+			if (!other.clear() && !other.relative() && other.width() == image.width()
+					&& other.height() == image.height() && other.depth() == image.depth()) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Moves every volume {@link #movable} accepts onto the anchor of the frame about to read it, by
+	 * the whole blocks the camera has crossed since it was filled.
+	 * <p>
+	 * <strong>What Iris does.</strong> It empties the custom images at the head of the level render
+	 * ({@code pipeline/IrisRenderingPipeline.java:892}), draws the shadow geometry that stores block
+	 * identities into them, and dispatches {@code shadowcomp} at the foot of that stage
+	 * ({@code shadows/ShadowRenderer.java:632}). Three points of ONE frame, so writer and reader
+	 * share a {@code cameraPosition}, and the volume Complementary indexes as
+	 * {@code scenePos + cameraPositionBestFract + half} is anchored on the same block for both.
+	 * <p>
+	 * <strong>What prevents it here.</strong> This engine draws the shadow stage at the END of a
+	 * frame for the next one ({@link dev.vitrail.sodium.ShadowTerrain}, and that placement is not a
+	 * preference: Sodium's per region lists reset on the FIRST walk of a frame, so the light's walk
+	 * has to follow the camera's rather than precede it). The identities are therefore written under
+	 * the previous frame's anchor, and {@code shadowcomp} runs at the head of this one, where it has
+	 * to run or the floodfill ping-pong lands on the half this frame's gbuffers do not read.
+	 * <p>
+	 * <strong>What it costs the image without this.</strong> The compute reads the floodfill at
+	 * {@code pos - (floor(previousCameraPosition) - floor(cameraPosition))}, so the light it carries
+	 * forward IS reprojected; the identities at {@code pos} are not. One frame per block crossed,
+	 * every block is read as its neighbour, and the cost is not symmetric: crossing UPWARDS the
+	 * reader takes each block for the one below it, so the layer of air just over the floor reads as
+	 * {@code voxel == 1u}, which the pack answers with {@code light = 0}. The coloured light around
+	 * the player collapses for that frame (a halo on a jump, continuous while climbing). Crossing
+	 * DOWNWARDS the same error makes a solid block read as air, which merely lights a cell buried in
+	 * the floor and shows nothing. That asymmetry is the signature the defect was reported under.
+	 * <p>
+	 * The {@code |d|} planes at the leading face keep what they held rather than being emptied. They
+	 * sit at the far edge of the volume, they are rewritten by the shadow stage at the end of this
+	 * same frame, and a stale identity there blocks light where an emptied one would leak it.
+	 */
+	void reanchor(CommandEncoder encoder, int dx, int dy, int dz) {
+		if (dx == 0 && dy == 0 && dz == 0) {
+			return;
+		}
+
+		GpuRecording.endPass(encoder);
+		VkCommandBuffer commands = commands(encoder);
+		if (commands == null) {
+			return;
+		}
+
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			GpuRecording.beforeTransfer(commands, stack);
+			for (Allocated image : this.allocated) {
+				if (image.scratch == 0L) {
+					continue;
+				}
+
+				// Past the extent nothing of the volume survives the move, which is a teleport
+				// rather than a step. Emptied and not moved: the pack's own floodfill reprojection
+				// is just as lost there, and identities from the world the player has left would
+				// block light all over the one they arrived in.
+				if (Math.abs(dx) >= image.width || Math.abs(dy) >= image.height
+						|| Math.abs(dz) >= image.depth) {
+					clearImage(commands, stack, image);
+					continue;
+				}
+
+				move(commands, stack, image, dx, dy, dz);
+			}
+
+			GpuRecording.afterTransfer(commands, stack);
+		}
+	}
+
+	/**
+	 * The move itself, in two copies through the image's own scratch because Vulkan leaves a copy
+	 * whose source and destination regions overlap undefined, and a shift of one plane overlaps
+	 * everywhere.
+	 */
+	private static void move(VkCommandBuffer commands, MemoryStack stack, Allocated image,
+			int dx, int dy, int dz) {
+		VkImageCopy.Buffer whole = VkImageCopy.calloc(1, stack);
+		layers(whole.get(0));
+		whole.get(0).extent().set(image.width, image.height, image.depth);
+		VK12.vkCmdCopyImage(commands, image.image, VK12.VK_IMAGE_LAYOUT_GENERAL,
+				image.scratch, VK12.VK_IMAGE_LAYOUT_GENERAL, whole);
+
+		GpuRecording.betweenTransfers(commands, stack);
+
+		// The reader wants index p to hold what index p + d holds, d being the blocks the camera
+		// has crossed since the write: so the source starts d planes in where the camera moved
+		// forward, and the destination does where it moved back.
+		VkImageCopy.Buffer shifted = VkImageCopy.calloc(1, stack);
+		VkImageCopy region = shifted.get(0);
+		layers(region);
+		region.srcOffset().set(Math.max(dx, 0), Math.max(dy, 0), Math.max(dz, 0));
+		region.dstOffset().set(Math.max(-dx, 0), Math.max(-dy, 0), Math.max(-dz, 0));
+		region.extent().set(image.width - Math.abs(dx), image.height - Math.abs(dy),
+				image.depth - Math.abs(dz));
+		VK12.vkCmdCopyImage(commands, image.scratch, VK12.VK_IMAGE_LAYOUT_GENERAL,
+				image.image, VK12.VK_IMAGE_LAYOUT_GENERAL, shifted);
+	}
+
+	private static void layers(VkImageCopy region) {
+		region.srcSubresource().set(VK12.VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1);
+		region.dstSubresource().set(VK12.VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1);
+	}
+
 	private void layoutIfNeeded() {
 		if (this.laidOut || this.allocated.isEmpty()) {
 			return;
@@ -228,19 +401,28 @@ public final class StorageImages implements AutoCloseable {
 				}
 
 				image.laidOut = true;
-				VkImageMemoryBarrier.Buffer barriers = VkImageMemoryBarrier.calloc(1, stack)
+				// The scratch beside its image and in the same breath: it is a transfer end of the
+				// same volume, so it has to leave UNDEFINED before the first copy names it, and a
+				// copy is the only thing that ever will.
+				int count = image.scratch == 0L ? 1 : 2;
+				VkImageMemoryBarrier.Buffer barriers = VkImageMemoryBarrier.calloc(count, stack)
 						.sType$Default();
-				VkImageMemoryBarrier barrier = barriers.get(0);
-				barrier.oldLayout(VK12.VK_IMAGE_LAYOUT_UNDEFINED);
-				barrier.newLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
-				barrier.srcAccessMask(0);
-				barrier.dstAccessMask(VK12.VK_ACCESS_SHADER_READ_BIT
-						| VK12.VK_ACCESS_SHADER_WRITE_BIT
-						| VK12.VK_ACCESS_TRANSFER_WRITE_BIT);
-				barrier.srcQueueFamilyIndex(VK12.VK_QUEUE_FAMILY_IGNORED);
-				barrier.dstQueueFamilyIndex(VK12.VK_QUEUE_FAMILY_IGNORED);
-				barrier.image(image.image);
-				barrier.subresourceRange().set(VK12.VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
+				for (int at = 0; at < count; at++) {
+					VkImageMemoryBarrier barrier = barriers.get(at);
+					barrier.sType$Default();
+					barrier.oldLayout(VK12.VK_IMAGE_LAYOUT_UNDEFINED);
+					barrier.newLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
+					barrier.srcAccessMask(0);
+					barrier.dstAccessMask(VK12.VK_ACCESS_SHADER_READ_BIT
+							| VK12.VK_ACCESS_SHADER_WRITE_BIT
+							| VK12.VK_ACCESS_TRANSFER_WRITE_BIT
+							| VK12.VK_ACCESS_TRANSFER_READ_BIT);
+					barrier.srcQueueFamilyIndex(VK12.VK_QUEUE_FAMILY_IGNORED);
+					barrier.dstQueueFamilyIndex(VK12.VK_QUEUE_FAMILY_IGNORED);
+					barrier.image(at == 0 ? image.image : image.scratch);
+					barrier.subresourceRange().set(VK12.VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
+				}
+
 				VK12.vkCmdPipelineBarrier(commands, VK12.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 						VK12.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, null, null, barriers);
 			}
@@ -314,33 +496,48 @@ public final class StorageImages implements AutoCloseable {
 
 		private final ImageInformation declared;
 		private final boolean relative;
+		private final int width;
+		private final int height;
+		private final int depth;
 		private long image;
 		private long allocation;
 		private long view;
 
+		/**
+		 * A second image of the same shape, for the volumes {@link #reanchor} moves, and nought for
+		 * every other. It carries no view: nothing samples it and nothing stores into it, it is one
+		 * end of a copy and no more.
+		 */
+		private long scratch;
+		private long scratchAllocation;
+
 		/** Whether the one UNDEFINED-to-GENERAL transition of this image's life has been recorded. */
 		private boolean laidOut;
 
-		private Allocated(ImageInformation declared, boolean relative, long image, long allocation,
-				long view) {
+		private Allocated(ImageInformation declared, boolean relative, int width, int height,
+				int depth, long image, long allocation, long view) {
 			this.declared = declared;
 			this.relative = relative;
+			this.width = width;
+			this.height = height;
+			this.depth = depth;
 			this.image = image;
 			this.allocation = allocation;
 			this.view = view;
 		}
 
 		private static Allocated create(VulkanDevice vulkan, ImageInformation declared, int width,
-				int height, int depth) {
+				int height, int depth, boolean movable) {
 			int vkFormat = vkFormat(declared.internalFormat().used());
 			int type = imageType(declared.shape());
 			int viewType = viewType(declared.shape());
+			int extentWidth = Math.max(width, 1);
 			int extentHeight = Math.max(height, 1);
 			int extentDepth = Math.max(depth, 1);
 			try (MemoryStack stack = MemoryStack.stackPush()) {
 				VkImageCreateInfo imageInfo = VkImageCreateInfo.calloc(stack).sType$Default();
 				imageInfo.imageType(type);
-				imageInfo.extent().set(Math.max(width, 1), extentHeight, extentDepth);
+				imageInfo.extent().set(extentWidth, extentHeight, extentDepth);
 				imageInfo.mipLevels(1);
 				imageInfo.arrayLayers(1);
 				imageInfo.format(vkFormat);
@@ -378,7 +575,32 @@ public final class StorageImages implements AutoCloseable {
 					throw e;
 				}
 
-				return new Allocated(declared, declared.relative(), image, allocation, viewPtr.get(0));
+				Allocated allocated = new Allocated(declared, declared.relative(), extentWidth,
+						extentHeight, extentDepth, image, allocation, viewPtr.get(0));
+
+				// The scratch only where the volume may be moved at all, which movable settles. It
+				// is a second image of the same shape, so it is not owed to a volume nothing will
+				// ever copy.
+				//
+				// A failure here is not the image's failure, and that is why it is caught rather
+				// than raised. The volume itself is allocated and bound; with no scratch it simply
+				// keeps the frame of lag it carried before, which is a worse picture. Raising here
+				// would drop the volume outright and take the pack's coloured light with it.
+				if (movable) {
+					try {
+						VulkanUtils.crashIfFailure(vulkan,
+								Vma.vmaCreateImage(vulkan.vma(), imageInfo, allocationInfo, imagePtr,
+										allocationPtr, null),
+								"storage image scratch " + declared.name());
+						allocated.scratch = imagePtr.get(0);
+						allocated.scratchAllocation = allocationPtr.get(0);
+					} catch (RuntimeException e) {
+						Vitrail.logger().warn("storage image {} keeps a frame of lag, its scratch "
+								+ "could not be allocated: {}", declared.name(), e.toString());
+					}
+				}
+
+				return allocated;
 			}
 		}
 
@@ -393,9 +615,13 @@ public final class StorageImages implements AutoCloseable {
 			long view = this.view;
 			long image = this.image;
 			long allocation = this.allocation;
+			long scratch = this.scratch;
+			long scratchAllocation = this.scratchAllocation;
 			this.view = 0L;
 			this.image = 0L;
 			this.allocation = 0L;
+			this.scratch = 0L;
+			this.scratchAllocation = 0L;
 			GpuRecording.destroyLater(() -> {
 				if (view != 0L) {
 					VK12.vkDestroyImageView(vulkan.vkDevice(), view, null);
@@ -403,6 +629,10 @@ public final class StorageImages implements AutoCloseable {
 
 				if (image != 0L) {
 					Vma.vmaDestroyImage(vulkan.vma(), image, allocation);
+				}
+
+				if (scratch != 0L) {
+					Vma.vmaDestroyImage(vulkan.vma(), scratch, scratchAllocation);
 				}
 			});
 		}

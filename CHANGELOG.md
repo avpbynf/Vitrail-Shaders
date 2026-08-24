@@ -21,6 +21,11 @@ what the next one holds.
   draws instead of switching itself off behind a red overlay: lamps and torches colour the
   world around them. A pack that requires custom images loads instead of being refused.
 
+  That light no longer blinks as you move. The glow of ores and lava used to flicker each time
+  you crossed from one block to the next, and worst of all going up: a ring of dark around you
+  on every jump, a constant shimmer flying upwards, and nothing at all coming back down. A
+  torch you place never showed it, because the ordinary block light under it covers it over.
+
 - **A crash during startup no longer takes the graphics backend with it.** The game resets the
   preferred graphics API, and the fullscreen mode, whenever the previous startup did not finish,
   and it does that for any crash rather than for a backend that failed. Since nothing of this mod

@@ -791,6 +791,11 @@ final class ColorTargets {
 		this.storageImages.clearMarked(encoder);
 	}
 
+	/** Moves what may be moved onto this frame's anchor. {@link StorageImages#reanchor} says why. */
+	void reanchorStorage(CommandEncoder encoder, int dx, int dy, int dz) {
+		this.storageImages.reanchor(encoder, dx, dy, dz);
+	}
+
 	void release() {
 		this.mainSide.values().forEach(TargetSurface::close);
 		this.altSide.values().forEach(TargetSurface::close);

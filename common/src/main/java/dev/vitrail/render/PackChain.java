@@ -41,6 +41,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
 
+import org.joml.Vector3dc;
+import org.joml.Vector3i;
 import org.joml.Vector4f;
 
 import java.io.IOException;
@@ -186,6 +188,30 @@ public final class PackChain {
 	 * opened", for the values and for the targets.
 	 */
 	private boolean opened;
+
+	/**
+	 * The block the camera stood in when the shadow stage last refilled the pack's cleared volumes,
+	 * which is the origin the identities in them are measured from.
+	 * <p>
+	 * Not a per frame flag, and that is why it is not reset with the four below: it belongs to the
+	 * volume rather than to a frame, and the frame that reads it is never the one that wrote it.
+	 */
+	private final Vector3i voxelAnchor = new Vector3i();
+
+	/** Whether {@link #voxelAnchor} names a real fill rather than the zero it starts at. */
+	private boolean voxelAnchored;
+
+	/**
+	 * Whether this chain has ever opened a frame, which is a different question from
+	 * {@link #advanced} and is asked by exactly one caller.
+	 * <p>
+	 * A chain replacing another does so at the head of {@link #draw}, so it is BUILT in the middle
+	 * of a frame whose shadow stage is still to come, and while it warms its pipelines it compiles
+	 * one a frame and draws nothing at all, so its value store never moves. The camera it would
+	 * report through those frames is the zero a fresh store starts at, and an anchor taken there
+	 * names the origin of the world rather than where the player stands.
+	 */
+	private boolean everAdvanced;
 
 	/** Whether the half of the chain that belongs before the world's translucents has run. */
 	private boolean early;
@@ -1398,6 +1424,20 @@ public final class PackChain {
 		}
 
 		chain.targets.clearStorage(device.createCommandEncoder());
+
+		// Taken with the clear rather than after the geometry, because the clear is the line that
+		// says the volume from here on holds THIS frame's writes and nothing older. A pack anchors
+		// what it stores on the block the camera stands in, so that block is what says which cell
+		// each identity lands in, and the frame reading it is not this one.
+		//
+		// Not taken at all from a chain that has never opened a frame: see everAdvanced. The value
+		// store would answer the origin of the world, and the next frame would read a move of the
+		// player's whole coordinates, which reanchor answers by emptying the volume.
+		if (chain.everAdvanced) {
+			Vector3dc camera = chain.values.world().cameraPositionUnshifted();
+			chain.voxelAnchor.set(block(camera.x()), block(camera.y()), block(camera.z()));
+			chain.voxelAnchored = true;
+		}
 	}
 
 	/**
@@ -1417,7 +1457,48 @@ public final class PackChain {
 		// player moves. Idempotent for the rest of the frame, which sees the same numbers it
 		// always did, only settled a moment earlier.
 		chain.beginFrame();
+		chain.reanchorCustomImages();
 		chain.compute.dispatch(chain.values, chain.targets);
+	}
+
+	/**
+	 * Moves the identity volume onto the anchor of the frame about to read it, before the compute
+	 * and before any gbuffer samples it. {@link StorageImages#reanchor} carries the whole of why,
+	 * against what Iris does. This half only works out how far.
+	 */
+	private void reanchorCustomImages() {
+		if (!this.voxelAnchored) {
+			return;
+		}
+
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (device == null) {
+			return;
+		}
+
+		Vector3dc camera = this.values.world().cameraPositionUnshifted();
+		int x = block(camera.x());
+		int y = block(camera.y());
+		int z = block(camera.z());
+		this.targets.reanchorStorage(device.createCommandEncoder(), x - this.voxelAnchor.x,
+				y - this.voxelAnchor.y, z - this.voxelAnchor.z);
+
+		// Where the volume stands now, and it stays there until the shadow stage refills it.
+		// Written rather than a flag lowered, and the difference is a frame that draws no shadow
+		// map at all: the identities in the volume are still the last ones written, they still have
+		// to follow the camera, and a second call of the same frame moves them by nothing.
+		this.voxelAnchor.set(x, y, z);
+	}
+
+	/**
+	 * The block a coordinate stands in, which is the origin a pack measures its voxel grid from: it
+	 * writes {@code scenePos + cameraPositionBestFract}, and this is the whole part that pair leaves
+	 * out. Read off the UNSHIFTED position, because {@code cameraPositionFract} is unshifted too,
+	 * and that is the name {@code cameraPositionBestFract} resolves to on anything this engine
+	 * answers as.
+	 */
+	private static int block(double coordinate) {
+		return (int) Math.floor(coordinate);
 	}
 
 	/** The same, for the sky. */
@@ -1469,6 +1550,7 @@ public final class PackChain {
 	void beginFrame() {
 		if (!this.advanced) {
 			this.advanced = true;
+			this.everAdvanced = true;
 			PassTimings.armCensus();
 			this.values.advance();
 			PackDump.take(this.chain.place(), this.load,
@@ -1645,6 +1727,12 @@ public final class PackChain {
 
 			chain.release();
 			chain.values.leaveWorld();
+
+			// The volumes went back with the targets and the camera went back to nought, so what
+			// the anchor names no longer exists. Lowered rather than left standing: this chain is
+			// NOT replaced on the way out, so nothing else would ever reset it, and a world joined
+			// again would be measured against where the player stood in the one they left.
+			chain.voxelAnchored = false;
 		} catch (RuntimeException e) {
 			disabled = true;
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
