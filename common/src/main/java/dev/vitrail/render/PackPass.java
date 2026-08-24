@@ -113,6 +113,7 @@ final class PackPass {
 	private final PackValues values;
 	private final PackUniforms uniforms;
 	private final List<String> samplers;
+	private final List<String> storage;
 	private final List<LodRead> lodReads;
 
 	/** The targets of {@link #lodReads}, for the binding to answer one name at a time. */
@@ -157,6 +158,10 @@ final class PackPass {
 		this.values = values;
 		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.catalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
+		this.storage = loaded.storageBlocks().stream()
+				.distinct()
+				.filter(StorageBuffers::named)
+				.toList();
 		this.lodReads = lodReadsOf(program, loaded, targets);
 		this.lodTargets = this.lodReads.stream().map(LodRead::target).collect(Collectors.toSet());
 
@@ -188,6 +193,7 @@ final class PackPass {
 		BindGroupLayout.Builder bindings = BindGroupLayout.builder()
 				.withUniform(UNIFORM_BLOCK, UniformType.UNIFORM_BUFFER);
 		this.samplers.forEach(bindings::withSampler);
+		this.storage.forEach(name -> bindings.withUniform(name, UniformType.UNIFORM_BUFFER));
 
 		RenderPipeline.Builder builder = RenderPipeline.builder()
 				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/" + stem))
@@ -474,6 +480,7 @@ final class PackPass {
 		pass.setPipeline(this.pipeline);
 		RenderSystem.bindDefaultUniforms(pass);
 		pass.setUniform(UNIFORM_BLOCK, uniforms);
+		StorageBuffers.bind(pass, this.storage);
 		pass.setVertexBuffer(0, quad.slice());
 		bindSamplers(pass, targets, depthView, distantView);
 		pass.draw(VERTICES, 1, 0, 0);
@@ -543,7 +550,7 @@ final class PackPass {
 				// something real and could not be turned into an image, and black is the honest
 				// answer for it: falling back to the colour target of the same name would have the
 				// pass read the scene as whatever the pack meant to sample and look convincing.
-				case UNSERVED, UNBINDABLE, PACK_TEXTURE -> targets.black();
+				case UNSERVED, UNBINDABLE, PACK_TEXTURE, CUSTOM_IMAGE -> targets.black();
 			};
 
 			// The noise image is LINEAR for the same reason the terrain reads it LINEAR: it is a

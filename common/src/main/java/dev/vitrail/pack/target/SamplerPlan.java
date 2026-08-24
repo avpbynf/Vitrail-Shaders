@@ -1,6 +1,7 @@
 package dev.vitrail.pack.target;
 
 import dev.vitrail.pack.program.ProgramNames;
+import dev.vitrail.pack.texture.CustomImages;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -101,7 +102,7 @@ public final class SamplerPlan {
 	 */
 	public enum Kind {
 		COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, PACK_TEXTURE, CENTER_DEPTH,
-		DISTANT_DEPTH, UNSERVED, UNBINDABLE
+		DISTANT_DEPTH, CUSTOM_IMAGE, UNSERVED, UNBINDABLE
 	}
 
 	/**
@@ -136,6 +137,10 @@ public final class SamplerPlan {
 	 *                 narrowed to it
 	 */
 	public static Kind classify(String name, String type, Set<String> supplied) {
+		if (CustomImages.named(name)) {
+			return Kind.CUSTOM_IMAGE;
+		}
+
 		if (type != null && SamplerTypes.refused(type)) {
 			return Kind.UNBINDABLE;
 		}
