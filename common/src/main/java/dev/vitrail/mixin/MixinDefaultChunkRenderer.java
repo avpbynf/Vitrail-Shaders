@@ -2,6 +2,7 @@ package dev.vitrail.mixin;
 
 import dev.vitrail.sodium.SodiumPasses;
 import dev.vitrail.pack.program.TerrainPass;
+import dev.vitrail.render.RingTimings;
 import dev.vitrail.render.TerrainDraw;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -18,6 +19,8 @@ import net.caffeinemc.mods.sodium.client.render.chunk.DefaultChunkRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -48,6 +51,18 @@ import java.util.function.Supplier;
  */
 @Mixin(value = DefaultChunkRenderer.class, remap = false)
 public abstract class MixinDefaultChunkRenderer {
+
+	// require, because a silently unapplied probe prints the same zeros as an empty rotate, and
+	// the whole point of the clock is telling those two apart.
+	@Inject(method = "rotate", at = @At("HEAD"), require = 1)
+	private void vitrail$rotateBegin(CallbackInfo ci) {
+		RingTimings.beginRotate();
+	}
+
+	@Inject(method = "rotate", at = @At("RETURN"), require = 1)
+	private void vitrail$rotateEnd(CallbackInfo ci) {
+		RingTimings.endRotate();
+	}
 
 	/**
 	 * Answers the target question with the game's own while the shadow map is being drawn.

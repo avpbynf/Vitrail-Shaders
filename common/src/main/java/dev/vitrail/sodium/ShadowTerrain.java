@@ -5,6 +5,7 @@ import dev.vitrail.mixin.RenderSectionManagerAccessor;
 import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.render.BlockStateIds;
 import dev.vitrail.render.DistantDraw;
+import dev.vitrail.render.RingTimings;
 import dev.vitrail.render.ShadowCullPlan;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
@@ -182,10 +183,15 @@ public final class ShadowTerrain {
 		// The steps live here rather than as a default on the accessor: Mixin treats an interface
 		// mixin with a default method as targeting an interface, and RenderSectionManager is a
 		// class, so the config fails to prepare. The check is Mixin's own, seen on the Fabric boot.
-		RenderSectionManagerAccessor access = (RenderSectionManagerAccessor) manager;
-		access.vitrail$setFrame(access.vitrail$getFrame() + 1);
-		if (access.vitrail$cameraChanged()) {
-			access.vitrail$invalidateRenderLists();
+		// keepShadowRotate puts the old call back so the two paths can be timed on the same jar.
+		if (RingTimings.keepSecondRotate()) {
+			manager.prepareRender();
+		} else {
+			RenderSectionManagerAccessor access = (RenderSectionManagerAccessor) manager;
+			access.vitrail$setFrame(access.vitrail$getFrame() + 1);
+			if (access.vitrail$cameraChanged()) {
+				access.vitrail$invalidateRenderLists();
+			}
 		}
 		try {
 			FogParameters fog = ((MixinSodiumWorldRenderer) renderer).vitrail$lastFogParameters();
