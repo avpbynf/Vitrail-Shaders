@@ -2064,8 +2064,12 @@ public final class PackChain {
 
 		try {
 			ChainPlan.Attachment into = chain.features.into();
-			chain.features.compose(device.createCommandEncoder(), chain.quad,
-					chain.targets.view(into.target(), into.side()));
+			GpuTextureView view = chain.targets.view(into.target(), into.side());
+			// This pass may be the frame's first to attach that target, so it takes the emptying
+			// still owed, the way every attaching pass does: composed onto a debt left standing,
+			// the layer would sit on stale texels and be erased with them at the deferred flush.
+			chain.features.compose(device.createCommandEncoder(), chain.quad, view,
+					chain.targets.takeClear(view));
 		} catch (RuntimeException e) {
 			disabled = true;
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -2231,15 +2235,13 @@ public final class PackChain {
 		// frame, so a frame no program of the pack drew in is served an empty one rather than the
 		// last one that was written.
 		GpuTextureView covered = this.targets.coverage();
-		// The mask's own emptying is owed HERE when nothing else has paid it. It rides the load-op
-		// of the first geometry pass that attaches it, which is free and is the whole point, but a
-		// frame in which the pack's geometry opens no pass at all never reaches that load-op. The
-		// mask would then still hold the LAST frame's depths, compared against this frame's with
-		// the camera moved in between, and the seed would repaint the pack's geometry over most of
-		// the screen. A standalone clear is a GPU stop, and on those frames it is the right price.
-		if (covered != null) {
-			this.targets.flushSampled(encoder, List.of(covered), List.of());
-		}
+		// Whatever is still owed an emptying is owed it HERE at the latest, the mask above first
+		// among them: it rides the load-op of the first geometry pass that attaches it, which is
+		// free, but a frame in which the pack's geometry opens no pass at all never reaches that
+		// load-op. The mask would then still hold the LAST frame's depths, compared against this
+		// frame's with the camera moved in between, and the seed would repaint the pack's geometry
+		// over most of the screen.
+		this.targets.flushPending(encoder);
 
 		// The far terrain's own depth rides the same fallback: a frame it drew nothing in reads as
 		// nothing of the pack's standing there, through the sentinel sitting outside the range on

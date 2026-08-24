@@ -413,7 +413,6 @@ final class GeometryProgram {
 	private final Set<Integer> collisions = new HashSet<>();
 
 	/** Reused while a descriptor is built: Sodium asks for one per region, not once a frame. */
-	private final List<GpuTextureView> sampledViews = new ArrayList<>();
 	private final List<GpuTextureView> attachedViews = new ArrayList<>();
 	private final List<GpuTextureView> writtenViews = new ArrayList<>();
 
@@ -1164,8 +1163,7 @@ final class GeometryProgram {
 
 		if (plain()) {
 			if (this.targets.hasPendingClears()) {
-				this.targets.flushSampled(RenderSystem.getDevice().createCommandEncoder(),
-						sampledColour(), List.of());
+				this.targets.flushPending(RenderSystem.getDevice().createCommandEncoder());
 			}
 
 			return null;
@@ -1201,8 +1199,7 @@ final class GeometryProgram {
 		}
 
 		if (this.targets.hasPendingClears()) {
-			this.targets.flushSampled(RenderSystem.getDevice().createCommandEncoder(), sampledColour(),
-					this.writtenViews);
+			this.targets.flushPending(RenderSystem.getDevice().createCommandEncoder());
 		}
 
 		// Never left out: the encoder refuses a descriptor without one outright, and it refuses it
@@ -1213,24 +1210,6 @@ final class GeometryProgram {
 				this.targets.screenWidth(), this.targets.screenHeight()));
 
 		return depth == null ? descriptor : descriptor.withDepthAttachment(depth);
-	}
-
-	/** Colour targets this program samples, for a pending clear that cannot wait for a write. */
-	private List<GpuTextureView> sampledColour() {
-		this.sampledViews.clear();
-		for (String sampler : this.samplers) {
-			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
-			if (binding.kind() != SamplerPlan.Kind.COLORTEX) {
-				continue;
-			}
-
-			GpuTextureView view = this.targets.view(binding.index(), binding.side());
-			if (view != null) {
-				this.sampledViews.add(view);
-			}
-		}
-
-		return this.sampledViews;
 	}
 
 	/**
