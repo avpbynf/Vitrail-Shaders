@@ -20,6 +20,8 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.SamplerTypes;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSchedule;
+import dev.vitrail.pack.texture.CustomImages;
+import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.pack.texture.PackTextures;
 import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.pack.texture.VolumeAtlas;
@@ -34,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -102,17 +106,19 @@ public final class PackProgram {
 		public List<TranslatedUnit.Uniform> unbindable() {
 			return this.program.samplers().stream()
 					.filter(sampler -> SamplerTypes.refused(sampler.type()))
+					.filter(sampler -> !CustomImages.named(sampler.name()))
 					.toList();
 		}
 
 		/**
-		 * The storage blocks this program declares, which nothing in this game binds. Empty is the
-		 * norm, and the one pack of the corpus that is not says so in every ordinary program.
+		 * The storage blocks this program declares. Empty is the norm. Complementary Ultra writes
+		 * {@code blockDataBuffer} when world-space reflections are on; those names are bound when
+		 * {@link CustomStorage#named} answers, and refused when it does not.
 		 * <p>
 		 * Worth asking separately from {@link #unbindable}: a sampler the backend refuses stops the
 		 * pipeline from being built, which every caller already notices, and a storage block does
-		 * not. It compiles, it is left out of the bind group, and the descriptor keeps the binding
-		 * the pack wrote.
+		 * not. It compiles, and without a bind-group entry its descriptor keeps the binding the
+		 * pack wrote.
 		 */
 		public List<String> storageBlocks() {
 			return this.program.stages().values().stream()
@@ -208,10 +214,9 @@ public final class PackProgram {
 	 *                   Nothing is missing there but the compute pass that would fill it, and this
 	 *                   engine runs none; every one of them in the corpus sits under a setting that
 	 *                   is off by default
-	 * @param storage    storage blocks. {@code IntermediaryShaderModule.createFromSpirv} lists a
-	 *                   module's uniform buffers and its sampled images and nothing else, so one of
-	 *                   these never enters a bind group, its binding is never rewritten, and the
-	 *                   descriptor stays on the number the pack wrote
+	 * @param storage    storage blocks this engine has no {@code bufferObject} for. A served one
+	 *                   is left out of this list and enters the bind group as a uniform name the
+	 *                   mixins turn into a storage buffer
 	 */
 	public record Refusal(List<TranslatedUnit.Uniform> unbindable,
 			List<TranslatedUnit.Uniform> volumes, List<String> storage) {
@@ -370,6 +375,76 @@ public final class PackProgram {
 			return Optional.of(bind(source.packName(), path, program, targets, AlphaTest.OFF,
 					textures));
 		}
+	}
+
+	/**
+	 * A compute-only program, translated, with the work group count Iris reads off
+	 * {@code const ivec3 workGroups}.
+	 */
+	public record Compute(Loaded loaded, int groupsX, int groupsY, int groupsZ) {
+	}
+
+	private static final Pattern WORK_GROUPS = Pattern.compile(
+			"const\\s+ivec3\\s+workGroups\\s*=\\s*ivec3\\s*\\(\\s*(-?\\d+)\\s*,\\s*(-?\\d+)\\s*,\\s*(-?\\d+)\\s*\\)");
+
+	/**
+	 * One {@code .csh} entry point, translated on its own. Empty when the pack does not ship it.
+	 */
+	public static Optional<Compute> loadCompute(Path packPath, String path,
+			Map<String, OptionValue> chosen, String profile) throws IOException {
+		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
+			OptionIndex options = OptionIndex.build(source);
+			ShaderProperties properties = ShaderProperties.parse(source);
+			Map<String, OptionValue> fromProfile = profile.isEmpty()
+					? Map.of()
+					: properties.expandProfile(profile);
+			SettingSet settings = SettingSet.resolve(fromProfile, chosen,
+					profile.isEmpty() ? "chosen" : profile);
+			IncludeExpander expander = new IncludeExpander(source, settings);
+			Optional<Path> file = source.file(path + "." + ProgramStage.COMPUTE.extension());
+			if (file.isEmpty()) {
+				return Optional.empty();
+			}
+
+			ExpandedUnit unit = expander.expand(file.get());
+			TargetPlan targets = TargetPlan.build(source, options, settings, properties,
+					dimensionOf(path));
+			PackTextures textures = textures(source, properties, options, settings);
+			Map<ProgramStage, ExpandedUnit> units = new LinkedHashMap<>();
+			units.put(ProgramStage.COMPUTE, unit);
+			ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units,
+					VertexInputs.FULLSCREEN, VertexInputs.FULLSCREEN.elements(), AlphaTest.OFF, false,
+					programOf(path), textures.volumes());
+			int[] groups = workGroupsOf(unit);
+			return Optional.of(new Compute(
+					bind(source.packName(), path, program, targets, AlphaTest.OFF, textures),
+					groups[0], groups[1], groups[2]));
+		}
+	}
+
+	/**
+	 * Iris reads {@code const ivec3 workGroups} off the live preprocessor branch. Complementary
+	 * lists every volume size, dead branches kept in the text, so the first match in the file
+	 * is the 128 one even on Ultra.
+	 */
+	private static int[] workGroupsOf(ExpandedUnit unit) {
+		List<String> lines = unit.lines();
+		for (int i = 0; i < lines.size(); i++) {
+			if (!unit.isLive(i)) {
+				continue;
+			}
+
+			Matcher matcher = WORK_GROUPS.matcher(lines.get(i));
+			if (matcher.find()) {
+				return new int[] {
+						Math.max(1, Integer.parseInt(matcher.group(1))),
+						Math.max(1, Integer.parseInt(matcher.group(2))),
+						Math.max(1, Integer.parseInt(matcher.group(3)))
+				};
+			}
+		}
+
+		return new int[] { 1, 1, 1 };
 	}
 
 	/**
@@ -1090,14 +1165,18 @@ public final class PackProgram {
 						.forEach(sampler -> found.putIfAbsent(sampler.name(), sampler));
 				stage.notes().storageBlocks().stream()
 						.filter(block -> !storage.contains(block))
+						.filter(block -> !CustomStorage.named(block))
 						.forEach(storage::add);
 			});
 
-			List<TranslatedUnit.Uniform> volumes = found.values().stream()
-					.filter(sampler -> filled.contains(sampler.name()))
-					.toList();
+			List<TranslatedUnit.Uniform> volumes = CustomImages.served()
+					? List.of()
+					: found.values().stream()
+							.filter(sampler -> filled.contains(sampler.name()))
+							.toList();
 			List<TranslatedUnit.Uniform> plain = found.values().stream()
-					.filter(sampler -> !filled.contains(sampler.name()))
+					.filter(sampler -> !filled.contains(sampler.name())
+							&& !CustomImages.named(sampler.name()))
 					.toList();
 
 			Refusal refusal = new Refusal(plain, volumes, storage);
@@ -1175,6 +1254,8 @@ public final class PackProgram {
 	 */
 	private static PackTextures textures(ShaderPackSource source, ShaderProperties properties,
 			OptionIndex options, SettingSet settings) throws IOException {
+		CustomImages.install(properties.imageDirectives(settings.globalDefines(options)));
+		CustomStorage.install(properties.bufferObjects(settings.globalDefines(options)));
 		return PackTextures.read(properties, settings.globalDefines(options), source);
 	}
 

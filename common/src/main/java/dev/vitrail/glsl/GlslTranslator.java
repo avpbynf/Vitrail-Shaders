@@ -10,6 +10,8 @@ import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.target.DrawBuffers;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.SamplerTypes;
+import dev.vitrail.pack.texture.CustomImages;
+import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
@@ -22,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 
@@ -2858,6 +2861,27 @@ public final class GlslTranslator {
 		}
 	}
 
+	/**
+	 * Vulkan GLSL requires a format on a storage image. Iris's GL bind supplies it at bind time,
+	 * so Complementary writes {@code writeonly uniform uimage3D voxel_img} with none. The format
+	 * comes off the {@code image.} directive and is written here, in the header: the body
+	 * declaration has already been lifted, so a layout qualifier inserted into the token stream
+	 * would qualify a statement that is no longer in the shader.
+	 */
+	private static String declareOpaque(TranslatedUnit.Uniform sampler) {
+		if (!isImageType(sampler.type())) {
+			return "uniform " + sampler.declaration() + ";";
+		}
+
+		return CustomImages.layoutFormat(sampler.name())
+				.map(format -> "layout(" + format + ") uniform " + sampler.declaration() + ";")
+				.orElse("uniform " + sampler.declaration() + ";");
+	}
+
+	private static boolean isImageType(String type) {
+		return type.startsWith("image") || type.startsWith("iimage") || type.startsWith("uimage");
+	}
+
 	private void liftOne(int keyword) {
 		int end = statementEnd(keyword);
 		if (end < 0) {
@@ -3422,13 +3446,13 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Records every storage block the unit declares, which nothing here can make bindable.
+	 * Records every storage block the unit declares, so a {@code bufferObject} can be bound to it.
 	 * <p>
 	 * Named rather than rewritten because the game never looks for one.
 	 * {@code IntermediaryShaderModule.createFromSpirv} lists the module's uniform buffers and its
-	 * sampled images and nothing else, so a storage block never enters a bind group, its binding is
-	 * never rewritten with the rest, and the descriptor stays on whatever number the pack wrote.
-	 * Reverie writes two at set 0, bindings 0 and 1, where the layout already puts the uniform block.
+	 * sampled images and nothing else, so a storage block is appended afterwards and remapped with
+	 * the rest. Complementary Ultra writes {@code blockDataBuffer} at binding 0 for world-space
+	 * reflections; without that name the shadow program is refused and voxel lighting never writes.
 	 * <p>
 	 * Read on the shape and not on the word alone: {@code buffer} followed by a name and an opening
 	 * brace is an interface block and can be nothing else, so no brace depth has to be counted, which
@@ -3451,10 +3475,67 @@ public final class GlslTranslator {
 			}
 
 			int brace = significantAfter(name);
-			if (brace >= 0 && this.tokens.get(brace).operator("{")) {
-				this.storageBlocks.add(this.tokens.get(name).text());
+			if (brace < 0 || !this.tokens.get(brace).operator("{")) {
+				continue;
+			}
+
+			String block = this.tokens.get(name).text();
+			int binding = layoutBinding(index);
+			if (!this.storageBlocks.contains(block)) {
+				this.storageBlocks.add(block);
+			}
+
+			CustomStorage.declare(block, binding);
+			int close = matchingBracket(brace);
+			int instance = close < 0 ? -1 : significantAfter(close);
+			if (instance >= 0 && this.tokens.get(instance).kind() == Kind.IDENTIFIER) {
+				String instanceName = this.tokens.get(instance).text();
+				if (!this.storageBlocks.contains(instanceName)) {
+					this.storageBlocks.add(instanceName);
+				}
+
+				CustomStorage.declare(instanceName, binding);
 			}
 		}
+	}
+
+	/**
+	 * The {@code binding = N} in the layout qualifier that precedes this {@code buffer} token, or
+	 * {@code -1} when the pack wrote none. Complementary always writes one; a nameless
+	 * {@code bufferObject.N} is matched against it.
+	 */
+	private int layoutBinding(int bufferIndex) {
+		int start = 0;
+		for (int scan = bufferIndex - 1; scan >= 0; scan--) {
+			if (this.tokens.get(scan).operator(";")) {
+				start = scan + 1;
+				break;
+			}
+		}
+
+		for (int scan = start; scan < bufferIndex; scan++) {
+			if (!this.tokens.get(scan).identifier("binding")) {
+				continue;
+			}
+
+			int equals = significantAfter(scan);
+			if (equals < 0 || !this.tokens.get(equals).operator("=")) {
+				continue;
+			}
+
+			int number = significantAfter(equals);
+			if (number < 0 || this.tokens.get(number).kind() != Kind.NUMBER) {
+				continue;
+			}
+
+			try {
+				return Integer.parseInt(this.tokens.get(number).text());
+			} catch (NumberFormatException ignored) {
+				return -1;
+			}
+		}
+
+		return -1;
 	}
 
 	/**
@@ -3607,7 +3688,7 @@ public final class GlslTranslator {
 		// compiler numbers a sampler by the order it first meets the name, and MoltenVK turns that
 		// number into a Metal slot that only accepts 0 through 15. Sampled names come first.
 		for (TranslatedUnit.Uniform sampler : samplers) {
-			lines.add("uniform " + sampler.declaration() + ";");
+			lines.add(declareOpaque(sampler));
 		}
 
 		// Attributes stay a matter for the stage that has them. Only a vertex shader has inputs
