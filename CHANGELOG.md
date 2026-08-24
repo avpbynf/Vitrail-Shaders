@@ -26,6 +26,14 @@ what the next one holds.
   is the loading window NeoForge opens before the game, which Fabric has no equivalent of. NeoForge
   still needs it.
 
+### Changed
+
+- **Opening a pack's settings no longer applies it.** Looking at another pack's pages used to load
+  it first, on its own default profile, so anybody meaning to open a heavy pack, turn it down and
+  then apply it paid the heavy profile in full first. The pages now open on the pack that was
+  picked while the loaded one goes on drawing, and Apply is the only thing that costs. A profile
+  chosen before applying is the one that lands.
+
 ## 0.7.5-beta
 
 ### Added
