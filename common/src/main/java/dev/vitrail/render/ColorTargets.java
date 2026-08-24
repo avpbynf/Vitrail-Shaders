@@ -49,11 +49,11 @@ import java.util.stream.Collectors;
  * the decisions on the pack side is what lets them be measured against the eight packs without
  * starting the game.
  * <p>
-	 * Allocating has to happen outside a render pass. Creating a texture records a barrier into the
-	 * very command buffer a pass would be recording into. Clears of the pack's colour targets are
-	 * remembered until the first pass that writes them, and become that pass's load operation: a
-	 * standalone texture clear is a GPU stop of its own on this backend, which OpenGL's
-	 * {@code glClear} as the FBO is bound is not.
+ * Allocating has to happen outside a render pass. Creating a texture records a barrier into the
+ * very command buffer a pass would be recording into. Clears of the pack's colour targets are
+ * remembered until the first pass that writes them, and become that pass's load operation: a
+ * standalone texture clear is a GPU stop of its own on this backend, which OpenGL's
+ * {@code glClear} as the FBO is bound is not.
  * <p>
  * No caller ever holds a texture view. A resize destroys and recreates the texture behind a target
  * and closes every view onto it, and nothing on the Vulkan backend checks that a bound view is
