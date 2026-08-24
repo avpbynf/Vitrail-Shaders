@@ -15,6 +15,12 @@ what the next one holds.
 
 ### Added
 
+- **A pack's coloured lighting runs.** The storage images, storage buffers and shadow compute
+  pass behind it are served, and `IRIS_FEATURE_CUSTOM_IMAGES` is announced, so the voxel
+  lighting of Complementary's top profiles, Euphoria Patches' Colored Lighting among them,
+  draws instead of switching itself off behind a red overlay: lamps and torches colour the
+  world around them. A pack that requires custom images loads instead of being refused.
+
 - **A crash during startup no longer takes the graphics backend with it.** The game resets the
   preferred graphics API, and the fullscreen mode, whenever the previous startup did not finish,
   and it does that for any crash rather than for a backend that failed. Since nothing of this mod

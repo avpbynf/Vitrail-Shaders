@@ -633,12 +633,10 @@ public final class PackChain {
 			PackDump.configure(engine.dump(),
 					gameDirectory.resolve(Vitrail.MOD_ID).resolve("dump.txt"));
 
-			// Refused by name, and before a single program is TRANSLATED. This engine serves no
-			// feature flag at all and defines no IRIS_FEATURE_, which is the honest answer and the
-			// one that keeps a pack on its fallback path; a pack that says it REQUIRES one is asking
-			// for something that is not here. Left unread, the refusal came much later and named
-			// whichever sampler the missing feature stood behind, which is a wrong diagnosis rather
-			// than an incomplete one.
+			// Refused by name, and before a single program is TRANSLATED. Required flags this
+			// engine does not serve keep the pack on its fallback; optional CUSTOM_IMAGES is
+			// posed from EngineDefines when the storage-image pipe is served, and is not a
+			// required flag in the corpus.
 			//
 			// **Here and not one line earlier**, and TerrainDraw.wanted above is the reason. It settles
 			// what the chunk mesh carries, and returning ahead of it would leave that answer at its
@@ -658,14 +656,20 @@ public final class PackChain {
 			//
 			// Read from the one file rather than from the report above, because a refusal has to
 			// hold at every load and the report is taken once.
-			List<String> required = PackLoader.properties(pack).requiredFeatures();
+			List<String> required = new ArrayList<>(PackLoader.properties(pack).requiredFeatures());
+			// Only the names this engine has not built refuse the pack: custom images are served
+			// now, so a pack that cannot draw without them is simply right about what it needs.
+			if (CustomImages.served()) {
+				required.remove("CUSTOM_IMAGES");
+			}
+
 			if (!required.isEmpty()) {
 				disabled = true;
 				String names = String.join(", ", required);
 				String named = ShaderPackSource.nameOf(pack);
 				lastError = named + " requires " + names
-						+ ", and this engine serves no feature flag";
-				Vitrail.logger().error("{} requires {}, and this engine serves none of them, so "
+						+ ", which this engine does not serve";
+				Vitrail.logger().error("{} requires {}, which this engine does not serve, so "
 						+ "nothing is drawn", named, names);
 				return;
 			}
