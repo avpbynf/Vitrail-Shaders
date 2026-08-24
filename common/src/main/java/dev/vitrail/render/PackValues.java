@@ -11,6 +11,9 @@ import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.pack.source.ShadowCullState;
 import dev.vitrail.pack.target.PackDirectives;
+import dev.vitrail.pack.texture.BufferObject;
+import dev.vitrail.pack.texture.CustomStorage;
+import dev.vitrail.pack.texture.ImageInformation;
 import dev.vitrail.uniform.expr.CustomUniforms;
 import dev.vitrail.uniform.NoiseTexture;
 import dev.vitrail.uniform.UniformCatalog;
@@ -93,6 +96,8 @@ public final class PackValues {
 	private Optional<String> particleOrdering = Optional.empty();
 	private NoiseTexture.Image noiseImage;
 	private PackImages packImages = PackImages.none();
+	private ImageInformation.Reading storageImages = ImageInformation.Reading.empty();
+	private BufferObject.Reading bufferObjects = BufferObject.Reading.empty();
 	private UniformCatalog catalog = UniformCatalog.engine();
 	private UniformCatalog geometry = UniformCatalog.geometry();
 	private UniformCatalog shadowGeometry = UniformCatalog.shadowGeometry();
@@ -140,6 +145,9 @@ public final class PackValues {
 			values.readNoise(properties, source, settings.globalDefines(options));
 			values.packImages =
 					PackImages.read(properties, settings.globalDefines(options), source);
+			values.storageImages = properties.imageDirectives(settings.globalDefines(options));
+			values.bufferObjects = properties.bufferObjects(settings.globalDefines(options));
+			CustomStorage.install(values.bufferObjects);
 
 			// Read against the same settings as everything above, which is not a formality: BSL wraps
 			// all its declarations in one conditional and keeps a fifth of them under the #else, so a
@@ -165,6 +173,15 @@ public final class PackValues {
 	/** The textures the pack ships as files of its own, decoded and waiting to be uploaded. */
 	PackImages packImages() {
 		return this.packImages;
+	}
+
+	/**
+	 * The storage images the pack declared, not yet allocated. Empty until custom images are
+	 * served; the notes still name them so a missing volume is a missing pass rather than a
+	 * missing file.
+	 */
+	ImageInformation.Reading storageImages() {
+		return this.storageImages;
 	}
 
 	/** The engine's table with the pack's own uniforms layered over it. */
@@ -605,6 +622,10 @@ public final class PackValues {
 		}
 
 		this.problems.forEach(problem -> notes.add("Dropped the pack's own " + problem));
+		this.storageImages.images().forEach(image -> notes.add("storage image " + image.describe()));
+		this.storageImages.dropped().forEach(dropped -> notes.add("Dropped " + dropped));
+		this.bufferObjects.buffers().forEach(buffer -> notes.add("storage buffer " + buffer.describe()));
+		this.bufferObjects.dropped().forEach(dropped -> notes.add("Dropped " + dropped));
 		notes.addAll(this.packImages.notes());
 
 		return notes;
