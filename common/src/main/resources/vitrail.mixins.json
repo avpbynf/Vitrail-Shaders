@@ -63,6 +63,7 @@
 		"TextureManagerAccessor",
 		"VKDrawContextMixin",
 		"VulkanBackendMixin",
+		"VulkanCommandEncoderAccessor",
 		"VulkanCommandEncoderMixin",
 		"VulkanDeviceMixin",
 		"VulkanQueueSubmitMixin",
