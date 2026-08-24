@@ -32,6 +32,12 @@ description = '''OptiFine-format shader packs, on Minecraft's native Vulkan rend
 [[mixins]]
 config = "vitrail.mixins.json"
 
+# The engine's own mixins are in the common module and are listed above. This second config is
+# the handful that exist on this loader alone, which today is the refusal of the early loading
+# window: it names classes of NeoForge's, so it could not live where the Fabric module reads.
+[[mixins]]
+config = "vitrail-neoforge.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId = "minecraft"
 type = "required"
@@ -52,15 +58,4 @@ type = "required"
 reason = "Vitrail renders through Sodium, which owns the Vulkan command submission."
 versionRange = "[0.9,0.10)"
 ordering = "AFTER"
-side = "CLIENT"
-
-# Any build will do: nothing here calls into Chloride, it only has to be present so that the window
-# is created without an OpenGL client API. Loading order is irrelevant for the same reason, since
-# the window exists long before mod construction.
-[[dependencies.${mod_id}]]
-modId = "chloride"
-type = "required"
-reason = "Without Chloride the window is created with an OpenGL client API and the Vulkan surface fails at boot."
-versionRange = "[0,)"
-ordering = "NONE"
 side = "CLIENT"

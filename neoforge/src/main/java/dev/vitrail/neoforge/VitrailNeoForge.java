@@ -13,6 +13,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.FlipFrameEvent;
 import net.neoforged.neoforge.client.event.FrameGraphSetupEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.TextureAtlasStitchedEvent;
@@ -22,7 +23,9 @@ import net.neoforged.neoforge.common.NeoForge;
 
 /**
  * Which NeoForge event each stage of {@link EngineStages} is reached by. What happens at a stage is
- * written there and not here, because the Fabric module has to reach the same ones.
+ * written there and not here, because the Fabric module has to reach the same ones. The one
+ * listener that answers to nothing on the other side is {@link EarlyWindow}, which has no stage
+ * because it has no counterpart: the window it deals with is this loader's own.
  */
 @Mod(value = Vitrail.MOD_ID, dist = Dist.CLIENT)
 public final class VitrailNeoForge {
@@ -37,6 +40,13 @@ public final class VitrailNeoForge {
 				(_, modListScreen) -> new SettingsScreen(modListScreen));
 
 		VitrailKeys.register(modBus);
+
+		// The one listener here that is not a stage of the engine, and the only one that has to be
+		// on this side: it disposes of the loading window this loader is left holding when the game
+		// was made to build its own. Posted after the frame has gone through the screen, which is
+		// the first moment nothing is drawing into either window. It costs a field read a frame
+		// forever after, and the alternative is a listener that unregisters itself.
+		NeoForge.EVENT_BUS.addListener(FlipFrameEvent.class, _ -> EarlyWindow.close());
 
 		modBus.addListener(FMLClientSetupEvent.class, _ -> EngineStages.clientSetup());
 
