@@ -1,9 +1,11 @@
 package dev.vitrail.sodium;
 
 import dev.vitrail.render.PackChain;
+import dev.vitrail.render.StartupGuard;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.ScreenText;
 import dev.vitrail.screen.SettingsScreen;
+import dev.vitrail.settings.GraphicsApiChoice;
 import dev.vitrail.settings.PackFile;
 import dev.vitrail.Vitrail;
 
@@ -69,6 +71,10 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	private static final Identifier SHADOW_DISTANCE =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "shadow_distance");
 
+	/** Which backend a startup that ended badly comes back to. */
+	private static final Identifier GRAPHICS_API =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "graphics_api");
+
 	/** What the selector offers while the pack draws the world, and what it offers otherwise. */
 	private static final Set<TextureFilteringMethod> WITHOUT_RGSS =
 			Set.of(TextureFilteringMethod.NONE, TextureFilteringMethod.ANISOTROPIC);
@@ -90,7 +96,9 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				// already writes over its video settings, translated everywhere this mod is not.
 				.addPage(builder.createOptionPage()
 						.setName(Component.translatable("options.videoTitle"))
-						.addOptionGroup(builder.createOptionGroup().addOption(shadowDistance(builder))))
+						.addOptionGroup(builder.createOptionGroup()
+								.addOption(shadowDistance(builder))
+								.addOption(graphicsApi(builder))))
 				// RGSS is shader code, written into the game's own terrain shader and into Sodium's,
 				// so it is worth nothing while the pack's terrain program is the one drawing: the
 				// player moves the selector and the image does not move. ANISOTROPIC keeps working,
@@ -115,6 +123,48 @@ public final class ConfigEntry implements ConfigEntryPoint {
 								.setAllowedValuesProvider(
 										state -> TerrainDraw.asked() ? WITHOUT_RGSS : EVERY_METHOD,
 										ConfigState.UPDATE_ON_REBUILD));
+	}
+
+	/**
+	 * Which backend the game comes back to after a startup that ended badly.
+	 * <p>
+	 * The game's own answer is to walk the preferred API down to Default, then to OpenGL, whenever
+	 * the previous startup did not finish. That rescue is meant for a machine whose Vulkan cannot
+	 * start; here it fires for any crash at all, from any mod, and empties the session rather than
+	 * saving it, since nothing of this engine is drawn off Vulkan. So the default here is Vulkan.
+	 * <p>
+	 * The two other answers are real answers and not politeness. OpenGL is for a machine where Vulkan
+	 * really does not start, and leaving it to the game is for anyone who would rather have the
+	 * vanilla behaviour back.
+	 * <p>
+	 * Written through {@link GraphicsApiChoice} into a file of its own, which is what lets it be read
+	 * inside {@code Minecraft}'s constructor, long before this screen or the mod exists.
+	 * {@link StartupGuard#forget} is what makes the next startup read the new value.
+	 *
+	 * @see StartupGuard
+	 */
+	private static OptionBuilder graphicsApi(ConfigBuilder builder) {
+		return builder.createEnumOption(GRAPHICS_API, GraphicsApiChoice.class)
+				.setName(Component.translatable(ScreenText.CRASH_API))
+				.setTooltip(_ -> Component.translatable(ScreenText.CRASH_API_TOOLTIP))
+				.setDefaultValue(GraphicsApiChoice.DEFAULT)
+				.setBinding(chosen -> {
+					GraphicsApiChoice.write(Vitrail.platform().gameDirectory(), chosen);
+					StartupGuard.forget();
+				}, GraphicsApiChoice::read)
+				.setElementNameProvider(chosen -> Component.translatable(switch (chosen) {
+					case VULKAN -> ScreenText.CRASH_API_VULKAN;
+					case OPENGL -> ScreenText.CRASH_API_OPENGL;
+					case GAME -> ScreenText.CRASH_API_GAME;
+				}))
+				// Empty for the same reason the slider above leaves it empty, and required for the
+				// same reason: Sodium refuses to build a stateful option without one, at the loading
+				// screen rather than at compile time. The binding has already written the file.
+				//
+				// No impact is declared either, and that is not an omission: this decides what a
+				// LATER launch starts on and costs the running frame nothing at all. Sodium's own
+				// impact labels are about the frame being drawn.
+				.setStorageHandler(() -> {});
 	}
 
 	/**

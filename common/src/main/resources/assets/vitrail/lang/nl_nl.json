@@ -1,5 +1,10 @@
 {
 	"options.vitrail.packs_title": "Shader Packs",
+	"options.vitrail.crash_graphics_api": "Backend after a crash",
+	"options.vitrail.crash_graphics_api_tooltip": "Controls which graphics backend is used again when the previous startup did not finish. Otherwise the game falls back to OpenGL, where shader packs are not drawn at all.",
+	"options.vitrail.crash_graphics_api.vulkan": "Vulkan",
+	"options.vitrail.crash_graphics_api.opengl": "OpenGL",
+	"options.vitrail.crash_graphics_api.game": "Game default",
 	"options.vitrail.shadow_distance": "Maximale Schaduwafstand",
 	"options.vitrail.shadow_distance_tooltip": "Hiermee kunt u de maximale afstand voor schaduwen wijzigen. Terrein en entiteiten buiten deze afstand zullen geen schaduwen werpen. Het verkleinen van de Schaduwafstand kan de prestaties aanzienlijk verbeteren.",
 	"options.vitrail.shadow_distance_forced": "Uw huidig shader-pack heeft al een weergaveafstand voor schaduwen ingesteld; je kunt het niet veranderen.",

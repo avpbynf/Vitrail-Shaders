@@ -1,5 +1,10 @@
 {
 	"options.vitrail.packs_title": "Shader Paketleri",
+	"options.vitrail.crash_graphics_api": "Backend after a crash",
+	"options.vitrail.crash_graphics_api_tooltip": "Controls which graphics backend is used again when the previous startup did not finish. Otherwise the game falls back to OpenGL, where shader packs are not drawn at all.",
+	"options.vitrail.crash_graphics_api.vulkan": "Vulkan",
+	"options.vitrail.crash_graphics_api.opengl": "OpenGL",
+	"options.vitrail.crash_graphics_api.game": "Game default",
 	"options.vitrail.shadow_distance": "Mak. Gölge Uzaklığı",
 	"options.vitrail.shadow_distance_tooltip": "Gölgeler için maksimum ucaklığı değiştirmeye yarar. Bu uzaklığın ötesindeki araziye ve varlıklara gölge uygulanmaz. Gölge uzaklığını azaltmak, performansı önemli ölçüde arttırabilir.",
 	"options.vitrail.shadow_distance_forced": "Mevcut shader paketiniz, zaten gölgeler için ayarlı bir görüntüleme uzaklığına sahip; bunu değiştiremezsin.",

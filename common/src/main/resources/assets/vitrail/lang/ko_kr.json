@@ -1,5 +1,10 @@
 {
 	"options.vitrail.packs_title": "셰이더 팩",
+	"options.vitrail.crash_graphics_api": "Backend after a crash",
+	"options.vitrail.crash_graphics_api_tooltip": "Controls which graphics backend is used again when the previous startup did not finish. Otherwise the game falls back to OpenGL, where shader packs are not drawn at all.",
+	"options.vitrail.crash_graphics_api.vulkan": "Vulkan",
+	"options.vitrail.crash_graphics_api.opengl": "OpenGL",
+	"options.vitrail.crash_graphics_api.game": "Game default",
 	"options.vitrail.shadow_distance": "그림자 렌더링 거리",
 	"options.vitrail.shadow_distance_tooltip": "그림자가 표시되는 최대 거리를 조정할 수 있습니다. 이 거리보다 멀리 있는 개체와 지형은 그림자를 표시하지 않습니다. 그림자 거리를 줄이면 성능을 향상시킬 수 있습니다.",
 	"options.vitrail.shadow_distance_forced": "현재 사용하고 있는 셰이더 팩은 이미 그림자 렌더링 거리가 설정되어 있어 바꿀 수 없습니다.",

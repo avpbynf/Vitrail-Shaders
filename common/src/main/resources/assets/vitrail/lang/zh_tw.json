@@ -1,5 +1,10 @@
 {
 	"options.vitrail.packs_title": "光影包",
+	"options.vitrail.crash_graphics_api": "Backend after a crash",
+	"options.vitrail.crash_graphics_api_tooltip": "Controls which graphics backend is used again when the previous startup did not finish. Otherwise the game falls back to OpenGL, where shader packs are not drawn at all.",
+	"options.vitrail.crash_graphics_api.vulkan": "Vulkan",
+	"options.vitrail.crash_graphics_api.opengl": "OpenGL",
+	"options.vitrail.crash_graphics_api.game": "Game default",
 	"options.vitrail.shadow_distance": "最大陰影距離",
 	"options.vitrail.shadow_distance_tooltip": "能讓您變更陰影的最大距離。超出此距離的地形和實體將不會有陰影。降低陰影距離能顯著提升效能。",
 	"options.vitrail.shadow_distance_forced": "您無法變更目前光影包所設定的陰影顯示距離。",

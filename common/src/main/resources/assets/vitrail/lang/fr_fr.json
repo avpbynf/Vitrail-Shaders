@@ -1,5 +1,10 @@
 {
 	"options.vitrail.packs_title": "Packs de shaders",
+	"options.vitrail.crash_graphics_api": "Backend après un plantage",
+	"options.vitrail.crash_graphics_api_tooltip": "Contrôle le backend graphique repris quand le démarrage précédent n'a pas abouti. Sinon le jeu retombe sur OpenGL, où les packs de shaders ne sont pas dessinés du tout.",
+	"options.vitrail.crash_graphics_api.vulkan": "Vulkan",
+	"options.vitrail.crash_graphics_api.opengl": "OpenGL",
+	"options.vitrail.crash_graphics_api.game": "Défaut du jeu",
 	"options.vitrail.shadow_distance": "Distance maximale des ombres",
 	"options.vitrail.shadow_distance_tooltip": "Permet de changer la distance maximale des ombres. Le terrain et les entités au-delà de cette distance ne projettent pas d'ombre. Baisser la distance des ombres peut améliorer nettement les performances.",
 	"options.vitrail.shadow_distance_forced": "Votre pack de shaders a déjà fixé sa propre distance de rendu des ombres; vous ne pouvez pas la changer.",

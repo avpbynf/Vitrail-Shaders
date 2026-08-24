@@ -31,6 +31,21 @@ public final class ScreenText {
 	public static final String PACKS_TITLE = "options.vitrail.packs_title";
 
 	/**
+	 * The selector for what a startup that ended badly comes back to, its tooltip, and its three
+	 * values.
+	 * <p>
+	 * The two backends are named here rather than borrowed from the game's own setting, which was
+	 * the first shape of this and was wrong: its Vulkan entry reads "Prefer Vulkan (Experimental)",
+	 * which is right where it stands and runs off the end of a row here. A value in a selector is a
+	 * name, not a sentence.
+	 */
+	public static final String CRASH_API = "options.vitrail.crash_graphics_api";
+	public static final String CRASH_API_TOOLTIP = "options.vitrail.crash_graphics_api_tooltip";
+	public static final String CRASH_API_VULKAN = "options.vitrail.crash_graphics_api.vulkan";
+	public static final String CRASH_API_OPENGL = "options.vitrail.crash_graphics_api.opengl";
+	public static final String CRASH_API_GAME = "options.vitrail.crash_graphics_api.game";
+
+	/**
 	 * How far the light reaches, on the video settings page this engine owns, with its two
 	 * tooltips: what the setting does, and what it says instead while a pack has taken the distance
 	 * out of the player's hands. Iris's {@code options.iris.shadowDistance} and its
@@ -152,6 +167,9 @@ public final class ScreenText {
 	public static final String OTHER_BACKEND = "options.vitrail.other_backend";
 	public static final String GRAPHICS_API = "options.graphicsApi";
 	public static final String GRAPHICS_API_VULKAN = "options.graphicsApi.vulkan";
+
+	/** The game's own label for the other one, used by {@link #CRASH_API} for the same reason. */
+	public static final String GRAPHICS_API_OPENGL = "options.graphicsApi.opengl";
 
 	/**
 	 * The group that key sits in. Nothing names it and nothing can: the game builds it from the
