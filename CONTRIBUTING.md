@@ -242,6 +242,12 @@ whoever never ran that command and for anything arriving from a fork. It is deli
 file: a workflow rewriting the same expression would be a second home for the rule, and the two
 would agree only until one of them changed.
 
+`.githooks/prepare-commit-msg` sits one step earlier and takes a `Co-authored-by`, `Made-with` or
+`Generated-by` line out of the message before it is stored. Nothing here forbids saying which tools
+built this project, and the readme says so plainly; what the log keeps is the reasoning for a
+change, and a trailer naming an editor is not that. The refusal in `commit-msg` stays either way,
+so a message that reaches it with one is still turned back.
+
 Catch it at the commit rather than at the request. A subject is amended in one gesture while it is
 still the last one, and rebuilt by hand once nine commits stand on top of it.
 
