@@ -86,7 +86,15 @@ public final class PackMenu {
 
 		List<String> warnings = new ArrayList<>();
 		Map<String, MenuOption> options = new LinkedHashMap<>();
-		Map<String, MenuPage> pages = new LinkedHashMap<>();
+		Map<String, List<MenuSlot>> slotsByPage = new LinkedHashMap<>();
+
+		// Where each * sits. The dump happens after every page has claimed its names, because
+		// the token means "everything no page shows", and what a later page shows is not known
+		// while an earlier one is being walked.
+		record Rest(List<MenuSlot> slots, int at) {
+		}
+		List<Rest> rests = new ArrayList<>();
+		Set<String> subPlaced = new HashSet<>();
 
 		for (Map.Entry<String, List<ShaderProperties.ScreenToken>> page : layout.entrySet()) {
 			String where = page.getKey().isEmpty() ? "screen" : "screen." + page.getKey();
@@ -108,6 +116,9 @@ public final class PackMenu {
 						} else {
 							slots.add(new MenuSlot.Option(options.computeIfAbsent(name,
 									_ -> MenuOption.of(declared, sliders.contains(name)))));
+							if (!page.getKey().isEmpty()) {
+								subPlaced.add(name);
+							}
 						}
 					}
 					case ShaderProperties.ScreenToken.Link(String target) -> {
@@ -126,21 +137,45 @@ public final class PackMenu {
 							slots.add(PROFILES);
 						}
 					}
-					case ShaderProperties.ScreenToken.Rest _ -> {
-						warnings.add(where + " asks for *, which no page shows yet");
-						slots.add(BLANK);
-					}
+					case ShaderProperties.ScreenToken.Rest _ ->
+							rests.add(new Rest(slots, slots.size()));
 				}
 			}
 
-			pages.put(page.getKey(), new MenuPage(page.getKey(), slots,
-					properties.columns(page.getKey()).orElse(slots.size() > WIDE_PAGE ? 3 : 2)));
+			slotsByPage.put(page.getKey(), slots);
 		}
 
-		if (!pages.containsKey("")) {
-			warnings.add("The pack lays out no main screen");
-			pages.put("", new MenuPage("", List.of(), 2));
+		// A pack that lays out no main screen means "everything", not "nothing": the reference
+		// reads the missing line as a single *. That token goes first, ahead of any * a sub-page
+		// carries, where the reference promises no winner at all, its dump walking a hash map.
+		if (!slotsByPage.containsKey("")) {
+			List<MenuSlot> main = new ArrayList<>();
+			rests.add(0, new Rest(main, 0));
+			slotsByPage.put("", main);
 		}
+
+		// The first * takes every offered setting no SUB-page names, in the order the pack
+		// declares them, and a second one takes what remains, which by then is nothing. What the
+		// main screen names pours out again on purpose: the reference fills its leftover list
+		// only after its main screen is built, so those names dump twice there, and a pack that
+		// laid its columns out against that must keep its shape here.
+		if (!rests.isEmpty()) {
+			List<MenuSlot> spill = new ArrayList<>();
+			for (PackOption declared : index.all()) {
+				if (subPlaced.contains(declared.name()) || !index.offers(declared)) {
+					continue;
+				}
+
+				spill.add(new MenuSlot.Option(options.computeIfAbsent(declared.name(),
+						_ -> MenuOption.of(declared, sliders.contains(declared.name())))));
+			}
+
+			rests.get(0).slots().addAll(rests.get(0).at(), spill);
+		}
+
+		Map<String, MenuPage> pages = new LinkedHashMap<>();
+		slotsByPage.forEach((name, slots) -> pages.put(name, new MenuPage(name, slots,
+				properties.columns(name).orElse(slots.size() > WIDE_PAGE ? 3 : 2))));
 
 		Map<String, Map<String, String>> profiles = new LinkedHashMap<>();
 		for (String name : properties.profiles().keySet()) {
