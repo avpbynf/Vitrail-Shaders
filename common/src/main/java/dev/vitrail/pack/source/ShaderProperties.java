@@ -4,7 +4,13 @@ import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.option.PackOption;
 import dev.vitrail.pack.program.AlphaTest;
+import dev.vitrail.pack.target.TargetFormat;
 import dev.vitrail.pack.target.TargetSize;
+import dev.vitrail.pack.texture.BufferObject;
+import dev.vitrail.pack.texture.ImageInformation;
+import dev.vitrail.pack.texture.PackTexture;
+import dev.vitrail.pack.texture.PixelFormat;
+import dev.vitrail.pack.texture.PixelType;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -128,7 +134,9 @@ public final class ShaderProperties {
 			Pattern.compile("^\\s*shadow\\.enabled\\s*=\\s*(.*)$");
 	private static final Pattern CUSTOM_TEXTURE =
 			Pattern.compile("^\\s*((?:texture|customTexture)\\.[^=\\s]+)\\s*=\\s*(.*)$");
-	private static final Pattern IMAGE = Pattern.compile("^\\s*image\\.[^=\\s.]+\\s*=\\s*(.*)$");
+	private static final Pattern IMAGE = Pattern.compile("^\\s*image\\.([^=\\s.]+)\\s*=\\s*(.*)$");
+	private static final Pattern BUFFER_OBJECT =
+			Pattern.compile("^\\s*bufferObject\\.(\\d+)\\s*=\\s*(.*)$");
 	private static final Pattern FLIP = Pattern.compile("^\\s*flip\\.([^=\\s.]+)\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern OTHER_KEY = Pattern.compile("^\\s*([A-Za-z_][\\w]*)[.=].*$");
 
@@ -484,6 +492,18 @@ public final class ShaderProperties {
 		// conditionals. Falling through here would leave those lines among the keys nothing reads
 		// and make that count say the engine ignores what it now honours.
 		if (CUSTOM_TEXTURE.matcher(line).matches()) {
+			return;
+		}
+
+		// Same reason as the texture family: the live lines are walked later, with the
+		// conditionals, and falling through would count {@code image} as a prefix nobody reads.
+		if (IMAGE.matcher(line).matches()) {
+			return;
+		}
+
+		// Same reason as the image family: the live lines are walked later, and falling through
+		// would count {@code bufferObject} as a prefix nobody reads.
+		if (BUFFER_OBJECT.matcher(line).matches()) {
 			return;
 		}
 
@@ -1063,6 +1083,25 @@ public final class ShaderProperties {
 	 */
 	public Set<String> imageSamplers(Map<String, String> defines) {
 		Set<String> samplers = new LinkedHashSet<>();
+		for (ImageInformation image : imageDirectives(defines).images()) {
+			image.sampler().ifPresent(samplers::add);
+		}
+
+		return samplers;
+	}
+
+	/**
+	 * The storage images the pack declares, live lines only, in the order it wrote them.
+	 * <p>
+	 * Iris reads the same grammar after its preprocessor has already substituted the pack's
+	 * settings ({@code ShaderProperties} around the {@code image.} handler). Here the
+	 * conditionals are evaluated against {@code defines} and a size written as a setting name
+	 * is looked up in that table, which is what lets Complementary size a volume with
+	 * {@code COLORED_LIGHTING} itself. A seventeenth image is dropped, which is Iris's ceiling.
+	 */
+	public ImageInformation.Reading imageDirectives(Map<String, String> defines) {
+		List<ImageInformation> images = new ArrayList<>();
+		List<String> dropped = new ArrayList<>();
 		ConditionStack conditions = new ConditionStack();
 
 		for (String line : this.lines) {
@@ -1073,15 +1112,233 @@ public final class ShaderProperties {
 			}
 
 			Matcher image = IMAGE.matcher(line);
-			if (conditions.active() && image.matches()) {
-				String[] words = image.group(1).trim().split(" ", -1);
-				if (!words[0].isEmpty() && !words[0].equalsIgnoreCase("none")) {
-					samplers.add(words[0]);
-				}
+			if (!conditions.active() || !image.matches()) {
+				continue;
+			}
+
+			String name = image.group(1);
+			String value = image.group(2).trim();
+			if (images.size() >= ImageInformation.LIMIT) {
+				dropped.add("image." + name + ": only " + ImageInformation.LIMIT
+						+ " storage images are allowed");
+				continue;
+			}
+
+			String reason = readImage(name, value, defines, images);
+			if (reason != null) {
+				dropped.add("image." + name + " = " + value + ": " + reason);
 			}
 		}
 
-		return samplers;
+		return new ImageInformation.Reading(images, dropped);
+	}
+
+	/**
+	 * The storage buffers the pack declares, live lines only, in the order it wrote them.
+	 * <p>
+	 * Iris reads the same grammar after its preprocessor has already substituted the pack's
+	 * settings ({@code ShaderProperties} around the {@code bufferObject.} handler). Here the
+	 * conditionals are evaluated against {@code defines}. An index past twelve is dropped, which
+	 * is Iris's ceiling, and a size below one disables the line, which is Iris's way of turning
+	 * one off.
+	 */
+	public BufferObject.Reading bufferObjects(Map<String, String> defines) {
+		Map<Integer, BufferObject> buffers = new LinkedHashMap<>();
+		List<String> dropped = new ArrayList<>();
+		ConditionStack conditions = new ConditionStack();
+
+		for (String line : this.lines) {
+			Matcher directive = DIRECTIVE.matcher(line);
+			if (directive.matches()) {
+				applyDirective(directive.group(1), line, conditions, defines);
+				continue;
+			}
+
+			Matcher buffer = BUFFER_OBJECT.matcher(line);
+			if (!conditions.active() || !buffer.matches()) {
+				continue;
+			}
+
+			String reason = readBufferObject(buffer.group(1), buffer.group(2).trim(), buffers);
+			if (reason != null) {
+				dropped.add("bufferObject." + buffer.group(1) + " = " + buffer.group(2).trim()
+						+ ": " + reason);
+			}
+		}
+
+		return new BufferObject.Reading(List.copyOf(buffers.values()), dropped);
+	}
+
+	/**
+	 * One {@code bufferObject.N} value, Iris's word counts, or a reason this line cannot be kept.
+	 * <p>
+	 * Returns null when the buffer was added. Two words or fewer are an absolute size and an
+	 * optional name; four or more are the relative form.
+	 */
+	private static String readBufferObject(String indexText, String value,
+			Map<Integer, BufferObject> buffers) {
+		int index;
+		try {
+			index = Integer.parseInt(indexText);
+		} catch (NumberFormatException e) {
+			return "index is not a number";
+		}
+
+		if (index > BufferObject.LIMIT) {
+			return "only indices 0 to " + BufferObject.LIMIT + " are allowed";
+		}
+
+		String[] parts = value.split(" ", -1);
+		if (parts.length == 0 || parts[0].isEmpty()) {
+			return "expected a size";
+		}
+
+		long size;
+		try {
+			size = Long.parseLong(parts[0]);
+		} catch (NumberFormatException e) {
+			return "size is not a number";
+		}
+
+		if (size < 1L) {
+			return "size below one disables the buffer";
+		}
+
+		if (parts.length <= 2) {
+			Optional<String> name = parts.length > 1 && !parts[1].isEmpty()
+					? Optional.of(parts[1])
+					: Optional.empty();
+			buffers.put(index, new BufferObject(index, size, false, 0.0F, 0.0F, name));
+			return null;
+		}
+
+		if (parts.length < 4) {
+			return "a relative buffer takes four words";
+		}
+
+		boolean relative = Boolean.parseBoolean(parts[1]);
+		float scaleX;
+		float scaleY;
+		try {
+			scaleX = Float.parseFloat(parts[2]);
+			scaleY = Float.parseFloat(parts[3]);
+		} catch (NumberFormatException e) {
+			return "relative scale is not a number";
+		}
+
+		buffers.put(index, new BufferObject(index, size, relative, scaleX, scaleY, Optional.empty()));
+		return null;
+	}
+
+	/**
+	 * One {@code image.NAME} value, Iris's word counts, or a reason this line cannot be kept.
+	 * <p>
+	 * Returns null when the image was added. A size that is not a number is looked up in
+	 * {@code defines}, which is the substitute for Iris running the preprocessor over the file
+	 * before this parser sees a token.
+	 */
+	private static String readImage(String name, String value, Map<String, String> defines,
+			List<ImageInformation> images) {
+		String[] parts = value.split(" ", -1);
+		if (parts.length < 6) {
+			return "expected at least six words";
+		}
+
+		Optional<String> sampler = parts[0].isEmpty() || parts[0].equalsIgnoreCase("none")
+				? Optional.empty()
+				: Optional.of(parts[0]);
+		Optional<PixelFormat> format = PixelFormat.parse(parts[1]);
+		TargetFormat.Resolution internal = TargetFormat.resolve(parts[2]);
+		Optional<PixelType> pixelType = PixelType.parse(parts[3]);
+		if (format.isEmpty() || pixelType.isEmpty()
+				|| internal.reason() == TargetFormat.Reason.UNKNOWN) {
+			return "format " + parts[1] + " internal " + parts[2] + " pixel type " + parts[3];
+		}
+
+		boolean clear = Boolean.parseBoolean(parts[4]);
+		boolean relative = Boolean.parseBoolean(parts[5]);
+		PackTexture.Shape shape;
+		int width;
+		int height;
+		int depth;
+		float relativeWidth = 0;
+		float relativeHeight = 0;
+		if (relative) {
+			if (parts.length != 8) {
+				return "a relative image takes two size words";
+			}
+
+			try {
+				relativeWidth = Float.parseFloat(parts[6]);
+				relativeHeight = Float.parseFloat(parts[7]);
+			} catch (NumberFormatException e) {
+				return "relative size is not a number";
+			}
+
+			shape = PackTexture.Shape.TEXTURE_2D;
+			width = 0;
+			height = 0;
+			depth = 0;
+		} else if (parts.length == 7) {
+			OptionalInt size = dimension(parts[6], defines);
+			if (size.isEmpty()) {
+				return "size is not a number";
+			}
+
+			shape = PackTexture.Shape.TEXTURE_1D;
+			width = size.getAsInt();
+			height = 0;
+			depth = 0;
+		} else if (parts.length == 8) {
+			OptionalInt sizeX = dimension(parts[6], defines);
+			OptionalInt sizeY = dimension(parts[7], defines);
+			if (sizeX.isEmpty() || sizeY.isEmpty()) {
+				return "size is not a number";
+			}
+
+			shape = PackTexture.Shape.TEXTURE_2D;
+			width = sizeX.getAsInt();
+			height = sizeY.getAsInt();
+			depth = 0;
+		} else if (parts.length == 9) {
+			OptionalInt sizeX = dimension(parts[6], defines);
+			OptionalInt sizeY = dimension(parts[7], defines);
+			OptionalInt sizeZ = dimension(parts[8], defines);
+			if (sizeX.isEmpty() || sizeY.isEmpty() || sizeZ.isEmpty()) {
+				return "size is not a number";
+			}
+
+			shape = PackTexture.Shape.TEXTURE_3D;
+			width = sizeX.getAsInt();
+			height = sizeY.getAsInt();
+			depth = sizeZ.getAsInt();
+		} else {
+			return "unknown image type";
+		}
+
+		images.add(new ImageInformation(name, sampler, shape, format.get(), internal,
+				pixelType.get(), width, height, depth, clear, relative, relativeWidth,
+				relativeHeight));
+
+		return null;
+	}
+
+	/** A size token, or the same name looked up in the pack's settings when it is not a number. */
+	private static OptionalInt dimension(String token, Map<String, String> defines) {
+		try {
+			return OptionalInt.of(Integer.parseInt(token));
+		} catch (NumberFormatException e) {
+			String value = defines.get(token);
+			if (value == null) {
+				return OptionalInt.empty();
+			}
+
+			try {
+				return OptionalInt.of(Integer.parseInt(value.trim()));
+			} catch (NumberFormatException ignored) {
+				return OptionalInt.empty();
+			}
+		}
 	}
 
 	/**
