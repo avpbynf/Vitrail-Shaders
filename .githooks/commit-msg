@@ -68,6 +68,10 @@ if [ -n "$second" ]; then
 	die "line 2 has to be blank, since it is what separates a subject from its body."
 fi
 
+if printf '%s\n' "$stored" | grep -qiE '^[[:space:]]*(Co-authored-by|Made-with|Generated-by):'; then
+	die "the message carries a trailer this history does not keep."
+fi
+
 # Absent under `git rebase` and anywhere else HEAD is detached, and there is nothing to check then.
 if [ "$#" -ge 2 ]; then
 	branch=$2
