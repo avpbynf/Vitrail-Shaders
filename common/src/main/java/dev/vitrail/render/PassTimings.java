@@ -7,6 +7,9 @@ import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.GpuQueryPool;
 import com.mojang.blaze3d.systems.RenderSystem;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,10 +32,13 @@ import java.util.function.Supplier;
  * first two is copies, clears and barriers between passes, the gap to the third is the CPU, or
  * vertical sync, or the limiter.
  * <p>
- * A one-shot count of the first full frame a pack draws is always on: how many render passes
- * opened, how many textures were cleared, how many were copied. That is the number a queue-submit
- * trace is counting, and it costs an integer add per pass. The timed report stays off unless the
- * JVM is started with {@code -Dvitrail.passTimings=N}, N being the seconds between two reports.
+ * A count of the first full frame a pack draws is always on: how many render passes opened, how
+ * many textures were cleared, how many were copied, and how many times the queue was submitted.
+ * The last of those is the number a capture tool reports, counted here where the backend makes the
+ * call, and the whole census costs an integer add apiece. It can be asked for every N seconds
+ * instead of once, which is the only way to see a frame of play rather than a frame of setup.
+ * The timed report is a different switch, and stays off unless the JVM is started with
+ * {@code -Dvitrail.passTimings=N}, N being the seconds between two reports.
  * The timestamps are written where the game's own Tracy profiler writes its zones, outside the pass
  * on the frame's command buffer, and they are written at the all-commands stage, so a pass's time is
  * measured from the end of whatever preceded it to the end of its own work: serialised, which is
@@ -95,10 +101,26 @@ public final class PassTimings {
 	 * One shot by default, on the first full frame, which is the one a pack load can be compared
 	 * against. That frame is NOT a frame of play: it allocates every target and empties each one,
 	 * so its clear count is the setup rather than the running cost, and reading it as the steady
-	 * state is how a budget gets attacked at the wrong end. {@code -Dvitrail.passCensus=N} prints
-	 * one every N seconds instead, which is the count that says what a frame really pays.
+	 * state is how a budget gets attacked at the wrong end. Asking for one every N seconds instead
+	 * gives the count that says what a frame really pays.
+	 * <p>
+	 * Two ways to ask, and the second is the one that matters: {@code -Dvitrail.passCensus=N} on
+	 * the command line, or a file {@code vitrail/pass-census} in the instance holding N, empty
+	 * meaning five. A JVM flag lives in the launcher, which is a place a session cannot reach; a
+	 * file beside the pack is a place it can, so a measurement can be armed, changed and disarmed
+	 * without anybody opening the launcher. The compute probe was armed the same way.
+	 * <p>
+	 * Read again at every pack load, so the interval can be changed without leaving the game.
 	 */
-	private static final int CENSUS_SECONDS = Integer.getInteger("vitrail.passCensus", 0);
+	private static final int CENSUS_PROPERTY = Integer.getInteger("vitrail.passCensus", 0);
+
+	/** What an arming file with nothing in it asks for. */
+	private static final int ARMED_BY_FILE_SECONDS = 5;
+
+	private static final String CENSUS_ARM_FILE = "pass-census";
+
+	/** Negative until the property and the file have been read, which needs the game directory. */
+	private static int censusSeconds = -1;
 
 	/** When the last census was printed, so the repeating one waits its interval out. */
 	private static long lastCensus;
@@ -135,7 +157,7 @@ public final class PassTimings {
 		// The repeating census waits its interval out. Without this it would count and print every
 		// frame, which is a line a second at best and a log nobody can read at worst.
 		if (lastCensus != 0L
-				&& System.nanoTime() - lastCensus < CENSUS_SECONDS * NANOS_PER_SECOND) {
+				&& System.nanoTime() - lastCensus < censusSeconds() * NANOS_PER_SECOND) {
 			return;
 		}
 
@@ -168,8 +190,57 @@ public final class PassTimings {
 		censusCopies = 0;
 		censusSubmits = 0;
 		lastCensus = 0L;
+		// Read again, so an arming file written or changed while the game runs is picked up by the
+		// next pack load rather than by the next launch.
+		censusSeconds = -1;
 		censusOpenLabel = null;
 		censusLabels.clear();
+	}
+
+	/**
+	 * Seconds between two censuses, or nought for the single one on the first full frame. The
+	 * command line wins over the file, so a flag can override an arming file somebody left behind.
+	 */
+	private static int censusSeconds() {
+		if (censusSeconds >= 0) {
+			return censusSeconds;
+		}
+
+		censusSeconds = CENSUS_PROPERTY > 0 ? CENSUS_PROPERTY : armedByFile();
+
+		return censusSeconds;
+	}
+
+	/**
+	 * What {@code vitrail/pass-census} asks for, or nought when it is not there.
+	 * <p>
+	 * A file that IS there and cannot be read as a number still arms, at the default interval: it
+	 * was put there on purpose, and answering a typo with silence is how a measurement gets waited
+	 * for and never comes.
+	 */
+	private static int armedByFile() {
+		Path file;
+		try {
+			file = Vitrail.platform().gameDirectory().resolve("vitrail").resolve(CENSUS_ARM_FILE);
+			if (!Files.isRegularFile(file)) {
+				return 0;
+			}
+		} catch (RuntimeException ignored) {
+			return 0;
+		}
+
+		try {
+			String asked = Files.readString(file).trim();
+			if (asked.isEmpty()) {
+				return ARMED_BY_FILE_SECONDS;
+			}
+
+			int seconds = Integer.parseInt(asked);
+
+			return seconds > 0 ? seconds : ARMED_BY_FILE_SECONDS;
+		} catch (IOException | RuntimeException ignored) {
+			return ARMED_BY_FILE_SECONDS;
+		}
 	}
 
 	/**
@@ -264,7 +335,7 @@ public final class PassTimings {
 			lastCensus = System.nanoTime();
 			// One shot unless a flag asked for more, in which case the next arm is what the
 			// interval above gates rather than this.
-			censusPrinted = CENSUS_SECONDS <= 0;
+			censusPrinted = censusSeconds() <= 0;
 		}
 
 		censusArmed = false;
@@ -300,7 +371,7 @@ public final class PassTimings {
 	private static void printCensus() {
 		Vitrail.logger().info("{} opened {} render passes, cleared {} textures and copied {}, for {} "
 						+ "queue submits",
-				CENSUS_SECONDS > 0 ? "A frame of this pack" : "This pack's first full frame",
+				censusSeconds() > 0 ? "A frame of this pack" : "This pack's first full frame",
 				censusPasses, censusClears, censusCopies, censusSubmits);
 
 		List<Map.Entry<String, Integer>> sorted = new ArrayList<>(censusLabels.entrySet());
