@@ -18,12 +18,16 @@
 # token that may only read. Nothing of the request is checked out or run here: what is read is the
 # name of its branch, and all that is done with it is a match against eleven words written below. A
 # name matching none of them reaches no command at all.
+#
+# `synchronize` as well as opened and reopened, because this job is a required check on origin/dev.
+# A request opened before the workflow existed, or whose check was skipped, stays blocked forever
+# if a later push does not run it again. Posing the label twice is the same pose.
 
 name: label
 
 on:
   pull_request_target:
-    types: [opened, reopened]
+    types: [opened, reopened, synchronize]
 
 permissions:
   pull-requests: write
