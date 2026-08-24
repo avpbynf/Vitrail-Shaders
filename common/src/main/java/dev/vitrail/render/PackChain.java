@@ -483,8 +483,13 @@ public final class PackChain {
 	}
 
 	/**
-	 * Reads the chosen pack and translates every program of its chain. Runs while the client
-	 * starts up, off the render thread, so it touches files and nothing else.
+	 * Reads the chosen pack and translates every program of its chain.
+	 * <p>
+	 * Two callers, on two different threads, and neither of them is a frame. Client setup reaches
+	 * it once at start up, on a mod loading worker under NeoForge and on the render thread under
+	 * Fabric; {@link #reload} reaches it again afterwards, on the render thread only. So it touches
+	 * files, and the one option {@link #turnOffImprovedTransparency} lowers, and nothing else. No
+	 * device, no pass, no target.
 	 */
 	public static void load(Path gameDirectory) {
 		PassTimings.resetCensus();
@@ -793,9 +798,16 @@ public final class PackChain {
 	 * ({@code ITEM_ENTITY_TARGET}). Each leftover feature that writes it is an Immediate draw, a
 	 * GPU stop OpenGL never paid. Packs already composite their own translucency; Iris therefore
 	 * refuses the option ({@code mixin/fabulous/MixinDisableFabulousGraphics.java:37-40}), and this
-	 * engine does the same. The setter rebuilds the world renderer, which is what tears that target
-	 * down; calling this at pack load is what Vitrail needs extra, because enabling a pack here is
-	 * not a renderer reload.
+	 * engine does the same. Calling this at pack load is what Vitrail needs extra, because enabling
+	 * a pack here is not a renderer reload.
+	 * <p>
+	 * What the setter does depends on when it is called, and the difference matters because one of
+	 * the two callers is not on the render thread. It reaches {@code LevelExtractor.allChanged},
+	 * which tears the target down and rebuilds around it, but only once there is a level: called
+	 * from {@link #load} at client setup there is none, so nothing is rebuilt and the option is
+	 * merely lowered before any of it is built. NeoForge runs that setup on a mod loading worker.
+	 * The rebuild that does happen is the one the pack load AFTER a world join asks for, on the
+	 * render thread, and {@code LevelExtractorMixin} is what catches the game's own reloads.
 	 */
 	public static void turnOffImprovedTransparency() {
 		if (!drawingPack()) {
