@@ -280,9 +280,10 @@ does not declare is not greyed at all: it becomes a blank.
 
 A slot naming an option the pack does not declare does not throw. It becomes a **blank**, and a line
 in the log names the slot and the setting it wanted. Packs in the test corpus do ship such slots,
-and a pack with one broken name is still a working pack. A slot naming a constant that is not a
-setting gets the same blank and its own line: such a name is a plain constant of the program, and
-the reference's screen shows nothing for it either.
+and a pack with one broken name is still a working pack. A slot naming a declaration that is not a
+setting gets the same blank and its own line: a toggle nothing tests, a value with no list of
+choices, or a constant off the closed list of configurable ones. The reference's screen shows
+nothing for any of them either.
 
 The log reports those together with the links that lead nowhere, in one line that says the entries
 concerned are shown "blank or greyed". Both kinds are in it, and which you get depends on which kind

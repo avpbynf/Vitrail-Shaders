@@ -101,8 +101,7 @@ public final class PackMenu {
 							warnings.add(where + " names " + name
 									+ ", which the pack does not declare");
 							slots.add(BLANK);
-						} else if (declared.kind() == PackOption.Kind.CONST
-								&& !index.offers(declared)) {
+						} else if (!index.offers(declared)) {
 							warnings.add(where + " names " + name
 									+ ", declared but not a setting");
 							slots.add(BLANK);

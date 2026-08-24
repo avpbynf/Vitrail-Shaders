@@ -220,7 +220,9 @@ and `bool` as configurable. Every other `const` is a plain constant of the progr
 comment offers: it appears on no screen, no settings file line can rewrite it, and conditionals
 read its name exactly as they read a name the pack never declared. Through those bars, a
 `const bool` is a toggle like a bare define, and a numeric constant cycles through its bracketed
-values.
+values. The same two demands hold for the defines: a bare toggle is only a setting while an
+`#ifdef` or `#ifndef` somewhere tests it, and a define carrying a value is only one with a
+bracketed list beside it.
 
 The scan deliberately runs with no preprocessor and no comment-block removal, so declarations
 sitting inside a documentation block enter the index. That is a fidelity choice, not an oversight:
