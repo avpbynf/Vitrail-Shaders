@@ -1491,7 +1491,7 @@ public final class PackChain {
 	 * blocks into the buffer this turn moved on to, and the next frame's turn is what fences them.
 	 */
 	private void closeFrame() {
-		GeometryHold.flush();
+		GeometryHold.flush(() -> "the frame before it closing");
 		this.advanced = false;
 		this.opened = false;
 		this.early = false;

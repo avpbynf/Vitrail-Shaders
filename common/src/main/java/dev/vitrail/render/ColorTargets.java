@@ -131,7 +131,13 @@ final class ColorTargets {
 	 */
 	private static final int ASSUMED_COLOR_ATTACHMENTS = 8;
 
-	static final String CLEAR_LABEL = "Vitrail pending clears";
+	/**
+	 * What the census files this pass under, and it says COLOUR because the shadow map empties its
+	 * own the same way under a name of its own. One name over both read as two colour flushes in a
+	 * frame that had paid one of each, and a count that stands for two things at once sends whoever
+	 * reads it hunting a fault that is not there.
+	 */
+	private static final String CLEAR_LABEL = "Vitrail pending colour clears";
 
 	/**
 	 * What one sampler is handed for a texture the pack ships: the image, and how the pack asked for
