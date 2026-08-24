@@ -212,6 +212,16 @@ constant. A define carrying a value but no bracketed list stays a value setting 
 choices: it is not a toggle. The allowed values come from a bracketed comment on the declaration
 line.
 
+**A constant is only a setting when its name is on a closed list**, the same twenty five names and
+per-buffer spellings Iris configures and nothing else, and the list is necessary rather than
+sufficient: a `const bool` also needs an `#ifdef` testing its name, a constant holding a number
+needs its bracketed list, and a `uint` never qualifies, the reference reading only `int`, `float`
+and `bool` as configurable. Every other `const` is a plain constant of the program, whatever its
+comment offers: it appears on no screen, no settings file line can rewrite it, and conditionals
+read its name exactly as they read a name the pack never declared. Through those bars, a
+`const bool` is a toggle like a bare define, and a numeric constant cycles through its bracketed
+values.
+
 The scan deliberately runs with no preprocessor and no comment-block removal, so declarations
 sitting inside a documentation block enter the index. That is a fidelity choice, not an oversight:
 filtering them is a separate decision that also moves every measurement.
@@ -229,7 +239,7 @@ landing on top of whatever the pack uses that word for.
 
 The rewrite rules are asymmetric on purpose: a true boolean uncomments the define, a false boolean
 comments it out, a value rewrites the define's value, and a value on a constant rewrites only its
-right-hand side. A
+right-hand side, when that constant's name is on the closed list at all. A
 boolean lands on a constant in one of two ways: on a `const bool` it is written out as `true` or
 `false`, since a constant is read as an expression rather than tested for existence and commenting
 the line out would leave the name undeclared; on a constant holding a number it is ignored and the
@@ -245,9 +255,11 @@ expansion walks over its define lines, like a real preprocessor.
 
 Unifying them is a mistake, and the asymmetry is the whole point: the properties table has to be
 complete before its first line is read, because that file may test any setting, while a source file
-has to meet the pack's own defaults where the pack wrote them. Constants are settings like any
-other and are in both tables under their declared value: the split is about *when* a default
-arrives, never about which kind of setting it is.
+has to meet the pack's own defaults where the pack wrote them. A constant that really is a setting
+sits in the properties table under its current value, and a boolean one only while it is true,
+which is the polarity the reference's preprocessor gives its booleans: an `#ifdef` on one declared
+false reads false. No constant is ever in the per-unit table, no preprocessor being able to test
+one. A constant that is not a setting enters neither.
 
 ### Profiles
 

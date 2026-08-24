@@ -21,7 +21,10 @@ public record MenuOption(String name, Form form, String defaultValue, List<Strin
 	private static final List<String> TOGGLE_VALUES = List.of("on", "off");
 
 	public enum Form {
-		/** A bare {@code #define}. The values are always exactly {@code on} and {@code off}. */
+		/**
+		 * A bare {@code #define}, or a configurable {@code const bool}. The values are always
+		 * exactly {@code on} and {@code off}.
+		 */
 		TOGGLE,
 		/** A value with at least two allowed values to walk through. */
 		CYCLE,
@@ -39,8 +42,11 @@ public record MenuOption(String name, Form form, String defaultValue, List<Strin
 	}
 
 	/**
-	 * A {@code const} declaration is a value like any other here; only a bare {@code #define} is
-	 * a toggle.
+	 * A {@code const bool} is a toggle exactly like a bare {@code #define}: the reference holds
+	 * both in one {@code BooleanOption} and its screen clicks both. Only the constants holding a
+	 * number cycle through a list. This is only ever reached for a constant the closed list of
+	 * {@link dev.vitrail.pack.option.ConstOptions} admits; any other constant never becomes an
+	 * option at all.
 	 *
 	 * @param slider whether {@code sliders=} names it. Honoured only for a {@link Form#CYCLE}.
 	 */
@@ -48,6 +54,11 @@ public record MenuOption(String name, Form form, String defaultValue, List<Strin
 		if (option.kind() == PackOption.Kind.TOGGLE) {
 			return new MenuOption(option.name(), Form.TOGGLE, option.defaultOff() ? "off" : "on",
 					TOGGLE_VALUES, false);
+		}
+
+		if (option.kind() == PackOption.Kind.CONST && "bool".equals(option.constType())) {
+			return new MenuOption(option.name(), Form.TOGGLE,
+					"true".equals(option.defaultText()) ? "on" : "off", TOGGLE_VALUES, false);
 		}
 
 		List<String> values = new ArrayList<>(option.values());
