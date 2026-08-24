@@ -2,6 +2,7 @@ package dev.vitrail.dh;
 
 import dev.vitrail.render.DistantDraw;
 import dev.vitrail.render.DistantMesh;
+import dev.vitrail.render.PassTimings;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -530,6 +531,11 @@ public final class DhLods {
 			throws ReflectiveOperationException {
 		List<Section> sections = new ArrayList<>();
 
+		// One list refilled section by section rather than one built per section: the record copies
+		// what it is handed, so nothing downstream can be holding this one, and a far view hands out
+		// thousands of sections twice a frame.
+		List<Piece> pieces = new ArrayList<>();
+
 		int count = (Integer) setSize.invoke(set);
 		for (int index = 0; index < count; index++) {
 			Object one = setGet.invoke(set, index);
@@ -539,7 +545,7 @@ public final class DhLods {
 				continue;
 			}
 
-			List<Piece> pieces = new ArrayList<>();
+			pieces.clear();
 			for (Object wrapper : wrappers) {
 				if (wrapper == null || !uploadedField.getBoolean(wrapper)
 						|| vertexCountField.getInt(wrapper) <= 0) {
@@ -558,11 +564,16 @@ public final class DhLods {
 
 			if (!pieces.isEmpty()) {
 				Object corner = cornerField.get(one);
+				// Handed the working list, not a copy of it: the record's own constructor copies, so
+				// copying here made the same array twice.
 				sections.add(new Section((Integer) cornerX.invoke(corner),
-						(Integer) cornerY.invoke(corner), (Integer) cornerZ.invoke(corner),
-						List.copyOf(pieces)));
+						(Integer) cornerY.invoke(corner), (Integer) cornerZ.invoke(corner), pieces));
 			}
 		}
+
+		// Counted where it is really built, so the frame's line says what this walk costs before
+		// anybody argues about whether the reflection under it is worth removing.
+		PassTimings.censusFarSections(sections.size());
 
 		return List.copyOf(sections);
 	}

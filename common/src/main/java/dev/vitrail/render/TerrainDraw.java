@@ -131,6 +131,11 @@ public final class TerrainDraw {
 	private List<String> declares = List.of();
 
 	private Map<TerrainPass, TerrainProgram> programs = Map.of();
+
+	/** The last pipeline {@link #owner} was asked about, and the answer it gave. */
+	private RenderPipeline lastBound;
+
+	private TerrainProgram lastOwner;
 	private boolean read;
 
 	TerrainDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
@@ -792,12 +797,40 @@ public final class TerrainDraw {
 			return;
 		}
 
-		for (TerrainProgram program : draw.programs.values()) {
+		TerrainProgram program = draw.owner(bound);
+		if (program != null) {
+			program.bind(pass);
+		}
+	}
+
+	/**
+	 * Which of the chunk programs owns the pipeline Sodium has bound, or null when none does.
+	 * <p>
+	 * Asked once per region drawn, and Sodium draws a region at a time: the map is three entries, but
+	 * walking it meant an iterator built and three virtual calls made for every one of them, twice
+	 * over on a frame with a shadow map, to reach the same answer as the region before. A pipeline
+	 * belongs to one program and to no other, so the last pair answers the whole run.
+	 * <p>
+	 * The no is remembered too, and it is the half that pays: the renderer's own shader is bound for
+	 * every chunk pass a pack does not take over, and a run of those used to walk the map to the end
+	 * each time to find nothing.
+	 */
+	private TerrainProgram owner(RenderPipeline bound) {
+		if (this.lastBound == bound && !PassTimings.keepRedoneWork()) {
+			return this.lastOwner;
+		}
+
+		PassTimings.censusProgramWalk();
+		this.lastBound = bound;
+		this.lastOwner = null;
+		for (TerrainProgram program : this.programs.values()) {
 			if (program.owns(bound)) {
-				program.bind(pass);
-				return;
+				this.lastOwner = program;
+				break;
 			}
 		}
+
+		return this.lastOwner;
 	}
 
 	/**
@@ -866,6 +899,10 @@ public final class TerrainDraw {
 
 			this.programs = TerrainProgram.build(this.loaded, this.values, this.load, format,
 					this.plan, this.chainTargets, this.chainRuns, this.targets);
+			// With the map it answers out of. A pipeline that outlived a rebuild would otherwise be
+			// answered with the program of the map before it.
+			this.lastBound = null;
+			this.lastOwner = null;
 		}
 
 		TerrainProgram program = this.programs.get(pass);
@@ -927,5 +964,9 @@ public final class TerrainDraw {
 
 	void release() {
 		this.programs.values().forEach(TerrainProgram::release);
+		// The same forgetting a rebuild does: nothing reaches a released holder today, but a memo
+		// that outlives the map it answers out of is exactly the shape of trap the rebuild guards.
+		this.lastBound = null;
+		this.lastOwner = null;
 	}
 }
