@@ -1,0 +1,15 @@
+#!/bin/sh
+#
+# Drops a Co-authored-by line from the message before it is stored. commit-msg still refuses the
+# commit if one remains.
+#
+#     git config core.hooksPath .githooks
+
+set -eu
+
+file=$1
+tmp=$file.git-strip
+# The || is not decoration: grep exits 1 when it prints nothing, which an empty message does, and
+# set -e would then abort a commit this hook has no opinion about.
+grep -viE '^[[:space:]]*(Co-authored-by|Made-with|Generated-by):' "$file" > "$tmp" || true
+mv "$tmp" "$file"
