@@ -321,10 +321,10 @@ public final class ShaderProperties {
 
 		// Replaced and not added to: a second line of the same name is the one that counts, which is
 		// how Iris reads both of them, and not how the sliders below are read, where the tokens of a
-		// second line join the first. Read even though this engine serves no feature at all, because that is
-		// exactly what makes the refusal say something: a pack that names what it cannot do without
-		// is answered with the names, instead of falling over later on whichever sampler its
-		// storage buffers happened to sit behind.
+		// second line join the first. Read so the refusal can say something: a pack that names
+		// what it cannot do without is answered with the names this engine has not built, instead
+		// of falling over later on whichever sampler its storage buffers happened to sit behind.
+		// What is served is settled at the chain, not here: this only carries the names.
 		Matcher features = IRIS_FEATURES.matcher(line);
 		if (features.matches()) {
 			List<String> named = new ArrayList<>();
@@ -1627,8 +1627,9 @@ public final class ShaderProperties {
 
 	/**
 	 * What the pack would use if it were there, and takes another path without. It is the list Iris
-	 * turns into {@code IRIS_FEATURE_} defines for the GLSL; this engine defines none, which is what
-	 * tells a pack to take the other path.
+	 * turns into {@code IRIS_FEATURE_} defines for the GLSL. This engine poses
+	 * {@code IRIS_FEATURE_CUSTOM_IMAGES} when the storage-image pipe is served, and none of the
+	 * others, which is what tells a pack to take the other path for those.
 	 * <p>
 	 * Nothing in the engine reads this list, and that is deliberate rather than an oversight: there
 	 * is nothing here to decide from it. What taking the line out of the ignored keys buys is

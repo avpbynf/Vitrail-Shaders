@@ -1,6 +1,7 @@
 package dev.vitrail.pack.option;
 
 import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.texture.CustomImages;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -131,11 +132,14 @@ public final class EngineDefines {
 		// it is also a promise, and every one of those has to work before it can stay.
 		defines.put("IS_IRIS", "");
 
-		// And no IRIS_FEATURE_ beside it, deliberately. Iris poses one per flag it can serve, in two
-		// places and not one: among the defines that read shaders.properties, for every flag it
-		// holds usable, and among the GLSL ones for the names of the optional line alone. A pack
-		// reads them to pick a path, so claiming one here would send the five packs of the corpus
-		// that name one down a road this engine has not built. See
+		// Posed only for a flag this engine serves. Custom images are the voxel volumes
+		// Complementary writes from shadow geometry and floods in shadowcomp; claiming the
+		// symbol without that pipe sends the pack down a road that refuses gbuffers.
+		if (CustomImages.served()) {
+			defines.put("IRIS_FEATURE_CUSTOM_IMAGES", "");
+		}
+
+		// The rest of IRIS_FEATURE_ stays unposted until each capability is served. See
 		// ShaderProperties.optionalFeatures for the other half of the answer, and PackChain for
 		// what a pack requiring one is told.
 

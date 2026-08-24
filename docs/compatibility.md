@@ -61,10 +61,11 @@ before any of its programs is translated, so the refusal names what the pack ask
 get (the log lists them) rather than the symptom that would have come later: a storage block,
 which compiles but never enters a bind group, so the draw would go against nothing.
 
-**Any such declaration is refused, whatever it names**, and that is wider than the paragraph above:
-this engine serves no feature flag at all, so it has nothing to check a name against. It also
-defines no `IRIS_FEATURE_`, which is what a pack reads to find out whether it should take the path
-it wrote for a renderer that has none: the declaration a pack marks optional rather than required.
+**Any name this engine has not built refuses the declaration.** One name is built and served
+today, `CUSTOM_IMAGES`, so a pack that requires it alone loads; every other name still refuses
+the pack, with the list in the log. The served flag is also the one `IRIS_FEATURE_` define a
+pack finds, `IRIS_FEATURE_CUSTOM_IMAGES`: a capability define is a promise, so each appears the
+day its feature is served and not before, and the optional declarations keep reading the truth.
 
 Iris draws Reverie. It refuses a required flag only when the name is unknown to it or the hardware
 cannot serve it, and it has built every one of the ones Reverie asks for: some outright, some
@@ -98,19 +99,19 @@ and asks you to switch to Iris. This is not the engine refusing anything: the pa
 message is one of its passes, and it is drawn because a capability test in its code came out false.
 
 The test reads capability defines. This engine announces itself the way Iris does, but a
-capability define is a promise, so it defines only what the backend actually serves, and it
-serves no `IRIS_FEATURE_` at all; the section above says why the features behind those names are
-closed. A pack that finds the announcement without the capability concludes it is running on
-OptiFine, the only renderer in that position when the pack was written, and words its message for
-it. Read "OptiFine" as "not Iris" and the message is accurate.
+capability define is a promise, so it defines only what the backend actually serves, which today
+is `IRIS_FEATURE_CUSTOM_IMAGES` and nothing else; the section above says why the features behind
+the other names are closed. A pack that finds the announcement without the capability it wants
+concludes it is running on OptiFine, the only renderer in that position when the pack was
+written, and words its message for it. Read "OptiFine" as "not Iris" and the message is accurate.
 
-Complementary is the pack of the test set that does this. Its colored lighting, which its two top
-profiles Very High and Ultra turn on, is voxel lighting: storage images filled by the geometry
-passes and a compute pass that spreads the light, all behind `IRIS_FEATURE_CUSTOM_IMAGES`. Finding
-that define absent, the pack switches its colored lighting off, draws the message over the frame,
-and leaves every other setting of the profile applied, so the image behind the overlay is the
-pack's own and correct. Any profile from High down draws without the message, and so do the two
-top ones once their Colored Lighting setting is turned back off.
+Complementary was the pack of the test set that did this, and it is why the define exists. Its
+colored lighting, which its two top profiles Very High and Ultra turn on, is voxel lighting:
+storage images filled by the geometry passes and a compute pass that spreads the light, all
+behind `IRIS_FEATURE_CUSTOM_IMAGES`. That pipe is served now and the define with it, so those
+profiles draw with their colored lighting instead of switching it off behind the message. A pack
+testing for a name still unserved keeps drawing its own overlay, and the paragraph above keeps
+being how to read it.
 
 ## The effect never ran
 
