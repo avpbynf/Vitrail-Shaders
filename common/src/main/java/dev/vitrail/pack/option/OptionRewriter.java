@@ -53,7 +53,16 @@ public final class OptionRewriter {
 
 		Matcher constant = CONSTANT.matcher(line);
 		if (constant.matches()) {
-			OptionValue value = chosen.get(constant.group(3));
+			// A constant off the closed list is never a setting. A chosen value for one can
+			// still arrive, from a hand-written line of the pack's settings file, and it has to
+			// change nothing: the reference does not hold such a name as an option, so a shared
+			// file must not edit the declaration here either. This line-at-a-time rewriter has
+			// no option index, so the list is the whole of its gate: a hand-written value for a
+			// listed name the index refuses, for want of a value list or of anything testing
+			// it, is still applied here where the reference would drop it. Only a hand can
+			// write that line, no screen offering the name.
+			OptionValue value = ConstOptions.isOption(constant.group(3))
+					? chosen.get(constant.group(3)) : null;
 			if (value == null) {
 				return line;
 			}

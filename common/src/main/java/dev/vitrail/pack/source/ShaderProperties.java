@@ -736,7 +736,11 @@ public final class ShaderProperties {
 				return this.defines.containsKey(name);
 			}
 
-			if (option.kind() != PackOption.Kind.CONST || !"bool".equals(option.constType())) {
+			// A constant the index does not offer is not a setting, so its name answers here
+			// the way an undeclared one does. Its declared value must not answer either: the
+			// reference never carries it into this table, whatever the declaration says.
+			if (option.kind() != PackOption.Kind.CONST || !"bool".equals(option.constType())
+					|| !this.options.offers(option)) {
 				return true;
 			}
 

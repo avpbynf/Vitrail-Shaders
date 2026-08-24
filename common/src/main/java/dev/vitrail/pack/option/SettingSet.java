@@ -73,11 +73,36 @@ public final class SettingSet {
 		return this.variantName;
 	}
 
-	/** Everything defined, for reading {@code shaders.properties}, which may test any of it. */
+	/**
+	 * Everything defined, for reading {@code shaders.properties}, which may test any of it.
+	 * Any setting, that is: a constant {@link OptionIndex#offers} refuses stays out of this
+	 * table the way it stays out of the reference's, so a conditional testing its name reads it
+	 * exactly as it reads a name the pack never declared. And a boolean constant enters only
+	 * while it is TRUE, because that is how the reference's preprocessor defines its booleans
+	 * ({@code PropertiesPreprocessor.getBooleanValues}): an {@code #ifdef} on one declared
+	 * false has to read false, whatever text the declaration carries.
+	 */
 	public Map<String, String> globalDefines(OptionIndex index) {
 		Map<String, String> defines = new LinkedHashMap<>(this.engine);
 
 		for (PackOption option : index.all()) {
+			if (option.kind() == PackOption.Kind.CONST) {
+				if (!index.offers(option)) {
+					continue;
+				}
+
+				if ("bool".equals(option.constType())) {
+					OptionValue held = this.chosen.get(option.name());
+					boolean on = held == null ? "true".equals(option.defaultText())
+							: held.isBoolean() && held.asBoolean();
+					if (on) {
+						defines.put(option.name(), "true");
+					}
+
+					continue;
+				}
+			}
+
 			OptionValue value = this.chosen.get(option.name());
 			if (value == null) {
 				// Left as the pack ships it. A setting commented out is simply not defined.

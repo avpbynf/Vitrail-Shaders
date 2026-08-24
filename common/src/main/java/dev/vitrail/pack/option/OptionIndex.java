@@ -5,6 +5,7 @@ import dev.vitrail.pack.source.ShaderPackSource;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -40,15 +41,24 @@ public final class OptionIndex {
 	// silently leaves those options with nothing to cycle through.
 	private static final Pattern VALUE_LIST = Pattern.compile("//[^\\[]*\\[(.*?)]");
 	private static final Pattern TRAILING_COMMENT = Pattern.compile("//.*");
+	// The reference's own strictness, detail for detail: no space between # and the keyword,
+	// the name alone, and nothing after it, so a trailing comment on the #ifdef line keeps it
+	// from counting as a reference there too. The name class is the one this index can hold;
+	// the reference would also take a name opening on a digit, which no declaration here can.
+	private static final Pattern CONDITIONAL =
+			Pattern.compile("^\\s*#(?:ifdef|ifndef)\\s+([A-Za-z_]\\w*)\\s*$");
 
 	private final Map<String, PackOption> byName;
+	private final Set<String> conditionalReferences;
 
-	private OptionIndex(Map<String, PackOption> byName) {
+	private OptionIndex(Map<String, PackOption> byName, Set<String> conditionalReferences) {
 		this.byName = Map.copyOf(byName);
+		this.conditionalReferences = Set.copyOf(conditionalReferences);
 	}
 
 	public static OptionIndex build(ShaderPackSource source) throws IOException {
 		Map<String, PackOption> found = new LinkedHashMap<>();
+		Set<String> referenced = new HashSet<>();
 
 		for (Path file : source.sourceFiles()) {
 			String where = source.rel(file);
@@ -59,10 +69,15 @@ public final class OptionIndex {
 				if (option != null) {
 					found.putIfAbsent(option.name(), option);
 				}
+
+				Matcher conditional = CONDITIONAL.matcher(lines.get(i));
+				if (conditional.matches()) {
+					referenced.add(conditional.group(1));
+				}
 			}
 		}
 
-		return new OptionIndex(found);
+		return new OptionIndex(found, referenced);
 	}
 
 	private static PackOption parse(String line, String where, int lineNumber) {
@@ -99,6 +114,38 @@ public final class OptionIndex {
 
 	public Optional<PackOption> get(String name) {
 		return Optional.ofNullable(this.byName.get(name));
+	}
+
+	/**
+	 * Whether any {@code #ifdef} or {@code #ifndef} in the pack tests this name. The reference
+	 * only offers a toggle whose name something tests; a bare define nothing reads is scenery,
+	 * not a setting. Its scope there is the include component of the declaring file, and the
+	 * whole pack here: this index deliberately has no include graph, and a name tested in a
+	 * file its declaration never reaches is a difference no measured pack exhibits.
+	 */
+	public boolean referenced(String name) {
+		return this.conditionalReferences.contains(name);
+	}
+
+	/**
+	 * Whether a declaration is a setting at all, and it is the reference's own sieve
+	 * ({@code OptionAnnotatedSource.getOptionSet}): a toggle something tests, a value with a
+	 * list to cycle through, or a constant that clears three bars at once. Its name has to be
+	 * on the closed list of {@link ConstOptions}; a {@code const bool} then needs something
+	 * testing it, a constant holding a number needs a list of values; and {@code uint} never
+	 * qualifies, the reference reading only {@code int}, {@code float} and {@code bool} as
+	 * configurable. The index still holds what fails here, because it deliberately holds every
+	 * declaration: this answers what a screen may offer and a settings file may change.
+	 */
+	public boolean offers(PackOption option) {
+		return switch (option.kind()) {
+			case TOGGLE -> referenced(option.name());
+			case VALUE -> option.hasValueList();
+			case CONST -> ConstOptions.isOption(option.name())
+					&& !"uint".equals(option.constType())
+					&& ("bool".equals(option.constType()) ? referenced(option.name())
+							: option.hasValueList());
+		};
 	}
 
 	public Collection<PackOption> all() {
