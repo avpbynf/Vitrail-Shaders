@@ -107,6 +107,7 @@ public final class TargetPlan {
 	private final Set<String> inferred;
 	private final Map<String, Set<Integer>> samples;
 	private final int geometryAt;
+	private final List<String> computes;
 	private final List<String> unreadable;
 	private final List<String> notes;
 	private final int programsRead;
@@ -125,6 +126,7 @@ public final class TargetPlan {
 		this.inferred = Collections.unmodifiableSet(new TreeSet<>(draft.inferred));
 		this.samples = Collections.unmodifiableMap(new LinkedHashMap<>(draft.samples));
 		this.geometryAt = draft.geometryAt;
+		this.computes = List.copyOf(draft.computes);
 		this.written = Collections.unmodifiableSet(new TreeSet<>(draft.written));
 		this.sampled = Collections.unmodifiableSet(new TreeSet<>(draft.sampled));
 
@@ -504,6 +506,14 @@ public final class TargetPlan {
 	}
 
 	/**
+	 * Compute entry points this place ships, by bare name. Shadowcomp is dispatched after the
+	 * shadow map; the rest are named in {@link #notes()} until a stage exists for them.
+	 */
+	public List<String> computes() {
+		return this.computes;
+	}
+
+	/**
 	 * Full screen programs this place ships and does not run, by bare name, with the reason. The
 	 * reason is the pack's own expression when the pack switched it off, {@code MOTION_BLUR} or
 	 * {@code false}, and {@link #LEFT_OUT} when {@code passes=} did, so a log can tell the two
@@ -635,7 +645,19 @@ public final class TargetPlan {
 		}
 
 		if (!draft.computes.isEmpty()) {
-			notes.add("compute programs skipped, no stage exists for them yet: " + draft.computes);
+			List<String> shadow = draft.computes.stream()
+					.filter(name -> ProgramNames.shadowComposite(ProgramNames.familyOf(name)))
+					.toList();
+			List<String> other = draft.computes.stream()
+					.filter(name -> !ProgramNames.shadowComposite(ProgramNames.familyOf(name)))
+					.toList();
+			if (!shadow.isEmpty()) {
+				notes.add("shadow compute after the shadow map: " + shadow);
+			}
+
+			if (!other.isEmpty()) {
+				notes.add("compute programs skipped, no stage exists for them yet: " + other);
+			}
 		}
 
 		if (!draft.shadowComposites.isEmpty()) {

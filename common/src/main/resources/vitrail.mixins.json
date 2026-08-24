@@ -25,6 +25,8 @@
 		"DebugScreenEntriesMixin",
 		"DebugScreenEntryListMixin",
 		"GlslCompilerMixin",
+		"IntermediaryShaderModuleAccessor",
+		"IntermediaryShaderModuleMixin",
 		"MinecraftStartupGuardMixin",
 		"MixinDefaultChunkRenderer",
 		"DefaultFluidRendererMixin",

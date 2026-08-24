@@ -9,6 +9,8 @@ import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.target.TargetSize;
+import dev.vitrail.pack.texture.CustomStorage;
+import dev.vitrail.pack.texture.ImageInformation;
 import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.NoiseTexture;
@@ -157,6 +159,10 @@ final class ColorTargets {
 	/** The textures the pack ships as files, already decoded, waiting for a device to exist. */
 	private final PackImages packImages;
 
+	/** Storage images the pack declared. Allocated on the device; not bound yet. */
+	private final StorageImages storageImages;
+	private final StorageBuffers storageBuffers;
+
 	/** One surface per texture the pack ships, allocated and uploaded with the constants. */
 	private final Map<PackImages.Image, TargetSurface> packSurfaces = new LinkedHashMap<>();
 
@@ -267,10 +273,12 @@ final class ColorTargets {
 	 * disagrees with itself, and that shows as a plausible picture rather than as an error.
 	 */
 	ColorTargets(TargetPlan plan, int noiseResolution, NoiseTexture.Image noiseImage,
-			PackImages packImages, int shadowResolution,
+			PackImages packImages, ImageInformation.Reading storageImages, int shadowResolution,
 			List<PackDirectives.ShadowColour> shadowColours) {
 		this.plan = plan;
 		this.packImages = packImages;
+		this.storageImages = new StorageImages(storageImages);
+		this.storageBuffers = new StorageBuffers(CustomStorage.reading());
 		// The pack asks for it by directive and 256 is the default. Held rather than looked up at
 		// allocation: this class knows nothing of a frame, and the resolution never moves while a
 		// pack is loaded.
@@ -354,6 +362,8 @@ final class ColorTargets {
 			// and again at the top of the stage that fills it, because its content has to cross the
 			// frame boundary.
 			this.shadowMap.ensure();
+			this.storageImages.ensure(screenWidth, screenHeight);
+			this.storageBuffers.ensure(screenWidth, screenHeight);
 			for (int index : this.plan.ordered()) {
 				// Each target has its own size, so one of them can be half the screen and be the
 				// only one reallocated when the window changes.
@@ -773,6 +783,14 @@ final class ColorTargets {
 		return List.copyOf(this.notes);
 	}
 
+	/**
+	 * Empties the storage images the pack marked {@code clear = true}, at the top of the shadow
+	 * stage, before geometry writes them. Complementary's voxel volume is one of those.
+	 */
+	void clearStorage(CommandEncoder encoder) {
+		this.storageImages.clearMarked(encoder);
+	}
+
 	void release() {
 		this.mainSide.values().forEach(TargetSurface::close);
 		this.altSide.values().forEach(TargetSurface::close);
@@ -781,6 +799,8 @@ final class ColorTargets {
 
 		this.packSurfaces.values().forEach(TargetSurface::close);
 		this.packSurfaces.clear();
+		this.storageImages.close();
+		this.storageBuffers.close();
 
 		this.black = release(this.black);
 		this.white = release(this.white);

@@ -13,6 +13,7 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
+import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.settings.PackFile;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsFile;
@@ -253,6 +254,9 @@ public final class PackChain {
 	/** Distant Horizons' far terrain, drawn with the pack's own programs where DH is there at all. */
 	private final DistantDraw distant;
 
+	/** Shadow compute, dispatched after the shadow map, Complementary's floodfill among them. */
+	private final PackCompute compute;
+
 	private List<PackPass> programs;
 	private PackPass last;
 
@@ -292,8 +296,8 @@ public final class PackChain {
 		// None of this touches the device: the textures are allocated by the first frame and this
 		// runs while the client is still starting up, off the render thread.
 		this.targets = new ColorTargets(chain.targets(), values.noiseResolution(),
-				values.noiseImage(), values.packImages(), values.shadowResolution(),
-				values.shadowColours());
+				values.noiseImage(), values.packImages(), values.storageImages(),
+				values.shadowResolution(), values.shadowColours());
 		this.seed = chain.chain().seed()
 				.filter(where -> this.targets.has(where.target()))
 				.map(where -> new SceneSeed(where, this.targets.format(where.target()),
@@ -356,6 +360,8 @@ public final class PackChain {
 		// on the frames DH really draws a far terrain.
 		this.distant = new DistantDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
+		this.compute = PackCompute.load(packPath, chain.place(), chosen, profile,
+				chain.targets().computes(), this.load, values.shadowGeometryCatalog());
 	}
 
 	/**
@@ -1370,6 +1376,44 @@ public final class PackChain {
 		PackChain chain = active;
 
 		return disabled || chain == null ? null : chain.terrain;
+	}
+
+	/**
+	 * Empties the pack's cleared storage images at the top of the shadow stage, matching Iris
+	 * clearing custom images before the shadow map is drawn.
+	 */
+	public static void clearCustomImages() {
+		PackChain chain = active;
+		if (disabled || chain == null) {
+			return;
+		}
+
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (device == null) {
+			return;
+		}
+
+		chain.targets.clearStorage(device.createCommandEncoder());
+	}
+
+	/**
+	 * Dispatches {@code shadowcomp} after the shadow geometry, as Iris does at
+	 * {@code ShadowRenderer.java:631}.
+	 */
+	public static void dispatchShadowCompute() {
+		PackChain chain = active;
+		if (disabled || chain == null) {
+			return;
+		}
+
+		// The frame opens HERE, not at the first draw, and the compute's correctness hangs on it.
+		// The values only move at beginFrame, so without this the dispatch reads the PREVIOUS
+		// frame's numbers: the floodfill then runs under the old frameCounter parity and writes
+		// the half this frame's gbuffers do not read, and every voxel light flickers as the
+		// player moves. Idempotent for the rest of the frame, which sees the same numbers it
+		// always did, only settled a moment earlier.
+		chain.beginFrame();
+		chain.compute.dispatch(chain.values, chain.targets);
 	}
 
 	/** The same, for the sky. */
@@ -2718,6 +2762,8 @@ public final class PackChain {
 		named(byKind, SamplerPlan.Kind.DISTANT_DEPTH,
 				"read the far terrain's own depth, kept beside the world's as Iris keeps it, on the "
 						+ "frames this pack draws the far terrain, and the far plane on the rest");
+		named(byKind, SamplerPlan.Kind.CUSTOM_IMAGE,
+				"read a storage image the pack declared with image.NAME");
 		named(byKind, SamplerPlan.Kind.UNBINDABLE,
 				"are declared under a type this backend cannot bind, and should have gone with "
 						+ "their pass");
@@ -2769,6 +2815,8 @@ public final class PackChain {
 	}
 
 	private void release() {
+		CustomImages.clear();
+		this.compute.close();
 		this.targets.release();
 		if (this.features != null) {
 			this.features.release();
