@@ -153,6 +153,15 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	private String page = "";
 
 	private boolean optionsOpen;
+
+	/**
+	 * Whether what is on screen is a pack being looked at rather than the one drawing the world.
+	 * <p>
+	 * It decides two things and nothing else: that the frame loop must not swap the screen back onto
+	 * the loaded pack under the player, and that Apply has settings of this pack's own to write even
+	 * though the pack itself is about to change.
+	 */
+	private boolean previewing;
 	private boolean guiHidden;
 	private boolean dropChanges;
 
@@ -510,14 +519,69 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	}
 
 	/**
-	 * Swaps the two views, applying on the way. Iris's own note gives the reason for applying: picking
-	 * a pack in the list without applying and then opening the settings would open the settings of the
-	 * pack before it.
+	 * Swaps the two views, READING the pack whose settings are asked for rather than applying it.
+	 * <p>
+	 * Iris applies here, and its note gives the reason: picking a pack in the list and then opening
+	 * the settings would otherwise open the settings of the pack before it. The reason is right and
+	 * the price is wrong. Applying is the whole of a pack switch, the GLSL translated and every
+	 * pipeline compiled, and it lands on the pack's OWN default profile because that is all the
+	 * player has chosen so far. Somebody who wanted to open a heavy pack, set it to its low profile
+	 * and then apply, pays the high one first, in full, on the machine least able to.
+	 * <p>
+	 * Reading answers the same need for nothing. A pack's menu comes out of its
+	 * {@code shaders.properties} and its directives, which is parsing and no more:
+	 * {@link PackSession#read} touches no device, and its own package imports no Minecraft API at
+	 * all, which is what lets the corpus be read outside the game. So the settings on screen can be
+	 * the chosen pack's while the loaded pack goes on drawing, and Apply stays the one thing that
+	 * costs.
 	 */
 	private void switchView() {
 		this.optionsOpen = !this.optionsOpen;
-		applyChanges();
+		if (this.optionsOpen) {
+			previewChosen();
+		}
+
 		rebuildWidgets();
+	}
+
+	/**
+	 * Puts the pack the list has selected on screen without loading it.
+	 * <p>
+	 * The loaded pack is adopted as it always was when it IS the one selected, which is the ordinary
+	 * case and costs nothing: its session is already read.
+	 * <p>
+	 * A pack that cannot be read leaves the view where it was rather than opening an empty page over
+	 * a row of buttons, and says why on the bottom line.
+	 */
+	private void previewChosen() {
+		PackList list = this.packList;
+		if (list == null) {
+			return;
+		}
+
+		String chosen = list.chosenName();
+		PackSession loaded = PackChain.session().orElse(null);
+		if (chosen.isEmpty() || (loaded != null && chosen.equals(loaded.packFileName()))) {
+			this.previewing = false;
+			if (loaded != null) {
+				adopt(loaded);
+			}
+
+			return;
+		}
+
+		try {
+			Path path = PackLoader.directory(gameDirectory()).resolve(chosen);
+			PackSession preview = PackSession.read(gameDirectory(), path,
+					this.minecraft == null ? "en_us" : this.minecraft.options.languageCode);
+			this.previewing = true;
+			adopt(preview);
+			this.error = null;
+		} catch (IOException | RuntimeException e) {
+			this.error = String.valueOf(e.getMessage());
+			Vitrail.logger().error("Vitrail could not read {} to show its settings", chosen, e);
+			this.optionsOpen = false;
+		}
 	}
 
 	private void refreshViewSwitch() {
@@ -917,14 +981,20 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 
 		// A pack being swapped drops what was clicked on the one before it: a value set on one pack has
 		// no meaning in the next one's file, and Iris clears its own queue for the same reason.
-		if (!samePack) {
+		//
+		// Unless what is on screen IS the pack being swapped to, which is the whole point of reading
+		// a pack without loading it: the values were set on it, they belong in its file, and throwing
+		// them away here would give back exactly the behaviour this replaced. The low profile someone
+		// just picked has to survive the switch, or they pay the high one anyway.
+		boolean settingsAreForTheChosenPack = samePack || this.previewing;
+		if (!settingsAreForTheChosenPack) {
 			MenuValues current = this.values;
 			if (current != null) {
 				current.clearPending();
 			}
 		}
 
-		boolean wrote = samePack && writePendingSettings();
+		boolean wrote = settingsAreForTheChosenPack && writePendingSettings();
 		if (!samePack || enabled != asked.enabled()) {
 			wrote |= writePackFile(chosen, enabled);
 		}
@@ -1076,6 +1146,16 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 			return;
 		}
 
+		// A pack being looked at is not the loaded one BY CONSTRUCTION, so this would swap it away on
+		// the very next frame and put the drawing pack's settings back under the player's hands. The
+		// look ends when the loaded pack becomes the one on screen, which is Apply having gone
+		// through, and that is the case the name check below lets past.
+		if (this.previewing && (loaded == null || held == null
+				|| !loaded.packFileName().equals(held.packFileName()))) {
+			return;
+		}
+
+		this.previewing = false;
 		MenuValues current = this.values;
 		if (loaded != null && held != null && current != null
 				&& loaded.packFileName().equals(held.packFileName())) {
