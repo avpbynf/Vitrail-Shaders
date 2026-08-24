@@ -1,6 +1,7 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.render.PassTimings;
+import dev.vitrail.render.RingTimings;
 
 import net.minecraft.client.renderer.LevelRenderer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -21,5 +22,6 @@ public abstract class LevelRendererFrameMixin {
 	@Inject(method = "endFrame", at = @At("HEAD"), require = 1)
 	private void vitrail$endFrame(CallbackInfo ci) {
 		PassTimings.endFrame();
+		RingTimings.endFrame();
 	}
 }
