@@ -428,6 +428,8 @@ public final class PackProgram {
 			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
 					dimensions);
 
+			Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
+
 			// What each pass is served by, read once and kept, because the passes are walked twice:
 			// the mesh is built out of what ALL of them ask for, and every one of them then declares
 			// that whole mesh. Expanding the includes a second time would be the same files read
@@ -453,7 +455,7 @@ public final class PackProgram {
 					continue;
 				}
 
-				AlphaTest alphaTest = pass.alphaTest(properties, servedBy);
+				AlphaTest alphaTest = pass.alphaTest(overrides, servedBy);
 				served.put(pass, new Served(path, units, alphaTest));
 				reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), inputs,
 						alphaTest, pass.covers(), pass.program(), textures.volumes()));
@@ -551,6 +553,8 @@ public final class PackProgram {
 			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
 					dimensions);
 
+			Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
+
 			record Served(String path, Map<ProgramStage, ExpandedUnit> units, AlphaTest alphaTest,
 					GeometryElement element) {
 			}
@@ -575,7 +579,7 @@ public final class PackProgram {
 					continue;
 				}
 
-				AlphaTest alphaTest = properties.alphaTest(servedBy).orElse(element.alphaTest());
+				AlphaTest alphaTest = overrides.getOrDefault(servedBy, element.alphaTest());
 				served.put(element.element(), new Served(path, units, alphaTest, element));
 				reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), element.inputs(),
 						alphaTest, element.coverage(), element.program(), textures.volumes()));
@@ -856,6 +860,8 @@ public final class PackProgram {
 			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
 					dimensions);
 
+			Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
+
 			Map<String, Map<ProgramStage, ExpandedUnit>> expanded = new LinkedHashMap<>();
 			Map<String, Loaded> translated = new LinkedHashMap<>();
 			Map<String, Loaded> loaded = new LinkedHashMap<>();
@@ -880,7 +886,7 @@ public final class PackProgram {
 					continue;
 				}
 
-				AlphaTest alphaTest = properties.alphaTest(servedBy).orElse(element.alphaTest());
+				AlphaTest alphaTest = overrides.getOrDefault(servedBy, element.alphaTest());
 				// What two pieces have to agree on to be one translation, and the element is not part
 				// of it. The threshold is, because it is written into the fragment stage: two pieces of
 				// one program discarding at different alphas are two texts, and sharing one would draw
