@@ -302,5 +302,5 @@ jobs:
           # is what refuses to boot without it, which is where the requirement actually bites.
           dependencies: |
             sodium(required)
-            chloride(required)
+            chloride(optional)
             fabric-api(optional)

@@ -5,7 +5,7 @@ contact_links:
     about: Start from what you are seeing. Most of the shapes people report are named there, with the cause and how to confirm it rather than guess.
   - name: The game will not start, or the world looks vanilla
     url: https://github.com/avpbynf/Vitrail-Shaders/blob/main/INSTALL.md
-    about: The versions this needs, the two Chloride settings that have to come off, and what the absence of either looks like.
+    about: The versions this needs, what a game that came up on the wrong backend looks like, and the Chloride settings that have to come off if you run it.
   - name: What is already known to be missing
     url: https://github.com/avpbynf/Vitrail-Shaders/issues?q=is%3Aissue+is%3Aopen+label%3A%22known+limitation%22
     about: The gaps this engine already knows about are open as issues. A symptom that matches one is worth a comment there rather than a new report.

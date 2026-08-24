@@ -5,10 +5,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        A world that looks entirely like vanilla is usually one of two things, and
-        [INSTALL.md](https://github.com/avpbynf/Vitrail-Shaders/blob/main/INSTALL.md) covers both:
-        the game came up on OpenGL, or Chloride is absent and the Vulkan surface never got a window
-        to draw into. Both say so in the log.
+        A world that looks entirely like vanilla is most often a game that came up on
+        OpenGL, which
+        [INSTALL.md](https://github.com/avpbynf/Vitrail-Shaders/blob/main/INSTALL.md) covers,
+        along with the two ways that failure hides itself. The log says which backend
+        the game is on.
 
   - type: textarea
     id: what
@@ -32,8 +33,8 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: Vitrail and its loader, Minecraft, Sodium, Chloride, and anything else in `mods/`.
-      placeholder: Vitrail 0.6.0-beta on NeoForge, MC 26.2, Sodium 0.9.1, Chloride 1.4.0
+      description: Vitrail and its loader, Minecraft, Sodium, and anything else in `mods/`.
+      placeholder: Vitrail 0.6.0-beta on NeoForge, MC 26.2, Sodium 0.9.1
     validations:
       required: true
 
@@ -54,8 +55,8 @@ body:
     attributes:
       label: Does it still happen with Vitrail taken out?
       description: >
-        Sodium and Chloride on their own, on the Vulkan backend, with the same pack folder in place.
-        It separates this engine from the two mods it cannot run without.
+        Sodium on its own, on the Vulkan backend, with the same pack folder in place.
+        It separates this engine from the one mod it cannot run without.
       options:
         - It stops when Vitrail is out
         - It happens without Vitrail too

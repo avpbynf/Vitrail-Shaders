@@ -21,7 +21,6 @@ are on.
 | NeoForge | 26.2.0.32-beta or later in the 26.2 line |
 | or Fabric Loader | 0.19.3 or later, with Fabric API |
 | Sodium | 0.9.x, the build for whichever loader is in front |
-| Chloride | any 26.2 build, to run on the Vulkan backend at all |
 | Java | 25, to build (the game brings its own runtime) |
 
 One jar for both loaders: each loader reads its own metadata out of it and
@@ -30,19 +29,22 @@ required, and they are the whole of what this mod takes from it: the key
 mapping and the client tick, which is what the settings screen is opened by.
 Nothing of the world's rendering goes through Fabric API.
 
-Sodium and Chloride are both declared as required dependencies, so the game will
-refuse to start without either of them. Do not update Sodium past 0.9.x: it has
-no stable API for what a shader engine needs from it. Chloride is pinned to no
-version at all, since nothing here calls into it.
+Sodium is declared as a required dependency, so the game will refuse to start
+without it. Do not update it past 0.9.x: it has no stable API for what a shader
+engine needs from it.
 
-Chloride is needed because without it the Vulkan backend has no window to draw
-into. NeoForge shows an early loading screen, and the game takes that window over
-rather than making one of its own, so the window it inherits was created for
-OpenGL and the Vulkan surface fails at boot with `GLFW error 65540 ... requires
-the window to have the client API set to GLFW_NO_API`. Chloride is what makes
-that window Vulkan capable. That mechanism is NeoForge's, and whether Fabric's
-window needs the same help has not been measured: Chloride is required on both
-because it is what every session of mine has run with.
+Chloride is no longer required. One thing was behind that requirement:
+NeoForge opens a loading window of its own before the game exists, that window
+carries an OpenGL context, and the game takes it over instead of making one, so
+the Vulkan surface is asked for on a window built for OpenGL and the boot fails
+with `GLFW error 65540 ... requires the window to have the client API set to
+GLFW_NO_API`. Vitrail refuses that window itself when the backend is Vulkan,
+takes it off FML's hands at the end of mod loading, and closes it once the game
+has drawn a first frame of its own, which is the whole of what Chloride was
+load bearing for here. Fabric opens no such window and never needed the help.
+Chloride remains worth installing, and running it alongside changes nothing:
+the two refusals nest, so exactly one of them ends up owning the window left
+over, and the other stands down.
 
 Worth knowing because the failure hides itself, and it hides itself twice over.
 Asked for Vulkan and unable to bring it up, the game falls back to OpenGL within
@@ -56,22 +58,22 @@ at startup, says it as an error when that backend is not Vulkan, and says it onc
 more in chat the first time a world is shown, naming the setting to change, so a
 picture that did not change is answered on the screen rather than by the file.
 
-Some of Chloride's own settings decide what reaches this engine, in
-`config/chloride-client.toml`, and they are entries inside its tables rather than
-keys of their own. `tileEntities`, `entities` and `monsters`, under `[culling]`,
-decide on their own which block entities, which mobs and which other entities are
-drawn at all, by distance: what they take out is never handed to the pack, so a
-chest, a sign, a boat or a mob that is not there is those settings rather than
-anything the pack does.
+If you do run it, some of Chloride's own settings decide what reaches this
+engine, in `config/chloride-client.toml`, and they are entries inside its tables
+rather than keys of their own. `tileEntities`, `entities` and `monsters`, under
+`[culling]`, decide on their own which block entities, which mobs and which other
+entities are drawn at all, by distance: what they take out is never handed to the
+pack, so a chest, a sign, a boat or a mob that is not there is those settings
+rather than anything the pack does.
 `chests` and `beds`, under `[fastBlocks]`, draw those blocks by a path this
 engine's final pass then covers over, so they go invisible with no other symptom.
 Which of the five a given Chloride writes on is its own business and changes with
 its versions, which is why none of them is described here as on or off.
 
-There is nothing to go looking for by hand. Vitrail reads that file at startup
-and, in the log, names each of them that is on with what it costs and what to set
-it to, names any it could not find, and says so when the file itself is not
-there.
+There is nothing to go looking for by hand: with Chloride installed, Vitrail
+reads that file at startup and, in the log, names each of them that is on with
+what it costs and what to set it to, names any it could not find, and says so
+when the file itself is not there.
 
 ## Other mods
 

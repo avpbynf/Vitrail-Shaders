@@ -91,16 +91,17 @@ There is one jar and it runs on both loaders, NeoForge and Fabric. It is on
 attached to every [release](https://github.com/avpbynf/Vitrail-Shaders/releases)
 here, put there by the same run, so both places serve the same file.
 
-Put it in `mods/` next to Sodium and Chloride, and switch
-the game to Vulkan: `preferredGraphicsBackend:"vulkan"` in `options.txt`, or
+Put it in `mods/` next to Sodium, and switch the game to Vulkan:
+`preferredGraphicsBackend:"vulkan"` in `options.txt`, or
 Options, then Video Settings, in game. Nothing enforces that switch, though the
 mod says at startup which backend the game came up on, and says so as an error
 when it is not Vulkan. Shader packs go in `shaderpacks/`, as they always have,
 and are selected in game from Vitrail's settings screen.
 
-[INSTALL.md](INSTALL.md) has the versions this needs, the Chloride settings that
-have to come off, and what the absence of either looks like. Client only: it does
-nothing on a server and does not need to be installed on one.
+[INSTALL.md](INSTALL.md) has the versions this needs, what a game that came up on
+the wrong backend looks like, and the Chloride settings that have to come off if
+you run it. Client only: it does nothing on a server and does not need to be
+installed on one.
 
 To build from source:
 
