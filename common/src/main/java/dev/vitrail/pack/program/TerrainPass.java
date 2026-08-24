@@ -2,6 +2,8 @@ package dev.vitrail.pack.program;
 
 import dev.vitrail.pack.source.ShaderProperties;
 
+import java.util.Map;
+
 /**
  * The passes the chunk renderer draws the world in, and what a pack owes each of them.
  * <p>
@@ -162,12 +164,14 @@ public enum TerrainPass {
 	/**
 	 * The alpha test this pass is drawn under, once the pack has had its say.
 	 *
-	 * @param servedBy the program that really serves this pass, which is the name the pack writes
-	 *                 the override under. A pack shipping one {@code gbuffers_terrain} and a line
-	 *                 {@code alphaTest.gbuffers_terrain=GREATER 0.1} moves both the solid and the
-	 *                 cutout pass with it, which is what Iris does and what Bliss counts on
+	 * @param overrides what {@link ShaderProperties#alphaTests} resolved under the settings in
+	 *                  force
+	 * @param servedBy  the program that really serves this pass, which is the name the pack writes
+	 *                  the override under. A pack shipping one {@code gbuffers_terrain} and a line
+	 *                  {@code alphaTest.gbuffers_terrain=GREATER 0.1} moves both the solid and the
+	 *                  cutout pass with it, which is what Iris does and what Bliss counts on
 	 */
-	public AlphaTest alphaTest(ShaderProperties properties, String servedBy) {
-		return properties.alphaTest(servedBy).orElse(this.fallback);
+	public AlphaTest alphaTest(Map<String, AlphaTest> overrides, String servedBy) {
+		return overrides.getOrDefault(servedBy, this.fallback);
 	}
 }

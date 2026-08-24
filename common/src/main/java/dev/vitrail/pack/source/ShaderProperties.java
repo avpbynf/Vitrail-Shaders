@@ -45,7 +45,8 @@ public final class ShaderProperties {
 	// three of its continuations on a blank line, and its main screen swallowed the commented
 	// block underneath.
 	private static final Pattern CONTINUATION = Pattern.compile("\\\\\\r?\\n[ \\t]*");
-	private static final Pattern DIRECTIVE = Pattern.compile("^\\s*#\\s*(if|ifdef|ifndef|else|elif|endif)\\b.*$");
+	// Package visible rather than private: DimensionSet walks its own file with the same stack.
+	static final Pattern DIRECTIVE = Pattern.compile("^\\s*#\\s*(if|ifdef|ifndef|else|elif|endif)\\b.*$");
 
 	private static final Pattern PROFILE = Pattern.compile("^\\s*profile\\.(\\w+)\\s*=\\s*(.*)$");
 	private static final Pattern PROGRAM_ENABLED = Pattern.compile("^\\s*program\\.(.+?)\\.enabled\\s*=\\s*(.*)$");
@@ -157,10 +158,8 @@ public final class ShaderProperties {
 	private final List<BlendDirective> blend;
 	private final Map<String, String> sizeBuffers;
 	private final List<FlipDirective> flips;
-	private final Map<String, AlphaTest> alphaTest;
 	private final Map<String, String> malformedAlphaTests;
 	private final Map<String, Integer> ignoredPrefixes;
-	private final String noiseTexturePath;
 	private final int directiveCount;
 	private final int continuationCount;
 	private final boolean present;
@@ -186,10 +185,8 @@ public final class ShaderProperties {
 		this.blend = List.copyOf(builder.blend);
 		this.sizeBuffers = Map.copyOf(builder.sizeBuffers);
 		this.flips = List.copyOf(builder.flips);
-		this.alphaTest = Map.copyOf(builder.alphaTest);
 		this.malformedAlphaTests = Map.copyOf(builder.malformedAlphaTests);
 		this.ignoredPrefixes = Map.copyOf(builder.ignoredPrefixes);
-		this.noiseTexturePath = builder.noiseTexturePath;
 		this.directiveCount = builder.directiveCount;
 		this.continuationCount = builder.continuationCount;
 		this.present = builder.present;
@@ -294,12 +291,16 @@ public final class ShaderProperties {
 			return;
 		}
 
+		// Consumed here for the census only; the values come out of alphaTests, which walks the
+		// conditionals, because the reference reads this family off its preprocessed copy of the
+		// file. Not every family: it reads the screens and the sliders off the raw one.
 		Matcher alpha = ALPHA_TEST.matcher(line);
 		if (alpha.matches()) {
 			String value = alpha.group(2).trim();
-			AlphaTest.parse(value).ifPresentOrElse(
-					test -> builder.alphaTest.put(alpha.group(1), test),
-					() -> builder.malformedAlphaTests.put(alpha.group(1), value));
+			if (AlphaTest.parse(value).isEmpty()) {
+				builder.malformedAlphaTests.put(alpha.group(1), value);
+			}
+
 			return;
 		}
 
@@ -457,14 +458,13 @@ public final class ShaderProperties {
 			}
 		}
 
-		// The path is relative to shaders/, as every path in this file is. Four packs of the
-		// corpus write the line, and their water and clouds are built against that image: the
-		// generated noise is a stand in with the same look and none of the same values.
+		// Consumed here for the census only; the path comes out of noiseTexturePath, which walks
+		// the conditionals like the other directive readers below.
 		Matcher noise = TEXTURE_NOISE.matcher(line);
 		if (noise.matches()) {
-			builder.noiseTexturePath = noise.group(1).trim();
 			return;
 		}
+
 
 		// Consumed and not kept: the rest of the family is read by customTextures, which walks the
 		// conditionals. Falling through here would leave those lines among the keys nothing reads
@@ -768,7 +768,7 @@ public final class ShaderProperties {
 		}
 	}
 
-	private static void applyDirective(String keyword, String line, ConditionStack conditions,
+	static void applyDirective(String keyword, String line, ConditionStack conditions,
 			Map<String, String> defines) {
 		switch (keyword) {
 			case "ifdef", "ifndef" -> {
@@ -828,7 +828,7 @@ public final class ShaderProperties {
 	/**
 	 * The textures the pack supplies with a file of its own, by the key it wrote, in that order,
 	 * with the conditionals around each line evaluated. {@code texture.noise} is not among them:
-	 * it is answered by {@link #noiseTexturePath()} and is not one of these.
+	 * it is answered by {@link #noiseTexturePath} and is not one of these.
 	 * <p>
 	 * Conditionally and not flat, for the reason every other reader here is conditional.
 	 * Complementary writes two of its {@code customTexture} lines under {@code #if} on its own
@@ -1388,14 +1388,25 @@ public final class ShaderProperties {
 	}
 
 	/**
-	 * What alpha a program discards at, when the pack overrides the default of the pass it is drawn
-	 * in. Empty for a line this could not read, which {@link #malformedAlphaTests()} names.
-	 *
-	 * @param program the name of the file that serves the pass, not the name the pass asked for
+	 * What alpha each program discards at, where the pack overrides the default of the pass it is
+	 * drawn in, keyed by the name of the file that serves the pass and not the name the pass asked
+	 * for. A line this could not read is absent, and {@link #malformedAlphaTests()} names it.
+	 * <p>
+	 * Conditionally and not flat: the reference reads this family off its preprocessed copy of
+	 * the file, so an override written under a setting's {@code #if} has to come and go with the
+	 * setting. Six of the eight packs of the corpus write these lines, and none under a
+	 * conditional, which is what kept a flat read invisible.
 	 */
-	public Optional<AlphaTest> alphaTest(String program) {
-		return Optional.ofNullable(this.alphaTest.get(program));
+	public Map<String, AlphaTest> alphaTests(Map<String, String> defines) {
+		Map<String, AlphaTest> overrides = new LinkedHashMap<>();
+		for (Matcher line : live(ALPHA_TEST, defines)) {
+			AlphaTest.parse(line.group(2).trim())
+					.ifPresent(test -> overrides.put(line.group(1), test));
+		}
+
+		return overrides;
 	}
+
 
 	/**
 	 * The {@code alphaTest} lines that name neither a function and a reference nor {@code off}.
@@ -1420,9 +1431,17 @@ public final class ShaderProperties {
 		return new TreeMap<>(this.ignoredPrefixes);
 	}
 
-	/** The pack's own noise image, {@code texture.noise}, relative to {@code shaders/}. */
-	public Optional<String> noiseTexturePath() {
-		return Optional.ofNullable(this.noiseTexturePath);
+	/**
+	 * The pack's own noise image, {@code texture.noise}, relative to {@code shaders/}, read under
+	 * the conditionals with the last live line winning.
+	 */
+	public Optional<String> noiseTexturePath(Map<String, String> defines) {
+		String path = null;
+		for (Matcher line : live(TEXTURE_NOISE, defines)) {
+			path = line.group(1).trim();
+		}
+
+		return Optional.ofNullable(path);
 	}
 
 	/**
@@ -1566,10 +1585,8 @@ public final class ShaderProperties {
 		private final List<BlendDirective> blend = new ArrayList<>();
 		private final Map<String, String> sizeBuffers = new LinkedHashMap<>();
 		private final List<FlipDirective> flips = new ArrayList<>();
-		private final Map<String, AlphaTest> alphaTest = new LinkedHashMap<>();
 		private final Map<String, String> malformedAlphaTests = new LinkedHashMap<>();
 		private final Map<String, Integer> ignoredPrefixes = new LinkedHashMap<>();
-		private String noiseTexturePath;
 		private int directiveCount;
 		private int continuationCount;
 		private boolean present;

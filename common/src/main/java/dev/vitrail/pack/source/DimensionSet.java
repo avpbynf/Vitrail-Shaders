@@ -1,5 +1,6 @@
 package dev.vitrail.pack.source;
 
+import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.pack.target.TargetPlan;
 
 import java.io.IOException;
@@ -33,6 +34,13 @@ public final class DimensionSet {
 	private static final Pattern DECLARATION =
 			Pattern.compile("^\\s*dimension\\.([A-Za-z0-9_-]+)\\s*=(.*)$");
 
+	/**
+	 * Any line the reference's properties reader would keep: not a comment, and carrying an
+	 * equals sign. What it decides is only whether the file counts as saying something, see
+	 * {@link #discover}.
+	 */
+	private static final Pattern ANY_KEY = Pattern.compile("^\\s*[^#!\\s][^=]*=.*$");
+
 	private static final String PROPERTIES = "dimension.properties";
 
 	/** What the three conventional folders mean when no {@code dimension.properties} says. */
@@ -61,21 +69,52 @@ public final class DimensionSet {
 
 		Optional<java.nio.file.Path> properties = source.file(PROPERTIES);
 		if (properties.isPresent()) {
+			// The engine's table and never the pack's settings: the reference preprocesses this
+			// file before the include graph exists, so a conditional here can only see the
+			// environment defines (ShaderPack.java:125-126). A declaration in a dead branch is
+			// no declaration.
+			Map<String, String> defines = EngineDefines.table(EngineDefines.machine());
+			ConditionStack conditions = new ConditionStack();
+
+			// A folder to the LAST worlds it was assigned, in first-assignment order. The
+			// reference reads this file as ordered properties, so re-assigning dimension.<folder>
+			// keeps the key's place, drops the earlier line's worlds entirely, and it is the
+			// FOLDER that is the key: two lines about one folder are one entry, two folders
+			// claiming one world are settled by whichever entry sits later.
+			Map<String, String> assignments = new LinkedHashMap<>();
+
 			for (String line : source.readLines(properties.get())) {
+				Matcher directive = ShaderProperties.DIRECTIVE.matcher(line);
+				if (directive.matches()) {
+					ShaderProperties.applyDirective(directive.group(1), line, conditions, defines);
+					continue;
+				}
+
+				if (!conditions.active()) {
+					continue;
+				}
+
 				Matcher declaration = DECLARATION.matcher(line);
 				if (declaration.matches()) {
-					found.add(declaration.group(1));
+					assignments.put(declaration.group(1), declaration.group(2));
+				}
+
+				// ANY live key suppresses the conventional folders, well formed or not: the
+				// reference's test is that the parsed file is not empty (ShaderPack.java:127),
+				// not that it holds a dimension line.
+				if (ANY_KEY.matcher(line).matches()) {
 					declared = true;
-					// One line carries as many worlds as the pack cares to group on that folder,
-					// separated by spaces. The first declaration of a world wins, so that a file
-					// naming one twice reads the same way twice rather than by map order.
-					for (String world : declaration.group(2).trim().split("\\s+", -1)) {
-						if (!world.isEmpty()) {
-							places.putIfAbsent(normalise(world), declaration.group(1));
-						}
-					}
 				}
 			}
+
+			assignments.forEach((folder, worlds) -> {
+				found.add(folder);
+				for (String world : worlds.trim().split("\\s+", -1)) {
+					if (!world.isEmpty()) {
+						places.put(normalise(world), folder);
+					}
+				}
+			});
 		}
 
 		for (String directory : source.topLevelDirectories()) {

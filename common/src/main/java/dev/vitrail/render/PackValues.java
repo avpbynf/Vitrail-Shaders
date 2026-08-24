@@ -137,7 +137,7 @@ public final class PackValues {
 			values.separateAo = properties.separateAo(settings.globalDefines(options));
 			values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
 			values.declare(properties, settings.globalDefines(options));
-			values.readNoise(properties, source);
+			values.readNoise(properties, source, settings.globalDefines(options));
 			values.packImages =
 					PackImages.read(properties, settings.globalDefines(options), source);
 
@@ -666,8 +666,9 @@ public final class PackValues {
 	 * of any kind falls back to the generated field and is named in the notes: the stand in looks
 	 * like noise too, which is exactly why silence here would cost somebody a day.
 	 */
-	private void readNoise(ShaderProperties properties, ShaderPackSource source) {
-		String path = properties.noiseTexturePath().orElse(null);
+	private void readNoise(ShaderProperties properties, ShaderPackSource source,
+			Map<String, String> defines) {
+		String path = properties.noiseTexturePath(defines).orElse(null);
 		if (path == null) {
 			return;
 		}
