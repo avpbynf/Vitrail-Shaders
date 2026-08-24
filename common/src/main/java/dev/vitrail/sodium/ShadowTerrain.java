@@ -179,7 +179,14 @@ public final class ShadowTerrain {
 		//
 		// prepareRender would then rotate the indirect command ring. The camera already did that
 		// at the top of the frame; a second rotate in the same frame is the stall #115 names.
-		((RenderSectionManagerAccessor) manager).vitrail$beginSecondWalk();
+		// The steps live here rather than as a default on the accessor: Mixin treats an interface
+		// mixin with a default method as targeting an interface, and RenderSectionManager is a
+		// class, so the config fails to prepare. The check is Mixin's own, seen on the Fabric boot.
+		RenderSectionManagerAccessor access = (RenderSectionManagerAccessor) manager;
+		access.vitrail$setFrame(access.vitrail$getFrame() + 1);
+		if (access.vitrail$cameraChanged()) {
+			access.vitrail$invalidateRenderLists();
+		}
 		try {
 			FogParameters fog = ((MixinSodiumWorldRenderer) renderer).vitrail$lastFogParameters();
 			// The shape the pack asked for, and a box around the camera cut out of it wherever a
