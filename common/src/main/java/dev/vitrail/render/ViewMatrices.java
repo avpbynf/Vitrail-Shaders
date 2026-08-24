@@ -175,8 +175,10 @@ public final class ViewMatrices implements ViewSource {
 	private boolean distantVolume;
 
 	/**
-	 * What Distant Horizons drew this frame with, or nothing when it drew nothing. See
-	 * {@link #advanceDistant} for why the three move together.
+	 * What Distant Horizons answers for this frame, or what stands in where it answers nothing. The
+	 * distance falls back on one question and the two planes on another, which is how Iris asks
+	 * them, and the distance is a setting rather than something read off a matrix that was drawn.
+	 * See {@link #advanceDistant}.
 	 */
 	private float dhNear = FALLBACK_PLANE;
 	private float dhFar = FALLBACK_PLANE;
@@ -250,15 +252,54 @@ public final class ViewMatrices implements ViewSource {
 	}
 
 	/**
-	 * Takes what Distant Horizons drew this frame with, or puts the three values back where they
-	 * stand when it drew nothing.
+	 * Takes what Distant Horizons drew this frame with, or puts each value back where it stands when
+	 * that mod answers nothing for it.
 	 * <p>
-	 * The three move together on purpose, and {@code render/FrameState} takes them that way. A pack
-	 * that has been told the far terrain is there works its fog out of the render distance and
-	 * rebuilds a position out of the planes, so a frame that served two of the three from DH and the
-	 * third from the game would fog the far terrain against a distance a fifteenth of the one it
-	 * stands at. The render distance is the one to watch, and the two packs read most closely here
-	 * do different things with it: BSL v10.1.3 widens the fog it already had,
+	 * <strong>The distance answers on its own, and the two planes on theirs, because that is how
+	 * Iris asks them.</strong> No two of the three share a question there: the distance falls back on
+	 * {@code configs == null || !dhEnabled} ({@code compat/dh/DHCompatInternal.java:102-109}), the
+	 * far plane on the first half of that alone ({@code :115-116}) and the near plane on a proxy
+	 * being up ({@code :127-128}). This engine held the three together instead until the fallback
+	 * was measured, and what that cost is the whole reason the coupling is gone: the planes are read
+	 * off the matrix DH really drew with, so they are short until that mod has drawn a frame, and
+	 * holding the distance back with them published the game's distance in CHUNKS on a frame where
+	 * the pack had already been told the far terrain was there. A number in chunks read as blocks is
+	 * short by the chunk at best and by that mod's whole reach at worst, and a pack that divides a
+	 * length by it repaints everything past a handful of blocks with the sky: Bliss v2.1.2 divides
+	 * by it in three files, {@code shaders/dimensions/composite1.fsh:1307} among them.
+	 * <p>
+	 * <strong>What the coupling protected, it never protected.</strong> The fear was a pack fogging
+	 * the far terrain against one road while rebuilding its position out of the other, and the fear
+	 * was sound while the remedy was not. Three partings outlive the coupling and are answered one
+	 * by one below, and a fourth case is listed under them that is not a parting at all. What the
+	 * fear is really about is far terrain on screen under a FALLBACK PLANE, which is the first of
+	 * them alone. The third puts far terrain on screen under real planes and a wrong distance,
+	 * which is a different wound and an older one.
+	 * <ul>
+	 * <li><strong>The planes short, the distance real.</strong> The ordinary case, and the whole
+	 * reason for the batch: that mod has drawn nothing, so there is no far-terrain fragment for a
+	 * fallback plane to place wrongly. Two ways reach it with terrain on screen and neither is new
+	 * here: a z row {@code dh/DhDepth.planes} refuses while {@code zRow} accepts, a far plane at
+	 * infinity; and the first frame that mod draws, where the planes are still the previous frame's
+	 * because the block is written once at the first sky draw, which {@code render/FrameState} says
+	 * where it publishes them. The planes fell back on both roads before this batch too. Holding the
+	 * distance down beside them repaired no plane, it only made the distance wrong as well.</li>
+	 * <li><strong>The distance short, the planes real, and that mod's rendering switched off.</strong>
+	 * Iris publishes the game's distance beside real planes there too, and a pack has been told the
+	 * far terrain is gone and has dropped its distant road, so nothing reads the pair.</li>
+	 * <li><strong>The distance short, the planes real, and the distance alone lost to a reflective
+	 * failure.</strong> <strong>This one is a hole rather than an answer, and it is older than this
+	 * batch.</strong> That latch leaves {@code dh/DhDepth.present} standing, so the pack keeps its
+	 * distant road while being handed the game's distance in CHUNKS for the rest of the session,
+	 * which is the very confusion this method exists to describe. The batch neither opens it nor
+	 * closes it, the coupling never closed it either, and {@code dh/DhDepth} now warns in those
+	 * words where it fires.</li>
+	 * <li><strong>Everything short at once.</strong> A read that put the whole reading of that mod
+	 * out. {@code render/FrameState} takes its three answers before publishing any, so the fallback
+	 * is taken whole rather than half published.</li>
+	 * </ul>
+	 * The distance is the one to watch, and the two packs read most closely here do different things
+	 * with it: BSL v10.1.3 widens the fog it already had,
 	 * {@code fogFar = max(fogFar, float(dhRenderDistance))} at
 	 * {@code shaders/lib/atmospherics/fog.glsl:137}, while Complementary Unbound r5.8.1 replaces the
 	 * distance outright, {@code float renderDistance = float(dhRenderDistance);} at
@@ -266,10 +307,16 @@ public final class ViewMatrices implements ViewSource {
 	 *
 	 * @param near     DH's own near plane in blocks, or {@link #FALLBACK_PLANE} for none
 	 * @param far      DH's own far plane in blocks, or {@link #FALLBACK_PLANE} for none
-	 * @param distance how far DH draws in blocks, or -1 for none, in which case the game's own
-	 *                 render distance in CHUNKS is published instead. The change of unit is Iris's
-	 *                 own and it is what packs are written against: without the mod the name
-	 *                 answers {@code getEffectiveRenderDistance}, and with it, chunks times sixteen
+	 * @param distance how far DH draws in blocks, or -1 where its rendering is switched off or can
+	 *                 no longer be read, in which case the game's own render distance in CHUNKS is
+	 *                 published instead. The change of unit
+	 *                 is Iris's own and it is what packs are written against: without the mod the
+	 *                 name answers {@code getEffectiveRenderDistance}, and with it, chunks times
+	 *                 sixteen. It is read a second time inside this class, where a shadow plane the
+	 *                 pack left at -1 is resolved off it, so the two units travel together there as
+	 *                 well, and no pack of the corpus reaches that road on its defaults: the one
+	 *                 branch of Bliss that writes both planes at -1 sits behind a setting shipped
+	 *                 off
 	 */
 	void advanceDistant(float near, float far, int distance) {
 		this.dhNear = near;
