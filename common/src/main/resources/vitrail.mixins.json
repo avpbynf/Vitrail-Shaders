@@ -64,6 +64,7 @@
 		"VKDrawContextMixin",
 		"VulkanCommandEncoderMixin",
 		"VulkanDeviceMixin",
+		"VulkanQueueSubmitMixin",
 		"WeatherEffectRendererMixin"
 	]
 }
