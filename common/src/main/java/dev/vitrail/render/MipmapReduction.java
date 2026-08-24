@@ -133,7 +133,7 @@ final class MipmapReduction {
 			return false;
 		}
 
-		GeometryHold.flush();
+		GeometryHold.flush(() -> "a mip chain being filled");
 		if (blit(encoder, surface)) {
 			surface.chainWritten(true);
 			return true;

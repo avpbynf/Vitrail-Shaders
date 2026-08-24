@@ -114,6 +114,13 @@ public final class PassTimings {
 	 */
 	private static final int CENSUS_PROPERTY = Integer.getInteger("vitrail.passCensus", 0);
 
+	private static final boolean KEEP_PROPERTY = Boolean.getBoolean("vitrail.keepRedoneWork");
+
+	private static final String KEEP_ARM_FILE = "keep-redone-work";
+
+	/** Negative until the property and the file have been read, which needs the game directory. */
+	private static int keepRedone = -1;
+
 	/** What an arming file with nothing in it asks for. */
 	private static final int ARMED_BY_FILE_SECONDS = 5;
 
@@ -142,6 +149,45 @@ public final class PassTimings {
 	private static Supplier<String> censusOpenLabel;
 	private static final Map<String, Integer> censusLabels = new HashMap<>();
 
+	/**
+	 * Per pass label, why the geometry family behind it had to open a pass rather than join the one
+	 * already recording, and how often each of those reasons came up.
+	 * <p>
+	 * The counts above say a family opened nine passes; without this, that nine can only be guessed
+	 * at, and a guess about a number is how a frame gets attacked at the wrong end. Only the passes
+	 * {@link GeometryHold} arbitrates appear here: a composite or a mip level is not a family
+	 * reopening, it is a pass of its own, and each of those is a cause rather than an effect.
+	 */
+	private static final Map<String, Map<String, Integer>> censusReopens = new HashMap<>();
+
+	/**
+	 * Work a frame does again that its answer did not change since: uniform slices rebuilt at a bind
+	 * whose two arguments are fixed for the pass, terrain programs looked for by walking a map at
+	 * every draw, and far-terrain sections read back out of Distant Horizons by reflection.
+	 * <p>
+	 * Counted rather than timed, and that is deliberate: these are CPU, so a clock on them measures
+	 * the machine's mood as much as the change, where a count is the same number twice. What a count
+	 * cannot say is whether removing them is worth anything, which is what the frame rate beside it
+	 * is for.
+	 */
+	private static int censusSlices;
+
+	private static int censusProgramWalks;
+	private static int censusFarSections;
+
+	/**
+	 * Frames since the last census, and when that was, which is what turns the census into a reading
+	 * of the frame rate as well as of the frame.
+	 * <p>
+	 * Counted here rather than read off an overlay or asked of a JVM flag, and that is the whole
+	 * point: the two things this class measures are armed by a file beside the pack, so a session
+	 * with no way into the launcher and no way to read the screen can still say whether a change
+	 * bought anything. Every frame pays one increment for it, armed or not.
+	 */
+	private static long censusFrames;
+
+	private static long censusFramesAt;
+
 	private PassTimings() {
 	}
 
@@ -166,9 +212,33 @@ public final class PassTimings {
 		censusPasses = 0;
 		censusClears = 0;
 		censusCopies = 0;
+		censusSlices = 0;
+		censusProgramWalks = 0;
+		censusFarSections = 0;
 		censusSubmits = 0;
 		censusOpenLabel = null;
 		censusLabels.clear();
+		censusReopens.clear();
+	}
+
+	/** Whether a census is counting this frame, asked before anything is spent naming a cause. */
+	public static boolean censusArmed() {
+		return censusArmed;
+	}
+
+	/**
+	 * One geometry pass that could not join the one before it, and what stopped it.
+	 *
+	 * @param label the pass about to open, the same name its row above is counted under
+	 * @param cause already in words: the caller has checked {@link #censusArmed} before building it
+	 */
+	public static void censusReopen(Supplier<String> label, String cause) {
+		if (!censusArmed) {
+			return;
+		}
+
+		String name = label == null ? "an unnamed pass" : label.get();
+		censusReopens.computeIfAbsent(name, key -> new HashMap<>()).merge(cause, 1, Integer::sum);
 	}
 
 	/** The chain is warm: this frame is the one whose totals should be printed. */
@@ -188,13 +258,18 @@ public final class PassTimings {
 		censusPasses = 0;
 		censusClears = 0;
 		censusCopies = 0;
+		censusSlices = 0;
+		censusProgramWalks = 0;
+		censusFarSections = 0;
 		censusSubmits = 0;
 		lastCensus = 0L;
 		// Read again, so an arming file written or changed while the game runs is picked up by the
 		// next pack load rather than by the next launch.
 		censusSeconds = -1;
+		keepRedone = -1;
 		censusOpenLabel = null;
 		censusLabels.clear();
+		censusReopens.clear();
 	}
 
 	/**
@@ -212,6 +287,44 @@ public final class PassTimings {
 	}
 
 	/**
+	 * Puts back the two things every draw used to redo, the uniform slice and the walk for the
+	 * terrain program, so that before and after are read off ONE jar rather than two.
+	 * <p>
+	 * Two builds compared against each other measure the two builds as much as the change: a
+	 * different compile, a different pack read, a different moment of the day. One jar with a switch
+	 * measures the change, and nothing else moves between the two readings.
+	 * <p>
+	 * Armed the way the census is, by {@code vitrail/keep-redone-work} beside the pack, and for the
+	 * same reason: a JVM flag lives in the launcher, and a session measuring this cannot open the
+	 * launcher. The command line still wins where somebody has one. Off otherwise, so a player never
+	 * carries the old path.
+	 * <p>
+	 * The far terrain is not under it: what changed there is allocation inside a walk that runs twice
+	 * a frame either way, so there is no second path to switch to, only a count to read.
+	 * <p>
+	 * Settled once per pack load, like the census interval, so the file can be written or removed
+	 * without leaving the game.
+	 */
+	public static boolean keepRedoneWork() {
+		if (keepRedone < 0) {
+			keepRedone = KEEP_PROPERTY || armFile(KEEP_ARM_FILE) != null ? 1 : 0;
+		}
+
+		return keepRedone == 1;
+	}
+
+	/** The arming file of that name beside the pack, or null where there is none to read. */
+	private static Path armFile(String name) {
+		try {
+			Path file = Vitrail.platform().gameDirectory().resolve("vitrail").resolve(name);
+
+			return Files.isRegularFile(file) ? file : null;
+		} catch (RuntimeException ignored) {
+			return null;
+		}
+	}
+
+	/**
 	 * What {@code vitrail/pass-census} asks for, or nought when it is not there.
 	 * <p>
 	 * A file that IS there and cannot be read as a number still arms, at the default interval: it
@@ -219,13 +332,8 @@ public final class PassTimings {
 	 * for and never comes.
 	 */
 	private static int armedByFile() {
-		Path file;
-		try {
-			file = Vitrail.platform().gameDirectory().resolve("vitrail").resolve(CENSUS_ARM_FILE);
-			if (!Files.isRegularFile(file)) {
-				return 0;
-			}
-		} catch (RuntimeException ignored) {
+		Path file = armFile(CENSUS_ARM_FILE);
+		if (file == null) {
 			return 0;
 		}
 
@@ -264,6 +372,27 @@ public final class PassTimings {
 	public static void censusCopy() {
 		if (censusArmed) {
 			censusCopies++;
+		}
+	}
+
+	/** One uniform slice built at a bind, whose offset and length the pass had already settled. */
+	public static void censusSlice() {
+		if (censusArmed) {
+			censusSlices++;
+		}
+	}
+
+	/** One program looked for by walking the terrain map, which a draw does before it can bind. */
+	public static void censusProgramWalk() {
+		if (censusArmed) {
+			censusProgramWalks++;
+		}
+	}
+
+	/** Far-terrain sections read back out of Distant Horizons, which happens twice a frame. */
+	public static void censusFarSections(int built) {
+		if (censusArmed) {
+			censusFarSections += built;
 		}
 	}
 
@@ -330,6 +459,11 @@ public final class PassTimings {
 	 * the card has answered, and prints the report when the interval is up.
 	 */
 	public static void endFrame() {
+		censusFrames++;
+		if (censusFramesAt == 0L) {
+			censusFramesAt = System.nanoTime();
+		}
+
 		if (censusComplete && !censusPrinted) {
 			printCensus();
 			lastCensus = System.nanoTime();
@@ -373,6 +507,9 @@ public final class PassTimings {
 						+ "queue submits",
 				censusSeconds() > 0 ? "A frame of this pack" : "This pack's first full frame",
 				censusPasses, censusClears, censusCopies, censusSubmits);
+		Vitrail.logger().info("  and redid {} uniform slices, {} terrain program walks and {} far "
+				+ "terrain sections", censusSlices, censusProgramWalks, censusFarSections);
+		printRate();
 
 		List<Map.Entry<String, Integer>> sorted = new ArrayList<>(censusLabels.entrySet());
 		sorted.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
@@ -382,6 +519,7 @@ public final class PassTimings {
 		for (Map.Entry<String, Integer> entry : sorted) {
 			if (shown < ROWS) {
 				Vitrail.logger().info("  x{}  {}", entry.getValue(), entry.getKey());
+				printReopens(entry.getKey());
 				shown++;
 			} else {
 				restPasses += entry.getValue();
@@ -391,6 +529,49 @@ public final class PassTimings {
 
 		if (restLabels > 0) {
 			Vitrail.logger().info("  x{}  {} other labels", restPasses, restLabels);
+		}
+	}
+
+	/**
+	 * Frames a second since the last census, and the milliseconds one frame took on average.
+	 * <p>
+	 * The window is the census interval, so it is the whole of it and not a moment inside it, which
+	 * is what a screen overlay gives. Said whether or not it is flattering: a change that costs
+	 * frames has to be as easy to read here as one that buys them.
+	 * <p>
+	 * The FIRST census of a session is not a reading of play. Its window reaches back to the world
+	 * being built, so it is named as what it is rather than dressed up as a rate.
+	 */
+	private static void printRate() {
+		long now = System.nanoTime();
+		double seconds = (now - censusFramesAt) / (double) NANOS_PER_SECOND;
+		if (censusFrames > 0 && seconds > 0) {
+			Vitrail.logger().info("  {} frames a second over the last {} s, {} ms a frame",
+					String.format(Locale.ROOT, "%.1f", censusFrames / seconds),
+					String.format(Locale.ROOT, "%.1f", seconds),
+					String.format(Locale.ROOT, "%.2f", seconds * 1000 / censusFrames));
+		}
+
+		censusFrames = 0;
+		censusFramesAt = now;
+	}
+
+	/**
+	 * Under one label, why each of its passes had to be opened instead of joining the one before it.
+	 * <p>
+	 * Silent for a label no geometry hold arbitrates, which is most of them: a composite opens
+	 * because it is a composite, and printing a reason for it would be a line saying nothing.
+	 */
+	private static void printReopens(String label) {
+		Map<String, Integer> causes = censusReopens.get(label);
+		if (causes == null) {
+			return;
+		}
+
+		List<Map.Entry<String, Integer>> sorted = new ArrayList<>(causes.entrySet());
+		sorted.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+		for (Map.Entry<String, Integer> cause : sorted) {
+			Vitrail.logger().info("        x{}  because {}", cause.getValue(), cause.getKey());
 		}
 	}
 

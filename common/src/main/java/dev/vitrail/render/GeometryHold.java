@@ -28,6 +28,16 @@ import java.util.function.Supplier;
  */
 public final class GeometryHold {
 
+	/** {@link #fit} found nothing in the way: the pass about to open joins the one recording. */
+	private static final int JOINS = -1;
+
+	/** Nothing was recording, so what ended the last hold is the cause and {@link #ended} holds it. */
+	private static final int NO_HOLD = -2;
+
+	private static final int COUNT_DIFFERS = -3;
+	private static final int DEPTH_DIFFERS = -4;
+	private static final int AREA_DIFFERS = -5;
+
 	private static RenderPass current;
 	private static GpuTexture[] colours;
 	private static GpuTexture depth;
@@ -36,6 +46,15 @@ public final class GeometryHold {
 	private static int areaW;
 	private static int areaH;
 	private static boolean opening;
+
+	/**
+	 * What ended the hold, kept for the next open to report.
+	 * <p>
+	 * A family almost never reopens because of anything at its own open: it reopens because
+	 * something between the two passes could not be recorded inside one, and by the time the next
+	 * open runs that something is gone. Holding it here is what lets the census say which.
+	 */
+	private static Supplier<String> ended;
 
 	private GeometryHold() {
 	}
@@ -50,13 +69,23 @@ public final class GeometryHold {
 	 * Load-ops on a reused descriptor are ignored: the first open already applied them.
 	 */
 	public static RenderPass open(CommandEncoder encoder, RenderPassDescriptor descriptor) {
-		if (matches(descriptor)) {
+		int fit = fit(descriptor);
+		if (fit == JOINS) {
 			resetArea(current);
 
 			return current;
 		}
 
-		flush();
+		// Named here and nowhere else: this is the one point that still knows both what is recording
+		// and what is asking, and a count of passes without their causes is what a family's number
+		// gets read into rather than read from. Only while a census is armed, the naming being the
+		// only part of any of this that builds a string.
+		if (PassTimings.censusArmed()) {
+			PassTimings.censusReopen(descriptor.label(), name(fit));
+		}
+
+		// Null, the cause having just been reported: the next open owes its own.
+		flush(null);
 		opening = true;
 		try {
 			current = encoder.createRenderPass(descriptor);
@@ -90,7 +119,7 @@ public final class GeometryHold {
 	 */
 	public static RenderPass leftover(RenderPassDescriptor descriptor) {
 		if (opening || current == null || clears(descriptor) || !leftoverLabel(descriptor)
-				|| !matches(descriptor)) {
+				|| fit(descriptor) != JOINS) {
 			return null;
 		}
 
@@ -99,9 +128,21 @@ public final class GeometryHold {
 		return current;
 	}
 
-	/** Ends the hold so a copy, a clear, a composite or a different framebuffer can run. */
-	public static void flush() {
+	/**
+	 * Ends the hold so a copy, a clear, a composite or a different framebuffer can run, naming what
+	 * is ending it so the next family to open can say why it had to.
+	 *
+	 * @param cause what the census reports against the pass that opens next, or {@code null} where
+	 *              the caller has already reported one of its own
+	 */
+	public static void flush(Supplier<String> cause) {
 		RenderPass pass = current;
+		// Only when something really was recording. A clear with no hold standing ends nothing, and
+		// blaming it for the reopening that comes later would name a bystander.
+		if (pass != null) {
+			ended = cause;
+		}
+
 		current = null;
 		colours = null;
 		depth = null;
@@ -110,22 +151,32 @@ public final class GeometryHold {
 		}
 	}
 
-	private static boolean matches(RenderPassDescriptor descriptor) {
+	/**
+	 * The four things a pass has to share with the one recording to join it, and which of them it
+	 * failed: {@link #JOINS} when none, a colour index when that image differs, one of the negative
+	 * codes otherwise.
+	 * <p>
+	 * One walk answering both questions, rather than a boolean here and a reason beside it: two
+	 * walks would be two chances to drift apart, and the one the census reads would be the one
+	 * nothing else exercises. Nothing here builds a string, which is what lets it stay on the path
+	 * every geometry pass takes.
+	 */
+	private static int fit(RenderPassDescriptor descriptor) {
 		if (current == null || colours == null) {
-			return false;
+			return NO_HOLD;
 		}
 
 		List<RenderPassDescriptor.Attachment<Optional<Vector4fc>>> listed =
 				descriptor.colorAttachments();
 		if (listed.size() != colours.length) {
-			return false;
+			return COUNT_DIFFERS;
 		}
 
 		for (int index = 0; index < colours.length; index++) {
 			RenderPassDescriptor.Attachment<Optional<Vector4fc>> attachment = listed.get(index);
 			GpuTexture texture = texture(attachment);
 			if (texture != colours[index]) {
-				return false;
+				return index;
 			}
 		}
 
@@ -133,12 +184,34 @@ public final class GeometryHold {
 				? null
 				: descriptor.depthAttachment().textureView().texture();
 		if (nextDepth != depth) {
-			return false;
+			return DEPTH_DIFFERS;
 		}
 
 		RenderPass.RenderArea area = descriptor.renderArea;
-		return area != null && area.x() == areaX && area.y() == areaY && area.width() == areaW
-				&& area.height() == areaH;
+		boolean sameArea = area != null && area.x() == areaX && area.y() == areaY
+				&& area.width() == areaW && area.height() == areaH;
+
+		return sameArea ? JOINS : AREA_DIFFERS;
+	}
+
+	/**
+	 * What {@link #fit} found, in words, for the census line. Reached only while a census is armed.
+	 * <p>
+	 * The no-hold answer is the one that carries the frame's real story: the family did not fail any
+	 * comparison, something between the two passes ended the hold before it ever got to ask.
+	 */
+	private static String name(int fit) {
+		if (fit >= 0) {
+			return "its colour image " + fit + " is not the one held";
+		}
+
+		return switch (fit) {
+			case COUNT_DIFFERS -> "it writes a different number of colour images";
+			case DEPTH_DIFFERS -> "its depth image is not the one held";
+			case AREA_DIFFERS -> "its area is not the one held";
+			case NO_HOLD -> ended == null ? "nothing was being held" : "the hold ended on " + ended.get();
+			default -> "it joins";
+		};
 	}
 
 	private static void remember(RenderPassDescriptor descriptor) {

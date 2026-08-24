@@ -791,7 +791,7 @@ final class GeometryProgram {
 		// recording into. The hold has to end first; after that this program's block exists and
 		// the next prepare of it can run while the next geometry program keeps that pass open.
 		if (this.block == null || !this.cleared) {
-			GeometryHold.flush();
+			GeometryHold.flush(() -> "a program building or clearing its block");
 		}
 
 		if (!compile(device)) {

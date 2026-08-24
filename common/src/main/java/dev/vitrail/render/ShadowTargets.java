@@ -76,6 +76,14 @@ final class ShadowTargets {
 	 */
 	static final int COLOURS = 2;
 
+	/**
+	 * Its own, and not the one {@link ColorTargets} empties under: the census groups a frame's passes
+	 * by label, so the two sharing a name made one flush of each read as two of the colour kind.
+	 * It still begins with {@code Vitrail}, which is what {@code VulkanCommandEncoderMixin} reads
+	 * to give our own passes the narrower barrier.
+	 */
+	private static final String CLEAR_LABEL = "Vitrail pending shadow clears";
+
 	private final int resolution;
 	private final List<PackDirectives.ShadowColour> asked;
 	private final List<GpuFormat> formats;
@@ -296,7 +304,7 @@ final class ShadowTargets {
 			return;
 		}
 
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> ColorTargets.CLEAR_LABEL);
+		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> CLEAR_LABEL);
 		for (int index = 0; index < colours.size(); index++) {
 			descriptor.withColorAttachment(colours.get(index), Optional.of(colourValues.get(index)));
 		}

@@ -43,7 +43,9 @@ public abstract class CommandEncoderMixin {
 		}
 
 		if (!GeometryHold.opening()) {
-			GeometryHold.flush();
+			// The pass's own label is the cause, and it is already a supplier: naming it costs
+			// nothing until a census asks, which is why the prefix is added there and not here.
+			GeometryHold.flush(descriptor.label());
 		}
 	}
 
@@ -65,13 +67,13 @@ public abstract class CommandEncoderMixin {
 
 	@Inject(method = "clearColorTexture", at = @At("HEAD"), require = 1)
 	private void vitrail$clearColour(CallbackInfo ci) {
-		GeometryHold.flush();
+		GeometryHold.flush(() -> "a texture clear");
 		PassTimings.censusClear();
 	}
 
 	@Inject(method = "clearDepthTexture", at = @At("HEAD"), require = 1)
 	private void vitrail$clearDepth(CallbackInfo ci) {
-		GeometryHold.flush();
+		GeometryHold.flush(() -> "a texture clear");
 		PassTimings.censusClear();
 	}
 
@@ -80,7 +82,7 @@ public abstract class CommandEncoderMixin {
 			+ "Lcom/mojang/blaze3d/textures/GpuTexture;D)V",
 			at = @At("HEAD"), require = 1)
 	private void vitrail$clearColourAndDepth(CallbackInfo ci) {
-		GeometryHold.flush();
+		GeometryHold.flush(() -> "a texture clear");
 		PassTimings.censusClear();
 	}
 
@@ -89,13 +91,13 @@ public abstract class CommandEncoderMixin {
 			+ "Lcom/mojang/blaze3d/textures/GpuTexture;DIIII)V",
 			at = @At("HEAD"), require = 1)
 	private void vitrail$clearColourAndDepthRegion(CallbackInfo ci) {
-		GeometryHold.flush();
+		GeometryHold.flush(() -> "a texture clear");
 		PassTimings.censusClear();
 	}
 
 	@Inject(method = "copyTextureToTexture", at = @At("HEAD"), require = 1)
 	private void vitrail$copyTexture(CallbackInfo ci) {
-		GeometryHold.flush();
+		GeometryHold.flush(() -> "a texture copy");
 		PassTimings.censusCopy();
 	}
 }
