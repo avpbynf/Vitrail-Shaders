@@ -429,6 +429,11 @@ public final class PackProgram {
 					dimensions);
 
 			Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
+			// The pack's own switch comes before its programs: the reference nulls its whole
+			// shadow renderer on shadow.enabled=false, however many shadow programs the pack
+			// ships, and only an explicit false moves anything.
+			boolean shadowOff =
+					properties.shadowEnabled(settings.globalDefines(options)).equals(Optional.of(false));
 
 			// What each pass is served by, read once and kept, because the passes are walked twice:
 			// the mesh is built out of what ALL of them ask for, and every one of them then declares
@@ -440,6 +445,10 @@ public final class PackProgram {
 			Map<TerrainPass, Served> served = new LinkedHashMap<>();
 			Set<String> reads = new LinkedHashSet<>();
 			for (TerrainPass pass : TerrainPass.values()) {
+				if (pass.shadow() && shadowOff) {
+					continue;
+				}
+
 				Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, pass.program());
 				if (resolution.isEmpty()) {
 					continue;
