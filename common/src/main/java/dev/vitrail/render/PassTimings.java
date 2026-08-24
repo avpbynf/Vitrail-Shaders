@@ -87,17 +87,36 @@ public final class PassTimings {
 	private static long lastReport;
 
 	/**
-	 * One-shot census of the first frame a pack actually draws. Cheap integers, no GPU queries: the
-	 * pass-timings flag still owns the clock. Armed at the frame's open, printed at its close, and
-	 * only once the chain is warm, so a frame still compiling one program a time is not the one
-	 * counted.
+	 * Census of the render passes, clears and copies one frame costs. Cheap integers, no GPU
+	 * queries: the pass-timings flag still owns the clock. Armed at the frame's open, printed at
+	 * its close, and only once the chain is warm, so a frame still compiling one program a time is
+	 * not the one counted.
+	 * <p>
+	 * One shot by default, on the first full frame, which is the one a pack load can be compared
+	 * against. That frame is NOT a frame of play: it allocates every target and empties each one,
+	 * so its clear count is the setup rather than the running cost, and reading it as the steady
+	 * state is how a budget gets attacked at the wrong end. {@code -Dvitrail.passCensus=N} prints
+	 * one every N seconds instead, which is the count that says what a frame really pays.
 	 */
+	private static final int CENSUS_SECONDS = Integer.getInteger("vitrail.passCensus", 0);
+
+	/** When the last census was printed, so the repeating one waits its interval out. */
+	private static long lastCensus;
+
 	private static boolean censusPrinted;
 	private static boolean censusArmed;
 	private static boolean censusComplete;
 	private static int censusPasses;
 	private static int censusClears;
 	private static int censusCopies;
+
+	/**
+	 * Calls to {@code vkQueueSubmit2KHR}, which is the number a capture tool reports and the one
+	 * issue 161 is about. Counted rather than inferred: a pass, a clear and a copy each tend to
+	 * cost one, but the backend decides that and not this class, so the totals beside it are what
+	 * says which of them the count is made of.
+	 */
+	private static int censusSubmits;
 	private static Supplier<String> censusOpenLabel;
 	private static final Map<String, Integer> censusLabels = new HashMap<>();
 
@@ -113,11 +132,19 @@ public final class PassTimings {
 			return;
 		}
 
+		// The repeating census waits its interval out. Without this it would count and print every
+		// frame, which is a line a second at best and a log nobody can read at worst.
+		if (lastCensus != 0L
+				&& System.nanoTime() - lastCensus < CENSUS_SECONDS * NANOS_PER_SECOND) {
+			return;
+		}
+
 		censusArmed = true;
 		censusComplete = false;
 		censusPasses = 0;
 		censusClears = 0;
 		censusCopies = 0;
+		censusSubmits = 0;
 		censusOpenLabel = null;
 		censusLabels.clear();
 	}
@@ -139,8 +166,20 @@ public final class PassTimings {
 		censusPasses = 0;
 		censusClears = 0;
 		censusCopies = 0;
+		censusSubmits = 0;
+		lastCensus = 0L;
 		censusOpenLabel = null;
 		censusLabels.clear();
+	}
+
+	/**
+	 * One call to {@code vkQueueSubmit2KHR}, counted where the backend really makes it rather than
+	 * guessed from what was recorded into it.
+	 */
+	public static void censusSubmit() {
+		if (censusArmed) {
+			censusSubmits++;
+		}
 	}
 
 	/** A standalone texture clear, which the backend ends with a full memory barrier. */
@@ -222,7 +261,10 @@ public final class PassTimings {
 	public static void endFrame() {
 		if (censusComplete && !censusPrinted) {
 			printCensus();
-			censusPrinted = true;
+			lastCensus = System.nanoTime();
+			// One shot unless a flag asked for more, in which case the next arm is what the
+			// interval above gates rather than this.
+			censusPrinted = CENSUS_SECONDS <= 0;
 		}
 
 		censusArmed = false;
@@ -256,8 +298,10 @@ public final class PassTimings {
 	 * as three different rows rather than one pile.
 	 */
 	private static void printCensus() {
-		Vitrail.logger().info("This pack's first full frame opened {} render passes, cleared {} "
-				+ "textures and copied {}", censusPasses, censusClears, censusCopies);
+		Vitrail.logger().info("{} opened {} render passes, cleared {} textures and copied {}, for {} "
+						+ "queue submits",
+				CENSUS_SECONDS > 0 ? "A frame of this pack" : "This pack's first full frame",
+				censusPasses, censusClears, censusCopies, censusSubmits);
 
 		List<Map.Entry<String, Integer>> sorted = new ArrayList<>(censusLabels.entrySet());
 		sorted.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
