@@ -282,9 +282,12 @@ button something to do.
 The screen itself is described by the pack: a root screen key and per-page keys, and a screen is
 built from **every** token those keys carry, not from the identifiers alone. A blank is layout and
 there are hundreds of them in the corpus; a link opens another page; one token selects a profile;
-and what is left over still has to land somewhere. Reading only the identifiers drops a third of
-what the pack wrote and takes the shape of the screen with it. A name exposed on a screen may be
-declared nowhere in the pack,
+and what is left over still has to land somewhere: the `*` token pours out every setting no other
+page names, where it stands, and what the main screen names comes out of it again, because the
+reference builds its leftover list only after its main screen and packs laid their columns against
+that. A pack that writes no root screen key at all is read as a main screen holding exactly that
+token, one page with everything on it rather than an empty one. A name exposed
+on a screen may be declared nowhere in the pack,
 so the screen has to tolerate an orphan name: neither crash on it nor fabricate a setting for it.
 
 ## Assembling a program's source
