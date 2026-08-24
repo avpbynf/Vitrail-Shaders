@@ -20,7 +20,7 @@ quietly stale.
 | Sildur's Vibrant Extreme v2.01 | Drawn, except for its water, which is an open case here. It is the pack that exercises the paths least travelled: it keeps the overworld's programs at the root of `shaders/` and gives the other two dimensions folders of their own, several families reach its textured program through the fallback tree rather than shipping one, and the target its terrain writes first is not target zero. |
 | Mellow v3.3 | Drawn, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. |
 | Body Camera v1.6.1 | Drawn. It is one of the packs that branches on the star flag in the sky, so it is worth reading [the sky goes flat](#the-sky-goes-flat) alongside. |
-| Reverie Beta v0.9 | **Refused at load, and the log names what it asked for.** It declares features it cannot be drawn without, and this engine serves no feature flag at all, so it refuses every such declaration whatever it names rather than half drawing the pack. That is a gap here and not a fault of the pack: Iris draws it. See [the pack was refused](#the-pack-was-refused). |
+| Reverie Beta v0.9 | **Refused at load, and the log names what it asked for.** It declares four features it cannot be drawn without, and this engine has built one of them, so it refuses the pack on the other three rather than half drawing it. That is a gap here and not a fault of the pack: Iris draws it. See [the pack was refused](#the-pack-was-refused). |
 
 Start from what you are seeing. Each symptom below names its cause, and says how to confirm it
 rather than guess.
