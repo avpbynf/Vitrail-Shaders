@@ -229,14 +229,15 @@ public final class ShadowGeometry {
 	 * <strong>And the game's own list is empty for the whole session here.</strong>
 	 * {@code LevelRenderer.visibleSections()} is filled by {@code LevelExtractor.applyFrustum}, which
 	 * Sodium redirects to an empty method ({@code mixin/core/render/world/LevelExtractorMixin}, a
-	 * {@code @Redirect} on {@code applyFrustum}, read at the shipped 0.9.1 jar). Walked, it yields
-	 * nothing, once, for ever, and the count printed beside it reads as a world with no chests in it.
+	 * {@code @Redirect} on {@code applyFrustum}, identical in the shipped 0.9.1 and 0.9.2-alpha.4
+	 * jars). Walked, it yields nothing, once, for ever, and the count printed beside it reads as a
+	 * world with no chests in it.
 	 * Iris is NOT in that position and never was: it asks the game for them
 	 * ({@code shadows/ShadowRenderer.java:668}, through an invoker on the game's own
 	 * {@code extractVisibleBlockEntities}), and Sodium cancels that method at head and answers it from
 	 * {@code SodiumWorldRenderer.extractBlockEntities}, off the render lists of whatever walk last
-	 * filled them. Which class carries that cancel moved between the two versions, so it is the same
-	 * behaviour rather than the same mixin. This walk asks the same object directly, and inside the
+	 * filled them. Which class carries that cancel moved between the shipped jars and the newer
+	 * checkout, so it is the same behaviour rather than the same mixin. This walk asks the same object directly, and inside the
 	 * light's scope what it hands back is the light's sections.
 	 * <p>
 	 * <strong>Asked once per stage, and nothing enforces that but the call site.</strong> The door

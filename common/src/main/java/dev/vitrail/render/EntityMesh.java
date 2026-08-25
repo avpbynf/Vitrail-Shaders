@@ -38,7 +38,7 @@ import org.jspecify.annotations.Nullable;
  * than deduced: under the lengthened field, on one bench and with only the jar changing, the spider,
  * the enderman, the warden, the charged creeper and the player's own arm were all gone, and only the
  * enderman's particles were left hanging where its body should have been. All three readings are off
- * the bytecode of the 0.9.1 this compiles against and not off a newer checkout.
+ * the bytecode of the shipped jars, 0.9.1 and 0.9.2-alpha.4, and not off a newer checkout.
  * <p>
  * A separate object fails that identity test, so the same {@code push} takes {@code copySlow}, which
  * asks {@code VertexSerializerRegistry} for a serializer from one format to the other.
