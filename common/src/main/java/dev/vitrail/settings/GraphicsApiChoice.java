@@ -2,6 +2,8 @@ package dev.vitrail.settings;
 
 import dev.vitrail.Vitrail;
 
+import net.minecraft.client.Minecraft;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -55,10 +57,14 @@ public enum GraphicsApiChoice {
 	/**
 	 * What the instance asks for, or {@link #DEFAULT} where it asks for nothing this understands.
 	 * <p>
-	 * Resolved against the working directory rather than a game directory: the launcher runs the
-	 * game with the instance as its working directory, and at the moment this is first read there is
-	 * nothing else to ask. A typo reads as the default and says so, because a setting that silently
-	 * means something else is worse than one that is ignored out loud.
+	 * Resolved against the game's own directory, which exists by the time this is asked even though
+	 * the mod does not: {@code Minecraft} assigns its static instance and its game directory in the
+	 * first lines of its constructor, and the read this answers is the one further down that same
+	 * constructor. The working directory is the fallback for the case where even that is not up
+	 * yet, and the launcher makes the two the same anyway.
+	 * <p>
+	 * A typo reads as the default and says so, because a setting that silently means something else
+	 * is worse than one that is ignored out loud.
 	 */
 	public static GraphicsApiChoice read() {
 		Path file = file();
@@ -96,7 +102,16 @@ public enum GraphicsApiChoice {
 		}
 	}
 
+	/**
+	 * Where the choice lives, under the game's directory, or under the working directory while the
+	 * game has none to give.
+	 */
 	private static Path file() {
-		return Path.of("vitrail", FILE);
+		Minecraft minecraft = Minecraft.getInstance();
+		Path directory = minecraft == null ? null : minecraft.gameDirectory.toPath();
+
+		return directory == null
+				? Path.of("vitrail", FILE)
+				: directory.resolve("vitrail").resolve(FILE);
 	}
 }
