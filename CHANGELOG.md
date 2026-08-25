@@ -619,6 +619,10 @@ what the next one holds.
   nausea, where it should hold still in front of the camera. The pack was being handed the whole
   screen distortion as the hand's walk bob, and it is the hand's clip position a pack writes
   through that. Walking and being hit were already right.
+- The hitch when joining a world, crossing a dimension or switching packs is shorter. Every
+  shader program used to clear its own copy of the same one-pixel textures each time the pack was
+  rebuilt, about ninety GPU stops in a single frame, hardest felt where every stop is a queue
+  submission of its own. They are now made once and shared.
 
 ## 0.2.0-alpha.1
 
