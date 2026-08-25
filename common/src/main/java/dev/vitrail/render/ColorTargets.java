@@ -578,6 +578,16 @@ final class ColorTargets {
 	 * The texels stay where they are. A copy would be a GPU stop, and both halves already carry
 	 * the same format. Mip levels past nought are rebuilt from nought before any program reads
 	 * one, the same as they were when this used to copy.
+	 * <p>
+	 * Iris copies here and says in the same breath that it would rather not:
+	 * {@code FinalPassRenderer} carries "we merely copy it from alt to main, this works for the
+	 * most part but it's not perfect", the better approach being framebuffers for every other
+	 * frame. This backend builds its pass descriptor per frame, so it can have that for nothing.
+	 * <p>
+	 * <strong>The debug labels cross over and are not corrected.</strong> A surface is named at
+	 * allocation and keeps that name, so after an odd number of frames the texture labelled
+	 * {@code Vitrail colortexN alt} is the main half. It costs nothing at runtime and it misreads
+	 * badly in a GPU capture, which is where a target is looked up by name.
 	 */
 	void swapBack(List<Integer> targets) {
 		for (int index : targets) {
