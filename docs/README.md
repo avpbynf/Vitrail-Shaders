@@ -59,9 +59,11 @@ That choice has consequences worth knowing about, because they explain most of w
 observe:
 
 - **The cost is paid at load, not per frame.** Some of it lands at selection and the rest in the
-  frames just after, because pipelines are compiled one per frame on purpose rather than all at
-  once. Until the last one is ready the chain draws nothing at all and the game's own image is what
-  you see, which is also what happens for a moment after every resource reload.
+  frames just after, because pipelines are compiled on a budget of the frame rather than all at
+  once. Until the composites and the terrain are ready the chain draws nothing, and neither does the
+  world: the HUD stays up and a line above it says the pack is still compiling. The leftover
+  families compile on their first draw. The same wait comes back for a moment after every resource
+  reload.
 - **A pack that cannot be translated fails loudly**, not as a corrupt image twenty minutes later.
   When Vitrail refuses something, the log names it.
 - **Uniform and sampler binding is decided up front**, so a pack that asks for something the

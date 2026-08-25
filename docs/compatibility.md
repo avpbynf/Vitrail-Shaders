@@ -48,18 +48,17 @@ words at the moment it happened.
 
 The engine refuses a pack rather than drawing something wrong with it, and it names the reason.
 
-**A pack can be refused for using a graphics feature this backend does not have.** Compute shaders,
-shader storage buffers, storage images, and one- or three-dimensional samplers are closed by the
-game's own compiler, not by missing effort here. A pack built around voxel lighting or GPU-side
-data structures will hit this. The Vulkan device can already run a compute dispatch and write a
-storage image when asked outside that compiler; that is a fact about the backend, not a pack
-feature, and no capability define is posed for it.
+**A pack can be refused for using a graphics feature this backend does not have.** The game's own
+compiler closes several of them by name, not by missing effort here, and
+[translation](translation.md) carries which. Storage images, storage buffers and a pack's shadow
+compute are no longer on that list: they are served beside that compiler rather than through it,
+which is what `IRIS_FEATURE_CUSTOM_IMAGES` announces and why voxel lighting draws. The full-screen
+shadow composites are a different family and are still skipped, the log naming them at load.
 
 Of the packs used for testing, Reverie is the one in that position, and it says so itself. A pack
 can declare the features it cannot be drawn without, and Reverie declares several. That line is read
 before any of its programs is translated, so the refusal names what the pack asked for and did not
-get (the log lists them) rather than the symptom that would have come later: a storage block,
-which compiles but never enters a bind group, so the draw would go against nothing.
+get, the log listing them, rather than the symptom that would have come later.
 
 **Any name this engine has not built refuses the declaration.** One name is built and served
 today, `CUSTOM_IMAGES`, so a pack that requires it alone loads; every other name still refuses

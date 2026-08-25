@@ -32,9 +32,14 @@ what make a selection real. Clicking a pack while shaders are off also switches 
 the reference's answer to a real confusion: before it, a pack could not be picked at all in that
 state and nobody worked out that the toggle came first.
 
-**The switch between the two views applies on the way through.** The reference's own note gives the
-reason: without it, picking a pack in the list and then opening the settings would open the settings
-of the pack *before* it, since the pages are built from the pack that is loaded.
+**The switch between the two views reads the pack whose settings are asked for, and does not apply
+it.** The reference applies at that point, and its own note gives the reason: without something
+there, picking a pack in the list and then opening the settings would open the settings of the pack
+*before* it, since the pages are built from the pack that is loaded. The reason holds and the price
+does not. Applying is the whole of a pack switch, on that pack's own default profile, so anybody
+meaning to open a heavy pack, turn it down and then apply paid the heavy profile in full first.
+Reading the chosen pack's properties answers the same need for nothing, the loaded pack goes on
+drawing, and Apply stays the one thing that costs.
 
 Escape unwinds one step at a time: the hidden screen comes back, then one page, then the pack list,
 then the screen closes. Which view it opens on is a line of `vitrail/options.txt`, alongside that

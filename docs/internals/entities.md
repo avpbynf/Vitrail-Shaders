@@ -16,13 +16,17 @@ colour attachment, so nothing writing more than one target can be written from i
 has no pass open at all and holds the whole group, which is what lets the engine open one pass over
 a **run** of draws and hand the pack every draw buffer it asked for.
 
-A run and not the group. One pass carries one set of attachments and one pipeline's worth of state,
-so the pass lasts exactly as long as consecutive draws keep asking for the same program, and
-anything else closes it: another program, geometry the engine does not serve, the end of the group.
-Nothing is reordered to make runs longer, because the order the game walks its draws in is the order
-things overlap in. A group whose last draw was the engine's is closed at the return of the group,
-which is not tidiness: the encoder allows one pass at a time, so a pass left standing does not leak,
-it makes the next thing the game draws throw.
+A run and not the group. One pass carries one set of attachments, so the run lasts as long as the
+draws that follow keep writing the same colour and depth images over the same area, whatever program
+they belong to: `GeometryHold` is what arbitrates that, and a different set of attachments, a
+different area, or anything that cannot be recorded inside a pass at all, which is a copy, a clear
+or a composite, is what ends it. Nothing is reordered to make runs longer, because the order the
+game walks its draws in is the order things overlap in. A run therefore outlives the group that
+started it, and the encoder still allows one pass at a time: a foreign `createRenderPass` ends the
+hold on its way in, which is what keeps a pass left standing from making the next thing the game
+draws throw. Two of them do not end it, and they are the point rather than an oversight: a leftover
+Immediate draw and Distant Horizons' own object renderer join the run when they write the same
+images, the way the reference leaves its framebuffer bound for them.
 
 **What decides which program serves a draw is the `RenderPipeline`**, not the render type and not
 the texture. That is the reference's key too, and the reason is that a render type is made per

@@ -50,8 +50,10 @@ zero to the first empty slot drops real programs.
 
 A compute program hangs a single-letter suffix off a name that has to be valid without it, and the
 suffix is recognised on the numbered families and on two of the unnumbered names, not on the
-geometry names. Vitrail reads those files, names them in the log and runs none of them, so what
-their order would be is the reference's business and not this engine's yet.
+geometry names. Vitrail reads those files and names them in the log. One family of them runs, the
+shadow compute, translated like any other unit and dispatched once a frame. The rest are named and
+go no further, so what their order among themselves would be is the reference's business and not
+this engine's yet.
 
 Stages are never paired or cross-checked. A compute program and a fragment program with the same
 slot name coexist as independent entries, which is a real case.

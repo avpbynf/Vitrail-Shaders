@@ -336,7 +336,7 @@ The End's two pieces answer that uniform with the *custom sky* stage, and that i
 reference rather than chosen. The reference sets a stage at the head of each overworld method of the
 sky renderer and sets none in either End method; what it does set, once, is the custom-sky stage at
 the head of the whole sky pass, as a heuristic for sky mods drawing before the game does. The End
-branch never reaches a method that replaces it, so custom sky is what a pack reads there - for the
+branch never reaches a method that replaces it, so custom sky is what a pack reads there, for the
 End's own sky and for its flash alike. The flash is worth naming for what it is not: it is a clock,
 seeded every six hundred ticks and fading in and out over a stretch drawn at random, not an event
 anything in the world sets off.
@@ -412,13 +412,13 @@ The End is the case to be careful with, and in two ways at once. It draws no **d
 is the piece the horizon cone rides in: there is no band under the End's horizon to close, and
 nothing there gates itself on the directive that gates the cone. The disc is also the piece that
 cuts the layer in the overworld, so the End needs a piece of its own that cuts it, or its sky is
-drawn into the pack's target and then painted over with the game's - which in the End holds nothing
+drawn into the pack's target and then painted over with the game's, which in the End holds nothing
 but the frame's clear, the draw having been taken from it. The End's own sky is that piece.
 
-**Which is why the cut is a property of the piece and not of its blending.** The obvious reading -
-a piece that writes outright claims its pixels, a piece that blends does not - is right for seven of
-the eight and wrong for the End's sky, whose pipeline blends and whose mesh is nonetheless opaque at
-every vertex behind a texture with no transparent texel in it. Read off the blend, the End loses its
+**Which is why the cut is a property of the piece and not of its blending.** The obvious reading,
+that a piece which writes outright claims its pixels and a piece that blends does not, is right for
+seven of the eight and wrong for the End's sky, whose pipeline blends and whose mesh is nonetheless
+opaque at every vertex behind a texture with no transparent texel in it. Read off the blend, the End loses its
 sky to a flat fog colour and nothing in the log says so.
 
 ### The sun's path is tilted for the bodies as well as for the light

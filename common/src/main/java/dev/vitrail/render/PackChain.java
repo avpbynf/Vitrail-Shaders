@@ -1441,8 +1441,14 @@ public final class PackChain {
 	}
 
 	/**
-	 * Dispatches {@code shadowcomp} after the shadow geometry, as Iris does at
-	 * {@code ShadowRenderer.java:631}.
+	 * Dispatches {@code shadowcomp} at the head of the frame, over the shadow geometry the frame
+	 * before it wrote.
+	 * <p>
+	 * Iris dispatches it inside its own shadow render ({@code ShadowRenderer.java:631-632}), which is
+	 * the same moment relative to the READERS: there the map is drawn and read within one frame,
+	 * here the shadow stage stands at the end of a frame and the map is one frame late, so the
+	 * moment that shares the frame of the gbuffers reading the volumes is this one. The caller in
+	 * {@code EngineStages} carries what putting it beside the shadow map instead would cost.
 	 */
 	public static void dispatchShadowCompute() {
 		PackChain chain = active;
@@ -1754,9 +1760,10 @@ public final class PackChain {
 			build(device);
 		}
 
-		// Pipelines compile before anything of the chain is drawn. The loading overlay is what the
-		// player sees for those frames, and drawable() keeps the terrain aside or the world would
-		// be drawn into a colour target this has no final ready to bring back.
+		// Pipelines compile before anything of the chain is drawn. The world is not drawn at all for
+		// those frames and the HUD is what the player sees, with a line above it saying the pack is
+		// still compiling; drawable() keeps the terrain aside or the world would be drawn into a
+		// colour target this has no final ready to bring back.
 		//
 		// The targets and the buffers first and the compilation second, which is not the order this
 		// had. What the warm up holds back is the drawing and not the frame, so the block ring and

@@ -220,8 +220,13 @@ The Java device has no compute. Its shader-type enumeration is a vertex stage an
 precompile accepts a render pipeline and nothing else, a texture's usage bits are copy, sample,
 attachment and cubemap, and bind-group reflection enumerates uniform buffers and sampled images.
 A pack compute unit that went through that path would compile as a vertex shader or not at all,
-and a storage image it declared would be bound to nothing. That is still true, and it is why this
-engine poses no `IRIS_FEATURE_` for custom images.
+and a storage image it declared would be bound to nothing. That is still true of the facade, and it
+is why nothing of a pack's compute goes through it: the pipeline is built against the backend below,
+and the walk is widened around the facade at three points. The reflected entry list gains the
+storage images and blocks it never enumerates, the layout emits a storage type for those names
+instead of a combined sampler or a uniform buffer, and the descriptor written at bind time carries
+the VMA handle and the three-dimensional view. `IRIS_FEATURE_CUSTOM_IMAGES` is posed on that road
+being open, and it is the only capability define this engine poses today.
 
 The Vulkan backend behind that facade already has the rest. The device object hands out the
 `VkDevice`, the VMA allocator, and a graphics queue created with both the graphics and compute
@@ -236,8 +241,10 @@ storage bit, so a storage image has to be allocated through VMA rather than thro
 
 None of this is inference. A compute shader built with that shaderc, dispatched against a storage
 image allocated through VMA, writes texels the same frame reads back unchanged: the road is open,
-and what is missing is a stage in this engine that walks it rather than anything in the backend.
-Whether a pack's own compute is served is a separate question, answered where the pack's chain is.
+and nothing of it was ever in the backend's way. The stage that walks it is `PackCompute`, which
+compiles a pack's `shadowcomp` and dispatches it at the head of the frame. Which programs it serves,
+and why that moment rather than beside the shadow map that feeds it, is answered where the pack's
+chain is.
 
 ## Small things that cost a lot to rediscover
 

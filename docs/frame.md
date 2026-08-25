@@ -104,10 +104,12 @@ accident to debug.
 
 ### A copy is not a conversion
 
-Targets are copied only between two halves of one doubled target, where the format is the same on
-both sides by construction. Copying between two *different* formats passes every check and hands
-back nonsense: the texture copy reinterprets bits rather than converting them, and the only thing
-checked on the way in is that both formats carry a colour aspect. The game's colour target is
+The one copy left on a target is between the two halves of the shadow depth pair, where the format
+is the same on both sides by construction. The doubled colour targets are not copied at all: the two
+surfaces swap names at the end of the frame, which is the same fact for nothing. Copying between two
+*different* formats passes every check and hands back nonsense: the texture copy reinterprets bits
+rather than converting them, and the only thing checked on the way in is that both formats carry a
+colour aspect. The game's colour target is
 eight-bit RGBA and a typical pack target is a packed float triple; both are thirty-two bits per
 pixel and hold completely different things.
 
@@ -190,7 +192,7 @@ pack's own geometry must not be repainted. Only a depth tells those two pixels a
 game's target and reached the pack through the seed, which cost the albedo one trip through eight
 bits a channel: a pack that packs two values into each channel of a wider target lost the first of
 them there. They write the mask now and take that buffer in the pack's own targets, which was not
-open to them while the mask was a flag - the cut then compared the world's depth with one taken
+open to them while the mask was a flag. The cut then compared the world's depth with one taken
 before a single feature was drawn, and a mob standing in front of a block moves that depth by
 construction, so every pixel of it answered "the game drew in front" whatever mask it wrote.
 
@@ -221,9 +223,9 @@ blend then adds that darkness.
 What decides whether a family can come in at all is **the mesh the game binds for it**, not how
 interesting the family is. The door reads one vertex layout, the game's entity format, and names the
 attributes a pack expects out of its elements. A pipeline binding anything else would have every
-attribute read from the wrong offset - a picture, and a wrong one, with nothing to say so - so it is
-refused and named in the log instead. The glint is the one exception and it is a narrow one: it is
-drawn from a two-element quad the door decodes as well.
+attribute read from the wrong offset, which is a picture and a wrong one with nothing to say so, so
+it is refused and named in the log instead. The glint is the one exception and it is a narrow one:
+it is drawn from a two-element quad the door decodes as well.
 
 That layout is the game's own with **three elements appended**: the numbers a pack tells one kind of
 mob, block entity or held item apart by, then the middle of the sprite a face is mapped to and the

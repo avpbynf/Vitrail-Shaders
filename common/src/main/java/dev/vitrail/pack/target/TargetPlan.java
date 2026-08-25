@@ -652,7 +652,7 @@ public final class TargetPlan {
 					.filter(name -> !ProgramNames.shadowComposite(ProgramNames.familyOf(name)))
 					.toList();
 			if (!shadow.isEmpty()) {
-				notes.add("shadow compute after the shadow map: " + shadow);
+				notes.add("shadow compute served: " + shadow);
 			}
 
 			if (!other.isEmpty()) {
