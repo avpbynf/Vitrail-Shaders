@@ -63,7 +63,22 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 	/**
 	 * The game ends every pass with a full memory barrier. Iris does not: it binds an FBO and
 	 * draws. On MoltenVK that full barrier is a Metal wait, which is the extra queue-submit count
-	 * on Apple Silicon. Our own passes only need write-then-sample, so they get that instead.
+	 * on Apple Silicon. Our own passes need write-then-sample and write-then-write, and get a
+	 * dependency naming those two rather than the whole of memory.
+	 * <p>
+	 * <strong>Write-then-write is half of it, and leaving it out is what an FBO gives for free.</strong>
+	 * Under OpenGL two draws into the bound framebuffer land in the order they were issued, so Iris
+	 * never has to say it; two Vulkan passes writing the same image are ordered by nothing at all.
+	 * That is every target the chain turns over, and the emptying now rides the load-op of the pass
+	 * that first attaches it rather than being a clear of its own, so a pass and the clear meant to
+	 * precede it are two writes to one image with no dependency between them.
+	 * <p>
+	 * <strong>What the masks deliberately leave out, and the day that stops being safe.</strong>
+	 * A pass of ours writes colour and depth attachments and nothing else, so the source names
+	 * those two. Nothing downstream is a compute dispatch, an image store or a shader storage
+	 * buffer, so the destination names no compute stage and no storage access. The day a pack's
+	 * compute programs are dispatched, both ends stop covering what the frame does, and the
+	 * dependency has to be widened here rather than worked around where it shows.
 	 */
 	@Redirect(method = "submitRenderPass", at = @At(value = "INVOKE",
 			target = "Lcom/mojang/blaze3d/vulkan/VulkanCommandEncoder;memoryBarrier("
@@ -103,10 +118,20 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR)
+				// The writes sit here beside the reads, and each of the three is reached every frame:
+				// a colour target the next pass writes, or that the emptying writes through its
+				// load-op; the depth image the next geometry pass tests and writes, and that the
+				// shadow map's own emptying clears; and the mip blit filling the levels of a target
+				// whose base the pass that just closed wrote. Named as reads alone, all three were
+				// write-after-write with nothing between them, which a driver is free to run in
+				// either order.
 				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_READ_BIT_KHR);
+						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR);
 		VkDependencyInfo info = VkDependencyInfo.calloc(stack)
 				.sType$Default()
 				.pMemoryBarriers(barrier);

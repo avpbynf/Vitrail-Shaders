@@ -63,9 +63,10 @@ what the next one holds.
 - **A pack's frame opens fewer GPU stops.** Clears ride as the first pass's load, leftover
   sampled-before-write clears share one empty pass per size, mip chains blit instead of drawing
   each level, consecutive geometry that writes the same images stays in one pass, ping-pong
-  targets swap names instead of copying texels back, and our own passes wait only for
-  sample-after-write. Same picture. Written for the extra submits a Mac report was counting;
-  whether the frame rate moves is still that machine's to measure.
+  targets swap names instead of copying texels back, and our own passes end on a wait naming what
+  the next one samples and what it writes, rather than on the game's wait for the whole of memory.
+  Same picture. Written for the extra submits a Mac report was counting; whether the frame rate
+  moves is still that machine's to measure.
 
 - **Pass uniforms reuse scratch matrices** instead of allocating a model-view-projection and a
   normal matrix on every fill. Same numbers.
