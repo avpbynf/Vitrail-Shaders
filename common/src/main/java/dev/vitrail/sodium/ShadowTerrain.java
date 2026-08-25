@@ -232,11 +232,19 @@ public final class ShadowTerrain {
 			// numbers mean the cull did not happen, and nothing on screen would say so. The table is
 			// named because a second load of the same pack prints this again, word for word: it is
 			// what tells the two readings apart, not a property of the cull itself.
+			//
+			// Two counts of the light's list rather than one, because they answer different
+			// questions and only the second one compares with anything outside this engine. The
+			// walked count is every section with something to render that the cull kept, which is
+			// what says how tight the cull was; the drawn count leaves out those carrying no block
+			// geometry, which are the ones a draw costs nothing for.
 			if (measuring && seen > 0) {
 				measured = BlockStateIds.generation();
+				SortedRenderLists lists = manager.getRenderLists();
 				Vitrail.logger().info("Shadow cull walked {} sections for the light against {} "
-						+ "for the camera, on block table {}, culling {}",
-						sections(manager.getRenderLists()), seen, measured, cull.culling());
+						+ "for the camera, {} of the light's with geometry to draw, on block "
+						+ "table {}, culling {}",
+						sections(lists), seen, drawn(lists), measured, cull.culling());
 			}
 
 			draw(renderer, minecraft, camera);
@@ -305,12 +313,42 @@ public final class ShadowTerrain {
 		}
 	}
 
+	/** Every section a walk kept, which is what says how tight the shape it measured against was. */
 	private static int sections(SortedRenderLists lists) {
 		int count = 0;
 		var iterator = lists.iterator(false);
 		while (iterator.hasNext()) {
 			ChunkRenderList list = iterator.next();
 			count += list.size();
+		}
+
+		return count;
+	}
+
+	/**
+	 * The kept sections that carry block geometry, which are the only ones the draw below spends
+	 * anything on: it walks {@code sectionsWithGeometryIterator} and steps over the rest
+	 * ({@code render/chunk/DefaultChunkRenderer}).
+	 * <p>
+	 * <strong>This is the count that compares with the reference, and the one beside it is
+	 * not.</strong> Iris puts a section count of its shadow list on the F3 screen and it is this
+	 * one: it takes {@code getSectionStatistics} inside its own shadow render list scope
+	 * ({@code shadows/ShadowRenderer.java:606}, the scope opened at {@code :477}), which Sodium
+	 * answers from {@code getSectionsWithGeometryCount} and not from the list's size
+	 * ({@code render/chunk/RenderSectionManager.getVisibleChunkCount}).
+	 * <p>
+	 * What the two differ by is narrow, and naming it is what says how far apart the numbers may
+	 * stand. A render list holds every section with anything to render at all, block entities and
+	 * animated sprites counted in ({@code RenderSectionFlags.MASK_NEEDS_RENDER}); one bit of that
+	 * mask is what reaches a draw. So a section with nothing in it is on neither side of the
+	 * comparison, and the gap is the sections whose only content is a block entity or an animated
+	 * sprite.
+	 */
+	private static int drawn(SortedRenderLists lists) {
+		int count = 0;
+		var iterator = lists.iterator(false);
+		while (iterator.hasNext()) {
+			count += iterator.next().getSectionsWithGeometryCount();
 		}
 
 		return count;
