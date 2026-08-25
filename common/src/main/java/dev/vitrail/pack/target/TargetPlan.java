@@ -184,17 +184,60 @@ public final class TargetPlan {
 
 		List<ProgramSet.ProgramKey> entries = fragmentsOf(programs, draft.place);
 
+		Map<String, String> defines = settings.globalDefines(options);
 		read(source, options, settings, properties, entries, draft);
-		walk(properties, options, settings.globalDefines(options), entries, filter, draft);
-
-		draft.computes = programs.keys().stream()
-				.filter(key -> key.stage() == ProgramStage.COMPUTE && key.dimension().equals(draft.place))
-				.map(key -> key.name().baseName())
-				.sorted()
-				.distinct()
-				.toList();
+		walk(properties, options, defines, entries, filter, draft);
+		computes(properties, options, defines, programs, draft);
 
 		return new TargetPlan(draft);
+	}
+
+	/**
+	 * The compute programs of this place, minus the ones the pack's own switch turns off.
+	 * <p>
+	 * Iris refuses a disabled program at the source: its provider hands back nothing for the name,
+	 * so no family is read and none is compiled, computes included
+	 * ({@code ShaderPack.java:261-265} fills the list, {@code :290-294} refuses on it). Here the
+	 * toggles are applied where each list is built, and this one was left out while nothing ran
+	 * it. BSL conditions its three {@code shadowcomp} programs on
+	 * {@code MULTICOLORED_BLOCKLIGHT}, and the setting takes with it both the {@code image.}
+	 * directives that give those images a format and the colour tables the compute indexes, so a
+	 * pack switched off does not merely draw nothing: it does not compile.
+	 */
+	private static void computes(ShaderProperties properties, OptionIndex options,
+			Map<String, String> defines, ProgramSet programs, Draft draft) {
+		Map<String, Boolean> toggles = properties.programToggles(defines, options);
+		Map<String, String> conditions = properties.programConditions(defines);
+		Set<String> kept = new TreeSet<>();
+		Map<String, String> off = new LinkedHashMap<>();
+
+		for (ProgramSet.ProgramKey key : programs.keys()) {
+			if (key.stage() != ProgramStage.COMPUTE || !key.dimension().equals(draft.place)) {
+				continue;
+			}
+
+			// The file the pack ships with its extension taken off, which is the name Iris looks
+			// up, and NOT the base name. A compute hangs off a composite by a letter, so
+			// world0/composite21_a is a name of its own and a pack switching off
+			// world0/composite21 has said nothing about it. Iris keeps those computes and runs
+			// them with no fragment stage at all, CompositeRenderer.java:135-141.
+			String file = key.file();
+			int dot = file.lastIndexOf('.');
+			String path = dot < 0 ? file : file.substring(0, dot);
+			String name = key.name().baseName();
+			if (Boolean.FALSE.equals(toggles.get(path))) {
+				off.put(name, conditions.getOrDefault(path, "shaders.properties"));
+				continue;
+			}
+
+			kept.add(name);
+		}
+
+		// Several files answer for one name once the letter is off it, and the name runs as soon
+		// as one of them is on: what the plan carries downstream is the name.
+		off.keySet().removeAll(kept);
+		draft.computes = List.copyOf(kept);
+		draft.disabledComputes.putAll(off);
 	}
 
 	/**
@@ -660,6 +703,16 @@ public final class TargetPlan {
 			}
 		}
 
+		// Named apart from the passes the engine leaves out, because nothing here is missing: the
+		// pack asked for these to be absent, and a reader who finds a compute in the folder and no
+		// dispatch in the log is owed the setting that answers for it.
+		if (!draft.disabledComputes.isEmpty()) {
+			notes.add("compute programs this place ships and the pack switches off: "
+					+ draft.disabledComputes.entrySet().stream()
+							.map(entry -> entry.getKey() + " (" + entry.getValue() + ")")
+							.collect(Collectors.joining(", ")));
+		}
+
 		if (!draft.shadowComposites.isEmpty()) {
 			notes.add("shadow composites skipped, they draw full screen over the shadow colour "
 					+ "buffers on a flip counter of their own and this engine runs no stage there, "
@@ -817,6 +870,7 @@ public final class TargetPlan {
 
 		private final List<String> running = new ArrayList<>();
 		private final Map<String, String> disabled = new LinkedHashMap<>();
+		private final Map<String, String> disabledComputes = new LinkedHashMap<>();
 		private final Set<String> shadowComposites = new TreeSet<>();
 		private final Set<Integer> written = new TreeSet<>();
 		private final Set<Integer> sampled = new TreeSet<>();
