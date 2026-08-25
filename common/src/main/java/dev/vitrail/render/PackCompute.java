@@ -68,9 +68,10 @@ import java.util.Set;
  * <p>
  * Complementary's floodfill lives in {@code shadowcomp.csh}. The Java facade has no compute, so
  * the pipeline is built the way the storage probe was: shaderc kind 2, a VMA storage image,
- * push descriptors. Iris runs it inside its shadow render ({@code ShadowRenderer.java:631},
- * {@code compositeRenderer.renderAll()}), before its gbuffers in the SAME frame; under this
- * engine's deferred shadow stage, the head of the frame is that moment's translation.
+ * push descriptors. Iris runs it inside its shadow render ({@code ShadowRenderer.java:631-632},
+ * the debug group and the {@code compositeRenderer.renderAll()} under it), before its gbuffers in
+ * the SAME frame. Under this engine's deferred shadow stage, the head of the frame is that
+ * moment's translation.
  *
  * @see <a href="https://github.com/IrisShaders/Iris">Iris ComputeProgram, LGPL-3.0</a>
  */

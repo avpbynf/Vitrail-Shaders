@@ -49,9 +49,9 @@ import java.util.stream.Stream;
  * <p>
  * <b>Two views and one screen</b>: the list of packs in the folder, {@link PackList}, and the pages of
  * the pack being configured, {@link OptionList}. The switch between them sits above the bottom row, and
- * it applies on the way through, which is Iris's own note and not a detail: picking a pack in the list
- * without applying and then opening the settings would otherwise open the settings of the pack before
- * it.
+ * it READS the pack whose settings are asked for rather than applying it. That is where this parts
+ * from Iris, which applies at that point for a reason that holds and at a price that does not, and
+ * {@link #switchView} carries the whole of it.
  * <p>
  * <b>Three buttons on the bottom row, and leaving applies.</b> Cancel drops what was clicked and
  * leaves, Apply writes and reloads without leaving, Done applies and leaves. That last one is Iris's

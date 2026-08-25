@@ -188,9 +188,9 @@ than the directive gives them targets exist, so the two counts genuinely differ.
 target to carry both render-attachment and copy-destination usage. Allocation therefore happens
 outside any pass. Pack colour and shadow clears are remembered until the first pass that writes
 them and become that pass's load operation, which is `glClear` as the FBO is bound. A target this
-pass samples and will not write is flushed as one empty pass per size, eight attachments at a
-time, still a load-op rather than `clearColorTexture`. Being outside a pass is the caller's job,
-not something the refusal will catch. The device hands back a **fresh encoder wrapper on every
+pass samples and will not write is flushed as one empty pass per size, as many attachments at a
+time as the device says a pass may carry, still a load-op rather than `clearColorTexture`. Being
+outside a pass is the caller's job, not something the refusal will catch. The device hands back a **fresh encoder wrapper on every
 call**, over one backend, and the "in a render pass" guard is a field of the wrapper: an encoder
 taken for a clear knows nothing of a pass another wrapper opened. Each site here takes its own
 encoder, which is cheap and correct where it stands, and worth nothing as a check. That a copy does

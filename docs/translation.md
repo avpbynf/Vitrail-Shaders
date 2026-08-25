@@ -298,13 +298,16 @@ for that path, three different mechanisms, and it is worth knowing which:
   a vertex stage and a fragment stage and nothing else, and the device exposes no way to precompile
   anything but a render pipeline. The Vulkan backend behind that facade already has a compute-capable
   queue, a public `VkDevice`, and the shaderc the game embeds, whose compute kind the facade never
-  passes. That path has been made to dispatch and to write. Translating a pack's own compute unit
-  is a separate question, because a translated unit still needs a stage that schedules it.
+  passes. That path has been made to dispatch and to write, and a pack's own shadowcomp goes down
+  it: translated like any other unit, compiled by the same shaderc, dispatched at the head of the
+  frame. The other compute names are named in the log and go no further, translation included.
 - **Storage buffers and storage images are worse than refused on the facade: they are ignored.**
   Reflection asks for uniform buffers, sampled images, outputs and inputs, and never enumerates
-  them. They pass compilation and are then bound to nothing. A storage image allocated through VMA
-  and bound as a push descriptor can still be written by a compute shader; the game's texture usage
-  bits never set the Vulkan storage flag, so `createTexture` cannot be that image.
+  them. On the facade's own walk they pass compilation and are bound to nothing, so the walk is
+  widened around it: the reflected entries gain those names, the layout emits a storage type for
+  them, and the descriptor written at bind time carries the handle. The image itself is allocated
+  through VMA and bound as a push descriptor, because the game's texture usage bits never set the
+  Vulkan storage flag and `createTexture` therefore cannot be that image.
 
 No amount of translation work makes a pack compute unit or a pack storage image pass through the
 facade. Vulkan itself supports all of them. The layer above does not, and the backend below it
