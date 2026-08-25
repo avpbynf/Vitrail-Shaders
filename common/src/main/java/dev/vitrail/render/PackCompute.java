@@ -80,6 +80,14 @@ final class PackCompute implements AutoCloseable {
 	private static final int SHADERC_VULKAN_1_2 = 4202496;
 	private static final int SHADERC_COMPUTE = 2;
 
+	/**
+	 * A common ceiling on a pushed descriptor set, the same one the graphics side carries in
+	 * {@link PackPass}. Nothing in the game asks the device for its own, so a dispatch past this
+	 * is named and still made: the failure, if it comes, is a driver error that the line makes
+	 * readable.
+	 */
+	private static final int PUSH_DESCRIPTORS = 32;
+
 	private final List<Pass> passes;
 	private boolean announced;
 
@@ -329,6 +337,15 @@ final class PackCompute implements AutoCloseable {
 				ComputeShader.Compiled compiled = ComputeShader.compile(vulkan, this.label, spirv);
 				this.shaderModule = compiled.module();
 				this.entries = compiled.entries();
+				// Named and still dispatched, which is what the graphics path does with the same
+				// ceiling: a device is only obliged to allow this many descriptors in one pushed
+				// set, and going past it is undefined rather than slow. Said here, once, so that a
+				// driver error later has a line in the log that predicted it.
+				if (this.entries.size() > PUSH_DESCRIPTORS) {
+					Vitrail.logger().warn("shadow compute {} pushes {} descriptors in one set, past "
+							+ "the {} a device commonly allows at once", this.path,
+							this.entries.size(), PUSH_DESCRIPTORS);
+				}
 			} catch (Exception e) {
 				Vitrail.logger().warn("shadow compute {} SPIR-V failed: {}", this.path, e.toString());
 				return;
