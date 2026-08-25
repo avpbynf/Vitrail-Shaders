@@ -2603,8 +2603,8 @@ public final class PackChain {
 
 		List<Integer> back = unfolded.swapBack();
 		if (!back.isEmpty()) {
-			Vitrail.logger().info("{} targets are copied back from their far half at the end of every "
-					+ "frame, because the pack keeps them and the chain left them there: {}",
+			Vitrail.logger().info("{} targets swap their two halves at the end of every frame, because "
+					+ "the pack keeps them and the chain left them on the far one: {}",
 					back.size(), back);
 		}
 
