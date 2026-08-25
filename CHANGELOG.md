@@ -46,6 +46,12 @@ what the next one holds.
   how many textures were cleared and how many were copied, then the labels, most frequent first.
   Always on, once per pack load. That is the number a Mac trace of queue submits is counting.
 
+- **The F3 screen says what the shadow map cost.** Two lines beside the version and the pack:
+  how many world sections were drawn into the map out of how many are loaded, at what render
+  distance, and what the walk for the light measured against. They are the lines Iris shows for
+  the same thing, in the same shape, so a screenshot taken under one can be read against a
+  screenshot taken under the other. Nothing has to be switched on for them to appear.
+
 ### Changed
 
 - **Chloride is no longer required, on either loader.** One thing was behind that
