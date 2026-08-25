@@ -432,8 +432,10 @@ final class GeometryProgram {
 		this.path = loaded.path();
 		this.gameTransforms = loaded.readsGameTransforms();
 		this.blockLabel = () -> "Vitrail " + pass.family() + " OfGlobals";
-		this.passLabel = () -> "Vitrail " + pass.family();
-		this.shadowLabel = () -> "Vitrail shadow " + pass.family();
+		String passName = "Vitrail " + pass.family();
+		String shadowName = "Vitrail shadow " + pass.family();
+		this.passLabel = () -> passName;
+		this.shadowLabel = () -> shadowName;
 		TranslatedUnit.Notes notes = loaded.program().stages().get(ProgramStage.FRAGMENT).notes();
 		int outputs = notes.fragmentOutputs();
 
