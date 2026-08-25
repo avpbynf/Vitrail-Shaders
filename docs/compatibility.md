@@ -400,6 +400,15 @@ list of its far terrain for the light, so a hill behind the camera lays a shadow
 front of it there and does not here: the mod hands its geometry over once a frame, on its own pass,
 and there is no second list to ask for.
 
+**Its far water stands behind the world**, which is worth saying because it takes an extra image
+to be true. That mod draws its water half after the entities, the block entities and the hand,
+against a depth image holding the far terrain and nothing else, so left alone it paints over all
+three and over the player in third person. Vitrail carries the world's own depth into that mod's
+volume before the water is drawn and lets the depth test hold it back. What a pack reads under the
+`dhDepthTex` names is untouched by that and is still the far terrain alone, with one thing given
+up: where the near world hides far water outright, that name answers with the far terrain behind
+the water rather than with the water, on a texel where neither is visible.
+
 One limit stays whatever the log says: past Distant Horizons' own far plane there is nothing drawn,
 and the picture there is the pack's sky, exactly as without the mod.
 

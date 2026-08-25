@@ -106,6 +106,16 @@ what the next one holds.
 
 ### Fixed
 
+- **Distant Horizons' far water no longer paints over you.** In third person, with far water
+  behind, the character came out washed out or gone entirely, and the part of him it covered
+  followed the part of the far water behind him. Everything drawn between the two halves of the
+  far terrain was covered the same way: mobs on the ground, particles, and the hand. The far
+  water is drawn after them and had no idea they were there. It now stands behind whatever the
+  game drew before it. What a pack reads under `dhDepthTex0` and `dhDepthTex1` is still the far
+  terrain and nothing else, with one thing given up: where the near world hides far water
+  outright, those names answer with the far terrain behind the water rather than with the water,
+  on a texel where neither is visible.
+
 - **Opening a world no longer crashes while leftover families are still being translated.**
   The frame used to walk those program maps as soon as the composites and the terrain were
   ready, which is the same moment the worker is still filling them.
