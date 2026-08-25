@@ -73,12 +73,15 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 	 * that first attaches it rather than being a clear of its own, so a pass and the clear meant to
 	 * precede it are two writes to one image with no dependency between them.
 	 * <p>
-	 * <strong>What the masks deliberately leave out, and the day that stops being safe.</strong>
-	 * A pass of ours writes colour and depth attachments and nothing else, so the source names
-	 * those two. Nothing downstream is a compute dispatch, an image store or a shader storage
-	 * buffer, so the destination names no compute stage and no storage access. The day a pack's
-	 * compute programs are dispatched, both ends stop covering what the frame does, and the
-	 * dependency has to be widened here rather than worked around where it shows.
+	 * <strong>Both ends also name what a pack's compute programs move.</strong>
+	 * A pass of ours no longer writes attachments and nothing else: a pack's geometry stores into
+	 * its own volumes from the fragment stage, so a storage write is one of the things a closing
+	 * pass leaves behind. And what reads next is no longer graphics alone, which is the half that
+	 * the barrier standing beside the dispatch cannot cover: that one carries storage writes as
+	 * its source, so it orders the stores of the shadow geometry against the floodfill, and
+	 * nothing in it names the ATTACHMENT writes of the same pass. The pack's compute samples the
+	 * shadow map through the same views the graphics passes bind, and shadowtex0 is a depth
+	 * attachment we wrote.
 	 */
 	@Redirect(method = "submitRenderPass", at = @At(value = "INVOKE",
 			target = "Lcom/mojang/blaze3d/vulkan/VulkanCommandEncoder;memoryBarrier("
@@ -105,10 +108,15 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 	private static void vitrail$framebufferBarrier(VkCommandBuffer commands, MemoryStack stack) {
 		VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack)
 				.sType$Default()
+				// The shader stages are here for the image stores of a pack's own geometry, which
+				// land in the volumes its compute reads and its gbuffers sample.
 				.srcStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR
-						| KHRSynchronization2.VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR)
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR)
 				.srcAccessMask(KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR)
+						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR)
 				// The vertex stage samples too, and leaving it out is not theoretical: a sampler
 				// declared in a pack's vertex unit is kept and bound like any other
 				// (ProgramTranslator collects the samplers of every stage), so a program whose
@@ -117,6 +125,7 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR)
 				// The writes sit here beside the reads, and each of the three is reached every frame:
 				// a colour target the next pass writes, or that the emptying writes through its
@@ -126,6 +135,8 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 				// write-after-write with nothing between them, which a driver is free to run in
 				// either order.
 				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT_KHR
