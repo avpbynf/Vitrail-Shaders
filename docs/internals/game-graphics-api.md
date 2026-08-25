@@ -117,7 +117,16 @@ a pass rather than being a clear of its own, which makes it one of those writes.
 geometry that writes the same colour and depth images stays in one pass, which is what Iris does by
 leaving `defaultFB` bound (`IrisRenderingPipeline.bindDefault`). A later composite, a copy, or a
 different framebuffer ends that hold first. Mip chains are filled with `vkCmdBlitImage` on the
-frame's command buffer, the Vulkan form of `glGenerateMipmap`, rather than a pass per level.
+frame's command buffer, the Vulkan form of `glGenerateMipmap`, rather than a pass per level, which
+gives up the barrier each of those passes ended on and keeps transfer barriers between the levels
+instead.
+
+**Both of those trades are on one switch**, because a narrow dependency that a driver honours by
+accident looks exactly like a correct one until somebody else's machine draws it. A file
+`vitrail/full-pass-barrier` in the instance, or `-Dvitrail.fullPassBarrier=true`, puts the game's own
+wait back at the close of our passes and sends the mip chain back to a pass per level. It is slower
+and it cannot be the cause of anything, which is the whole point: an image that comes right with it
+has named the synchronisation rather than the pass that shows it.
 
 The practical consequence is that reading in pass N+1 what pass N wrote still requires no
 synchronisation code of our own: close, open, bind. But the barrier exists only if the pass is

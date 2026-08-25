@@ -33,6 +33,15 @@ what the next one holds.
   under Video Settings picks what to come back to, and it comes back to Vulkan unless told
   otherwise.
 
+- **A switch that puts the game's own wait back after every render pass.** A pack's passes end on
+  a wait naming what the next one reads and writes, rather than on the game's wait for the whole of
+  memory. That is what makes the frame cheaper, and it is also the kind of thing a driver can honour
+  by accident, so a wrong image on one machine and a right one on another is exactly what a missing
+  wait looks like. An empty file `vitrail/full-pass-barrier` in the instance, or
+  `-Dvitrail.fullPassBarrier=true`, puts the wide wait back on both roads where one was traded away,
+  the close of a pack's pass and the filling of a mip chain. It is slower and it cannot be the cause
+  of anything, so an image that comes right with it has named the problem.
+
 - **The log names the first full frame's GPU stops.** One line says how many render passes opened,
   how many textures were cleared and how many were copied, then the labels, most frequent first.
   Always on, once per pack load. That is the number a Mac trace of queue submits is counting.

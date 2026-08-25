@@ -1,6 +1,7 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.render.MipmapCommands;
+import dev.vitrail.render.PassBarrier;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.textures.GpuTexture;
@@ -39,7 +40,9 @@ import java.util.function.Supplier;
  * below it, then the encoder's own full barrier once so the rest of the frame can sample the chain.
  * <p>
  * Closing a pass still runs the encoder's full barrier. Our own labels start with {@code Vitrail}
- * and get a write-then-sample barrier instead; the rest of the frame keeps the original wait.
+ * and get a write-then-sample barrier instead, the rest of the frame keeping the original wait.
+ * {@link PassBarrier} puts the original wait back on ours too, and sends the mip chain back to a
+ * pass per level, for a machine where the narrow one is suspected of a wrong image.
  */
 @Mixin(VulkanCommandEncoder.class)
 public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
@@ -91,7 +94,10 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 		Supplier<String> label = this.vitrail$closingLabel;
 		this.vitrail$closingLabel = null;
 		VkCommandBuffer commands = vitrail$commandBuffer();
-		if (label != null && vitrail$ours(label)) {
+		// The wide wait first, so that arming it takes every pass back to what the game does and
+		// leaves nothing of the narrow one standing. {@link PassBarrier} carries why that switch
+		// exists at all.
+		if (label != null && !PassBarrier.full() && vitrail$ours(label)) {
 			vitrail$framebufferBarrier(commands, stack);
 		} else {
 			VulkanCommandEncoder.memoryBarrier(commands, stack);
@@ -151,7 +157,12 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 
 	@Override
 	public boolean vitrail$generateMipmaps(GpuTexture texture) {
-		if (this.currentRenderPass != null || !(texture instanceof VulkanGpuTexture image)) {
+		// Refused while the wide wait is armed, so the caller goes back to a pass per level and
+		// every one of those ends on the game's own barrier. The switch would otherwise leave the
+		// mip chain on transfer barriers alone, and a reporter whose image is still wrong with it on
+		// would clear the synchronisation for a road it never put back.
+		if (PassBarrier.full() || this.currentRenderPass != null
+				|| !(texture instanceof VulkanGpuTexture image)) {
 			return false;
 		}
 

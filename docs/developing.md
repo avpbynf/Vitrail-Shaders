@@ -256,6 +256,12 @@ has diverged from the plan, and the pack is not the suspect.
 **Shader sources under the instance are read live.** Changing GLSL needs no rebuild. Only engine
 changes need one.
 
+**The narrowed synchronisation can be put back.** An empty file `vitrail/full-pass-barrier` in the
+instance, or `-Dvitrail.fullPassBarrier=true` among the JVM arguments, closes every pass on the
+game's full memory barrier and sends the mip chain back to a pass per level. It is slower and it
+cannot be the cause of a wrong image, so it is the first thing to ask of a machine that draws one
+this one does not.
+
 **The card's time per pass is in the log on request.** Started with `-Dvitrail.passTimings=N`
 among the JVM arguments, the game prints every N seconds a table of GPU time per render pass
 label, the game's and Sodium's passes beside the pack's, sorted by cost, with the share of the pass
