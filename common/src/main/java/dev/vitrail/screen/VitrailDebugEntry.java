@@ -2,6 +2,9 @@ package dev.vitrail.screen;
 
 import dev.vitrail.Vitrail;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.sodium.ShadowTerrain;
+
+import net.minecraft.client.Minecraft;
 
 import net.minecraft.client.gui.components.debug.DebugScreenDisplayer;
 import net.minecraft.client.gui.components.debug.DebugScreenEntry;
@@ -48,7 +51,39 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 			if (!profile.isEmpty()) {
 				displayer.addToGroup(GROUP, PREFIX + "Profile: " + profile);
 			}
+			if (level != null) {
+				shadowLines(displayer);
+			}
 		}, () -> displayer.addToGroup(GROUP, PREFIX + undrawnLine()));
+	}
+
+	/**
+	 * What the shadow map cost to fill, said the way the reference says it so that a capture of one
+	 * screen reads against a capture of the other.
+	 * <p>
+	 * The first line is Sodium's own shape for the camera, which Iris reuses for the light and
+	 * shows by default ({@code gui/debug/IrisDebugEntry}, raising its shadow flag around the ask):
+	 * sections drawn over sections loaded, then the render distance. <strong>The number to read
+	 * against Iris is the first one</strong>, both sides counting the sections that carry block
+	 * geometry and no others.
+	 * <p>
+	 * The second line is what Iris keeps for its debug options and this engine has no reason to
+	 * hide: the shape the walk measured against, and how many sections came back. Two counts that
+	 * differ by little say the cull is running and finding nothing to drop, which is a state worth
+	 * seeing rather than guessing at.
+	 */
+	private static void shadowLines(DebugScreenDisplayer displayer) {
+		ShadowTerrain.Walk walk = ShadowTerrain.lastWalk();
+		if (walk == null) {
+			displayer.addToGroup(GROUP, PREFIX + "Shadows: (unavailable)");
+			return;
+		}
+
+		displayer.addToGroup(GROUP, PREFIX + "Shadows: C: " + walk.drawn() + "/" + walk.total()
+				+ " D: " + Minecraft.getInstance().options.getEffectiveRenderDistance()
+				+ (walk.terrain() ? "" : " (no terrain)"));
+		displayer.addToGroup(GROUP, PREFIX + "Shadow cull: " + walk.kept() + " sections kept, "
+				+ walk.culling());
 	}
 
 	/**
