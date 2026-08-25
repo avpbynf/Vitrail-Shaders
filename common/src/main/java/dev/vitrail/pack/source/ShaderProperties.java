@@ -584,6 +584,28 @@ public final class ShaderProperties {
 	}
 
 	/**
+	 * The programs this file switches off, under the paths the pack wrote, extension excluded.
+	 * <p>
+	 * The shape the resolution wants: a switched-off program is one the place does not ship, so
+	 * what serves the name is whatever the fallback tree offers next, and only a name whose whole
+	 * chain is switched off or absent ends up served by nothing. That is the reference's
+	 * behaviour and not an interpretation of it: a disabled name gets no source there
+	 * ({@code ShaderPack.java:290-294}), {@code ProgramSet.get} then answers empty
+	 * ({@code programs/ProgramSet.java:279-285}), and the resolver walks to the parent
+	 * ({@code programs/ProgramFallbackResolver.java:27-42}).
+	 */
+	public Set<String> switchedOff(Map<String, String> defines, OptionIndex options) {
+		Set<String> off = new LinkedHashSet<>();
+		programToggles(defines, options).forEach((program, on) -> {
+			if (!on) {
+				off.add(program);
+			}
+		});
+
+		return Set.copyOf(off);
+	}
+
+	/**
 	 * The same programs with the expression left as written, so that a log can say which setting
 	 * switched a pass off rather than only that something did. The key is the path the pack wrote,
 	 * {@code world0/composite1} or {@code composite} at the root, and never the bare name: BSL

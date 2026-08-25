@@ -10,7 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -54,7 +53,6 @@ public final class PackLoader {
 			ShaderProperties properties = ShaderProperties.parse(source);
 			OptionIndex options = OptionIndex.build(source);
 			ProgramSet programs = ProgramSet.enumerate(source, dimensions);
-			ProgramResolver resolved = ProgramResolver.resolve(programs, dimensions);
 			PackStats stats = PackStats.measure(source, options);
 
 			// Every entry point is flattened, and the text is then thrown away. This stage is
@@ -64,12 +62,15 @@ public final class PackLoader {
 
 			// The file has conditionals of its own, and they read the settings, so the toggles
 			// can only be known once the settings are.
-			Set<String> disabled = new LinkedHashSet<>();
-			properties.programToggles(settings.globalDefines(options), options).forEach((program, on) -> {
-				if (!on) {
-					disabled.add(program);
-				}
-			});
+			Set<String> disabled = properties.switchedOff(settings.globalDefines(options), options);
+
+			// Resolved as the pack SHIPS, with no toggle applied, and the empty set says so rather
+			// than standing for one nobody worked out. This report runs before the machine's own
+			// symbols are installed and against the pack's defaults rather than the player's
+			// settings, so the answer it would give to a toggle is not the answer the chain gets:
+			// a pack branching a program on DISTANT_HORIZONS reads it off here and on there. The
+			// count above carries the same reserve and carried it before this line existed.
+			ProgramResolver resolved = ProgramResolver.resolve(programs, dimensions, Set.of());
 
 			IncludeExpander expander = new IncludeExpander(source, settings);
 			ExpansionStats expansion = ExpansionStats.NONE;
@@ -83,7 +84,7 @@ public final class PackLoader {
 			}
 
 			return new LoadedPack(source.packName(), source.isZip(), dimensions, properties, options,
-					programs, resolved, stats, expansion, expanded, Set.copyOf(disabled),
+					programs, resolved, stats, expansion, expanded, disabled,
 					source.caseInsensitiveHits(), (System.nanoTime() - start) / 1_000_000L);
 		}
 	}
