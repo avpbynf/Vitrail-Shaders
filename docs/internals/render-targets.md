@@ -203,9 +203,12 @@ is dead and nothing says so.
 
 **Synchronisation is free and it is not cheap.** The Vulkan command encoder places a global memory
 barrier after every render pass the game itself closes, and again after every clear and every copy.
-Passes this engine labels close with a write-then-sample barrier instead. Writing a target in one
-pass and reading it in the next therefore requires nothing at all from this engine, and images stay
-in one layout end to end with no transitions to manage. The other side of that coin is that each
+Passes this engine labels close with a narrower one instead, which names both what the rest of the
+frame samples of the pass and what it writes over it: the second half is the one an OpenGL engine
+never has to say, since the bound framebuffer orders two draws into it and two Vulkan passes into
+one image are ordered by nothing. Writing a target in one pass and reading it in the next therefore
+requires nothing at all from this engine, and images stay in one layout end to end with no
+transitions to manage. The other side of that coin is that each
 closed pass, each standalone clear and each copy is still a GPU stop; that is the real cost model
 for anything that adds one, and the reason matching geometry is kept in one pass.
 

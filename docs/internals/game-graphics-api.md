@@ -109,7 +109,11 @@ On top of that, submitting a render pass ends it with a **full memory barrier**:
 all commands, memory read and memory write. The other operations that touch textures (clearing,
 copying, uploading) end the same way. That is still what the game does for its own passes.
 
-Passes this engine labels (`Vitrail ...`) close with a write-then-sample barrier instead. Consecutive
+Passes this engine labels (`Vitrail ...`) close with a narrower barrier instead, naming what the
+rest of the frame samples of the pass **and** what it writes over it. Both halves are needed and only
+the first is obvious: two Vulkan passes writing one image are ordered by nothing, where the bound
+framebuffer of OpenGL orders them for free, and the emptying of a target now rides the load-op of
+a pass rather than being a clear of its own, which makes it one of those writes. Consecutive
 geometry that writes the same colour and depth images stays in one pass, which is what Iris does by
 leaving `defaultFB` bound (`IrisRenderingPipeline.bindDefault`). A later composite, a copy, or a
 different framebuffer ends that hold first. Mip chains are filled with `vkCmdBlitImage` on the
