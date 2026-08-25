@@ -30,8 +30,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * constructor asks {@code ChunkMeshFormats.getCurrent}.</strong> That is narrower than saying
  * nothing holding a stride is alive here, and it is what was measured: this runs before
  * {@code deleteRendererState}, so the previous manager and its regions are still standing, and an
- * exhaustive pass over the 688 classes of the mod jar inside 0.9.1 finds no caller of that method on
- * the road between. Everything that will ask for the format is built afterwards, and every section
+ * exhaustive pass over every class of the mod jar, in 0.9.1 and again in 0.9.2-alpha.4, finds no
+ * caller of that method on the road between. Everything that will ask for the format is built afterwards, and every section
  * is meshed again after that.
  * <p>
  * <strong>{@code require = 1} because this injection is now the only writer of the answer</strong>,
