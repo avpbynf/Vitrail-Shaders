@@ -252,8 +252,8 @@ None of this is inference. A compute shader built with that shaderc, dispatched 
 image allocated through VMA, writes texels the same frame reads back unchanged: the road is open,
 and nothing of it was ever in the backend's way. The stage that walks it is `PackCompute`, which
 compiles a pack's `shadowcomp` and dispatches it at the head of the frame. Which programs it serves,
-and why that moment rather than beside the shadow map that feeds it, is answered where the pack's
-chain is.
+including the pack's own switch deciding whether it serves any at all, and why that moment rather
+than beside the shadow map that feeds it, is answered where the pack's chain is.
 
 ## Small things that cost a lot to rediscover
 

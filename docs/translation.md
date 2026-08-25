@@ -300,7 +300,9 @@ for that path, three different mechanisms, and it is worth knowing which:
   queue, a public `VkDevice`, and the shaderc the game embeds, whose compute kind the facade never
   passes. That path has been made to dispatch and to write, and a pack's own shadowcomp goes down
   it: translated like any other unit, compiled by the same shaderc, dispatched at the head of the
-  frame. The other compute names are named in the log and go no further, translation included.
+  frame. Only where the pack keeps it, and a pack that switches the program off takes with it the
+  declarations that program reads, so one switched off does not draw nothing, it does not compile.
+  The other compute names are named in the log and go no further, translation included.
 - **Storage buffers and storage images are worse than refused on the facade: they are ignored.**
   Reflection asks for uniform buffers, sampled images, outputs and inputs, and never enumerates
   them. On the facade's own walk they pass compilation and are bound to nothing, so the walk is

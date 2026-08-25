@@ -51,9 +51,9 @@ zero to the first empty slot drops real programs.
 A compute program hangs a single-letter suffix off a name that has to be valid without it, and the
 suffix is recognised on the numbered families and on two of the unnumbered names, not on the
 geometry names. Vitrail reads those files and names them in the log. One family of them runs, the
-shadow compute, translated like any other unit and dispatched once a frame. The rest are named and
-go no further, so what their order among themselves would be is the reference's business and not
-this engine's yet.
+shadow compute, translated like any other unit and dispatched once a frame wherever the pack's own
+toggle keeps it. The rest are named and go no further, so what their order among themselves would
+be is the reference's business and not this engine's yet.
 
 Stages are never paired or cross-checked. A compute program and a fragment program with the same
 slot name coexist as independent entries, which is a real case.
@@ -125,6 +125,12 @@ conditions `world0/composite1` and `world-1/composite1` on two different express
 bare key when the qualified one is absent would run in the Nether a pass the pack switched off
 there. Deriving that key by substituting characters in the folder name misses instead, silently, on
 every pack with an unusual dimension name.
+
+**A compute is looked up under the file it ships in, letter included.** A compute hangs off a
+name by a single letter, so `world0/composite21_a` is a key of its own and a pack switching off
+`world0/composite21` has said nothing about it. The reference keeps such a compute and runs it
+with no fragment stage at all, which is why the lookup cannot fall back to the name the letter
+came off.
 
 Both an empty value and a non-evaluable expression mean enabled: this file is read fail-open.
 

@@ -122,6 +122,21 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack's shadow compute is no longer built when the pack switched it off.** A pack turns
+  whole programs on and off from its own settings, and the compute pass behind coloured lighting
+  was read and handed to the compiler whichever way that setting stood. Switched off, the pack
+  also takes away the colour tables and the image formats that pass reads, so what reached the
+  compiler was not a shader at all and it was refused. The refusal came out as a warning, and
+  there was nothing on screen to say a pass had been meant to run. BSL with its multicoloured
+  blocklight off, Bliss, and both Complementary outside their coloured lighting profiles were all
+  in that state.
+
+- **A pack's storage images keep the words it wrote around them.** Translation rebuilt those
+  declarations from the type onwards and dropped `writeonly`, `readonly`, `restrict` and
+  `coherent` on the way, whichever side of `uniform` the pack put them. On Vulkan the first of
+  those is what makes an image with no declared format legal at all, and it is the one the packs
+  that ship a voxel volume write.
+
 - **Distant Horizons' far water no longer paints over you.** In third person, with far water
   behind, the character came out washed out or gone entirely, and the part of him it covered
   followed the part of the far water behind him. Everything drawn between the two halves of the
