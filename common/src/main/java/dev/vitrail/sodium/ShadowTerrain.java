@@ -29,6 +29,8 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayerGroup;
 import net.minecraft.world.phys.Vec3;
 
+import org.jspecify.annotations.Nullable;
+
 import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
@@ -91,6 +93,28 @@ public final class ShadowTerrain {
 	 */
 	private static int measured = -1;
 
+	/**
+	 * What the last walk for the light kept, drew and measured against, held for the F3 line.
+	 * <p>
+	 * Held rather than asked for where it is shown, because by then the render lists belong to the
+	 * camera again: this stage walks at the END of a frame and hands them straight back, so a count
+	 * taken from the overlay would be the camera's under a shadow heading. Iris holds the same thing
+	 * for the same reason, a string taken inside its shadow scope and read outside it
+	 * ({@code shadows/ShadowRenderer.java:119} and {@code :606}).
+	 * <p>
+	 * A null {@link #walkCulling} means no walk has run under the pack now loaded, which the line
+	 * says in those words rather than showing the numbers of a pack that is no longer drawn.
+	 */
+	private static int walkKept;
+
+	private static int walkDrawn;
+
+	private static int walkTotal;
+
+	private static boolean walkTerrain;
+
+	private static @Nullable String walkCulling;
+
 	private ShadowTerrain() {
 	}
 
@@ -146,6 +170,7 @@ public final class ShadowTerrain {
 			// or the voxel volume keeps stale writes; the compute itself runs at the head of
 			// the frame, from the frame graph setup, whatever this stage does.
 			PackChain.clearCustomImages();
+			walkCulling = null;
 			return;
 		}
 
@@ -238,13 +263,17 @@ public final class ShadowTerrain {
 			// walked count is every section with something to render that the cull kept, which is
 			// what says how tight the cull was; the drawn count leaves out those carrying no block
 			// geometry, which are the ones a draw costs nothing for.
+			count(manager.getRenderLists());
+			walkTotal = manager.getTotalSections();
+			walkTerrain = casters.terrain();
+			walkCulling = cull.culling();
+
 			if (measuring && seen > 0) {
 				measured = BlockStateIds.generation();
-				SortedRenderLists lists = manager.getRenderLists();
 				Vitrail.logger().info("Shadow cull walked {} sections for the light against {} "
 						+ "for the camera, {} of the light's with geometry to draw, on block "
 						+ "table {}, culling {}",
-						sections(lists), seen, drawn(lists), measured, cull.culling());
+						walkKept, seen, walkDrawn, measured, walkCulling);
 			}
 
 			draw(renderer, minecraft, camera);
@@ -326,13 +355,14 @@ public final class ShadowTerrain {
 	}
 
 	/**
-	 * The kept sections that carry block geometry, which are the only ones the draw below spends
-	 * anything on: it walks {@code sectionsWithGeometryIterator} and steps over the rest
-	 * ({@code render/chunk/DefaultChunkRenderer}).
+	 * Both counts of the light's list, in one pass because the F3 line asks for them every frame
+	 * and not once a block table any more.
 	 * <p>
-	 * <strong>This is the count that compares with the reference, and the one beside it is
-	 * not.</strong> Iris puts a section count of its shadow list on the F3 screen and it is this
-	 * one: it takes {@code getSectionStatistics} inside its own shadow render list scope
+	 * <strong>The drawn count is the one that compares with the reference, and the kept count is
+	 * not.</strong> Only the sections carrying block geometry reach a draw, which walks
+	 * {@code sectionsWithGeometryIterator} and steps over the rest
+	 * ({@code render/chunk/DefaultChunkRenderer}), and it is that count Iris puts on the F3 screen:
+	 * it takes {@code getSectionStatistics} inside its own shadow render list scope
 	 * ({@code shadows/ShadowRenderer.java:606}, the scope opened at {@code :477}), which Sodium
 	 * answers from {@code getSectionsWithGeometryCount} and not from the list's size
 	 * ({@code render/chunk/RenderSectionManager.getVisibleChunkCount}).
@@ -343,14 +373,44 @@ public final class ShadowTerrain {
 	 * mask is what reaches a draw. So a section with nothing in it is on neither side of the
 	 * comparison, and the gap is the sections whose only content is a block entity or an animated
 	 * sprite.
+	 * <p>
+	 * One pass and not two, where Iris pays one for the single count it shows: the two sums walk
+	 * the same handful of per region lists, so asking for them apart would double a walk this
+	 * stage now makes on every frame.
 	 */
-	private static int drawn(SortedRenderLists lists) {
-		int count = 0;
+	private static void count(SortedRenderLists lists) {
+		int kept = 0;
+		int drawn = 0;
 		var iterator = lists.iterator(false);
 		while (iterator.hasNext()) {
-			count += iterator.next().getSectionsWithGeometryCount();
+			ChunkRenderList list = iterator.next();
+			kept += list.size();
+			drawn += list.getSectionsWithGeometryCount();
 		}
 
-		return count;
+		walkKept = kept;
+		walkDrawn = drawn;
+	}
+
+	/**
+	 * The last walk for the light, or null where none has run under the pack now loaded.
+	 *
+	 * @param kept    every section with something to render that the walk kept
+	 * @param drawn   those of them carrying block geometry, which is the count Iris shows
+	 * @param total   every section loaded, which is the denominator Sodium's own line carries
+	 * @param terrain whether the pack takes the world's own geometry into its map at all. The walk
+	 *                runs either way, the entities and the far terrain being decided apart from it,
+	 *                so a count without this flag beside it would announce sections that no draw
+	 *                ever reads. Iris says the same thing in the same place, {@code (no terrain)}
+	 *                appended to its own line ({@code shadows/ShadowRenderer.java:776})
+	 * @param culling the shape the walk measured against, in the words the log line uses
+	 */
+	public record Walk(int kept, int drawn, int total, boolean terrain, String culling) {
+	}
+
+	/** The last walk, for the one line that shows it. */
+	public static @Nullable Walk lastWalk() {
+		return walkCulling == null ? null
+				: new Walk(walkKept, walkDrawn, walkTotal, walkTerrain, walkCulling);
 	}
 }
