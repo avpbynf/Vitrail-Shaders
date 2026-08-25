@@ -1,5 +1,6 @@
 package dev.vitrail.mixin;
 
+import net.caffeinemc.mods.sodium.client.gpu.arena.ArenaAggregator;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkMeshFormats;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType;
 import org.objectweb.asm.Opcodes;
@@ -18,17 +19,17 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * chunk renderer, and a region's device resources. Those three see the pack's mesh. The allocator
  * did not, so the resources asked it for forty and it threw {@code Unsupported stride}.
  * <p>
- * The class is absent from the 0.9.1 this module compiles against, which is why the target is a
- * name and why {@code @Pseudo} lets 0.9.1 skip the mixin rather than refuse to load. The redirect
- * is required when the class is there: a silent miss would be the same crash the player already
- * hit, arriving a world late.
+ * The class is absent from the 0.9.1 the mod still accepts at runtime, which is why
+ * {@code @Pseudo} lets 0.9.1 skip the mixin rather than refuse to load. The redirect is required
+ * when the class is there: a silent miss would be the same crash the player already hit, arriving
+ * a world late.
  * <p>
  * Construction is after {@code TerrainMesh.settle}, at the head of {@code initRenderer}, so
  * {@code getCurrent()} here is the format the builder is about to write. That is the same instant
  * {@code MixinSodiumWorldRendererInit} already chose, not a second one.
  */
 @Pseudo
-@Mixin(targets = "net.caffeinemc.mods.sodium.client.gpu.arena.ArenaAggregator", remap = false)
+@Mixin(value = ArenaAggregator.class, remap = false)
 public abstract class ArenaAggregatorMixin {
 
 	@Redirect(
