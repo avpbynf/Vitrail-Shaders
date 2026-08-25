@@ -30,11 +30,9 @@ import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
 import com.mojang.blaze3d.shaders.UniformType;
-import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
@@ -49,15 +47,12 @@ import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.resources.Identifier;
 
 import org.joml.Matrix4fc;
-import org.joml.Vector4f;
 import org.joml.Vector4fc;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -202,12 +197,6 @@ final class GeometryProgram {
 	 * the translation puts the name there itself, and no pack writes it.
 	 */
 	private static final String OVERLAY = LegacyGlsl.OVERLAY_SAMPLER;
-
-	/** One pixel each, for a name this step has no answer for. */
-	private static final GpuFormat CONSTANT_FORMAT = GpuFormat.RGBA8_UNORM;
-	private static final Vector4f OPAQUE_BLACK = new Vector4f(0.0F, 0.0F, 0.0F, 1.0F);
-	private static final Vector4f OPAQUE_WHITE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
-	private static final Vector4f MID_GREY = new Vector4f(0.5F, 0.5F, 0.5F, 1.0F);
 
 	/** Where one colour attachment of a world pass takes its image from. */
 	private enum Bound {
@@ -388,16 +377,13 @@ final class GeometryProgram {
 	private GpuBuffer blockSliceOf;
 
 	private int blockSliceBytes;
-	private TextureTarget black;
-	private TextureTarget white;
-	private TextureTarget grey;
 
 	/**
-	 * One texel per material map, for a sprite the resource pack ships nothing for and for every
-	 * family drawn with no atlas at all. Their values are not a taste: they are the ones Iris falls
-	 * back on, and each of them reads as the absence of what its map describes.
+	 * The device's one-texel constants, for a sprite the resource pack ships nothing for and for
+	 * every family drawn with no atlas at all. Shared across every program and surviving every
+	 * release, which is what keeps a rebuild from paying their clears again: see the class.
 	 */
-	private final Map<PbrMap, TextureTarget> flatMaps = new EnumMap<>(PbrMap.class);
+	private ConstantTextures constants;
 	private GpuTextureView atlas;
 
 	/** The matrix the game pushed for this pass, or null for the frame's camera. */
@@ -412,7 +398,6 @@ final class GeometryProgram {
 	/** The colour the game modulates this pass by, or null for white. */
 	private Vector4fc passColour;
 	private GpuSampler atlasSampler;
-	private boolean cleared;
 	private boolean announced;
 	private boolean drew;
 	private boolean broken;
@@ -810,7 +795,7 @@ final class GeometryProgram {
 		// Creating a texture or clearing one records into the command buffer a pass would be
 		// recording into. The hold has to end first; after that this program's block exists and
 		// the next prepare of it can run while the next geometry program keeps that pass open.
-		if (this.block == null || !this.cleared) {
+		if (this.block == null || !ConstantTextures.ready()) {
 			GeometryHold.flush(() -> "a program building or clearing its block");
 		}
 
@@ -826,7 +811,8 @@ final class GeometryProgram {
 		}
 
 		// After the constants and never before them: what a name with no image is answered with is a
-		// view of one of those textures, and this is the call that makes them again after a release.
+		// view of one of those textures, and this is the call that settles those answers again
+		// after a release.
 		resolve();
 		announce();
 		writeBlock();
@@ -931,11 +917,12 @@ final class GeometryProgram {
 	 * brought no image of its own is answered with.
 	 * <p>
 	 * <strong>Called from {@link #prepare} and nowhere else, and that is what says how long any of
-	 * this is held: exactly one pass.</strong> Prepare stands after the constants have been made or
-	 * made again, after the colour targets have been opened for the frame, and before the pass this
+	 * this is held: exactly one pass.</strong> Prepare stands after the device's constants exist,
+	 * after the colour targets have been opened for the frame, and before the pass this
 	 * pair is bound into exists, and every family reaches it again before it opens the next one. So
 	 * there is no frontier for a stale answer to cross. A pack switch and a resource reload both go
-	 * through {@link #release}, which drops the textures these name and these with them; F3+T empties
+	 * through {@link #release}, which drops these answers with the rest of the program's state, the
+	 * one-texel constants outliving it by design; F3+T empties
 	 * the device's pipeline cache, and prepare recompiles and settles this again on the next pass
 	 * either way; and a program is only ever bound into a pass its own prepare handed the pipeline
 	 * back for.
@@ -1353,12 +1340,11 @@ final class GeometryProgram {
 		this.blockSlice = null;
 		this.blockSliceOf = null;
 
-		this.black = release(this.black);
-		this.white = release(this.white);
-		this.grey = release(this.grey);
-		this.flatMaps.values().forEach(TextureTarget::destroyBuffers);
-		this.flatMaps.clear();
-		this.cleared = false;
+		// The reference is dropped, the textures are not: they are the device's, not this
+		// program's, and re-clearing them once per program was about ninety of the standalone
+		// clears a reload frame paid.
+		this.constants = null;
+
 		// Dropped with the textures they name rather than left standing. Nothing binds a released
 		// program before it is prepared again, and prepare settles these afresh, so this only shortens
 		// the life of a reference; a view of a destroyed texture is not a thing to keep a field on.
@@ -1454,27 +1440,7 @@ final class GeometryProgram {
 	}
 
 	private void ensureConstants(GpuDevice device) {
-		if (this.black == null) {
-			this.black = new TextureTarget("Vitrail terrain black", 1, 1, false, CONSTANT_FORMAT);
-			this.white = new TextureTarget("Vitrail terrain white", 1, 1, false, CONSTANT_FORMAT);
-			this.grey = new TextureTarget("Vitrail terrain grey", 1, 1, false, CONSTANT_FORMAT);
-			for (PbrMap map : PbrMap.values()) {
-				this.flatMaps.put(map, new TextureTarget("Vitrail terrain " + map.sampler(), 1, 1,
-						false, CONSTANT_FORMAT));
-			}
-
-			this.cleared = false;
-		}
-
-		if (!this.cleared) {
-			this.cleared = true;
-			CommandEncoder encoder = device.createCommandEncoder();
-			encoder.clearColorTexture(this.black.getColorTexture(), OPAQUE_BLACK);
-			encoder.clearColorTexture(this.white.getColorTexture(), OPAQUE_WHITE);
-			encoder.clearColorTexture(this.grey.getColorTexture(), MID_GREY);
-			this.flatMaps.forEach((map, target) ->
-					encoder.clearColorTexture(target.getColorTexture(), map.missing()));
-		}
+		this.constants = ConstantTextures.of(device);
 	}
 
 	/**
@@ -1492,14 +1458,14 @@ final class GeometryProgram {
 			// One texel of what the absence of this map means, for a sprite the resource pack ships
 			// nothing for and for every family drawn with no image at all. What is drawn over it when
 			// the draw does bring one is in imageView.
-			return this.flatMaps.get(one.material).getColorTextureView();
+			return this.constants.flat(one.material);
 		}
 
 		if (one.albedo) {
 			// One pixel where the pass has no atlas of its own, which is every cloud and the sky's
 			// own disc: a name bound to nothing at all throws at the bind. imageView says why it is
 			// white and not black.
-			return this.white.getColorTextureView();
+			return this.constants.white();
 		}
 
 		if (OVERLAY.equals(sampler)) {
@@ -1514,7 +1480,7 @@ final class GeometryProgram {
 			GpuTextureView overlay = minecraft == null
 					? null : minecraft.gameRenderer.overlayTexture().getTextureView();
 
-			return overlay == null ? this.black.getColorTextureView() : overlay;
+			return overlay == null ? this.constants.black() : overlay;
 		}
 
 		if (LIGHTMAP.equals(sampler)) {
@@ -1525,13 +1491,13 @@ final class GeometryProgram {
 			// multiplies its albedo by what it reads out of this image, and every texel of the game's
 			// own is darker than one except at the brightest level.
 			if (this.loaded.fullbright()) {
-				return this.white.getColorTextureView();
+				return this.constants.white();
 			}
 
 			Minecraft minecraft = Minecraft.getInstance();
 			GpuTextureView lightmap = minecraft == null ? null : minecraft.gameRenderer.lightmap();
 
-			return lightmap == null ? this.white.getColorTextureView() : lightmap;
+			return lightmap == null ? this.constants.white() : lightmap;
 		}
 
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
@@ -1551,7 +1517,7 @@ final class GeometryProgram {
 			// noisetex there and nowhere else, so this is not a case the chain also covers.
 			case PACK_TEXTURE -> packTexture(sampler);
 			case DISTANT_DEPTH -> distantDepth();
-			default -> this.black.getColorTextureView();
+			default -> this.constants.black();
 		};
 	}
 
@@ -1559,7 +1525,7 @@ final class GeometryProgram {
 	private GpuTextureView packTexture(String sampler) {
 		ColorTargets.PackBinding supplied = this.targets.packTexture(TextureStage.GBUFFERS, sampler);
 
-		return supplied == null ? this.black.getColorTextureView() : supplied.view();
+		return supplied == null ? this.constants.black() : supplied.view();
 	}
 
 	/**
@@ -1575,7 +1541,7 @@ final class GeometryProgram {
 	 */
 	private GpuTextureView shadowDepth(String sampler) {
 		if (this.pass.shadow()) {
-			return this.white.getColorTextureView();
+			return this.constants.white();
 		}
 
 		// shadowtex1 is the map without the translucents and shadowtex0 the map with them. Serving
@@ -1587,18 +1553,18 @@ final class GeometryProgram {
 				? this.shadow.depthWithoutTranslucents()
 				: this.shadow.depth();
 
-		return map == null ? this.white.getColorTextureView() : map;
+		return map == null ? this.constants.white() : map;
 	}
 
 	/** A shadow colour target, on the same two rules as the depth above. */
 	private GpuTextureView shadowColour(int index) {
 		if (this.pass.shadow()) {
-			return this.white.getColorTextureView();
+			return this.constants.white();
 		}
 
 		GpuTextureView view = this.shadow.colour(index);
 
-		return view == null ? this.white.getColorTextureView() : view;
+		return view == null ? this.constants.white() : view;
 	}
 
 	/**
@@ -1663,7 +1629,7 @@ final class GeometryProgram {
 			}
 		}
 
-		return this.white.getColorTextureView();
+		return this.constants.white();
 	}
 
 	/**
@@ -1698,7 +1664,7 @@ final class GeometryProgram {
 			}
 		}
 
-		return this.white.getColorTextureView();
+		return this.constants.white();
 	}
 
 	/**
@@ -1720,13 +1686,13 @@ final class GeometryProgram {
 							TargetName.canonical(binding.index()));
 				}
 
-				return this.black.getColorTextureView();
+				return this.constants.black();
 			}
 		}
 
 		GpuTextureView view = this.targets.view(binding.index(), binding.side());
 
-		return view == null ? this.black.getColorTextureView() : view;
+		return view == null ? this.constants.black() : view;
 	}
 
 	/**
@@ -2019,13 +1985,5 @@ final class GeometryProgram {
 				.forEach((reason, names) -> Vitrail.logger().warn("{} reads {} values answered with "
 						+ "a stand-in rather than with the value, {}, which count as supplied "
 						+ "everywhere else, because {}", this.path, names.size(), names, reason));
-	}
-
-	private static TextureTarget release(TextureTarget target) {
-		if (target != null) {
-			target.destroyBuffers();
-		}
-
-		return null;
 	}
 }
