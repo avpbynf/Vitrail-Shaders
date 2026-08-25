@@ -91,6 +91,13 @@ Resolution stops at a name it has already walked, so a mis-edited table cannot l
 report anything either: the chain simply ends, and the program comes out unserved exactly as if it
 had no parent.
 
+**A program the pack switched off counts as missing here**, and that is the whole of what the
+switch does to the geometry: the walk carries on to the parent, so a pack that ships a translucent
+entity program and switches it off is asking for those entities to be drawn by its ordinary entity
+program rather than not drawn. Only a name whose whole chain is switched off or absent comes out
+unserved, and for the shadow family, whose root has no parent, that closes the stage instead of
+opening it on a program the pack never wrote.
+
 ## shaders.properties
 
 Only `=` separates a key from its value, and **there is no end-of-line comment**: everything after
