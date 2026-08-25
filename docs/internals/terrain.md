@@ -41,8 +41,8 @@ from nothing, and merely repeats it everywhere else. Turning the terrain switch 
 game to rebuild the world, which is the same door F3+A uses; it does not ask for a restart.
 
 Sodium 0.9.2 added a shared geometry arena that does not call the accessor. It bakes the compact
-stride at construction and then refuses any other width, so a pack's mesh (thirty-two to forty bytes)
-dies with `Unsupported stride` on the first upload. A mixin on that constructor asks the accessor
+stride at construction and then refuses any other width, so a pack's mesh (twenty-four to forty
+bytes) dies with `Unsupported stride` on the first upload. A mixin on that constructor asks the accessor
 instead, at the same instant the section manager is built. 0.9.1 has no such class, and the mixin
 is skipped there.
 
