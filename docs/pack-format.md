@@ -133,6 +133,14 @@ what makes a pack's misspelled key visible: correct to ignore, wrong to lose.
 
 ### The shadow caster directives, and the two that are not flags
 
+**`shadow.enabled` comes before all of them.** It says whether the pack wants a shadow map at all,
+and an explicit `false` is the only value that moves anything: a pack that says nothing leaves the
+stage standing on whichever shadow programs it ships, which is how the reference reads it. Written
+false, nothing is ever drawn from the light, and the six directives below decide nothing because
+there is no map for them to decide about. Like them it takes a literal boolean and nothing else, a
+value that is not one being honoured nowhere, and like them it is read through the pack's own
+conditionals, so the line may sit inside a branch of the pack's own settings.
+
 `shadowTerrain`, `shadowTranslucent`, `shadowEntities`, `shadowPlayer`, `shadowBlockEntities` and
 `shadowLightBlockEntities` say which families a pack wants drawn into its shadow map. Four of them
 default to on; the two that default to off are `shadowPlayer` and `shadowLightBlockEntities`, which
@@ -379,6 +387,33 @@ This works because the backend refuses the declared type, not what actually sits
 The rename is applied in every program carrying the declaration, not only in the targeted stage: the
 reference renames only in the targeted stage, which leaves an unbound three-dimensional sampler
 alive elsewhere: tolerated by the old backend, refused by this one.
+
+## Images and buffers a pack asks the engine for
+
+Separate from the textures above, which are files the pack ships: these are memory the pack asks
+the engine to allocate, writes to from its own shaders, and reads back. They are what
+`IRIS_FEATURE_CUSTOM_IMAGES` announces, and a pack gates its voxel lighting on that define before
+writing a single one of them.
+
+**`image.NAME` declares one image.** The value is the reference's own word list: a sampler name, or
+`none` where the image is stored and never sampled; a pixel format, an internal format and a pixel
+type; whether the engine empties it every frame; whether the size is a fraction of the screen; then
+the dimensions, one, two or three of them, and exactly two where the size is a fraction. Sixteen
+images is the ceiling and a seventeenth is
+dropped, which is the reference's ceiling and not this engine's. A dimension may be written as the
+name of one of the pack's own settings rather than as a number, and it is looked up in the table the
+conditionals are evaluated against, which is how a pack sizes a volume with the same setting that
+switches its coloured lighting on.
+
+**`bufferObject.N` declares one shader storage block**, at an index of nought to twelve. The value
+is a size in bytes and an optional block name, or the reference's four-word relative form where the
+size follows the screen. A size below one disables the buffer rather than allocating an empty one.
+
+Both are read through the pack's conditionals like everything else in this file, which matters more
+here than anywhere: most of the corpus writes these lines behind the coloured-lighting setting, so
+read flat a pack would be handed volumes its own settings had already switched off. **A line that is
+live and cannot be read is named in the log and dropped**, one line each, rather than taking the
+declaration next to it with it.
 
 ## A pack is untrusted content
 
