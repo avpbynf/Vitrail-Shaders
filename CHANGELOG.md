@@ -94,6 +94,12 @@ what the next one holds.
   Same picture. Written for the extra submits a Mac report was counting; whether the frame rate
   moves is still that machine's to measure.
 
+- **The frame that rebuilds the pack's programs pays far fewer clears.** A dimension change, a
+  world join or a pack switch re-prepares every geometry program the scene draws, and each one
+  rebuilt its own copy of the same one-texel constants, one standalone clear per texture: about
+  ninety full GPU stops on that single frame, felt as the hitch at a portal. The constants are
+  now built once and shared, and the same frame measures nine.
+
 - **Pass uniforms reuse scratch matrices** instead of allocating a model-view-projection and a
   normal matrix on every fill. Same numbers.
 
