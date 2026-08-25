@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Works out, for one dimension, which file actually serves each program.
@@ -27,11 +28,23 @@ public final class ProgramResolver {
 		this.byDimension = Map.copyOf(byDimension);
 	}
 
-	public static ProgramResolver resolve(ProgramSet programs, DimensionSet dimensions) {
+	/**
+	 * @param switchedOff the programs the pack's own settings turn off, under the paths it wrote,
+	 *                    from {@link dev.vitrail.pack.source.ShaderProperties#switchedOff}. One of
+	 *                    those counts as not shipped rather than as served by nothing, so the
+	 *                    chain carries on to the next candidate and a family whose parent is still
+	 *                    there keeps drawing through the parent. Skipping the family outright
+	 *                    would leave the geometry unserved, which the reference does not do and
+	 *                    which is worse than serving it: a pack that switches off its translucent
+	 *                    entity program is asking for those entities to be drawn by its ordinary
+	 *                    entity program, not for them to disappear.
+	 */
+	public static ProgramResolver resolve(ProgramSet programs, DimensionSet dimensions,
+			Set<String> switchedOff) {
 		// One index per dimension of what that dimension ships, keyed by program name.
 		Map<String, Map<String, String>> shipped = new LinkedHashMap<>();
 		for (ProgramSet.ProgramKey key : programs.keys()) {
-			if (key.stage() == ProgramStage.FRAGMENT) {
+			if (key.stage() == ProgramStage.FRAGMENT && !switchedOff.contains(pathOf(key))) {
 				shipped.computeIfAbsent(key.dimension(), _ -> new LinkedHashMap<>())
 						.put(key.name().baseName(), key.file());
 			}
@@ -62,6 +75,13 @@ public final class ProgramResolver {
 		}
 
 		return new ProgramResolver(resolved);
+	}
+
+	/** The file the pack ships with its extension taken off, which is how a toggle names it. */
+	private static String pathOf(ProgramSet.ProgramKey key) {
+		String file = key.file();
+		int dot = file.lastIndexOf('.');
+		return dot < 0 ? file : file.substring(0, dot);
 	}
 
 	public List<Resolution> resolutions(String dimension) {

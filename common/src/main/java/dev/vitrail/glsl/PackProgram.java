@@ -696,7 +696,8 @@ public final class PackProgram {
 					() -> DimensionSet.discover(source));
 			ProgramResolver resolver = ProgramResolver.resolve(
 					source.derived(ProgramSet.class, () -> ProgramSet.enumerate(source, dimensions)),
-					dimensions);
+					dimensions, pack.properties().switchedOff(pack.settings().globalDefines(pack.options()),
+							pack.options()));
 
 			return new Reading(expander, targets, textures, resolver);
 		});
@@ -1409,7 +1410,8 @@ public final class PackProgram {
 
 		DimensionSet dimensions = DimensionSet.discover(source);
 		ProgramSet programs = ProgramSet.enumerate(source, dimensions);
-		ChainPlan chain = ChainPlan.of(targets, ProgramResolver.resolve(programs, dimensions),
+		ChainPlan chain = ChainPlan.of(targets, ProgramResolver.resolve(programs, dimensions,
+				properties.switchedOff(settings.globalDefines(options), options)),
 				refusals, families);
 
 		Map<String, Loaded> loaded = new LinkedHashMap<>();
