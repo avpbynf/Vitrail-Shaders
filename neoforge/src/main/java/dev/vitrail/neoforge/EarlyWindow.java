@@ -95,6 +95,11 @@ public final class EarlyWindow {
 		claimed = false;
 		EarlyLoadingScreenController controller = EarlyLoadingScreenController.current();
 		if (controller == null) {
+			// Somebody else took it between the refusal and here. Said rather than passed over: what
+			// is left is a window nothing will close, alive behind the game's own for the rest of the
+			// session, and a line is the only thing that would ever point at it.
+			Vitrail.logger().warn("NeoForge's early loading window was claimed and is gone by the "
+					+ "time it should have been taken over, so it stays open behind the game");
 			return;
 		}
 
