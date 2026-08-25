@@ -291,6 +291,14 @@ public final class GlslTranslator {
 	private final Map<String, String> samplers = new LinkedHashMap<>();
 
 	/**
+	 * What a pack wrote in front of an opaque uniform's type, by the name it declared:
+	 * {@code writeonly}, {@code readonly}, {@code coherent} and their kind. Lifting the
+	 * declaration into the header rebuilds it from the type onwards, so anything in front of the
+	 * type is only still in the shader because it is kept here.
+	 */
+	private final Map<String, String> memoryQualifiers = new LinkedHashMap<>();
+
+	/**
 	 * The sampler this unit reads {@code centerDepthSmooth} out of, or null where nothing was moved.
 	 * The header declares it, because the statement it was taken out of may still declare other
 	 * names and cannot carry a second declaration.
@@ -2759,7 +2767,7 @@ public final class GlslTranslator {
 		}
 
 		Map<String, String> found = new LinkedHashMap<>();
-		if (!readDeclarators(parts, cursor + 1, type, found)) {
+		if (!readDeclarators(parts, cursor + 1, type, "", found)) {
 			return null;
 		}
 
@@ -2862,20 +2870,31 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Vulkan GLSL requires a format on a storage image. Iris's GL bind supplies it at bind time,
-	 * so Complementary writes {@code writeonly uniform uimage3D voxel_img} with none. The format
-	 * comes off the {@code image.} directive and is written here, in the header: the body
-	 * declaration has already been lifted, so a layout qualifier inserted into the token stream
-	 * would qualify a statement that is no longer in the shader.
+	 * Vulkan GLSL requires a format on a storage image, unless the image is write-only. Iris's GL
+	 * bind supplies the format at bind time, so Complementary writes
+	 * {@code writeonly uniform uimage3D voxel_img} with none, and BSL writes
+	 * {@code writeonly uniform image3D lightimg0} the same way. The format comes off the
+	 * {@code image.} directive and is written here, in the header: the body declaration has
+	 * already been lifted, so a layout qualifier inserted into the token stream would qualify a
+	 * statement that is no longer in the shader.
+	 * <p>
+	 * The pack's own memory qualifiers are written back for the same reason, and they are what
+	 * carries a declaration whose format we never learn: a pack switches its images off with the
+	 * setting that switches off the program reading them, and then the {@code image.} lines go
+	 * with it while the {@code writeonly} on the declaration stays. Dropping it turned a legal
+	 * declaration into one shaderc refuses.
 	 */
-	private static String declareOpaque(TranslatedUnit.Uniform sampler) {
+	private String declareOpaque(TranslatedUnit.Uniform sampler) {
+		String memory = this.memoryQualifiers.getOrDefault(sampler.name(), "");
+		String tail = (memory.isEmpty() ? "" : memory + " ") + "uniform " + sampler.declaration()
+				+ ";";
 		if (!isImageType(sampler.type())) {
-			return "uniform " + sampler.declaration() + ";";
+			return tail;
 		}
 
 		return CustomImages.layoutFormat(sampler.name())
-				.map(format -> "layout(" + format + ") uniform " + sampler.declaration() + ";")
-				.orElse("uniform " + sampler.declaration() + ";");
+				.map(format -> "layout(" + format + ") " + tail)
+				.orElse(tail);
 	}
 
 	private static boolean isImageType(String type) {
@@ -2896,13 +2915,23 @@ public final class GlslTranslator {
 		}
 
 		List<Integer> parts = significantRange(start, end);
-		int cursor = parts.indexOf(keyword);
-		if (cursor < 0) {
+		int keywordAt = parts.indexOf(keyword);
+		if (keywordAt < 0) {
 			return;
 		}
 
-		cursor++;
+		// Both sides of the keyword, because the corpus uses both. BSL and Complementary's voxel
+		// volume write writeonly uniform image3D, the qualifier in front, and Bliss and
+		// Complementary's player atlas write uniform readonly and uniform writeonly, the
+		// qualifier behind. Reading only what follows the keyword lost the first form.
+		List<String> memory = new ArrayList<>();
+		for (int part = 0; part < keywordAt; part++) {
+			rememberMemoryQualifier(memory, this.tokens.get(parts.get(part)));
+		}
+
+		int cursor = keywordAt + 1;
 		while (cursor < parts.size() && isQualifier(this.tokens.get(parts.get(cursor)))) {
+			rememberMemoryQualifier(memory, this.tokens.get(parts.get(cursor)));
 			cursor++;
 		}
 
@@ -2920,7 +2949,10 @@ public final class GlslTranslator {
 		// collectComparisonSamplers, so this only has to record it under the same spelling.
 		String plain = withoutComparison(type);
 
-		if (!readDeclarators(parts, cursor + 1, plain, opaque ? this.samplers : this.blockMembers)) {
+		// Recorded for an opaque uniform alone, which is the only declaration these can be
+		// written on and the only one that reads them back out of the header.
+		if (!readDeclarators(parts, cursor + 1, plain, opaque ? String.join(" ", memory) : "",
+				opaque ? this.samplers : this.blockMembers)) {
 			return;
 		}
 
@@ -3589,8 +3621,15 @@ public final class GlslTranslator {
 		return type.substring(0, type.length() - SHADOW_SHAPE.length());
 	}
 
-	/** Records each declarator of one declaration. False if none could be read. */
-	private boolean readDeclarators(List<Integer> parts, int from, String type,
+	/**
+	 * Records each declarator of one declaration. False if none could be read.
+	 *
+	 * @param memory the memory qualifiers written in front of the type, kept beside the name
+	 *               rather than in the declaration so that the type stays the first word of it.
+	 *               Empty for everything but an opaque uniform, which is the only declaration
+	 *               these can be written on.
+	 */
+	private boolean readDeclarators(List<Integer> parts, int from, String type, String memory,
 			Map<String, String> target) {
 		int cursor = from;
 		boolean any = false;
@@ -3603,6 +3642,10 @@ public final class GlslTranslator {
 
 			if (token.kind() != Kind.IDENTIFIER) {
 				return false;
+			}
+
+			if (!memory.isEmpty()) {
+				this.memoryQualifiers.put(token.text(), memory);
 			}
 
 			StringBuilder declaration = new StringBuilder(type).append(' ').append(token.text());
@@ -4374,6 +4417,15 @@ public final class GlslTranslator {
 		}
 
 		return found;
+	}
+
+	/** Adds a memory qualifier to what a declaration carries, in the order the pack wrote it. */
+	private static void rememberMemoryQualifier(List<String> memory, Token token) {
+		String text = token.text();
+		if (token.kind() == Kind.IDENTIFIER && LegacyGlsl.MEMORY_QUALIFIERS.contains(text)
+				&& !memory.contains(text)) {
+			memory.add(text);
+		}
 	}
 
 	private static boolean isQualifier(Token token) {
