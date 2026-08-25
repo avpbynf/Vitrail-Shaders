@@ -2,6 +2,7 @@ package dev.vitrail.uniform;
 
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
+import org.joml.Vector2f;
 import org.joml.Vector4f;
 
 /**
@@ -63,5 +64,73 @@ public final class ClipSpace {
 		dest.m32(m32);
 
 		return dest;
+	}
+
+	/**
+	 * The pair that turns a depth the game rasterised into the same point's depth in the volume
+	 * Distant Horizons rasterises its far terrain in: {@code far = pair.x * world + pair.y}.
+	 * <p>
+	 * <strong>Why a pair and not a matrix.</strong> The two volumes share every row but one.
+	 * {@code RenderUtil.setDhProjectionMatrix} overwrites the z row of the game's own matrix with
+	 * clip planes of its own and touches nothing else, and {@code render/ViewMatrices} splices that
+	 * row into the frame's matrix the same way. So the two projections have the same w row, and the
+	 * clip w a vertex comes out with is the same number under both. Write the eye distance the game
+	 * measures as {@code t}: the game's depth is {@code -m22 + m32 / t}, the far terrain's is
+	 * {@code -scale + offset / t}, and eliminating {@code t} between the two leaves an affine map in
+	 * the depth alone. There is nothing to approximate and no matrix to invert.
+	 * <p>
+	 * <strong>It holds under the walk bob, which is the half that is easy to get wrong.</strong>
+	 * The bob, the damage tilt, the nausea and the portal are all applied to the RIGHT of the
+	 * projection, so they multiply the two IMAGES this pair stands between identically and cancel
+	 * out of the ratio: what plays the part of {@code t} above stops being the eye distance and
+	 * becomes the bobbed one, the same number for both. The pair is therefore exact for a walking
+	 * player and not merely close, which a derivation written on a still camera would never have
+	 * said.
+	 * <p>
+	 * That is not the claim {@code render/ViewMatrices.advanceDistantVolume} makes, and the two only
+	 * look as though they disagree. That one compares the volume this engine rasterises the far
+	 * terrain in against the volume this mod would have rasterised it in, and those two really do
+	 * part under the bob, because this mod overwrites the row of a matrix the bob has already been
+	 * multiplied into. This one compares the two images that exist.
+	 * <p>
+	 * <strong>The premise is asked of the matrix rather than assumed of it.</strong> Four entries
+	 * carry it: the z row has to be nought outside its own two terms, so that the depth is a
+	 * function of the eye distance alone, and the w row has to be the perspective's, so that the
+	 * clip w is the same number under both. They hold on every frame the engine splits the bob out
+	 * of the projection, which is the ordinary one. They do NOT hold on a frame it could not, where
+	 * {@code render/CapturedProjection} hands back the composed matrix and the bob's own terms sit
+	 * in that row: this answers false there, and the far terrain's water goes back to being drawn
+	 * against the far terrain alone, which is where it stood before any of this.
+	 * <p>
+	 * <strong>Two things the caller owes, and neither is optional.</strong> A game depth of nought
+	 * is the clear value of a reversed Z and means nothing was drawn there, so it has to be left
+	 * alone rather than converted: it stands for the game's own far plane, which is far nearer than
+	 * this mod's, and converting it would put a lid over every LOD past the game's render distance.
+	 * And the result has to be clamped, because everything closer than this mod's near plane
+	 * converts to more than one, and that plane is at most seven and a half blocks out:
+	 * {@code core/util/RenderUtil.setDhProjectionMatrix} caps it there with a {@code Math.min}, and
+	 * only while this mod is not overriding the near plane on the player's height.
+	 *
+	 * @param rendered the frame's own projection as the device took it, reversed Z over zero to one
+	 * @param scale    the z term of the row this mod drew with, {@code dh/DhDepth} reads it
+	 * @param offset   the w term of that row, nought while this mod has drawn no frame
+	 * @param dest     filled with the multiply and then the add, and left alone when this answers
+	 *                 false
+	 * @return false when there is no conversion to be had: this mod having no volume yet, a
+	 *         projection with no perspective in it, or a frame whose projection carries terms the
+	 *         derivation above has no place for
+	 */
+	public static boolean distantDepth(Matrix4fc rendered, float scale, float offset,
+			Vector2f dest) {
+		float worldOffset = rendered.m32();
+		if (offset == 0.0F || worldOffset == 0.0F || rendered.m02() != 0.0F
+				|| rendered.m12() != 0.0F || rendered.m23() != -1.0F || rendered.m33() != 0.0F) {
+			return false;
+		}
+
+		float multiply = offset / worldOffset;
+		dest.set(multiply, rendered.m22() * multiply - scale);
+
+		return true;
 	}
 }

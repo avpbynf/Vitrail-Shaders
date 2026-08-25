@@ -1,6 +1,7 @@
 package dev.vitrail.uniform;
 
 import org.joml.Matrix4fc;
+import org.joml.Vector2f;
 import org.joml.Vector4fc;
 
 /**
@@ -148,6 +149,17 @@ public interface ViewSource {
 	 * this stands to {@code dhProjection}.
 	 */
 	Matrix4fc drawnDistantProjection();
+
+	/**
+	 * The multiply and the add that carry a depth the game rasterised into the volume above, in the
+	 * convention the device rasterises in at both ends. False while the two volumes are the same
+	 * one, which is every frame Distant Horizons has drawn nothing on.
+	 * <p>
+	 * Not published to a pack and not meant to be: this is the one value of this interface that
+	 * belongs to a pass of the engine rather than to a name a pack reads.
+	 * {@link ClipSpace#distantDepth} derives it and the off-game harness proves it.
+	 */
+	boolean distantDepthPair(Vector2f dest);
 
 	Matrix4fc dhPreviousProjection();
 

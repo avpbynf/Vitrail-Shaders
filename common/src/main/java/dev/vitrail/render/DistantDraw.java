@@ -14,22 +14,36 @@ import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.IndexType;
+import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.shaders.ShaderSource;
+import com.mojang.blaze3d.shaders.ShaderType;
+import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.MappableRingBuffer;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+
+import org.joml.Vector2f;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -170,6 +184,8 @@ public final class DistantDraw {
 				new Element("distant_shadow_water", "dh_shadow", true, true));
 	}
 
+	private static final String SEED_LABEL = "Vitrail far terrain occlusion";
+
 	/** The key one half of DH's geometry is drawn under, in each of the two images. */
 	private static String key(boolean water, boolean shadow) {
 		return (shadow ? "distant_shadow" : "distant") + (water ? "_water" : "");
@@ -181,6 +197,85 @@ public final class DistantDraw {
 
 	/** What the far terrain's own depth image holds, which is the format the game's own depth has. */
 	private static final GpuFormat DEPTH_FORMAT = GpuFormat.D32_FLOAT;
+
+	/** One float a texel, which is all a depth carried out of one volume into another is. */
+	private static final GpuFormat CARRIED_FORMAT = GpuFormat.R32_FLOAT;
+
+	private static final Identifier SEED_VERTEX_ID =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "distant/occlusion_vertex");
+	private static final Identifier SEED_FRAGMENT_ID =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "distant/occlusion_fragment");
+
+	private static final String SEED_WORLD = "InWorld";
+	private static final String SEED_FAR = "InFar";
+	private static final String SEED_BLOCK = "OfDistantOcclusion";
+
+	/** One vec2 under std140, which is what the slot HOLDS; how far apart slots start is the
+	 * device's answer and {@link Occlusion#slotBytes} alone carries it. */
+	private static final int SEED_BLOCK_BYTES = 16;
+
+	/** Two triangles, the quad every full screen pass of this engine draws. */
+	private static final int SEED_VERTICES = 6;
+
+	private static final String SEED_VERTEX = """
+			#version 460 core
+
+			in vec3 Position;
+			in vec2 UV0;
+
+			out vec2 ofTexCoord;
+
+			void main() {
+				ofTexCoord = UV0;
+				gl_Position = vec4(Position.xy * 2.0 - 1.0, 0.0, 1.0);
+			}
+			""";
+
+	/**
+	 * Carries the world's depth into the volume the far terrain is rasterised in, and leaves the
+	 * nearer of the two behind.
+	 * <p>
+	 * The two things this does besides the multiply and the add are the two
+	 * {@link dev.vitrail.uniform.ClipSpace#distantDepth} says its caller owes it, and the off-game
+	 * harness measures why each is there rather than asserting it. Nought is the clear value of a
+	 * reversed Z and means the game drew nothing at that texel, so it stands for the game's own far
+	 * plane rather than for a surface, and carrying it over would lay a lid across every LOD past
+	 * the game's render distance. And everything nearer than that mod's own near plane, which is at
+	 * most seven and a half blocks out, carries past one, which is right and has to be said in
+	 * range.
+	 */
+	private static final String SEED_FRAGMENT = """
+			#version 460 core
+
+			layout(std140) uniform OfDistantOcclusion {
+				vec2 ofDistantDepth;
+			};
+
+			uniform sampler2D InWorld;
+			uniform sampler2D InFar;
+
+			in vec2 ofTexCoord;
+
+			layout(location = 0) out vec4 ofFragData0;
+
+			void main() {
+				float world = texture(InWorld, ofTexCoord).r;
+				float carried = world == 0.0
+						? 0.0
+						: clamp(ofDistantDepth.x * world + ofDistantDepth.y, 0.0, 1.0);
+
+				ofFragData0 = vec4(carried);
+				gl_FragDepth = max(carried, texture(InFar, ofTexCoord).r);
+			}
+			""";
+
+	private static final ShaderSource SEED_SOURCE = (id, type) -> {
+		if (type == ShaderType.FRAGMENT) {
+			return SEED_FRAGMENT_ID.equals(id) ? SEED_FRAGMENT : null;
+		}
+
+		return SEED_VERTEX_ID.equals(id) ? SEED_VERTEX : null;
+	};
 
 	private final PackChain owner;
 	private final Path packPath;
@@ -211,6 +306,37 @@ public final class DistantDraw {
 	private GpuTextureView depthView;
 	private int depthWidth;
 	private int depthHeight;
+
+	/**
+	 * Where the WATER half is really rasterised: the image above with the world's own depth seeded
+	 * into it. Null until a frame that draws the far terrain asks for it.
+	 * <p>
+	 * <strong>A second image and not the first one seeded, and that difference is the whole of what
+	 * a pack reads.</strong> {@code dhDepthTex} has to go on meaning the far terrain and nothing
+	 * else, so the image the two takes are drawn from stays as pure as it is today. This one holds
+	 * the far terrain AND the world, and only a depth test ever reads it.
+	 */
+	private GpuTexture blended;
+	private GpuTextureView blendedView;
+
+	/**
+	 * What was seeded into it, kept because the take that follows the water half has no other way
+	 * of telling the world back out again: a texel where the world won holds the world's own depth,
+	 * and it is only recognisable against the value that was put there. The game's live depth is no
+	 * substitute, the world's translucents having written it by the time that take runs.
+	 */
+	private TargetSurface worldCarried;
+
+	private int blendedWidth;
+	private int blendedHeight;
+
+	/** Whether this frame really seeded the pair above, which is what the water half asks. */
+	private boolean seeded;
+
+	/** Said once, and it costs the occlusion alone: the water half falls back on the pure image. */
+	private boolean seedBroken;
+
+	private RenderPipeline seedPipeline;
 
 	/** Whether anything was drawn into that image this frame, which is what the takes ask. */
 	private boolean drew;
@@ -248,6 +374,15 @@ public final class DistantDraw {
 	 * It outlives the pack for the reason the ring above does.
 	 */
 	private static final Corners SHADOW_CORNERS = new Corners("Vitrail far terrain shadow sections");
+
+	/**
+	 * The one slot a frame the seeding pass reads its pair out of.
+	 * <p>
+	 * Static and never closed on a pack load, for the reason the two rings above are not: a load
+	 * tears the chain down in the middle of a frame whose passes already hold slices of it. It
+	 * costs a few dozen bytes and it turns where they turn.
+	 */
+	private static final Occlusion OCCLUSION = new Occlusion();
 
 	/** What DH has handed over on the frame being drawn, one list per half of its geometry. */
 	private List<DhLods.Section> opaqueSections = List.of();
@@ -382,6 +517,128 @@ public final class DistantDraw {
 	/** The image the far terrain left its depth in, or null when it drew nothing this frame. */
 	GpuTextureView served() {
 		return this.drew ? this.depthView : null;
+	}
+
+	/**
+	 * The image the water half was really rasterised against, the far terrain and the world both,
+	 * or null on a frame that was not seeded and where the image above therefore holds the water
+	 * itself.
+	 */
+	GpuTextureView blendedServed() {
+		return this.seeded ? this.blendedView : null;
+	}
+
+	/** What was seeded into it, or null on the same frames. Always null or non-null together. */
+	GpuTextureView worldServed() {
+		return this.seeded ? this.worldCarried.view() : null;
+	}
+
+	/**
+	 * Seeds the world's own depth under the far terrain's water half, so that the player and
+	 * everything else drawn between the two halves stands in front of it.
+	 * <p>
+	 * <strong>What this closes, and it is a divergence rather than a gap being filled.</strong> The
+	 * water half is drawn at {@code RenderStage.TERRAIN_TRANSLUCENT}, which is after the entities,
+	 * the block entities and the hand, and until this it was rasterised against an image holding
+	 * the far terrain alone. Nothing held it back, so it painted over the player in third person,
+	 * over every entity on the ground and over the hand. Iris is in the same position and does the
+	 * same thing: it binds that mod's own depth to its water target
+	 * ({@code compat/dh/DHCompatInternal.java:161-176}), it CANCELS that mod's apply step outright
+	 * as soon as a pack is loaded ({@code compat/dh/LodRendererEvents.java}, the before-apply event),
+	 * and that step compares nothing anyway, its Blaze pipeline carrying
+	 * {@code withDepthTest(NONE)}, {@code withDepthWrite(false)} and a dummy depth image
+	 * ({@code common/render/blaze/apply/BlazeDhApplyRenderer.java}). So the picture this engine gave
+	 * was Iris's picture, and what is written here parts from it on purpose.
+	 * <p>
+	 * <strong>WHEN it is taken decides what the water ends up hidden behind, and one frame stage
+	 * too early costs the player's own body.</strong> It is taken from the water half's own draw,
+	 * at the last instant before that half is recorded, and nowhere earlier. Taken at the end of the
+	 * game's opaque features instead, which is where this first stood, the depth it reads carries
+	 * the opaque world, the entities, the block entities and the hand, and NOT the geometry the game
+	 * types translucent: a player's own skin is drawn with {@code entityTranslucent}, because a skin
+	 * may carry a transparent outer layer, so in third person the body arrives after that point
+	 * while the cape, which is solid, arrives before it. What that showed on screen was a player
+	 * whose cape stood in front of the far water and whose head and arms did not, which is the
+	 * defect this exists to close wearing half a disguise.
+	 * <p>
+	 * Once a frame, and the flag that says so falls at the frame boundary with every other per frame
+	 * fact of this class. Quiet on every frame with no far terrain in it, and quiet once it has
+	 * failed: what is lost then is the occlusion alone, the water half falling back on the image it
+	 * used to be drawn against.
+	 *
+	 * @param main the game's own target, whose depth is the world as it stands
+	 */
+	private void seedWater(GpuDevice device, RenderTarget main) {
+		// And not at all once the take that follows this half has given up on its own three image
+		// conversion: seeding without it would leave dhDepthTex0 answering the far terrain with no
+		// water for the rest of this load, which is a worse name than an unoccluded water.
+		if (this.broken || this.seedBroken || !this.drew
+				|| this.targets.depth().distantRefused()) {
+			return;
+		}
+
+		try {
+			// Asked for INSIDE the catch and not handed in: the first frame of a pack allocates it
+			// here, and an allocation that gave way outside would land in the caller's own catch,
+			// which hands the far terrain back to that mod for the rest of the pack rather than
+			// costing the occlusion alone.
+			this.seeded = seed(device, main, this.owner.quad(device));
+		} catch (RuntimeException e) {
+			this.seedBroken = true;
+			Vitrail.logger().error("Vitrail stopped seeding the world's depth under the far terrain's "
+					+ "water after an error, so that water paints over whatever the game drew between "
+					+ "the two halves of the far terrain for the rest of this pack", e);
+		}
+	}
+
+	private boolean seed(GpuDevice device, RenderTarget main, GpuBuffer quad) {
+		GpuTextureView world = main.getDepthTextureView();
+		// The two sizes agree by construction, {@link #record} having just called ensureDepth on
+		// this very target, and the comparison stands as the precondition of a pass that samples
+		// one image at the size of another: a seed drawn across two sizes would stretch the world's
+		// depth over the screen rather than fail. What it does NOT cover is the frame of a resize
+		// itself, where ensureDepth has just remade the far terrain's image and emptied it, so the
+		// water half of that one frame is held back by the world alone and not by the far terrain's
+		// own opaque half. One frame, and the colour of that half is already on screen.
+		if (world == null || quad == null || main.width != this.depthWidth
+				|| main.height != this.depthHeight) {
+			return false;
+		}
+
+		Vector2f pair = new Vector2f();
+		if (!this.values.world().distantDepthPair(pair)) {
+			return false;
+		}
+
+		// The pipeline before the images, so that a driver which will not have this shader never
+		// allocates the two it would then hold for the rest of the pack. The refusal that comes
+		// later, after a resource reload has emptied the device's cache, hands them back itself.
+		RenderPipeline compiled = seedPipeline(device);
+		if (compiled == null || !ensureBlended(device, this.depthWidth, this.depthHeight)) {
+			return false;
+		}
+
+		GpuBufferSlice block = OCCLUSION.write(device, pair);
+
+		// Neither attachment is cleared, and neither needs to be: the draw covers both whole, the
+		// depth test being ALWAYS and the colour written on every texel.
+		try (RenderPass pass = device.createCommandEncoder().createRenderPass(
+				() -> SEED_LABEL, this.worldCarried.view(), Optional.empty(), this.blendedView,
+				java.util.OptionalDouble.empty())) {
+			pass.setPipeline(compiled);
+			RenderSystem.bindDefaultUniforms(pass);
+			pass.setVertexBuffer(0, quad.slice());
+			pass.setUniform(SEED_BLOCK, block);
+			// NEAREST on both, and it is what makes this a rewrite of the value rather than of the
+			// image: one destination texel covers one source texel in each.
+			pass.bindTexture(SEED_WORLD, world,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			pass.bindTexture(SEED_FAR, this.depthView,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			pass.draw(SEED_VERTICES, 1, 0, 0);
+		}
+
+		return true;
 	}
 
 	/**
@@ -523,8 +780,25 @@ public final class DistantDraw {
 					+ "Horizons' own shader steadily rather than as a flicker");
 		}
 
-		RenderPassDescriptor descriptor = program.descriptor(main.getColorTextureView(),
-				this.depthView);
+		// The world's depth goes under this half here and not one stage earlier, which is what
+		// makes the player's own body stand in front of the water rather than only his cape:
+		// seedWater says why. Once a frame, and only for the half that needs it.
+		if (element.afterDeferred() && !this.seeded) {
+			seedWater(device, main);
+		}
+
+		// The water half rasterises against the seeded image where there is one, and that is the
+		// whole of the occlusion: the depth test does the rest. Everything else, the opaque half
+		// and both halves of the light, keeps the pure image, which is what the two takes read.
+		//
+		// The flag is the whole of the question and no size is compared beside it, which is only
+		// true since the seed moved into this method: it and ensureDepth now run in the same call,
+		// so the pair cannot be left at a size the far terrain's own image has moved off.
+		GpuTextureView into = element.afterDeferred() && this.seeded
+				? this.blendedView
+				: this.depthView;
+
+		RenderPassDescriptor descriptor = program.descriptor(main.getColorTextureView(), into);
 		if (descriptor == null && !program.plain()) {
 			return refuse(element, "unallocated:" + element.element(), "one of the pack's colour "
 					+ "targets had no image yet on some frame, so the pass this half wanted could not "
@@ -556,7 +830,7 @@ public final class DistantDraw {
 
 		try (RenderPass pass = descriptor == null
 				? encoder.createRenderPass(() -> "Vitrail " + element.element(),
-						main.getColorTextureView(), Optional.empty(), this.depthView,
+						main.getColorTextureView(), Optional.empty(), into,
 						java.util.OptionalDouble.empty())
 				: GeometryHold.open(encoder, descriptor)) {
 			pass.setPipeline(pipeline);
@@ -630,6 +904,95 @@ public final class DistantDraw {
 		device.createCommandEncoder().clearDepthTexture(this.depth, 0.0);
 
 		return true;
+	}
+
+	/**
+	 * Makes the water half's own pair of images exist, or remakes them after a resize. Called only
+	 * from the seed, so a session whose pack draws no far terrain never pays for them.
+	 *
+	 * @return whether there is anywhere to seed into
+	 */
+	private boolean ensureBlended(GpuDevice device, int width, int height) {
+		if (this.blended != null && this.blendedWidth == width && this.blendedHeight == height) {
+			return true;
+		}
+
+		releaseBlended();
+		this.blendedWidth = width;
+		this.blendedHeight = height;
+		if (width <= 0 || height <= 0) {
+			return false;
+		}
+
+		// Two usages here and three on the pure image beside it: this one is drawn into and read by
+		// the take that follows the water half, and never cleared, the seed covering it whole.
+		this.blended = device.createTexture(() -> "Vitrail far terrain depth with the world",
+				GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_TEXTURE_BINDING,
+				DEPTH_FORMAT, width, height, 1, 1);
+		this.blendedView = device.createTextureView(this.blended);
+		this.worldCarried = new TargetSurface("Vitrail world depth in the far terrain's volume",
+				CARRIED_FORMAT, false, width, height);
+
+		// Said out loud rather than left to be discovered, like every other pair this engine
+		// allocates: this is the cost of the far terrain's water standing behind the world, and of
+		// nothing else.
+		Vitrail.logger().info("The world's depth is carried into the far terrain's volume in two "
+				+ "images at {}x{}, {} MiB", width, height,
+				(2L * this.worldCarried.bytes()) / (1024L * 1024L));
+
+		return true;
+	}
+
+	/**
+	 * The seeding pipeline, compiled the first time it is asked for and kept.
+	 * <p>
+	 * Asked of the device every frame rather than trusted to a flag, like every other pipeline of
+	 * this engine: the compiled form lives in a cache the game empties at each resource reload, and
+	 * the call is a {@code computeIfAbsent} that costs nothing once it has been made.
+	 */
+	private RenderPipeline seedPipeline(GpuDevice device) {
+		if (this.seedPipeline == null) {
+			this.seedPipeline = buildSeed();
+		}
+
+		if (device.precompilePipeline(this.seedPipeline, SEED_SOURCE).isValid()) {
+			return this.seedPipeline;
+		}
+
+		// Handed back and not merely refused: this road is reached after frames have drawn, the
+		// compile being asked again at every resource reload, so the two images would otherwise
+		// stay resident for the rest of the pack with nothing left to write them.
+		this.seedBroken = true;
+		this.seedPipeline = null;
+		releaseBlended();
+		Vitrail.logger().error("The far terrain's occlusion pass did not compile, so its water paints "
+				+ "over whatever the game drew between the two halves of the far terrain");
+
+		return null;
+	}
+
+	private static RenderPipeline buildSeed() {
+		return RenderPipeline.builder()
+				.withLocation(
+						Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/distant_occlusion"))
+				.withVertexShader(SEED_VERTEX_ID)
+				.withFragmentShader(SEED_FRAGMENT_ID)
+				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
+				.withBindGroupLayout(BindGroupLayout.builder()
+						.withUniform(SEED_BLOCK, UniformType.UNIFORM_BUFFER)
+						.withSampler(SEED_WORLD)
+						.withSampler(SEED_FAR)
+						.build())
+				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
+				.withColorTargetState(new ColorTargetState(Optional.empty(), CARRIED_FORMAT,
+						ColorTargetState.WRITE_ALL))
+				// ALWAYS and not the reversed test every other pass of this engine carries: what is
+				// written is already the nearer of the two, worked out in the shader, and a test
+				// against what the image held would keep the frame before it instead.
+				.withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true))
+				.withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+				.withCull(false)
+				.build();
 	}
 
 	/**
@@ -841,12 +1204,17 @@ public final class DistantDraw {
 	 */
 	void rotate() {
 		this.drew = false;
+		// Dropped here and not where the seed is written, for the reason every per frame flag of
+		// this class is dropped here: a frame that draws no far terrain would otherwise hand the
+		// take an image seeded a frame ago, against a camera that has moved.
+		this.seeded = false;
 		this.shadowOpaque = this.opaqueSections;
 		this.shadowWater = this.waterSections;
 		this.opaqueSections = List.of();
 		this.waterSections = List.of();
 		CORNERS.rotate();
 		SHADOW_CORNERS.rotate();
+		OCCLUSION.rotate();
 		if (this.read) {
 			this.programs.values().forEach(DistantProgram::rotate);
 		}
@@ -871,6 +1239,9 @@ public final class DistantDraw {
 		CORNERS.forget();
 		SHADOW_CORNERS.forget();
 
+		this.seedBroken = false;
+		this.seedPipeline = null;
+		releaseBlended();
 		releaseDepth();
 	}
 
@@ -883,6 +1254,26 @@ public final class DistantDraw {
 	static void close() {
 		CORNERS.close();
 		SHADOW_CORNERS.close();
+		OCCLUSION.close();
+	}
+
+	private void releaseBlended() {
+		if (this.blendedView != null) {
+			this.blendedView.close();
+			this.blendedView = null;
+		}
+
+		if (this.blended != null) {
+			this.blended.close();
+			this.blended = null;
+		}
+
+		if (this.worldCarried != null) {
+			this.worldCarried.close();
+			this.worldCarried = null;
+		}
+
+		this.seeded = false;
 	}
 
 	private void releaseDepth() {
@@ -1038,6 +1429,56 @@ public final class DistantDraw {
 		}
 
 		/** Frees the ring itself, which only {@link DistantDraw#close()} may ask for. */
+		void close() {
+			if (this.buffer != null) {
+				this.buffer.close();
+				this.buffer = null;
+			}
+		}
+	}
+
+	/**
+	 * The one slot a frame the seeding pass reads its pair out of.
+	 * <p>
+	 * A ring and not one buffer, for the reason every other per frame block of this engine is one:
+	 * the backend keeps two submissions in flight, and a buffer written again while a frame that
+	 * has not finished is still reading it is two frames of camera at once. It turns where
+	 * {@link DistantDraw#rotate} turns, and it is never closed on a pack load: see {@link Corners}.
+	 */
+	private static final class Occlusion {
+
+		private MappableRingBuffer buffer;
+
+		/**
+		 * Writes this frame's pair and hands back the slice the pass binds. Never null: an
+		 * allocation that fails throws out of the ring's own constructor, and the caller's own
+		 * catch is what covers it.
+		 */
+		GpuBufferSlice write(GpuDevice device, Vector2f pair) {
+			if (this.buffer == null) {
+				this.buffer = new MappableRingBuffer(() -> SEED_LABEL,
+						GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, slotBytes(device));
+			}
+
+			try (GpuBufferSlice.MappedView view = this.buffer.currentBuffer().map(false, true)) {
+				Std140Builder.intoBuffer(view.data()).putVec2(pair.x, pair.y);
+			}
+
+			return this.buffer.currentBuffer().slice(0, SEED_BLOCK_BYTES);
+		}
+
+		/** How wide one slot has to be, which is the device's answer and not a number of ours. */
+		private static int slotBytes(GpuDevice device) {
+			return Mth.roundToward(SEED_BLOCK_BYTES,
+					device.getDeviceInfo().limits().minUniformOffsetAlignment());
+		}
+
+		void rotate() {
+			if (this.buffer != null) {
+				this.buffer.rotate();
+			}
+		}
+
 		void close() {
 			if (this.buffer != null) {
 				this.buffer.close();

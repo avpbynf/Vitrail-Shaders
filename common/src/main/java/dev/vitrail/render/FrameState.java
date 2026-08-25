@@ -1761,6 +1761,11 @@ public final class FrameState implements WorldState {
 	}
 
 	@Override
+	public boolean distantDepthPair(Vector2f dest) {
+		return this.view.distantDepthPair(dest);
+	}
+
+	@Override
 	public Matrix4fc dhProjection() {
 		return this.view.dhProjection();
 	}

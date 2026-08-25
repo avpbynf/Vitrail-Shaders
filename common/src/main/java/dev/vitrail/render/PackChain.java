@@ -2312,7 +2312,8 @@ public final class PackChain {
 		GpuTextureView distantServed = this.distant.served();
 		if (distantServed != null) {
 			this.targets.depth().takeDistantScene(device.createCommandEncoder(), device, this.quad,
-					distantServed, distantServed.getWidth(0), distantServed.getHeight(0));
+					this.distant.blendedServed(), this.distant.worldServed(), distantServed,
+					distantServed.getWidth(0), distantServed.getHeight(0));
 		}
 
 		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene(),
@@ -2626,12 +2627,13 @@ public final class PackChain {
 	/**
 	 * The quad every full screen pass of this engine draws, made the first time anything asks for it.
 	 * <p>
-	 * Its own method rather than a line of {@link #prepare}, because the two depths a pack is served
-	 * are copied with it from entry points that never go through prepare at all:
-	 * {@link #markPreHandDepth} and {@link #markSceneDepth} answer events of their own, and a frame
-	 * reaches either of them whether or not the chain drew. Each asks here and gets the one buffer.
+	 * Its own method rather than a line of {@link #prepare}, because what needs it is reached from
+	 * entry points that never go through prepare at all: {@link #markPreHandDepth} and
+	 * {@link #markSceneDepth} answer events of their own, and a frame reaches either of them whether
+	 * or not the chain drew. {@code DistantDraw} is the third, asking from inside the far terrain's
+	 * own draw. Each asks here and gets the one buffer.
 	 */
-	private GpuBuffer quad(GpuDevice device) {
+	GpuBuffer quad(GpuDevice device) {
 		if (this.quad == null) {
 			ByteBuffer vertices = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
 					.order(ByteOrder.nativeOrder());
