@@ -19,49 +19,46 @@ what the next one holds.
   pass behind it are served, and `IRIS_FEATURE_CUSTOM_IMAGES` is announced, so the voxel
   lighting of Complementary's top profiles, Euphoria Patches' Colored Lighting among them,
   draws instead of switching itself off behind a red overlay: lamps and torches colour the
-  world around them. A pack that requires custom images loads instead of being refused.
-
-  That light no longer blinks as you move. The glow of ores and lava used to flicker each time
-  you crossed from one block to the next, and worst of all going up: a ring of dark around you
-  on every jump, a constant shimmer flying upwards, and nothing at all coming back down. A
-  torch you place never showed it, because the ordinary block light under it covers it over.
+  world around them. A pack that requires custom images loads instead of being refused. And
+  that light holds still as you move: the glow of ores and lava used to flicker at every block
+  crossed, worst going up, a ring of dark on each jump and a shimmer in upward flight against
+  nothing at all on the way down, with a placed torch never showing it only because the
+  ordinary block light covers it over.
 
 - **A crash during startup no longer takes the graphics backend with it.** The game resets the
-  preferred graphics API, and the fullscreen mode, whenever the previous startup did not finish,
-  and it does that for any crash rather than for a backend that failed. Since nothing of this mod
-  is drawn off Vulkan, that turned one crash into a restart to set it back by hand. A selector
-  under Video Settings picks what to come back to, and it comes back to Vulkan unless told
-  otherwise.
+  preferred graphics API and the fullscreen mode after any startup that did not finish, whatever
+  crashed, and nothing of this mod draws off Vulkan, so one crash used to cost a restart to set
+  it back by hand. A selector under Video Settings picks what to come back to, Vulkan unless
+  told otherwise.
 
 - **A switch that puts the game's own wait back after every render pass.** A pack's passes end on
-  a wait naming what the next one reads and writes, rather than on the game's wait for the whole of
-  memory. That is what makes the frame cheaper, and it is also the kind of thing a driver can honour
-  by accident, so a wrong image on one machine and a right one on another is exactly what a missing
-  wait looks like. An empty file `vitrail/full-pass-barrier` in the instance, or
-  `-Dvitrail.fullPassBarrier=true`, puts the wide wait back on both roads where one was traded away,
-  the close of a pack's pass and the filling of a mip chain. It is slower and it cannot be the cause
-  of anything, so an image that comes right with it has named the problem.
+  a wait naming what the next one reads and writes, rather than on the game's wait for the whole
+  of memory. That is what makes the frame cheaper, and it is also the kind of thing a driver can
+  honour by accident: a wrong image on one machine and a right one on another is exactly what a
+  missing wait looks like. An empty file `vitrail/full-pass-barrier` in the instance, or
+  `-Dvitrail.fullPassBarrier=true`, puts the wide wait back on both roads where one was traded
+  away, the close of a pack's pass and the filling of a mip chain. Slower, and it cannot be the
+  cause of anything, so an image that comes right with it has named the problem.
 
-- **The log names the first full frame's GPU stops.** One line says how many render passes opened,
-  how many textures were cleared and how many were copied, then the labels, most frequent first.
-  Always on, once per pack load. That is the number a Mac trace of queue submits is counting.
+- **The log names the first full frame's GPU stops.** One line per pack load, always on: how many
+  render passes opened, how many textures were cleared and copied, then the labels, most frequent
+  first. That is the number a Mac trace of queue submits is counting.
 
 - **The F3 screen says what the shadow map cost.** Two lines beside the version and the pack:
   how many world sections were drawn into the map out of how many are loaded, at what render
-  distance, and what the walk for the light measured against. They are the lines Iris shows for
-  the same thing, in the same shape, so a screenshot taken under one can be read against a
-  screenshot taken under the other. Nothing has to be switched on for them to appear.
+  distance, and what the walk for the light measured against. They are Iris's lines for the same
+  thing, in the same shape, so a screenshot under one reads against a screenshot under the
+  other, and nothing has to be switched on for them to appear.
 
 ### Changed
 
-- **Chloride is no longer required, on either loader.** One thing was behind that
-  requirement: NeoForge opens a loading window before the game exists, that window carries an
-  OpenGL context, and the game takes it over instead of making one, so the Vulkan surface is
-  asked for on a window built for OpenGL. Vitrail now refuses that window itself when the
-  backend is Vulkan, takes it off FML's hands at the end of mod loading, and closes it once
-  the game has drawn its first frame. Fabric opens no such window and never needed the help.
-  Chloride remains worth installing, its settings are still read and reported, and running it
-  alongside changes nothing.
+- **Chloride is no longer required, on either loader.** One thing was behind that requirement:
+  NeoForge opens a loading window before the game exists, that window carries an OpenGL context,
+  and the game takes it over instead of making one, so the Vulkan surface was asked for on a
+  window built for OpenGL. Vitrail now refuses that window itself when the backend is Vulkan,
+  takes it off FML's hands at the end of mod loading, and closes it once the game has drawn its
+  first frame. Fabric opens no such window and never needed the help. Chloride remains worth
+  installing, its settings are still read and reported, and running it alongside changes nothing.
 
 - **The odd corners of a pack's properties read the way Iris reads them.** An `alphaTest.`, a
   `texture.noise` or a `dimension.properties` line written under a setting's `#if` now comes and
@@ -76,11 +73,11 @@ what the next one holds.
   constant off its closed list, a toggle nothing tests or a value without a list of choices,
   shows the same blank it shows there instead of becoming a slider or a toggle Iris never had.
 
-- **Opening a pack's settings no longer applies it.** Looking at another pack's pages used to load
-  it first, on its own default profile, so anybody meaning to open a heavy pack, turn it down and
-  then apply it paid the heavy profile in full first. The pages now open on the pack that was
-  picked while the loaded one goes on drawing, and Apply is the only thing that costs. A profile
-  chosen before applying is the one that lands.
+- **Opening a pack's settings no longer applies it.** Looking at another pack's pages used to
+  load it first, on its own default profile, so opening a heavy pack to turn it down paid the
+  heavy profile in full. The pages now open on the pack that was picked while the loaded one
+  goes on drawing; Apply is the only thing that costs, and a profile chosen before applying is
+  the one that lands.
 
 - **The shadow walk no longer rotates Sodium's command ring a second time in the same frame.**
   The lists still reset so the light does not append onto the camera's; the ring waits for the
@@ -101,10 +98,8 @@ what the next one holds.
   now built once and shared, and the same frame measures nine.
 
 - **Pass uniforms reuse scratch matrices** instead of allocating a model-view-projection and a
-  normal matrix on every fill. Same numbers.
-
-- **Sodium region draws skip leftover sampled clears** once nothing is still owed one, and the
-  shadow sweep reuses its plane scratch. Same picture.
+  normal matrix on every fill, Sodium region draws skip leftover sampled clears once nothing is
+  still owed one, and the shadow sweep reuses its plane scratch. Same picture, same numbers.
 
 - **Improved transparency is turned off while a pack draws**, the same refusal Iris makes. That
   option opens a second colour target for translucent items, and every leftover feature that
@@ -114,13 +109,13 @@ what the next one holds.
   pass already open**, the way Iris leaves the default framebuffer bound. A leftover pass is
   never adopted: its viewport and scissor would be whoever opened it.
 
-- **Geometry programs compile during the same warm-up as the chain**, before the pack is drawn.
-  Families translate on a worker while composites compile. The world waits until the composites
-  and the terrain are in the device cache; leftover families compile on their first draw, which
-  is what kept Complementary Unbound behind a loading overlay for the better part of a minute.
-  shaderc stays on the render thread: the device cache is not safe off it. A line above the HUD
-  says the pack is still compiling while the world waits, then that it is done, and is gone
-  once the player can walk.
+- **Geometry programs compile during the same warm-up as the chain**, before the pack is drawn:
+  families translate on a worker while composites compile, and the world waits until the
+  composites and the terrain are in the device cache. Leftover families compile on their first
+  draw, which is what kept Complementary Unbound behind a loading overlay for the better part of
+  a minute; shaderc stays on the render thread, the device cache not being safe off it. A line
+  above the HUD says the pack is still compiling, then that it is done, and is gone once the
+  player can walk.
 
 - **The wait for a pack skips the world, not the HUD.** Several programs compile a frame instead
   of one, so the wait is not a two-frame-per-second vanilla picture of the same work.
