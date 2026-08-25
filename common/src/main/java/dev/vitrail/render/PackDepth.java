@@ -92,8 +92,15 @@ final class PackDepth {
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/depth_window_vertex");
 	private static final Identifier FRAGMENT_ID =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/depth_window_fragment");
+	private static final Identifier DISTANT_FRAGMENT_ID =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pack/distant_window_fragment");
 
 	private static final String SAMPLER = "InSampler";
+
+	/** The three the take that follows the far terrain's water half reads; see its own fragment. */
+	private static final String BLENDED = "InBlended";
+	private static final String CARRIED = "InCarried";
+	private static final String PURE = "InPure";
 
 	/** Two triangles, the quad every full screen pass of this engine draws. */
 	private static final int VERTICES = 6;
@@ -102,6 +109,9 @@ final class PackDepth {
 	private static final GpuFormat FORMAT = GpuFormat.R32_FLOAT;
 
 	private static final String LABEL = "Vitrail depth window";
+
+	/** Its own, and not the one above: the frame's pass census names a pass by its label. */
+	private static final String DISTANT_LABEL = "Vitrail far terrain depth window";
 
 	private static final String VERTEX = """
 			#version 460 core
@@ -137,8 +147,52 @@ final class PackDepth {
 			}
 			""", ClipSpace.REVERSED.z, ClipSpace.REVERSED.w);
 
+	/**
+	 * The same conversion, out of three images instead of one, for the take that follows the far
+	 * terrain's water half.
+	 * <p>
+	 * <strong>What the three are for is keeping {@code dhDepthTex0} the far terrain and nothing
+	 * else.</strong> The water half is rasterised against an image the world's own depth was seeded
+	 * into, so that it stands behind the player; that image therefore holds the world wherever the
+	 * world won, and handing it to a pack would say there is far terrain in front of every wall.
+	 * The seed was kept as it was written, so a texel still carrying it is a texel the world won
+	 * and the answer there is the pure image, which holds the far terrain hidden behind the world
+	 * or nothing at all. Everywhere else the blended image is the far terrain's own, water
+	 * included.
+	 * <p>
+	 * What is lost, and it is worth naming: far WATER hidden behind the near world answers with the
+	 * far terrain behind it rather than with the water, its own depth having been thrown away by
+	 * the very test that keeps it off the player. It is a texel where nothing of the far terrain is
+	 * visible, and the answer given there is a surface that is really there rather than one that is
+	 * not.
+	 */
+	private static final String DISTANT_FRAGMENT = String.format(Locale.ROOT, """
+			#version 460 core
+
+			uniform sampler2D InBlended;
+			uniform sampler2D InCarried;
+			uniform sampler2D InPure;
+
+			in vec2 ofTexCoord;
+
+			layout(location = 0) out vec4 ofFragData0;
+
+			void main() {
+				float blended = texture(InBlended, ofTexCoord).r;
+				float far = blended > texture(InCarried, ofTexCoord).r
+						? blended
+						: texture(InPure, ofTexCoord).r;
+
+				ofFragData0 = vec4(%s * far + %s);
+			}
+			""", ClipSpace.REVERSED.z, ClipSpace.REVERSED.w);
+
 	private static final ShaderSource SOURCE = (id, type) -> {
 		if (type == ShaderType.FRAGMENT) {
+			if (DISTANT_FRAGMENT_ID.equals(id)) {
+				return DISTANT_FRAGMENT;
+			}
+
 			return FRAGMENT_ID.equals(id) ? FRAGMENT : null;
 		}
 
@@ -149,6 +203,14 @@ final class PackDepth {
 
 	/** Said once and not per frame, so that a driver that will not have this shader is readable. */
 	private boolean refused;
+
+	/**
+	 * The same pair for the three image take, latched apart: a driver that refuses that one still
+	 * has the one above, and what falls back is the far terrain's water and not every depth a pack
+	 * reads.
+	 */
+	private RenderPipeline distantPipeline;
+	private boolean distantRefused;
 
 	private TargetSurface opaque;
 	private TargetSurface scene;
@@ -301,8 +363,19 @@ final class PackDepth {
 	 * render pass, and only on the frames the pack really drew the far terrain, like the take above.
 	 */
 	boolean takeDistantScene(CommandEncoder encoder, GpuDevice device, GpuBuffer quad,
-			GpuTextureView distant, int width, int height) {
-		if (!ensureDistant(width, height) || !fill(encoder, device, quad, distant, this.distantScene)) {
+			GpuTextureView blended, GpuTextureView carried, GpuTextureView pure, int width,
+			int height) {
+		if (!ensureDistant(width, height)) {
+			return false;
+		}
+
+		// One image where the frame seeded nothing under the water half, and then the pure image
+		// carries that water itself and is the whole answer; three where it did, and then the water
+		// is in the blended one and the pure one is what the world is told back out with.
+		boolean filled = (blended == null || carried == null)
+				? fill(encoder, device, quad, pure, this.distantScene)
+				: fillDistant(encoder, device, quad, blended, carried, pure);
+		if (!filled) {
 			return false;
 		}
 
@@ -351,6 +424,21 @@ final class PackDepth {
 	 */
 	GpuTextureView preHand() {
 		return this.preHandWritten ? this.preHand.view() : null;
+	}
+
+	/**
+	 * Whether the three image conversion has given up for this load, which is what stops the far
+	 * terrain's water being seeded at all.
+	 * <p>
+	 * <strong>The two refusals have to recover in the same direction, and that is the whole of why
+	 * this is asked.</strong> {@code DistantDraw} handing its own seed back sends the water half
+	 * into the pure image, so {@code dhDepthTex0} is whole again and only the occlusion is lost.
+	 * This one on its own would leave the seed running and the water landing in an image nothing
+	 * reads, and then that name would answer the far terrain with no water at all, on every texel
+	 * rather than on the few the design gives up.
+	 */
+	boolean distantRefused() {
+		return this.distantRefused;
 	}
 
 	/**
@@ -635,6 +723,61 @@ final class PackDepth {
 	}
 
 	/**
+	 * Draws the far terrain's scene image out of the three the seeded water half leaves behind.
+	 * Falls back on the pure image alone where the three image pipeline will not compile, which
+	 * costs the water rather than the whole name.
+	 */
+	private boolean fillDistant(CommandEncoder encoder, GpuDevice device, GpuBuffer quad,
+			GpuTextureView blended, GpuTextureView carried, GpuTextureView pure) {
+		if (quad == null || this.distantScene == null) {
+			return false;
+		}
+
+		RenderPipeline compiled = distantPipeline(device);
+		if (compiled == null) {
+			return fill(encoder, device, quad, pure, this.distantScene);
+		}
+
+		try (RenderPass pass = encoder.createRenderPass(() -> DISTANT_LABEL,
+				this.distantScene.view(), Optional.empty())) {
+			pass.setPipeline(compiled);
+			RenderSystem.bindDefaultUniforms(pass);
+			pass.setVertexBuffer(0, quad.slice());
+			pass.bindTexture(BLENDED, blended,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			pass.bindTexture(CARRIED, carried,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			pass.bindTexture(PURE, pure,
+					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+			pass.draw(VERTICES, 1, 0, 0);
+		}
+
+		return true;
+	}
+
+	/** The three image pipeline, on the same terms as the one below. */
+	private RenderPipeline distantPipeline(GpuDevice device) {
+		if (this.distantRefused) {
+			return null;
+		}
+
+		if (this.distantPipeline == null) {
+			this.distantPipeline = buildDistant();
+		}
+
+		if (device.precompilePipeline(this.distantPipeline, SOURCE).isValid()) {
+			return this.distantPipeline;
+		}
+
+		this.distantRefused = true;
+		this.distantPipeline = null;
+		Vitrail.logger().error("The far terrain's depth conversion did not compile, so dhDepthTex0 "
+				+ "answers the far terrain without its water rather than a depth carrying the world");
+
+		return null;
+	}
+
+	/**
 	 * The pipeline, compiled the first time it is asked for and kept.
 	 * <p>
 	 * The compiled form lives in the device cache, which the game empties at every resource reload,
@@ -660,6 +803,26 @@ final class PackDepth {
 				+ "pack reads the far plane rather than a depth in the wrong direction");
 
 		return null;
+	}
+
+	private static RenderPipeline buildDistant() {
+		return RenderPipeline.builder()
+				.withLocation(
+						Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/distant_window"))
+				.withVertexShader(VERTEX_ID)
+				.withFragmentShader(DISTANT_FRAGMENT_ID)
+				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
+				.withBindGroupLayout(BindGroupLayout.builder()
+						.withSampler(BLENDED)
+						.withSampler(CARRIED)
+						.withSampler(PURE)
+						.build())
+				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
+				.withColorTargetState(new ColorTargetState(Optional.empty(), FORMAT,
+						ColorTargetState.WRITE_ALL))
+				.withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+				.withCull(false)
+				.build();
 	}
 
 	private static RenderPipeline build() {

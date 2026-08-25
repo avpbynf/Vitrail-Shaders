@@ -5,6 +5,7 @@ import dev.vitrail.uniform.ViewSource;
 
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
+import org.joml.Vector2f;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector4f;
@@ -165,6 +166,15 @@ public final class ViewMatrices implements ViewSource {
 	private boolean distantSeeded;
 
 	/**
+	 * Whether the volume above is really Distant Horizons' this frame, rather than the frame's own
+	 * standing in for it. Kept apart from {@link #distantSeeded}, which is about there having been a
+	 * frame before rather than about there being a row now: this one falls back to false the moment
+	 * that mod stops drawing, and {@link #distantDepthPair} is the one answer that must not be given
+	 * out of two volumes that are the same one.
+	 */
+	private boolean distantVolume;
+
+	/**
 	 * What Distant Horizons drew this frame with, or nothing when it drew nothing. See
 	 * {@link #advanceDistant} for why the three move together.
 	 */
@@ -309,7 +319,8 @@ public final class ViewMatrices implements ViewSource {
 		// which is every session without Distant Horizons. On the frames with a row the two bases
 		// agree, the row being replaced either way.
 		this.distantProjection.set(this.rendered);
-		if (offset != 0.0F) {
+		this.distantVolume = offset != 0.0F;
+		if (this.distantVolume) {
 			// Row z, column z and column w, in JOML's column first spelling: what DH calls m22 and
 			// m23 are m22 and m32 here, and the two conventions number the pair the other way round.
 			this.distantProjection.m22(scale);
@@ -666,6 +677,18 @@ public final class ViewMatrices implements ViewSource {
 	@Override
 	public Matrix4fc drawnDistantProjection() {
 		return this.distantProjection;
+	}
+
+	/**
+	 * Read off the RENDERED matrix and the row spliced into it, which are the two the images were
+	 * really written with. The published pair is no use here: it has been through
+	 * {@link ClipSpace#toLegacyDepth} and describes the window a pack reads, where both of the
+	 * images this pair stands between are the device's own.
+	 */
+	@Override
+	public boolean distantDepthPair(Vector2f dest) {
+		return this.distantVolume && ClipSpace.distantDepth(this.rendered,
+				this.distantProjection.m22(), this.distantProjection.m32(), dest);
 	}
 
 	/**
