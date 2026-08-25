@@ -125,6 +125,19 @@ what the next one holds.
   outright, those names answer with the far terrain behind the water rather than with the water,
   on a texel where neither is visible.
 
+- **Entering a world with Distant Horizons no longer washes the distance out to the sky colour.**
+  Until that mod has drawn its first frame, which on a world it has no cache for takes a moment,
+  a pack was told how far the far terrain reached in the wrong unit, and the number it got was
+  sixteen times too small: a dozen blocks or so, rather than the thousands that mod actually
+  draws. A pack that fogs by that number then fogged out everything past the end of its own nose,
+  so the whole distance came back as flat sky until the far terrain appeared. Bliss shows it
+  plainly. The number no longer waits on that first frame.
+
+  Two smaller things move with it. Turning that mod's rendering off now gives a pack back the
+  game's own distance, which is what Iris gives it. And a pack that leaves its shadow planes for
+  the engine to resolve gets a shadow box sized for whichever terrain is really being drawn. No
+  pack shipped today asks for that on its default settings.
+
 - **Opening a world no longer crashes while leftover families are still being translated.**
   The frame used to walk those program maps as soon as the composites and the terrain were
   ready, which is the same moment the worker is still filling them.
