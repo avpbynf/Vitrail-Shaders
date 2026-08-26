@@ -856,9 +856,14 @@ final class GeometryProgram {
 			return false;
 		}
 
-		if (this.compiled) {
-			return true;
-		}
+		// NOT short-circuited on the flag below, which only says shaderc has been paid once.
+		// Every resource reload empties the device cache under a running session, and what
+		// lowers that flag is the chain noticing its own head recompiled, which happens later in
+		// the frame than the sky, the first thing the world draws. A program trusting the flag
+		// hands back a pipeline the cache no longer holds, and setPipeline compiles it from the
+		// game's shader sources, which carry no line of this pack: an invalid pipeline, and the
+		// frame throws by name in the middle of the sky. The call below is a computeIfAbsent, so
+		// it costs a lookup for as long as the cache holds the key.
 
 		// What the worker finished is handed to the cache here, on the render thread, and the
 		// precompile below finds it as a lookup. A cache that already holds the key kept a copy
