@@ -945,6 +945,13 @@ public final class GlslTranslator {
 	/**
 	 * Records every name the unit declares under a built-in type, and among them the functions
 	 * whose name GLSL has since taken for itself.
+	 * <p>
+	 * A declaration declares more than one name when it carries commas, and only the first of them
+	 * follows the type. E-LITE writes {@code uniform int frameCounter, isEyeInWater, entityId},
+	 * and reading the first alone left the other two as names the unit never declares, which is
+	 * what decides whether the block supplies one: {@code entityId} was then written into the
+	 * block twice, once by the lift and once as a name nobody had declared, and the compiler
+	 * refuses a member declared twice.
 	 */
 	private void collectDeclarations() {
 		for (int index = 0; index < this.tokens.size(); index++) {
@@ -959,10 +966,81 @@ public final class GlslTranslator {
 			}
 
 			this.declaredNames.add(token.text());
+			this.declaredNames.addAll(continuationDeclarators(index));
 			if (LegacyGlsl.POST_120_BUILTINS.contains(token.text()) && callOpener(index) >= 0) {
 				this.shadowedBuiltins.add(token.text());
 			}
 		}
+	}
+
+	/**
+	 * The names a declaration declares after its first, which is every declarator past a comma.
+	 * <p>
+	 * A name is only taken where what FOLLOWS it says it is a declarator, which is a comma, a
+	 * semicolon, an initialiser or an array bracket. Reading the name alone is not enough, and a
+	 * parameter list is why: {@code TYPE_NAMES} carries no {@code const}, {@code in} or
+	 * {@code out}, so Bliss writing {@code float rayLength, const float steps} in a signature
+	 * ({@code lib/ROBOBO_sky.glsl:61}) offers {@code const} where a declarator would stand. What
+	 * follows it there is a type name and never one of the four, so it is refused.
+	 * <p>
+	 * Liveness is not consulted, here or anywhere else in this pass: a declaration is read whether
+	 * its branch is taken or not, and the tail of a list is read on the same terms as its head.
+	 * Making the pass live-aware would change what it answers for every declaration in the file
+	 * and belongs to a batch of its own.
+	 *
+	 * @param first the first declarator of the statement, the one the type stands in front of
+	 */
+	private List<String> continuationDeclarators(int first) {
+		int end = statementEnd(first);
+		if (end < 0) {
+			return List.of();
+		}
+
+		List<String> names = new ArrayList<>();
+		int depth = 0;
+		boolean expectName = false;
+
+		for (int index = significantAfter(first); index >= 0 && index <= end;
+				index = significantAfter(index)) {
+			Token token = this.tokens.get(index);
+			if (token.operator("(") || token.operator("[") || token.operator("{")) {
+				depth++;
+			} else if (token.operator(")") || token.operator("]") || token.operator("}")) {
+				if (depth == 0) {
+					return names;
+				}
+
+				depth--;
+			} else if (depth == 0 && token.operator(",")) {
+				expectName = true;
+			} else if (expectName) {
+				if (token.kind() != Kind.IDENTIFIER || !declaratorFollows(index)) {
+					return names;
+				}
+
+				names.add(token.text());
+				expectName = false;
+			}
+		}
+
+		return names;
+	}
+
+	/**
+	 * Whether the name at this position is followed by what only ever follows a declarator: the
+	 * comma before the next one, the semicolon that ends the declaration, an initialiser, or the
+	 * bracket of an array.
+	 */
+	private boolean declaratorFollows(int name) {
+		int next = significantAfter(name);
+		if (next < 0) {
+			return false;
+		}
+
+		Token token = this.tokens.get(next);
+
+		return token.operator(",") || token.operator(";") || token.operator("=")
+				|| token.operator("[");
 	}
 
 	/**
@@ -1498,9 +1576,15 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Whether the identifier at this position is being DECLARED rather than read, which is the same
-	 * test {@code collectDeclarations} makes: an identifier straight after a built-in type name is
-	 * being named, anywhere else it is being used.
+	 * Whether the identifier at this position is being DECLARED rather than read: an identifier
+	 * straight after a built-in type name is being named, anywhere else it is being used.
+	 * <p>
+	 * It answers for the head of a declaration and for nothing else, where
+	 * {@link #collectDeclarations} reads the whole list. A pack writing
+	 * {@code uniform mat4 gbufferModelView, modelViewMatrix} would be told the second name is a
+	 * use, and the injection below would land on the declarator. No pack of the corpus writes the
+	 * shape, and closing it is not this method's alone: {@code declaredUnderAType} makes the same
+	 * first-name-only test for the block, so the two move together or neither does.
 	 */
 	private boolean declaring(int index) {
 		int before = significantBefore(index);
