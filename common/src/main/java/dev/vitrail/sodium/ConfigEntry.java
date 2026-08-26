@@ -71,6 +71,10 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	private static final Identifier SHADOW_DISTANCE =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "shadow_distance");
 
+	/** The fraction of the window the world renders at, beside the distance above. */
+	private static final Identifier RENDER_SCALE =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "render_scale");
+
 	/** Which backend a startup that ended badly comes back to. */
 	private static final Identifier GRAPHICS_API =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "graphics_api");
@@ -98,6 +102,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 						.setName(Component.translatable("options.videoTitle"))
 						.addOptionGroup(builder.createOptionGroup()
 								.addOption(shadowDistance(builder))
+								.addOption(renderScale(builder))
 								.addOption(graphicsApi(builder))))
 				// RGSS is shader code, written into the game's own terrain shader and into Sodium's,
 				// so it is worth nothing while the pack's terrain program is the one drawing: the
@@ -123,6 +128,35 @@ public final class ConfigEntry implements ConfigEntryPoint {
 								.setAllowedValuesProvider(
 										state -> TerrainDraw.asked() ? WITHOUT_RGSS : EVERY_METHOD,
 										ConfigState.UPDATE_ON_REBUILD));
+	}
+
+	/**
+	 * What fraction of the window the world renders at before being upscaled back onto it, as a
+	 * percentage on each axis, applied while a pack draws and stored in {@code pack.txt} beside
+	 * the distance above.
+	 * <p>
+	 * The step of five exists for the slider alone: the file takes any number the range holds, and
+	 * a hand-written 33 survives the read, the clamp in {@code PackFile} being the only correction
+	 * ever written back.
+	 * <p>
+	 * The value is shown with a literal percent sign rather than through the game's own
+	 * {@code options.percent_value}, which is not a value string: it carries the option's caption
+	 * and a colon along with the number.
+	 */
+	private static OptionBuilder renderScale(ConfigBuilder builder) {
+		return builder.createIntegerOption(RENDER_SCALE)
+				.setName(Component.translatable(ScreenText.RENDER_SCALE))
+				.setTooltip(_ -> Component.translatable(ScreenText.RENDER_SCALE_TOOLTIP))
+				.setDefaultValue(PackFile.DEFAULT_RENDER_SCALE)
+				.setRange(new Range(PackFile.MIN_RENDER_SCALE, PackFile.MAX_RENDER_SCALE, 5))
+				.setBinding(percent -> PackChain.renderScale(Vitrail.platform().gameDirectory(),
+								percent),
+						PackChain::renderScale)
+				.setValueFormatter(percent -> Component.literal(percent + "%"))
+				// Sodium refuses to build an option without one, at the loading screen and not at
+				// compile time. The binding above has already written pack.txt.
+				.setStorageHandler(() -> {})
+				.setImpact(OptionImpact.HIGH);
 	}
 
 	/**

@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "影の最大描画距離",
 	"options.vitrail.shadow_distance_tooltip": "影が描画される最大の距離を設定できます。 指定された値より遠くの地形やエンティティには影が描画されません。 最大描画距離を下げることで、パフォーマンスが向上することがあります。",
 	"options.vitrail.shadow_distance_forced": "お使いのシェーダーパックでは既に最大描画距離が設定されているため、ここでは変更できません。",
+	"options.vitrail.render_scale": "FSRレンダースケール",
+	"options.vitrail.render_scale_tooltip": "ワールドを描画する解像度をウィンドウサイズに対する割合で制御します。完成した画像はインターフェースの前にAMD FSR 1.0で拡大されます。低い値はシェーダーパック使用時のフレームレートを大きく改善しますが、鮮明さがいくらか失われます。",
 	"pack.vitrail.select_title": "シェーダー選択",
 	"pack.vitrail.configure_title": "シェーダー設定",
 	"options.vitrail.title": "シェーダーパックの設定",

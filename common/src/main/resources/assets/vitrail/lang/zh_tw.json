@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "最大陰影距離",
 	"options.vitrail.shadow_distance_tooltip": "能讓您變更陰影的最大距離。超出此距離的地形和實體將不會有陰影。降低陰影距離能顯著提升效能。",
 	"options.vitrail.shadow_distance_forced": "您無法變更目前光影包所設定的陰影顯示距離。",
+	"options.vitrail.render_scale": "FSR 算圖比例",
+	"options.vitrail.render_scale_tooltip": "控制世界算繪所用的解析度，以視窗大小的百分比表示。完成的畫面會在繪製介面之前用 AMD FSR 1.0 放大。較低的值可在啟用光影包時明顯提升效能，但會犧牲一些清晰度。",
 	"pack.vitrail.select_title": "選擇",
 	"pack.vitrail.configure_title": "設定",
 	"options.vitrail.title": "光影包設定",

@@ -833,3 +833,17 @@ GNU Lesser General Public License version 3
   Nothing else in Vitrail is derived from Iris. Of its GLSL transformation machinery, which links
   against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that
   code is here, and the translator in dev.vitrail.glsl is this project's own.
+
+AMD FidelityFX Super Resolution 1.0, https://github.com/GPUOpen-Effects/FidelityFX-FSR
+Copyright (c) 2021 Advanced Micro Devices, Inc.
+MIT License
+
+  common/src/main/java/dev/vitrail/render/RenderScale.java carries GLSL ports of FsrEasuF and
+  FsrRcasF from ffx_fsr1.h, read on 26 August 2026: the 12-tap edge-adaptive upsampling kernel
+  with its gather layout, its direction and length analysis, its lanczos-like tap weights and its
+  deringing clamp, and the 5-tap contrast-adaptive sharpen with its clipping solve and its limit
+  constant. The two low-precision reciprocal approximations come from ffx_a.h of the same
+  project. Three departures: the constants the reference computes in a CPU-side setup are derived
+  in the shader from textureSize, the optional noise-detection term of RCAS is not carried, the
+  reference itself compiling it out by default, and the sharpness is baked at the 0.2 stops the
+  FSR demo ships with.

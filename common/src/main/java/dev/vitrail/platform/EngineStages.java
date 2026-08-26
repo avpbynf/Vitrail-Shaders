@@ -5,6 +5,7 @@ import dev.vitrail.render.HandDraw;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.PbrAtlases;
 import dev.vitrail.render.PbrTextures;
+import dev.vitrail.render.RenderScale;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.sodium.EntityMeshSerializer;
@@ -230,6 +231,10 @@ public final class EngineStages {
 		// map is filled from a submission of its own, so it carries its own dispatcher and its own
 		// buffers, and they go back here rather than with any pack.
 		ShadowGeometry.close();
+
+		// The render scale's scaled world and its quad belong to the session too: they outlive
+		// every pack on purpose, so the end of the session is the one caller that frees them.
+		RenderScale.close();
 
 		// And the material maps, which belong to the resource pack rather than to any shader pack:
 		// nothing in a pack's lifetime touches them, so nothing but the end of the session does. Both

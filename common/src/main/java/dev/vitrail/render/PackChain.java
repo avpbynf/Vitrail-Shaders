@@ -605,8 +605,11 @@ public final class PackChain {
 			askedFor = PackFile.read(packFile(gameDirectory));
 			// Off that same read rather than a second one, and before anything can refuse the load:
 			// this line belongs to the player and not to the pack, and every return below is reached
-			// with no pack drawn and the shadow distance still theirs.
+			// with no pack drawn and the shadow distance still theirs. The render scale rides the
+			// same rule; whether it ENGAGES is asked per frame against drawingPack(), so the roads
+			// below that draw nothing need no line of their own to keep the world at the window.
 			shadowDistance = askedFor.shadowDistance();
+			RenderScale.wanted(askedFor.renderScale());
 
 			// Both ways out of the next two blocks end with no pack drawing anything, and NEITHER mesh
 			// carries what a pack reads once none wants it: said here as well as on the road that
@@ -1212,6 +1215,33 @@ public final class PackChain {
 			PackFile.write(file, PackFile.read(file).withShadowDistance(chunks));
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Vitrail could not write the shadow distance to {}", file, e);
+		}
+	}
+
+	/**
+	 * What fraction of the window the world renders at, as the percentage the player set. Answered
+	 * from the last read of {@code pack.txt} rather than from the file, like the distance above.
+	 */
+	public static int renderScale() {
+		return askedFor.renderScale();
+	}
+
+	/**
+	 * Takes a new render scale and puts it away, on the shape of {@link #shadowDistance(Path, int)}
+	 * and for its reasons: taken on first, so a folder that cannot be written still moves this
+	 * session, and the file read before it is written, so the pack lines and a hand edit survive
+	 * the slider. It takes effect at the next frame's swap rather than on a reload: nothing about
+	 * the pack changes, only the size the world is handed.
+	 */
+	public static void renderScale(Path gameDirectory, int percent) {
+		askedFor = askedFor.withRenderScale(percent);
+		RenderScale.wanted(askedFor.renderScale());
+
+		Path file = packFile(gameDirectory);
+		try {
+			PackFile.write(file, PackFile.read(file).withRenderScale(percent));
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().error("Vitrail could not write the render scale to {}", file, e);
 		}
 	}
 
