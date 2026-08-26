@@ -71,8 +71,15 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 	/** The least alpha the separators are ever drawn at once they are drawn, also Iris's. */
 	private static final float FAINTEST = 0.01F;
 
-	/** Where a pack comes from when the folder is empty, and the page Iris points at from here. */
-	private static final String PACK_SITE = "https://modrinth.com/shaders";
+	/**
+	 * Where a pack comes from when the folder is empty. Iris sends people to Modrinth from here,
+	 * which is a store this mod is not on, so the address is the CurseForge search instead. It asks
+	 * for the shader class and nothing else: the same search filtered on a game version answers
+	 * with the packs whose author has uploaded a file tagged for it, which is close to none of them
+	 * in the weeks after a game release, exactly when somebody arrives here with an empty folder.
+	 */
+	private static final String PACK_SITE =
+			"https://www.curseforge.com/minecraft/search?class=shaders";
 
 	private static final int ROW_HEIGHT = 20;
 
@@ -333,7 +340,7 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 	/**
 	 * Somewhere to get a pack, through the game's own "do you want to open this link" screen so that
 	 * nothing is opened without being asked for and the address is shown before it is followed. Iris
-	 * offers the same page from the same place.
+	 * offers a page of its own from the same place.
 	 */
 	private void openPackSite() {
 		Screen here = this.minecraft.gui.screen();
