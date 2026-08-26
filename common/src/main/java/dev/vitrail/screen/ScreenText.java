@@ -178,7 +178,15 @@ public final class ScreenText {
 	public static final String COMPILING = "overlay.vitrail.compiling";
 
 	/**
-	 * The same line once the world can be drawn. Said once, then vanilla fades it.
+	 * The same line once the world draws but the pack-load worker is still compiling the
+	 * on-demand families behind it. Said once and left to fade rather than pinned: the worker
+	 * runs through normal play, where the action bar belongs to servers and other mods too.
+	 */
+	public static final String COMPILING_BACKGROUND = "overlay.vitrail.compiling_background";
+
+	/**
+	 * The same line once the world can be drawn and the worker is done. Said once, then vanilla
+	 * fades it.
 	 */
 	public static final String COMPILED = "overlay.vitrail.compiled";
 

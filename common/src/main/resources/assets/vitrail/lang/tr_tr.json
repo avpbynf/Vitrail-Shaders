@@ -52,6 +52,7 @@
 	"options.vitrail.reload_failed": "Shaderları yenileme başarısız! Sebep: %s",
 	"options.vitrail.other_backend": "Vitrail %s arka ucunda hiçbir şey çizmez: shaderları yalnızca Vulkan üzerinde çalışır. Seçenekler, Görüntü Ayarları altında %s ayarını \"%s\" yapın ve oyunu yeniden başlatın.",
 	"overlay.vitrail.compiling": "Vitrail shader'ları hâlâ derliyor",
+	"overlay.vitrail.compiling_background": "Vitrail geri kalanını arka planda derliyor",
 	"overlay.vitrail.compiled": "Vitrail shader'ları derlendi",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

@@ -52,6 +52,7 @@
 	"options.vitrail.reload_failed": "Falha ao recarregar sombreadores! Motivo: %s",
 	"options.vitrail.other_backend": "O Vitrail não desenha nada no backend %s: seus shaders só funcionam em Vulkan. Defina %s como \"%s\" em Opções, Configurações de vídeo, e reinicie o jogo.",
 	"overlay.vitrail.compiling": "Vitrail ainda está compilando os shaders",
+	"overlay.vitrail.compiling_background": "Vitrail está compilando o resto em segundo plano",
 	"overlay.vitrail.compiled": "Shaders do Vitrail compilados",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

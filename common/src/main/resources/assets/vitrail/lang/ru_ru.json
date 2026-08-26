@@ -52,6 +52,7 @@
 	"options.vitrail.reload_failed": "Не удалось перезагрузить шейдеры. Причина: %s",
 	"options.vitrail.other_backend": "Vitrail ничего не рисует на бэкенде %s: его шейдеры работают только на Vulkan. Установите %s в значение \"%s\" в меню Настройки, Настройки графики, и перезапустите игру.",
 	"overlay.vitrail.compiling": "Vitrail всё ещё компилирует шейдеры",
+	"overlay.vitrail.compiling_background": "Vitrail компилирует остальное в фоновом режиме",
 	"overlay.vitrail.compiled": "Шейдеры Vitrail скомпилированы",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

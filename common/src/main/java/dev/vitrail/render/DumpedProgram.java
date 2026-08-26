@@ -3,6 +3,8 @@ package dev.vitrail.render;
 import dev.vitrail.uniform.WorldState;
 
 import com.mojang.blaze3d.systems.GpuDevice;
+import com.mojang.blaze3d.vulkan.VulkanDevice;
+import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 /**
  * What {@link PackDump} needs of a program to be able to name it and read it back.
@@ -42,4 +44,25 @@ interface DumpedProgram {
 	 * A resource reload emptied the device cache, so the next {@link #compile} has to pay again.
 	 */
 	void forgetCompiled();
+
+	/**
+	 * Compiles this program's pipeline on the pack-load worker, so its first draw finds the work
+	 * already paid instead of paying shaderc on the render thread. The six on-demand families
+	 * override it; the terrain does not, compiling while the world is still held back.
+	 *
+	 * @param compiler the worker's own compiler, never the device's: the device's belongs to the
+	 *                 render thread along with the caches around it
+	 * @return true when a compiled pipeline is now waiting for {@link #compile} to adopt it
+	 */
+	default boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+		return false;
+	}
+
+	/**
+	 * The chain released before anything drew this program, so no {@link #compile} will ever adopt
+	 * what the worker prepared: what waits is destroyed, and a worker still running stores nothing
+	 * more here.
+	 */
+	default void discardAhead() {
+	}
 }

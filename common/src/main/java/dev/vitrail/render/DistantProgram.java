@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.DistantVertex;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.target.ChainPlan;
@@ -17,6 +18,8 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vulkan.VulkanDevice;
+import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 import org.joml.Matrix4fc;
 
@@ -236,6 +239,23 @@ final class DistantProgram implements DumpedProgram {
 	@Override
 	public void forgetCompiled() {
 		this.body.forgetCompiled();
+	}
+
+	@Override
+	public boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+		// Without DH standing, nothing ever draws these. And measured on a bench without that
+		// mod, the two dh programs also refused shaderc outright, so compiling ahead here bought
+		// nothing but refusal lines for programs no frame would ever ask for.
+		if (!DhLods.usable()) {
+			return false;
+		}
+
+		return this.body.warmAhead(device, compiler);
+	}
+
+	@Override
+	public void discardAhead() {
+		this.body.discardAhead();
 	}
 
 	/** @see GeometryProgram#decoded */

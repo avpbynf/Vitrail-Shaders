@@ -15,6 +15,8 @@ import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vulkan.VulkanDevice;
+import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 import net.minecraft.client.renderer.BindGroupLayouts;
 
 import java.util.List;
@@ -164,6 +166,16 @@ final class CloudProgram implements DumpedProgram {
 	@Override
 	public void forgetCompiled() {
 		this.body.forgetCompiled();
+	}
+
+	@Override
+	public boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+		return this.body.warmAhead(device, compiler);
+	}
+
+	@Override
+	public void discardAhead() {
+		this.body.discardAhead();
 	}
 
 	/** @see GeometryProgram#decoded */

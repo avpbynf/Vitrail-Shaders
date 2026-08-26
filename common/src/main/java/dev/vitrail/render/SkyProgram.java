@@ -13,6 +13,8 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vulkan.VulkanDevice;
+import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 import org.joml.Matrix4fc;
 import org.joml.Vector4fc;
@@ -168,6 +170,16 @@ final class SkyProgram implements DumpedProgram {
 	@Override
 	public void forgetCompiled() {
 		this.body.forgetCompiled();
+	}
+
+	@Override
+	public boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+		return this.body.warmAhead(device, compiler);
+	}
+
+	@Override
+	public void discardAhead() {
+		this.body.discardAhead();
 	}
 
 	/**
