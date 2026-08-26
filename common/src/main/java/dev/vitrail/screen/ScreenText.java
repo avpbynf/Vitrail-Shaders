@@ -56,6 +56,13 @@ public final class ScreenText {
 	public static final String SHADOW_DISTANCE_TOOLTIP = "options.vitrail.shadow_distance_tooltip";
 	public static final String SHADOW_DISTANCE_FORCED = "options.vitrail.shadow_distance_forced";
 
+	/**
+	 * What fraction of the window the world renders at before being upscaled, on the same page as
+	 * the distance above. No counterpart in Iris, so both strings are this project's own.
+	 */
+	public static final String RENDER_SCALE = "options.vitrail.render_scale";
+	public static final String RENDER_SCALE_TOOLTIP = "options.vitrail.render_scale_tooltip";
+
 	/** The grey line under the title, one per view. */
 	public static final String SELECT_TITLE = "pack.vitrail.select_title";
 	public static final String CONFIGURE_TITLE = "pack.vitrail.configure_title";

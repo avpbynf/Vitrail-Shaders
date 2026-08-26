@@ -219,11 +219,13 @@ declared and simply no longer be on a page.
 `vitrail/pack.txt`. They have to be: a single line cannot switch shaders off and still remember which
 pack to come back to. A file holding one bare word is still read the way it always was.
 
-A third line of that same file is not this screen's at all: `shadowdistance=` is how far the shadow
-map reaches, in chunks, and it is written by the Max Shadow Distance slider in the video settings.
-It sits there because it is the same kind of thing as the other two, one number a player sets once
-that outlives whichever pack is loaded, which is where the reference keeps its own. Both writers
-read the file before writing it, so neither drops the other's line.
+Two more lines of that same file are not this screen's at all, and both are written by the video
+settings: `shadowdistance=` is how far the shadow map reaches, in chunks, from the Max Shadow
+Distance slider, and `renderscale=` is what fraction of the window the world renders at before
+being upscaled, from the FSR Render Scale slider. They sit there because they are the same kind of
+thing as the other two, one number a player sets once that outlives whichever pack is loaded,
+which is where the reference keeps its own distance. Every writer reads the file before writing
+it, so none drops another's line.
 
 `vitrail/options.txt` keeps its own job and is never written by this screen.
 

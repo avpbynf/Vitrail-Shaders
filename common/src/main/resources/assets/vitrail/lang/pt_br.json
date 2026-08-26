@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "Distância das sombras",
 	"options.vitrail.shadow_distance_tooltip": "Permite alterar a distância máxima das sombras. O terreno e as entidades além dessa distância não projetarão sombras. O desempenho do jogo pode ser melhorado significativamente ao reduzir este valor.",
 	"options.vitrail.shadow_distance_forced": "Seu pacote de sombreadores já definiu um valor da distância das sombras e você não poderá alterá-lo.",
+	"options.vitrail.render_scale": "Escala de renderização FSR",
+	"options.vitrail.render_scale_tooltip": "Controla a resolução em que o mundo é renderizado, como porcentagem do tamanho da janela. A imagem final é ampliada com AMD FSR 1.0 antes da interface. Valores mais baixos podem melhorar muito o desempenho com um pacote de shaders ativo, ao custo de alguma nitidez.",
 	"pack.vitrail.select_title": "Selecionar um pacote",
 	"pack.vitrail.configure_title": "Configurando um pacote",
 	"options.vitrail.title": "Configurações do pacote de sombreadores",

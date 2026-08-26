@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "Max. Schattendistanz",
 	"options.vitrail.shadow_distance_tooltip": "Erlaubt es dir, die maximale Distanz für Schatten zu ändern. Gelände und Objekte, die weiter entfernt sind als die eingestellte Distanz, werden keine Schatten werfen. Das Senken der Distanz kann die Leistung erheblich verbessern.",
 	"options.vitrail.shadow_distance_forced": "Dein aktuelles Shaderpaket hat bereits eine Distanz für Schatten gesetzt; du kannst sie nicht ändern.",
+	"options.vitrail.render_scale": "FSR-Renderskalierung",
+	"options.vitrail.render_scale_tooltip": "Steuert die Auflösung, mit der die Welt gerendert wird, als Prozentsatz der Fenstergröße. Das fertige Bild wird vor der Oberfläche mit AMD FSR 1.0 hochskaliert. Niedrigere Werte können die Bildrate mit aktivem Shader-Paket deutlich erhöhen, auf Kosten von etwas Schärfe.",
 	"pack.vitrail.select_title": "Auswählen",
 	"pack.vitrail.configure_title": "Konfigurieren",
 	"options.vitrail.title": "Shader-Einstellungen",

@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "Massima Distanza delle ombre",
 	"options.vitrail.shadow_distance_tooltip": "Permette di cambiare la massima distanza per le ombre. Terreno ed entità oltre questa distanza non creeranno ombre. Abbassare questa opzione può aumentare la tua performance di molto.",
 	"options.vitrail.shadow_distance_forced": "La tua shader pack corrente ha già una distanza per le ombre e non puoi cambiarla.",
+	"options.vitrail.render_scale": "Scala di rendering FSR",
+	"options.vitrail.render_scale_tooltip": "Controlla la risoluzione a cui viene renderizzato il mondo, come percentuale della finestra. L'immagine finita viene ingrandita con AMD FSR 1.0 prima dell'interfaccia. Valori più bassi possono migliorare molto le prestazioni con un pacchetto shader attivo, al costo di un po' di nitidezza.",
 	"pack.vitrail.select_title": "Seleziona",
 	"pack.vitrail.configure_title": "Configura",
 	"options.vitrail.title": "Impostazioni del pacchetto di shader",

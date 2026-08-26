@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "그림자 렌더링 거리",
 	"options.vitrail.shadow_distance_tooltip": "그림자가 표시되는 최대 거리를 조정할 수 있습니다. 이 거리보다 멀리 있는 개체와 지형은 그림자를 표시하지 않습니다. 그림자 거리를 줄이면 성능을 향상시킬 수 있습니다.",
 	"options.vitrail.shadow_distance_forced": "현재 사용하고 있는 셰이더 팩은 이미 그림자 렌더링 거리가 설정되어 있어 바꿀 수 없습니다.",
+	"options.vitrail.render_scale": "FSR 렌더 스케일",
+	"options.vitrail.render_scale_tooltip": "월드를 렌더링하는 해상도를 창 크기에 대한 비율로 제어합니다. 완성된 이미지는 인터페이스 전에 AMD FSR 1.0으로 업스케일됩니다. 낮은 값은 셰이더 팩 사용 시 프레임을 크게 높일 수 있지만 선명도가 다소 떨어집니다.",
 	"pack.vitrail.select_title": "선택",
 	"pack.vitrail.configure_title": "설정",
 	"options.vitrail.title": "셰이더 팩 설정",

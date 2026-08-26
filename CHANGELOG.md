@@ -15,6 +15,13 @@ what the next one holds.
 
 ### Added
 
+- **An FSR Render Scale slider under Video Settings**, on the mod's page beside Max Shadow
+  Distance. The world renders at the chosen fraction of the window, 25 to 100 percent, and the
+  finished image is brought back to full size with AMD FidelityFX Super Resolution 1.0 before
+  the interface is drawn, so menus, chat and the F3 screen stay sharp whatever the scale.
+  Moving the slider takes effect immediately, the setting outlives whichever pack is chosen,
+  and at 100 percent, or with shaders off, nothing changes at all.
+
 - **A pack's coloured lighting runs.** The storage images, storage buffers and shadow compute
   pass behind it are served, and `IRIS_FEATURE_CUSTOM_IMAGES` is announced, so the voxel
   lighting of Complementary's top profiles, Euphoria Patches' Colored Lighting among them,
