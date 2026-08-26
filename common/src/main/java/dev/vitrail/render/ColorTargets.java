@@ -237,6 +237,32 @@ final class ColorTargets {
 	private int screenWidth;
 	private int screenHeight;
 	private boolean clearOwed;
+
+	/**
+	 * Whether the full round of emptying a reallocation asks for is still owed, which is a different
+	 * question from {@link #clearOwed} and is why it is a field of its own.
+	 * <p>
+	 * A round is WRITTEN in one part and RECORDED in another, and the two are not finished at the
+	 * same moment. The constants, the noise field and the pack's own textures are written where the
+	 * round is decided, so they are done the instant {@link #clear} runs, and {@code clearOwed} is
+	 * all they need. The per target emptying is only recorded there and paid afterwards, by the
+	 * load-op of the first pass that attaches the surface or by the flush that takes what is left,
+	 * so it can be lost outright: the frame that recorded it may open no pass at all, and the next
+	 * one drops what it finds. This flag is what carries the recording across such a frame.
+	 * <p>
+	 * <strong>What it watches is the record, not the texels.</strong> It comes down when nothing is
+	 * left on the books, and an entry leaves them where a pass descriptor is BUILT rather than where
+	 * one opens. A frame that builds descriptors and opens none of them therefore clears the books
+	 * without emptying anything, and this comes down with them. That gap is older than this flag and
+	 * it is where the remaining hole is, not in the carrying.
+	 * <p>
+	 * Warm up is the case this exists for, and it is the ordinary road rather than an odd one: the
+	 * terrain opens the targets and hands the frame straight back, once per frame, for as long as
+	 * programs are still compiling. Carrying {@code clearOwed} itself across those frames would
+	 * rewrite every constant and re-upload every texture the pack ships on each one of them.
+	 */
+	private boolean fullDeferOwed;
+
 	private boolean broken;
 
 	/**
@@ -405,7 +431,14 @@ final class ColorTargets {
 	}
 
 	/**
-	 * Clears both halves of what the pack asked to have cleared, and pays any full clear owed.
+	 * Records the emptying that the main and the alternate surface of each target the pack asked to
+	 * have cleared are owed, and of every other target as well while a round is a full one.
+	 * <p>
+	 * A record is paid afterwards, by the load-op of the first pass that attaches the surface or by
+	 * the flush that takes whatever is left, and {@link #fullDeferOwed} is what carries it over a
+	 * frame that pays nothing. The rest of a full round is not a target at all, the constants, the
+	 * noise field and the textures the pack ships, and that part is written here and now on
+	 * {@link #clearOwed} alone, once per reallocation and never again while one is merely carried.
 	 * <p>
 	 * The shadow map is deliberately not in this list. It is drawn at the end of a frame for the
 	 * next one, so what it holds when the frame opens is exactly what the gbuffers are about to
@@ -417,9 +450,19 @@ final class ColorTargets {
 	 *            reflections, because the pack reads that channel as something of its own
 	 */
 	void clear(CommandEncoder encoder, Vector4fc fog) {
-		boolean full = this.clearOwed;
+		// Entries still standing are the last frame's, recorded and never paid, and the wipe below
+		// drops them without emptying a texel. So a full round that got no further than being
+		// recorded is owed again, and stays owed while anything of it is still on the books.
+		this.fullDeferOwed &= !this.pendingClears.isEmpty();
 
-		if (full) {
+		boolean full = this.clearOwed || this.fullDeferOwed;
+
+		// The written part, on the flag a reallocation raises and nothing carries forward. Hanging
+		// it off `full` instead would run all of this on every frame of a warm up, where the targets
+		// are opened and the frame handed back before any pass exists: four clears of their own, the
+		// noise field written out again, and every texture the pack ships uploaded again, once per
+		// frame for as long as programs are still compiling.
+		if (this.clearOwed) {
 			clear(encoder, this.black, OPAQUE_BLACK);
 			clear(encoder, this.white, OPAQUE_WHITE);
 			clear(encoder, this.grey, MID_GREY);
@@ -450,10 +493,14 @@ final class ColorTargets {
 			defer(this.altSide.get(index), colour);
 		}
 
-		// Last, so the debt is only ever paid off by a clear that got all the way through. Written
-		// off at the top, an upload that threw halfway - the noise field is the one that reads a file
-		// - left the pack sampling whatever the driver had put in a texture nobody had written, for
-		// the rest of the session and without a line to say so.
+		// Last, so a throw above leaves both flags standing. Written off at the top, an upload that
+		// threw halfway left the pack sampling whatever the driver had put in a texture nobody had
+		// written, for the rest of the session and without a line to say so.
+		//
+		// The written part is done by the time this line runs and is written off here. The record
+		// has only just been made, so it is owed from here until the check at the top of the next
+		// round finds the books clear.
+		this.fullDeferOwed = full;
 		this.clearOwed = false;
 	}
 
