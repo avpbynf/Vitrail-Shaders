@@ -44,6 +44,16 @@ what the next one holds.
   itself. A line that names several values at once is now read to its end, so nothing is
   supplied over a name the pack wrote.
 
+- **A pack could come up with something wrong smeared across the picture, and stay that way
+  until it was loaded again.** Not a flicker and not a glitch that passes: a patch of colour
+  or noise that is simply there, on a machine where it happens and never on the one next to
+  it. What was behind it: the images a pack draws into are wiped once when they are built, at
+  every pack load and again whenever the window changes size, and that wipe was ticked off
+  the list the moment it was scheduled instead of when it happened. One frame that drew none
+  of the pack lost it, and the seconds a pack spends compiling are exactly those frames. The
+  images a pack carries from one frame to the next are never scheduled again after that, so
+  they kept whatever the graphics driver had left lying in them.
+
 ## 0.8.0-beta
 
 ### Added
