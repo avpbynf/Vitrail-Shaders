@@ -32,6 +32,18 @@ what the next one holds.
   the leftover programs ahead of their first draw. Those programs then paid for themselves
   at the first frame that needed them, which is a stutter where there had been none.
 
+- **Mellow draws again.** Since 0.7.5-beta the pack loaded, laid out its settings and then
+  drew nothing at all, the game's own picture staying on screen. One of its fullscreen
+  passes was refused at compile, and a pack one of whose passes does not compile draws
+  nothing at all. What that pass builds its outline from is a number its own settings fix
+  before anything is compiled, and the engine was treating it as one that could still
+  change. Any pack that writes a constant that way was open to the same.
+
+- **E-LITE compiles whole.** Twenty of its programs were refused, because one value the
+  engine supplies reached the shader a second time where the pack had already named it
+  itself. A line that names several values at once is now read to its end, so nothing is
+  supplied over a name the pack wrote.
+
 ## 0.8.0-beta
 
 ### Added
