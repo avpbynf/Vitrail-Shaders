@@ -39,8 +39,14 @@ import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 import net.minecraft.client.GraphicsPreset;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.screens.LevelLoadingScreen;
 import net.minecraft.client.renderer.MappableRingBuffer;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
 
@@ -67,10 +73,14 @@ import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Runs one pack's chain over the finished world: every full screen program the pack keeps on, in
@@ -324,20 +334,31 @@ public final class PackChain {
 	private static final Set<CompletableFuture<Void>> WARMUPS = ConcurrentHashMap.newKeySet();
 
 	/**
-	 * Whether this chain's pack-load worker is done, whatever it managed: what lets
-	 * {@link #tickCompileHint} keep its line up through the background compiles and close it with
-	 * a "compiled" that really means nothing is compiling any more. Raised on every road out of
-	 * the worker, the refused and the stopped included, because a line that can never close is
-	 * worse than one that closes early.
+	 * Whether this chain's pack-load workers are done, whatever they managed: what moves
+	 * {@link #extractCompileIcon} from its pulse to its closing words. Raised on every road out
+	 * of the workers, the refused and the stopped included, because a mark that can never go
+	 * out is worse than one that goes out early.
 	 */
 	private volatile boolean familiesWarmed;
 
 	/**
-	 * Whether {@link #tickCompileHint} has already said, once, that the rest compiles in the
-	 * background. Render thread only, and per chain like the flag above, so a swap starts the
-	 * next pack's accounting afresh.
+	 * When the workers finished, written just before {@link #familiesWarmed} on each of its
+	 * roads and published by that volatile write: what the closing words are timed from, so a
+	 * corner hidden long enough behind F3 misses the show instead of replaying it stale.
 	 */
-	private boolean backgroundHintShown;
+	private long warmedAt;
+
+	/**
+	 * The progress the corner's words carry: how many family programs the compile tasks have
+	 * walked, out of how many the finished translations have put on their plates. The total
+	 * grows family by family, the way a loading bar's does, from the one translation worker; it
+	 * is atomic for the lint's peace of mind, the render thread only ever reading it. It stays
+	 * nought when no task was spawned at all, which is what keeps the words bare rather than
+	 * stuck at "0 of N".
+	 */
+	private final AtomicInteger warmWalked = new AtomicInteger();
+	private final AtomicInteger warmServed = new AtomicInteger();
+	private final AtomicInteger warmTotal = new AtomicInteger();
 	private boolean geometryReady;
 	private boolean announced;
 
@@ -1280,8 +1301,7 @@ public final class PackChain {
 		// falls back to the game's own shader for the one frame it takes to reload.
 		PackChain previous = active;
 		active = null;
-		compileHintShown = false;
-		// Cleared as well, so that a pack that failed to compile can be fixed and tried again
+		// Cleared, so that a pack that failed to compile can be fixed and tried again
 		// without leaving the game.
 		disabled = false;
 
@@ -1345,7 +1365,7 @@ public final class PackChain {
 	/**
 	 * A pack is loaded and still compiling, so the world must not be drawn. Skipping it is what
 	 * keeps this wait from being a two-frame-per-second picture of the same vanilla terrain. The
-	 * HUD stays up, and {@link #tickCompileHint} is the line that says why.
+	 * HUD stays up, and {@link #extractCompileIcon}'s mark and its words say why.
 	 */
 	public static boolean warming() {
 		PackChain chain = active;
@@ -1368,8 +1388,8 @@ public final class PackChain {
 	 * frame, with the world not drawn, is the same work without that picture.
 	 * <p>
 	 * Complementary Unbound is still not compiled all at once. Its families translate on a worker
-	 * while this thread compiles the composites and the terrain, and the same worker then compiles
-	 * their pipelines; nothing of the leftovers holds the world back.
+	 * while this thread compiles the composites and the terrain, and each family's pipelines then
+	 * compile on a small pool of the engine's own; nothing of the leftovers holds the world back.
 	 */
 	public static void pumpWarmup() {
 		PackChain chain = active;
@@ -1406,52 +1426,142 @@ public final class PackChain {
 		} while (System.nanoTime() < deadline);
 	}
 
+	/** The mod's own mark, pulsing in a corner while the pack compiles. */
+	private static final Identifier COMPILE_ICON =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "textures/gui/compiling.png");
+
+	/** One pulse per second: full, down to half opacity, and back. */
+	private static final long PULSE_MILLIS = 1000L;
+
+	private static final int ICON_EDGE = 16;
+	private static final int ICON_TEXTURE = 32;
+	private static final int ICON_MARGIN = 3;
+
+	/** How long the closing sentence stands beside the mark, then the fade that erases both. */
+	private static final long DONE_MILLIS = 2500L;
+	private static final long FADE_MILLIS = 800L;
+
+	/** Every appearance eases in over this, the way the whole corner eases out at the end. */
+	private static final long RAMP_MILLIS = 300L;
+
 	/**
-	 * Keeps the action-bar line up while the world is waiting on this pack, keeps it up in its
-	 * background form while the pack-load worker is still compiling the leftover families, then
-	 * says once that everything is done.
+	 * The floor under which nothing is drawn at all: the font renderer keeps the old convention
+	 * of reading a near-nought alpha as fully opaque, so a fade has to end by not drawing
+	 * rather than by popping back to full.
 	 */
-	private static boolean compileHintShown;
+	private static final float FAINT = 0.05F;
 
-	public static void tickCompileHint() {
+	/**
+	 * When this chain's mark first showed, the fade-in's zero. Render thread only, nought until
+	 * then, and per chain, so a reload eases in afresh.
+	 */
+	private long iconShownAt;
+
+	/**
+	 * Draws the mod's mark in the top-left corner for as long as the pack compiles, the way the
+	 * old autosave floppy used to blink, with the words of the moment beside it: the mark
+	 * pulses next to "Compiling shaders..." through the held world and the background compiles
+	 * alike, the walked-out-of-total count riding along once the compile tasks have a plate,
+	 * then stands still next to "Shaders compiled!" once the workers finish, and the whole
+	 * corner fades away. The mark's first appearance eases in and the end eases out, a corner
+	 * re-shown after F3 or F1 coming back plain; the closing show is timed from
+	 * {@link #familiesWarmed} rising, so a corner hidden long enough behind those misses the
+	 * show rather than replaying it stale.
+	 * <p>
+	 * Reached from the HUD's own extraction, after every vanilla layer, and quiet everywhere
+	 * else: no chain, a chain that can never draw, the show over, the terrain loading screen
+	 * (where vanilla extracts no HUD at all and the tail of the extraction still runs), and the
+	 * F3 screen, whose first lines sit exactly where the mark does.
+	 */
+	public static void extractCompileIcon(GuiGraphicsExtractor graphics) {
 		Minecraft minecraft = Minecraft.getInstance();
-		if (minecraft.player == null || minecraft.gui.hud.isHidden()) {
-			return;
-		}
-
-		if (warming()) {
-			compileHintShown = true;
-			minecraft.gui.hud.setOverlayMessage(Component.translatable(ScreenText.COMPILING), false);
-			return;
-		}
-
-		if (!compileHintShown) {
-			return;
-		}
-
 		PackChain chain = active;
-		if (disabled || !chainWanted || chain == null || !chain.drawable()) {
-			compileHintShown = false;
+		if (disabled || !chainWanted || chain == null || minecraft.gui.hud.isHidden()
+				|| minecraft.gui.screen() instanceof LevelLoadingScreen) {
 			return;
 		}
 
-		// The world draws while the worker still compiles the leftover families behind it. Said
-		// ONCE and left to fade, never pinned: the worker runs a minute of normal play on a big
-		// pack, and a line re-set every tick would own the action bar for all of it, over any
-		// server title or other mod's message. The closing line below still keeps its meaning of
-		// "nothing is compiling".
-		if (!chain.familiesWarmed) {
-			if (!chain.backgroundHintShown) {
-				chain.backgroundHintShown = true;
-				minecraft.gui.hud.setOverlayMessage(
-						Component.translatable(ScreenText.COMPILING_BACKGROUND), false);
+		// Under F3 the mark bows out, its corner being where the debug block's first lines sit,
+		// EXCEPT while the world is held back: F3 is exactly the key a player presses at a
+		// screen with no world in it, and the corner is the only thing that says why. An overlap
+		// read over debug lines beats an absence read as a defect.
+		if (minecraft.gui.hud.getDebugOverlay().showDebugScreen() && !warming()) {
+			return;
+		}
+
+		// In flight covers both moments of a load, the held world and the background compiles;
+		// a chain that is neither in flight nor drawable was refused and shows nothing.
+		boolean inFlight = !chain.familiesWarmed && (warming() || chain.drawable());
+		if (!inFlight && !(chain.familiesWarmed && chain.drawable())) {
+			return;
+		}
+
+		long now = Util.getMillis();
+		if (chain.iconShownAt == 0L) {
+			chain.iconShownAt = now;
+		}
+
+		float ease = ramp(now - chain.iconShownAt);
+		Font font = minecraft.font;
+		int textX = ICON_MARGIN + ICON_EDGE + 4;
+		int textY = ICON_MARGIN + (ICON_EDGE - font.lineHeight) / 2 + 1;
+
+		if (inFlight) {
+			float phase = (now % PULSE_MILLIS) / (float) PULSE_MILLIS;
+			float pulse = 0.75F + 0.25F * (float) Math.cos(2.0 * Math.PI * phase);
+			icon(graphics, ease * pulse);
+
+			// The count rides along once the tasks have a plate: walked out of total, the total
+			// growing family by family the way a loading bar's does. Bare words before that,
+			// rather than a "0 of 0" that reads as stuck.
+			Component words = Component.translatable(ScreenText.COMPILING);
+			int total = chain.warmTotal.get();
+			if (total > 0) {
+				words = words.copy()
+						.append(" " + Math.min(chain.warmWalked.get(), total) + "/" + total);
 			}
 
+			word(graphics, font, words, textX, textY, ease);
+
 			return;
 		}
 
-		compileHintShown = false;
-		minecraft.gui.hud.setOverlayMessage(Component.translatable(ScreenText.COMPILED), false);
+		long since = now - chain.warmedAt;
+		if (since >= DONE_MILLIS + FADE_MILLIS) {
+			return;
+		}
+
+		// The workers just finished: the mark stands still and the sentence lands with it on
+		// the spot, no transition, then the whole corner eases out together. The one place the
+		// ramp deliberately does not apply: the switch of words IS the news.
+		float out = since <= DONE_MILLIS ? 1.0F
+				: 1.0F - (since - DONE_MILLIS) / (float) FADE_MILLIS;
+		icon(graphics, ease * out);
+		word(graphics, font, Component.translatable(ScreenText.COMPILED), textX, textY, out);
+	}
+
+	/** How far into an appearance a thing is, nought to one over {@link #RAMP_MILLIS}. */
+	private static float ramp(long sinceMillis) {
+		return Math.min(1.0F, sinceMillis / (float) RAMP_MILLIS);
+	}
+
+	private static void icon(GuiGraphicsExtractor graphics, float alpha) {
+		if (alpha < FAINT) {
+			return;
+		}
+
+		graphics.blit(RenderPipelines.GUI_TEXTURED, COMPILE_ICON, ICON_MARGIN, ICON_MARGIN,
+				0.0F, 0.0F, ICON_EDGE, ICON_EDGE, ICON_TEXTURE, ICON_TEXTURE, ICON_TEXTURE,
+				ICON_TEXTURE, ARGB.colorFromFloat(alpha, 1.0F, 1.0F, 1.0F));
+	}
+
+	private static void word(GuiGraphicsExtractor graphics, Font font, Component words, int x,
+			int y, float alpha) {
+		if (alpha < FAINT) {
+			return;
+		}
+
+		graphics.text(font, words, x, y, ARGB.colorFromFloat(alpha, 1.0F, 1.0F, 1.0F), true);
 	}
 
 	/**
@@ -1822,9 +1932,9 @@ public final class PackChain {
 		}
 
 		// Pipelines compile before anything of the chain is drawn. The world is not drawn at all for
-		// those frames and the HUD is what the player sees, with a line above it saying the pack is
-		// still compiling; drawable() keeps the terrain aside or the world would be drawn into a
-		// colour target this has no final ready to bring back.
+		// those frames and the HUD is what the player sees, the corner's mark and its words saying
+		// the pack is still compiling; drawable() keeps the terrain aside or the world would be
+		// drawn into a colour target this has no final ready to bring back.
 		//
 		// The targets and the buffers first and the compilation second, which is not the order this
 		// had. What the warm up holds back is the drawing and not the frame, so the block ring and
@@ -2562,7 +2672,7 @@ public final class PackChain {
 		// and spreading it only spaces the stalls out. What removed the stalls rather than moving
 		// them is the worker: precompilePipeline is not safe off the render thread, its caches
 		// and its compiler being shared and unguarded, but the create calls under it are once
-		// those are bypassed, and warmFamilies says how the two halves are split.
+		// those are bypassed, and startFamilyPrefetch says how the two halves are split.
 		if (compileNext(device, this.terrain.programs())) {
 			return false;
 		}
@@ -2582,14 +2692,18 @@ public final class PackChain {
 	private static final long WARM_BUDGET_NANOS = 80_000_000L;
 
 	/**
-	 * Translates the six families on a worker, then compiles their pipelines on it too.
-	 * Complementary Unbound's entities still cost their minute, and that minute is this worker
-	 * rather than holding the world back or, as it stood before the worker learnt to compile, a
-	 * hitch of half a second per program on whichever frame first drew each of them.
+	 * Translates the six families on a worker, and compiles each family's pipelines on a task of
+	 * its own the moment that family's translation lands, so the entities compile while the
+	 * clouds are still being read. Complementary Unbound's leftovers still cost their minute of
+	 * work on a cold driver cache, spread across the pool's workers instead of queued on one;
+	 * what they never cost again is the render thread, which only adopts what the workers
+	 * finish, and the failed shape that DID cost it is engraved above compileNext.
 	 * <p>
-	 * All six translations before the first compile, deliberately: a family's translation is what
-	 * its first draw needs even to fall back on the render thread, so no family's reading waits
-	 * behind another family's shaderc.
+	 * The translations stay SEQUENTIAL on the one worker, deliberately: two readers on one zip
+	 * race, which is the reason the terrain's own read finishes before this starts. Only the
+	 * compiles fan out, one task and one compiler per family, on {@link #COMPILE_POOL} rather
+	 * than on the game's shared pool. The sky's and the entities' tasks are spawned first:
+	 * those two are on screen the moment the world is.
 	 */
 	private void startFamilyPrefetch() {
 		synchronized (this) {
@@ -2600,91 +2714,170 @@ public final class PackChain {
 			this.familyPrefetchStarted = true;
 		}
 
-		// Read on the thread loading the pack, before the worker exists, and carried into it as
-		// a value: read lazily from the worker instead, it would race the reset a pack swap does
-		// on the render thread.
+		// Read here, before any worker exists, and carried in as a value: the arming file read
+		// lazily from a worker would race the reset a pack swap does on the render thread.
 		boolean keepOld = PassTimings.keepFirstDrawCompiles();
-		CompletableFuture<Void> warmup;
+		AtomicBoolean fanned = new AtomicBoolean();
+		AtomicLong start = new AtomicLong();
+		CompletableFuture<Void> whole;
 		try {
-			warmup = CompletableFuture.runAsync(() -> {
+			whole = CompletableFuture.supplyAsync(() -> {
+				start.set(System.nanoTime());
+				Vitrail.logger().info("The pack-load worker starts on the six families");
+				VulkanDevice device = compileDevice(keepOld);
+				fanned.set(device != null);
+
+				List<CompletableFuture<Void>> compiles = new ArrayList<>(FAMILIES);
 				try {
-					Vitrail.logger().info("The pack-load worker starts on the six families");
 					prefetchFamily(this.sky::prefetch);
+					spawnFamilyCompiles(compiles, 0, device);
 					prefetchFamily(this.entities::prefetch);
+					spawnFamilyCompiles(compiles, 1, device);
 					prefetchFamily(this.clouds::prefetch);
+					spawnFamilyCompiles(compiles, 2, device);
 					prefetchFamily(this.weather::prefetch);
+					spawnFamilyCompiles(compiles, 3, device);
 					prefetchFamily(this.particles::prefetch);
+					spawnFamilyCompiles(compiles, 4, device);
 					prefetchFamily(this.distant::prefetch);
-					warmFamilies(keepOld);
+					spawnFamilyCompiles(compiles, 5, device);
 				} catch (Throwable e) {
-					// Throwable and not RuntimeException: runAsync swallows what its runnable
-					// throws, so anything that dies here unlogged reads as the worker having
-					// finished. The families it did not reach fall back to the first-draw path
-					// either way.
+					// prefetchFamily catches the RuntimeException of one translation; anything
+					// harder would otherwise take this stage down EXCEPTIONALLY, and the whole
+					// would then complete while the tasks already spawned still run, out of the
+					// reach of the shutdown wait. Caught here, the spawned tasks stay tracked
+					// and the families never reached keep their first-draw path.
 					Vitrail.logger().error("The pack-load worker died", e);
-				} finally {
-					this.familiesWarmed = true;
 				}
-			}, Util.backgroundExecutor());
+
+				return compiles;
+			}, Util.backgroundExecutor()).thenCompose(compiles ->
+					CompletableFuture.allOf(compiles.toArray(new CompletableFuture<?>[0])));
 		} catch (RejectedExecutionException e) {
 			// The executor only refuses while the client shuts down. The families keep their
-			// first-draw path, and the flag closes the hint rather than leaving a line that can
-			// never end.
+			// first-draw path, and the flag closes the mark rather than leaving one that can
+			// never go out.
+			this.warmedAt = Util.getMillis();
 			this.familiesWarmed = true;
 
 			return;
 		}
 
-		WARMUPS.add(warmup);
-		warmup.whenComplete((unused, e) -> WARMUPS.remove(warmup));
+		CompletableFuture<Void> tracked = whole.handle((unused, e) -> {
+			if (e != null) {
+				// handle() and not a catch: the futures swallow what their runnables throw, so
+				// anything that dies unlogged reads as the workers having finished. The families
+				// they did not reach fall back to the first-draw path either way, and one
+				// family's failure no longer stops the five others.
+				Vitrail.logger().error("The pack-load worker died", e);
+			}
+
+			this.warmedAt = Util.getMillis();
+			this.familiesWarmed = true;
+			if (fanned.get()) {
+				Vitrail.logger().info("{} of {} leftover pipelines compiled ahead of their "
+						+ "first draw, {} ms of background work, translations included",
+						this.warmServed.get(), this.warmWalked.get(),
+						(System.nanoTime() - start.get()) / 1_000_000L);
+			}
+
+			return (Void) null;
+		});
+		WARMUPS.add(tracked);
+		tracked.whenComplete((unused, e) -> WARMUPS.remove(tracked));
 	}
 
 	/**
-	 * Compiles every program the six families read, still on the worker, with a compiler of the
-	 * worker's own: the device's precompile keeps its results in maps only the render thread may
-	 * touch, so each pipeline is built through the same public steps instead and
-	 * {@code GeometryProgram.compile} hands the finished object to the cache on the render
-	 * thread. {@code GeometryProgram.warmAhead} says why every step of that is safe off the
-	 * thread, and {@code vitrail/keep-first-draw-compiles} beside the pack keeps the old
-	 * first-draw path for a measurement, the way {@code keep-redone-work} does.
-	 * <p>
-	 * Walked in {@code familyPrograms} order, which serves the sky and the entities first: those
-	 * two are on screen the moment the world is, and the far terrain comes last.
+	 * The threads the family compile tasks run on, this engine's own and never the game's
+	 * shared pool: a compile parks its thread in native shaderc for half a second at a time,
+	 * six families land at once at world join, and threads parked like that would starve every
+	 * other user of the shared executor for the length of the warm-up. Three at most, daemons,
+	 * and the pool empties itself once the warm-up is over. Being daemons, they offer shutdown
+	 * no barrier of their own: {@link #awaitFamilyWarmups} is the one thing standing between a
+	 * compile in flight and the device teardown.
 	 */
-	private void warmFamilies(boolean keepOld) {
-		GpuDevice front = RenderSystem.tryGetDevice();
-		if (front == null || keepOld
-				|| !(((GpuDeviceAccessor) front).vitrail$backend()
-						instanceof VulkanDevice device)) {
-			Vitrail.logger().info("The worker leaves the leftover families to their first draw: "
-					+ "{}", front == null ? "no device"
-							: keepOld ? "keep-first-draw-compiles"
-									: "the backend is not the Vulkan one");
+	private static final ThreadPoolExecutor COMPILE_POOL = compilePool();
 
+	private static ThreadPoolExecutor compilePool() {
+		AtomicInteger names = new AtomicInteger();
+		ThreadPoolExecutor pool = new ThreadPoolExecutor(3, 3, 30L, TimeUnit.SECONDS,
+				new LinkedBlockingQueue<>(), runnable -> {
+					Thread thread = new Thread(runnable,
+							"Vitrail compile worker " + names.incrementAndGet());
+					thread.setDaemon(true);
+					// The game outranks the warm-up by design: a window measured during play ran
+					// six times longer than the same one behind a loading screen, which is these
+					// threads yielding, and the priority writes that bargain down.
+					thread.setPriority(Thread.MIN_PRIORITY);
+
+					return thread;
+				});
+		pool.allowCoreThreadTimeOut(true);
+
+		return pool;
+	}
+
+	/**
+	 * The Vulkan backend the compile tasks build against, or null with the reason logged: no
+	 * task is spawned then, and every family keeps its first-draw path. Resolved on the worker
+	 * rather than at the call, because the load's own road can run before rendering is up.
+	 */
+	private static VulkanDevice compileDevice(boolean keepOld) {
+		GpuDevice front = RenderSystem.tryGetDevice();
+		if (front != null && !keepOld
+				&& ((GpuDeviceAccessor) front).vitrail$backend() instanceof VulkanDevice device) {
+			return device;
+		}
+
+		Vitrail.logger().info("The workers leave the leftover families to their first draw: {}",
+				front == null ? "no device"
+						: keepOld ? "keep-first-draw-compiles"
+								: "the backend is not the Vulkan one");
+
+		return null;
+	}
+
+	/**
+	 * One compile task for one family, started the moment its translation landed. The pool it
+	 * lands on is never shut down and its queue is unbounded, so the submit cannot be refused;
+	 * the game's own executor, which can refuse one at shutdown, only ever carries the
+	 * translation stage.
+	 */
+	private void spawnFamilyCompiles(List<CompletableFuture<Void>> compiles, int family,
+			VulkanDevice device) {
+		if (device == null) {
 			return;
 		}
 
-		long start = System.nanoTime();
-		int walked = 0;
-		int served = 0;
-		try (GlslCompiler compiler = new GlslCompiler()) {
-			for (int family = 0; family < FAMILIES; family++) {
-				for (DumpedProgram program : familyPrograms(family)) {
-					if (this.released || disabled) {
-						return;
-					}
+		// The plate grows before the task that will empty it exists, so the corner's count can
+		// only ever run behind the truth, never past it.
+		this.warmTotal.addAndGet(familyPrograms(family).size());
+		compiles.add(CompletableFuture.runAsync(
+				() -> warmFamily(family, device), COMPILE_POOL));
+	}
 
-					walked++;
-					if (program.warmAhead(device, compiler)) {
-						served++;
-					}
+	/**
+	 * Compiles every program one family read, with a compiler of this task's own: the device's
+	 * precompile keeps its results in maps only the render thread may touch, so each pipeline is
+	 * built through the same public steps instead and {@code GeometryProgram.compile} hands the
+	 * finished object to the cache on the render thread. {@code GeometryProgram.warmAhead} says
+	 * why every step of that is safe off the thread, and
+	 * {@code vitrail/keep-first-draw-compiles} beside the pack keeps the old first-draw path for
+	 * a measurement, the way {@code keep-redone-work} does.
+	 */
+	private void warmFamily(int family, VulkanDevice device) {
+		try (GlslCompiler compiler = new GlslCompiler()) {
+			for (DumpedProgram program : familyPrograms(family)) {
+				if (this.released || disabled) {
+					return;
+				}
+
+				this.warmWalked.incrementAndGet();
+				if (program.warmAhead(device, compiler)) {
+					this.warmServed.incrementAndGet();
 				}
 			}
 		}
-
-		Vitrail.logger().info("{} of {} leftover pipelines compiled ahead of their first draw, "
-				+ "{} ms off the render thread", served, walked,
-				(System.nanoTime() - start) / 1_000_000L);
 	}
 
 	private void prefetchFamily(Runnable prefetch) {

@@ -38,6 +38,7 @@
 		"GameRendererMixin",
 		"GameRendererWarmupMixin",
 		"GpuDeviceAccessor",
+		"HudCompileIconMixin",
 		"ItemFeatureRendererMixin",
 		"ItemInHandRendererMixin",
 		"ItemModelResolverMixin",
