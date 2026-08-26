@@ -1920,6 +1920,15 @@ public final class GlslTranslator {
 	 * An array size still needs a real constant, so a declaration whose initialiser is only literals
 	 * and type constructors is left alone. Parameters keep {@code const}: that spelling means
 	 * immutable, not compile-time, and the language allows it.
+	 * <p>
+	 * A name the unit {@code #define}s is left alone too, and it has to be: this pass reads tokens,
+	 * the macro is expanded later by the compiler, and what stands here is a name where a literal
+	 * will be. Mellow builds its outline offsets out of {@code OUTLINE_THICKNESS}, a constructor
+	 * multiplied by it four times over, and hands the array to {@code textureGatherOffsets}, which
+	 * takes nothing but a constant expression. Read as non-constant, the keyword came off a
+	 * declaration that was constant all along, one fullscreen pass of the pack would not compile,
+	 * and a pack one of whose passes does not compile draws nothing at all. What #157 was about is
+	 * a call and a uniform, neither of which a macro name is.
 	 */
 	private void demoteNonConstantInitialisers() {
 		int parens = 0;
@@ -1952,7 +1961,7 @@ public final class GlslTranslator {
 
 	/**
 	 * Whether this {@code const} declaration assigns something Vulkan will not take as a constant
-	 * expression: any identifier that is not a type constructor.
+	 * expression: any identifier that is neither a type constructor nor a macro this unit defines.
 	 */
 	private boolean nonConstantInitialiser(int keyword, int end) {
 		boolean seenEquals = false;
@@ -1967,7 +1976,8 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			if (!LegacyGlsl.TYPE_NAMES.contains(token.text())) {
+			if (!LegacyGlsl.TYPE_NAMES.contains(token.text())
+					&& !this.packMacros.contains(token.text())) {
 				return true;
 			}
 		}
