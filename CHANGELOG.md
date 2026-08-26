@@ -13,6 +13,11 @@ what the next one holds.
 
 ## Unreleased
 
+### Changed
+
+- **The link under an empty pack folder opens the CurseForge shader search.** It used to open
+  the shader page on Modrinth, where this mod is not published.
+
 ### Fixed
 
 - **The game no longer crashes when resources reload with a pack loaded.** Moving
