@@ -11,6 +11,22 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **The game no longer crashes when resources reload with a pack loaded.** Moving
+  Anisotropic Filtering or Texture Filtering under Video Settings, switching resource packs
+  and pressing F3 + T all reload every resource, and any of them took a world with a
+  shaderpack on straight to the crash screen, on "Pipeline is not valid".
+  The sky is drawn first in the frame and was the piece that fell over, but nothing the pack
+  draws was safe. The reload now costs what it always should have, a few frames while the
+  programs compile again.
+
+- A pack swapped while the engine was still warming up could kill the worker that compiles
+  the leftover programs ahead of their first draw. Those programs then paid for themselves
+  at the first frame that needed them, which is a stutter where there had been none.
+
 ## 0.8.0-beta
 
 ### Added
