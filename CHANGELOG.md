@@ -111,11 +111,9 @@ what the next one holds.
 
 - **Geometry programs compile during the same warm-up as the chain**, before the pack is drawn:
   families translate on a worker while composites compile, and the world waits until the
-  composites and the terrain are in the device cache. Leftover families compile on their first
-  draw, which is what kept Complementary Unbound behind a loading overlay for the better part of
-  a minute; shaderc stays on the render thread, the device cache not being safe off it. A line
-  above the HUD says the pack is still compiling, then that it is done, and is gone once the
-  player can walk.
+  composites and the terrain are in the device cache. From there the leftover families compile
+  in the background, described under Fixed, and the pulsing mark in the corner carries the
+  state from the held world to the last word of the closing show.
 
 - **The wait for a pack skips the world, not the HUD.** Several programs compile a frame instead
   of one, so the wait is not a two-frame-per-second vanilla picture of the same work.
@@ -126,11 +124,13 @@ what the next one holds.
   clouds, the weather, the particles and the far terrain used to compile on the frame that first
   drew each of them: around half a second frozen per program on a cold driver cache, over a
   hundred programs on a big pack, spread across the first minutes of play and paid again behind
-  every portal. They are now compiled in the background while you play, and a frame only waits
-  for a program it reached before the background did. The action-bar line follows: it stays up,
-  as "compiling the rest in the background", while that work runs, and only says compiled once
-  nothing is compiling any more. An empty file `vitrail/keep-first-draw-compiles` in the
-  instance puts the old path back for a comparison.
+  every portal. They are now compiled in the background while you play, several families at
+  once, and a frame only waits for a program it reached before the background did. While that
+  work runs, the Vitrail mark pulses in the top-left corner of the screen with "Compiling
+  shaders..." and the running count beside it, the way the autosave floppy used to blink; when
+  the work ends, "Shaders compiled!" stands beside the mark for a moment and the corner fades
+  back to the game. An empty file
+  `vitrail/keep-first-draw-compiles` in the instance puts the old path back for a comparison.
 
 - **A pack's shadow compute is no longer built when the pack switched it off.** A pack turns
   whole programs on and off from its own settings, and the compute pass behind coloured lighting

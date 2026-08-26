@@ -51,8 +51,7 @@
 	"options.vitrail.pack_reloaded": "已重新加载光影包！",
 	"options.vitrail.reload_failed": "重新加载光影包失败！原因：%s",
 	"options.vitrail.other_backend": "Vitrail 在 %s 后端下不绘制任何内容：其光影只能在 Vulkan 上运行。请在选项、视频设置中将 %s 设为 \"%s\"，然后重新启动游戏。",
-	"overlay.vitrail.compiling": "Vitrail 仍在编译着色器",
-	"overlay.vitrail.compiling_background": "Vitrail 正在后台编译其余着色器",
-	"overlay.vitrail.compiled": "Vitrail 着色器已编译完成",
+	"overlay.vitrail.compiling": "正在编译着色器...",
+	"overlay.vitrail.compiled": "着色器编译完成！",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

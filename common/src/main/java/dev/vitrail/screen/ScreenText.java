@@ -172,21 +172,15 @@ public final class ScreenText {
 	public static final String GRAPHICS_API_OPENGL = "options.graphicsApi.opengl";
 
 	/**
-	 * The action-bar line while a pack is still compiling. What replaced the loading overlay:
-	 * the HUD stays, and this is the one line that says why the world is late.
+	 * The words beside the pulsing mark for as long as a pack compiles, through the held world
+	 * and the background compiles alike. Short on purpose: they stand next to a sixteen-pixel
+	 * icon, not on a line of their own.
 	 */
 	public static final String COMPILING = "overlay.vitrail.compiling";
 
 	/**
-	 * The same line once the world draws but the pack-load worker is still compiling the
-	 * on-demand families behind it. Said once and left to fade rather than pinned: the worker
-	 * runs through normal play, where the action bar belongs to servers and other mods too.
-	 */
-	public static final String COMPILING_BACKGROUND = "overlay.vitrail.compiling_background";
-
-	/**
-	 * The same line once the world can be drawn and the worker is done. Said once, then vanilla
-	 * fades it.
+	 * The sentence that takes their place when the background compiles finish, standing for a
+	 * moment before the corner fades back to the game.
 	 */
 	public static final String COMPILED = "overlay.vitrail.compiled";
 

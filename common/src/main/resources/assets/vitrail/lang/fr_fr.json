@@ -51,8 +51,7 @@
 	"options.vitrail.pack_reloaded": "Shaders rechargés !",
 	"options.vitrail.reload_failed": "Échec lors du rechargement des shaders ! Raison : %s",
 	"options.vitrail.other_backend": "Vitrail ne dessine rien sur le backend %s : ses shaders ne tournent que sur Vulkan. Réglez %s sur \"%s\" dans Options, Paramètres vidéo, puis redémarrez le jeu.",
-	"overlay.vitrail.compiling": "Vitrail compile encore les shaders",
-	"overlay.vitrail.compiling_background": "Vitrail compile le reste en arrière-plan",
-	"overlay.vitrail.compiled": "Vitrail a fini de compiler les shaders",
+	"overlay.vitrail.compiling": "Compilation des shaders...",
+	"overlay.vitrail.compiled": "Shaders compilés !",
 	"key.category.vitrail.keybinds": "Vitrail"
 }
