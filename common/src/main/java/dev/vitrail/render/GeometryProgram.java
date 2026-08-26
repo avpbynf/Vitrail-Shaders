@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.LegacyGlsl;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
+import dev.vitrail.mixin.GpuDeviceAccessor;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.program.RenderStage;
@@ -21,6 +22,7 @@ import dev.vitrail.Vitrail;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.preprocessor.GlslPreprocessor;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -41,6 +43,11 @@ import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vulkan.VulkanDevice;
+import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
+import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
+import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
+import com.mojang.blaze3d.vulkan.glsl.ShaderCompileException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.MappableRingBuffer;
@@ -402,6 +409,21 @@ final class GeometryProgram {
 	private boolean drew;
 	private boolean broken;
 	private boolean compiled;
+
+	/**
+	 * The pipeline the pack-load worker built for this program, waiting for a render-thread
+	 * {@link #compile} to hand it to the device's cache, which is the one step the worker may not
+	 * take itself. Written and cleared under this program's monitor, on whichever side gets there
+	 * first.
+	 */
+	private VulkanRenderPipeline ahead;
+
+	/**
+	 * Set by {@link #discardAhead()} when the chain released before anything drew this program:
+	 * from then on the worker destroys what it built instead of storing it, since no compile of a
+	 * released chain will ever come to adopt it.
+	 */
+	private boolean discarded;
 
 	/** Targets already reported as read on the half this pass writes. Said once each, not per frame. */
 	private final Set<Integer> collisions = new HashSet<>();
@@ -838,6 +860,19 @@ final class GeometryProgram {
 			return true;
 		}
 
+		// What the worker finished is handed to the cache here, on the render thread, and the
+		// precompile below finds it as a lookup. A cache that already holds the key kept a copy
+		// somebody compiled meanwhile, so ours dies instead, never having been bound anywhere.
+		VulkanRenderPipeline ready = this.ahead;
+		if (ready != null) {
+			this.ahead = null;
+			boolean adopted = ((GpuDeviceAccessor) device).vitrail$backend()
+					instanceof StalePipelines cache && cache.vitrail$adopt(this.pipeline, ready);
+			if (!adopted) {
+				ready.destroy();
+			}
+		}
+
 		CompiledRenderPipeline compiled = device.precompilePipeline(this.pipeline, this.source);
 		if (!compiled.isValid()) {
 			// Handing back an invalid pipeline throws inside setPipeline, in the middle of Sodium's
@@ -868,6 +903,102 @@ final class GeometryProgram {
 	 */
 	void forgetCompiled() {
 		this.compiled = false;
+	}
+
+	/**
+	 * Builds this program's compiled pipeline on the pack-load worker, through the same public
+	 * steps the device takes, so the first draw finds the half second of shaderc already paid.
+	 * <p>
+	 * <strong>Deliberately not {@code precompilePipeline}</strong>: the device keeps its results
+	 * in plain maps only the render thread may touch, and its compiler is one shared instance on
+	 * the same rule. Everything used here instead is safe off the thread. The worker's own
+	 * {@code GlslCompiler} carries shaderc, the SPIRV-Cross reflection opens a context per call,
+	 * and the three calls underneath ({@code vkCreateShaderModule}, the set layout, the pipelines)
+	 * create device-level objects Vulkan lets any thread create. What the worker may not do is
+	 * write the cache, and {@link #compile} does that half, adopting the object built here.
+	 * <p>
+	 * A compile the pack's GLSL refuses stores nothing and says so in one line, because a refusal
+	 * only this path reproduces would otherwise never be seen at all; the first draw then retries
+	 * on the device's own path, which latches {@link #broken} and prints the authoritative one.
+	 *
+	 * @param compiler the worker's own compiler, never the device's
+	 * @return true when a compiled pipeline now waits for {@link #compile} to adopt it
+	 */
+	boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+		synchronized (this) {
+			if (this.compiled || this.broken || this.discarded || this.ahead != null) {
+				return false;
+			}
+		}
+
+		VulkanRenderPipeline built;
+		try {
+			IntermediaryShaderModule vertex =
+					intermediary(compiler, this.pipeline.getVertexShader(), ShaderType.VERTEX);
+			try {
+				IntermediaryShaderModule fragment =
+						intermediary(compiler, this.pipeline.getFragmentShader(), ShaderType.FRAGMENT);
+				try {
+					GlslCompiler.CompiledModules modules =
+							compiler.compile(device, this.pipeline, vertex, fragment);
+					built = VulkanRenderPipeline.compile(device, modules.layout(), this.pipeline,
+							modules.vertex(), modules.fragment());
+				} finally {
+					// vkCreateShaderModule consumes pCode at the call, by spec, so the buffers
+					// behind the intermediaries are done once compile returns. The device keeps
+					// its own in a cache instead, which is why its path has no close: here
+					// nothing keeps them.
+					fragment.close();
+				}
+			} finally {
+				vertex.close();
+			}
+		} catch (ShaderCompileException e) {
+			// The first draw retries on the device's own path, which latches broken and prints
+			// the pack's defect properly. Said here as well because a refusal the device path
+			// does NOT reproduce would otherwise never be seen at all.
+			Vitrail.logger().info("{} stays for its first draw: {}", this.path, e.getMessage());
+
+			return false;
+		}
+
+		synchronized (this) {
+			if (this.compiled || this.broken || this.discarded) {
+				built.destroy();
+
+				return false;
+			}
+
+			this.ahead = built;
+		}
+
+		return true;
+	}
+
+	/** One stage the way the device reads it: the pipeline's defines injected, then shaderc. */
+	private IntermediaryShaderModule intermediary(GlslCompiler compiler, Identifier id,
+			ShaderType type) throws ShaderCompileException {
+		String text = this.source.get(id, type);
+		if (text == null) {
+			throw new ShaderCompileException("no source for " + id);
+		}
+
+		return compiler.createIntermediary(id.toDebugFileName(),
+				GlslPreprocessor.injectDefines(text, this.pipeline.getShaderDefines()), type);
+	}
+
+	/**
+	 * The chain released before anything drew this program, so no {@link #compile} will ever come
+	 * for what the worker prepared. What already waits is destroyed on the spot, which is safe for
+	 * an object nothing ever bound; what the worker is still building is destroyed by the worker
+	 * itself when it finds this flag.
+	 */
+	synchronized void discardAhead() {
+		this.discarded = true;
+		if (this.ahead != null) {
+			this.ahead.destroy();
+			this.ahead = null;
+		}
 	}
 
 	/**

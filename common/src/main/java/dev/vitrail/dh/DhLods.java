@@ -71,7 +71,22 @@ public final class DhLods {
 	private static final int UNREACHED = -1;
 
 	private static boolean resolved;
-	private static boolean usable;
+
+	/**
+	 * Volatile for the one reader off the render thread, {@code DistantProgram.warmAhead}: it
+	 * asks whether the far terrain family's pipelines are worth compiling ahead, and a stale
+	 * answer there costs a skipped or a wasted warm-up, never an image.
+	 */
+	private static volatile boolean usable;
+
+	/**
+	 * Whether DH's far terrain is currently taken out of it. False before {@link #install} first
+	 * resolves, and dropped for good when DH stops cooperating mid-session: once it falls it
+	 * never comes back up.
+	 */
+	public static boolean usable() {
+		return usable;
+	}
 
 	/** The road to DH's own switch that moves its water half behind the deferred stage. */
 	private static Field renderProxyField;

@@ -121,6 +121,14 @@ public final class PassTimings {
 	/** Negative until the property and the file have been read, which needs the game directory. */
 	private static int keepRedone = -1;
 
+	private static final boolean FIRST_DRAW_PROPERTY =
+			Boolean.getBoolean("vitrail.keepFirstDrawCompiles");
+
+	private static final String FIRST_DRAW_ARM_FILE = "keep-first-draw-compiles";
+
+	/** Negative until the property and the file have been read, which needs the game directory. */
+	private static int keepFirstDraw = -1;
+
 	/** What an arming file with nothing in it asks for. */
 	private static final int ARMED_BY_FILE_SECONDS = 5;
 
@@ -267,6 +275,7 @@ public final class PassTimings {
 		// next pack load rather than by the next launch.
 		censusSeconds = -1;
 		keepRedone = -1;
+		keepFirstDraw = -1;
 		censusOpenLabel = null;
 		censusLabels.clear();
 		censusReopens.clear();
@@ -311,6 +320,21 @@ public final class PassTimings {
 		}
 
 		return keepRedone == 1;
+	}
+
+	/**
+	 * Puts back the render-thread first-draw compiles of the six on-demand families, so that the
+	 * hitch and its absence are read off ONE jar, for the reason {@link #keepRedoneWork} gives.
+	 * Armed by {@code vitrail/keep-first-draw-compiles} beside the pack or by
+	 * {@code -Dvitrail.keepFirstDrawCompiles}, read again at every pack load, and off otherwise,
+	 * so a player never carries the old path.
+	 */
+	public static boolean keepFirstDrawCompiles() {
+		if (keepFirstDraw < 0) {
+			keepFirstDraw = FIRST_DRAW_PROPERTY || armFile(FIRST_DRAW_ARM_FILE) != null ? 1 : 0;
+		}
+
+		return keepFirstDraw == 1;
 	}
 
 	/** The arming file of that name beside the pack, or null where there is none to read. */

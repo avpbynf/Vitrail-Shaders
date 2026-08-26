@@ -52,6 +52,7 @@
 	"options.vitrail.reload_failed": "Shader konnte nicht neu geladen werden! Grund: %s",
 	"options.vitrail.other_backend": "Vitrail zeichnet auf dem %s-Backend nichts: seine Shader laufen nur auf Vulkan. Setze %s unter Optionen, Grafikeinstellungen auf \"%s\" und starte das Spiel neu.",
 	"overlay.vitrail.compiling": "Vitrail kompiliert die Shader noch",
+	"overlay.vitrail.compiling_background": "Vitrail kompiliert den Rest im Hintergrund",
 	"overlay.vitrail.compiled": "Vitrail-Shader kompiliert",
 	"key.category.vitrail.keybinds": "Vitrail"
 }

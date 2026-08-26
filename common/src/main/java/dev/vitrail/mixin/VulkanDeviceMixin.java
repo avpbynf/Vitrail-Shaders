@@ -97,6 +97,11 @@ public abstract class VulkanDeviceMixin implements StalePipelines {
 		return false;
 	}
 
+	@Override
+	public boolean vitrail$adopt(RenderPipeline pipeline, VulkanRenderPipeline compiled) {
+		return this.pipelineCache.putIfAbsent(pipeline, compiled) == null;
+	}
+
 	@Inject(method = "clearPipelineCache", at = @At("TAIL"), require = 1)
 	private void vitrail$destroySetAside(CallbackInfo callback) {
 		this.vitrail$setAside.forEach(VulkanRenderPipeline::destroy);

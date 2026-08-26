@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.mixin.GpuDeviceAccessor;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
@@ -33,6 +34,8 @@ import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vulkan.VulkanDevice;
+import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 import net.minecraft.client.GraphicsPreset;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
@@ -61,6 +64,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -296,6 +305,39 @@ public final class PackChain {
 	private int warmed;
 	private boolean familyPrefetchStarted;
 	private volatile int familiesReady;
+
+	/**
+	 * Raised by {@link #release()} and read by the pack-load worker between two programs, which is
+	 * what stops a worker still compiling for a chain nothing will ever draw again. Volatile for
+	 * that one cross-thread read; everything else about the release stays on the render thread.
+	 */
+	private volatile boolean released;
+
+	/**
+	 * Every pack-load worker still running, whichever chain started it, held for the one caller
+	 * that must see them out: shutdown. A release only raises its chain's {@link #released} and
+	 * moves on, the worker stopping at its next program; and a pack swap detaches its chain
+	 * without waiting either, so the worker shutdown must see out is not always the active
+	 * chain's. Shutdown tears the device down behind them, and a device call still in flight then
+	 * is a crash at exit, so {@link #close} waits the set out, bounded.
+	 */
+	private static final Set<CompletableFuture<Void>> WARMUPS = ConcurrentHashMap.newKeySet();
+
+	/**
+	 * Whether this chain's pack-load worker is done, whatever it managed: what lets
+	 * {@link #tickCompileHint} keep its line up through the background compiles and close it with
+	 * a "compiled" that really means nothing is compiling any more. Raised on every road out of
+	 * the worker, the refused and the stopped included, because a line that can never close is
+	 * worse than one that closes early.
+	 */
+	private volatile boolean familiesWarmed;
+
+	/**
+	 * Whether {@link #tickCompileHint} has already said, once, that the rest compiles in the
+	 * background. Render thread only, and per chain like the flag above, so a swap starts the
+	 * next pack's accounting afresh.
+	 */
+	private boolean backgroundHintShown;
 	private boolean geometryReady;
 	private boolean announced;
 
@@ -1326,8 +1368,8 @@ public final class PackChain {
 	 * frame, with the world not drawn, is the same work without that picture.
 	 * <p>
 	 * Complementary Unbound is still not compiled all at once. Its families translate on a worker
-	 * while this thread compiles the composites and the terrain; leftover pipelines compile on
-	 * their first draw rather than holding the world back.
+	 * while this thread compiles the composites and the terrain, and the same worker then compiles
+	 * their pipelines; nothing of the leftovers holds the world back.
 	 */
 	public static void pumpWarmup() {
 		PackChain chain = active;
@@ -1365,9 +1407,9 @@ public final class PackChain {
 	}
 
 	/**
-	 * Keeps the action-bar line up while the world is waiting on this pack, then says once that
-	 * it is done. Leftover families compile on their first draw and must not bring either line
-	 * back once the player is already walking.
+	 * Keeps the action-bar line up while the world is waiting on this pack, keeps it up in its
+	 * background form while the pack-load worker is still compiling the leftover families, then
+	 * says once that everything is done.
 	 */
 	private static boolean compileHintShown;
 
@@ -1387,12 +1429,28 @@ public final class PackChain {
 			return;
 		}
 
-		compileHintShown = false;
 		PackChain chain = active;
 		if (disabled || !chainWanted || chain == null || !chain.drawable()) {
+			compileHintShown = false;
 			return;
 		}
 
+		// The world draws while the worker still compiles the leftover families behind it. Said
+		// ONCE and left to fade, never pinned: the worker runs a minute of normal play on a big
+		// pack, and a line re-set every tick would own the action bar for all of it, over any
+		// server title or other mod's message. The closing line below still keeps its meaning of
+		// "nothing is compiling".
+		if (!chain.familiesWarmed) {
+			if (!chain.backgroundHintShown) {
+				chain.backgroundHintShown = true;
+				minecraft.gui.hud.setOverlayMessage(
+						Component.translatable(ScreenText.COMPILING_BACKGROUND), false);
+			}
+
+			return;
+		}
+
+		compileHintShown = false;
 		minecraft.gui.hud.setOverlayMessage(Component.translatable(ScreenText.COMPILED), false);
 	}
 
@@ -1686,6 +1744,8 @@ public final class PackChain {
 		if (chain != null) {
 			chain.release();
 		}
+
+		awaitFamilyWarmups();
 
 		// The far terrain's two corner rings and the one-texel constants survive every release on
 		// purpose, so the shutdown is the one caller that really frees them.
@@ -2446,11 +2506,13 @@ public final class PackChain {
 	 * emptied its cache, which it does at every resource reload: the alternative is to ask for all
 	 * of them every frame, which pays the whole compilation in the one frame after a reload.
 	 * <p>
-	 * After the composites, terrain pipelines compile a call. The other families translate on a
-	 * worker and shaderc on their first draw: Complementary Unbound's leftover pipelines are the
-	 * minute between packs, and holding the world for them is that minute. {@link #pumpWarmup}
-	 * repeats the compiles for as long as a short budget on the frame allows. shaderc itself stays
-	 * on the render thread: the device cache is not safe off it.
+	 * After the composites, terrain pipelines compile a call. The other families translate AND
+	 * compile on a worker: Complementary Unbound's leftover pipelines are the minute between
+	 * packs, and holding the world for them is that minute. A first draw the worker has not
+	 * reached yet still pays shaderc on the render thread, which is the fallback and no longer
+	 * the rule. {@link #pumpWarmup} repeats the compiles here for as long as a short budget on
+	 * the frame allows. The device cache itself is only ever written on the render thread: the
+	 * worker builds the objects, {@code GeometryProgram.compile} hands them over.
 	 *
 	 * @return false while a program is still missing, in which case nothing of the chain is drawn.
 	 *         What the screen holds for those frames is the terrain's answer and not this one, and
@@ -2489,19 +2551,18 @@ public final class PackChain {
 		startFamilyPrefetch();
 
 		// Terrain is the world frame. Complementary Unbound's leftover families are the minute
-		// between packs; they compile on their first draw. Terrain is a handful of pipelines, and
-		// the first world frame hitches without them.
+		// between packs; the worker compiles them while the world is already being played, and a
+		// first draw that outruns it falls back here. Terrain is a handful of pipelines, and the
+		// first world frame hitches without them.
 		//
-		// THE LEFTOVERS ARE NOT COMPILED AHEAD, and that is a decision rather than an omission.
-		// Doing it a program a frame, here, cost two minutes at two frames a second on entering a
-		// world with Complementary Unbound: one shaderc compile is about half a second and a frame
-		// is worth sixteen milliseconds, so there is no per-frame budget it fits in and spreading
-		// it only spaces the stalls out. It also pays for families the session may never draw. On
-		// first draw the cost is bounded by what is actually on screen.
-		//
-		// What would remove it rather than move it is compiling off the render thread, which turns
-		// on whether the device call underneath is safe there; nothing here has established that,
-		// and this engine has already paid for device work on the wrong thread.
+		// THE LEFTOVERS ARE NOT COMPILED ON THIS THREAD, and that is a decision rather than an
+		// omission. Doing it a program a frame, here, cost two minutes at two frames a second on
+		// entering a world with Complementary Unbound: one shaderc compile is about half a second
+		// and a frame is worth sixteen milliseconds, so there is no per-frame budget it fits in
+		// and spreading it only spaces the stalls out. What removed the stalls rather than moving
+		// them is the worker: precompilePipeline is not safe off the render thread, its caches
+		// and its compiler being shared and unguarded, but the create calls under it are once
+		// those are bypassed, and warmFamilies says how the two halves are split.
 		if (compileNext(device, this.terrain.programs())) {
 			return false;
 		}
@@ -2521,9 +2582,14 @@ public final class PackChain {
 	private static final long WARM_BUDGET_NANOS = 80_000_000L;
 
 	/**
-	 * Translates the six families on a worker. Translation does not touch the device; shaderc
-	 * does, and stays on the render thread. Complementary Unbound's entities still cost, and
-	 * that cost is this worker rather than holding the world back.
+	 * Translates the six families on a worker, then compiles their pipelines on it too.
+	 * Complementary Unbound's entities still cost their minute, and that minute is this worker
+	 * rather than holding the world back or, as it stood before the worker learnt to compile, a
+	 * hitch of half a second per program on whichever frame first drew each of them.
+	 * <p>
+	 * All six translations before the first compile, deliberately: a family's translation is what
+	 * its first draw needs even to fall back on the render thread, so no family's reading waits
+	 * behind another family's shaderc.
 	 */
 	private void startFamilyPrefetch() {
 		synchronized (this) {
@@ -2534,14 +2600,91 @@ public final class PackChain {
 			this.familyPrefetchStarted = true;
 		}
 
-		Util.backgroundExecutor().execute(() -> {
-			prefetchFamily(this.sky::prefetch);
-			prefetchFamily(this.entities::prefetch);
-			prefetchFamily(this.clouds::prefetch);
-			prefetchFamily(this.weather::prefetch);
-			prefetchFamily(this.particles::prefetch);
-			prefetchFamily(this.distant::prefetch);
-		});
+		// Read on the thread loading the pack, before the worker exists, and carried into it as
+		// a value: read lazily from the worker instead, it would race the reset a pack swap does
+		// on the render thread.
+		boolean keepOld = PassTimings.keepFirstDrawCompiles();
+		CompletableFuture<Void> warmup;
+		try {
+			warmup = CompletableFuture.runAsync(() -> {
+				try {
+					Vitrail.logger().info("The pack-load worker starts on the six families");
+					prefetchFamily(this.sky::prefetch);
+					prefetchFamily(this.entities::prefetch);
+					prefetchFamily(this.clouds::prefetch);
+					prefetchFamily(this.weather::prefetch);
+					prefetchFamily(this.particles::prefetch);
+					prefetchFamily(this.distant::prefetch);
+					warmFamilies(keepOld);
+				} catch (Throwable e) {
+					// Throwable and not RuntimeException: runAsync swallows what its runnable
+					// throws, so anything that dies here unlogged reads as the worker having
+					// finished. The families it did not reach fall back to the first-draw path
+					// either way.
+					Vitrail.logger().error("The pack-load worker died", e);
+				} finally {
+					this.familiesWarmed = true;
+				}
+			}, Util.backgroundExecutor());
+		} catch (RejectedExecutionException e) {
+			// The executor only refuses while the client shuts down. The families keep their
+			// first-draw path, and the flag closes the hint rather than leaving a line that can
+			// never end.
+			this.familiesWarmed = true;
+
+			return;
+		}
+
+		WARMUPS.add(warmup);
+		warmup.whenComplete((unused, e) -> WARMUPS.remove(warmup));
+	}
+
+	/**
+	 * Compiles every program the six families read, still on the worker, with a compiler of the
+	 * worker's own: the device's precompile keeps its results in maps only the render thread may
+	 * touch, so each pipeline is built through the same public steps instead and
+	 * {@code GeometryProgram.compile} hands the finished object to the cache on the render
+	 * thread. {@code GeometryProgram.warmAhead} says why every step of that is safe off the
+	 * thread, and {@code vitrail/keep-first-draw-compiles} beside the pack keeps the old
+	 * first-draw path for a measurement, the way {@code keep-redone-work} does.
+	 * <p>
+	 * Walked in {@code familyPrograms} order, which serves the sky and the entities first: those
+	 * two are on screen the moment the world is, and the far terrain comes last.
+	 */
+	private void warmFamilies(boolean keepOld) {
+		GpuDevice front = RenderSystem.tryGetDevice();
+		if (front == null || keepOld
+				|| !(((GpuDeviceAccessor) front).vitrail$backend()
+						instanceof VulkanDevice device)) {
+			Vitrail.logger().info("The worker leaves the leftover families to their first draw: "
+					+ "{}", front == null ? "no device"
+							: keepOld ? "keep-first-draw-compiles"
+									: "the backend is not the Vulkan one");
+
+			return;
+		}
+
+		long start = System.nanoTime();
+		int walked = 0;
+		int served = 0;
+		try (GlslCompiler compiler = new GlslCompiler()) {
+			for (int family = 0; family < FAMILIES; family++) {
+				for (DumpedProgram program : familyPrograms(family)) {
+					if (this.released || disabled) {
+						return;
+					}
+
+					walked++;
+					if (program.warmAhead(device, compiler)) {
+						served++;
+					}
+				}
+			}
+		}
+
+		Vitrail.logger().info("{} of {} leftover pipelines compiled ahead of their first draw, "
+				+ "{} ms off the render thread", served, walked,
+				(System.nanoTime() - start) / 1_000_000L);
 	}
 
 	private void prefetchFamily(Runnable prefetch) {
@@ -2552,6 +2695,28 @@ public final class PackChain {
 		}
 
 		this.familiesReady++;
+	}
+
+	/**
+	 * Waits out, bounded, every worker still running at shutdown, whichever chain started it.
+	 * Nothing device-side can START once a chain is released; what the bound really covers is the
+	 * one compile possibly in flight, about half a second, and a worker still translating holds
+	 * no device work at all. The bound itself is for a worker wedged in the driver, which may not
+	 * be allowed to hold the quit.
+	 */
+	private static void awaitFamilyWarmups() {
+		CompletableFuture<?>[] running = WARMUPS.toArray(new CompletableFuture<?>[0]);
+		if (running.length == 0) {
+			return;
+		}
+
+		try {
+			CompletableFuture.allOf(running).get(2, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		} catch (ExecutionException | TimeoutException ignored) {
+			// The runnable logs its own failures, and a timeout leaves nothing to do but quit.
+		}
 	}
 
 	private Collection<? extends DumpedProgram> familyPrograms(int index) {
@@ -2602,7 +2767,7 @@ public final class PackChain {
 	 * compiles one program a frame, so every load, every resource reload and every portal used to
 	 * spend {@code programs.size()} frames with the world drawn into a target nothing read: three
 	 * seconds of a screen with no world in it, at every F3+T. Terrain pipelines take that same
-	 * road after the composites. Leftover families compile on their first draw.
+	 * road after the composites. Leftover families compile on the worker.
 	 * <p>
 	 * The empty chain answers no rather than yes on a vacuous count. A place with no program has no
 	 * final either, so nothing would ever bring that target back, and {@link #warm} refuses it in
@@ -2917,6 +3082,16 @@ public final class PackChain {
 	}
 
 	private void release() {
+		// The worker's flag first, so a compile still running for this chain stores nothing more
+		// into programs nothing will ever draw again; what it already stored is destroyed with the
+		// walk below, which is safe for objects nothing ever bound. Only families the worker
+		// finished translating are walked, for the reason rotate() gives.
+		this.released = true;
+		int ready = this.familiesReady;
+		for (int family = 0; family < ready && family < FAMILIES; family++) {
+			familyPrograms(family).forEach(DumpedProgram::discardAhead);
+		}
+
 		CustomImages.clear();
 		this.compute.close();
 		this.targets.release();

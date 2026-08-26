@@ -122,6 +122,16 @@ what the next one holds.
 
 ### Fixed
 
+- **The freezes on first encounters are gone.** A pack's programs for the entities, the sky, the
+  clouds, the weather, the particles and the far terrain used to compile on the frame that first
+  drew each of them: around half a second frozen per program on a cold driver cache, over a
+  hundred programs on a big pack, spread across the first minutes of play and paid again behind
+  every portal. They are now compiled in the background while you play, and a frame only waits
+  for a program it reached before the background did. The action-bar line follows: it stays up,
+  as "compiling the rest in the background", while that work runs, and only says compiled once
+  nothing is compiling any more. An empty file `vitrail/keep-first-draw-compiles` in the
+  instance puts the old path back for a comparison.
+
 - **A pack's shadow compute is no longer built when the pack switched it off.** A pack turns
   whole programs on and off from its own settings, and the compute pass behind coloured lighting
   was read and handed to the compiler whichever way that setting stood. Switched off, the pack

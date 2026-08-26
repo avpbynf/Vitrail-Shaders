@@ -62,8 +62,9 @@ observe:
   frames just after, because pipelines are compiled on a budget of the frame rather than all at
   once. Until the composites and the terrain are ready the chain draws nothing, and neither does the
   world: the HUD stays up and a line above it says the pack is still compiling. The leftover
-  families compile on their first draw. The same wait comes back for a moment after every resource
-  reload.
+  families compile in the background while you play, the line says so once, once more when
+  everything is done, and a first draw that outruns that work compiles on the spot. The same
+  wait comes back for a moment after every resource reload.
 - **A pack that cannot be translated fails loudly**, not as a corrupt image twenty minutes later.
   When Vitrail refuses something, the log names it.
 - **Uniform and sampler binding is decided up front**, so a pack that asks for something the
