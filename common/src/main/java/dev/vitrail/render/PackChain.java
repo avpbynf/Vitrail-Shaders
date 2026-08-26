@@ -317,6 +317,14 @@ public final class PackChain {
 	private volatile int familiesReady;
 
 	/**
+	 * Guards the six family program maps against the one pair of threads that ever touches
+	 * them at once: the pack-load worker copying the family it has just read, and the render
+	 * thread emptying every family when the pack goes. A plain map read while another thread
+	 * clears it is undefined rather than merely unlucky, so neither side is left to chance.
+	 */
+	private final Object familyMaps = new Object();
+
+	/**
 	 * Raised by {@link #release()} and read by the pack-load worker between two programs, which is
 	 * what stops a worker still compiling for a chain nothing will ever draw again. Volatile for
 	 * that one cross-thread read; everything else about the release stays on the render thread.
@@ -2879,11 +2887,21 @@ public final class PackChain {
 			return;
 		}
 
+		// Copied here, on the thread that has just filled this family, and never walked live:
+		// the maps behind it are emptied on the render thread when the pack goes, and an
+		// iterator standing in one then throws under the worker even though the released flag
+		// it reads every step is already up. Under the lock, because the copy itself is a read
+		// of the live map and the emptying is what it races.
+		List<DumpedProgram> programs;
+		synchronized (this.familyMaps) {
+			programs = List.copyOf(familyPrograms(family));
+		}
+
 		// The plate grows before the task that will empty it exists, so the corner's count can
 		// only ever run behind the truth, never past it.
-		this.warmTotal.addAndGet(familyPrograms(family).size());
+		this.warmTotal.addAndGet(programs.size());
 		compiles.add(CompletableFuture.runAsync(
-				() -> warmFamily(family, device), COMPILE_POOL));
+				() -> warmFamily(programs, device), COMPILE_POOL));
 	}
 
 	/**
@@ -2895,9 +2913,9 @@ public final class PackChain {
 	 * {@code vitrail/keep-first-draw-compiles} beside the pack keeps the old first-draw path for
 	 * a measurement, the way {@code keep-redone-work} does.
 	 */
-	private void warmFamily(int family, VulkanDevice device) {
+	private void warmFamily(List<DumpedProgram> programs, VulkanDevice device) {
 		try (GlslCompiler compiler = new GlslCompiler()) {
-			for (DumpedProgram program : familyPrograms(family)) {
+			for (DumpedProgram program : programs) {
 				if (this.released || disabled) {
 					return;
 				}
@@ -3327,12 +3345,14 @@ public final class PackChain {
 		DhLods.handBack();
 
 		this.terrain.release();
-		this.sky.release();
-		this.entities.release();
-		this.clouds.release();
-		this.weather.release();
-		this.particles.release();
-		this.distant.release();
+		synchronized (this.familyMaps) {
+			this.sky.release();
+			this.entities.release();
+			this.clouds.release();
+			this.weather.release();
+			this.particles.release();
+			this.distant.release();
+		}
 
 		if (this.block != null) {
 			this.block.close();
