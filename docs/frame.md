@@ -71,7 +71,8 @@ buffer parity is checked outside the game rather than judged on screen.
 
 **A target a pack keeps across frames is not a fault.** Packs use one for temporal accumulation:
 the clear skips it, so the first frame of a session reads the clear and every later frame reads
-what the previous frame left. The engine reports such a read as historical rather than flagging it.
+what the previous frame left. Nothing flags such a read, in the engine or in the checks outside
+the game.
 
 Targets belong to a **place** (the root, or a dimension directory) and never to a pack as a
 whole. A pack can declare its format table in one dimension folder only, and then other dimensions

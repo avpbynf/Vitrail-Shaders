@@ -48,12 +48,13 @@ the per-loader `vitrail-neoforge-*` and `vitrail-fabric-*` jars carry the same
 mod as the merged one, and a loader that finds it twice refuses to start.
 
 Shader packs go into the `shaderpacks/` folder at the root of the instance, the
-same folder OptiFine and Iris use, zipped or unpacked. The mod keeps two files of
-its own in a `vitrail/` folder next to `mods/`: `pack.txt`, which is which pack is
-loaded and whether shaders are on at all, and `options.txt`, which is the engine's
-own switches. A pack's own settings are not kept in either. They go beside the
-pack, in the file the reference engine reads and writes for the same pack, so they
-follow you from one engine to the other. What each of those files holds is in
+same folder OptiFine and Iris use, zipped or unpacked. Two files of the mod's own
+live in a `vitrail/` folder next to `mods/`. It writes `pack.txt` itself, which is
+which pack is loaded and whether shaders are on at all. It only ever reads
+`options.txt`, the engine's own switches, which is yours to write. A pack's own
+settings are kept in neither. They go beside the pack, in the file the reference
+engine reads and writes for the same pack, so they follow you from one engine to
+the other. What each of those files holds is in
 [the settings screen](docs/settings-screen.md).
 
 None of them has to exist, and without a pack picked nothing is drawn. The screen
