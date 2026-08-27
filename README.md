@@ -68,7 +68,8 @@ experimental by the game itself.
   own settings screen.
 
 [INSTALL.md](INSTALL.md) has the versions this needs, the Chloride settings that
-have to come off, and how to build from source.
+decide what reaches your pack, and what a game that came up on the wrong backend
+looks like.
 
 ## What goes through your pack
 
