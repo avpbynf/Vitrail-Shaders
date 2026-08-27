@@ -13,7 +13,7 @@ quietly stale.
 
 | Pack | What I have seen |
 | --- | --- |
-| BSL v10.1.3 | Drawn whole, and the one watched most closely. Terrain, water, shadow map, sky, clouds, weather, particles, mobs and the held hand all go through it. |
+| BSL v10.1.3 | Drawn whole, and the one watched most closely. Terrain, water, shadow map, sky, clouds, weather, particles, mobs, block entities and the held hand all go through it. |
 | Complementary Unbound r5.8.1 | Drawn whole, and watched as closely. Its colour targets, its deferred chain and its shadow map all come up; the log prints how many targets it allocated and at what size. Its two top profiles are the exception, and the pack announces it itself: see [the pack asks for Iris](#the-pack-asks-for-iris). |
 | Complementary Reimagined r5.8.1 | Drawn whole, seen beside Unbound, and visually as close to it as the two packs are to each other. Same top-profile exception as Unbound. |
 | Bliss v2.1.2 | Drawn, water included. The flat wrong colours its mobs and its held arm used to come out in are gone: that was this engine sending their first output through a target of the game's, eight bits to a channel where the pack stacks two values in sixteen, and both now write the pack's own. It is the pack that reads the light map raw where BSL and Complementary multiply the matrix in, which is why the far terrain's pair is served normalised. |
@@ -27,7 +27,7 @@ rather than guess.
 
 | What you see | Go to |
 | --- | --- |
-| Nothing of the pack is drawn, the world looks vanilla | [The pack was refused](#the-pack-was-refused) |
+| Nothing of the pack is drawn, the world looks vanilla | [The pack was refused](#the-pack-was-refused), or a game that came up on OpenGL, which [INSTALL](../INSTALL.md#switching-the-graphics-backend-to-vulkan) answers |
 | A red full-screen message tells you to install Iris | [The pack asks for Iris](#the-pack-asks-for-iris) |
 | An effect does nothing at all | [The effect never ran](#the-effect-never-ran) |
 | Blocks have no relief, however smooth the pack promises | [Everything is flat](#everything-is-flat) |

@@ -345,7 +345,7 @@ holds:
   ever reports annotations missing from a dependency's own jar, and the one asking for a
   `serialVersionUID` on exceptions nothing serialises
 - javadoc linting as errors, everything but the missing comments, so a broken reference, a
-  malformed tag or malformed HTML fails the build
+  malformed tag, malformed HTML and an accessibility fault all fail the build
 - Error Prone, contributing the checks it rates as errors, plus two of its warnings promoted to
   join them, `StringSplitter` and `OperatorPrecedence`
 - `checkText`, which covers the two things no compiler sees: a byte order mark, which PowerShell

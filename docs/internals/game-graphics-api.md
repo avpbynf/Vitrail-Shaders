@@ -164,10 +164,10 @@ the game's texture-backed target type is public and instantiable, so owning targ
 and its textures are created with usages that allow the same texture to be a colour attachment in
 one pass and a sampled input in the next without being recreated.
 
-## Coordinates keep the OpenGL convention end to end
+## The screen's two axes keep the OpenGL convention end to end
 
-This is the question every port of an OpenGL-era renderer asks, and the answer is that there is
-nothing to flip.
+This is the question every port of an OpenGL-era renderer asks, and for X and Y the answer is that
+there is nothing to flip. Depth is the other story, and it is at the foot of this section.
 
 The Vulkan viewport the game sets is **not** inverted: it starts at zero and has a positive height.
 The flip happens once, at the very last moment, in the blit to the swapchain, where the destination
@@ -176,8 +176,13 @@ any target a mod owns) keeps the OpenGL orientation, origin at the bottom left.
 
 So a full-screen shader that maps a corner to both its texture coordinate and its clip position
 sees texture coordinate zero at the bottom left of the screen, which is exactly the convention
-OptiFine-format packs are written against. No coordinate flip is needed for them anywhere, and one
+OptiFine-format packs are written against. No flip of those two axes is needed anywhere, and one
 added "to be safe" is a defect.
+
+**Depth does not keep it, and that is the one to remember.** The game rasterises with a reversed Z
+where a pack is written for the OpenGL volume, so a formula that is correct in a pack becomes false
+here with no word of it misquoted. The translator converts at three fixed sites rather than leaving
+it to the pack, and [translation](../translation.md) names them.
 
 ## Samplers and uniform blocks are paired by reflection
 

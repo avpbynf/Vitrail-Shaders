@@ -135,9 +135,17 @@ one answer bound by a pipeline compiled under the other, which is the wrong stri
 So there is one answer in force and one call that moves it. Its instant is the head of the chunk
 renderer being built again from nothing, which is reached from the extract that consumes the world
 rebuild: after the previous frame was submitted and presented, and before this one has bound a single
-pipeline, so emptying the compiled pipelines there has nothing in flight to tear down. Emptying them
-is owed only where the answer really moved, and it is owed: the game precompiles every static
-pipeline at every resource load and caches it by identity, so the entity ones standing at that
+pipeline. What happens there is that the entity pipelines leave the lookup map, which is map work,
+safe anywhere, and enough on its own: what no lookup can answer with, no new draw binds.
+
+**Nothing is destroyed there, and that is not an omission.** This backend records continuously, so
+at any instant of a running session something already recorded still names what a purge would free.
+Freed at this one, on a pack load in a running world, the device was lost seconds later with nothing
+in the log. The compiled pipelines wait aside for the game's own cache clear, which quiesces first,
+and the recompile happens at once rather than lazily at the next bind.
+
+Dropping them is owed only where the answer really moved, and it is owed: the game precompiles every
+static pipeline at every resource load and caches it by identity, so the entity ones standing at that
 moment were compiled under the other answer.
 
 **Asking is all a switch does.** Moving one raises the same world rebuild F3+A raises and lets the
