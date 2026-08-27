@@ -10,7 +10,9 @@
 
 <p align="center">
   <a href="https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders"><img src="https://img.shields.io/badge/download-CurseForge-F16436?style=flat-square&logo=curseforge&logoColor=white" alt="Vitrail on CurseForge"></a>
-  <img src="https://img.shields.io/badge/status-experimental-C1440E?style=flat-square" alt="Experimental">
+  <img src="https://img.shields.io/badge/minecraft-26.2-4C8C4A?style=flat-square" alt="Minecraft 26.2">
+  <img src="https://img.shields.io/badge/loaders-Fabric%20%2F%20NeoForge-5B6472?style=flat-square" alt="Fabric and NeoForge">
+  <a href="https://ko-fi.com/B1H225VJC4"><img src="https://img.shields.io/badge/support-Ko--fi-FF5E5B?style=flat-square&logo=kofi&logoColor=white" alt="Support Vitrail on Ko-fi"></a>
 </p>
 
 ---
@@ -45,83 +47,43 @@
 </p>
 </details>
 
-Minecraft 26.2 ships a native Vulkan renderer alongside the OpenGL one. The
-shader ecosystem grew up on OpenGL and has not crossed over yet: the packs, the
-engines that load them and the habits of the people who write them all assume
-that renderer.
+Minecraft 26.2 ships a native Vulkan renderer alongside the OpenGL one. Every
+shader pack that exists was written for OpenGL, and none of them run on it.
 
-Vitrail keeps the two sides compatible while that changes. It loads existing
-OptiFine-format packs, unmodified, on the Vulkan backend, so that turning Vulkan
-on does not mean giving up the packs you already use.
+**Vitrail runs them anyway, unmodified.** It reads an OptiFine-format pack out
+of `shaderpacks/`, translates its GLSL once when the pack loads, and hands it to
+the compiler the game already embeds. Nothing translates while a frame is drawn.
 
-It is a side project by one person, and it started as a question: whether packs
-written for OpenGL over more than a decade could run, untouched, on the renderer
-that now ships with the game. Well enough to play with, it turns out.
-
-Much of the code was written with Claude. The design, the testing
-against real packs, the decisions about where this renderer differs from OpenGL
-and the licensing are mine.
-
-## Status
-
-The backend this runs on is marked experimental by the game itself, and Vitrail
-is earlier still. Point it at a pack and it loads it, settings and all,
-translates its programs once, and runs its frame in the order the format
-prescribes: terrain, water, shadows, sky, clouds, weather, particles, mobs,
-block entities and the held hand all go through the pack today, and so does
-the far terrain of Distant Horizons, given a build of that mod that draws on
-this backend; [Other mods](INSTALL.md#other-mods) names one. A settings
-screen reads the pack's own menu layout, and a resource pack's normal and
-specular maps are served beside the blocks they belong to.
-
-What is not through yet comes from the game instead, and that set moves from one
-release to the next, so a list here would go stale: when a place first draws,
-the engine logs which families still come from the game, and
-[pack compatibility](docs/compatibility.md) starts from what you are seeing and
-names the cause. If what you want today is a finished picture, use
-[Iris](https://github.com/IrisShaders/Iris) on the OpenGL backend instead; it
-does that job well, and it is the reference this engine is checked against.
-Vitrail is for people who want the Vulkan backend on and will trade some image
-quality for it in the meantime.
+One person's side project, and an early one: the backend it runs on is marked
+experimental by the game itself.
 
 ## Quick start
 
-There is one jar and it runs on both loaders, NeoForge and Fabric. It is on
-[CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) and
-attached to every [release](https://github.com/avpbynf/Vitrail-Shaders/releases)
-here, put there by the same run, so both places serve the same file.
+- One jar, both loaders. On
+  [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) and
+  on every [release](https://github.com/avpbynf/Vitrail-Shaders/releases) here.
+- Put it in `mods/` next to Sodium. Client only.
+- Switch the game to Vulkan, in Options then Video Settings, and restart it.
+- Packs go in `shaderpacks/` as they always have, and are picked from Vitrail's
+  own settings screen.
 
-Put it in `mods/` next to Sodium, and switch the game to Vulkan:
-`preferredGraphicsBackend:"vulkan"` in `options.txt`, or
-Options, then Video Settings, in game. Nothing enforces that switch, though the
-mod says at startup which backend the game came up on, and says so as an error
-when it is not Vulkan. Shader packs go in `shaderpacks/`, as they always have,
-and are selected in game from Vitrail's settings screen.
+[INSTALL.md](INSTALL.md) has the versions this needs, the Chloride settings that
+have to come off, and how to build from source.
 
-[INSTALL.md](INSTALL.md) has the versions this needs, what a game that came up on
-the wrong backend looks like, and the Chloride settings that have to come off if
-you run it. Client only: it does nothing on a server and does not need to be
-installed on one.
+## What goes through your pack
 
-To build from source:
+Terrain, water, shadows, sky, clouds, weather, particles, mobs, block entities,
+the held hand, and the far terrain of Distant Horizons given a build of that mod
+that draws on this backend, which [Other mods](INSTALL.md#other-mods) names. The
+settings screen reads the pack's own menu layout, and a resource pack's normal
+and specular maps are served beside the blocks they belong to.
 
-```
-gradlew build
-```
-
-Three jars land in `build/libs`; the one to install is the plain
-`vitrail-<version>` one, the other two being its per-loader slices.
-
-## How it works
-
-A shader pack is GLSL written against OpenGL conventions that no Vulkan driver
-will accept. Vitrail rewrites every program into Vulkan GLSL **once, before it
-ever draws**, and hands it to the compiler the game already embeds, which
-turns it into SPIR-V exactly as it does for the game's own shaders. There is no
-translation layer left between the game and the GPU while a frame is drawn:
-this is a compiler that runs before the frame, not a shim that runs inside it. What
-that one idea costs, buys and implies is the opening page of
-[the documentation](docs/README.md).
+The rest still comes from the game, and that set moves from one release to the
+next: the engine logs which families do when a place first draws, and
+[pack compatibility](docs/compatibility.md) starts from what you are seeing and
+names the cause. If what you want today is a finished picture, use
+[Iris](https://github.com/IrisShaders/Iris) on the OpenGL backend instead, which
+is the reference this engine is checked against.
 
 ## Read more
 
@@ -133,24 +95,24 @@ that one idea costs, buys and implies is the opening page of
 | Install it, and know what it refuses to run beside | [INSTALL.md](INSTALL.md) |
 | Understand how any of this works | [The documentation](docs/README.md) |
 
+## Support
+
+<a href="https://ko-fi.com/B1H225VJC4"><img src="https://storage.ko-fi.com/cdn/kofi3.png?v=6" width="220" alt="Buy Me a Coffee at ko-fi.com"></a>
+
 ## Contributing
 
 Open an issue before writing anything substantial. I order the work by risk, and
 code that lands ahead of what can be verified is hard to accept however good it
-is.
-
-[CONTRIBUTING.md](CONTRIBUTING.md) covers the rest and is short. Two of its rules
-bite people who skip it: files are UTF-8 without a BOM everywhere, because a BOM
-breaks anything that feeds sources to a GLSL compiler, and line endings are LF.
+is. [CONTRIBUTING.md](CONTRIBUTING.md) is short, and two of its rules bite people
+who skip it: files are UTF-8 without a BOM, because a BOM breaks anything that
+feeds sources to a GLSL compiler, and line endings are LF.
 
 ## Licence
 
-LGPL-3.0-only, in [LICENSE](LICENSE). Version 3 of the Lesser GPL is written as
-a set of additional permissions on top of the ordinary GPL rather than as a
-standalone document, so a copy of that one is in [GPL-3.0.txt](GPL-3.0.txt) as
-well. Both are needed to read either.
+LGPL-3.0-only, in [LICENSE](LICENSE), with [GPL-3.0.txt](GPL-3.0.txt) beside it
+because version 3 of the Lesser GPL is written as permissions on top of the
+ordinary GPL rather than as a standalone document.
 
 Parts of the pack loader and of the value catalogue are adapted from Iris, which
-is the reference for what a pack expects. Iris is LGPL-3.0 as well, so nothing
-about the licensing of this repository changes. What was taken, from where, and
-what was changed on the way is recorded in [NOTICE](NOTICE).
+is LGPL-3.0 as well. What was taken and what was changed on the way is recorded
+in [NOTICE](NOTICE).
