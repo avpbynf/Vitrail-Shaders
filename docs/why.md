@@ -1,16 +1,17 @@
 # Why this exists
 
-Minecraft renders through Vulkan now, and not one shader pack that exists today runs on it. Two
-choices follow from that, and this page is the reasoning behind both: keeping the OptiFine format
-rather than inventing one, and writing an engine at all when others are already in the area.
+Minecraft ships a Vulkan renderer now, and not one of the shader packs written over the last decade
+ran on it. Two choices follow from that, and this page is the reasoning behind both: keeping the
+OptiFine format rather than inventing one, and writing an engine at all when others are already in
+the area.
 
 ## Why the OptiFine format
 
 Not because it is elegant, but because that is where the work is. Packs have been written against
 the OptiFine conventions for more than a decade, by a lot of people, and that is still where nearly
 all of the community writes today. Minecraft moving to Vulkan does not make any of that work worse.
-It just makes it unrunnable, and asking every author to port to a new format is asking them to throw
-it away.
+It just makes it unrunnable there, and asking every author to port to a new format is asking them
+to throw it away.
 
 So inventing a format was the obvious alternative, and it was rejected on purpose. Following
 conventions that have held for ten years means the specification already exists, there is a corpus

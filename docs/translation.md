@@ -69,8 +69,9 @@ function that disagree about them are a real conflict.
 **`const` on a variable whose initialiser is not a constant expression is stripped.** Vulkan
 refuses a global `const mat3` initialised from `transpose(...)`, or from a uniform, which OpenGL
 drivers took as merely immutable. The keyword comes off and the value stays. A declaration whose
-initialiser is only literals and type constructors is left alone, because an array size still
-needs a real constant. Parameters keep `const`: that spelling means immutable, not compile-time.
+initialiser is only literals, type constructors and names the unit itself defines is left alone,
+because an array size still needs a real constant. Parameters keep `const`: that spelling means
+immutable, not compile-time.
 
 **Names that collide with newer builtins are renamed.** A function a pack defines can collide with
 a builtin introduced after the version the pack targets, and the error does not name the collision:

@@ -357,8 +357,9 @@ says so on the way past. What it cannot let through is anything javac calls an e
 javadoc lint and the two promotions.
 
 The vendored stareval sources under `uniform/expr/kroppeb/` are left out of the javadoc lint and out
-of the static analyser, promotions included, so that borrowed code stays as its author wrote it.
-Nothing guards that package, so a change made there is worth reading twice.
+of the static analyser, promotions included, so that borrowed code stays as its author wrote it. The
+analyser is pointed away from `vitrail/mixin/` as well. Nothing guards either package, so a change
+made in one is worth reading twice.
 
 Why each of those gates exists, what the two promotions are really about and what none of them
 covers is in [developing](docs/developing.md). Run the build before pushing rather than after:

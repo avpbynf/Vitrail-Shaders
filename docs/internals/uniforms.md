@@ -94,9 +94,12 @@ integrates over and an unquantised one puts all of them slightly off the referen
 reason. The running time a pack reads accumulates those frame durations rather than sampling a wall
 clock, so it stops while the game is paused, which is what a pack driving noise from it expects.
 
-A handful of values are properties of the **pass** rather than of the frame: the depth convention
-of the target being drawn into, the model view the pass draws with, the colour it modulates by, and
-which stage of the frame it is. Those are set beside each block write and never carried over. Left
+A handful of values are properties of the **pass** rather than of the frame: the depth convention of
+the target being drawn into, the model view the pass draws with and the projection it draws under,
+the colour it modulates by, and which stage of the frame it is. Those are set beside each block
+write and dropped rather than carried over, though not in the same place: the frame boundary drops
+the model view, the projection and the colour, and the chain drops the render stage before it
+writes its own blocks, being the only reader left that could hold a stale one. Left
 standing from the pass before, the render stage would tell every full-screen pass of the frame that
 it was drawing the moon, because that value sits in the same table a full-screen pass shares with a
 geometry one.
@@ -119,8 +122,10 @@ Three details decide the result and none of them is obvious:
   fall is a constant here, and the pack cannot change it, because both of the directive names it
   would write (the one that reads as the rise and the one that reads as the fall) are registered
   against the rise, so the second one it writes only overwrites the first. That is the reference's
-  behaviour, reproduced on purpose: honouring the pack's own fall directive instead would dry the
-  ground several times too fast on every pack of the corpus that declares both.
+  behaviour, reproduced on purpose. Honouring the pack's own fall directive instead would be the
+  more sensible reading, and it would change the look of the three packs of the corpus that declare
+  one, in opposite directions: BSL asks for 5 deciseconds against this 200, and both Complementary
+  for 300.
 - There is no smoothing at all on the first value, which is set outright. Otherwise a fresh
   accumulator would spend its first seconds climbing out of zero.
 - A half-life of zero gives an infinite decay constant, hence a factor of one, hence no smoothing.
@@ -285,11 +290,13 @@ could not be read back (`glGetUniformfv` is there for it). It is that reading th
 the second walk the paragraph above rules out. Holding them costs one class rather than a redesign.
 
 It names one program at a time, since the point is to read the file rather than to search it, and
-not because two programs of one frame would say the same thing. They do not. The depth convention,
-the model view the pass draws with, the colour it modulates by and the render stage are properties
-of the pass, so a terrain program and a composite answer differently on exactly the members that
-have to be told apart: one carries the world's model view where the other carries the identity.
-Taking the reading under one program and then under the other is how that pair gets compared at all.
+not because two programs of one frame would say the same thing. They do not, on everything the named
+program itself decides. What they do NOT tell apart is what a pass sets beside its block write. The
+dump is taken as the frame opens, before any pass has written one, so the pass model view reads back
+as the camera's, the modulating colour as white, and the render stage as whatever the last block of
+the frame before left there, which is not the chain's own. The eight pieces of the sky dump alike on
+exactly those. Taking the reading under one program and then under the other is how the rest gets
+compared at all.
 It is rewritten whole rather
 than appended, roughly once a second rather than once a frame, so what is in it is always now: a
 curve is taken by reading it repeatedly, which is exactly how a half-life is measured.
