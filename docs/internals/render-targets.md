@@ -121,7 +121,8 @@ wrong resolution.
 
 A scaled target also cannot join the game's colour target inside one render pass, because a pass
 has a single render area and every attachment has to match the first (see below), and attachment
-zero is the game's target at screen size. A pack that scales a target its geometry writes therefore
+zero is the game's own target, at whatever size the render scale has left it rather than at any
+size a pack chose. A pack that scales a target its geometry writes therefore
 has that pass fall back to the game's target alone: the attachments the pack named for it are
 dropped as a set rather than one by one, so every draw buffer of that pass is written nowhere. The
 log names the program and says exactly that, which is the point of dropping them at load: the
