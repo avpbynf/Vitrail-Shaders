@@ -256,9 +256,10 @@ plane from `n` out to `2nf / (n + f)`. And the planes come out in camera-relativ
 than in the light's clip space, which is also the space the boxes arrive in, so no further conversion
 is owed anywhere: the light's own volume never enters the cull at all.
 
-What this buys has to be read off the log rather than off the screen, and the shadow stage prints it:
-how many sections the light walked, how many the camera walked, and which shape was used. The picture
-is the place it will NOT show, because keeping a section too many costs a draw and not a pixel.
+What this buys is read off the log, where the shadow stage prints how many sections the light walked,
+how many the camera walked and which shape was used, or off the debug screen, which carries the shape
+and the count that survived it. The picture is the place it will NOT show, because keeping a section
+too many costs a draw and not a pixel.
 
 All of the above is about the terrain. What moves is culled separately, and there is an open
 divergence there worth stating plainly, because it is a gap and not a workaround. A caster is

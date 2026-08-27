@@ -45,11 +45,13 @@ are split on all three endings including a lone carriage return: a file with cla
 read as one long line loses every directive in it. A pack that ships one file in the wrong encoding
 should lose that file's accented comments, not fail to load.
 
-## One sorted walk, over a closed set of extensions
+## The sorted walk, over a closed set of extensions
 
-Only a fixed list of extensions is read. Widening it is not free: packs ship JSON meant for other
-mods that contains lines beginning with an include directive, and scanning those changes every
-number the loader reports. The extension list is the only filter.
+Only a fixed list of extensions is read as source. Widening it is not free: packs ship JSON meant
+for other mods that contains lines beginning with an include directive, and scanning those changes
+every number the loader reports. The extension list is the only filter on what becomes source, and
+everything it leaves out is still reachable: proving that a name is mentioned nowhere in a pack
+means reading those files too, by a second walk that filters on the size ceiling instead.
 
 The walk is then **sorted by pack-relative path**, and that sort is part of the contract. The
 settings index keeps the first declaration of a name and drops later ones, and packs do declare the
@@ -84,8 +86,9 @@ hits are counted so a pack that depends on it can be named rather than merely to
 
 ## The settings index
 
-Two patterns, tried in order per line: a define that may itself be commented out, and a typed
-constant of a scalar type. The first declaration of a name wins.
+Three patterns run over each line: a define that may itself be commented out, a typed constant of
+a scalar type, and an `#ifdef` or `#ifndef` naming one symbol and nothing else, which records that
+something tests that name. The first declaration of a name wins.
 
 **The kind of a setting is decided by whether the rest of the line is empty** once the trailing
 comment is stripped, not by whether a list of allowed values is present. Empty is a switch; anything
@@ -133,6 +136,11 @@ The rewrite rules are asymmetric on purpose:
   as an expression rather than tested for existence, so commenting it out would leave the name
   undeclared where it is used, and skipping it would drop the player's choice silently.
 
+**Those last two reach a closed list of names and no others.** A `const` the reference does not
+configure is a plain constant, whatever its type, and no choice ever rewrites it. So is one the
+index refuses for a reason of its own: a `uint`, a number shipped without a list of values to
+cycle through, or a boolean nothing tests.
+
 A name the pack declares **nowhere** is not applied at all, and nothing is emitted for it in the
 unit's header. There is nowhere to apply it: the section below carries why that is the answer rather
 than an omission.
@@ -149,7 +157,9 @@ Reading a pack produces two tables of defines. Unifying them makes one of the tw
 
 The table used for `shaders.properties` carries the engine's symbols, the default of every setting
 the pack does not ship commented out, and the player's choices on top. That file may test any
-setting, so every setting has to be present before the first line is read.
+setting, so every setting the index offers is present before the first line is read. A boolean
+constant is the one that enters only while it is true, because an `#ifdef` on one declared false
+has to read false whatever text the declaration carries.
 
 The table a source file starts with carries **the engine's symbols and nothing else**. The pack's own
 settings enter as the expander walks past their declarations, in file order, exactly as a
@@ -186,13 +196,18 @@ device at all, which is what the out-of-game checks in [Developing](../developin
 The table is ordered, and its order is preserved, because it is emitted in order: an ordered emission
 is one a person can diff against the previous run.
 
-What it holds are the symbols packs branch on to decide what they are allowed to use: the game
-version in the packed form the format specifies, the GL and GLSL levels, one symbol each for the
-operating system, the vendor and the renderer, quality and hand-depth scalars, the render stage
+What it holds are the symbols packs branch on to decide what they are allowed to use: the
+reference's own name and version, which a pack tests to know it is on an engine that speaks this
+format at all, the game version in the packed form the format specifies, the GL and GLSL levels,
+the colour buffer ceiling, the two symbols saying the normal and specular maps are served, one
+symbol each for the operating system, the vendor and the renderer, quality and hand-depth
+scalars, the render stage
 constants taken straight off the engine's own enumeration so the number a pack compares against and
 the number a draw carries cannot part company, the block kinds and precipitation kinds packs read
 without declaring, and the biome and biome-category symbols, which stay empty until a caller has a
-registry to walk. **A missing symbol does not fail loudly.** It quietly sends the pack down a
+registry to walk. Two more are posted only while they hold: the far terrain symbol while that mod
+is drawing, and the custom images capability while it is served. **A missing symbol does not fail
+loudly.** It quietly sends the pack down a
 fallback path written for a renderer from a decade ago, which is why classifying a vendor string into
 the wrong bucket is worse than not classifying it.
 
