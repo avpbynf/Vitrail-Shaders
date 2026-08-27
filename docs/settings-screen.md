@@ -196,7 +196,8 @@ per line, because the reference has no key for a profile name at all: writing th
 hand it a file carrying none of the eight settings a profile like BSL's ULTRA decides.
 
 A file this engine wrote before the settings moved is carried over at the first load of that pack,
-in one go: it is read, written out to the shared file, and renamed aside. It is not read for as long
+in one go: it is read, written out to the shared file, and renamed aside to `.txt.migrated`. It is
+not read for as long
 as the shared file happens to be missing, and the difference matters three times over. The screen's
 Apply rebases on the shared file, so a first Apply after a lazy carry-over would write the one
 setting just clicked and drop the rest. An Apply with nothing pending writes nothing, so a pack the
@@ -217,7 +218,8 @@ declared and simply no longer be on a page.
 
 **Which pack was chosen, and whether shaders are on at all, are two separate lines** of
 `vitrail/pack.txt`. They have to be: a single line cannot switch shaders off and still remember which
-pack to come back to. A file holding one bare word is still read the way it always was.
+pack to come back to. A file holding one bare word is still read the way it always was, and one
+holding `none` still reads as shaders off.
 
 Two more lines of that same file are not this screen's at all, and both are written by the video
 settings: `shadowdistance=` is how far the shadow map reaches, in chunks, from the Max Shadow
@@ -228,6 +230,43 @@ which is where the reference keeps its own distance. Every writer reads the file
 it, so none drops another's line.
 
 `vitrail/options.txt` keeps its own job and is never written by this screen.
+
+## The switches that file holds
+
+One `NAME=value` per line, and what it says wins over the screen. Every one of them that is a yes
+or a no is on until it is taken out: what this engine can serve it serves, and only a disabling is
+written down. The last three are values rather than switches and do nothing unless written.
+
+```
+terrain=off      hands the chunk passes back to the game's own shader
+shadow=off       stops the second pass over the world from the light
+sky=off          hands the sky back to the game's own shaders
+clouds=off       hands the clouds back too, and with them the pack's own
+                 clouds directive, which most packs use to remove them
+weather=off      hands the rain and the snow back to the game's own shader,
+                 and with them the pack's own weather directive
+particles=off    hands the quad particles back too, both halves of them
+entities=off     hands the mobs and the block entities back, lit by the game
+                 and carried in flat by the scene seed, and with them the glint
+                 an enchantment puts over anything they hold or wear
+hand=off         leaves the player's own hand where the game draws it, after
+                 the whole chain has run, and the glint over what it holds
+                 with it
+chain=off        stops the composites and the final from drawing at all
+seed=off         stops the game's finished frame being painted in under the chain
+passes=N         cuts the chain to its first N passes, or to a list of names
+dump=NAME        prints the values one program was handed, decoded
+screen=settings  opens the settings screen on the pack rather than on the list
+```
+
+Each of the switches is a stage that can be taken in or out on its own, which is what tells a
+wrong gbuffer from a wrong composite, and it is how a wrong picture is bisected without a
+rebuild. `dump=` is the one that answers what no picture can, since a value can be non zero,
+plausible and wrong.
+
+One more name is held back rather than handed to the pack as a setting: `profile=NAME` picks a
+whole profile the pack declares, and this screen greys its own profile selector out for as long as
+that line is there. Everything else in the file is a setting of the pack, by its own name.
 
 ## The layers
 
