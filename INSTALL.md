@@ -10,8 +10,8 @@ one per tag, built by the tag itself rather than uploaded by hand, and mirrored 
 [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) by that
 same run, so whichever of the two places you take it from serves the same file. A version
 carrying an identifier after a dash is marked as a pre-release, which is what it
-is. Building from source is below and gives the same thing for whatever commit you
-are on.
+is. Building it yourself gives the same thing for whatever commit you are on, and
+[CONTRIBUTING.md](CONTRIBUTING.md) says how.
 
 ## Requirements
 
@@ -33,118 +33,6 @@ Sodium is declared as a required dependency, so the game will refuse to start
 without it. Do not update it past 0.9.x: it has no stable API for what a shader
 engine needs from it.
 
-Chloride is no longer required. One thing was behind that requirement:
-NeoForge opens a loading window of its own before the game exists, that window
-carries an OpenGL context, and the game takes it over instead of making one, so
-the Vulkan surface is asked for on a window built for OpenGL and the boot fails
-with `GLFW error 65540 ... requires the window to have the client API set to
-GLFW_NO_API`. Vitrail refuses that window itself when the backend is Vulkan,
-takes it off FML's hands at the end of mod loading, and closes it once the game
-has drawn a first frame of its own, which is the whole of what Chloride was
-load bearing for here. Fabric opens no such window and never needed the help.
-Chloride remains worth installing, and running it alongside changes nothing:
-the two refusals nest, so exactly one of them ends up owning the window left
-over, and the other stands down.
-
-Worth knowing because the failure hides itself, and it hides itself twice over.
-Asked for Vulkan and unable to bring it up, the game falls back to OpenGL within
-the same run and keeps your setting, so `options.txt` goes on saying `vulkan`
-while the session is not on it: the file cannot answer the question. And a game
-that dies before it reaches the title screen leaves a mark that the *next* start
-reads, which sets `preferredGraphicsBackend` back to `default` and saves over
-whatever you had written. Either way Vitrail loads, reads the pack and draws
-nothing of it: the game keeps its own image. It says which backend it came up on
-at startup, says it as an error when that backend is not Vulkan, and says it once
-more in chat the first time a world is shown, naming the setting to change, so a
-picture that did not change is answered on the screen rather than by the file.
-
-If you do run it, some of Chloride's own settings decide what reaches this
-engine, in `config/chloride-client.toml`, and they are entries inside its tables
-rather than keys of their own. `tileEntities`, `entities` and `monsters`, under
-`[culling]`, decide on their own which block entities, which mobs and which other
-entities are drawn at all, by distance: what they take out is never handed to the
-pack, so a chest, a sign, a boat or a mob that is not there is those settings
-rather than anything the pack does.
-`chests` and `beds`, under `[fastBlocks]`, draw those blocks by a path this
-engine's final pass then covers over, so they go invisible with no other symptom.
-Which of the five a given Chloride writes on is its own business and changes with
-its versions, which is why none of them is described here as on or off.
-
-There is nothing to go looking for by hand: with Chloride installed, Vitrail
-reads that file at startup and, in the log, names each of them that is on with
-what it costs and what to set it to, names any it could not find, and says so
-when the file itself is not there.
-
-## Other mods
-
-Vitrail hooks the frame through public NeoForge events where the game offers
-them, and through mixins where it does not, which on Fabric is everywhere: the
-points a NeoForge event is posted at are reached there by a mixin on the very
-line that posts it, so both loaders run the same ordered work. The load-bearing
-ones: the matrices
-the world is really drawn with, which are never stored anywhere the camera
-exposes; the game's sky renderer, which opens a pass of its own per sky element
-and is handed the pack's program for that element, the colour targets the pack
-sends it to, and the pack's word on whether that element is drawn at all; and
-Sodium's chunk renderer, which is handed the pack's terrain programs, one extra
-vertex element carrying the block id, and the render pass its draw buffers need.
-Sodium has no API for any of that, which is why its version is pinned above.
-Every family drawn since takes one or two more, and the whole list is the mixin
-config shipped in the jar rather than anything summarised here.
-
-Which Distant Horizons build works depends on the loader. On Fabric, 3.2.0-b
-installs from the launcher like any other mod and runs beside Vitrail, with a
-pack drawn and without one. On NeoForge that same build unwraps a GPU texture
-into an OpenGL handle as the lightmap renders, its NeoForge wrapper alone doing
-so, and dies on the first frame of a world with a `ClassCastException` naming
-`VulkanGpuTexture`: there the [patched build][dh-build] below is still the one
-to install, by hand and with no other Distant Horizons jar beside it. That build
-reports itself as `3.2.1-b-dev`, the same string an upstream development build
-carries, so bug reports made with it belong on this tracker and not with the
-Distant Horizons team. While a pack
-is up, Vitrail hands its far terrain to the pack's own programs, `dh_terrain`
-and `dh_water` for the picture, and `dh_shadow` for the shadow map where the
-pack ships one and has not switched it off, and serves its depth beside the
-world's, which is the arrangement packs are written against. The changelog says
-what that changes and what it does not reach, and the log names each far
-terrain pass as the pack takes it over.
-
-With shaders off, that mod draws its far terrain itself and this engine is not
-involved. Beyond the NeoForge death above, the patched build changes one more
-thing: how that mod's own fog and ambient occlusion read a reverse depth
-buffer, a divergence seen in its code, reachable only while no pack is drawn,
-and never yet seen in a picture. On Fabric it is optional and that is all it
-would buy.
-
-[dh-build]: https://gitlab.com/avpbynf/distant-horizons/-/releases/vitrail-26.2-1
-
-## Building
-
-```
-gradlew.bat build
-```
-
-The first build decompiles Minecraft and takes a couple of minutes. After that it
-is a few seconds. Three jars land in `build/libs`, named for the version in
-`gradle.properties` and the Minecraft version beside it. The first is the one a
-release ships and runs on either loader; the other two are the slices it is
-merged from, one per loader, kept beside it for whoever wants only theirs:
-
-```
-build/libs/vitrail-<version>+mc<minecraft>.jar
-build/libs/vitrail-<loader>-<version>+mc<minecraft>.jar
-```
-
-`gradlew.bat :neoforge:build` builds the NeoForge slice alone, into that
-module's own `neoforge/build/libs`, and `:fabric:build` the other; only the
-full build refreshes `build/libs`.
-
-To run the mod in a development client instead of installing it:
-
-```
-gradlew.bat :neoforge:runClient
-```
-
 ## Installing into an instance
 
 Copy the jar into the `mods` folder of a NeoForge or Fabric 26.2 instance, next
@@ -160,97 +48,21 @@ the per-loader `vitrail-neoforge-*` and `vitrail-fabric-*` jars carry the same
 mod as the merged one, and a loader that finds it twice refuses to start.
 
 Shader packs go into the `shaderpacks/` folder at the root of the instance, the
-same folder OptiFine and Iris use, zipped or unpacked. The mod keeps its own
-files in a `vitrail/` folder next to `mods/`:
+same folder OptiFine and Iris use, zipped or unpacked. The mod keeps two files of
+its own in a `vitrail/` folder next to `mods/`: `pack.txt`, which is which pack is
+loaded and whether shaders are on at all, and `options.txt`, which is the engine's
+own switches. A pack's own settings are not kept in either. They go beside the
+pack, in the file the reference engine reads and writes for the same pack, so they
+follow you from one engine to the other. What each of those files holds is in
+[the settings screen](docs/settings-screen.md).
 
-```
-pack.txt       pack=  which pack of the folder to load, by whole or partial
-                      name, or none to load nothing at all
-               enabled=  false to switch shaders off without forgetting which
-                      pack was picked
-               shadowdistance=  how far the shadow map reaches, in chunks, 0 to
-                      32; the Max Shadow Distance slider writes this line
-options.txt    engine switches, one NAME=value per line; wins over the settings
-```
-
-A `pack.txt` holding one bare word, which is what earlier versions wrote, still
-reads as that pack, and one holding `none` still reads as shaders off.
-
-What you change in a pack's own settings screen is not kept there. It goes beside
-the pack, in `shaderpacks/<pack file name>.txt`, which is the file Iris reads and
-writes for the same pack: one file per pack, shared, so settings follow you from
-one engine to the other.
-
-Earlier versions kept those settings in `vitrail/settings/` instead. The first time
-a pack is loaded after the move its old file is read, written out beside the pack,
-and renamed to `.txt.migrated` on the spot. Nothing is asked of you, and a profile
-you had chosen comes over too: the old file stored only what differed from it, so
-the profile is turned back into the values it names on the way.
-
-Two cases leave your old file exactly where it is, both named in the log. One is a
-file naming a profile the pack no longer declares, because what it stored is only
-the difference from a set of values nothing can rebuild; the log gives the profile
-name. The other is a file that could not be read or written at all, usually a folder
-this game cannot write to. Neither loses anything, and both are tried again at the
-next load.
-
-None of these files has to exist, and without them nothing is drawn: a pack is
-loaded once one is picked, in the screen or in `pack.txt`, and never before.
-What is picked is then drawn whole. `options.txt` is there to take a stage back
-out again, which is how a wrong picture is bisected without a rebuild. The names
-it reads:
-
-```
-terrain=off      hands the chunk passes back to the game's own shader
-shadow=off       stops the second pass over the world from the light
-sky=off          hands the sky back to the game's own shaders
-clouds=off       hands the clouds back too, and with them the pack's own
-                 clouds directive, which most packs use to remove them
-weather=off      hands the rain and the snow back to the game's own shader,
-                 and with them the pack's own weather directive
-particles=off    hands the quad particles back too, both halves of them
-entities=off     hands the mobs and the block entities back, lit by the game
-                 and carried in flat by the scene seed, and with them the glint
-                 an enchantment puts over anything they hold or wear
-hand=off         leaves the player's own hand where the game draws it, after
-                 the whole chain has run, and the glint over what it holds
-                 with it
-chain=off        stops the composites and the final from drawing at all
-seed=off         stops the game's finished frame being painted in under the chain
-passes=N         cuts the chain to its first N passes, or to a list of names
-dump=NAME        prints the values one program was handed, decoded
-screen=settings  opens the settings screen on the pack rather than on the list
-```
-
-Every one of those that is a yes or a no is on until it is taken out: what this
-engine can serve it serves, and only a disabling is written down. The last three
-are values rather than switches and do nothing unless written.
-
-One more name is held back rather than handed to the pack as a setting:
-`profile=NAME` picks a whole profile the pack declares, and the settings screen
-greys its own profile selector out for as long as that line is there. Everything
-else in the file is a setting of the pack, by its own name.
-
-Each of the switches is a stage that can be taken in or out on its own, which
-is what tells a wrong gbuffer from a wrong composite. `dump=` is the one that
-answers what no picture can, since a value can be non zero, plausible and wrong.
-
-A settings screen covers all of it in game: the video settings, where it sits
-under Vitrail in the list of pages, the I key, or, on NeoForge, the Config button
-in the mod list. It is the screen of the engine packs are written against, ported rather
-than approximated, so it looks and behaves like that one. It opens on the pack
-list and reads each pack's own menu layout. The row at the head of the list turns shaders off
-altogether and leaves the game drawing its own image. Clicking a pack only selects it: Apply writes what
-you changed and reads the pack again without closing, Done does both and closes,
-and Cancel throws the changes away. A program that fails to compile is reported
-in the log and the game keeps its own rendering rather than crashing.
-
-The pack folder is watched, so a pack dropped into it turns up in the list on its
-own. Nothing inside a pack is watched, and neither is `vitrail/`: edit either by
-hand while the game runs, then press `R` and the pack is read again from disk,
-whole. From inside the settings screen, where no key reaches, the same thing is
-the small circular arrow at the bottom left, which like the eye beside it is
-there in a world only. The jar never needs rebuilding for any of it.
+None of them has to exist, and without a pack picked nothing is drawn. The screen
+that picks one is in the video settings, under Vitrail in the list of pages, on the
+`I` key, or, on NeoForge, behind the Config button in the mod list. The pack folder
+is watched, so a pack dropped into it turns up in the list on its own. Nothing
+inside a pack is watched: edit a shader by hand while the game runs, press `R`, and
+the pack is read again from disk, whole. The jar never needs rebuilding for any of
+it.
 
 ## Switching the graphics backend to Vulkan
 
@@ -265,6 +77,57 @@ The same setting is reachable in game under Options, Video Settings, where it is
 called Graphics API and the entry to pick reads "Prefer Vulkan (Experimental)".
 Either way the change only takes effect on the next start, which the game says
 itself when you pick it.
+
+**A game that came up on the wrong backend hides it, twice over.** Asked for
+Vulkan and unable to bring it up, the game falls back to OpenGL within the same
+run and keeps your setting, so `options.txt` goes on saying `vulkan` while the
+session is not on it: the file cannot answer the question. And a game that dies
+before it reaches the title screen leaves a mark that the *next* start reads,
+which sets `preferredGraphicsBackend` back to `default` and saves over whatever
+you had written. Either way Vitrail loads, reads the pack and draws nothing of
+it: the game keeps its own image. So the answer is on the screen rather than in
+the file. The mod says which backend the game came up on at startup, says it as
+an error when that backend is not Vulkan, and says it once more in chat the first
+time a world is shown, naming the setting to change.
+
+## Other mods
+
+Vitrail hooks the frame through public NeoForge events where the game offers
+them, and through mixins where it does not, which on Fabric is everywhere: the
+points a NeoForge event is posted at are reached there by a mixin on the very
+line that posts it, so both loaders run the same ordered work. Sodium's chunk
+renderer is one of those hooks and has no API for any of it, which is why its
+version is pinned above. The whole list is the mixin config shipped in the jar.
+
+**Chloride** is no longer required. What it was load bearing for, the OpenGL
+loading window NeoForge opens before the game exists, Vitrail refuses on its own
+now, and the two refusals nest if you run both. What Chloride does change is what
+reaches this engine: five entries of `config/chloride-client.toml` decide it.
+`tileEntities`, `entities` and `monsters`, under `[culling]`, take block entities,
+mobs and other entities out by distance before the pack is ever asked, so a chest,
+a sign, a boat or a mob that is not there is those settings rather than anything
+the pack does.
+`chests` and `beds`, under `[fastBlocks]`, draw those blocks by a path this
+engine's final pass then covers over, so they go invisible with no other symptom.
+Which of the five a given Chloride writes on is its own business and changes with
+its versions, which is why none of them is described here as on or off: with
+Chloride installed, Vitrail reads that file at startup and names in the log each
+one that is on, with what it costs and what to set it to.
+
+**Distant Horizons** works, and which build depends on the loader. On Fabric,
+3.2.0-b installs from the launcher like any other mod. On NeoForge that same build
+unwraps a GPU texture into an OpenGL handle as the lightmap renders, its NeoForge
+wrapper alone doing so, and dies on the first frame of a world with a
+`ClassCastException` naming `VulkanGpuTexture`: there the [patched build][dh-build]
+is the one to install, by hand and with no other Distant Horizons jar beside it.
+It reports itself as `3.2.1-b-dev`, the same string an upstream development build
+carries, so bug reports made with it belong on this tracker and not with the
+Distant Horizons team. While a pack is up, Vitrail hands its far terrain to the
+pack's own programs, and serves its depth beside the world's, which is the
+arrangement packs are written against. With shaders off, that mod draws its far
+terrain itself and this engine is not involved.
+
+[dh-build]: https://gitlab.com/avpbynf/distant-horizons/-/releases/vitrail-26.2-1
 
 ## Going back
 

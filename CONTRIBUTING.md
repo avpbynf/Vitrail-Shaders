@@ -354,7 +354,25 @@ gradlew.bat build
 ```
 
 The JDK it wants is pinned in `gradle.properties`, along with the Minecraft and loader versions.
-Artifacts land in `build/libs`.
+The first build decompiles Minecraft and takes a couple of minutes. After that it is a few seconds.
+
+Three jars land in `build/libs`, named for the version in `gradle.properties` and the Minecraft
+version beside it. The first is the one a release ships and runs on either loader; the other two are
+the slices it is merged from, one per loader, kept beside it for whoever wants only theirs:
+
+```
+build/libs/vitrail-<version>+mc<minecraft>.jar
+build/libs/vitrail-<loader>-<version>+mc<minecraft>.jar
+```
+
+`gradlew.bat :neoforge:build` builds the NeoForge slice alone, into that module's own
+`neoforge/build/libs`, and `:fabric:build` the other; only the full build refreshes `build/libs`.
+
+To run the mod in a development client instead of installing it:
+
+```
+gradlew.bat :neoforge:runClient
+```
 
 ## What the build refuses
 
