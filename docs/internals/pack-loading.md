@@ -162,9 +162,10 @@ constant is the one that enters only while it is true, because an `#ifdef` on on
 has to read false whatever text the declaration carries.
 
 The table a source file starts with carries **the engine's symbols and nothing else**. The pack's own
-settings enter as the expander walks past their declarations, in file order, exactly as a
-preprocessor would. A file that tests a setting above the line declaring it has to see it undefined,
-because that is what the compiler will see later.
+defines enter as the expander walks past their declarations, in file order, exactly as a preprocessor
+would, and its constants never do: there is nothing in one for a preprocessor to test. A file that
+tests a define above the line declaring it has to see it undefined, because that is what the compiler
+will see later.
 
 A chosen name the pack declares nowhere therefore reaches no unit at all. It has no declaration to
 rewrite, and writing it into the head of the unit instead is the one thing that must not happen: a

@@ -101,9 +101,10 @@ swallowed the commented-out block underneath when the rule was written the other
 
 The recognised families include profiles, per-program enable flags, custom uniform and variable
 declarations, the settings screen and its pages, blending, alpha test and sliders, and also the
-buffer sizes, the sky toggles, the shadow caster directives, the noise and custom texture keys, the
-images and the per-program flip directives described further down. Patterns are anchored and tried
-in a fixed order, first match wins.
+buffer sizes, the sky toggles, the shadow caster directives, the noise and custom texture keys and
+the images, all described further down, and the per-program flip directives, whose one home is
+[render targets](internals/render-targets.md#the-flip-convention-one-set-and-one-place-allowed-to-consult-it).
+Patterns are anchored and tried in a fixed order, first match wins.
 
 **A value is cut on SPACES, and a tab never separates two words.** The lists, which are the screen
 and its pages, the two feature lines, the sliders and the profile bodies, take a run of spaces as
@@ -192,7 +193,8 @@ default is the tightest of them rather than the loosest.
   `voxelDistance` that is kept whatever the sweep says of it, for a pack that samples its map from
   places the sweep knows nothing about.
 
-A word this cannot read leaves the default standing, which is what the reference does with it.
+A word this cannot read leaves the default standing rather than the answer a valid line above it
+gave, which is what the reference does with it.
 
 **The safe zone's box can have a width now, where for most of the corpus it could not.** The width
 comes from a `const float voxelDistance`, and it only counts where it sits on a line that survives
@@ -240,8 +242,11 @@ per-buffer spellings Iris configures and nothing else, and the list is necessary
 sufficient: a `const bool` also needs an `#ifdef` testing its name, a constant holding a number
 needs its bracketed list, and a `uint` never qualifies, the reference reading only `int`, `float`
 and `bool` as configurable. Every other `const` is a plain constant of the program, whatever its
-comment offers: it appears on no screen, no settings file line can rewrite it, and conditionals
-read its name exactly as they read a name the pack never declared. Through those bars, a
+comment offers: it appears on no screen, and conditionals read its name exactly as they read a name
+the pack never declared. One case escapes on the way out. A name that IS on the closed list and was
+refused only for want of a value list or of anything testing it still takes a hand-written value
+from the settings file, the rewriter reading a line at a time with the list as the whole of its
+gate. No screen offers that name, so only a hand can write it. Through those bars, a
 `const bool` is a toggle like a bare define, and a numeric constant cycles through its bracketed
 values. The same two demands hold for the defines: a bare toggle is only a setting while an
 `#ifdef` or `#ifndef` somewhere tests it, and a define carrying a value is only one with a
