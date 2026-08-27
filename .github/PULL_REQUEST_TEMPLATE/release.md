@@ -10,7 +10,10 @@ of its own, and been reviewed there.
 
 **DO NOT PRESS A MERGE BUTTON ON THIS ONE.** All three rewrite, and `main` is already an ancestor of
 `dev`, so replaying `dev` onto it hands `main` a second copy of every commit under a fresh hash.
-What merges this is a fast-forward from a terminal,
+That has happened once, and the repository said so within the minute: `prefix` went red on `main`.
+
+What merges this is a fast-forward, run from a terminal by whoever opened the request as soon as
+the checks are green, rather than left on the page for somebody to find:
 
     git push origin origin/dev:main
 

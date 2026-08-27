@@ -48,8 +48,9 @@ say it in the one place nothing reads it back from.
 
 **The history is linear and carries no merge commit anywhere, which is not a preference.** A tree
 that forks is a tree nobody reads once it is public, and this one is public. A topic branch is
-rebased onto `dev` and enters by a pull request, merged with the rebase button. If that button
-refuses, the rebase was not done, and the answer is to rebase rather than to merge.
+rebased onto `dev` and enters by a pull request, merged by rebase and by nothing else, which is
+`gh pr merge --rebase` from a terminal or the one button that does the same. If either refuses, the
+rebase was not done, and the answer is to rebase rather than to merge.
 
 **Rebase a topic branch as soon as `dev` moves under it, and read the whole of
 `git diff dev..HEAD` afterwards rather than only the hunks git marked.** Git follows a file that
@@ -62,7 +63,9 @@ it lives in.
 **`dev` reaches `main` by a fast-forward and NOT by the merge button.** That button always writes
 new commits, and `main` is already an ancestor of `dev`, so replaying `dev` onto it would give
 `main` a second copy of every commit under a different hash. A pull request is still the right
-place to look at a release, for the record and for the checks it runs. What merges it is
+place to look at a release, for the record and for the checks it runs. What merges it is a command,
+run by whoever opened the request as soon as its checks are green, so that nobody is ever left
+looking at that page with a button on it:
 
     git push origin origin/dev:main
 
