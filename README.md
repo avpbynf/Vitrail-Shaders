@@ -104,9 +104,10 @@ is the reference this engine is checked against.
 
 Open an issue before writing anything substantial. I order the work by risk, and
 code that lands ahead of what can be verified is hard to accept however good it
-is. [CONTRIBUTING.md](CONTRIBUTING.md) is short, and two of its rules bite people
-who skip it: files are UTF-8 without a BOM, because a BOM breaks anything that
-feeds sources to a GLSL compiler, and line endings are LF.
+is.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) opens on the short version, what refuses a first
+push, and carries the rest.
 
 ## Licence
 
