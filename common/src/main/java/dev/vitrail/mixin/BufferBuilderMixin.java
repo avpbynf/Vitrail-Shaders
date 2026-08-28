@@ -127,7 +127,18 @@ public abstract class BufferBuilderMixin {
 	@Inject(method = "<init>", at = @At("RETURN"), require = 1)
 	private void vitrail$findElements(ByteBufferBuilder buffer, PrimitiveTopology topology,
 			VertexFormat format, CallbackInfo callback) {
+		this.vitrail$identifiers = -1;
+		// Asked on its own and ahead of the others, because asking is a WALK. A format keeps its
+		// elements in an array map sixteen slots wide (VertexFormat's own elements field, a fastutil
+		// Object2ObjectArrayMap), so a name is compared against every element the format has until it
+		// matches or runs out, and a name that is not there is that walk paid in full. This is the one
+		// name no format but this engine's carries, and the game builds one of these per render type
+		// change, so the five below are five walks an ordinary builder no longer takes.
 		int identifiers = vitrail$offsetOf(EntityVertex.IDENTIFIERS);
+		if (identifiers < 0) {
+			return;
+		}
+
 		int midTexCoord = vitrail$offsetOf(EntityVertex.MID_TEX_COORD);
 		int tangent = vitrail$offsetOf(EntityVertex.TANGENT);
 		int position = vitrail$offsetOf("Position");
@@ -137,10 +148,7 @@ public abstract class BufferBuilderMixin {
 		// carrying the first without the rest is not a state this engine can build. Answering it the
 		// way a builder of any other format is answered is what keeps a constructor the game runs
 		// thousands of times a frame from being a place anything can be thrown out of.
-		if (identifiers < 0 || midTexCoord < 0 || tangent < 0 || position < 0 || texCoord < 0
-				|| normal < 0) {
-			this.vitrail$identifiers = -1;
-
+		if (midTexCoord < 0 || tangent < 0 || position < 0 || texCoord < 0 || normal < 0) {
 			return;
 		}
 
