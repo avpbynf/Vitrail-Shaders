@@ -38,10 +38,20 @@ public final class GlslLexer {
 	 *
 	 * @param directive the preprocessor keyword of the line this token sits on, {@code null} when
 	 *                  the token is ordinary code. A {@code #} on its own gives an empty string.
+	 * @param macroName whether this token is the name a naming directive gives rather than a use of
+	 *                  one, which is what keeps it from being renamed. It rides on the token and not
+	 *                  on its position because the translator inserts tokens, and an insertion moves
+	 *                  every index after it: a position recorded before one names somebody else's
+	 *                  token afterwards, and nothing on the way out says so
 	 */
-	public record Token(Kind kind, String text, String directive) {
+	public record Token(Kind kind, String text, String directive, boolean macroName) {
 
 		public static final Token BLANK = new Token(Kind.SPACE, "", null);
+
+		/** A token of ordinary source, which is what everything the lexer produces starts as. */
+		public Token(Kind kind, String text, String directive) {
+			this(kind, text, directive, false);
+		}
 
 		public boolean trivia() {
 			return this.kind == Kind.SPACE || this.kind == Kind.COMMENT;
@@ -56,7 +66,12 @@ public final class GlslLexer {
 		}
 
 		public Token as(String replacement) {
-			return new Token(this.kind, replacement, this.directive);
+			return new Token(this.kind, replacement, this.directive, this.macroName);
+		}
+
+		/** The same token, marked as the name its directive gives. */
+		public Token naming() {
+			return new Token(this.kind, this.text, this.directive, true);
 		}
 	}
 
