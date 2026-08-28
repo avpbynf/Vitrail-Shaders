@@ -7,6 +7,7 @@ import dev.vitrail.render.PbrAtlases;
 import dev.vitrail.render.PbrTextures;
 import dev.vitrail.render.RenderScale;
 import dev.vitrail.render.ShadowGeometry;
+import dev.vitrail.render.SpirvCache;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.sodium.EntityMeshSerializer;
 import dev.vitrail.screen.SettingsKey;
@@ -76,6 +77,12 @@ public final class EngineStages {
 	public static void clientTick() {
 		SettingsKey.poll();
 		HostReport.sayInWorld();
+
+		// A tick rather than a point of a load, because a load has no single end to hang a line on:
+		// the composites compile on the render thread and the leftover families on a pool, over the
+		// minute after. The call is silent until the compiler has been quiet for a while, and what
+		// it then prints is that load's totals.
+		SpirvCache.say();
 	}
 
 	/**

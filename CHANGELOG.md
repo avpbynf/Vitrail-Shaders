@@ -35,6 +35,13 @@ what the next one holds.
 
 ### Changed
 
+- **Loading a pack again skips the step that turns its shaders into something the card can
+  run.** What that step produced is kept under `vitrail/spirv` in the game folder and reused
+  when the same shader comes back unchanged. Editing a shader or moving a pack setting
+  changes it, and so does updating the mod, the game or the loader, and anything that has
+  changed is compiled from scratch as before. Each version keeps its own folder and takes the
+  older ones away with it, the whole thing is capped, and the log says at every load how many
+  shaders came off the disk, how many were compiled and how much is stored.
 - **A shadow lookup a pack asks the hardware to compare is now compared by the hardware.** A
   pack declaring `sampler2DShadow` used to have that comparison rebuilt in shader
   arithmetic on every tap, a dozen instructions where a comparison sampler pays one, and a
