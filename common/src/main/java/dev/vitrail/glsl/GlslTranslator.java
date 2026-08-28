@@ -278,9 +278,6 @@ public final class GlslTranslator {
 	/** Names the pack defines as macros. Their uses belong to the preprocessor, not to us. */
 	private final Set<String> packMacros = new HashSet<>();
 
-	/** Token positions that name a macro rather than use one, and so are never renamed. */
-	private final Set<Integer> macroNamePositions = new HashSet<>();
-
 	/** Names the unit declares under a built-in type, which is how a declaration is told apart. */
 	private final Set<String> declaredNames = new HashSet<>();
 
@@ -851,7 +848,7 @@ public final class GlslTranslator {
 			Token token = this.tokens.get(index);
 			boolean rename = token.kind() == Kind.IDENTIFIER
 					&& shadowed.contains(token.text())
-					&& !this.macroNamePositions.contains(index)
+					&& !token.macroName()
 					&& (token.directive() == null
 							|| !LegacyGlsl.OPAQUE_DIRECTIVES.contains(token.directive()));
 
@@ -923,6 +920,17 @@ public final class GlslTranslator {
 	}
 
 
+	/**
+	 * Marks the name each naming directive gives, so that later passes leave it spelled as the
+	 * preprocessor needs it.
+	 * <p>
+	 * The mark goes on the token and not into a set of positions, and that is the whole point of
+	 * {@link Token#macroName()}. This runs first, before anything inserts, and two passes do insert:
+	 * {@link #rewriteIdentifiers} closes the legacy shadow lookups it wrapped and {@link #convertDepth}
+	 * closes the depth writes it wrapped. Each insertion moves every index after it, so a position
+	 * taken here would name a different token by the time {@link #body(Set)} reads it, and rename a
+	 * macro name or leave a shadowed read on the block value with nothing logged either way.
+	 */
 	private void collectMacroNames() {
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -935,7 +943,7 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			this.macroNamePositions.add(name);
+			this.tokens.set(name, this.tokens.get(name).naming());
 			if (token.directive().equals("define")) {
 				this.packMacros.add(this.tokens.get(name).text());
 			}
@@ -1095,7 +1103,7 @@ public final class GlslTranslator {
 
 			String directive = token.directive();
 			if (directive != null
-					&& (LegacyGlsl.OPAQUE_DIRECTIVES.contains(directive) || this.macroNamePositions.contains(index))) {
+					&& (LegacyGlsl.OPAQUE_DIRECTIVES.contains(directive) || token.macroName())) {
 				continue;
 			}
 
@@ -1220,7 +1228,11 @@ public final class GlslTranslator {
 			}
 		}
 
-		// Inserting shifts every index after it, so the last insertion is made first.
+		// Inserting shifts every index after it, so the last insertion is made first. It also ends
+		// every position taken before it: this loop and insertClosings are the only two places that
+		// move a token, so anything a later pass still has to know about a token is carried on the
+		// token, as Token#macroName is. A position kept across here would be read against somebody
+		// else's token, and the reading pass has no way to notice.
 		closings.sort(Comparator.reverseOrder());
 		for (int at : closings) {
 			this.tokens.add(at, new Token(Kind.RAW, ")", null));
@@ -1678,7 +1690,7 @@ public final class GlslTranslator {
 
 			String directive = token.directive();
 			if (directive != null
-					&& (LegacyGlsl.OPAQUE_DIRECTIVES.contains(directive) || this.macroNamePositions.contains(index))) {
+					&& (LegacyGlsl.OPAQUE_DIRECTIVES.contains(directive) || token.macroName())) {
 				continue;
 			}
 
@@ -1874,7 +1886,15 @@ public final class GlslTranslator {
 		this.fragDepthWrites++;
 	}
 
-	/** Inserting shifts every index after it, so the last insertion is made first. */
+	/**
+	 * Inserting shifts every index after it, so the last insertion is made first.
+	 * <p>
+	 * This and the closing loop at the end of {@link #rewriteIdentifiers} are the only two places
+	 * that move a token, and so the only two that can make a position stale. What a later pass has
+	 * to know about a token is carried on the token for that reason, as {@link Token#macroName()}
+	 * is: a position kept across either of them would be read against somebody else's token, and
+	 * nothing downstream can tell.
+	 */
 	private void insertClosings(List<Closing> closings) {
 		closings.sort(Comparator.comparingInt(Closing::at).reversed());
 		for (Closing closing : closings) {
