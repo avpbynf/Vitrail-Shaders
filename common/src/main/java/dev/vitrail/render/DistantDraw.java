@@ -54,6 +54,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 
 /**
@@ -811,10 +812,36 @@ public final class DistantDraw {
 		// keyed on the opaque half: a half that refused, or a pack that serves only the other one,
 		// would otherwise leave the image holding the frame before it, and the takes would hand the
 		// pack last frame's far terrain in a world that has moved on.
+		//
+		// Nought is DH's own clear and the far plane of a reversed Z, so an untouched pixel reads as
+		// nothing drawn, which converts to the far plane the pack tests for.
+		//
+		// Paid as the load-op of the pass that is about to attach the image, and not as a command of
+		// its own: an encoder clear is a vkCmdClearDepthStencilImage plus the full pipeline drain the
+		// backend appends to every clear it performs, where a load-op costs the pass nothing it was
+		// not already paying. That drain is not what ordered the emptying against the draws before it,
+		// though: every pass already ends on the same ALL_COMMANDS barrier the clear posted
+		// (VulkanCommandEncoder.submitRenderPass), so what the drain added was a second one. Nothing
+		// reads the image in between either: it leaves this class through served()
+		// alone, which answers null until drew is set, and drew is set below this pass. A half that
+		// gives up between here and the pass therefore leaves the image as the last frame left it,
+		// which the same guard keeps out of the pack's hands.
+		OptionalDouble clear = OptionalDouble.empty();
 		if (!this.drew) {
-			// Nought is DH's own clear and the far plane of a reversed Z, so an untouched pixel reads
-			// as nothing drawn, which converts to the far plane the pack tests for.
-			encoder.clearDepthTexture(this.depth, 0.0);
+			if (into == this.depthView && coversDepth(descriptor)) {
+				clear = OptionalDouble.of(0.0);
+
+				// The hold is ended first because a joined pass applies no load-op, which
+				// GeometryHold.open says out loud, and the emptying would go silently missing. This
+				// costs nothing that was not already spent: the encoder clear standing here ended
+				// the hold too, through the door CommandEncoderMixin holds open for every clear.
+				GeometryHold.flush(() -> "the far terrain's depth being emptied");
+				if (descriptor != null) {
+					descriptor.withDepthAttachment(into, clear);
+				}
+			} else {
+				encoder.clearDepthTexture(this.depth, 0.0);
+			}
 		}
 
 		// The camera is the game's own and not DH's copy of it, although DH hands one in: everything
@@ -830,8 +857,7 @@ public final class DistantDraw {
 
 		try (RenderPass pass = descriptor == null
 				? encoder.createRenderPass(() -> "Vitrail " + element.element(),
-						main.getColorTextureView(), Optional.empty(), into,
-						java.util.OptionalDouble.empty())
+						main.getColorTextureView(), Optional.empty(), into, clear)
 				: GeometryHold.open(encoder, descriptor)) {
 			pass.setPipeline(pipeline);
 			program.bind(pass);
@@ -871,6 +897,31 @@ public final class DistantDraw {
 	}
 
 	/**
+	 * Whether a pass built from this descriptor covers the depth image whole, which is what decides
+	 * that the frame's emptying may be paid as that pass's load-op.
+	 * <p>
+	 * A load-op empties the render area and not one texel outside it, where {@code clearDepthTexture}
+	 * empties the image. The two agree while the area is the screen and the image is the screen's
+	 * size, which holds because {@link ColorTargets#ensure} and {@link #ensureDepth} both read it off
+	 * {@code mainRenderTarget()} rather than off each other, the two being reached frames apart on
+	 * some roads; a frame where they disagree keeps the standalone clear rather than
+	 * leaving a margin of the last frame's far terrain for the window takes to sample.
+	 *
+	 * @param descriptor the pack's own descriptor, or null where the pass is built here instead from
+	 *                   the game's colour view, which is the image's own size by construction
+	 */
+	private boolean coversDepth(RenderPassDescriptor descriptor) {
+		if (descriptor == null) {
+			return true;
+		}
+
+		RenderPass.RenderArea area = descriptor.renderArea;
+
+		return area != null && area.x() == 0 && area.y() == 0
+				&& area.width() >= this.depthWidth && area.height() >= this.depthHeight;
+	}
+
+	/**
 	 * Makes the far terrain's own depth image, or remakes it after a resize.
 	 *
 	 * @return whether there is one to draw into
@@ -888,10 +939,11 @@ public final class DistantDraw {
 		}
 
 		// Three usages and every one of them is asked for by name somewhere: drawn into as an
-		// attachment, sampled by the window takes, and emptied at the head of the frame. The clear is
-		// the one that is not obvious: an encoder refuses to clear a depth image that was not also
-		// made a copy destination (CommandEncoder.verifyDepthTexture), a clear being a write it
-		// performs itself rather than a load the pass does.
+		// attachment, sampled by the window takes, and emptied by the encoder here at birth and on
+		// the frames the pass's own load-op cannot pay for. That last one is not obvious: an encoder
+		// refuses to clear a depth image that was not also made a copy destination
+		// (CommandEncoder.verifyDepthTexture), a clear being a write it performs itself rather than a
+		// load the pass does.
 		this.depth = device.createTexture(() -> "Vitrail far terrain depth",
 				GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_TEXTURE_BINDING
 						| GpuTexture.USAGE_COPY_DST,

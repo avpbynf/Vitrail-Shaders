@@ -21,6 +21,12 @@ what the next one holds.
   surface lit by the wrong program, with nothing in the log pointing at it. The failure now names
   itself at launch. The one exception is the line this mod adds to the F3 overlay, which is
   allowed to go missing because nothing on screen depends on it.
+- **Two pieces of per-frame work on the graphics card are gone, and the picture is the same.**
+  The far terrain's own depth image is emptied by the pass that draws into it rather than by a
+  command of its own, which also spares the full stop of the card that such a command carries.
+  The voxel volumes that follow the camera now copy only the part of themselves that survives
+  the move, where they used to copy the whole volume. Neither has been measured, so this says
+  work removed and not frames gained.
 
 ### Fixed
 
