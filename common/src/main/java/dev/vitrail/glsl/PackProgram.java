@@ -12,6 +12,7 @@ import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.source.DimensionSet;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.source.IncludeExpander;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.SourceMentions;
 import dev.vitrail.pack.source.ShaderProperties;
@@ -389,37 +390,36 @@ public final class PackProgram {
 
 	/**
 	 * One {@code .csh} entry point, translated on its own. Empty when the pack does not ship it.
+	 * <p>
+	 * Reads the opening the caller already holds rather than one of its own, and this is the entry
+	 * point where that matters most: a pack's shadow computes are read in a loop, so an opening
+	 * apiece meant mounting the archive and rebuilding the whole settings index once per compute
+	 * program rather than once for the load.
 	 */
-	public static Optional<Compute> loadCompute(Path packPath, String path,
-			Map<String, OptionValue> chosen, String profile) throws IOException {
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex options = OptionIndex.build(source);
-			ShaderProperties properties = ShaderProperties.parse(source);
-			Map<String, OptionValue> fromProfile = profile.isEmpty()
-					? Map.of()
-					: properties.expandProfile(profile);
-			SettingSet settings = SettingSet.resolve(fromProfile, chosen,
-					profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, settings);
-			Optional<Path> file = source.file(path + "." + ProgramStage.COMPUTE.extension());
-			if (file.isEmpty()) {
-				return Optional.empty();
-			}
-
-			ExpandedUnit unit = expander.expand(file.get());
-			TargetPlan targets = TargetPlan.build(source, options, settings, properties,
-					dimensionOf(path));
-			PackTextures textures = textures(source, properties, options, settings);
-			Map<ProgramStage, ExpandedUnit> units = new LinkedHashMap<>();
-			units.put(ProgramStage.COMPUTE, unit);
-			ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units,
-					VertexInputs.FULLSCREEN, VertexInputs.FULLSCREEN.elements(), AlphaTest.OFF, false,
-					programOf(path), textures.volumes());
-			int[] groups = workGroupsOf(unit);
-			return Optional.of(new Compute(
-					bind(source.packName(), path, program, targets, AlphaTest.OFF, textures),
-					groups[0], groups[1], groups[2]));
+	public static Optional<Compute> loadCompute(OpenedPack pack, String path) throws IOException {
+		ShaderPackSource source = pack.source();
+		OptionIndex options = pack.options();
+		ShaderProperties properties = pack.properties();
+		SettingSet settings = pack.settings();
+		IncludeExpander expander = new IncludeExpander(source, settings);
+		Optional<Path> file = source.file(path + "." + ProgramStage.COMPUTE.extension());
+		if (file.isEmpty()) {
+			return Optional.empty();
 		}
+
+		ExpandedUnit unit = expander.expand(file.get());
+		TargetPlan targets = TargetPlan.build(source, options, settings, properties,
+				dimensionOf(path));
+		PackTextures textures = textures(source, properties, options, settings);
+		Map<ProgramStage, ExpandedUnit> units = new LinkedHashMap<>();
+		units.put(ProgramStage.COMPUTE, unit);
+		ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units,
+				VertexInputs.FULLSCREEN, VertexInputs.FULLSCREEN.elements(), AlphaTest.OFF, false,
+				programOf(path), textures.volumes());
+		int[] groups = workGroupsOf(unit);
+		return Optional.of(new Compute(
+				bind(source.packName(), path, program, targets, AlphaTest.OFF, textures),
+				groups[0], groups[1], groups[2]));
 	}
 
 	/**
@@ -483,90 +483,98 @@ public final class PackProgram {
 	public static Terrain loadTerrain(Path packPath, String place,
 			Map<String, OptionValue> chosen, String profile, VertexInputs inputs)
 			throws IOException {
+		try (OpenedPack pack = OpenedPack.open(packPath, chosen, profile)) {
+			return loadTerrain(pack, place, inputs);
+		}
+	}
+
+	/**
+	 * The same, reading an opening the caller already holds, which is the road the engine takes:
+	 * the chunk programs are read where the pack is loaded, beside the chain and the computes, and
+	 * the three of them share one reading of the archive.
+	 */
+	public static Terrain loadTerrain(OpenedPack pack, String place, VertexInputs inputs)
+			throws IOException {
 		if (!inputs.terrain()) {
 			throw new IllegalArgumentException("The chunk passes are drawn from Sodium's own mesh, so "
 					+ inputs + " is not one of the contracts they may be written against");
 		}
 
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex options = OptionIndex.build(source);
-			ShaderProperties properties = ShaderProperties.parse(source);
-			Map<String, OptionValue> fromProfile = profile.isEmpty()
-					? Map.of()
-					: properties.expandProfile(profile);
-			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, settings);
-			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
-			PackTextures textures = textures(source, properties, options, settings);
+		ShaderPackSource source = pack.source();
+		OptionIndex options = pack.options();
+		ShaderProperties properties = pack.properties();
+		SettingSet settings = pack.settings();
+		IncludeExpander expander = new IncludeExpander(source, settings);
+		TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
+		PackTextures textures = textures(source, properties, options, settings);
 
-			DimensionSet dimensions = DimensionSet.discover(source);
-			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
-					dimensions);
+		DimensionSet dimensions = DimensionSet.discover(source);
+		ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
+				dimensions);
 
-			Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
-			// The pack's own switch comes before its programs: the reference nulls its whole
-			// shadow renderer on shadow.enabled=false, however many shadow programs the pack
-			// ships, and only an explicit false moves anything.
-			boolean shadowOff =
-					properties.shadowEnabled(settings.globalDefines(options)).equals(Optional.of(false));
+		Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
+		// The pack's own switch comes before its programs: the reference nulls its whole
+		// shadow renderer on shadow.enabled=false, however many shadow programs the pack
+		// ships, and only an explicit false moves anything.
+		boolean shadowOff =
+				properties.shadowEnabled(settings.globalDefines(options)).equals(Optional.of(false));
 
-			// What each pass is served by, read once and kept, because the passes are walked twice:
-			// the mesh is built out of what ALL of them ask for, and every one of them then declares
-			// that whole mesh. Expanding the includes a second time would be the same files read
-			// again for the same answer.
-			record Served(String path, Map<ProgramStage, ExpandedUnit> units, AlphaTest alphaTest) {
-			}
-
-			Map<TerrainPass, Served> served = new LinkedHashMap<>();
-			Set<String> reads = new LinkedHashSet<>();
-			for (TerrainPass pass : TerrainPass.values()) {
-				if (pass.shadow() && shadowOff) {
-					continue;
-				}
-
-				Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, pass.program());
-				if (resolution.isEmpty()) {
-					continue;
-				}
-
-				// The name the override is written under is the file that really serves the pass and
-				// not the one the pass asked for, which is how Iris looks it up: a pack shipping one
-				// gbuffers_terrain moves both halves of the chunk pass with one line.
-				String servedBy = resolution.get().servedBy();
-				String path = pathOf(place, servedBy);
-				Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
-				if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
-					continue;
-				}
-
-				AlphaTest alphaTest = pass.alphaTest(overrides, servedBy);
-				served.put(pass, new Served(path, units, alphaTest));
-				reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), inputs,
-						alphaTest, pass.covers(), pass.program(), textures.volumes()));
-			}
-
-			// Nothing to draw and therefore nothing to carry, which is not the same answer as a mesh
-			// whose pack reads none of the six: the caller leaves Sodium's own format alone either
-			// way, and this is the road where it also has no program to leave it alone for.
-			if (served.isEmpty()) {
-				return new Terrain(Map.of(), List.of());
-			}
-
-			List<String> carried = SodiumVertex.carried(reads);
-			Map<TerrainPass, Loaded> loaded = new LinkedHashMap<>();
-			for (Map.Entry<TerrainPass, Served> entry : served.entrySet()) {
-				TerrainPass pass = entry.getKey();
-				Served one = entry.getValue();
-				// The pass's own program and not the file that serves it, for the reason the alpha
-				// test is taken that way: what the engine supplies belongs to what is being drawn.
-				loaded.put(pass, bind(source.packName(), one.path(),
-						ProgramTranslator.translate(one.units(), inputs, carried, one.alphaTest(),
-								pass.covers(), pass.program(), textures.volumes()),
-						targets, one.alphaTest(), textures));
-			}
-
-			return new Terrain(loaded, carried);
+		// What each pass is served by, read once and kept, because the passes are walked twice:
+		// the mesh is built out of what ALL of them ask for, and every one of them then declares
+		// that whole mesh. Expanding the includes a second time would be the same files read
+		// again for the same answer.
+		record Served(String path, Map<ProgramStage, ExpandedUnit> units, AlphaTest alphaTest) {
 		}
+
+		Map<TerrainPass, Served> served = new LinkedHashMap<>();
+		Set<String> reads = new LinkedHashSet<>();
+		for (TerrainPass pass : TerrainPass.values()) {
+			if (pass.shadow() && shadowOff) {
+				continue;
+			}
+
+			Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, pass.program());
+			if (resolution.isEmpty()) {
+				continue;
+			}
+
+			// The name the override is written under is the file that really serves the pass and
+			// not the one the pass asked for, which is how Iris looks it up: a pack shipping one
+			// gbuffers_terrain moves both halves of the chunk pass with one line.
+			String servedBy = resolution.get().servedBy();
+			String path = pathOf(place, servedBy);
+			Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
+			if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+				continue;
+			}
+
+			AlphaTest alphaTest = pass.alphaTest(overrides, servedBy);
+			served.put(pass, new Served(path, units, alphaTest));
+			reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), inputs,
+					alphaTest, pass.covers(), pass.program(), textures.volumes()));
+		}
+
+		// Nothing to draw and therefore nothing to carry, which is not the same answer as a mesh
+		// whose pack reads none of the six: the caller leaves Sodium's own format alone either
+		// way, and this is the road where it also has no program to leave it alone for.
+		if (served.isEmpty()) {
+			return new Terrain(Map.of(), List.of());
+		}
+
+		List<String> carried = SodiumVertex.carried(reads);
+		Map<TerrainPass, Loaded> loaded = new LinkedHashMap<>();
+		for (Map.Entry<TerrainPass, Served> entry : served.entrySet()) {
+			TerrainPass pass = entry.getKey();
+			Served one = entry.getValue();
+			// The pass's own program and not the file that serves it, for the reason the alpha
+			// test is taken that way: what the engine supplies belongs to what is being drawn.
+			loaded.put(pass, bind(source.packName(), one.path(),
+					ProgramTranslator.translate(one.units(), inputs, carried, one.alphaTest(),
+							pass.covers(), pass.program(), textures.volumes()),
+					targets, one.alphaTest(), textures));
+		}
+
+		return new Terrain(loaded, carried);
 	}
 
 	/**
@@ -1065,79 +1073,87 @@ public final class PackProgram {
 	public static Optional<Chain> loadChain(Path packPath, String dimension,
 			Map<String, OptionValue> chosen, String profile, ChainFilter filter,
 			ChainPlan.Families families) throws IOException {
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex options = OptionIndex.build(source);
-			ShaderProperties properties = ShaderProperties.parse(source);
-			Map<String, OptionValue> fromProfile = profile.isEmpty()
-					? Map.of()
-					: properties.expandProfile(profile);
-			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, settings);
-
-			TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimension, filter);
-			String place = targets.place();
-
-			// Asked before anything is expanded. A place that serves no final draws nothing at all,
-			// and finding that out after nine programs have been read is nine wasted seconds.
-			if (!targets.running().contains(FINAL) || !serves(source, pathOf(place, FINAL))) {
-				return Optional.empty();
-			}
-
-			PackTextures textures = textures(source, properties, options, settings);
-
-			// Inside the same opening as everything else, for the reason the other readings give: a
-			// zip closed behind us invalidates every path taken from it.
-			SourceMentions mentions = SourceMentions.of(source, SETTLED_EARLY);
-			Map<String, ProgramTranslator.TranslatedProgram> translated = new LinkedHashMap<>();
-			for (String name : targets.running()) {
-				String path = pathOf(place, name);
-				Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
-				if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
-					throw new IOException(path + " is meant to run and " + source.packName()
-							+ " does not serve both of its stages");
-				}
-
-				translated.put(name, translate(path, units, textures.volumes()));
-			}
-
-			Map<String, Refusal> refused =
-					unbindable(translated, properties.imageSamplers(settings.globalDefines(options)));
-			List<String> refusals = new ArrayList<>();
-			if (refused.containsKey(FINAL)) {
-				// A final is never offered to a filter and cannot be: with it gone nothing of the
-				// chain reaches the screen, so there is nothing left to salvage and the whole pack
-				// is refused instead. Mellow and Reverie are both this case as they ship.
-				refusals.add(refusal(source.packName(), pathOf(place, FINAL), refused));
-			} else if (!refused.isEmpty()) {
-				targets = TargetPlan.build(source, options, settings, properties, dimension,
-						filter.without(refused.keySet()));
-			}
-
-			DimensionSet dimensions = DimensionSet.discover(source);
-			ProgramSet programs = ProgramSet.enumerate(source, dimensions);
-			ChainPlan chain = ChainPlan.of(targets, ProgramResolver.resolve(programs, dimensions),
-					refusals, families);
-
-			Map<String, Loaded> loaded = new LinkedHashMap<>();
-			for (String name : targets.running()) {
-				ProgramTranslator.TranslatedProgram program = translated.get(name);
-				if (program == null) {
-					// The second walk reads the same files with the same ranks and only ever takes
-					// programs away, so a name appearing that the first one never had is this class
-					// contradicting itself rather than anything a pack can cause.
-					throw new IllegalStateException(name + " is in the rebuilt chain of "
-							+ source.packName() + " and was never translated");
-				}
-
-					// A full screen pass has no alpha test. The fixed function one was for geometry, and
-				// nothing in the format lets a composite ask for it.
-				loaded.put(name, bind(source.packName(), pathOf(place, name), program, targets,
-						AlphaTest.OFF, textures));
-			}
-
-			return Optional.of(
-					new Chain(source.packName(), place, targets, chain, loaded, refused, mentions));
+		try (OpenedPack pack = OpenedPack.open(packPath, chosen, profile)) {
+			return loadChain(pack, dimension, filter, families);
 		}
+	}
+
+	/**
+	 * The same, reading an opening the caller already holds, which is the road the engine takes:
+	 * the chain, the chunk programs and the shadow computes are all read at the load and share one
+	 * reading of the archive between them.
+	 */
+	public static Optional<Chain> loadChain(OpenedPack pack, String dimension, ChainFilter filter,
+			ChainPlan.Families families) throws IOException {
+		ShaderPackSource source = pack.source();
+		OptionIndex options = pack.options();
+		ShaderProperties properties = pack.properties();
+		SettingSet settings = pack.settings();
+		IncludeExpander expander = new IncludeExpander(source, settings);
+
+		TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimension, filter);
+		String place = targets.place();
+
+		// Asked before anything is expanded. A place that serves no final draws nothing at all,
+		// and finding that out after nine programs have been read is nine wasted seconds.
+		if (!targets.running().contains(FINAL) || !serves(source, pathOf(place, FINAL))) {
+			return Optional.empty();
+		}
+
+		PackTextures textures = textures(source, properties, options, settings);
+
+		// Inside the same opening as everything else, for the reason the other readings give: a
+		// zip closed behind us invalidates every path taken from it.
+		SourceMentions mentions = SourceMentions.of(source, SETTLED_EARLY);
+		Map<String, ProgramTranslator.TranslatedProgram> translated = new LinkedHashMap<>();
+		for (String name : targets.running()) {
+			String path = pathOf(place, name);
+			Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
+			if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+				throw new IOException(path + " is meant to run and " + source.packName()
+						+ " does not serve both of its stages");
+			}
+
+			translated.put(name, translate(path, units, textures.volumes()));
+		}
+
+		Map<String, Refusal> refused =
+				unbindable(translated, properties.imageSamplers(settings.globalDefines(options)));
+		List<String> refusals = new ArrayList<>();
+		if (refused.containsKey(FINAL)) {
+			// A final is never offered to a filter and cannot be: with it gone nothing of the
+			// chain reaches the screen, so there is nothing left to salvage and the whole pack
+			// is refused instead. Mellow and Reverie are both this case as they ship.
+			refusals.add(refusal(source.packName(), pathOf(place, FINAL), refused));
+		} else if (!refused.isEmpty()) {
+			targets = TargetPlan.build(source, options, settings, properties, dimension,
+					filter.without(refused.keySet()));
+		}
+
+		DimensionSet dimensions = DimensionSet.discover(source);
+		ProgramSet programs = ProgramSet.enumerate(source, dimensions);
+		ChainPlan chain = ChainPlan.of(targets, ProgramResolver.resolve(programs, dimensions),
+				refusals, families);
+
+		Map<String, Loaded> loaded = new LinkedHashMap<>();
+		for (String name : targets.running()) {
+			ProgramTranslator.TranslatedProgram program = translated.get(name);
+			if (program == null) {
+				// The second walk reads the same files with the same ranks and only ever takes
+				// programs away, so a name appearing that the first one never had is this class
+				// contradicting itself rather than anything a pack can cause.
+				throw new IllegalStateException(name + " is in the rebuilt chain of "
+						+ source.packName() + " and was never translated");
+			}
+
+				// A full screen pass has no alpha test. The fixed function one was for geometry, and
+			// nothing in the format lets a composite ask for it.
+			loaded.put(name, bind(source.packName(), pathOf(place, name), program, targets,
+					AlphaTest.OFF, textures));
+		}
+
+		return Optional.of(
+				new Chain(source.packName(), place, targets, chain, loaded, refused, mentions));
 	}
 
 	/**

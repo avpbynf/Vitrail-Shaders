@@ -6,6 +6,7 @@ import dev.vitrail.mixin.GpuDeviceAccessor;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.source.PackLoader;
 import dev.vitrail.pack.source.PackReport;
 import dev.vitrail.pack.source.ShaderPackSource;
@@ -383,7 +384,7 @@ public final class PackChain {
 	private boolean redirected;
 
 	private PackChain(PackProgram.Chain chain, PackValues values, String world, boolean seedEnabled,
-			Path packPath, Map<String, OptionValue> chosen, String profile) {
+			OpenedPack opened, Path packPath, Map<String, OptionValue> chosen, String profile) {
 		this.chain = chain;
 		this.values = values;
 		this.world = world;
@@ -420,7 +421,7 @@ public final class PackChain {
 		// say a word. Whether the chain runs travels with them, because a translucent pass that
 		// takes draw buffer nought for the pack is drawing for a final: without one, the water
 		// would leave the screen and reach nothing.
-		this.terrain = new TerrainDraw(this, packPath, chain.place(), chosen, profile, values,
+		this.terrain = new TerrainDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 		// The same plan and the same schedule again, and for the same reason. The sky is read on
 		// demand too, since the game builds its meshes once at startup and a place that never draws
@@ -457,8 +458,8 @@ public final class PackChain {
 		// on the frames DH really draws a far terrain.
 		this.distant = new DistantDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
-		this.compute = PackCompute.load(packPath, chain.place(), chosen, profile,
-				chain.targets().computes(), this.load, values.shadowGeometryCatalog());
+		this.compute = PackCompute.load(opened, chain.place(), chain.targets().computes(), this.load,
+				values.shadowGeometryCatalog());
 	}
 
 	/**
@@ -596,6 +597,9 @@ public final class PackChain {
 	 */
 	public static void load(Path gameDirectory) {
 		PassTimings.resetCensus();
+		// Taken before anything reads the folder, so that the count printed at the end of the load
+		// covers every opening the load made and not only the translation's.
+		int openings = ShaderPackSource.openings();
 		session = null;
 		lastError = null;
 		removed = List.of();
@@ -774,54 +778,73 @@ public final class PackChain {
 				return;
 			}
 
-			// The world decides the directory, and the pack decides which world that is: a folder
-			// may be named anything and mapped in dimension.properties, so the name is read from
-			// the pack rather than composed from the dimension.
-			String place = PackPlace.place(pack);
-			String world = PackPlace.world();
+			// ONE opening of the archive for everything below, and it is what a player feels. The
+			// place, the values, the chain, the chunk programs and every shadow compute used to
+			// open the pack for themselves: for a zip that mounts the archive again each time, and
+			// each of them then walked every source file of the pack line by line to rebuild the
+			// same index of the same settings. Half a dozen identical readings and one more per
+			// compute program, on the thread that draws, is the freeze after picking a pack.
+			//
+			// Nothing below may keep a path taken from it. ShaderPackSource says why: closing the
+			// zip invalidates every path out of it, and what that leaves is a
+			// ClosedFileSystemException on an unrelated read much later.
+			try (OpenedPack opened = OpenedPack.open(pack, chosen, settings.profile())) {
+				// The world decides the directory, and the pack decides which world that is: a folder
+				// may be named anything and mapped in dimension.properties, so the name is read from
+				// the pack rather than composed from the dimension.
+				String place = PackPlace.place(opened.source());
+				String world = PackPlace.world();
 
-			// Before the translation and not after: this is what installs the machine's own
-			// symbols, and the biome ones among them decide which branch of the pack compiles.
-			PackValues values = PackValues.read(pack, place, chosen, settings.profile());
+				// Before the translation and not after: this is what installs the machine's own
+				// symbols, and the biome ones among them decide which branch of the pack compiles.
+				PackValues values = PackValues.read(opened, place);
 
-			long began = System.nanoTime();
-			Optional<PackProgram.Chain> read = PackProgram.loadChain(pack, place, chosen,
-					settings.profile(), engine.passes(), engine.families());
-			if (read.isEmpty()) {
-				String where = place.isEmpty() ? "at its root" : "in " + place + " or at its root";
-				String named = ShaderPackSource.nameOf(pack);
-				lastError = named + " serves no final with both stages " + where;
-				Vitrail.logger().warn("{} serves no final with both stages {}, nothing to draw",
-						named, where);
-				return;
+				long began = System.nanoTime();
+				Optional<PackProgram.Chain> read =
+						PackProgram.loadChain(opened, place, engine.passes(), engine.families());
+				if (read.isEmpty()) {
+					String where = place.isEmpty() ? "at its root" : "in " + place + " or at its root";
+					String named = ShaderPackSource.nameOf(pack);
+					lastError = named + " serves no final with both stages " + where;
+					Vitrail.logger().warn("{} serves no final with both stages {}, nothing to draw",
+							named, where);
+					return;
+				}
+
+				PackProgram.Chain chain = read.get();
+				Vitrail.logger().info("Read {} programs of {} in {} ms", chain.programs().size(),
+						chain.packName(), (System.nanoTime() - began) / 1_000_000L);
+
+				// A refusal is a rule of the API this engine cannot bend, named with the program that
+				// broke it. Dropping that program instead would move the half every later pass reads.
+				List<String> refusals = chain.chain().refusals();
+				if (!refusals.isEmpty()) {
+					disabled = true;
+					refusals.forEach(refusal -> Vitrail.logger().error("{}", refusal));
+					// The first one, in the pack's own terms, so that the screen says why nothing is
+					// drawn rather than sending the reader to the log for all of them.
+					lastError = chain.packName() + " cannot be drawn as it stands: " + refusals.get(0);
+					Vitrail.logger().error("{} cannot be drawn as it stands, nothing will be drawn",
+							chain.packName());
+					return;
+				}
+
+				announceRemoved(chain);
+				active = new PackChain(chain, values, world, engine.seed(), opened, pack, chosen,
+						settings.profile());
+				// Terrain first, and it finishes before the other families start: two readers on one
+				// zip at once is a race, and Sodium takes the mesh format here before any pass asks
+				// for a shader. The other families then translate on a worker, so Complementary
+				// Unbound's entities overlap the composite compiles and never sit on the render thread.
+				active.terrain.read(opened);
+				// The count, so that what a load costs is a figure in the log rather than a feeling.
+				// It covers the whole of this method, the report and the settings reading included,
+				// and the families are deliberately outside it: they translate on a worker, off the
+				// thread the player is waiting on, and each opens the pack for itself.
+				Vitrail.logger().info("Opened {} {} times to load it", chain.packName(),
+						ShaderPackSource.openings() - openings);
 			}
 
-			PackProgram.Chain chain = read.get();
-			Vitrail.logger().info("Read {} programs of {} in {} ms", chain.programs().size(),
-					chain.packName(), (System.nanoTime() - began) / 1_000_000L);
-
-			// A refusal is a rule of the API this engine cannot bend, named with the program that
-			// broke it. Dropping that program instead would move the half every later pass reads.
-			List<String> refusals = chain.chain().refusals();
-			if (!refusals.isEmpty()) {
-				disabled = true;
-				refusals.forEach(refusal -> Vitrail.logger().error("{}", refusal));
-				// The first one, in the pack's own terms, so that the screen says why nothing is
-				// drawn rather than sending the reader to the log for all of them.
-				lastError = chain.packName() + " cannot be drawn as it stands: " + refusals.get(0);
-				Vitrail.logger().error("{} cannot be drawn as it stands, nothing will be drawn",
-						chain.packName());
-				return;
-			}
-
-			announceRemoved(chain);
-			active = new PackChain(chain, values, world, engine.seed(), pack, chosen,
-					settings.profile());
-			// Terrain first, and it finishes before the other families start: two readers on one
-			// zip at once is a race, and Sodium takes the mesh format here before any pass asks
-			// for a shader. The other families then translate on a worker, so Complementary
-			// Unbound's entities overlap the composite compiles and never sit on the render thread.
-			active.terrain.read();
 			active.startFamilyPrefetch();
 			turnOffImprovedTransparency();
 			if (!chainWanted) {

@@ -3,8 +3,8 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.SodiumVertex;
 import dev.vitrail.glsl.VertexInputs;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.TerrainPass;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSize;
@@ -25,7 +25,6 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
@@ -117,17 +116,18 @@ public final class TerrainProgram implements DumpedProgram {
 	 * were written against. A pass the pack ships nothing for is absent, and keeps the game's own
 	 * shader.
 	 * <p>
-	 * A second reading of the pack, which costs one plan build for all six. The chain's own reading
-	 * translates what the chain runs, and a gbuffers program is not in it: folding this into that
-	 * walk would make every place pay for programs only this step uses.
+	 * A second walk of the pack's programs, inside the opening the load already holds, and it costs
+	 * one plan build for all six. The chain's own reading translates what the chain runs, and a
+	 * gbuffers program is not in it: folding this into that walk would make every place pay for
+	 * programs only this step uses.
 	 * <p>
 	 * <strong>Read where the pack is loaded and not where a chunk pass first asks.</strong> What the
 	 * mesh carries is the union of what these six read, and the mesh has to be settled before Sodium
 	 * builds the chunk renderer that meshes with it. The device is not touched here: the pipelines
 	 * are built by {@link #build}, at the first draw and against the format the renderer hands over.
 	 */
-	static PackProgram.Terrain read(Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values) throws IOException {
+	static PackProgram.Terrain read(OpenedPack pack, String place, PackValues values)
+			throws IOException {
 		// Which of the two colours the six vertex stages read, settled here because this is where
 		// the pack's own reading of separateAo is held. Two shapes for one word Sodium already
 		// writes, so it decides both which element a stage reads and whether the mesh carries the
@@ -135,10 +135,10 @@ public final class TerrainProgram implements DumpedProgram {
 		VertexInputs inputs = values.separateAo()
 				? VertexInputs.TERRAIN_SEPARATE_AO
 				: VertexInputs.TERRAIN;
-		PackProgram.Terrain read = PackProgram.loadTerrain(packPath, place, chosen, profile, inputs);
+		PackProgram.Terrain read = PackProgram.loadTerrain(pack, place, inputs);
 		if (read.programs().isEmpty()) {
 			Vitrail.logger().warn("{} serves no terrain program with both stages in {}, so the "
-					+ "world keeps the game's own shader", packPath.getFileName(),
+					+ "world keeps the game's own shader", pack.packPath().getFileName(),
 					place.isEmpty() ? "its root" : place);
 		}
 

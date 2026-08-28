@@ -5,10 +5,10 @@ import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.mixin.CommandEncoderAccessor;
 import dev.vitrail.mixin.GpuDeviceAccessor;
 import dev.vitrail.mixin.VulkanCommandEncoderAccessor;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.ProgramNames;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.UniformCatalog;
@@ -53,11 +53,9 @@ import org.lwjgl.vulkan.VkWriteDescriptorSet;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -99,8 +97,16 @@ final class PackCompute implements AutoCloseable {
 		return new PackCompute(List.of());
 	}
 
-	static PackCompute load(Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, List<String> computes, int load, UniformCatalog catalog) {
+	/**
+	 * Reads every shadow compute the pack ships, out of the opening the load already holds.
+	 * <p>
+	 * The opening is handed in and not taken here, and this loop is why it matters: read a program
+	 * at a time from a pack path, each turn mounted the archive again and walked every source file
+	 * of it to rebuild the same index of the same settings, so a pack with four shadow computes
+	 * paid for four whole readings of itself to translate four files.
+	 */
+	static PackCompute load(OpenedPack pack, String place, List<String> computes, int load,
+			UniformCatalog catalog) {
 		List<Pass> passes = new ArrayList<>();
 		for (String name : computes) {
 			if (!ProgramNames.shadowComposite(ProgramNames.familyOf(name))) {
@@ -109,8 +115,7 @@ final class PackCompute implements AutoCloseable {
 
 			String path = place.isEmpty() ? name : place + "/" + name;
 			try {
-				Optional<PackProgram.Compute> compute = PackProgram.loadCompute(packPath, path, chosen,
-						profile);
+				Optional<PackProgram.Compute> compute = PackProgram.loadCompute(pack, path);
 				if (compute.isEmpty()) {
 					continue;
 				}

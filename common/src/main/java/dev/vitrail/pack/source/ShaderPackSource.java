@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 /**
@@ -51,6 +52,18 @@ public final class ShaderPackSource implements AutoCloseable {
 
 	/** How much of a file is read before it is allowed to be called binary. */
 	private static final int BINARY_PROBE = 4096;
+
+	/**
+	 * How many packs have been opened since the game started, which a load reports the difference
+	 * of.
+	 * <p>
+	 * Counted here because this is the one door, and because the number is the shape of what a load
+	 * costs: opening a zip mounts the archive as a filesystem, and everything above this class then
+	 * walks every source file of the pack again to rebuild what it needs. A load that opens the same
+	 * pack half a dozen times is doing all of that half a dozen times, and the difference between
+	 * "it should be faster" and a figure is this one increment.
+	 */
+	private static final AtomicInteger OPENINGS = new AtomicInteger();
 
 	private final String packName;
 	private final Path shadersRoot;
@@ -90,7 +103,13 @@ public final class ShaderPackSource implements AutoCloseable {
 		return text.substring(0, text.length() - 4);
 	}
 
+	/** How many packs have been opened so far, which a load takes a before and an after of. */
+	public static int openings() {
+		return OPENINGS.get();
+	}
+
 	public static ShaderPackSource open(Path packPath) throws IOException {
+		OPENINGS.incrementAndGet();
 		if (Files.isDirectory(packPath)) {
 			return new ShaderPackSource(nameOf(packPath), findShadersRoot(packPath), null);
 		}

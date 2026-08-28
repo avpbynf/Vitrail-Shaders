@@ -1,8 +1,8 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.TerrainPass;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
@@ -112,8 +112,6 @@ public final class TerrainDraw {
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
@@ -138,14 +136,11 @@ public final class TerrainDraw {
 	private TerrainProgram lastOwner;
 	private boolean read;
 
-	TerrainDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, ColorTargets targets) {
+	TerrainDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
@@ -163,7 +158,7 @@ public final class TerrainDraw {
 	 * that does not describe them. What that costs when it is skipped is a world drawn by the game
 	 * while the sky is drawn by the pack, which reads as the sky being in front of the world rather
 	 * than as a terrain program that never ran. Switched on it empties nothing and settles nothing:
-	 * {@link #read()} is what fills the answer in, once the pack's own programs have been read.
+	 * {@link #read(OpenedPack)} is what fills the answer in, once the pack's own programs have been read.
 	 * <p>
 	 * The door is the one F3+A uses, {@code LevelExtractor.allChanged}, and it raises a flag the next
 	 * extract consumes rather than tearing sections down inside a frame. That extract calls
@@ -220,15 +215,18 @@ public final class TerrainDraw {
 	 * A reading that throws takes the terrain down rather than the pack: the sky and the entities are
 	 * read from the same archive and have their own answer about it, and a world drawn by the game
 	 * under a pack's sky is what this would otherwise leave behind.
+	 *
+	 * @param pack the opening the load holds, which stays open for exactly as long as this call. The
+	 *             six programs are read from it rather than from an opening of this class's own,
+	 *             which is why nothing here may keep a {@code Path} taken from the pack
 	 */
-	void read() {
+	void read(OpenedPack pack) {
 		if (!wanted) {
 			return;
 		}
 
 		try {
-			PackProgram.Terrain read = TerrainProgram.read(this.packPath, this.place, this.chosen,
-					this.profile, this.values);
+			PackProgram.Terrain read = TerrainProgram.read(pack, this.place, this.values);
 			this.loaded = read.programs();
 			this.declares = read.carried();
 		} catch (IOException | RuntimeException e) {

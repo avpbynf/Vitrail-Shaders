@@ -8,7 +8,6 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.dimension.DimensionType;
 
 import java.io.IOException;
-import java.nio.file.Path;
 
 /**
  * Which world the player is in, in the terms a pack is written in, and which of the pack's
@@ -62,14 +61,13 @@ public final class PackPlace {
 	 * Reads the pack's own map of worlds to folders and answers where this world's programs live,
 	 * the empty string for the root.
 	 * <p>
-	 * One more opening of the pack per load, which is two files and a directory listing against the
-	 * second the load itself costs. The map is kept afterwards because {@link #world()} needs it
-	 * every second and must not touch the disk to get it.
+	 * Read from the opening the load already holds rather than one of its own, which is two files
+	 * and a directory listing off the load and, for a zipped pack, one archive mount fewer. The map
+	 * is kept afterwards because {@link #world()} needs it every second and must not touch the disk
+	 * to get it.
 	 */
-	public static String place(Path packPath) throws IOException {
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			known = DimensionSet.discover(source);
-		}
+	public static String place(ShaderPackSource source) throws IOException {
+		known = DimensionSet.discover(source);
 
 		return known.place(world());
 	}
