@@ -3,6 +3,7 @@ package dev.vitrail.mixin;
 import dev.vitrail.render.GeometryHold;
 import dev.vitrail.render.ParticleDraw;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
@@ -10,14 +11,11 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
-import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.renderer.feature.FeatureFrameContext;
 import net.minecraft.client.renderer.feature.QuadParticleFeatureRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
 import java.util.Optional;
@@ -32,24 +30,30 @@ import java.util.function.Supplier;
  * unchanged; this one implements the interface directly and has an {@code executeGroup} of its own,
  * which opens a render pass, walks the layers of the group and sets a pipeline and an atlas for each.
  * So the shape here is the sky's and the weather's rather than the entities': the pass is replaced
- * where it is opened and the pipeline swapped where it is set.
+ * where it is opened, and this class only opens and closes the group.
+ * <p>
+ * <strong>The pipeline and the atlas are swapped on the pass and not here</strong>, by
+ * {@link RenderPassMixin}, keyed to the pass this class hands the renderer. Wrapping the calls of
+ * {@code drawLayers} was tried first and it misses every draw a mod records into the group's pass
+ * from a handler of its own: AsyncParticles' GPU particles set pipelines carrying one colour state
+ * after {@code drawLayers} returns, which a pass carrying the pack's colour targets refuses by name.
  * <p>
  * <strong>Which half is being drawn is read off the submits and not worked out here.</strong> The
  * game reads the same field to decide which layers go into the group and which target they go to, so
  * taking it from anywhere else would be a second answer to a question already asked.
  * <p>
- * <strong>All four handlers are required</strong>, and say so rather than lean on the
- * configuration's default. The pass and the pipeline are a pair, and half of them applying binds a
- * pipeline carrying eight colour states into a pass carrying one, which throws by name. The other
- * two each leave a picture with nothing in the log: particles drawn with the block of the group
- * before, or a group that kept this engine's program after the one that opened it was forgotten.
+ * <strong>Both handlers are required</strong>, and say so rather than lean on the configuration's
+ * default. Without the open, the pack's particle programs are never asked for and every group keeps
+ * the game's own shader, with nothing in the log to say why. Without the close, what the open armed
+ * outlives the group, and the hooks on the pass would answer for draws that are not particles at
+ * all.
  */
 @Mixin(QuadParticleFeatureRenderer.class)
 public abstract class QuadParticleFeatureRendererMixin {
 
 	/**
-	 * Prepares the pack's program for the half about to be drawn and hands back the pass it wants
-	 * opened.
+	 * Prepares the pack's program for the half about to be drawn, hands back the pass it wants
+	 * opened, and tells {@link ParticleDraw} which pass the group's draws will land in.
 	 * <p>
 	 * The submits cannot be empty here: the renderer only records a group when they are not, and it
 	 * is indexing that record one line above. Read defensively all the same, an empty list being a
@@ -73,45 +77,28 @@ public abstract class QuadParticleFeatureRendererMixin {
 				: ParticleDraw.group(submits.getFirst().translucent(), colour, depth);
 		RenderPassDescriptor descriptor = pipeline == null ? null : ParticleDraw.descriptor();
 
-		return descriptor == null
+		RenderPass pass = descriptor == null
 				? original.call(encoder, label, colour, clearColour, depth, clearDepth)
 				: GeometryHold.open(encoder, descriptor);
-	}
+		ParticleDraw.opened(pass);
 
-	@WrapOperation(method = "drawLayers", require = 1,
-			at = @At(value = "INVOKE",
-					target = "Lcom/mojang/blaze3d/systems/RenderPass;setPipeline("
-							+ "Lcom/mojang/blaze3d/pipeline/RenderPipeline;)V"))
-	private static void vitrail$pipeline(RenderPass pass, RenderPipeline pipeline,
-			Operation<Void> original) {
-		original.call(pass, ParticleDraw.pipeline(pipeline));
+		return pass;
 	}
 
 	/**
-	 * Lets the game bind the layer's own atlas and keeps what it bound, then binds the pack's block
-	 * and samplers over it, one line before the draw that reads them.
-	 * <p>
-	 * In {@code drawLayers} and not in {@code executeGroup}, which is what makes it the LAYER's atlas
-	 * rather than the group's: one group is drawn off the block atlas, the item atlas and the
-	 * particle atlas between its layers. The game's own binding costs nothing and its name is not the
-	 * one that is read, the descriptor flush walking the layout of the pipeline that is really bound.
+	 * Forgets the group at the way out, whichever way out it is. The two hooks on the pass stay
+	 * armed for as long as the group stands, so an exception thrown inside the renderer must
+	 * disarm them too: the group's pass may be one {@code GeometryHold} keeps open, and later
+	 * families join that same object.
 	 */
-	@WrapOperation(method = "drawLayers", require = 1,
-			at = @At(value = "INVOKE",
-					target = "Lcom/mojang/blaze3d/systems/RenderPass;bindTexture("
-							+ "Ljava/lang/String;"
-							+ "Lcom/mojang/blaze3d/textures/GpuTextureView;"
-							+ "Lcom/mojang/blaze3d/textures/GpuSampler;)V"))
-	private static void vitrail$texture(RenderPass pass, String name, GpuTextureView view,
-			GpuSampler sampler, Operation<Void> original) {
-		original.call(pass, name, view, sampler);
-		ParticleDraw.texture(pass, view, sampler);
-	}
-
-	/** Forgets the group, so that the next one cannot be handed this one's block. */
-	@Inject(method = "executeGroup", at = @At("RETURN"), require = 1)
-	private void vitrail$close(FeatureFrameContext context, int groupIndex, List<?> submits,
-			boolean strictlyOrdered, CallbackInfo callback) {
-		ParticleDraw.endGroup();
+	@WrapMethod(method = "executeGroup", require = 1)
+	private void vitrail$group(FeatureFrameContext context, int groupIndex,
+			List<QuadParticleFeatureRenderer.Submit> submits, boolean strictlyOrdered,
+			Operation<Void> original) {
+		try {
+			original.call(context, groupIndex, submits, strictlyOrdered);
+		} finally {
+			ParticleDraw.endGroup();
+		}
 	}
 }

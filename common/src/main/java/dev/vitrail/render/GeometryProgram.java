@@ -43,6 +43,7 @@ import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormatElement;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
 import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
@@ -58,8 +59,10 @@ import org.joml.Vector4fc;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -396,6 +399,12 @@ final class GeometryProgram {
 	private final Sampled[] bound;
 	private final RenderPipeline pipeline;
 	private final ShaderSource source;
+
+	/**
+	 * Pipelines drawing this program over a mesh laid out by somebody else, keyed by that layout.
+	 * A refusal is held as null, latched the way {@link #compile}'s is.
+	 */
+	private final Map<VertexFormat, RenderPipeline> reshaped = new HashMap<>();
 
 	/**
 	 * Whether this program reads {@code gl_TextureMatrix[0]} out of the game's own per draw
@@ -943,6 +952,140 @@ final class GeometryProgram {
 		this.compiled = true;
 
 		return true;
+	}
+
+	/**
+	 * The same program, compiled to read a mesh laid out by somebody else.
+	 * <p>
+	 * A draw a mod records into a pass this engine opened arrives with a vertex layout of the mod's
+	 * own, and a pipeline reads its buffer through the layout it was built with: binding
+	 * {@link #prepare}'s answer over such a mesh would read every attribute at the wrong offset.
+	 * The variant is this program's pipeline with the caller's layout on binding nought and
+	 * everything else kept, under a location of its own so the device caches the two apart. The
+	 * shaders do not move, so the layout is refused unless it leads with the attributes this
+	 * program names, which {@link #rebuild} sets out.
+	 * <p>
+	 * Recompiled through {@code precompilePipeline} on every call, for the reason {@link #compile}
+	 * gives: a resource reload empties the device cache, and the call is a lookup while the cache
+	 * holds the key.
+	 *
+	 * @param layout the layout of the caller's mesh, on binding nought
+	 * @return the pipeline to bind over that mesh, or null when it refused to compile
+	 */
+	RenderPipeline reshape(GpuDevice device, VertexFormat layout) {
+		// The lock compile() takes, for the flag they share: a worker warming this program ahead
+		// writes broken under it, and this runs on the render thread while it does.
+		synchronized (this) {
+			if (this.broken) {
+				return null;
+			}
+
+			VertexFormat own = this.pipeline.getVertexFormatBinding(0);
+			if (layout.equals(own)) {
+				return this.pipeline;
+			}
+
+			RenderPipeline variant;
+			if (this.reshaped.containsKey(layout)) {
+				variant = this.reshaped.get(layout);
+			} else {
+				variant = rebuild(layout, own);
+				this.reshaped.put(layout, variant);
+			}
+
+			if (variant == null) {
+				return null;
+			}
+
+			if (!device.precompilePipeline(variant, this.source).isValid()) {
+				// Latched like compile()'s refusal, and for its reason: retrying would pay shaderc
+				// every draw for the same answer, and the caller has a fallback to hand the draw to.
+				this.reshaped.put(layout, null);
+				Vitrail.logger().error("{} did not compile over a mesh layout brought by another "
+						+ "mod, so the {} pass draws that mesh through its own layout", this.path,
+						this.pass.name());
+
+				return null;
+			}
+
+			return variant;
+		}
+	}
+
+	/**
+	 * Builds the variant, or hands back null with one line where the layout cannot carry this
+	 * program.
+	 * <p>
+	 * <strong>The layout has to lead with this program's own attributes, by name and in
+	 * order.</strong> The pipeline numbers a location for every element of the layout while the
+	 * shader numbers one for every element it declares, so an undeclared element sitting before a
+	 * declared one pulls the two counts apart and the shader reads the wrong attribute, silently.
+	 * Elements past the program's own are safe: their locations fall beyond every one the shader
+	 * asks for.
+	 * <p>
+	 * The build itself is guarded too: the builder refuses by throw, over sixteen attributes among
+	 * other things, and this is called from inside another mod's draw, where a throw would be the
+	 * very crash this door exists to close.
+	 */
+	private RenderPipeline rebuild(VertexFormat layout, VertexFormat own) {
+		List<VertexFormatElement> lead = own.getElements();
+		List<VertexFormatElement> given = layout.getElements();
+		boolean leads = given.size() >= lead.size();
+		for (int index = 0; leads && index < lead.size(); index++) {
+			leads = lead.get(index).name().equals(given.get(index).name());
+		}
+
+		if (!leads) {
+			Vitrail.logger().warn("A mesh brought by another mod does not lead with the attributes "
+					+ "the {} pass reads, so its draws keep the pass pipeline's own layout: attribute "
+					+ "locations are numbered over every element of a layout, and a stranger before "
+					+ "a known one would make the shader read the wrong attribute without a word",
+					this.pass.name());
+
+			return null;
+		}
+
+		try {
+			return reshapeAs(layout, this.reshaped.size());
+		} catch (RuntimeException e) {
+			Vitrail.logger().error("The " + this.pass.name() + " pass could not rebuild its "
+					+ "pipeline over a mesh layout brought by another mod, so those draws keep the "
+					+ "pipeline's own layout", e);
+
+			return null;
+		}
+	}
+
+	/**
+	 * The pipeline above with one layout swapped, which is a rebuild: the game's pipelines are
+	 * immutable and the builder is the public door. Every state is read off the built pipeline
+	 * rather than off this class's fields, so the two cannot drift.
+	 */
+	private RenderPipeline reshapeAs(VertexFormat layout, int index) {
+		RenderPipeline.Builder builder = RenderPipeline.builder()
+				.withLocation(this.pipeline.getLocation().withSuffix("/reshaped/" + index))
+				.withVertexShader(this.pipeline.getVertexShader())
+				.withFragmentShader(this.pipeline.getFragmentShader())
+				.withCull(this.pipeline.isCull())
+				.withPrimitiveTopology(this.pipeline.getPrimitiveTopology())
+				.withVertexBinding(0, layout);
+		this.pipeline.getBindGroupLayouts().forEach(builder::withBindGroupLayout);
+		if (this.pipeline.getDepthStencilState() != null) {
+			builder.withDepthStencilState(this.pipeline.getDepthStencilState());
+		}
+
+		// Null is how the builder holds an unused slot, so null is copied as unused; the count the
+		// pipeline carries beside the array is rebuilt by walking every slot in order.
+		ColorTargetState[] states = this.pipeline.getColorTargetStates();
+		for (int slot = 0; slot < states.length; slot++) {
+			if (states[slot] == null) {
+				builder.withUnusedColorTargetState(slot);
+			} else {
+				builder.withColorTargetState(slot, states[slot]);
+			}
+		}
+
+		return builder.build();
 	}
 
 	/** Whether {@link #compile} has already paid shaderc for this pipeline. */

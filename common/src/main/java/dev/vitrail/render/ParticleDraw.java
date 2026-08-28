@@ -18,6 +18,7 @@ import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderPipelines;
 
@@ -40,8 +41,8 @@ import java.util.Set;
  * without redefining it; the particles implement the interface directly and have an
  * {@code executeGroup} of their own, which opens a render pass, walks the layers of the group and
  * sets a pipeline and an atlas for each. So the shape here is the sky's and the weather's, a pass
- * replaced where it is opened and a pipeline swapped where it is set, and the layer's atlas is handed
- * over per draw as the entities' skin is.
+ * replaced where it is opened and a pipeline swapped as it is set on that pass, and the draw's atlas
+ * is handed over per draw as the entities' skin is.
  * <p>
  * <strong>The two halves are two programs on opposite sides of the frame, and this is the one family
  * that straddles the deferred stage.</strong> The game submits every group twice, once solid and once
@@ -154,16 +155,32 @@ public final class ParticleDraw {
 	private volatile boolean read;
 
 	/**
-	 * The reasons this engine has already said something about a group, one line each and not one a
-	 * frame. Most of them are hand-backs; the {@code foreign:} one is the opposite, a group kept and
-	 * a layer inside it that lost its own pipeline to it.
+	 * The reasons this engine has already handed a group back, one line each and not one a frame.
 	 */
 	private final Set<String> refused = new LinkedHashSet<>();
+
+	/** The foreign pipelines already written about, so that line comes out once per caller and
+	 * costs nothing on the draws after it. */
+	private final Set<RenderPipeline> foreign = new LinkedHashSet<>();
+
+	/** The name the game binds the primary texture under, and the one every atlas arrives as. */
+	private static final String ATLAS_SAMPLER = "Sampler0";
 
 	/** The program of the group being recorded, and the game pipeline it stands in for. */
 	private ParticleProgram drawing;
 	private RenderPipeline standsIn;
 	private RenderPipeline bound;
+
+	/** The pass the group's draws are recorded into, ours or the renderer's own. */
+	private RenderPass pass;
+
+	/**
+	 * True while {@link #texture} is binding the pack's own samplers, which go through the very
+	 * call it watches the atlas at. The names it binds are the pack's and the atlas name is the
+	 * game's, but nothing enforces that split, and a pack naming a sampler the way the game does
+	 * would re-enter it without end.
+	 */
+	private boolean binding;
 
 	/**
 	 * Whether the pipeline this engine last handed the renderer was its own. False for a layer that
@@ -259,44 +276,76 @@ public final class ParticleDraw {
 	}
 
 	/**
-	 * The pipeline one layer of the group is really drawn with.
+	 * Remembers the pass the group's draws are about to be recorded into, ours or the renderer's
+	 * own.
 	 * <p>
-	 * <strong>A layer whose pipeline is neither of the two the table names keeps its own wherever it
+	 * It is the pass and not the call site that scopes the two hooks on {@link RenderPass}: the
+	 * game's own draws go through {@code drawLayers}, but a mod may record draws of its own into
+	 * the same pass from a handler of its own, which AsyncParticles' GPU particles do after
+	 * {@code drawLayers} returns. A hook on the renderer's method sees none of those; a hook on
+	 * the pass sees them all, and this field is what tells it which pass is the group's.
+	 */
+	public static void opened(RenderPass pass) {
+		ParticleDraw draw = PackChain.particles();
+		if (draw != null && draw.drawing != null) {
+			draw.pass = pass;
+		}
+	}
+
+	/**
+	 * The pipeline one draw of the group is really recorded with, whoever asked for it.
+	 * <p>
+	 * <strong>A draw whose pipeline is neither of the two the table names keeps its own wherever it
 	 * can</strong>, which is what Iris does with it: an unassigned pipeline answers a null key
 	 * ({@code pipeline/IrisPipelines.java:224-231}) and its override then hands back nothing
 	 * ({@code mixin/MixinShaderManager_Overrides.java:97-101}), leaving the game's shader in place.
-	 * A layer like that is not a particle this engine was asked about, and drawing it with the pack's
+	 * A draw like that is not a particle this engine was asked about, and drawing it with the pack's
 	 * program would take its blend, its depth, its culling and its topology as well as its shader,
-	 * every one of them read off the pipeline the table names rather than off the layer's own.
+	 * every one of them read off the pipeline the table names rather than off the draw's own.
 	 * <p>
-	 * <strong>It cannot keep it once the pass is ours</strong>, and that is the one divergence here.
-	 * The pass was opened before any layer was seen, and where the pack took draw buffers it carries
-	 * a colour attachment for each; a pipeline declaring ONE colour state is refused by name in the
-	 * middle of it. So there the layer takes the pack's program, which draws rather than throws, and
-	 * the log says so. Where the pack took none, the pass is the renderer's own single attachment one
-	 * and the layer keeps everything.
+	 * <strong>It cannot keep it once the pass is ours, and there it takes the pack's program over
+	 * the caller's own vertex layout.</strong> The pass was opened before any draw was seen, and
+	 * where the pack took draw buffers it carries a colour attachment for each; a pipeline
+	 * declaring ONE colour state is refused by name in the middle of it. The program is recompiled
+	 * over the layout the caller's mesh really has ({@code GeometryProgram.reshape}) rather than
+	 * bound as built, which would read every vertex past the first at the wrong offset. That is
+	 * where Iris lands for the reachable caller: AsyncParticles' GPU particles record draws into
+	 * the group's pass after {@code drawLayers} returns, on a wider layout of their own, and it
+	 * registers those pipelines against Iris' two particle programs
+	 * ({@code GpuParticlePipelines.of} ends on {@code IrisApi.assignPipeline}), so Iris draws them
+	 * with the pack's program too. What stays divergent is a pipeline Iris was never told about,
+	 * which keeps the game's shader there and takes the pack's program here, the log saying so.
+	 * Where the pack took none, the pass is the renderer's own single attachment one and the draw
+	 * keeps everything.
 	 * <p>
-	 * <strong>The case is reachable and is not vanilla's.</strong> {@code SingleQuadParticle.Layer} is
-	 * a public record and {@code getLayer} is overridable, so a mod may put a layer carrying a
-	 * pipeline of its own into a group whose translucency matches. Every layer of the game pairs its
-	 * translucency with one of the two the table names, so nothing of the game reaches this.
+	 * <strong>The layer case is reachable and is not vanilla's.</strong>
+	 * {@code SingleQuadParticle.Layer} is a public record and {@code getLayer} is overridable, so a
+	 * layer may carry a pipeline of its own into a group whose translucency matches. Every layer of
+	 * the game pairs its translucency with one of the two the table names, so nothing of the game
+	 * reaches this.
 	 *
-	 * @param game the pipeline the layer asked for
-	 * @return the pipeline to bind instead, or the game's own
+	 * @param pass the pass the pipeline is being set on, which is what scopes this to the group
+	 * @param game the pipeline the draw asked for
+	 * @return the pipeline to bind instead, or the one asked for
 	 */
 	@SuppressWarnings("ReferenceEquality")
-	public static RenderPipeline pipeline(RenderPipeline game) {
+	public static RenderPipeline pipeline(RenderPass pass, RenderPipeline game) {
 		ParticleDraw draw = PackChain.particles();
-		if (draw == null || draw.drawing == null || draw.bound == null) {
+		if (draw == null || draw.drawing == null || draw.bound == null || pass != draw.pass) {
 			return game;
 		}
 
 		draw.handedOurs = true;
+		// Ours coming back around, re-set by a caller that kept a reference: nothing to swap.
+		if (game == draw.bound) {
+			return game;
+		}
+
 		if (draw.standsIn == game) {
 			return draw.bound;
 		}
 
-		// The pack took no draw buffer here, so the pass is the renderer's own and the layer's
+		// The pack took no draw buffer here, so the pass is the renderer's own and the draw's
 		// pipeline binds into it as it always did. Nothing is lost and nothing is said.
 		if (draw.descriptor == null) {
 			draw.handedOurs = false;
@@ -304,43 +353,71 @@ public final class ParticleDraw {
 			return game;
 		}
 
-		if (draw.refused.add("foreign:" + game.getLocation())) {
-			Vitrail.logger().warn("A particle layer asked for {}, which is neither of the two "
-					+ "pipelines the game draws its own quad particles with, inside a group whose "
-					+ "pass this engine had already opened over the pack's own colour targets. It "
-					+ "takes the pack's particle program, and with it that program's blend, depth, "
-					+ "culling and topology: a pipeline carrying one colour state is refused by name "
-					+ "in a pass carrying several, so its own could not be bound there. Iris leaves "
-					+ "the game's shader on a pipeline it was never assigned", game.getLocation());
+		// The binding read directly rather than through the array's length: the game hands the
+		// builder's raw sixteen slots through, so the array is never short and its entries are
+		// where the nulls live.
+		GpuDevice device = RenderSystem.tryGetDevice();
+		VertexFormat layout = game.getVertexFormatBinding(0);
+		RenderPipeline reshaped = device == null || layout == null
+				? null
+				: draw.drawing.reshape(device, layout);
+		if (draw.foreign.add(game)) {
+			if (reshaped != null) {
+				Vitrail.logger().warn("A particle draw asked for {}, which is neither of the two "
+						+ "pipelines the game draws its own quad particles with, inside a group "
+						+ "whose pass this engine had already opened over the pack's own colour "
+						+ "targets, where a pipeline carrying one colour state is refused by name. "
+						+ "It takes the pack's particle program over the caller's own vertex "
+						+ "layout, which is where Iris lands for the callers that register such "
+						+ "pipelines against its particle programs", game.getLocation());
+			} else {
+				Vitrail.logger().warn("A particle draw asked for {}, which is neither of the two "
+						+ "pipelines the game draws its own quad particles with, inside a group "
+						+ "whose pass this engine had already opened over the pack's own colour "
+						+ "targets, where a pipeline carrying one colour state is refused by name. "
+						+ "The pack's particle program could not be rebuilt over the caller's own "
+						+ "vertex layout, so it is bound as built and reads that mesh through its "
+						+ "own", game.getLocation());
+			}
 		}
 
-		return draw.bound;
+		return reshaped == null ? draw.bound : reshaped;
 	}
 
 	/**
-	 * The atlas the game was going to draw this layer with, on its way past, and the pack's block and
+	 * The atlas a draw of the group was going to read, on its way past, and the pack's block and
 	 * samplers bound over it.
 	 * <p>
-	 * One line before the draw that reads them, which is where the renderer binds its own: the layers
+	 * One line before the draw that reads them, which is where each caller binds its own: the draws
 	 * of one group come off three different atlases, so this is the draw's answer and not the pass's.
+	 * Only the name the game binds every atlas under is answered, the group's pass also carrying a
+	 * lightmap under another, and only outside this method's own binds, which go through the very
+	 * call it is watching.
 	 */
-	public static void texture(RenderPass pass, GpuTextureView view, GpuSampler sampler) {
+	public static void texture(RenderPass pass, String name, GpuTextureView view,
+			GpuSampler sampler) {
 		ParticleDraw draw = PackChain.particles();
 		// What the pass really got decides, as it does for the weather and for the sky. A foreign
-		// layer keeps its own pipeline wherever the pass allows it, which pipeline() answers just
+		// draw keeps its own pipeline wherever the pass allows it, which pipeline() answers just
 		// above and this would otherwise ignore: binding the pack's block over the game's shader is
 		// harmless in itself, the descriptor flush walking the layout of the pipeline really bound,
 		// but it makes this engine announce a first draw for a program that drew nothing.
-		if (draw == null || draw.drawing == null || draw.bound == null || !draw.handedOurs) {
+		if (draw == null || draw.drawing == null || draw.bound == null || !draw.handedOurs
+				|| pass != draw.pass || draw.binding || !ATLAS_SAMPLER.equals(name)) {
 			return;
 		}
 
-		draw.drawing.texture(view, sampler);
-		draw.drawing.bind(pass);
+		draw.binding = true;
+		try {
+			draw.drawing.texture(view, sampler);
+			draw.drawing.bind(pass);
+		} finally {
+			draw.binding = false;
+		}
 	}
 
 	/**
-	 * Forgets the group, at the return of the method that drew it.
+	 * Forgets the group, at the way out of the method that drew it, thrown ways out included.
 	 * <p>
 	 * Owed rather than tidy: the two halves of a frame are two calls, and a group that left its
 	 * program standing would hand the translucent half's layers the opaque half's block. Nothing
@@ -359,6 +436,7 @@ public final class ParticleDraw {
 		this.drawing = null;
 		this.standsIn = null;
 		this.bound = null;
+		this.pass = null;
 		this.descriptor = null;
 		this.handedOurs = false;
 	}
@@ -608,6 +686,7 @@ public final class ParticleDraw {
 		this.programs.values().forEach(ParticleProgram::release);
 		this.programs.clear();
 		this.refused.clear();
+		this.foreign.clear();
 		this.read = false;
 	}
 }
