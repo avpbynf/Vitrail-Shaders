@@ -129,6 +129,17 @@ public final class TerrainMesh implements ChunkVertexType {
 	 */
 	private static final float FLATTENED = 1.0E-20F;
 
+	/**
+	 * The seven floats {@link #frame} works in, one array per thread.
+	 * <p>
+	 * A quad's frame is read by {@link TangentFrame#pack} and kept by nobody, so one array serves
+	 * every quad a thread ever meshes rather than one per quad. Per THREAD and not per instance:
+	 * this class is remade whenever the carried list moves, the workers outlive any one of it, and
+	 * Sodium meshes on as many of them as it was given, so an array of the instance would still be
+	 * four builders writing seven floats over each other.
+	 */
+	private static final ThreadLocal<float[]> FRAMES = ThreadLocal.withInitial(() -> new float[7]);
+
 	private final ChunkVertexType inner = ChunkMeshFormats.COMPACT;
 	private final ChunkVertexEncoder innerEncoder = this.inner.getEncoder();
 	private final ChunkVertexEncoder encoder = this::encode;
@@ -575,7 +586,14 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * reads, and normalising a zero puts a NaN in the colour.
 	 */
 	private static float[] frame(ChunkVertexEncoder.Vertex[] vertices) {
-		float[] frame = new float[7];
+		float[] frame = FRAMES.get();
+
+		// Emptied rather than allocated, and only the three Newell sums into: the tangent's three are
+		// written outright on every road out of here, the last of them being perpendicular's, and the
+		// handedness on the line below.
+		frame[0] = 0.0F;
+		frame[1] = 0.0F;
+		frame[2] = 0.0F;
 
 		// The answer for a quad no triangle of which has an area to measure. A triangle that has one
 		// overwrites it below, whether or not it goes on to yield a direction.

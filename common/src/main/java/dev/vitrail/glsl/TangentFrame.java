@@ -64,6 +64,13 @@ public final class TangentFrame {
 	 */
 	private static final float FLAT = 1.0E-20F;
 
+	/**
+	 * The three floats {@link #pack} decodes its own normal into, one array per thread: packing
+	 * runs on every builder thread of the world, and the decoded copy lives no longer than the
+	 * call that made it.
+	 */
+	private static final ThreadLocal<float[]> DECODED = ThreadLocal.withInitial(() -> new float[3]);
+
 	private TangentFrame() {
 	}
 
@@ -87,7 +94,7 @@ public final class TangentFrame {
 	 */
 	public static int pack(float[] frame) {
 		int normal = packNormal(frame[0], frame[1], frame[2]);
-		float[] decoded = normal(normal);
+		float[] decoded = normal(normal, DECODED.get());
 
 		return normal | (frame[6] >= 0.0F ? 1 << 23 : 0)
 				| (packTangent(decoded, frame[3], frame[4], frame[5]) << 24);
@@ -99,16 +106,26 @@ public final class TangentFrame {
 	 * comes out of here and the prologue reads it in a basis built from its own copy.
 	 */
 	public static float[] normal(int word) {
+		return normal(word, new float[3]);
+	}
+
+	/** The same, into an array the caller keeps, which is what lets a hot path bring its own. */
+	public static float[] normal(int word, float[] into) {
 		float x = (word << 20 >> 20) / (float) X_MAX;
 		float y = (word << 9 >> 21) / (float) Y_MAX;
 		float z = 1.0F - Math.abs(x) - Math.abs(y);
-		float[] normal = z >= 0.0F
-				? new float[] {x, y, z}
-				: new float[] {(1.0F - Math.abs(y)) * sideOf(x),
-						(1.0F - Math.abs(x)) * sideOf(y), z};
-		normalise(normal);
+		if (z >= 0.0F) {
+			into[0] = x;
+			into[1] = y;
+		} else {
+			into[0] = (1.0F - Math.abs(y)) * sideOf(x);
+			into[1] = (1.0F - Math.abs(x)) * sideOf(y);
+		}
 
-		return normal;
+		into[2] = z;
+		normalise(into);
+
+		return into;
 	}
 
 	/**
