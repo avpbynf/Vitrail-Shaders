@@ -33,6 +33,16 @@ public final class Val {
 	private int rank;
 	private boolean integral;
 
+	/**
+	 * Whether {@link #floats} already holds what the value holds, which a matrix leaves false.
+	 * <p>
+	 * A matrix is written out of {@link #mat3()} or {@link #mat4()} on every road but one, a pack
+	 * declaring a mat4 name as a mat3 or the other way round, and that road reads it component by
+	 * component through {@link #f(int)}. Copying the sixteen floats at the set was paying for that
+	 * road on every matrix of every block of every frame, so it is paid where it is taken instead.
+	 */
+	private boolean flattened;
+
 	public Val set(float x) {
 		return scalars(1, false, x, 0.0F, 0.0F, 0.0F);
 	}
@@ -83,18 +93,18 @@ public final class Val {
 
 	public Val set(Matrix3fc m) {
 		this.mat3.set(m);
-		this.mat3.get(this.floats);
 		this.rank = 9;
 		this.integral = false;
+		this.flattened = false;
 
 		return this;
 	}
 
 	public Val set(Matrix4fc m) {
 		this.mat4.set(m);
-		this.mat4.get(this.floats);
 		this.rank = 16;
 		this.integral = false;
+		this.flattened = false;
 
 		return this;
 	}
@@ -112,6 +122,7 @@ public final class Val {
 		this.floats[7] = scale;
 		this.rank = 8;
 		this.integral = false;
+		this.flattened = true;
 
 		return this;
 	}
@@ -126,7 +137,13 @@ public final class Val {
 	}
 
 	public float f(int component) {
-		return component < this.rank ? this.floats[component] : 0.0F;
+		if (component >= this.rank) {
+			return 0.0F;
+		}
+
+		flatten();
+
+		return this.floats[component];
 	}
 
 	public int i(int component) {
@@ -134,9 +151,13 @@ public final class Val {
 			return 0;
 		}
 
-		return this.integral && component < this.ints.length
-				? this.ints[component]
-				: (int) this.floats[component];
+		if (this.integral && component < this.ints.length) {
+			return this.ints[component];
+		}
+
+		flatten();
+
+		return (int) this.floats[component];
 	}
 
 	/** Only meaningful at rank 16. */
@@ -149,6 +170,24 @@ public final class Val {
 		return this.mat3;
 	}
 
+	/**
+	 * The matrix into the flat array, on the one road that reads it there and never before: the
+	 * columns of a mat3 are three long and those of a mat4 are four, and both land where the
+	 * component readers above expect them.
+	 */
+	private void flatten() {
+		if (this.flattened) {
+			return;
+		}
+
+		this.flattened = true;
+		if (this.rank == 9) {
+			this.mat3.get(this.floats);
+		} else {
+			this.mat4.get(this.floats);
+		}
+	}
+
 	private Val scalars(int rank, boolean integral, float x, float y, float z, float w) {
 		this.floats[0] = x;
 		this.floats[1] = y;
@@ -156,6 +195,7 @@ public final class Val {
 		this.floats[3] = w;
 		this.rank = rank;
 		this.integral = integral;
+		this.flattened = true;
 
 		return this;
 	}

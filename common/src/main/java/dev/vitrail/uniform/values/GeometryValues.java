@@ -10,8 +10,6 @@ import dev.vitrail.uniform.WorldState;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
-import java.util.Set;
-
 /**
  * The fixed function state of a pass drawn over the world rather than over a quad, and the one
  * name outside it whose answer depends on which of the two a program is.
@@ -74,7 +72,9 @@ public final class GeometryValues {
 	 * write {@code [1]}. It is written down rather than fixed because fixing it belongs to the chunk
 	 * prologue, which is where the aliasing is missing.
 	 */
-	private static final Set<Integer> LIGHTMAP_UNITS = Set.of(1, 2);
+	private static boolean lightmapUnit(int element) {
+		return element == 1 || element == 2;
+	}
 
 	/**
 	 * What {@code gl_TextureMatrix[1]} held when the game still had a fixed function pipeline, and
@@ -254,7 +254,7 @@ public final class GeometryValues {
 
 			@Override
 			public void read(WorldState world, Val out, int element) {
-				out.set(LIGHTMAP_UNITS.contains(element) ? LIGHTMAP_TEXTURE_MATRIX : IDENTITY);
+				out.set(lightmapUnit(element) ? LIGHTMAP_TEXTURE_MATRIX : IDENTITY);
 			}
 		});
 	}
