@@ -8,6 +8,8 @@
 	},
 	"client": [
 		"ArenaAggregatorMixin",
+		"BiomeClimateAccessor",
+		"BiomeMixin",
 		"BiomesMixin",
 		"BlockEntityRenderDispatcherMixin",
 		"BlockEntityRenderStateAccessor",

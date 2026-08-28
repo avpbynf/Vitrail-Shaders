@@ -924,6 +924,7 @@ public final class FrameState implements WorldState {
 					case RAIN -> 1;
 					case SNOW -> 2;
 				};
+		this.rainfall = ((BiomeHumidity) (Object) holder.value()).vitrail$downfall();
 		this.temperature = holder.value().getBaseTemperature();
 	}
 
@@ -1225,12 +1226,18 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
-	 * Zero, and it stays zero here. Vanilla has no accessor at all: {@code Biome.climateSettings}
-	 * is private and there is no {@code getDownfall}. The only public route is NeoForge's
-	 * modifiable copy of the biome, and this module compiles against vanilla alone on purpose, so
-	 * that the Fabric module can reuse it as it stands. Answering it means moving the read to the
-	 * loader side, which is a piece of plumbing rather than a question, and not inventing a getter
-	 * that does not exist.
+	 * The biome's own humidity, and not the weather: {@code rainStrength} and {@code wetness} carry
+	 * whether it is raining, this one is the constant a desert and a swamp differ by. Iris publishes
+	 * the same field ({@code uniforms/BiomeUniforms.java:50-51}), off the same biome at the player's
+	 * block, so a pack reads one number on both engines.
+	 * <p>
+	 * There is still no getter, and there never was one to wait for: the value comes through
+	 * {@link BiomeHumidity}, which the biome answers because a mixin puts it there. That this module
+	 * compiles against vanilla alone was never what blocked it, and saying so here is what kept the
+	 * gap alive: a mixin onto a vanilla class is available here like any other, {@code BiomesMixin}
+	 * having stood beside this one doing exactly that the whole time. What the belief cost is a
+	 * nought that arrived through a registered source, which reads as measured rather than missing,
+	 * and told any pack scaling puddles or fog by humidity that the whole world was a desert.
 	 */
 	@Override
 	public float rainfall() {

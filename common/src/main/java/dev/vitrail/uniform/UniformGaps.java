@@ -105,8 +105,6 @@ public final class UniformGaps {
 		reasons.put("currentColorSpace", "there is no settings screen to choose it from, which is "
 				+ "also what Iris answers outside the mode concerned");
 
-		reasons.put("rainfall",
-				"vanilla has no accessor for it and this module compiles against vanilla alone");
 		reasons.put("constantMood", "Iris reads it through an interface it mixes into the player");
 
 		return Map.copyOf(reasons);
