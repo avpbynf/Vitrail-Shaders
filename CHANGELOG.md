@@ -150,6 +150,12 @@ what the next one holds.
   the pack's passes were refused for two outputs on one slot. The pack's own declaration takes the
   slot now.
 
+- **An effect a pack carries from one frame to the next no longer alternates between two images
+  while the view moves.** The two halves of such a target were exchanged at the end of the frame
+  instead of one being copied over the other, which is the same thing only where the frame wrote
+  the whole target. Where it wrote part of it, or where the pass that writes it did not run, the
+  pack was handed one image on one frame and the previous one on the next. It is steady standing
+  still and shows as the view moves, so it reads as lighting that slides.
 - **A greyscale picture a pack ships is read as the pack wrote it.** Every grey image came out
   lighter than the file, its darks lifted towards white, because the decoder converted the picture
   out of its own colour space instead of taking the bytes as they were written. A pack that compares

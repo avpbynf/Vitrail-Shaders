@@ -132,16 +132,16 @@ accident to debug.
 
 ### A copy is not a conversion
 
-The one copy left on a target is between the two halves of the shadow depth pair, where the format
-is the same on both sides by construction. The doubled colour targets are not copied at all: the two
-surfaces swap names at the end of the frame, and only for those still flipped when the last pass has
-run and kept between frames, which is the same fact for nothing. Copying between two *different*
-formats passes every check and hands back nonsense: the texture copy reinterprets bits rather than
-converting them, and what checks it on the way in depends on the loader. The bare game checks no
-format at all; the NeoForge build checks that the two agree on whether they carry a colour aspect,
-and that they are the same format where the source carries depth or stencil. Two colour formats pass
-either way. The game's colour target is eight-bit RGBA and a typical pack target is a packed float
-triple; both are thirty-two bits per pixel and hold completely different things.
+A copy on a target is always between two images of one format by construction: the two halves of
+the shadow depth pair, the two halves of a doubled colour target still flipped when the last pass
+has run and kept between frames, or a shadow map and the store a frame keeps it in. Copying between
+two *different* formats passes every check
+and hands back nonsense: the texture copy reinterprets bits rather than converting them, and what
+checks it on the way in depends on the loader. The bare game checks no format at all; the NeoForge
+build checks that the two agree on whether they carry a colour aspect, and that they are the same
+format where the source carries depth or stencil. Two colour formats pass either way. The game's
+colour target is eight-bit RGBA and a typical pack target is a packed float triple; both are
+thirty-two bits per pixel and hold completely different things.
 
 This is why the game's image is brought into a pack target by a **full-screen draw** and never by a
 texture copy.
