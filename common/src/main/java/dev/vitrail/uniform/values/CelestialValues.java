@@ -44,6 +44,27 @@ public final class CelestialValues {
 	private static final Matrix4f SCRATCH = new Matrix4f();
 	private static final Vector4f POSITION = new Vector4f();
 
+	/**
+	 * The four eye space answers as they were last built, each beside the inputs it was built from.
+	 * <p>
+	 * A name is asked for once per program that declares it and a pack has many programs, so the
+	 * rotations below were built again and again inside one frame out of numbers that had not moved
+	 * between two of the asks. {@link Settled} carries what the key is and why it is the inputs
+	 * rather than the frame. What belongs here is that these four do not move together, so they do
+	 * not share one: {@code upPosition} turns on the camera alone and settles again the instant the
+	 * head stops turning, the sun and the moon each carry an angle of their own, and the flash
+	 * carries two angles nothing else reads.
+	 */
+	private static final Settled SUN = new Settled();
+	private static final Settled MOON = new Settled();
+	private static final Settled UP = new Settled();
+	private static final Settled FLASH = new Settled();
+
+	private static final Vector3f SUN_POSITION = new Vector3f();
+	private static final Vector3f MOON_POSITION = new Vector3f();
+	private static final Vector3f UP_POSITION = new Vector3f();
+	private static final Vector3f FLASH_POSITION = new Vector3f();
+
 	private CelestialValues() {
 	}
 
@@ -55,14 +76,7 @@ public final class CelestialValues {
 
 		builder.add("sunPosition", UniformShape.VEC3, (world, out) -> celestial(world, true, out));
 		builder.add("moonPosition", UniformShape.VEC3, (world, out) -> celestial(world, false, out));
-		builder.add("upPosition", UniformShape.VEC3, (world, out) -> {
-			// The same fixed quarter turn as the sky, and deliberately not the sky angle: this one
-			// is where up is, not where the sun is.
-			SCRATCH.set(world.gbufferModelView()).rotateY((float) Math.toRadians(-90.0F));
-			POSITION.set(0.0F, 100.0F, 0.0F, 0.0F);
-			SCRATCH.transform(POSITION);
-			out.set(POSITION.x, POSITION.y, POSITION.z);
-		});
+		builder.add("upPosition", UniformShape.VEC3, CelestialValues::up);
 
 		// The pack has to have opted in for this one, and not for the position below it. Where the
 		// light comes from is something a pack is written around; where the flash is is a fact.
@@ -152,29 +166,60 @@ public final class CelestialValues {
 	}
 
 	/**
+	 * The same fixed quarter turn as the sky, and deliberately not the sky angle: this one is where
+	 * up is, not where the sun is. The camera is the whole of what it turns on.
+	 */
+	private static void up(WorldState world, Val out) {
+		if (!UP.holds(world.gbufferModelView())) {
+			SCRATCH.set(world.gbufferModelView()).rotateY((float) Math.toRadians(-90.0F));
+			POSITION.set(0.0F, 100.0F, 0.0F, 0.0F);
+			SCRATCH.transform(POSITION);
+			UP_POSITION.set(POSITION.x, POSITION.y, POSITION.z);
+		}
+
+		out.set(UP_POSITION);
+	}
+
+	/**
 	 * The transformation the sky renderer applies, moved forward so that a pack can read the result
 	 * before vanilla performs it. The angle is the <b>raw</b> attribute, not the wrapped one the
 	 * {@code sunAngle} uniform carries.
+	 * <p>
+	 * Built again only when the camera or one of the two angles has moved, which is the whole of
+	 * what it is a function of.
 	 */
 	private static void celestial(WorldState world, boolean sun, Val out) {
-		SCRATCH.set(world.gbufferModelView())
-				.rotateY((float) Math.toRadians(-90.0F))
-				.rotateZ((float) Math.toRadians(world.sunPathRotation()))
-				.rotateX((float) Math.toRadians(
-						sun ? world.sunAngleDegrees() : world.moonAngleDegrees()));
+		Settled settled = sun ? SUN : MOON;
+		Vector3f held = sun ? SUN_POSITION : MOON_POSITION;
+		float angle = sun ? world.sunAngleDegrees() : world.moonAngleDegrees();
 
-		POSITION.set(0.0F, 100.0F, 0.0F, 1.0F);
-		SCRATCH.transform(POSITION);
-		out.set(POSITION.x, POSITION.y, POSITION.z);
+		if (!settled.holds(world.gbufferModelView(), world.sunPathRotation(), angle)) {
+			SCRATCH.set(world.gbufferModelView())
+					.rotateY((float) Math.toRadians(-90.0F))
+					.rotateZ((float) Math.toRadians(world.sunPathRotation()))
+					.rotateX((float) Math.toRadians(angle));
+
+			POSITION.set(0.0F, 100.0F, 0.0F, 1.0F);
+			SCRATCH.transform(POSITION);
+			held.set(POSITION.x, POSITION.y, POSITION.z);
+		}
+
+		out.set(held);
 	}
 
+	/** The camera and the two flash angles, on the same terms as {@link #celestial}. */
 	private static void endFlash(WorldState world, Val out) {
-		SCRATCH.set(world.gbufferModelView())
-				.rotateY((float) Math.toRadians(180.0F - world.endFlashYAngleDegrees()))
-				.rotateX((float) Math.toRadians(-90.0F - world.endFlashXAngleDegrees()));
+		if (!FLASH.holds(world.gbufferModelView(),
+				world.endFlashXAngleDegrees(), world.endFlashYAngleDegrees())) {
+			SCRATCH.set(world.gbufferModelView())
+					.rotateY((float) Math.toRadians(180.0F - world.endFlashYAngleDegrees()))
+					.rotateX((float) Math.toRadians(-90.0F - world.endFlashXAngleDegrees()));
 
-		POSITION.set(0.0F, 100.0F, 0.0F, 0.0F);
-		SCRATCH.transform(POSITION);
-		out.set(POSITION.x, POSITION.y, POSITION.z);
+			POSITION.set(0.0F, 100.0F, 0.0F, 0.0F);
+			SCRATCH.transform(POSITION);
+			FLASH_POSITION.set(POSITION.x, POSITION.y, POSITION.z);
+		}
+
+		out.set(FLASH_POSITION);
 	}
 }

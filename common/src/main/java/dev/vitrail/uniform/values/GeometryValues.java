@@ -112,8 +112,25 @@ public final class GeometryValues {
 
 	/** The six units that are not the light map's, which the fixed function pipeline left alone. */
 	private static final Matrix4f IDENTITY = new Matrix4f();
+
+	/**
+	 * The two matrices this class composes, as they were last built, each beside the matrices it was
+	 * built from. A name is asked for once per program that declares it and a pack has many
+	 * programs, so the product and the inverse were formed again and again inside one frame out of
+	 * matrices that had not moved between two of the asks.
+	 * <p>
+	 * <strong>What settles them is the PASS's pair and never the frame, which is why
+	 * {@link Settled} asks about inputs and not about a frame number.</strong> The sky, the hand and
+	 * the entities each set a matrix of their own, so both of these really do change several times
+	 * inside one frame. Settled for the frame instead, they would answer the sky and the hand with
+	 * whichever pass reached them first: a sky vertex would be placed by the camera's product rather
+	 * than by the one the game drew it with, and a pack's {@code ftransform()} would stop being the
+	 * matrix its own {@code gl_ProjectionMatrix * gl_ModelViewMatrix} is.
+	 */
 	private static final Matrix4f MODEL_VIEW_PROJECTION = new Matrix4f();
+	private static final Settled MODEL_VIEW_PROJECTION_INPUTS = new Settled();
 	private static final Matrix3f NORMAL = new Matrix3f();
+	private static final Settled NORMAL_INPUTS = new Settled();
 
 	private GeometryValues() {
 	}
@@ -185,15 +202,25 @@ public final class GeometryValues {
 		// only reader. Left to right, so that the pack's own gl_ProjectionMatrix * gl_ModelViewMatrix
 		// and its ftransform() are the same matrix, which is why this reads the pass's projection and
 		// not the frame's: the two factors have to be the two the pack would have multiplied.
-		builder.add("of_ModelViewProjectionMatrix", UniformShape.MAT4, (world, out) ->
-				out.set(MODEL_VIEW_PROJECTION.set(world.passProjection()).mul(world.passModelView())));
+		builder.add("of_ModelViewProjectionMatrix", UniformShape.MAT4, (world, out) -> {
+			if (!MODEL_VIEW_PROJECTION_INPUTS.holds(world.passProjection(), world.passModelView())) {
+				MODEL_VIEW_PROJECTION.set(world.passProjection()).mul(world.passModelView());
+			}
+
+			out.set(MODEL_VIEW_PROJECTION);
+		});
 
 		// The inverse transpose of the model view's rotation. The level's model view is a pure
 		// rotation, so this is its transpose, but it is computed rather than assumed: a shadow pass
 		// or a pack directive could put a scale in it, and normalising a normal afterwards hides
 		// the difference exactly until it does not.
-		builder.add("of_NormalMatrix", UniformShape.MAT3, (world, out) ->
-				out.set(NORMAL.set(world.passModelView()).invert().transpose()));
+		builder.add("of_NormalMatrix", UniformShape.MAT3, (world, out) -> {
+			if (!NORMAL_INPUTS.holds(world.passModelView())) {
+				NORMAL.set(world.passModelView()).invert().transpose();
+			}
+
+			out.set(NORMAL);
+		});
 
 		// Six identities and the light map's twice, where the engine table answers eight identities.
 		// That is the whole of the difference between a pass drawn over the world and one drawn over a
