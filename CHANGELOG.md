@@ -15,6 +15,10 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack written with the old shadow lookups could be translated wrong, without a word.**
+  Wrapping those lookups shifted the translator's own note of which words are macro names,
+  which could rename one of them or leave a local variable reading a global value instead.
+  Nothing in the tested packs reached it.
 - **A pack that changes with how humid a biome is no longer sees a desert everywhere.** The
   `rainfall` value handed to shaders was always nought, so puddles, wetness and fog that
   scale with humidity stayed at their driest in a swamp and a jungle alike.
