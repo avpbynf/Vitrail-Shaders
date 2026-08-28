@@ -105,7 +105,7 @@ texture is used as a colour attachment is the same as the one passed when it is 
 per-texture layout tracking anywhere, so there is nothing that can drift out of step from one frame
 to the next.
 
-On top of that, submitting a render pass ends it with a **full memory barrier**: all commands to
+On top of that, closing a render pass ends it with a **full memory barrier**: all commands to
 all commands, memory read and memory write. The other operations that touch textures (clearing,
 copying, uploading) end the same way. That is still what the game does for its own passes.
 
@@ -130,7 +130,8 @@ has named the synchronisation rather than the pass that shows it.
 
 The practical consequence is that reading in pass N+1 what pass N wrote still requires no
 synchronisation code of our own: close, open, bind. But the barrier exists only if the pass is
-genuinely closed, since it is closing that submits. A pass left open by an early return or an
+genuinely closed, closing being what records it: `vkCmdEndRenderingKHR` and then the barrier, on the
+command buffer the frame submits once at its end. A pass left open by an early return or an
 exception path skips its barrier and stays open besides, so passes belong in try-with-resources
 without exception.
 
