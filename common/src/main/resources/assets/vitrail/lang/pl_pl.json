@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "Maksymalna odległość cieni",
 	"options.vitrail.shadow_distance_tooltip": "Umożliwia zmianę maksymalnej odległości wyświetlania cieni. Teren i obiekty znajdujące się poza tą odległością nie będą rzucać cieni. Zmniejszenie odległości cieni może znacznie zwiększyć wydajność.",
 	"options.vitrail.shadow_distance_forced": "Twój aktualny pakiet Shaderów ma już ustawioną odległość renderowania cieni; nie możesz jej zmienić.",
+	"options.vitrail.shadow_map_scale": "Skala mapy cieni",
+	"options.vitrail.shadow_map_scale_tooltip": "Określa, jaka część mapy cieni żądanej przez paczkę shaderów jest faktycznie rysowana, jako procent każdego boku. Paczka dostaje mniejszy rozmiar i wszystko na nim wylicza, więc niższe wartości czynią krawędzie cieni mniej wyraźnymi: miększymi, jeśli paczka wygładza swoje cienie, a bardziej kanciastymi, jeśli nie. Rysowanie świata od strony światła kosztuje mniej przy niższych wartościach, a zasięg pozostaje ten sam. Przy 100% paczka dostaje dokładnie tę mapę, o którą prosiła, i nic się nie zmienia. Zmiana tego ustawienia przeładowuje paczkę shaderów.",
 	"options.vitrail.render_scale": "Skala renderowania FSR",
 	"options.vitrail.render_scale_tooltip": "Określa rozdzielczość, w jakiej renderowany jest świat, jako procent rozmiaru okna. Gotowy obraz jest skalowany w górę przez AMD FSR 1.0 przed interfejsem. Niższe wartości mogą znacznie poprawić wydajność przy aktywnej paczce shaderów, kosztem części ostrości.",
 	"pack.vitrail.select_title": "Wybierz",

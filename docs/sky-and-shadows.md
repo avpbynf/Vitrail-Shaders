@@ -17,6 +17,21 @@ paint the world, seen from the light, over the finished image. For the same reas
 arrives in the middle of a session the map is emptied rather than left frozen: a stale map is
 served to the pack as if it were current.
 
+### The map is square, at the size the pack asked for
+
+The resolution is the pack's own directive, 1024 unless it says otherwise, and it is the one image
+of the frame that is not sized from the window: it does not grow with the screen and it does not
+shrink with the render scale.
+
+A player can ask for a fraction of it with the Shadow Map Scale slider, which is off by default.
+The slider rewrites the pack's own declaration of the size before a line of it is translated, so
+the pack computes its filter radius, its bias and its texel coordinates against the map it really
+gets: where the pack smooths its shadows a smaller map is a wider penumbra rather than a coarser
+one, and where it takes a single sample there is no radius to widen and the edge simply coarsens.
+Moving the slider reloads the pack. What that trade is worth against the others is [The render
+scale](render-scale.md); the engine says at load when the setting is in force, and the line where
+the map is allocated says the size it came out at.
+
 ### The light view is a rotation about the camera
 
 The shadow frustum is centred on the player, not on the sun. This matters when reading a pack:

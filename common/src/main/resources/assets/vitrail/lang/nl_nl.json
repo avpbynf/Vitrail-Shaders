@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "Maximale Schaduwafstand",
 	"options.vitrail.shadow_distance_tooltip": "Hiermee kunt u de maximale afstand voor schaduwen wijzigen. Terrein en entiteiten buiten deze afstand zullen geen schaduwen werpen. Het verkleinen van de Schaduwafstand kan de prestaties aanzienlijk verbeteren.",
 	"options.vitrail.shadow_distance_forced": "Uw huidig shader-pack heeft al een weergaveafstand voor schaduwen ingesteld; je kunt het niet veranderen.",
+	"options.vitrail.shadow_map_scale": "Schaduwkaartschaal",
+	"options.vitrail.shadow_map_scale_tooltip": "Bepaalt hoeveel van de door het shaderpakket gevraagde schaduwkaart daadwerkelijk wordt getekend, als percentage per zijde. Het pakket krijgt de kleinere maat en rekent alles daarmee uit, dus lagere waarden maken schaduwranden minder scherp: zachter als het pakket zijn schaduwen gladstrijkt, en blokkeriger als het dat niet doet. De wereld vanuit het licht tekenen kost minder bij lagere waarden, en het bereik blijft gelijk. Bij 100% krijgt het pakket precies de kaart waar het om vroeg en verandert er niets. Dit wijzigen laadt het shaderpakket opnieuw.",
 	"options.vitrail.render_scale": "FSR-renderschaal",
 	"options.vitrail.render_scale_tooltip": "Bepaalt de resolutie waarop de wereld wordt gerenderd, als percentage van de venstergrootte. Het voltooide beeld wordt vóór de interface opgeschaald met AMD FSR 1.0. Lagere waarden kunnen de framerate met een actief shaderpakket flink verbeteren, ten koste van wat scherpte.",
 	"pack.vitrail.select_title": "Selecteren",

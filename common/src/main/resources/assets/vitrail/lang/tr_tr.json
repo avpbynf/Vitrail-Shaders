@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "Mak. Gölge Uzaklığı",
 	"options.vitrail.shadow_distance_tooltip": "Gölgeler için maksimum ucaklığı değiştirmeye yarar. Bu uzaklığın ötesindeki araziye ve varlıklara gölge uygulanmaz. Gölge uzaklığını azaltmak, performansı önemli ölçüde arttırabilir.",
 	"options.vitrail.shadow_distance_forced": "Mevcut shader paketiniz, zaten gölgeler için ayarlı bir görüntüleme uzaklığına sahip; bunu değiştiremezsin.",
+	"options.vitrail.shadow_map_scale": "Gölge Haritası Ölçeği",
+	"options.vitrail.shadow_map_scale_tooltip": "Gölgelendirici paketinin istediği gölge haritasının ne kadarının gerçekten çizileceğini, her kenar için yüzde olarak belirler. Paket küçültülmüş boyutu alır ve her şeyi ona göre hesaplar, bu yüzden düşük değerler gölge kenarlarını daha az belirgin yapar: paket gölgelerini yumuşatıyorsa daha yumuşak, yumuşatmıyorsa daha köşeli. Dünyayı ışıktan çizmek düşük değerlerde daha ucuzdur ve menzil aynı kalır. 100% değerinde paket tam olarak istediği haritayı alır ve hiçbir şey değişmez. Bunu değiştirmek gölgelendirici paketini yeniden yükler.",
 	"options.vitrail.render_scale": "FSR İşleme Ölçeği",
 	"options.vitrail.render_scale_tooltip": "Dünyanın işlendiği çözünürlüğü pencere boyutunun yüzdesi olarak denetler. Bitmiş görüntü arayüzden önce AMD FSR 1.0 ile büyütülür. Daha düşük değerler, bir shader paketi etkinken kare hızını belirgin şekilde artırabilir, karşılığında biraz netlik kaybedilir.",
 	"pack.vitrail.select_title": "Seç",

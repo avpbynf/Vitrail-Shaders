@@ -15,6 +15,7 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
+import dev.vitrail.pack.option.SettingSet;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.settings.PackFile;
@@ -647,6 +648,15 @@ public final class PackChain {
 			// below that draw nothing need no line of their own to keep the world at the window.
 			shadowDistance = askedFor.shadowDistance();
 			RenderScale.wanted(askedFor.renderScale());
+			// Here and not lower down, because it is read during the expansion of the pack's very
+			// first unit: the shadow map's size is a declaration of the pack's own text, and the
+			// scale is applied by rewriting that declaration rather than by allocating something
+			// else, so it has to be in force before a line is expanded.
+			// Pushed here and said further down. This is the one place that knows the setting
+			// before anything is expanded, which is what it has to be in force for, but the roads
+			// below reach an empty folder and a pack switched off as well, and there is nothing
+			// to rewrite on either.
+			SettingSet.shadowMapScale(askedFor.shadowMapScale());
 
 			// Both ways out of the next two blocks end with no pack drawing anything, and NEITHER mesh
 			// carries what a pack reads once none wants it: said here as well as on the road that
@@ -813,6 +823,15 @@ public final class PackChain {
 			// Nothing below may keep a path taken from it. ShaderPackSource says why: closing the
 			// zip invalidates every path out of it, and what that leaves is a
 			// ClosedFileSystemException on an unrelated read much later.
+			if (askedFor.shadowMapScale() < PackFile.MAX_SHADOW_MAP_SCALE) {
+				// Under the pack rather than beside the allocation, because the map's own line knows
+				// one number and not where it came from. What is said is what the engine does, and
+				// the size in force is the pack's own setting for the name where it has one.
+				Vitrail.logger().info("The shadow map scale stands at {}%, so the size in force for this pack's "
+					+ "shadow map, its own setting for it included, is rewritten to that fraction wherever it "
+					+ "is written as a plain number", askedFor.shadowMapScale());
+			}
+
 			try (OpenedPack opened = OpenedPack.open(pack, chosen, settings.profile())) {
 				// The world decides the directory, and the pack decides which world that is: a folder
 				// may be named anything and mapped in dimension.properties, so the name is read from
@@ -1302,6 +1321,48 @@ public final class PackChain {
 	}
 
 	/**
+	 * How much of the shadow map the pack asked for is actually drawn, as the percentage the player
+	 * set. Answered from the last read of {@code pack.txt} like the two above. Nothing about the
+	 * shadow map is decided from this: the number is applied when the declaration of the size in
+	 * force is rewritten, before a line of the pack is translated. What reads this is the screen
+	 * that offers it, and the load that announces the setting and hands it to the translation.
+	 */
+	public static int shadowMapScale() {
+		return askedFor.shadowMapScale();
+	}
+
+	/**
+	 * Takes a new shadow map scale and puts it away, on the shape of {@link #renderScale(Path, int)}
+	 * and for its reasons: taken on first, so a folder that cannot be written still moves this
+	 * session, and the file read before it is written, so the pack lines and a hand edit survive the
+	 * slider.
+	 * <p>
+	 * <strong>Unlike the render scale, this asks for the pack to be read again, and it has to.</strong>
+	 * The size is applied by rewriting the declaration the pack makes of it, so it lives in
+	 * translated text and not in an allocation a later frame could redo. A map remade under
+	 * programs translated against the old number is the whole defect this setting exists to
+	 * avoid. The reload is asked for rather than performed, on the shape the settings screen
+	 * already uses, so nothing is rebuilt inside a slider's own frame.
+	 */
+	public static void shadowMapScale(Path gameDirectory, int percent) {
+		askedFor = askedFor.withShadowMapScale(percent);
+		// Off the record and not off the argument, which is what the two settings either side of
+		// this one do: the record is where the range is enforced, so an out of range percentage
+		// would otherwise rewrite the declaration at the raw number while every reader of the
+		// setting, the allocation's own line included, named the bounded one.
+		SettingSet.shadowMapScale(askedFor.shadowMapScale());
+
+		Path file = packFile(gameDirectory);
+		try {
+			PackFile.write(file, PackFile.read(file).withShadowMapScale(percent));
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().error("Vitrail could not write the shadow map scale to {}", file, e);
+		}
+
+		reload(gameDirectory);
+	}
+
+	/**
 	 * Rebuilds everything when the world under the pack has changed, which is not the same thing as
 	 * a file having changed and is the only reload nobody can ask for.
 	 * <p>
@@ -1358,7 +1419,10 @@ public final class PackChain {
 	 * Render thread only: {@link #release()} closes GPU buffers and hands back the colour targets,
 	 * which has to happen where {@code draw} runs and outside any render pass. The settings screen
 	 * calls this from Apply, which covers a pack being picked, from Reset, and from its own reload
-	 * button; the key that reads a pack again calls it from the client tick. All of them go through
+	 * button; the key that reads a pack again calls it from the client tick; and the shadow map
+	 * scale reaches it from its own setter, because the size it moves lives in translated text.
+	 * That last one is applied from the video settings screen, which calls the setter once when
+	 * the screen is applied rather than on each notch of the slider. All of them go through
 	 * here rather than each having a path of its own, so that what the screen applies and what a hand
 	 * edit applies cannot drift apart. The world moving under the pack reads again too, and it is the
 	 * one caller that does not come through here: see {@link #readAgain}.

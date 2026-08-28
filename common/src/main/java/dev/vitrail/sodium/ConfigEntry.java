@@ -75,6 +75,10 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	private static final Identifier RENDER_SCALE =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "render_scale");
 
+	/** The fraction of the shadow map the pack asked for that is drawn, beside both. */
+	private static final Identifier SHADOW_MAP_SCALE =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "shadow_map_scale");
+
 	/** Which backend a startup that ended badly comes back to. */
 	private static final Identifier GRAPHICS_API =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "graphics_api");
@@ -102,6 +106,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 						.setName(Component.translatable("options.videoTitle"))
 						.addOptionGroup(builder.createOptionGroup()
 								.addOption(shadowDistance(builder))
+								.addOption(shadowMapScale(builder))
 								.addOption(renderScale(builder))
 								.addOption(graphicsApi(builder))))
 				// RGSS is shader code, written into the game's own terrain shader and into Sodium's,
@@ -155,6 +160,36 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				.setValueFormatter(percent -> Component.literal(percent + "%"))
 				// Sodium refuses to build an option without one, at the loading screen and not at
 				// compile time. The binding above has already written pack.txt.
+				.setStorageHandler(() -> {})
+				.setImpact(OptionImpact.HIGH);
+	}
+
+	/**
+	 * How much of the shadow map the pack asked for is drawn, as a percentage on each axis, stored
+	 * in {@code pack.txt} beside the render scale above.
+	 * <p>
+	 * <strong>It is a slider of its own and not a consequence of the one above it</strong>, and the
+	 * reason is a pack's own arithmetic. The map is the one image of the frame this engine does not
+	 * size from the window, because a pack picks its filter radius as a fraction of the map it was
+	 * told it has: rewriting that number is exactly how this works, and it makes a smaller map a
+	 * wider penumbra, an image its author never saw and never approved. Dragging it along behind
+	 * the render scale would hand that to
+	 * anybody who only wanted the world smaller, in silence. So it defaults to the whole map, where
+	 * nothing of it runs at all, and a player who wants what it trades has to say so.
+	 * <p>
+	 * The step of five, the literal percent sign and the empty storage handler are the slider above
+	 * this one's, for its reasons, written there.
+	 */
+	private static OptionBuilder shadowMapScale(ConfigBuilder builder) {
+		return builder.createIntegerOption(SHADOW_MAP_SCALE)
+				.setName(Component.translatable(ScreenText.SHADOW_MAP_SCALE))
+				.setTooltip(_ -> Component.translatable(ScreenText.SHADOW_MAP_SCALE_TOOLTIP))
+				.setDefaultValue(PackFile.DEFAULT_SHADOW_MAP_SCALE)
+				.setRange(new Range(PackFile.MIN_SHADOW_MAP_SCALE, PackFile.MAX_SHADOW_MAP_SCALE, 5))
+				.setBinding(percent -> PackChain.shadowMapScale(Vitrail.platform().gameDirectory(),
+								percent),
+						PackChain::shadowMapScale)
+				.setValueFormatter(percent -> Component.literal(percent + "%"))
 				.setStorageHandler(() -> {})
 				.setImpact(OptionImpact.HIGH);
 	}

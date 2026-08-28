@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "Máxima Distancia de Sombras",
 	"options.vitrail.shadow_distance_tooltip": "Te permite cambiar la distáncia máxima para las sombras. El terreno y las entidades tras esta distáncia no emitirán sombras. Reducir la distáncia de sombras puede incrementar el rendimiento significativamente.",
 	"options.vitrail.shadow_distance_forced": "Tu shader pack ya ha establecido una distáncia de renderizado para las sombreas; no puedes cambiarla.",
+	"options.vitrail.shadow_map_scale": "Escala del mapa de sombras",
+	"options.vitrail.shadow_map_scale_tooltip": "Controla qué parte del mapa de sombras que pidió el paquete de shaders se dibuja realmente, como porcentaje en cada lado. El paquete recibe el tamaño reducido y calcula todo con él, así que los valores bajos hacen los bordes de sombra menos definidos: más suaves si el paquete suaviza sus sombras, y más toscos si no. Dibujar el mundo desde la luz cuesta menos con valores bajos, y el alcance no cambia. Al 100% el paquete obtiene exactamente el mapa que pidió y nada cambia. Cambiar esto recarga el paquete de shaders.",
 	"options.vitrail.render_scale": "Escala de renderizado FSR",
 	"options.vitrail.render_scale_tooltip": "Controla la resolución a la que se renderiza el mundo, como porcentaje del tamaño de la ventana. La imagen final se amplía con AMD FSR 1.0 antes de la interfaz. Valores más bajos pueden mejorar mucho el rendimiento con un paquete de shaders activo, a costa de algo de nitidez.",
 	"pack.vitrail.select_title": "Seleccionar",
