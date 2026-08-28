@@ -344,27 +344,43 @@ public final class StorageImages implements AutoCloseable {
 	 * The move itself, in two copies through the image's own scratch because Vulkan leaves a copy
 	 * whose source and destination regions overlap undefined, and a shift of one plane overlaps
 	 * everywhere.
+	 * <p>
+	 * Both copies carry the SAME region, the one the second reads, and the scratch keeps whatever an
+	 * earlier move left outside it: no reader of any kind ever names the scratch, so a texel there
+	 * that the second copy will not read is a texel the first one has no reason to write. That is
+	 * {@code |d|} planes an axis, a plane at a walking pace and a large part of the volume at speed.
 	 */
 	private static void move(VkCommandBuffer commands, MemoryStack stack, Allocated image,
 			int dx, int dy, int dz) {
-		VkImageCopy.Buffer whole = VkImageCopy.calloc(1, stack);
-		layers(whole.get(0));
-		whole.get(0).extent().set(image.width, image.height, image.depth);
+		// The reader wants index p to hold what index p + d holds, d being the blocks the camera has
+		// crossed since the write: so the source starts d planes in where the camera moved forward,
+		// and the destination does where it moved back. Written once and used by both copies, which
+		// is what makes the pair agree by construction rather than by two readings of the same
+		// arithmetic.
+		int fromX = Math.max(dx, 0);
+		int fromY = Math.max(dy, 0);
+		int fromZ = Math.max(dz, 0);
+		int spanX = image.width - Math.abs(dx);
+		int spanY = image.height - Math.abs(dy);
+		int spanZ = image.depth - Math.abs(dz);
+
+		VkImageCopy.Buffer kept = VkImageCopy.calloc(1, stack);
+		VkImageCopy carried = kept.get(0);
+		layers(carried);
+		carried.srcOffset().set(fromX, fromY, fromZ);
+		carried.dstOffset().set(fromX, fromY, fromZ);
+		carried.extent().set(spanX, spanY, spanZ);
 		VK12.vkCmdCopyImage(commands, image.image, VK12.VK_IMAGE_LAYOUT_GENERAL,
-				image.scratch, VK12.VK_IMAGE_LAYOUT_GENERAL, whole);
+				image.scratch, VK12.VK_IMAGE_LAYOUT_GENERAL, kept);
 
 		GpuRecording.betweenTransfers(commands, stack);
 
-		// The reader wants index p to hold what index p + d holds, d being the blocks the camera
-		// has crossed since the write: so the source starts d planes in where the camera moved
-		// forward, and the destination does where it moved back.
 		VkImageCopy.Buffer shifted = VkImageCopy.calloc(1, stack);
 		VkImageCopy region = shifted.get(0);
 		layers(region);
-		region.srcOffset().set(Math.max(dx, 0), Math.max(dy, 0), Math.max(dz, 0));
+		region.srcOffset().set(fromX, fromY, fromZ);
 		region.dstOffset().set(Math.max(-dx, 0), Math.max(-dy, 0), Math.max(-dz, 0));
-		region.extent().set(image.width - Math.abs(dx), image.height - Math.abs(dy),
-				image.depth - Math.abs(dz));
+		region.extent().set(spanX, spanY, spanZ);
 		VK12.vkCmdCopyImage(commands, image.scratch, VK12.VK_IMAGE_LAYOUT_GENERAL,
 				image.image, VK12.VK_IMAGE_LAYOUT_GENERAL, shifted);
 	}
