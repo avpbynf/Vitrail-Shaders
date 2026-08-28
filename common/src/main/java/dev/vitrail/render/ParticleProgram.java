@@ -13,6 +13,7 @@ import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
 import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
@@ -163,6 +164,15 @@ final class ParticleProgram implements DumpedProgram {
 	 */
 	void bind(RenderPass pass) {
 		this.body.bind(pass);
+	}
+
+	/**
+	 * The same program over a mesh laid out by another mod.
+	 *
+	 * @see GeometryProgram#reshape
+	 */
+	RenderPipeline reshape(GpuDevice device, VertexFormat layout) {
+		return this.body.reshape(device, layout);
 	}
 
 	/** @see GeometryProgram#compile */
