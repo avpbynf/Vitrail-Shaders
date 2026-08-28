@@ -76,7 +76,14 @@ public final class TerrainMesh implements ChunkVertexType {
 	private static boolean broken;
 
 	/**
-	 * What the log last announced, and null until the first settle of a run.
+	 * What the pack had published the last time the log announced anything, and null until the first
+	 * settle of a run.
+	 * <p>
+	 * What the pack published and not what {@link #settle()} decided out of it, because the two part
+	 * on the road where a pack's programs declare Sodium's own elements and none of ours. The
+	 * decision is empty there, and it is empty again where no pack wants the terrain at all, so a key
+	 * taken from the decision would let one of those two roads follow the other without a word. They
+	 * are different lines and one of them is the answer to a question a log has to be able to answer.
 	 * <p>
 	 * Null and not the empty list, because the two would otherwise share their value: without the
 	 * difference, the first settle of a game nobody picked a pack in would find nothing changed and
@@ -210,11 +217,41 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * the pack's chunk programs far enough to know, and has already asked for the world to be rebuilt
 	 * if the answer moved. Nothing is decided here beyond turning that list into a layout.
 	 * <p>
+	 * <strong>"Already" is an ORDER, and it is a contract with {@code TerrainDraw.read} that nothing
+	 * in this class can enforce.</strong> That method is what fills the answer in, and it runs where
+	 * the pack is loaded; this runs where Sodium builds its chunk renderer. Read first, the mesh
+	 * follows the pack. Settled first, {@code TerrainDraw.carried} answers empty, the mesh stays at
+	 * Sodium's own twenty bytes, and the pack is not put away here but a world later: the first chunk
+	 * pass compares the format it was handed against what the programs declare, in
+	 * {@code TerrainProgram.carries}, and puts the whole pack away with an error naming two lists and
+	 * not the order that made them differ. That is why the empty branch below names the order among
+	 * its causes rather than leaving the log to be read backwards from the error.
+	 * <p>
+	 * What holds the order is two facts and neither is a check. The first load runs at client setup,
+	 * before any level exists, and Sodium reaches {@code initRenderer} only with a level. A reload
+	 * asked for by the settings screen or by the key runs on the render thread and asks for the
+	 * rebuild through {@code allChanged} rather than performing it, so the reading has returned
+	 * before the rebuild begins.
+	 * <p>
+	 * <strong>A dimension change runs the two the other way round, and what saves it is the second
+	 * rebuild.</strong> {@code Minecraft.setLevel} reaches {@code LevelExtractor.setLevel}, which
+	 * calls {@code allChanged} itself, so the next {@code extract} invalidates the compiled geometry
+	 * and this settles before that frame's level is drawn; the pack of the new dimension is not read
+	 * until {@code PackChain.draw} reaches {@code reloadIfTheWorldMoved}, at the end of that same
+	 * frame. Nothing is bound wrongly in between, and the reason is that the reversal is complete:
+	 * the pack in force is still the previous dimension's, and its programs declare exactly the list
+	 * this settled from. When the new reading moves the list, {@code carries} asks for a rebuild of
+	 * its own and this runs again on the frame after, which is the hitch at the portal.
+	 * <p>
 	 * Built here rather than in a static field so that a mesh this cannot extend leaves the game
 	 * running on Sodium's own instead of failing to load a class in the middle of a world.
 	 */
 	public static synchronized void settle() {
-		List<String> carried = broken ? List.of() : TerrainDraw.carried();
+		// What the pack published, kept apart from what is decided out of it: a list that arrives
+		// empty is a pack with nothing to say, and one emptied below is a pack that asked for none of
+		// ours. The two decide the same layout and are not the same event, and the log parts them.
+		List<String> asked = broken ? List.of() : TerrainDraw.carried();
+		List<String> carried = asked;
 		// Sodium's own four and nothing of ours is the same layout Sodium already binds, so it is
 		// answered with Sodium's own rather than with a copy of it. No pack of the corpus is here,
 		// every one of them reading at least the block id, but a pack that read none of the five
@@ -238,19 +275,62 @@ public final class TerrainMesh implements ChunkVertexType {
 			built = null;
 		}
 
-		if (carried.equals(said)) {
+		if (asked.equals(said)) {
 			return;
 		}
 
-		said = carried;
+		said = asked;
 		if (carried.isEmpty()) {
+			if (broken) {
+				// Nothing, and before the roads below rather than among them. The error above has
+				// named the one cause this road has, and every line below it would be a guess at a
+				// question already answered: the pack is still wanted and still published its
+				// elements, so both of them would read as true and neither would be.
+				return;
+			}
+
+			List<String> ours = Arrays.stream(Extra.values()).map(Extra::attribute).toList();
+			if (!asked.isEmpty()) {
+				// The pack was read and wants none of the five, so Sodium's own layout is what its
+				// programs were translated against and there is nothing to append. A normal event
+				// and not a failure, which is why it is said at this level; it is said at all
+				// because it decides the stride of every vertex in the world and would otherwise be
+				// indistinguishable in the log from the pack below that decides the same stride.
+				Vitrail.logger().info("This pack's chunk programs read none of {}, so nothing is "
+						+ "appended and they draw from the format Sodium gave the mesh", ours);
+
+				return;
+			}
+
+			if (TerrainDraw.asked()) {
+				// THREE roads share this one and nothing here can part them, so all three are named
+				// rather than the likeliest one guessed at. The commonest by far is a load that
+				// never reached the pack's chunk programs at all: PackChain raises this flag off the
+				// options and only opens the pack afterwards, so a required flag it does not serve,
+				// a chain with no final, a refusal and an archive that will not open all leave the
+				// flag standing with nothing behind it. Then a pack that was read and serves no
+				// chunk program, where the world keeps the game's own shader and the pack's sky and
+				// chain go on being drawn. Then this having run before TerrainDraw.read published
+				// anything, which is the order this method depends on and cannot check.
+				//
+				// Said at this level and not louder because the first road is the one that arrives,
+				// and every way into it has already said what went wrong in its own words. What this
+				// adds is the consequence for the mesh, which none of them mentions.
+				Vitrail.logger().info("The pack's own terrain program is wanted and nothing has been "
+						+ "published for it, so the mesh keeps the format Sodium gave it and carries "
+						+ "none of {}. Either this pack's load never reached its chunk programs, or "
+						+ "it serves none of its own, or they had not been read when the chunk "
+						+ "renderer was built", ours);
+
+				return;
+			}
+
 			// Said out loud, this being the branch that would otherwise be silent. Without naming a
 			// cause, because there are three and this cannot tell them apart: a terrain= line, no
 			// pack chosen yet, which is every first launch of a fresh instance, and a terrain
 			// program that threw.
 			Vitrail.logger().info("The pack's own terrain program is not wanted, so the mesh keeps the "
-					+ "format Sodium gave it and carries none of {}",
-					Arrays.stream(Extra.values()).map(Extra::attribute).toList());
+					+ "format Sodium gave it and carries none of {}", ours);
 
 			return;
 		}

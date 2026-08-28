@@ -48,6 +48,13 @@ what the next one holds.
   at all, which is how one of those forms switches a pass off, now dispatches nothing rather
   than one tile, and a program whose size cannot be read at all is left out with a line in
   the log naming it, rather than guessed at.
+- **The log says why a pack is drawing the world with the game's own terrain shader.**
+  When nothing of the pack reaches the chunk mesh, three quite different things can have
+  happened: the pack was read and asks for none of the extra vertex data, or its load never
+  got as far as its chunk programs, or the mesh was built before the pack had been read. All
+  three used to share one line that named none of them, and the third only showed itself a
+  world later, as an error about two lists of attributes that said nothing about the order
+  that made them differ. Each now says which one it was, where it happened.
 
 ## 0.8.1-beta
 
