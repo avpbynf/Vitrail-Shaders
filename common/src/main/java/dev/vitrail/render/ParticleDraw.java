@@ -391,10 +391,10 @@ public final class ParticleDraw {
 		if (element.afterDeferred() && minecraft.levelRenderer.particlesTarget() != null) {
 			return refuse("fabulous", "the game's improved transparency is on, so it draws its "
 					+ "translucent particles into a target of its own that it composes afterwards, "
-					+ "and the pack's colour targets cannot be attached beside it. Iris never meets "
-					+ "this: it turns improved transparency OFF as soon as shaders are enabled, which "
-					+ "this engine does not do, so that half is the game's here where it would be the "
-					+ "pack's there. Turning improved transparency off gives it back");
+					+ "and the pack's colour targets cannot be attached beside it. This engine turns "
+					+ "that option off when the pack is loaded, as Iris does when shaders are enabled, "
+					+ "so reaching this line means it was turned back on afterwards. Turning it off "
+					+ "again gives that half back to the pack");
 		}
 
 		this.owner.beginFrame();

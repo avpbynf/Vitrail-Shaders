@@ -1452,10 +1452,11 @@ public final class EntityDraw {
 					+ prepared.outputTarget(), true, "the game sends it to "
 					+ prepared.outputTarget() + ", which it composes itself afterwards, and the pack's "
 					+ "colour targets cannot be attached beside a picture this engine has not got. It "
-					+ "is the game's improved transparency that allocates those targets, and Iris "
-					+ "never meets this: it turns improved transparency OFF as soon as shaders are "
-					+ "enabled (mixin/fabulous/MixinDisableFabulousGraphics.java:37-40), which this "
-					+ "engine does not do. Turning improved transparency off gives it back");
+					+ "is the game's improved transparency that allocates those targets, and this "
+					+ "engine turns that option off when the pack is loaded, as Iris does when shaders "
+					+ "are enabled (mixin/fabulous/MixinDisableFabulousGraphics.java:37-40). Reaching "
+					+ "this line means it was turned back on afterwards, and turning it off again "
+					+ "gives the draw back");
 		}
 
 		try {
