@@ -37,7 +37,13 @@ public abstract class GameRendererMixin {
 		return original.call(projection, bob);
 	}
 
-	@WrapOperation(method = "renderLevel",
+	/**
+	 * {@code require = 2} because the rotation and the rotation back are two calls of the same
+	 * signature in the same method, and Mixin counts an injector's matches as one total: at one, the
+	 * turn back could stop matching on its own and be dropped without a word, which would leave the
+	 * copy holding a spin the game undid.
+	 */
+	@WrapOperation(method = "renderLevel", require = 2,
 			at = @At(value = "INVOKE", target = "Lorg/joml/Matrix4f;rotate(FLorg/joml/Vector3fc;)Lorg/joml/Matrix4f;"))
 	private Matrix4f vitrail$spin(Matrix4f projection, float angle, Vector3fc axis,
 			Operation<Matrix4f> original) {

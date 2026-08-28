@@ -52,6 +52,12 @@ import java.util.function.Supplier;
  * place under the End's skybox reaches two of these methods and a place under any other reaches the
  * remaining six, and the ones a place never calls cost it nothing.
  * <p>
+ * <strong>Each wrap states how many calls it has to bind, and the number is not decoration.</strong>
+ * Mixin counts an injector's matches as one total over every method it names, so a wrap listing
+ * eight methods and requiring one is satisfied by one of the eight and lets the other seven die
+ * without a word. The counts written below are what the game's bytecode holds, one call in each
+ * method named, so a method that loses its call refuses the launch instead of the picture.
+ * <p>
  * <strong>One of the pack's answers is not a shader at all.</strong> Two of these pieces, the sun
  * and the moon, can be refused outright in {@code shaders.properties}, and a refusal is cancelled at
  * the head of the method rather than served with a program of ours, because the pack has drawn that
@@ -152,6 +158,7 @@ public abstract class SkyRendererMixin {
 	@WrapOperation(
 			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
 					"renderMoon", "renderEndFlash"},
+			require = 7,
 			at = @At(value = "INVOKE",
 					target = "Lnet/minecraft/client/renderer/DynamicUniforms;writeTransform("
 							+ "Lorg/joml/Matrix4f;"
@@ -191,6 +198,7 @@ public abstract class SkyRendererMixin {
 	@WrapOperation(
 			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
 					"renderMoon", "renderEndSky", "renderEndFlash"},
+			require = 8,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/CommandEncoder;createRenderPass("
 							+ "Ljava/util/function/Supplier;"
@@ -216,6 +224,7 @@ public abstract class SkyRendererMixin {
 	@WrapOperation(
 			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
 					"renderMoon", "renderEndSky", "renderEndFlash"},
+			require = 8,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/RenderPass;setPipeline("
 							+ "Lcom/mojang/blaze3d/pipeline/RenderPipeline;)V"))
@@ -236,6 +245,7 @@ public abstract class SkyRendererMixin {
 	 */
 	@WrapOperation(
 			method = {"renderSun", "renderMoon", "renderEndSky", "renderEndFlash"},
+			require = 4,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/RenderPass;bindTexture("
 							+ "Ljava/lang/String;"
@@ -283,6 +293,7 @@ public abstract class SkyRendererMixin {
 	@WrapOperation(
 			method = {"renderSkyDisc", "renderDarkDisc", "renderStars", "renderSunriseAndSunset", "renderSun",
 					"renderMoon", "renderEndSky", "renderEndFlash"},
+			require = 8,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/systems/RenderPass;setVertexBuffer("
 							+ "ILcom/mojang/blaze3d/buffers/GpuBufferSlice;)V"))

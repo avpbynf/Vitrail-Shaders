@@ -13,6 +13,15 @@ what the next one holds.
 
 ## Unreleased
 
+### Changed
+
+- **A patch of this mod that stops fitting the game now refuses to start it, instead of drawing a
+  wrong picture.** Those patches used to be dropped without a word when a game or Sodium update
+  moved what they attach to, and what reached the screen was an effect quietly missing or a
+  surface lit by the wrong program, with nothing in the log pointing at it. The failure now names
+  itself at launch. The one exception is the line this mod adds to the F3 overlay, which is
+  allowed to go missing because nothing on screen depends on it.
+
 ### Fixed
 
 - **A pack written with the old shadow lookups could be translated wrong, without a word.**

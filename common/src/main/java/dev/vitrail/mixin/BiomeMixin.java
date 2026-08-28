@@ -35,9 +35,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * module cannot do; what it costs is one uniform, on one loader, with such a mod installed.
  * <p>
  * The other four parameters are named because an injector's signature has to match its target's,
- * and they are all public types. {@code require = 1} against this config's {@code defaultRequire}
- * of nought, for the reason {@code BiomesMixin} gives: a silently missed injection here would leave
- * every biome answering nought, which is exactly the desert this exists to stop being published.
+ * and they are all public types. {@code require = 1}, written out where this config already
+ * defaults to it, for the reason {@code BiomesMixin} gives: a silently missed injection here would
+ * leave every biome answering nought, which is exactly the desert this exists to stop being
+ * published.
  */
 @Mixin(Biome.class)
 public abstract class BiomeMixin implements BiomeHumidity {

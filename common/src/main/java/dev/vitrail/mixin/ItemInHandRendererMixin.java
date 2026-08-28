@@ -34,11 +34,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ItemInHandRendererMixin {
 
 	/**
-	 * <strong>Required, where most of this package is not.</strong> Dropped in silence, both arms
-	 * would be drawn in both passes: the whole hand would be drawn twice per frame, the second time
-	 * with the water program over the first, and a pack that tints its translucent hand would tint
-	 * the sword as well. That is a plausible picture and a wrong one, which is the failure this
-	 * engine refuses.
+	 * <strong>Required, and written out rather than left to the configuration's default.</strong>
+	 * Dropped in silence, both arms would be drawn in both passes: the whole hand would be drawn
+	 * twice per frame, the second time with the water program over the first, and a pack that tints
+	 * its translucent hand would tint the sword as well. That is a plausible picture and a wrong
+	 * one, which is the failure this engine refuses.
 	 */
 	@Inject(method = "submitArmWithItem", at = @At("HEAD"), cancellable = true, require = 1)
 	private void vitrail$oneHalfAtATime(AbstractClientPlayer player, float frameInterp, float xRot,

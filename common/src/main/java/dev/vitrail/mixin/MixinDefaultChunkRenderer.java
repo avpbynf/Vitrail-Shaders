@@ -76,9 +76,14 @@ public abstract class MixinDefaultChunkRenderer {
 	 * <p>
 	 * What comes back is thrown away. The descriptor below replaces the whole pass, so this only has
 	 * to be something that exists.
+	 * <p>
+	 * {@code require = 2} because the method asks twice, and Mixin counts an injector's matches as
+	 * one total: at one, either call could stop matching on its own and be dropped without a word,
+	 * and the one left unwrapped throws from inside Sodium the first time a shadow map is drawn.
 	 */
 	@WrapOperation(
 			method = "render",
+			require = 2,
 			at = @At(value = "INVOKE",
 					target = "Lnet/caffeinemc/mods/sodium/client/render/chunk/terrain/TerrainRenderPass;"
 							+ "getTarget()Lcom/mojang/blaze3d/pipeline/RenderTarget;"))
