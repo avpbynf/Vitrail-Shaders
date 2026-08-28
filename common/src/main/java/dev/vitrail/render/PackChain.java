@@ -601,6 +601,9 @@ public final class PackChain {
 	 */
 	public static void load(Path gameDirectory) {
 		PassTimings.resetCensus();
+		// Here and not lower down: it decides what the translation emits, and every road
+		// below this point that reads a pack translates one.
+		DriverTrig.read(gameDirectory);
 		// The storage blocks the translator files away, emptied at the head of a load and NOT beside
 		// the CustomImages line in release(), though the two are installed on the same line.
 		//
@@ -881,6 +884,10 @@ public final class PackChain {
 				// for a shader. The other families then translate on a worker, so Complementary
 				// Unbound's entities overlap the composite compiles and never sit on the render thread.
 				active.terrain.read(opened);
+				// After the two reads this thread makes and before the worker starts on the rest,
+				// so the count on the line is a number rather than a snapshot of a tally still
+				// moving.
+				DriverTrig.announce();
 				// The count, so that what a load costs is a figure in the log rather than a feeling.
 				// It covers the whole of this method, the report and the settings reading included,
 				// and the families are deliberately outside it: they translate on a worker, off the

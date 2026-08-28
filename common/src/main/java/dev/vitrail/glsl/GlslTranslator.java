@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Turns one flattened pack unit into GLSL a Vulkan compiler will take.
@@ -178,11 +179,64 @@ public final class GlslTranslator {
 	 * <p>
 	 * The goldberg hash {@code fract(sin(dot(p, K)) * 43758.5453)} is not sent through this helper.
 	 * See {@link #HASH}.
+	 * <p>
+	 * The substitution can be taken off for a measurement, which leaves the driver's own two in
+	 * place and emits neither of these. See {@code reduceTrig} below, which is on wherever nobody
+	 * has said otherwise.
 	 */
 	private static final String REDUCED_SIN = "ofReducedSin";
 
 	/** See {@link #REDUCED_SIN}. */
 	private static final String REDUCED_COS = "ofReducedCos";
+
+	/**
+	 * Whether a pack's {@code sin} and {@code cos} are sent through {@link #REDUCED_SIN} at all.
+	 * On, which is what a player gets and what every reading taken so far was taken under.
+	 * <p>
+	 * <strong>It is an instrument, and not a preference anybody is meant to keep.</strong> The
+	 * substitution above is unconditional: it does not look at the argument, so a call on a small
+	 * one pays the reduction and the polynomial for a value the driver's own sine would have got
+	 * right, and one pack of the corpus writes a hundred and thirty six of them in its text,
+	 * multiplied by every stage whose includes pull them in. What that costs a
+	 * frame has never been measured, and it cannot be measured across two jars: a rate read on one
+	 * build and set beside a rate read on another carries every difference between the two runs and
+	 * not this one. Both states in one jar, a pack load apart, is what makes the number mean
+	 * something.
+	 * <p>
+	 * What turning it off gives up is the whole reason the helper exists. Packs feed these two
+	 * whole world coordinates, and a single fp32 two-pi sheds the low bits of a large argument long
+	 * before anybody watching can say where the shimmer came from. {@code DriverTrig} carries how
+	 * it is armed, and the line it writes to the log in both directions at every pack load.
+	 */
+	private static volatile boolean reduceTrig = true;
+
+	/**
+	 * The call sites matched since the switch was last set, added up over every unit translated.
+	 * <p>
+	 * Matched and not substituted, which is the point of it: a reading taken with the driver's own
+	 * sine in place still has to be able to say the pack had something for the substitution to bite
+	 * on, and a count that only rose in one of the two states would say nothing at all there.
+	 * <p>
+	 * One window makes it a tally and not an exact figure: a family of the chain that has just
+	 * been released finishes translating on its worker (the prefetch only tests for release
+	 * between families), and its sites land here after the reset. Nothing of that reaches a live
+	 * program, the released chain is never active again; it moves this count and no more.
+	 */
+	private static final AtomicInteger TRIG_SITES = new AtomicInteger();
+
+	/**
+	 * Set at the head of a pack load, before a program of it is translated, and it empties the
+	 * count with it: a tally belongs to the load whose state it was taken under.
+	 */
+	public static void reduceTrig(boolean on) {
+		reduceTrig = on;
+		TRIG_SITES.set(0);
+	}
+
+	/** How many {@code sin} and {@code cos} call sites have been matched since that call. */
+	public static int trigSites() {
+		return TRIG_SITES.get();
+	}
 
 	/**
 	 * What the goldberg hash idiom becomes.
@@ -375,6 +429,13 @@ public final class GlslTranslator {
 	/** Calls to {@code sin} or {@code cos} sent through the reduced-argument helpers. */
 	private int trigCalls;
 
+	/**
+	 * Call sites to those two this unit matched, whether or not they were substituted. The same
+	 * number as {@link #trigCalls} wherever {@code reduceTrig} is on, which is everywhere a player
+	 * is, and the only one of the two that says anything at all when it is off.
+	 */
+	private int trigSites;
+
 	/** Goldberg hash idioms rewritten onto {@link #HASH} instead of through a sine. */
 	private int hashCalls;
 
@@ -565,7 +626,8 @@ public final class GlslTranslator {
 		dropVersionAndExtensions();
 		rewriteIdentifiers();
 		// After the identifiers, because the goldberg idiom's sine has become ofReducedSin by then
-		// and that is how the site is recognised. Taking it earlier would leave the sine standing
+		// and that is one of the two names the site is recognised under, the other being the plain
+		// sin that reduceTrig off leaves standing. Taking it earlier would leave the sine standing
 		// and the helper below would wrap a call this pass was about to erase.
 		rewriteGoldbergHash();
 		// After the identifiers and before the depth, and both halves of that matter: the legacy
@@ -605,6 +667,11 @@ public final class GlslTranslator {
 
 		this.used = usedNames();
 		this.declaredAfter = declaredUnderAType();
+		// Once per unit and only here, after the goldberg rewrite has taken its own sites back off.
+		// The families translate on a worker while the chain is already read, so a counter each of
+		// them walked up and down itself would be read mid-flight; one addition at the end of a
+		// unit is the whole of what crosses a thread.
+		TRIG_SITES.addAndGet(this.trigSites);
 	}
 
 	/**
@@ -1198,11 +1265,19 @@ public final class GlslTranslator {
 			// Calls only, and never a name the pack declared for itself: a unit shipping its own
 			// sin has already said what it means by it. See REDUCED_SIN for why the builtin cannot
 			// be left to take the argument raw.
+			//
+			// The site is counted before the switch is asked and not after, so that a load running
+			// on the driver's own two can still say what the substitution would have had to bite
+			// on. With the switch off nothing is replaced and the token falls through to the
+			// readings below, exactly as any other name the pack calls does.
 			if ((name.equals("sin") || name.equals("cos")) && callOpener(index) >= 0
 					&& !this.declaredNames.contains(name)) {
-				replace(index, name.equals("sin") ? REDUCED_SIN : REDUCED_COS);
-				this.trigCalls++;
-				continue;
+				this.trigSites++;
+				if (reduceTrig) {
+					replace(index, name.equals("sin") ? REDUCED_SIN : REDUCED_COS);
+					this.trigCalls++;
+					continue;
+				}
 			}
 
 			if (directive != null) {
@@ -1297,6 +1372,12 @@ public final class GlslTranslator {
 			String argument = tokenText(argStart, argEnd);
 			blankRange(index, fractClose);
 			inject(index, HASH + "(" + argument + ")");
+			// Off both counts, and the site comes off whichever name its sine still went under: the
+			// idiom is erased here, so it is not a call either helper was ever going to take.
+			if (this.trigSites > 0) {
+				this.trigSites--;
+			}
+
 			if (reduced && this.trigCalls > 0) {
 				this.trigCalls--;
 			}
@@ -1306,8 +1387,12 @@ public final class GlslTranslator {
 	}
 
 	private boolean goldbergSine(Token token) {
+		// The plain arm carries BOTH exclusions the substitution itself applies, the pack macro
+		// one included: a pack that defines sin for itself keeps its idiom whatever the switch
+		// says, exactly as it kept it before the switch existed.
 		return token.identifier(REDUCED_SIN)
-				|| (token.identifier("sin") && !this.declaredNames.contains("sin"));
+				|| (token.identifier("sin") && !this.declaredNames.contains("sin")
+						&& !this.packMacros.contains("sin"));
 	}
 
 	/**
