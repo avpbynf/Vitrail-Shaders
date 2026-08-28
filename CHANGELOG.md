@@ -35,6 +35,14 @@ what the next one holds.
   numbers that had not moved in between. They are kept and reused until something they are
   built from actually changes. The values handed over are the same ones, to the bit, and this
   has not been measured either, so again it is work removed rather than frames gained.
+- **The same picture with less repeated work inside the frame.** A pack's geometry program
+  re-bound every texture it declares for every chunk region, mob piece and particle batch it
+  drew, where only the two to four that follow the image in hand can change inside one pass;
+  the rest are now written once, when the pass opens. Beside it: the far terrain's sections are
+  collected into a list sized from the count Distant Horizons gives rather than grown into one,
+  and handed on without a copy; a vertex format is searched for this engine's own elements only
+  until the first one it has not got; and a pass is asked for its name only once everything
+  cheaper about it has already matched. Whether the frame rate moves is a machine's to measure.
 
 ### Fixed
 

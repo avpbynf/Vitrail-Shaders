@@ -544,14 +544,18 @@ public final class DhLods {
 	/** One half of one pass, out of DH's objects and into this engine's. */
 	private static List<Section> sections(Object set, boolean opaque)
 			throws ReflectiveOperationException {
-		List<Section> sections = new ArrayList<>();
+		int count = (Integer) setSize.invoke(set);
+
+		// Given the width DH just answered with rather than grown into it. A far view hands out
+		// thousands of sections twice a frame, and a list that starts at ten reaches that by
+		// allocating a longer array and copying the old one into it a dozen times over.
+		List<Section> sections = new ArrayList<>(count);
 
 		// One list refilled section by section rather than one built per section: the record copies
 		// what it is handed, so nothing downstream can be holding this one, and a far view hands out
 		// thousands of sections twice a frame.
 		List<Piece> pieces = new ArrayList<>();
 
-		int count = (Integer) setSize.invoke(set);
 		for (int index = 0; index < count; index++) {
 			Object one = setGet.invoke(set, index);
 			Object[] wrappers =
@@ -562,8 +566,15 @@ public final class DhLods {
 
 			pieces.clear();
 			for (Object wrapper : wrappers) {
-				if (wrapper == null || !uploadedField.getBoolean(wrapper)
-						|| vertexCountField.getInt(wrapper) <= 0) {
+				if (wrapper == null || !uploadedField.getBoolean(wrapper)) {
+					continue;
+				}
+
+				// Asked once and kept: the read below it is reflective like every other here, and it
+				// answered the same number twice for every buffer of every section of every frame so
+				// that one check could have it on the one frame a session where it looks.
+				int written = vertexCountField.getInt(wrapper);
+				if (written <= 0) {
 					continue;
 				}
 
@@ -572,7 +583,7 @@ public final class DhLods {
 				if (vertices instanceof GpuBuffer vertexBuffer
 						&& indices instanceof GpuBuffer indexBuffer
 						&& !vertexBuffer.isClosed()) {
-					checkStride(vertexBuffer, vertexCountField.getInt(wrapper));
+					checkStride(vertexBuffer, written);
 					pieces.add(new Piece(vertexBuffer, indexBuffer, indexCountField.getInt(wrapper)));
 				}
 			}
@@ -590,7 +601,11 @@ public final class DhLods {
 		// anybody argues about whether the reflection under it is worth removing.
 		PassTimings.censusFarSections(sections.size());
 
-		return List.copyOf(sections);
+		// Handed over as it stands rather than copied. The copy was one more array as wide as the far
+		// view, twice a frame, and it bought nothing: this list is built here, is not the reused one
+		// above it, and the only thing that holds it afterwards is {@code DistantDraw}, which reads
+		// it and drops it.
+		return sections;
 	}
 
 	/** Says once what the far terrain really holds, which is what tells a reader it is reachable. */

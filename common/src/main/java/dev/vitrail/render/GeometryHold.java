@@ -118,8 +118,14 @@ public final class GeometryHold {
 	 * @return the held pass, or {@code null} to let the encoder open a new one
 	 */
 	public static RenderPass leftover(RenderPassDescriptor descriptor) {
-		if (opening || current == null || clears(descriptor) || !leftoverLabel(descriptor)
-				|| fit(descriptor) != JOINS) {
+		// The NAME is asked last, and that order is what keeps this on the path every pass of the
+		// frame takes: the encoder sends every createRenderPass through here, and reading a
+		// descriptor's name means running the supplier that builds it, which for the game's own
+		// immediate draws concatenates the pipeline it is drawing with into a string that is thrown
+		// away one comparison later. Everything ahead of it compares pointers and numbers, so the
+		// string is now only built for a pass that already writes the held images at the held area.
+		if (opening || current == null || clears(descriptor) || fit(descriptor) != JOINS
+				|| !leftoverLabel(descriptor)) {
 			return null;
 		}
 

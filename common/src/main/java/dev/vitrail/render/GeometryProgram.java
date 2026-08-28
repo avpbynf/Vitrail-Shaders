@@ -205,6 +205,35 @@ final class GeometryProgram {
 	 */
 	private static final String OVERLAY = LegacyGlsl.OVERLAY_SAMPLER;
 
+	/**
+	 * The pass the answers that do NOT follow the draw's image are currently standing in, and the
+	 * program that put them there.
+	 * <p>
+	 * A bind writes a name into a map the pass keeps until it closes, allocating the pair it stores,
+	 * so a name whose answer cannot move inside a pass only has to be written once. Two things can
+	 * undo that writing, and both are held here rather than on the program: {@link #resolve} moving
+	 * the answers, which drops the pair below, and another program binding ITS names over them,
+	 * which one pass sees often since {@link GeometryHold} carries several families through one and
+	 * the entity family alone hands its pass twenty pieces.
+	 * <p>
+	 * Nothing outside this class writes one of these names into a geometry pass, and that is a fact
+	 * about today's naming rather than a guarantee. A composite, a copy or a clear ends the hold
+	 * before it records anything, but {@link GeometryHold#leftover} deliberately does not: it
+	 * adopts the game's remaining immediate draws and Distant Horizons' generic object renderer
+	 * into a hold that is already open. What keeps them apart is only that none of their names
+	 * collides: the game binds {@code Sampler0} and its siblings, Sodium {@code u_BlockTex} and
+	 * {@code u_LightTex}, Distant Horizons {@code uLightMap} alone, and a pack's names are the
+	 * lower case ones a pack writes. The translation never compares a name a pack declared
+	 * against any of those, so nothing enforces it.
+	 * <p>
+	 * <strong>Settling raises what a collision would cost.</strong> A foreign write over one of
+	 * these names used to be undone by the next bind of the same program; it now stands for the
+	 * rest of the pass.
+	 */
+	private static RenderPass settledIn;
+
+	private static GeometryProgram settled;
+
 	/** Where one colour attachment of a world pass takes its image from. */
 	private enum Bound {
 
@@ -1017,7 +1046,14 @@ final class GeometryProgram {
 	 * <strong>Only the names that follow the draw's own image are worked out here.</strong> The rest
 	 * were settled by {@link #resolve}, at the one point of a pass that stands outside it, and this
 	 * walks them in order out of an array rather than asking for each of them by name.
+	 * <p>
+	 * <strong>And only those are WRITTEN here, past the first bind of a pass.</strong> A pack's
+	 * geometry program declares ten to twenty five names of which two to four move with the draw,
+	 * and the pass holds what it was told until it closes, so the rest were a pair allocated and a
+	 * map entry replaced by its own value, once for every draw of the frame. {@link #settledIn}
+	 * carries what makes that safe.
 	 */
+	@SuppressWarnings("ReferenceEquality")
 	void bind(RenderPass pass) {
 		// Once, and it is the one thing that tells a pass that draws from a pass that only compiled:
 		// announce() says a program was prepared, which happens whether or not the renderer goes on
@@ -1039,10 +1075,17 @@ final class GeometryProgram {
 		pass.setUniform(UNIFORM_BLOCK, blockSlice());
 		StorageBuffers.bind(pass, this.storage);
 
+		// The rest are already standing in this pass, put there by this program's own last bind into
+		// it, and writing them again would allocate a pair and put back what the map already holds.
+		// {@link #settledIn} says what can undo that and why nothing else can.
+		boolean settle = settledIn != pass || settled != this;
+		settledIn = pass;
+		settled = this;
+
 		for (Sampled one : this.bound) {
 			if (one.followsTheImage()) {
 				pass.bindTexture(one.name, imageView(one), imageSampler(one));
-			} else {
+			} else if (settle) {
 				pass.bindTexture(one.name, one.view, one.state);
 			}
 		}
@@ -1068,6 +1111,12 @@ final class GeometryProgram {
 	 * pipeline draws every mob on screen and each of them brings its own skin.
 	 */
 	private void resolve() {
+		// Whatever this program left standing in a pass is no longer what it would write now, so the
+		// next bind writes the lot again. release() clears the same two, and not because a released
+		// program is unreachable: TerrainDraw is the one family that keeps its program map across a
+		// release, so its static bind can reach a program that has never come back through here.
+		settledIn = null;
+		settled = null;
 		boolean labPbr = PbrAtlases.labPbr();
 		for (Sampled one : this.bound) {
 			one.interpolates = one.material != null && one.material.interpolates(labPbr);
@@ -1487,6 +1536,15 @@ final class GeometryProgram {
 		for (Sampled one : this.bound) {
 			one.view = null;
 			one.state = null;
+		}
+
+		// Let go of the pass and the program the same way, and for the same reason as the views
+		// above: these two are the one place a closed RenderPass and a released program stay
+		// reachable, and they would otherwise stand until some program's next bind. Only when it
+		// is this program standing there, another one's settling being none of our business.
+		if (settled == this) {
+			settled = null;
+			settledIn = null;
 		}
 	}
 
