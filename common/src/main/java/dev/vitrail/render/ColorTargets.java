@@ -76,9 +76,8 @@ import java.util.stream.Collectors;
  * A target the schedule turns over carries two textures, and which half a program reads and
  * writes is the schedule's answer rather than a flag kept here. The one thing this class owes the
  * ping pong is {@link #swapBack}: a target the pack keeps between frames and that the chain left
- * on the alternate half has to become the main one, because the next frame starts its walk
- * from an empty flipped set and would otherwise read the half nothing wrote. The two surfaces
- * swap names. Copying the texels would be another GPU stop for the same fact.
+ * on the alternate half has to come back to the main one, because the next frame starts its walk
+ * from an empty flipped set and would read the half nothing wrote.
  * <p>
  * The files the pack ships as textures of its own live here too, and for one reason: they are
  * allocated, uploaded and freed at exactly the moments the constants are, and a second holder
@@ -746,37 +745,58 @@ final class ColorTargets {
 	}
 
 	/**
-	 * Makes the alternate half the main one, for the targets the plan named and no others. After
-	 * the last pass of the frame, and only a name swap: the next frame walks the chain from an
-	 * empty flipped set, so it reads the main half of everything before anything has written it.
-	 * Without this the pack would be handed, once per frame, the half it filled two frames ago.
+	 * Copies the alternate half back over the main one, for the targets the plan named and no
+	 * others. Must run outside any render pass, and after the last one of the frame.
 	 * <p>
-	 * The texels stay where they are. A copy would be a GPU stop, and both halves already carry
-	 * the same format. Mip levels past nought are rebuilt from nought before any program reads
-	 * one, the same as they were when this used to copy.
+	 * Only a target the pack keeps between frames is ever in that list. The next frame walks the
+	 * chain from an empty flipped set, so it reads the main half of everything before anything has
+	 * written it; without this the pack would be handed, once per frame, the half it filled two
+	 * frames ago. Both halves carry the same format, so this is a copy of bits that mean the same
+	 * thing on both sides rather than a reinterpretation.
 	 * <p>
-	 * Iris copies here and says in the same breath that it would rather not:
-	 * {@code FinalPassRenderer} carries "we merely copy it from alt to main, this works for the
-	 * most part but it's not perfect", the better approach being framebuffers for every other
-	 * frame. This backend builds its pass descriptor per frame, so it can have that for nothing.
+	 * <strong>Exchanging the two surfaces instead of copying is NOT the same operation, and the
+	 * difference is what the frame did not write.</strong> A copy leaves the two halves carrying
+	 * the same image; an exchange leaves main on the last write and alt on the one before it. The
+	 * two only agree where the frame covered the whole target. Where it did not, because the pass
+	 * blends over a region rather than painting the surface, because a program the plan counted
+	 * failed to build, or because the chain is still warming up, the copy converges in one frame
+	 * and the exchange alternates for as long as the pack stays loaded. That alternation is
+	 * invisible while the player stands still, both halves then holding the same scene, and shows
+	 * as soon as the view moves and they hold two.
 	 * <p>
-	 * <strong>The debug labels cross over and are not corrected.</strong> A surface is named at
-	 * allocation and keeps that name, so after an odd number of frames the texture labelled
-	 * {@code Vitrail colortexN alt} is the main half. It costs nothing at runtime and it misreads
-	 * badly in a GPU capture, which is where a target is looked up by name.
+	 * Iris copies here, {@code pipeline/FinalPassRenderer.java:139-162} and the
+	 * {@code glCopyTexSubImage2D} at {@code :290-303}, and it skips the targets
+	 * it is about to clear the same way this skips the ones the pack does not keep. Its own note
+	 * says a copy "works for the most part" and that the better approach would be a second set of
+	 * framebuffers on every other frame. That approach is not the exchange below: it needs the
+	 * chain walk itself to start from the other side on odd frames, where this engine starts every
+	 * frame from an empty flipped set, so exchanging the surfaces under a fixed walk moves the
+	 * image without moving the reader.
+	 * <p>
+	 * The list handed in keeps the plan's name for it, {@code ChainPlan.swapBack}: it names the
+	 * targets the frame leaves on the far half, whatever is done to bring them back, and the
+	 * harness reads it under that name.
 	 */
-	void swapBack(List<Integer> targets) {
+	void swapBack(CommandEncoder encoder, List<Integer> targets) {
 		for (int index : targets) {
 			TargetSurface alt = this.altSide.get(index);
 			TargetSurface main = this.mainSide.get(index);
 			if (alt == null || main == null) {
-				note("nothing to swap back for " + TargetName.canonical(index) + ": the plan asks "
+				note("nothing to copy back for " + TargetName.canonical(index) + ": the plan asks "
 						+ "for it and only one half of it exists");
 				continue;
 			}
 
-			this.mainSide.put(index, alt);
-			this.altSide.put(index, main);
+			GpuTexture from = alt.texture();
+			GpuTexture to = main.texture();
+			if (from != null && to != null) {
+				// Level nought alone, chain or no chain. The levels past it are refilled from it
+				// ahead of the next pass that reads one, so copying them here would be work whose
+				// result is overwritten before that pass can read it. A compute dispatched ahead of
+				// that refill samples the frame before's levels over this frame's nought, which is
+				// what Iris hands it too, its copy being level nought as well.
+				encoder.copyTextureToTexture(from, to, 0, 0, 0, 0, 0, main.width(), main.height());
+			}
 		}
 	}
 

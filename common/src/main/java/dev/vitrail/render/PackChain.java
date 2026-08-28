@@ -2295,17 +2295,17 @@ public final class PackChain {
 		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene(),
 				this.targets.depth().distantScene(), true, Cut.AFTER_TRANSLUCENTS);
 
-		// After the whole chain and before the halves swap back, which is where a final would have
-		// drawn. Only on a pack that ships none; ChainPresent says what it stands in for.
+		// After the whole chain and before the kept targets are copied back, which is where a final
+		// would have drawn. Only on a pack that ships none; ChainPresent says what it stands in for.
 		if (this.present != null && this.present.prepare(device)) {
 			this.present.draw(device.createCommandEncoder(), this.quad, ready.mainView(),
 					this.targets);
 		}
 
 		// Outside any pass, and after the last one. Only the targets the pack keeps between frames
-		// and that the chain left on the far half swap names: the next frame walks from an empty
+		// and that the chain left on the far half are copied: the next frame walks from an empty
 		// flipped set and would otherwise be handed what was written two frames ago.
-		this.targets.swapBack(this.chain.chain().swapBack());
+		this.targets.swapBack(device.createCommandEncoder(), this.chain.chain().swapBack());
 	}
 
 	/**
@@ -2967,8 +2967,8 @@ public final class PackChain {
 
 		List<Integer> back = unfolded.swapBack();
 		if (!back.isEmpty()) {
-			Vitrail.logger().info("{} targets swap their two halves at the end of every frame, because "
-					+ "the pack keeps them and the chain left them on the far one: {}",
+			Vitrail.logger().info("{} targets are copied back from their far half at the end of every "
+					+ "frame, because the pack keeps them and the chain left them there: {}",
 					back.size(), back);
 		}
 
