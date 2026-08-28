@@ -207,6 +207,18 @@ public final class TerrainDraw {
 	 * format would be settled from the pack before it and every section would be meshed at a stride
 	 * these programs do not declare.
 	 * <p>
+	 * <strong>This is one half of a contract, and {@code TerrainMesh.settle} is the other.</strong>
+	 * That method reads what this publishes and decides the layout out of it, at the head of Sodium's
+	 * {@code initRenderer}; it cannot check that this has run, and nothing between the two makes them
+	 * agree by construction. What keeps them in order is where each is reached from and not a test:
+	 * this runs from {@code PackChain.load}, at client setup before any level exists and afterwards
+	 * on the render thread, and Sodium reaches {@code initRenderer} only with a level and only on
+	 * that same thread. Reversed with a pack in force, the mesh answers with Sodium's own twenty
+	 * bytes for a pack that declares more, and what the player is left with is a pack put away a
+	 * world later, over the two lists {@code TerrainProgram.carries} prints rather than over the
+	 * order that parted them. A dimension change does reverse them, harmlessly and for one frame,
+	 * and {@code TerrainMesh.settle} is where that road is written out.
+	 * <p>
 	 * Nothing here touches the device, so it runs wherever the load runs, off the render thread while
 	 * the client starts up. What it costs a place that never draws a chunk is those six translations;
 	 * what the laziness bought was exactly that, and it cannot be had at the same time as a format
