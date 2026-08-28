@@ -11,6 +11,14 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **A pack that changes with how humid a biome is no longer sees a desert everywhere.** The
+  `rainfall` value handed to shaders was always nought, so puddles, wetness and fog that
+  scale with humidity stayed at their driest in a swamp and a jungle alike.
+
 ## 0.8.1-beta
 
 ### Changed
