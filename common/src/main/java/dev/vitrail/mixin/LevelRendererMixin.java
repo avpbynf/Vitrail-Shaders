@@ -33,11 +33,10 @@ import org.spongepowered.asm.mixin.injection.At;
 public abstract class LevelRendererMixin {
 
 	/**
-	 * The only wrap in this package to carry {@code require}, because it is the only one whose
-	 * failure to bind gives back exactly the picture it was written against: under the
-	 * {@code defaultRequire: 0} the config carries, a descriptor that stopped matching would leave
-	 * {@code depthtex0} reading the far plane again, in silence and with nothing on screen to tell
-	 * the two apart.
+	 * {@code require} written out where the config already defaults to it, because this is the wrap
+	 * whose failure to bind gives back exactly the picture it was written against: unrequired, a
+	 * descriptor that stopped matching would leave {@code depthtex0} reading the far plane again, in
+	 * silence and with nothing on screen to tell the two apart.
 	 */
 	@WrapOperation(method = "addAlwaysOnTopPass",
 			at = @At(value = "INVOKE",

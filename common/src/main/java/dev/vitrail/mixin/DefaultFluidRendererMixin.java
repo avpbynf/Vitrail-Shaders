@@ -68,8 +68,8 @@ public abstract class DefaultFluidRendererMixin {
 	 * reading the third. Writing {@code Object} for one of them compiles and matches nothing at all.
 	 * <p>
 	 * {@code require = 1} is what makes the next Sodium release say so at load rather than at
-	 * leisure: with the {@code defaultRequire: 0} this config carries, a descriptor that stops
-	 * matching fails in silence and shows up as water that is no longer water.
+	 * leisure: unrequired, a descriptor that stops matching fails in silence and shows up as water
+	 * that is no longer water. It says out loud what this config now defaults to.
 	 */
 	@Inject(method = "render", at = @At("HEAD"), require = 1)
 	private void vitrail$take(LevelSlice level, BlockState blockState, FluidState fluidState,

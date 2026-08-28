@@ -29,7 +29,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Biomes.class)
 public abstract class BiomesMixin {
 
-	// require = 1 against this config's defaultRequire of nought: a silently missed injection
+	// require = 1, written out where this config now defaults to it: a silently missed injection
 	// here would number every biome nought and write no BIOME_* define at all, which a pack
 	// swallows without a word.
 	@Inject(method = "register", at = @At("TAIL"), require = 1)

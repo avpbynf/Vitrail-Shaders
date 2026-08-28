@@ -97,8 +97,11 @@ subprojects {
 		// one of them reads as unused. Measured before deciding, on the report of 6 August: sixty
 		// of the hundred and sixty four findings were UnusedMethod or UnusedVariable and ALL sixty
 		// were in this one package, none of them dead. Acting on a single one would have deleted a
-		// handler the game calls, and with the defaultRequire this config carries it would have
-		// failed in silence, which is the trap DefaultFluidRendererMixin already documents.
+		// handler the game calls, and neither half of that is caught here. Dropping a parameter
+		// leaves a descriptor that no longer matches its target, which the required injections turn
+		// into a refusal to start, and that is the trap DefaultFluidRendererMixin documents.
+		// Dropping the whole method takes its injector with it, and nothing counts an injector that
+		// is not there: that half fails in silence whatever the configuration says.
 		//
 		// Only this analyser steps back. The javac warnings still apply here and are still errors,
 		// and they are the ones that catch a real mistake in a mixin.

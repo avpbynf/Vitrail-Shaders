@@ -48,13 +48,14 @@ import java.util.function.Supplier;
  * is the texture, so it is handed over as the game binds it and the block is bound again before each
  * of the two draws.
  * <p>
- * <strong>All five handlers are required</strong>, which the rest of this package is not: the
- * configuration sets {@code defaultRequire} to nought, so an injection that stops matching is
- * normally dropped in silence, and not one of these five can afford that. The pass and the pipeline
- * are a pair, and half of them applying binds a pipeline carrying eight colour states into a pass
- * carrying one, which throws by name in the middle of a rainstorm. The other three each turn into a
- * picture with nothing in the log: the curtain drawn twice, the curtain drawn with the wrong image,
- * or a pack's {@code rain.depth} quietly unread.
+ * <strong>All five handlers are required</strong>, and say so rather than lean on the
+ * configuration's default, which is one whatever the injector really binds: writing the count out
+ * is what keeps it right when a handler moves or a target gains a call.
+ * The pass and the pipeline are a pair, and half of them
+ * applying binds a pipeline carrying eight colour states into a pass carrying one, which throws by
+ * name in the middle of a rainstorm. The other three each turn into a picture with nothing in the
+ * log: the curtain drawn twice, the curtain drawn with the wrong image, or a pack's
+ * {@code rain.depth} quietly unread.
  */
 @Mixin(WeatherEffectRenderer.class)
 public abstract class WeatherEffectRendererMixin {

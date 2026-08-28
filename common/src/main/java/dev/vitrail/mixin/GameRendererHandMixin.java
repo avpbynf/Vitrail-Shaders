@@ -35,11 +35,11 @@ public abstract class GameRendererHandMixin {
 	/**
 	 * Skips the game's own submission exactly when this engine has already made one.
 	 * <p>
-	 * <strong>Required, where most of this package is not.</strong> The configuration sets
-	 * {@code defaultRequire} to nought, so a handler that stopped matching would be dropped in
-	 * silence; here that leaves both submissions standing and the hand is drawn twice, once inside
-	 * the level under the pack's programs and once over the finished image under the game's. Two arms
-	 * a frame apart is a picture nothing else in the engine would explain.
+	 * <strong>Required, and written out rather than left to the configuration's default.</strong> A
+	 * handler that stopped matching and was dropped in silence would leave both submissions standing
+	 * and the hand drawn twice, once inside the level under the pack's programs and once over the
+	 * finished image under the game's. Two arms a frame apart is a picture nothing else in the
+	 * engine would explain.
 	 * <p>
 	 * {@link HandDraw#diverted()} is the same question both halves ask before they draw anything, so
 	 * the two cannot disagree and leave the hand submitted twice or not at all.

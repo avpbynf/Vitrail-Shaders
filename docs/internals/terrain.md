@@ -373,8 +373,8 @@ inside the game's own matrices instead. Doing it that way then forces the held i
 by hand, since it is drawn with the same model-view and has to stay put. Keeping the change inside
 the published uniforms means that problem never arises. It also means the reference's fourth
 interception has no counterpart here, which is just as well: the method it wraps has a different
-shape in this version of the game, and a patch descriptor that no longer matches its target fails
-silently when injectors are not required.
+shape in this version of the game, and this engine's injectors are required, so a patch descriptor
+that no longer matched its target would refuse to load rather than quietly do nothing.
 
 One family is not placed by that matrix and therefore does not read it: the player's own hand, which
 is drawn under a projection the engine builds rather than under the level's. The game builds the

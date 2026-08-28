@@ -36,13 +36,14 @@ import java.util.List;
  * left a pass open, deliberately: the next draw of the group usually wants the same one, and it is
  * closed by the first draw this engine does not serve or by the handler below.
  * <p>
- * <strong>All three handlers are required, which the rest of this package is not.</strong> The mixin
- * configuration sets {@code defaultRequire} to nought, so an injection that stops matching is
- * normally dropped in silence. The two that open and close are a pair, and half of them applying is
- * a render pass left standing over whatever the game draws next. The third, which says where a draw
- * came from, fails more quietly and worse: every chest in the world would be lit as a mob, and
- * nothing on screen or in the log would say why. Refusing to start is the better half of both
- * bargains, and it is the only failure of the three that names itself.
+ * <strong>All three handlers are required, and say so rather than lean on the configuration's
+ * default.</strong> Writing the count out is what keeps it right when a handler moves or a target
+ * gains a call, since the default is one whatever the injector really binds. The two
+ * that open and close are a pair, and half of them applying is a render pass left standing over
+ * whatever the game draws next. The third, which says where a draw came from, fails more quietly
+ * and worse: every chest in the world would be lit as a mob, and nothing on screen or in the log
+ * would say why. Refusing to start is the better half of both bargains, and it is the only failure
+ * of the three that names itself.
  */
 @Mixin(RenderTypeFeatureRenderer.class)
 public abstract class RenderTypeFeatureRendererMixin {

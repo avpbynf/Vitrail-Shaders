@@ -38,11 +38,11 @@ import java.util.function.Supplier;
  * game reads the same field to decide which layers go into the group and which target they go to, so
  * taking it from anywhere else would be a second answer to a question already asked.
  * <p>
- * <strong>All four handlers are required</strong>, which the rest of this package is not. The pass
- * and the pipeline are a pair, and half of them applying binds a pipeline carrying eight colour
- * states into a pass carrying one, which throws by name. The other two each leave a picture with
- * nothing in the log: particles drawn with the block of the group before, or a group that kept this
- * engine's program after the one that opened it was forgotten.
+ * <strong>All four handlers are required</strong>, and say so rather than lean on the
+ * configuration's default. The pass and the pipeline are a pair, and half of them applying binds a
+ * pipeline carrying eight colour states into a pass carrying one, which throws by name. The other
+ * two each leave a picture with nothing in the log: particles drawn with the block of the group
+ * before, or a group that kept this engine's program after the one that opened it was forgotten.
  */
 @Mixin(QuadParticleFeatureRenderer.class)
 public abstract class QuadParticleFeatureRendererMixin {
