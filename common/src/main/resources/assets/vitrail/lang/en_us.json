@@ -8,6 +8,8 @@
 	"options.vitrail.shadow_distance": "Max Shadow Distance",
 	"options.vitrail.shadow_distance_tooltip": "Allows you to change the maximum distance for shadows. Terrain and entities beyond this distance will not cast shadows. Lowering the shadow distance can significantly increase performance.",
 	"options.vitrail.shadow_distance_forced": "Your current shader pack has already set a render distance for shadows; you cannot change it.",
+	"options.vitrail.shadow_map_scale": "Shadow Map Scale",
+	"options.vitrail.shadow_map_scale_tooltip": "Controls how much of the shadow map the shader pack asked for is actually drawn, as a percentage on each side. The pack is handed the smaller size and works everything out against it, so lower values make shadow edges less defined: softer where the pack smooths its shadows, coarser where it does not. Drawing the world from the light costs less at lower values, and it reaches just as far. At 100% the pack gets exactly the map it asked for and nothing changes. Changing this reloads the shader pack.",
 	"options.vitrail.render_scale": "FSR Render Scale",
 	"options.vitrail.render_scale_tooltip": "Controls the resolution the world is rendered at, as a percentage of the window size. The finished image is upscaled with AMD FSR 1.0 before the interface is drawn. Lower values can significantly improve frame rates while a shader pack is active, at some cost in sharpness.",
 	"pack.vitrail.select_title": "Select",

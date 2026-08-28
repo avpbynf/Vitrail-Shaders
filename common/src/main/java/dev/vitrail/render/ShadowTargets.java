@@ -42,10 +42,12 @@ import java.util.OptionalDouble;
  * ({@code program/shadow.glsl:189}). Eleven times the density on that one material, and every body
  * of water filled with milk: the whole screen from under the surface, the lake alone from the bank.
  * <p>
- * Square, at the resolution the pack asked for and at no other, which is the one number about this
- * stage that cannot be chosen here. A pack picks its filter radius in texels of its own map, so a
- * map at half the size it declared is a penumbra at twice the width, and it looks like a pack that
- * was written that way rather than like a mistake of ours.
+ * Square, at the resolution the pack's text asks for, which may already carry the player's shadow
+ * map scale: that scale is applied by rewriting the pack's own declaration before a line of it is
+ * translated, so what arrives here is a number the pack's whole arithmetic agrees with. Nothing
+ * about the size is decided in this class, and it must not be. A pack picks its filter radius, its
+ * shadow bias and its texel coordinates from the number it declared, so a map allocated at any
+ * other size is a picture computed against an image that does not exist.
  * <p>
  * <strong>The map stores the forward window, nought at the near plane and one at the far one, and
  * that is a decision rather than an inheritance.</strong> The scene is drawn under a reversed Z the
@@ -207,8 +209,13 @@ final class ShadowTargets {
 			}
 
 			clear(RenderSystem.getDevice().createCommandEncoder());
+			// The size and no word about why it is that size. This class cannot tell a pack that
+			// asked for a small map from a player who asked for a smaller one: what it is handed is
+			// one number, already through whatever was applied upstream, and a caption naming the
+			// player's setting would be a claim it cannot make. PackChain says the setting is in
+			// force, once, where it knows that.
 			Vitrail.logger().info("Shadow map allocated at {}x{}, storing the forward depth window, "
-					+ "with {}", this.resolution, this.resolution, describe());
+				+ "with {}", this.resolution, this.resolution, describe());
 
 			return true;
 		} catch (RuntimeException e) {

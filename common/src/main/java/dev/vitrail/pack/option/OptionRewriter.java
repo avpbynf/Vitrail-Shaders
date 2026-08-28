@@ -28,8 +28,32 @@ public final class OptionRewriter {
 	private OptionRewriter() {
 	}
 
-	/** Returns the line unchanged when it declares nothing, or nothing was chosen for it. */
-	public static String apply(String line, Map<String, OptionValue> chosen) {
+	/**
+	 * The one declaration this engine may rewrite without a pack or a player having chosen a
+	 * value for it, because the number it holds is the size of an image the engine allocates.
+	 */
+	private static final String SHADOW_MAP_RESOLUTION = "shadowMapResolution";
+
+	/**
+	 * Returns the line unchanged when it declares nothing, or nothing was chosen for it and no
+	 * scale applies to it.
+	 * <p>
+	 * <strong>The scale is applied HERE and nowhere else, which is what stops the picture and
+	 * the allocation disagreeing.</strong> The engine reads the size it allocates off the
+	 * expanded unit, {@code ConstDirectives.read} keeping the live declarations of the text this
+	 * returns, so a number scaled here is the number allocated and the number the pack's own
+	 * arithmetic divides by. Scaling the allocation instead would leave every pack computing its
+	 * filter radius, its shadow bias and its {@code texelFetch} coordinates against a map that
+	 * does not exist, which is a wrong image rather than a smaller one.
+	 * <p>
+	 * It composes with the pack's own setting rather than replacing it: four packs of the corpus
+	 * offer this name as a slider of their own, and what is scaled is whatever they and the
+	 * player between them settled on. A declaration this cannot read as a whole number is left
+	 * alone, which leaves the pack the size it asked for.
+	 *
+	 * @param scale a percentage on each axis, a hundred meaning the declaration is untouched
+	 */
+	public static String apply(String line, Map<String, OptionValue> chosen, int scale) {
 		Matcher define = DEFINE.matcher(line);
 		if (define.matches()) {
 			OptionValue value = chosen.get(define.group(3));
@@ -63,7 +87,12 @@ public final class OptionRewriter {
 			// write that line, no screen offering the name.
 			OptionValue value = ConstOptions.isOption(constant.group(3))
 					? chosen.get(constant.group(3)) : null;
-			if (value == null) {
+
+			// The scale is the one thing that rewrites a declaration nobody chose a value for, so it
+			// is asked before the line is given back. A hundred changes nothing at all, which is what
+			// makes an untouched setting free and keeps every reading below it out of this file.
+			boolean scaled = scale != 100 && SHADOW_MAP_RESOLUTION.equals(constant.group(3));
+			if (value == null && !scaled) {
 				return line;
 			}
 
@@ -72,16 +101,53 @@ public final class OptionRewriter {
 			// declaration takes: a constant is read as an expression rather than tested with
 			// #ifdef, so commenting the line out the way a #define is would leave the name
 			// undeclared, and skipping it would drop the setting without a word.
-			if (value.isBoolean() && !BOOL.equals(constant.group(2))) {
+			if (value != null && value.isBoolean() && !BOOL.equals(constant.group(2))) {
 				return line;
 			}
 
-			String text = value.isBoolean() ? Boolean.toString(value.asBoolean()) : value.text();
+			// The declaration's own expression when nothing was chosen, which is the road a scale
+			// takes on a pack that offers no setting for this name.
+			String text = value == null ? constant.group(4).trim()
+				: value.isBoolean() ? Boolean.toString(value.asBoolean()) : value.text();
+
+			if (scaled) {
+				// A scale that cannot be applied never costs a chosen value: the declaration is left
+				// standing only where there was nothing to write anyway, so a setting for this name
+				// still reaches the shader when the scale cannot read what it holds.
+				String through = through(text, scale);
+				if (through == null && value == null) {
+					return line;
+				}
+
+				if (through != null) {
+					text = through;
+				}
+			}
 
 			return constant.group(1) + "const " + constant.group(2) + " " + constant.group(3)
 					+ " = " + text + ";" + constant.group(5);
 		}
 
 		return line;
+	}
+
+	/**
+	 * That number through the scale, at least one texel, or null where it is not a whole number
+	 * this can read.
+	 * <p>
+	 * Null rather than a guess, and the caller then leaves the declaration standing: a pack
+	 * writing an expression here keeps the size it asked for, which is the only outcome that
+	 * cannot make an image wrong. Held at one because a quarter of a pack's own nonsense still
+	 * has to be a texture.
+	 */
+	private static String through(String text, int scale) {
+		int declared;
+		try {
+			declared = Integer.parseInt(text);
+		} catch (NumberFormatException e) {
+			return null;
+		}
+
+		return Integer.toString(Math.max(1, Math.round(declared * scale / 100.0F)));
 	}
 }

@@ -13,6 +13,26 @@ what the next one holds.
 
 ## Unreleased
 
+### Added
+
+- **A Shadow Map Scale slider under Video Settings**, on the mod's page beside Max Shadow
+  Distance. The shadow map is drawn at the chosen fraction of the resolution the pack asked
+  for, 25 to 100 percent, and the setting outlives whichever pack is chosen. Moving it reloads
+  the pack, which is what lets the pack be told the smaller number instead of being left to
+  work against a map it cannot see.
+
+  It is a setting of its own rather than something the FSR Render Scale takes along with it,
+  because of what it does to the picture. The pack works out its shadow blur, its shadow bias
+  and where it reads the map from the size it was given, so a smaller map is a less defined
+  shadow, softer where the pack smooths its own and coarser where it does not, and an image
+  the pack's author never saw. That is a trade worth offering and not worth making on
+  somebody's behalf, so at 100 percent, which is where it starts, the pack gets exactly the
+  map it asked for and nothing of the setting runs. The engine says at load when the setting
+  is in force.
+
+  What the render scale reaches and what it leaves alone is now written down, in
+  `docs/render-scale.md`.
+
 ### Changed
 
 - **A patch of this mod that stops fitting the game now refuses to start it, instead of drawing a

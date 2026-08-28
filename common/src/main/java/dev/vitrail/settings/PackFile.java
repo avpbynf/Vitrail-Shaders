@@ -10,15 +10,16 @@ import java.util.Locale;
 
 /**
  * What {@code vitrail/pack.txt} carries: which pack was chosen, whether shaders are on at all, how
- * far the player asked the light to reach, and what fraction of the window the world renders at.
+ * far the player asked the light to reach, what fraction of the window the world renders at, and
+ * how much of the shadow map the pack asked for is actually drawn.
  * <p>
- * <b>The last two are not about a pack, and they are here for the reason the other two are.</b>
+ * <b>The last three are not about a pack, and they are here for the reason the other two are.</b>
  * Iris keeps its own in the same properties file as {@code shaderPack} and {@code enableShaders},
  * {@code maxShadowRenderDistance} in {@code config/IrisConfig.java:178,206}, because it is the same
  * kind of thing: one number the player set once, that outlives whichever pack is loaded and has to
  * be there before one is. A file of its own would be a second file to find, to write and to keep in
- * step. The render scale has no counterpart in Iris and follows the same rule for the same
- * reason.
+ * step. The render scale and the shadow map scale have no counterpart in Iris and follow the same
+ * rule for the same reason.
  * <p>
  * <b>Two facts and not one, and that is what the screen's toggle needs.</b> Iris keeps
  * {@code shaderPack} and {@code enableShaders} apart in its own properties file, so turning shaders
@@ -34,7 +35,8 @@ import java.util.Locale;
  * Nothing here touches Minecraft, which is the rule for this whole package: it is what lets the
  * settings be run against the pack corpus without starting the game.
  */
-public record PackFile(String name, boolean enabled, int shadowDistance, int renderScale) {
+public record PackFile(String name, boolean enabled, int shadowDistance, int renderScale,
+		int shadowMapScale) {
 
 	/** The word that means no pack rather than the name of one, kept from the one line format. */
 	public static final String NONE = "none";
@@ -43,6 +45,7 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 	private static final String ENABLED_KEY = "enabled";
 	private static final String SHADOW_DISTANCE_KEY = "shadowdistance";
 	private static final String RENDER_SCALE_KEY = "renderscale";
+	private static final String SHADOW_MAP_SCALE_KEY = "shadowmapscale";
 
 	/**
 	 * The range the shadow distance is offered and stored over, in CHUNKS, and Iris's own: zero to
@@ -64,23 +67,53 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 	public static final int MAX_RENDER_SCALE = 100;
 	public static final int DEFAULT_RENDER_SCALE = MAX_RENDER_SCALE;
 
+	/**
+	 * The range the shadow map scale is offered and stored over, as a percentage of the square
+	 * resolution the pack declared, on each axis. At the top the map is exactly the one the pack
+	 * asked for and nothing of the setting runs, which is what makes an untouched one free; the
+	 * floor is where a shadow edge stops being an edge.
+	 * <p>
+	 * <b>Iris has no counterpart, and this is a setting rather than something the render scale
+	 * drags along with it.</b> Iris allocates the map at the pack's own directive and at no other
+	 * number ({@code shadows/ShadowRenderTargets.java:65}), and its video settings carry two player
+	 * facts and no third, the shadow distance and the colour space
+	 * ({@code gui/option/IrisVideoSettings.java:15-16}). So the case for this one is the render
+	 * scale's and not the distance's: it belongs to the machine rather than to the pack, it changes
+	 * nothing at all while it sits at its default, and a player has to reach for it.
+	 * <p>
+	 * <b>What it moves is the number the PACK IS TOLD, and that is the whole of why it is
+	 * safe.</b> The declaration the pack makes of its map size is rewritten before a line of it is
+	 * translated, so the pack computes its filter radius, its depth bias and its texel coordinates
+	 * against the map it really gets. Where the pack smooths its shadows a smaller map is then a
+	 * wider penumbra rather than a blockier one, the radius being a fraction of the map; where it
+	 * takes a single sample there is no radius to widen and the edge simply coarsens, which some
+	 * quality profiles of the corpus do. Either is an image the pack's author never saw and a
+	 * coherent one. Allocating smaller
+	 * while leaving the declaration alone is the other thing entirely, and it is a wrong picture:
+	 * the corpus reads that map with texel coordinates taken from the declared number.
+	 */
+	public static final int MIN_SHADOW_MAP_SCALE = 25;
+	public static final int MAX_SHADOW_MAP_SCALE = 100;
+	public static final int DEFAULT_SHADOW_MAP_SCALE = MAX_SHADOW_MAP_SCALE;
+
 	/** Nothing chosen. Shaders are on, so choosing a pack is all it takes to draw one. */
-	public static final PackFile EMPTY =
-			new PackFile("", true, DEFAULT_SHADOW_DISTANCE, DEFAULT_RENDER_SCALE);
+	public static final PackFile EMPTY = new PackFile("", true, DEFAULT_SHADOW_DISTANCE,
+			DEFAULT_RENDER_SCALE, DEFAULT_SHADOW_MAP_SCALE);
 
 	public PackFile {
 		name = name.trim();
 		// Clamped here rather than where the file is read, so that a number typed by hand and a
 		// number arriving from a screen are held to the same range: the value is served to the
-		// culling as a distance and a negative one there means something else entirely. The scale
-		// under the same rule, its floor being where the picture stops being one.
+		// culling as a distance and a negative one there means something else entirely. Both scales
+		// under the same rule, their floors being where the picture stops being one.
 		shadowDistance = Math.clamp(shadowDistance, MIN_SHADOW_DISTANCE, MAX_SHADOW_DISTANCE);
 		renderScale = Math.clamp(renderScale, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+		shadowMapScale = Math.clamp(shadowMapScale, MIN_SHADOW_MAP_SCALE, MAX_SHADOW_MAP_SCALE);
 	}
 
 	/**
 	 * What the file says, or {@link #EMPTY} when it is not there. A line that is neither a comment nor
-	 * one of the four keys is ignored rather than refused: this file is edited by hand.
+	 * one of the five keys is ignored rather than refused: this file is edited by hand.
 	 * <p>
 	 * Decoded through the {@code String} constructor rather than through {@code Files.readString},
 	 * which THROWS on a byte that is not UTF-8. The rule the lines below are read under, that
@@ -106,14 +139,17 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 			String bare = content.trim();
 
 			return NONE.equalsIgnoreCase(bare)
-					? new PackFile("", false, DEFAULT_SHADOW_DISTANCE, DEFAULT_RENDER_SCALE)
-					: new PackFile(bare, true, DEFAULT_SHADOW_DISTANCE, DEFAULT_RENDER_SCALE);
+					? new PackFile("", false, DEFAULT_SHADOW_DISTANCE, DEFAULT_RENDER_SCALE,
+							DEFAULT_SHADOW_MAP_SCALE)
+					: new PackFile(bare, true, DEFAULT_SHADOW_DISTANCE, DEFAULT_RENDER_SCALE,
+							DEFAULT_SHADOW_MAP_SCALE);
 		}
 
 		String name = "";
 		boolean enabled = true;
 		int shadowDistance = DEFAULT_SHADOW_DISTANCE;
 		int renderScale = DEFAULT_RENDER_SCALE;
+		int shadowMapScale = DEFAULT_SHADOW_MAP_SCALE;
 		for (String line : content.lines().toList()) {
 			String trimmed = line.trim();
 			if (trimmed.isEmpty() || trimmed.startsWith("#")) {
@@ -137,12 +173,13 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 				// character must not cost the player the pack they had chosen.
 				case SHADOW_DISTANCE_KEY -> shadowDistance = number(value, shadowDistance);
 				case RENDER_SCALE_KEY -> renderScale = number(value, renderScale);
+				case SHADOW_MAP_SCALE_KEY -> shadowMapScale = number(value, shadowMapScale);
 				default -> {
 				}
 			}
 		}
 
-		return new PackFile(name, enabled, shadowDistance, renderScale);
+		return new PackFile(name, enabled, shadowDistance, renderScale, shadowMapScale);
 	}
 
 	/** The file's text, decoded rather than refused, with any byte order mark taken off. */
@@ -165,8 +202,8 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 	 * leaving any of them to be inferred from its absence.
 	 * <p>
 	 * <b>Two things write this file and neither owns all of it</b>, the settings screen picking a
-	 * pack and the video settings moving the shadow distance. Whichever writes has to carry the
-	 * other's line through, which is why both go through a read of the file first rather than
+	 * pack and the video settings moving one of its three numbers. Whichever writes has to carry the
+	 * other's lines through, which is why both go through a read of the file first rather than
 	 * building a record out of what they happen to hold.
 	 * <p>
 	 * Through a temporary and an {@code ATOMIC_MOVE} in the same folder, so that a crash between the
@@ -184,7 +221,8 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 				NAME_KEY + "=" + chosen.name() + "\n"
 						+ ENABLED_KEY + "=" + chosen.enabled() + "\n"
 						+ SHADOW_DISTANCE_KEY + "=" + chosen.shadowDistance() + "\n"
-						+ RENDER_SCALE_KEY + "=" + chosen.renderScale() + "\n",
+						+ RENDER_SCALE_KEY + "=" + chosen.renderScale() + "\n"
+						+ SHADOW_MAP_SCALE_KEY + "=" + chosen.shadowMapScale() + "\n",
 				StandardCharsets.UTF_8);
 		try {
 			try {
@@ -223,23 +261,31 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 	}
 
 	public PackFile withName(String name) {
-		return new PackFile(name, this.enabled, this.shadowDistance, this.renderScale);
+		return new PackFile(name, this.enabled, this.shadowDistance, this.renderScale,
+				this.shadowMapScale);
 	}
 
 	public PackFile withEnabled(boolean enabled) {
-		return new PackFile(this.name, enabled, this.shadowDistance, this.renderScale);
+		return new PackFile(this.name, enabled, this.shadowDistance, this.renderScale,
+				this.shadowMapScale);
 	}
 
 	/** Both halves of a pack choice at once, leaving whatever else the file carries where it is. */
 	public PackFile withChoice(String name, boolean enabled) {
-		return new PackFile(name, enabled, this.shadowDistance, this.renderScale);
+		return new PackFile(name, enabled, this.shadowDistance, this.renderScale,
+				this.shadowMapScale);
 	}
 
 	public PackFile withShadowDistance(int chunks) {
-		return new PackFile(this.name, this.enabled, chunks, this.renderScale);
+		return new PackFile(this.name, this.enabled, chunks, this.renderScale, this.shadowMapScale);
 	}
 
 	public PackFile withRenderScale(int percent) {
-		return new PackFile(this.name, this.enabled, this.shadowDistance, percent);
+		return new PackFile(this.name, this.enabled, this.shadowDistance, percent,
+				this.shadowMapScale);
+	}
+
+	public PackFile withShadowMapScale(int percent) {
+		return new PackFile(this.name, this.enabled, this.shadowDistance, this.renderScale, percent);
 	}
 }

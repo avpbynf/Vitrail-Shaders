@@ -43,14 +43,34 @@ import java.util.Map;
  */
 public final class SettingSet {
 
+	/**
+	 * How much of the shadow map the pack asks for is actually drawn, as a percentage on each
+	 * axis, a hundred meaning the pack's own number untouched.
+	 * <p>
+	 * <strong>Pushed by the engine rather than passed in, on the shape of
+	 * {@link EngineDefines#machine(EngineDefines.Environment)} and for its reason:</strong>
+	 * {@link #resolve} is reached from six places that translate, and threading one number
+	 * through all six is six chances to miss one and read a pack at two different sizes in one
+	 * load. It stays a plain number with a default that does nothing, so the pack corpus runs
+	 * off-game without anybody setting it.
+	 */
+	private static volatile int shadowMapScale = 100;
+
 	private final Map<String, OptionValue> chosen;
 	private final Map<String, String> engine;
 	private final String variantName;
+	private final int scale;
 
-	private SettingSet(Map<String, OptionValue> chosen, Map<String, String> engine, String variantName) {
+	private SettingSet(Map<String, OptionValue> chosen, Map<String, String> engine, String variantName,
+			int scale) {
 		this.chosen = Map.copyOf(chosen);
 		this.engine = Map.copyOf(engine);
 		this.variantName = variantName;
+		this.scale = scale;
+	}
+
+	public static void shadowMapScale(int percent) {
+		shadowMapScale = percent;
 	}
 
 	public static SettingSet resolve(Map<String, OptionValue> profile, Map<String, OptionValue> user,
@@ -58,7 +78,15 @@ public final class SettingSet {
 		Map<String, OptionValue> chosen = new LinkedHashMap<>(profile);
 		chosen.putAll(user);
 
-		return new SettingSet(chosen, EngineDefines.table(EngineDefines.machine()), variantName);
+		// Taken once here rather than read where it is used, so that every unit of one reading
+		// is expanded at the same size even if the player moves the slider while a pack loads.
+		return new SettingSet(chosen, EngineDefines.table(EngineDefines.machine()), variantName,
+			shadowMapScale);
+	}
+
+	/** The percentage this reading expands at, for the one declaration it touches. */
+	public int scale() {
+		return this.scale;
 	}
 
 	public static SettingSet defaults() {

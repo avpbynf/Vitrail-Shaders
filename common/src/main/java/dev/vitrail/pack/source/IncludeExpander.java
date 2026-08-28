@@ -242,7 +242,7 @@ public final class IncludeExpander {
 		}
 
 		Matcher original = DEFINE.matcher(line);
-		String rewritten = OptionRewriter.apply(line, this.settings.chosen());
+		String rewritten = OptionRewriter.apply(line, this.settings.chosen(), this.settings.scale());
 		Matcher applied = DEFINE.matcher(rewritten);
 
 		if (applied.matches()) {

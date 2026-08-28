@@ -57,8 +57,17 @@ public final class ScreenText {
 	public static final String SHADOW_DISTANCE_FORCED = "options.vitrail.shadow_distance_forced";
 
 	/**
+	 * How much of the shadow map the pack asked for is drawn, under the distance above and on the
+	 * same page. No counterpart in Iris, so both strings are this project's own, and the tooltip is
+	 * about the edge of a shadow rather than about a resolution: what a player sees when they lower
+	 * it is a less defined edge, the pack being told the smaller map and smoothing over it.
+	 */
+	public static final String SHADOW_MAP_SCALE = "options.vitrail.shadow_map_scale";
+	public static final String SHADOW_MAP_SCALE_TOOLTIP = "options.vitrail.shadow_map_scale_tooltip";
+
+	/**
 	 * What fraction of the window the world renders at before being upscaled, on the same page as
-	 * the distance above. No counterpart in Iris, so both strings are this project's own.
+	 * the two above. No counterpart in Iris, so both strings are this project's own.
 	 */
 	public static final String RENDER_SCALE = "options.vitrail.render_scale";
 	public static final String RENDER_SCALE_TOOLTIP = "options.vitrail.render_scale_tooltip";
