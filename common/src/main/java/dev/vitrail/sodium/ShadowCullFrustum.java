@@ -406,7 +406,17 @@ public final class ShadowCullFrustum implements Frustum {
 		return true;
 	}
 
-	/** The same, answering whether the box is wholly inside as well, for the callers that ask. */
+	/**
+	 * The same, answering whether the box is wholly inside as well, for the callers that ask.
+	 * <p>
+	 * The two halves of the loop are not symmetric and must not be made so. The near corner is
+	 * tested against EVERY plane, because that is the test that culls and any plane may still be the
+	 * one that rejects. The far corner only decides between INSIDE and INTERSECT, and one plane
+	 * having put it outside already settles that, so the rest of its dot products answer a question
+	 * nobody is asking any more. Written as a guarded assignment rather than the {@code &=} it reads
+	 * like, since that operator on booleans does not short circuit: it would evaluate the second dot
+	 * product for all thirteen planes of every box the shadow walk hands over.
+	 */
 	private int corners(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
 		boolean inside = true;
 
@@ -420,9 +430,11 @@ public final class ShadowCullFrustum implements Frustum {
 				return FrustumIntersection.OUTSIDE;
 			}
 
-			inside &= plane[0] * (plane[0] < 0.0F ? maxX : minX)
-					+ plane[1] * (plane[1] < 0.0F ? maxY : minY)
-					+ plane[2] * (plane[2] < 0.0F ? maxZ : minZ) + plane[3] >= 0.0F;
+			if (inside) {
+				inside = plane[0] * (plane[0] < 0.0F ? maxX : minX)
+						+ plane[1] * (plane[1] < 0.0F ? maxY : minY)
+						+ plane[2] * (plane[2] < 0.0F ? maxZ : minZ) + plane[3] >= 0.0F;
+			}
 		}
 
 		return inside ? FrustumIntersection.INSIDE : FrustumIntersection.INTERSECT;
