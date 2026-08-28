@@ -38,6 +38,16 @@ what the next one holds.
   asked for, or keep a program running against a block nothing binds at all. Complementary
   Ultra with world-space reflections on is the pack that declares such a block, and quitting
   the game between two packs was the only thing that cleared it.
+- **A shadow compute pass that leaves its size to the engine now covers the screen.** A pack
+  can say how much work such a program does in several ways, and only the one where it
+  writes the count out itself was read. A program using any other ran as a single small
+  tile: it filled a few hundred texels, and everything past them kept whatever the frame
+  before had left, so the effect showed up in one square at the corner and was stale over
+  the rest of the picture. Every pack tested here writes the count out, so only packs
+  outside that set could see it. Two smaller things come with it: a pack asking for no work
+  at all, which is how one of those forms switches a pass off, now dispatches nothing rather
+  than one tile, and a program whose size cannot be read at all is left out with a line in
+  the log naming it, rather than guessed at.
 
 ## 0.8.1-beta
 
