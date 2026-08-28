@@ -113,6 +113,16 @@ final class PackPass {
 	private final PackValues values;
 	private final PackUniforms uniforms;
 	private final List<String> samplers;
+
+	/**
+	 * The plan's answer for each of {@link #samplers}, in that order.
+	 * <p>
+	 * Taken here because the plan is settled when the pack is read and the names never move: asked at
+	 * the binding it was a lookup by name per sampler, per pass and per frame, and a name nothing
+	 * serves built its answer afresh on every one of them.
+	 */
+	private final List<SamplerPlan.Binding> samplerBindings;
+
 	private final List<String> storage;
 	private final List<LodRead> lodReads;
 
@@ -124,6 +134,15 @@ final class PackPass {
 	private final Supplier<String> label;
 	private final List<String> notes = new ArrayList<>();
 	private final List<GpuTextureView> attachedViews = new ArrayList<>();
+
+	/**
+	 * The area of the last descriptor built and the screen it was built for. This program's own size
+	 * follows the screen and nothing else, so the value moves on a resize and never between two.
+	 */
+	private RenderPass.RenderArea area;
+	private int areaWidth;
+	private int areaHeight;
+
 	private final int outputs;
 	private final int offset;
 	private final boolean last;
@@ -158,6 +177,7 @@ final class PackPass {
 		this.values = values;
 		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.catalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
+		this.samplerBindings = this.samplers.stream().map(loaded.samplers()::binding).toList();
 		this.storage = loaded.storageBlocks().stream()
 				.distinct()
 				.filter(StorageBuffers::named)
@@ -445,8 +465,7 @@ final class PackPass {
 			descriptor.withUnusedColorAttachment();
 		}
 
-		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0,
-				this.pass.size().width(screenWidth), this.pass.size().height(screenHeight)));
+		descriptor.withRenderArea(area(screenWidth, screenHeight));
 
 		if (targets.hasPendingClears()) {
 			targets.flushPending(encoder);
@@ -455,6 +474,21 @@ final class PackPass {
 		try (RenderPass pass = encoder.createRenderPass(descriptor)) {
 			record(pass, targets, depthView, distantView, quad, uniforms);
 		}
+	}
+
+	/**
+	 * The area this program is drawn over, built again only where the screen has moved since the last
+	 * one. The record is read by the descriptor and kept by nobody else.
+	 */
+	private RenderPass.RenderArea area(int screenWidth, int screenHeight) {
+		if (this.area == null || screenWidth != this.areaWidth || screenHeight != this.areaHeight) {
+			this.areaWidth = screenWidth;
+			this.areaHeight = screenHeight;
+			this.area = new RenderPass.RenderArea(0, 0, this.pass.size().width(screenWidth),
+					this.pass.size().height(screenHeight));
+		}
+
+		return this.area;
 	}
 
 	/**
@@ -500,8 +534,9 @@ final class PackPass {
 	 */
 	private void bindSamplers(RenderPass pass, ColorTargets targets, GpuTextureView depthView,
 			GpuTextureView distantView) {
-		for (String sampler : this.samplers) {
-			SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+		for (int at = 0; at < this.samplers.size(); at++) {
+			String sampler = this.samplers.get(at);
+			SamplerPlan.Binding binding = this.samplerBindings.get(at);
 
 			// A texture the pack ships answers all three questions at once, and they are one
 			// answer: which image, how it is filtered, and how it is addressed outside zero to one

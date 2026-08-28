@@ -1156,6 +1156,13 @@ public final class EntityDraw {
 	/** The reasons a draw has already been handed back to the game. One line each, not one a frame. */
 	private final Set<String> refused = new LinkedHashSet<>();
 
+	/**
+	 * The pipelines whose casters have already been reported dropped, which is the same "once each"
+	 * as {@link #refused} and is kept apart from it: the pipeline itself is the key there, where a
+	 * name built from it was a string composed at every draw the light's walk gives up on.
+	 */
+	private final Set<RenderPipeline> droppedPipelines = new LinkedHashSet<>();
+
 	/** The pass a run of draws is being recorded into, or null between runs. */
 	private RenderPass open;
 
@@ -1737,7 +1744,7 @@ public final class EntityDraw {
 	 */
 	@SuppressWarnings("ReferenceEquality")
 	private void dropped(RenderPipeline pipeline) {
-		if (!this.refused.add("shadow:" + pipeline.getLocation())) {
+		if (!this.droppedPipelines.add(pipeline)) {
 			return;
 		}
 
@@ -2232,6 +2239,7 @@ public final class EntityDraw {
 		// this can refuse again, for the same reason or for another, and a reader watching a portal
 		// would see the first reading's lines and nothing after them.
 		this.refused.clear();
+		this.droppedPipelines.clear();
 		this.read = false;
 	}
 }
