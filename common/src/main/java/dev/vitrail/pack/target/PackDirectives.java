@@ -1,8 +1,8 @@
 package dev.vitrail.pack.target;
 
 import dev.vitrail.pack.option.SettingSet;
+import dev.vitrail.pack.program.ProgramNames;
 import dev.vitrail.pack.program.ProgramSet;
-import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.source.DimensionSet;
 import dev.vitrail.pack.source.IncludeExpander;
 import dev.vitrail.pack.source.ShaderPackSource;
@@ -12,7 +12,6 @@ import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -122,12 +121,12 @@ public final class PackDirectives {
 		boolean present = !dimension.equals(ProgramSet.ROOT)
 				&& source.topLevelDirectories().contains(dimension);
 		List<ProgramSet.ProgramKey> entries =
-				fragmentsOf(programs, present ? dimension : ProgramSet.ROOT);
+				programs.fragmentsOf(present ? dimension : ProgramSet.ROOT);
 
 		IncludeExpander expander = new IncludeExpander(source, settings);
 		Builder builder = builder();
 
-		for (ProgramSet.ProgramKey key : sorted(entries)) {
+		for (ProgramSet.ProgramKey key : ProgramSet.sorted(entries, ProgramNames::directiveRank)) {
 			Optional<Path> file = source.file(key.file());
 			if (file.isEmpty()) {
 				continue;
@@ -278,34 +277,6 @@ public final class PackDirectives {
 	/** Which {@code shadowcolor} buffers the pack named at all, which is not which ones exist. */
 	public Set<Integer> shadowColoursDeclared() {
 		return this.shadowColours.keySet();
-	}
-
-	private static List<ProgramSet.ProgramKey> fragmentsOf(ProgramSet programs, String place) {
-		return programs.keys().stream()
-				.filter(key -> key.stage() == ProgramStage.FRAGMENT)
-				.filter(key -> key.dimension().equals(place))
-				.toList();
-	}
-
-	private static List<ProgramSet.ProgramKey> sorted(List<ProgramSet.ProgramKey> entries) {
-		return entries.stream()
-				.sorted(Comparator
-						.comparingInt((ProgramSet.ProgramKey key) -> rank(key.name().family()))
-						.thenComparingInt(key -> key.name().slot())
-						.thenComparing(ProgramSet.ProgramKey::file))
-				.toList();
-	}
-
-	/** The order Iris folds directives in, the same one {@link TargetPlan} uses. */
-	private static int rank(String family) {
-		return switch (family) {
-			case "shadowcomp" -> 0;
-			case "begin" -> 1;
-			case "prepare" -> 2;
-			case "deferred" -> 4;
-			case "composite" -> 5;
-			default -> 3;
-		};
 	}
 
 	public static final class Builder {

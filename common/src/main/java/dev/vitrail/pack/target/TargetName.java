@@ -5,7 +5,8 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * The names a colour target answers to, and the index behind them.
+ * The names a colour target answers to, and the index behind them. Also, {@link #bareName}: not
+ * a target name at all, kept here because it is never called apart from one.
  * <p>
  * The eight names from before the format was numbered are not folklore. Five of the eight packs
  * sample a target through one of them, and not in a corner: Mellow reads {@code gaux1} in all of
@@ -90,5 +91,20 @@ public final class TargetName {
 	}
 
 	public record Suffixed(int index, String suffix) {
+	}
+
+	/**
+	 * A program is named here by itself, {@code composite1}, while the rest of the engine names it
+	 * by where it lives, {@code world0/composite1}. Both are accepted, so that neither side has to
+	 * remember which form the other one uses.
+	 * <p>
+	 * Not a target name, unlike the rest of this class: it strips a program's directory, not a
+	 * buffer's alias. Kept here anyway because every reader that calls it also reads a target name
+	 * in the same breath, matching a program's writes and samples against the targets above.
+	 */
+	public static String bareName(String program) {
+		int slash = program.lastIndexOf('/');
+
+		return slash < 0 ? program : program.substring(slash + 1);
 	}
 }

@@ -393,13 +393,9 @@ public final class TargetDirectives {
 		}
 	}
 
+	/** {@link TargetName#bareName}, with the file's own extension taken off besides its directory. */
 	private static String bareName(String program) {
-		String name = program;
-		int slash = name.lastIndexOf('/');
-		if (slash >= 0) {
-			name = name.substring(slash + 1);
-		}
-
+		String name = TargetName.bareName(program);
 		int dot = name.lastIndexOf('.');
 
 		return dot < 0 ? name : name.substring(0, dot);

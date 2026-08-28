@@ -364,7 +364,7 @@ public final class SamplerPlan {
 	 * gbuffers override stands for the whole frame however the targets have been flipped.
 	 */
 	private static Set<String> standing(TargetPlan plan, String program, Set<String> supplied) {
-		String bare = bareName(program);
+		String bare = TargetName.bareName(program);
 		String stage = stageOf(bare);
 		if (supplied.isEmpty() || stage == null) {
 			return supplied;
@@ -406,12 +406,6 @@ public final class SamplerPlan {
 			case "final" -> "composite";
 			default -> null;
 		};
-	}
-
-	private static String bareName(String program) {
-		int slash = program.lastIndexOf('/');
-
-		return slash < 0 ? program : program.substring(slash + 1);
 	}
 
 	/** In declaration order, one entry per name, never short. */

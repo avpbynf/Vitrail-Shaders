@@ -18,14 +18,12 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.ToIntFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -182,7 +180,7 @@ public final class TargetPlan {
 		draft.place = present ? dimension : ProgramSet.ROOT;
 		draft.properties = properties;
 
-		List<ProgramSet.ProgramKey> entries = fragmentsOf(programs, draft.place);
+		List<ProgramSet.ProgramKey> entries = programs.fragmentsOf(draft.place);
 
 		Map<String, String> defines = settings.globalDefines(options);
 		read(source, options, settings, properties, entries, draft);
@@ -252,7 +250,7 @@ public final class TargetPlan {
 		List<TargetSchedule.Step> steps = new ArrayList<>();
 		int rank = 0;
 
-		for (ProgramSet.ProgramKey key : sorted(entries, ProgramNames::frameRank)) {
+		for (ProgramSet.ProgramKey key : ProgramSet.sorted(entries, ProgramNames::frameRank)) {
 			String family = key.name().family();
 			String name = key.name().baseName();
 
@@ -390,7 +388,7 @@ public final class TargetPlan {
 		// Iris's order, from ProgramSet.locateDirectives, and the last live declaration wins. One
 		// unit is held at a time: the worst of the corpus expands to four hundred kilobytes and
 		// one dimension has up to forty six of them.
-		for (ProgramSet.ProgramKey key : sorted(entries, TargetPlan::directiveRank)) {
+		for (ProgramSet.ProgramKey key : ProgramSet.sorted(entries, ProgramNames::directiveRank)) {
 			Optional<Path> file = source.file(key.file());
 			if (file.isEmpty()) {
 				draft.unreadable.add(key.file());
@@ -568,7 +566,7 @@ public final class TargetPlan {
 
 	/** The draw buffers of one program after inference, by bare name. Empty for the final. */
 	public List<Integer> writes(String program) {
-		return this.writes.getOrDefault(bareName(program), List.of());
+		return this.writes.getOrDefault(TargetName.bareName(program), List.of());
 	}
 
 	/** Programs whose draw buffers nobody wrote down and that were sent to colortex0. */
@@ -581,7 +579,7 @@ public final class TargetPlan {
 	 * from a translation, so that the whole chain can be checked without compiling anything.
 	 */
 	public Set<Integer> samples(String program) {
-		return this.samples.getOrDefault(bareName(program), Set.of());
+		return this.samples.getOrDefault(TargetName.bareName(program), Set.of());
 	}
 
 	/**
@@ -797,7 +795,7 @@ public final class TargetPlan {
 			}
 
 			BlendMode.parse(directive.value())
-					.ifPresent(mode -> blend.put(bareName(directive.program()), mode));
+					.ifPresent(mode -> blend.put(TargetName.bareName(directive.program()), mode));
 		}
 
 		return Collections.unmodifiableMap(blend);
@@ -810,51 +808,7 @@ public final class TargetPlan {
 	 * @param program the bare name, {@code gbuffers_water}, not the file that ends up serving it
 	 */
 	public Optional<BlendMode> blend(String program) {
-		return Optional.ofNullable(this.blend.get(bareName(program)));
-	}
-
-	private static List<ProgramSet.ProgramKey> fragmentsOf(ProgramSet programs, String place) {
-		return programs.keys().stream()
-				.filter(key -> key.stage() == ProgramStage.FRAGMENT)
-				.filter(key -> key.dimension().equals(place))
-				.toList();
-	}
-
-	private static List<ProgramSet.ProgramKey> sorted(List<ProgramSet.ProgramKey> entries,
-			ToIntFunction<String> rank) {
-		return entries.stream()
-				.sorted(Comparator
-						.comparingInt((ProgramSet.ProgramKey key) -> rank.applyAsInt(key.name().family()))
-						.thenComparingInt(key -> key.name().slot())
-						.thenComparing(ProgramSet.ProgramKey::file))
-				.toList();
-	}
-
-	/**
-	 * The order Iris folds directives in, from {@code ProgramSet.locateDirectives}. Setup programs
-	 * are not in it: they go to the compute list there and are only ever read for their work group
-	 * size, so they declare no format however they are written.
-	 */
-	private static int directiveRank(String family) {
-		return switch (family) {
-			case "shadowcomp" -> 0;
-			case "begin" -> 1;
-			case "prepare" -> 2;
-			case "deferred" -> 4;
-			case "composite" -> 5;
-			default -> 3;
-		};
-	}
-
-	/**
-	 * A program is named here by itself, {@code composite1}, while the rest of the engine names
-	 * it by where it lives, {@code world0/composite1}. Both are accepted, as in the schedule, so
-	 * that neither side has to remember which form the other one uses.
-	 */
-	private static String bareName(String program) {
-		int slash = program.lastIndexOf('/');
-
-		return slash < 0 ? program : program.substring(slash + 1);
+		return Optional.ofNullable(this.blend.get(TargetName.bareName(program)));
 	}
 
 	private static final class Draft {

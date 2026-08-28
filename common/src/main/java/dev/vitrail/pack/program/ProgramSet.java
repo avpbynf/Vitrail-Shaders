@@ -6,10 +6,12 @@ import dev.vitrail.pack.source.ShaderPackSource;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.ToIntFunction;
 
 /**
  * The entry points a pack ships: one per file that is a program stage sitting where programs
@@ -111,6 +113,24 @@ public final class ProgramSet {
 	/** Directories under {@code shaders/} that were not walked into. */
 	public Map<String, Integer> skippedDirectories() {
 		return new TreeMap<>(this.skippedDirectories);
+	}
+
+	/** Every fragment entry point of one dimension. */
+	public List<ProgramKey> fragmentsOf(String place) {
+		return this.keys.stream()
+				.filter(key -> key.stage() == ProgramStage.FRAGMENT)
+				.filter(key -> key.dimension().equals(place))
+				.toList();
+	}
+
+	/** The same keys, ordered by family under the caller's rank, then by slot, then by file. */
+	public static List<ProgramKey> sorted(List<ProgramKey> entries, ToIntFunction<String> rank) {
+		return entries.stream()
+				.sorted(Comparator
+						.comparingInt((ProgramKey key) -> rank.applyAsInt(key.name().family()))
+						.thenComparingInt(key -> key.name().slot())
+						.thenComparing(ProgramKey::file))
+				.toList();
 	}
 
 	/** One entry point: where it lives, what it is, and which file holds it. */

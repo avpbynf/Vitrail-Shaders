@@ -105,7 +105,8 @@ public final class TargetSchedule {
 		int opened = 0;
 
 		for (Step step : steps) {
-			int reached = ProgramNames.frameRank(ProgramNames.familyOf(bareName(step.program())));
+			int reached =
+					ProgramNames.frameRank(ProgramNames.familyOf(TargetName.bareName(step.program())));
 
 			// The snapshot is taken between the last deferred and the first thing after it, with
 			// the deferred stage opened and the composite one not. That is the moment Iris takes
@@ -138,7 +139,8 @@ public final class TargetSchedule {
 
 			doubled.addAll(step.writes());
 
-			Map<Integer, Boolean> here = forced.getOrDefault(bareName(step.program()), Map.of());
+			Map<Integer, Boolean> here =
+					forced.getOrDefault(TargetName.bareName(step.program()), Map.of());
 			for (int index : step.writes()) {
 				if (!Boolean.FALSE.equals(here.get(index))) {
 					flip(flipped, index);
@@ -208,9 +210,10 @@ public final class TargetSchedule {
 	}
 
 	public Optional<Bound> step(String program) {
-		String wanted = bareName(program);
+		String wanted = TargetName.bareName(program);
 
-		return this.steps.stream().filter(step -> bareName(step.program()).equals(wanted)).findFirst();
+		return this.steps.stream().filter(step -> TargetName.bareName(step.program()).equals(wanted))
+				.findFirst();
 	}
 
 	/**
@@ -275,11 +278,11 @@ public final class TargetSchedule {
 	 */
 	public Set<Integer> doubledFor(Set<String> programs) {
 		Set<String> wanted = new LinkedHashSet<>();
-		programs.forEach(program -> wanted.add(bareName(program)));
+		programs.forEach(program -> wanted.add(TargetName.bareName(program)));
 
 		Set<Integer> found = new TreeSet<>();
 		for (Bound step : this.steps) {
-			String name = bareName(step.program());
+			String name = TargetName.bareName(step.program());
 			if (!step.fullscreen() || !wanted.contains(name)) {
 				continue;
 			}
@@ -305,24 +308,14 @@ public final class TargetSchedule {
 		}
 	}
 
-	/**
-	 * A program is named here by itself, {@code composite1}, while the rest of the engine names
-	 * it by where it lives, {@code world0/composite1}. Both are accepted so that neither side has
-	 * to remember which form the other one uses.
-	 */
-	private static String bareName(String program) {
-		int slash = program.lastIndexOf('/');
-
-		return slash < 0 ? program : program.substring(slash + 1);
-	}
-
 	private static Map<String, Map<Integer, Boolean>> byProgram(
 			List<ShaderProperties.FlipDirective> explicit) {
 		Map<String, Map<Integer, Boolean>> forced = new LinkedHashMap<>();
 
 		for (ShaderProperties.FlipDirective directive : explicit) {
 			TargetName.index(directive.buffer()).ifPresent(index ->
-					forced.computeIfAbsent(bareName(directive.program()), _ -> new LinkedHashMap<>())
+					forced.computeIfAbsent(TargetName.bareName(directive.program()),
+							_ -> new LinkedHashMap<>())
 							.put(index, directive.value()));
 		}
 
