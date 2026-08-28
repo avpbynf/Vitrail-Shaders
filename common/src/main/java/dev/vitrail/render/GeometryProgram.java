@@ -460,6 +460,21 @@ final class GeometryProgram {
 	/** Reused while a descriptor is built: Sodium asks for one per region, not once a frame. */
 	private final List<GpuTextureView> attachedViews = new ArrayList<>();
 	private final List<GpuTextureView> writtenViews = new ArrayList<>();
+	private final List<GpuTextureView> shadowViews = new ArrayList<>();
+
+	/**
+	 * The area of the last descriptor built, and the size it was built for.
+	 * <p>
+	 * Held for the same reason the view lists above are: one is asked for per region and the value
+	 * moves only when the window does. The size is carried beside it rather than the area being
+	 * dropped on a resize, because nothing here is told of one; the map's own is a square and moves
+	 * when the player scales it.
+	 */
+	private RenderPass.RenderArea area;
+	private int areaWidth;
+	private int areaHeight;
+	private RenderPass.RenderArea shadowArea;
+	private int shadowAreaSize;
 
 	GeometryProgram(Pass pass, PackProgram.Loaded loaded, PackValues values, int load,
 			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets,
@@ -1399,8 +1414,7 @@ final class GeometryProgram {
 		// at the first draw rather than at load time. The size is the screen's, and stays the
 		// screen's now that attachment nought may be a target of the pack's: a scaled colour target
 		// is dropped before it gets here, and the game's depth is attached whatever else is.
-		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0,
-				this.targets.screenWidth(), this.targets.screenHeight()));
+		descriptor.withRenderArea(area(this.targets.screenWidth(), this.targets.screenHeight()));
 
 		return depth == null ? descriptor : descriptor.withDepthAttachment(depth);
 	}
@@ -1458,7 +1472,7 @@ final class GeometryProgram {
 			return null;
 		}
 
-		List<GpuTextureView> colours = new ArrayList<>(this.shadowColours.size());
+		this.shadowViews.clear();
 		for (int index : this.shadowColours) {
 			// One attachment per state the pipeline carries, and in the same order. The images are
 			// allocated together with the depth, so this is null only where the depth above is, and
@@ -1470,21 +1484,47 @@ final class GeometryProgram {
 				return null;
 			}
 
-			colours.add(colour);
+			this.shadowViews.add(colour);
 		}
 
 		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.shadowLabel);
 		int at = 0;
 		for (int index : this.shadowColours) {
-			descriptor.withColorAttachment(colours.get(at), this.shadow.takeColourClear(index));
+			descriptor.withColorAttachment(this.shadowViews.get(at), this.shadow.takeColourClear(index));
 			at++;
 		}
 
 		descriptor.withDepthAttachment(depth, this.shadow.takeDepthClear())
-				.withRenderArea(new RenderPass.RenderArea(0, 0, this.shadow.resolution(),
-						this.shadow.resolution()));
+				.withRenderArea(shadowArea());
 		this.shadow.flushPending(RenderSystem.getDevice().createCommandEncoder());
 		return descriptor;
+	}
+
+	/**
+	 * The area a descriptor covers, built again only where the window has moved since the last one.
+	 * <p>
+	 * The value is the same on every region of a frame and on every frame between two resizes, and
+	 * the object is read by the descriptor and kept by nobody else.
+	 */
+	private RenderPass.RenderArea area(int width, int height) {
+		if (this.area == null || width != this.areaWidth || height != this.areaHeight) {
+			this.areaWidth = width;
+			this.areaHeight = height;
+			this.area = new RenderPass.RenderArea(0, 0, width, height);
+		}
+
+		return this.area;
+	}
+
+	/** The same for the map's own square, which moves when the player scales it and not otherwise. */
+	private RenderPass.RenderArea shadowArea() {
+		int size = this.shadow.resolution();
+		if (this.shadowArea == null || size != this.shadowAreaSize) {
+			this.shadowAreaSize = size;
+			this.shadowArea = new RenderPass.RenderArea(0, 0, size, size);
+		}
+
+		return this.shadowArea;
 	}
 
 	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */
