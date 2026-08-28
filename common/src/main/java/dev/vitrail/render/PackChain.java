@@ -16,6 +16,7 @@ import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.texture.CustomImages;
+import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.settings.PackFile;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsFile;
@@ -326,9 +327,11 @@ public final class PackChain {
 	private final Object familyMaps = new Object();
 
 	/**
-	 * Raised by {@link #release()} and read by the pack-load worker between two programs, which is
-	 * what stops a worker still compiling for a chain nothing will ever draw again. Volatile for
-	 * that one cross-thread read; everything else about the release stays on the render thread.
+	 * Raised by {@link #release()} and read by the pack-load worker on both of its stages, which is
+	 * what stops a worker still working for a chain nothing will ever draw again:
+	 * {@link #warmFamily} reads it between two programs and {@link #prefetchFamily} between two
+	 * families. Volatile for those cross-thread reads; everything else about the release stays on
+	 * the render thread.
 	 */
 	private volatile boolean released;
 
@@ -597,6 +600,28 @@ public final class PackChain {
 	 */
 	public static void load(Path gameDirectory) {
 		PassTimings.resetCensus();
+		// The storage blocks the translator files away, emptied at the head of a load and NOT beside
+		// the CustomImages line in release(), though the two are installed on the same line.
+		//
+		// What parts them is not when they are asked. VulkanBindGroupLayoutMixin asks both in the
+		// same method, while the layout is built. It is that only this one is asked again on the
+		// OTHER side of the same decision: the layout takes VK_DESCRIPTOR_TYPE_STORAGE_BUFFER from
+		// StorageBuffers.named and the descriptor write takes it from StorageBuffers.bound, and both
+		// of those come back here. A layout is cached with its pipeline and a release does not empty
+		// that cache, so emptying this between the two makes the write go in as a uniform buffer
+		// against a slot the layout already declared storage. The image half cannot do that: the
+		// write side reads StorageImages.bound, which walks an allocation of its own and never asks
+		// CustomImages, so an empty table there costs a filter mode for a frame and no more. And the
+		// road that would reach it is real: leaving a world releases the chain and does NOT replace
+		// it, so the first frame of the next world is drawn by that same chain before draw() gets to
+		// reloadIfTheWorldMoved.
+		//
+		// What emptying here buys is bounded, not absolute. The pack-load worker of the chain that
+		// has just gone translates on a background thread and every program it reads reinstalls what
+		// ITS pack declared, so it can put the outgoing answers back after this line. prefetchFamily
+		// stops between two families once the chain is released, which leaves the one family already
+		// under way, and that is the whole of what can still land here.
+		CustomStorage.clear();
 		// Taken before anything reads the folder, so that the count printed at the end of the load
 		// covers every opening the load made and not only the translation's.
 		int openings = ShaderPackSource.openings();
@@ -2951,7 +2976,26 @@ public final class PackChain {
 		}
 	}
 
+	/**
+	 * One family read ahead, and the translation half of what {@link #released} stops.
+	 * <p>
+	 * {@link #warmFamily} read that flag between two programs and this did not, so a chain nothing
+	 * would ever draw again went on translating its remaining families. That is wasted work, and it
+	 * is also the one thing that writes to state no chain owns: every {@code PackProgram.load}
+	 * reinstalls the {@code bufferObject} lines of the pack it is reading and the translator files
+	 * its storage block names away as it goes, so a worker outliving its pack can put the outgoing
+	 * pack's answers back after the next load has emptied them.
+	 * <p>
+	 * Read once per family rather than per program, which is what the counter below can express: it
+	 * is a prefix bound, and skipping the rest without raising it leaves exactly the families that
+	 * were really filled walkable. So a translation already under way still finishes and can still
+	 * write, and that one family is the window this narrows the race to rather than closes it.
+	 */
 	private void prefetchFamily(Runnable prefetch) {
+		if (this.released || disabled) {
+			return;
+		}
+
 		try {
 			prefetch.run();
 		} catch (RuntimeException e) {
