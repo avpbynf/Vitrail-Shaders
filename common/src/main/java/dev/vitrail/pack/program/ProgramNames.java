@@ -73,6 +73,26 @@ public final class ProgramNames {
 		};
 	}
 
+	/**
+	 * The order Iris folds directives in, from {@code ProgramSet.locateDirectives}. Setup programs
+	 * are not in it: they go to the compute list there and are only ever read for their work group
+	 * size, so they declare no format however they are written.
+	 * <p>
+	 * Kept beside {@link #frameRank} rather than beside either of its own readers, for the same
+	 * reason: two readers that disagree about where directives fold produce no error, only a wrong
+	 * answer in one place and not the other.
+	 */
+	public static int directiveRank(String family) {
+		return switch (family) {
+			case "shadowcomp" -> 0;
+			case "begin" -> 1;
+			case "prepare" -> 2;
+			case "deferred" -> 4;
+			case "composite" -> 5;
+			default -> 3;
+		};
+	}
+
 	/** A pass drawn over the world rather than over a quad, which never flips anything. */
 	public static boolean geometry(String family) {
 		return family.startsWith("gbuffers") || family.startsWith("dh_")
