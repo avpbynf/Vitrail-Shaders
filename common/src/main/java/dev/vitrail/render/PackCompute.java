@@ -17,6 +17,7 @@ import dev.vitrail.Vitrail;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.GpuDeviceBackend;
@@ -30,6 +31,7 @@ import com.mojang.blaze3d.vulkan.VulkanGpuBuffer;
 import com.mojang.blaze3d.vulkan.VulkanGpuSampler;
 import com.mojang.blaze3d.vulkan.VulkanGpuTextureView;
 import com.mojang.blaze3d.vulkan.VulkanUtils;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -120,9 +122,21 @@ final class PackCompute implements AutoCloseable {
 					continue;
 				}
 
+				// Left undispatched rather than dispatched at a guessed size. A program on one of
+				// the screen roads is sized by dividing the screen by its own local size, and a
+				// local size this engine cannot read as a number would have to be invented: read
+				// as one where the shader means sixteen, the guess asks for a group per pixel and
+				// stalls the frame instead of drawing it wrong.
+				if (!compute.get().sized()) {
+					Vitrail.logger().warn("shadow compute {} is not dispatched: it leaves its work "
+							+ "group count to the engine and writes its local size as something "
+							+ "other than a number, so how much work it asks for cannot be read",
+							path);
+					continue;
+				}
+
 				passes.add(new Pass(compute.get(), catalog, load, path));
-				Vitrail.logger().info("Loaded shadow compute {} ({}x{}x{} groups)", path,
-						compute.get().groupsX(), compute.get().groupsY(), compute.get().groupsZ());
+				Vitrail.logger().info("Loaded shadow compute {} ({})", path, sizing(compute.get()));
 			} catch (IOException | RuntimeException e) {
 				Vitrail.logger().warn("shadow compute {} could not be translated: {}", path,
 						e.toString());
@@ -163,9 +177,20 @@ final class PackCompute implements AutoCloseable {
 			afterShadowGeometry(commands, stack);
 		}
 
+		// Asked of the game and not of ColorTargets, which is the same number one frame late or
+		// nought on the first. ColorTargets.screenWidth is only written by its ensure(), which
+		// runs inside the world render, while this dispatch is placed at the head of the frame
+		// before any of it: on the first frame after a pack loads the fields are still nought,
+		// which is a dispatch of no groups at all, and every resize afterwards would size a frame
+		// by the window it had before. Iris asks the same object at the same moment,
+		// ShadowCompositeRenderer.java:211-212.
+		Minecraft minecraft = Minecraft.getInstance();
+		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
+		int width = main == null ? 0 : main.width;
+		int height = main == null ? 0 : main.height;
 		for (Pass pass : this.passes) {
 			try {
-				pass.dispatch(vulkan, commands, values, targets);
+				pass.dispatch(vulkan, commands, values, targets, width, height);
 			} catch (RuntimeException e) {
 				if (pass.failed.add(e.toString())) {
 					Vitrail.logger().warn("shadow compute {} failed: {}", pass.path, e.toString());
@@ -198,6 +223,23 @@ final class PackCompute implements AutoCloseable {
 	private static VulkanDevice vulkan(GpuDevice device) {
 		GpuDeviceBackend backend = ((GpuDeviceAccessor) device).vitrail$backend();
 		return backend instanceof VulkanDevice found ? found : null;
+	}
+
+	/**
+	 * What sizes this program's dispatch, in the pack's own terms. Only the count a pack writes
+	 * out for itself is a number before the frame runs: the two roads that go by the screen are
+	 * settled at the size the frame is drawn at, so what is named here is the road and the tile of
+	 * pixels one group of it covers.
+	 */
+	private static String sizing(PackProgram.Compute compute) {
+		if (compute.fixed()) {
+			return compute.groupsX() + "x" + compute.groupsY() + "x" + compute.groupsZ() + " groups";
+		}
+
+		String covered = compute.relative()
+				? compute.renderX() + " by " + compute.renderY() + " of the screen"
+				: "the whole screen";
+		return covered + ", " + compute.localX() + "x" + compute.localY() + " pixels to a group";
 	}
 
 	/**
@@ -303,7 +345,7 @@ final class PackCompute implements AutoCloseable {
 		}
 
 		private void dispatch(VulkanDevice vulkan, VkCommandBuffer commands, PackValues values,
-				ColorTargets targets) {
+				ColorTargets targets, int width, int height) {
 			if (!this.compiled) {
 				compile(vulkan);
 			}
@@ -317,8 +359,12 @@ final class PackCompute implements AutoCloseable {
 				VulkanCommandEncoder.memoryBarrier(commands, stack);
 				VK12.vkCmdBindPipeline(commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, this.pipeline);
 				pushDescriptors(commands, stack, targets);
-				VK12.vkCmdDispatch(commands, this.compute.groupsX(), this.compute.groupsY(),
-						this.compute.groupsZ());
+				// The screen and not the shadow map: Iris sizes a shadow composite's compute off
+				// the main render target, ShadowCompositeRenderer.java:212, and the resolution of
+				// the shadow map is what it sizes the shadow GEOMETRY computes off instead,
+				// IrisRenderingPipeline.java:916.
+				int[] groups = this.compute.groupsAt(width, height);
+				VK12.vkCmdDispatch(commands, groups[0], groups[1], groups[2]);
 			}
 
 			if (this.block != null) {
@@ -365,8 +411,8 @@ final class PackCompute implements AutoCloseable {
 			}
 
 			if (this.pipeline != 0L) {
-				Vitrail.logger().info("Compiled shadow compute {} ({}x{}x{} groups)", this.path,
-						this.compute.groupsX(), this.compute.groupsY(), this.compute.groupsZ());
+				Vitrail.logger().info("Compiled shadow compute {} ({})", this.path,
+						sizing(this.compute));
 			}
 		}
 

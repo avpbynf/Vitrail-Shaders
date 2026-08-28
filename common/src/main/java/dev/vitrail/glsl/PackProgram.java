@@ -379,14 +379,115 @@ public final class PackProgram {
 	}
 
 	/**
-	 * A compute-only program, translated, with the work group count Iris reads off
-	 * {@code const ivec3 workGroups}.
+	 * A compute-only program, translated, with everything its dispatch has to be sized from.
+	 * <p>
+	 * Iris sizes a dispatch four ways ({@code ComputeProgram.java:47-64}). A
+	 * {@code const ivec3 workGroups} is a count of work groups and is dispatched exactly as
+	 * written, whatever size the pass runs at. A {@code const vec2 workGroupsRender} is a
+	 * multiplier of that size, and the count becomes that many pixels divided by the shader's own
+	 * {@code local_size}. A program writing neither covers the whole of the size, which is the
+	 * same division with the multiplier left at one.
+	 * <p>
+	 * <strong>The fourth is a known hole here.</strong> An {@code indirect.<pass>} line in
+	 * {@code shaders.properties} points at a buffer holding the counts
+	 * ({@code ShaderProperties.java:374-380}), and Iris then dispatches indirectly and reads no
+	 * directive at all: {@code getWorkGroups} answers null for such a program
+	 * ({@code ComputeProgram.java:48}) and shadow composites carry the pointer like every other
+	 * family ({@code ShadowCompositeRenderer.java:349}). Nothing here reads that line, so a
+	 * program relying on it would be dispatched off its directives instead, which is the wrong
+	 * count. No pack of the corpus writes one.
+	 * <p>
+	 * <strong>Only the first road was read here, and a program on either derived road was
+	 * dispatched as a single work group.</strong> One group of a sixteen by sixteen local size
+	 * covers two hundred and fifty-six texels of a target that asked for the screen, so the pass
+	 * ran, wrote its corner, and left everything past it holding whatever the frame before had put
+	 * there. Nothing errors and nothing is missing: the effect appears in one small square and is
+	 * stale everywhere else.
+	 * <p>
+	 * None of this is a formula over depth or clip space, so the reversed Z this engine rasterises
+	 * with does not enter it. A count of work groups reads the same here as it does there.
+	 *
+	 * @param groupsX the count the pack wrote, or -1 in all three when it wrote no
+	 *                {@code workGroups}. Absence cannot be spelt with nought, which is a value a
+	 *                pack does mean: Reverie writes {@code ivec3(0, 0, 0)} on the branch that turns
+	 *                a pass off, and Iris dispatches nothing for it
+	 * @param renderX the multiplier of the pass size, or -1 in both when the pack wrote no
+	 *                {@code workGroupsRender}
+	 * @param localX  the shader's own {@code local_size_x}, or -1 in both when it is not written
+	 *                as a literal there. A derived road cannot be walked without it, and
+	 *                {@link #sized()} is what says so
 	 */
-	public record Compute(Loaded loaded, int groupsX, int groupsY, int groupsZ) {
+	public record Compute(Loaded loaded, int groupsX, int groupsY, int groupsZ, float renderX,
+			float renderY, int localX, int localY) {
+
+		/** Whether the pack asked for a count of its own, the one road that ignores the size. */
+		public boolean fixed() {
+			return this.groupsX >= 0;
+		}
+
+		/** Whether the pack asked for a fraction of the size rather than the whole of it. */
+		public boolean relative() {
+			return this.renderX >= 0.0F;
+		}
+
+		/**
+		 * Whether the count can be worked out at all. A program that asked for a count of its own
+		 * always can; a program on a derived road cannot without the local size it divides by.
+		 * <p>
+		 * <strong>There is no defensible default for a local size, and guessing one is a freeze
+		 * rather than a wrong image.</strong> Read as one where the shader means sixteen by
+		 * sixteen, a full screen road dispatches a group per pixel: two million groups at 1080p
+		 * where the shader asked for eight thousand, each still running its real two hundred and
+		 * fifty-six invocations. The caller is expected to leave such a program undispatched and
+		 * say so, which is why this is asked rather than answered with a number.
+		 */
+		public boolean sized() {
+			return fixed() || this.localX > 0;
+		}
+
+		/**
+		 * How many groups to dispatch over a pass run at that size, for a program {@link #sized()}
+		 * answers for. Iris hands its shadow composites the main render target's size
+		 * ({@code ShadowCompositeRenderer.java:212}), so that is the size this is asked about, and
+		 * the answer moves with the window.
+		 */
+		public int[] groupsAt(int width, int height) {
+			if (fixed()) {
+				return new int[] { this.groupsX, this.groupsY, this.groupsZ };
+			}
+
+			int spanX = relative() ? (int) Math.ceil(width * (double) this.renderX) : width;
+			int spanY = relative() ? (int) Math.ceil(height * (double) this.renderY) : height;
+			return new int[] { cover(spanX, this.localX), cover(spanY, this.localY), 1 };
+		}
+
+		/** Groups enough to cover that many pixels, the last of them part used, never fewer. */
+		private static int cover(int span, int local) {
+			return span <= 0 ? 0 : (span + local - 1) / local;
+		}
 	}
 
 	private static final Pattern WORK_GROUPS = Pattern.compile(
 			"const\\s+ivec3\\s+workGroups\\s*=\\s*ivec3\\s*\\(\\s*(-?\\d+)\\s*,\\s*(-?\\d+)\\s*,\\s*(-?\\d+)\\s*\\)");
+
+	/**
+	 * The second road's directive. Its arguments are floats and a pack does write them with no
+	 * decimal point at all, Reverie's {@code vec2(1, 1)}, so the number is matched in both forms.
+	 */
+	private static final Pattern WORK_GROUPS_RENDER = Pattern.compile(
+			"const\\s+vec2\\s+workGroupsRender\\s*=\\s*vec2\\s*\\(\\s*(-?\\d*\\.?\\d+)[fF]?\\s*,"
+					+ "\\s*(-?\\d*\\.?\\d+)[fF]?\\s*\\)");
+
+	/**
+	 * What both derived roads divide the pass size by, written on the shader's {@code layout}.
+	 * The value is captured whole rather than as digits, so that one written through a macro is
+	 * found and refused rather than missed and replaced by a default.
+	 */
+	private static final Pattern LOCAL_SIZE =
+			Pattern.compile("local_size_([xy])\\s*=\\s*([^,)\\s]+)");
+
+	/** A literal the reader may believe, as opposed to a macro nothing here substitutes. */
+	private static final Pattern LITERAL = Pattern.compile("\\d+");
 
 	/**
 	 * One {@code .csh} entry point, translated on its own. Empty when the pack does not ship it.
@@ -417,17 +518,36 @@ public final class PackProgram {
 				VertexInputs.FULLSCREEN, VertexInputs.FULLSCREEN.elements(), AlphaTest.OFF, false,
 				programOf(path), textures.volumes());
 		int[] groups = workGroupsOf(unit);
+		float[] render = workGroupsRenderOf(unit);
+		int[] local = localSizeOf(unit);
 		return Optional.of(new Compute(
 				bind(source.packName(), path, program, targets, AlphaTest.OFF, textures),
-				groups[0], groups[1], groups[2]));
+				groups[0], groups[1], groups[2], render[0], render[1], local[0], local[1]));
 	}
 
 	/**
 	 * Iris reads {@code const ivec3 workGroups} off the live preprocessor branch. Complementary
-	 * lists every volume size, dead branches kept in the text, so the first match in the file
-	 * is the 128 one even on Ultra.
+	 * lists every volume size, dead branches kept in the text, so a reader that took them all
+	 * would end on the 128 one even on Ultra.
+	 * <p>
+	 * <strong>The LAST live match wins, which is Iris' rule</strong>: it walks every directive of
+	 * the source and lets each overwrite the one before ({@code ProgramSet.java:245-248}). One
+	 * question deserves one tie-break, so the multiplier and the local size below are read the
+	 * same way. It settles nothing in the corpus, where the branches are exclusive and exactly one
+	 * match of each survives, and it is what a pack listing two live ones would expect.
+	 * <p>
+	 * <strong>A negative count is clamped to nought, and that is a divergence.</strong> What Iris
+	 * does: it stores the value as parsed ({@code ComputeDirectiveParser.java:34-37}) and hands it
+	 * to {@code glDispatchCompute} unexamined ({@code IrisRenderSystem.java:322-323}). What
+	 * prevents it here: {@code vkCmdDispatch} counts groups in unsigned words, so a minus one
+	 * arrives as four billion, which is past {@code maxComputeWorkGroupCount} on every device and
+	 * is a lost device rather than a slow frame. What it costs the image: nothing measurable, the
+	 * pack having asked for a dispatch no driver can make either way. Nought itself is NOT
+	 * clamped, a pack writing it to turn a pass off, which is why an absent directive is answered
+	 * with -1 and not with a count.
 	 */
 	private static int[] workGroupsOf(ExpandedUnit unit) {
+		int[] groups = { -1, -1, -1 };
 		List<String> lines = unit.lines();
 		for (int i = 0; i < lines.size(); i++) {
 			if (!unit.isLive(i)) {
@@ -435,16 +555,82 @@ public final class PackProgram {
 			}
 
 			Matcher matcher = WORK_GROUPS.matcher(lines.get(i));
-			if (matcher.find()) {
-				return new int[] {
-						Math.max(1, Integer.parseInt(matcher.group(1))),
-						Math.max(1, Integer.parseInt(matcher.group(2))),
-						Math.max(1, Integer.parseInt(matcher.group(3)))
-				};
+			while (matcher.find()) {
+				groups[0] = Math.max(0, Integer.parseInt(matcher.group(1)));
+				groups[1] = Math.max(0, Integer.parseInt(matcher.group(2)));
+				groups[2] = Math.max(0, Integer.parseInt(matcher.group(3)));
 			}
 		}
 
-		return new int[] { 1, 1, 1 };
+		return groups;
+	}
+
+	/**
+	 * The multiplier of the pass size, which is the road Iris takes when the pack asked for no
+	 * count of its own. Read off the live branch like the count above, and for the same reason.
+	 * <p>
+	 * <strong>A pack may write the value as a macro rather than as a literal</strong>, Reverie's
+	 * {@code vec2(VOLUMETRICS_RES, VOLUMETRICS_RES)}, and Iris reads it substituted because it
+	 * parses a preprocessed source. Nothing substitutes it here, so such a directive reads as
+	 * absent and the program covers the whole pass rather than the fraction the pack asked for.
+	 * That errs by a factor the local size caps, the tile of pixels a group covers being the same
+	 * on both roads, so unlike a missing local size it stays a wrong image and not a stalled one.
+	 * No pack of the corpus writes it that way on a program this engine dispatches.
+	 */
+	private static float[] workGroupsRenderOf(ExpandedUnit unit) {
+		float[] render = { -1.0F, -1.0F };
+		List<String> lines = unit.lines();
+		for (int i = 0; i < lines.size(); i++) {
+			if (!unit.isLive(i)) {
+				continue;
+			}
+
+			Matcher matcher = WORK_GROUPS_RENDER.matcher(lines.get(i));
+			while (matcher.find()) {
+				render[0] = Math.max(0.0F, Float.parseFloat(matcher.group(1)));
+				render[1] = Math.max(0.0F, Float.parseFloat(matcher.group(2)));
+			}
+		}
+
+		return render;
+	}
+
+	/**
+	 * The shader's own work group size, which both derived roads divide the pass size by, or -1 in
+	 * both where it cannot be read as a literal. Iris asks the linked program for it
+	 * ({@code GL_COMPUTE_WORK_GROUP_SIZE}) and is never in that position; nothing is linked here
+	 * at the moment the question is asked, so it comes off the same live text as the directives
+	 * and by the same last match wins rule.
+	 * <p>
+	 * <strong>An axis written through a macro refuses the whole answer rather than falling back on
+	 * the GLSL default of one.</strong> The default is right for an axis the shader really leaves
+	 * out and catastrophic for one it writes and this engine cannot read: sixteen read as one is
+	 * two million groups at 1080p where the shader asked for eight thousand, at the shader's real
+	 * two hundred and fifty-six invocations apiece, which is a frozen game rather than a wrong
+	 * picture. Which of the two it is cannot be told from a missed match, so the value is captured
+	 * whole and refused when it is not a number. {@code local_size_x} is required of every compute
+	 * shader, so finding none of it at all is the same failure to read and gets the same answer.
+	 */
+	private static int[] localSizeOf(ExpandedUnit unit) {
+		int[] local = { -1, 1 };
+		List<String> lines = unit.lines();
+		for (int i = 0; i < lines.size(); i++) {
+			if (!unit.isLive(i)) {
+				continue;
+			}
+
+			Matcher matcher = LOCAL_SIZE.matcher(lines.get(i));
+			while (matcher.find()) {
+				if (!LITERAL.matcher(matcher.group(2)).matches()) {
+					return new int[] { -1, -1 };
+				}
+
+				local["x".equals(matcher.group(1)) ? 0 : 1] =
+						Math.max(1, Integer.parseInt(matcher.group(2)));
+			}
+		}
+
+		return local;
 	}
 
 	/**
