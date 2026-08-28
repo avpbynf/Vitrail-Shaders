@@ -262,6 +262,17 @@ game's full memory barrier and sends the mip chain back to a pass per level. It 
 cannot be the cause of a wrong image, so it is the first thing to ask of a machine that draws one
 this one does not.
 
+**The sine substitution can be taken off.** Every `sin` and `cos` a pack writes is replaced at load
+time by a reduced-argument helper of the translation's own, whatever the argument. An empty file
+`vitrail/driver-trig` in the instance, or `-Dvitrail.driverTrig=true` among the JVM arguments,
+leaves the driver's own two in place instead, so what the replacement costs a frame can be read as
+two measurements in one world rather than across two builds. The state is written to the log in
+both directions at every load that installs a chain, with the call sites matched by the time the
+line prints, so a reading always names the state it belongs to and says whether the pack had
+anything for the switch to bite on. It is an instrument and not a setting to keep: without the
+replacement a pack feeding whole world coordinates to a sine gets whatever the driver makes of
+them.
+
 **The card's time per pass is in the log on request.** Started with `-Dvitrail.passTimings=N`
 among the JVM arguments, the game prints every N seconds a table of GPU time per render pass
 label, the game's and Sodium's passes beside the pack's, sorted by cost, with the share of the pass
