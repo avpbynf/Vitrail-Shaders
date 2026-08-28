@@ -46,10 +46,18 @@ public final class ShadowGeometryValues {
 				out.set(MODEL_VIEW_PROJECTION.set(world.drawnShadowProjection())
 						.mul(world.drawnShadowModelView())));
 
-		// The shadow model view carries the grid snap as a translation, so this is not the
-		// transpose of a pure rotation and computing it is the only way to get it right.
+		// The basis as it stands, where GeometryValues computes an inverse transpose off the pass
+		// matrix. Not a shortcut taken here: that one is computed because a pass model view can
+		// arrive carrying a scale, and this one cannot. ViewMatrices.advanceShadow builds the shadow
+		// model view from an identity, three rotations and the grid snap, and the snap is a
+		// translate, so it lands in the fourth column; Matrix3f.set(Matrix4fc) reads the upper left
+		// three by three and never sees it. What is read here is therefore a product of rotations,
+		// whose inverse is its transpose, so inverting and transposing it hands back what went in.
+		//
+		// What would break it is a scale multiplied into the shadow model view, and the symptom
+		// would be shadow pass normals off by that scale rather than anything that fails loudly.
 		builder.add("of_NormalMatrix", UniformShape.MAT3, (world, out) ->
-				out.set(NORMAL.set(world.drawnShadowModelView()).invert().transpose()));
+				out.set(NORMAL.set(world.drawnShadowModelView())));
 
 		builder.add("shadowModelView", UniformShape.MAT4,
 				(world, out) -> out.set(world.drawnShadowModelView()));
