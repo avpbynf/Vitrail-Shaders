@@ -28,6 +28,14 @@ what the next one holds.
   the move, where they used to copy the whole volume. Neither has been measured, so this says
   work removed and not frames gained.
 
+- **A handful of values handed to shaders are worked out once a frame instead of once for
+  every program that asks for them.** Where the sun and the moon are, which way is up, the
+  End's flash, and the two matrices a pack multiplies its vertices by were all rebuilt from
+  scratch each time a shader asked, which for a large pack is dozens of times a frame out of
+  numbers that had not moved in between. They are kept and reused until something they are
+  built from actually changes. The values handed over are the same ones, to the bit, and this
+  has not been measured either, so again it is work removed rather than frames gained.
+
 ### Fixed
 
 - **A pack written with the old shadow lookups could be translated wrong, without a word.**
