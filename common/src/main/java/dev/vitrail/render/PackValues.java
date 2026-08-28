@@ -3,9 +3,9 @@ package dev.vitrail.render;
 import dev.vitrail.pack.id.BlockIds;
 import dev.vitrail.pack.id.NameIds;
 import dev.vitrail.pack.option.OptionIndex;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.option.SettingSet;
 import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.source.ShadowCasters;
@@ -113,50 +113,47 @@ public final class PackValues {
 	 * {@code shaders.properties} is live and which branch of the GLSL compiles, so they have to be
 	 * in the table before either is read.
 	 *
+	 * @param pack      the pack, already opened and already read for its settings. Handed in rather
+	 *                  than opened here because the load reads it half a dozen times over, and
+	 *                  every one of those readings walked the whole archive to rebuild the same
+	 *                  index of the same settings
 	 * @param dimension which set of programs the directives are folded from, {@code world0} for the
 	 *                  overworld
-	 * @param chosen    the settings forced on the pack, by the name the pack declares them under
-	 * @param profile   a profile the pack declares, or the empty string
 	 */
-	public static PackValues read(Path packPath, String dimension, Map<String, OptionValue> chosen,
-			String profile) throws IOException {
+	public static PackValues read(OpenedPack pack, String dimension) throws IOException {
 		PackValues values = new PackValues();
 		PackDefines.install();
 
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex options = OptionIndex.build(source);
-			ShaderProperties properties = ShaderProperties.parse(source);
-			Map<String, OptionValue> fromProfile =
-					profile.isEmpty() ? Map.of() : properties.expandProfile(profile);
-			SettingSet settings =
-					SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
+		ShaderPackSource source = pack.source();
+		OptionIndex options = pack.options();
+		ShaderProperties properties = pack.properties();
+		SettingSet settings = pack.settings();
 
-			values.state.directives(PackDirectives.read(source, settings, dimension));
-			values.state.endFlashShadows(properties.endFlashShadows());
-			values.skyElements = properties.skyElements(settings.globalDefines(options));
-			values.weather = properties.weather(settings.globalDefines(options));
-			values.rainDepth = properties.rainDepth(settings.globalDefines(options));
-			values.shadowCasters = properties.shadowCasters(settings.globalDefines(options));
-			values.dhShadow = properties.dhShadow(settings.globalDefines(options));
-			values.shadowCull = properties.shadowCull(settings.globalDefines(options));
-			values.separateAo = properties.separateAo(settings.globalDefines(options));
-			values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
-			values.declare(properties, settings.globalDefines(options));
-			values.readNoise(properties, source, settings.globalDefines(options));
-			values.packImages =
-					PackImages.read(properties, settings.globalDefines(options), source);
-			values.storageImages = properties.imageDirectives(settings.globalDefines(options));
-			values.bufferObjects = properties.bufferObjects(settings.globalDefines(options));
-			CustomStorage.install(values.bufferObjects);
+		values.state.directives(PackDirectives.read(source, settings, dimension));
+		values.state.endFlashShadows(properties.endFlashShadows());
+		values.skyElements = properties.skyElements(settings.globalDefines(options));
+		values.weather = properties.weather(settings.globalDefines(options));
+		values.rainDepth = properties.rainDepth(settings.globalDefines(options));
+		values.shadowCasters = properties.shadowCasters(settings.globalDefines(options));
+		values.dhShadow = properties.dhShadow(settings.globalDefines(options));
+		values.shadowCull = properties.shadowCull(settings.globalDefines(options));
+		values.separateAo = properties.separateAo(settings.globalDefines(options));
+		values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
+		values.declare(properties, settings.globalDefines(options));
+		values.readNoise(properties, source, settings.globalDefines(options));
+		values.packImages =
+				PackImages.read(properties, settings.globalDefines(options), source);
+		values.storageImages = properties.imageDirectives(settings.globalDefines(options));
+		values.bufferObjects = properties.bufferObjects(settings.globalDefines(options));
+		CustomStorage.install(values.bufferObjects);
 
-			// Read against the same settings as everything above, which is not a formality: BSL wraps
-			// all its declarations in one conditional and keeps a fifth of them under the #else, so a
-			// reading with an empty table measures a different pack.
-			BlockStateIds.install(BlockIds.read(source, settings.globalDefines(options)));
-			PackNameIds.install(
-					NameIds.read(source, settings.globalDefines(options), NameIds.Kind.ENTITY),
-					NameIds.read(source, settings.globalDefines(options), NameIds.Kind.ITEM));
-		}
+		// Read against the same settings as everything above, which is not a formality: BSL wraps
+		// all its declarations in one conditional and keeps a fifth of them under the #else, so a
+		// reading with an empty table measures a different pack.
+		BlockStateIds.install(BlockIds.read(source, settings.globalDefines(options)));
+		PackNameIds.install(
+				NameIds.read(source, settings.globalDefines(options), NameIds.Kind.ENTITY),
+				NameIds.read(source, settings.globalDefines(options), NameIds.Kind.ITEM));
 
 		return values;
 	}
