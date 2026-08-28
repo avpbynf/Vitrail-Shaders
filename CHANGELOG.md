@@ -22,6 +22,13 @@ what the next one holds.
 - **A pack that changes with how humid a biome is no longer sees a desert everywhere.** The
   `rainfall` value handed to shaders was always nought, so puddles, wetness and fog that
   scale with humidity stayed at their driest in a swamp and a jungle alike.
+- **Changing shaderpack without restarting no longer leaves the buffers of the pack before it
+  in play.** The names a pack gives its `bufferObject` blocks were remembered for the whole
+  session rather than for the pack that wrote them, so a pack loaded after another could have a
+  block bound to a buffer the earlier one had declared, at whatever size and contents that one
+  asked for, or keep a program running against a block nothing binds at all. Complementary
+  Ultra with world-space reflections on is the pack that declares such a block, and quitting
+  the game between two packs was the only thing that cleared it.
 
 ## 0.8.1-beta
 

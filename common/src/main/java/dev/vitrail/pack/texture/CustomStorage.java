@@ -16,6 +16,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class CustomStorage {
 
 	private static volatile BufferObject.Reading declared = BufferObject.Reading.empty();
+
+	/**
+	 * The block names the translator saw, which is the one half of this class that does not replace
+	 * itself. {@link #install} hands the whole of {@link #declared} over at each load, while this is
+	 * filled a name at a time and would otherwise carry every name of every pack read this session.
+	 * Emptied by {@link #clear} at the head of a load, and the answers below say what that buys.
+	 */
 	private static final Map<String, Integer> bindings = new ConcurrentHashMap<>();
 
 	private CustomStorage() {
@@ -26,6 +33,15 @@ public final class CustomStorage {
 		declared = reading;
 	}
 
+	/**
+	 * Forgets the pack that was read before, both halves of it.
+	 * <p>
+	 * Called at the head of a load and not with the chain that is going. The two answers below sit
+	 * on either side of one descriptor type decision, the bind group layout and the descriptor
+	 * write, and a layout outlives a release in the pipeline cache. A road that releases a chain
+	 * without replacing it would then draw a frame with the two disagreeing, and
+	 * {@code PackChain.load} carries the whole of why.
+	 */
 	public static void clear() {
 		declared = BufferObject.Reading.empty();
 		bindings.clear();
