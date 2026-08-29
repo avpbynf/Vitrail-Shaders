@@ -459,7 +459,6 @@ final class GeometryProgram {
 
 	/** Reused while a descriptor is built: Sodium asks for one per region, not once a frame. */
 	private final List<GpuTextureView> attachedViews = new ArrayList<>();
-	private final List<GpuTextureView> writtenViews = new ArrayList<>();
 	private final List<GpuTextureView> shadowViews = new ArrayList<>();
 
 	/**
@@ -1395,14 +1394,12 @@ final class GeometryProgram {
 		}
 
 		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.passLabel);
-		this.writtenViews.clear();
 		for (GpuTextureView view : this.attachedViews) {
 			if (view == null) {
 				descriptor.withUnusedColorAttachment();
 				continue;
 			}
 
-			this.writtenViews.add(view);
 			descriptor.withColorAttachment(view, this.targets.takeClear(view));
 		}
 
