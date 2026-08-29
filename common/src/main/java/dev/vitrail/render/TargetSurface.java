@@ -59,8 +59,9 @@ final class TargetSurface implements AutoCloseable {
 	 * the driver left there, so a sampler allowed to climb the chain before the reduction has run
 	 * once serves undefined memory rather than a coarser image, which is the defect 4d52d20 closed
 	 * for the shadow map. Stale is a different matter and not a danger: a chain built two passes ago
-	 * is a real image of the target, only an older one, and the reduction runs immediately before
-	 * each program that reads one.
+	 * is a real image of the target, only an older one, and the walk that fills chains runs the
+	 * reduction before any program that reads one where something has written the base since the
+	 * last fill.
 	 */
 	private boolean chainWritten;
 
