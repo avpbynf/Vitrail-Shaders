@@ -66,6 +66,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -282,6 +283,16 @@ public final class PackChain {
 
 	/** Fills the mip chains of the targets the programs of this place read at a lod. */
 	private final MipmapReduction mipmaps = new MipmapReduction();
+
+	/**
+	 * The chains {@link #drawRange} has filled and nothing has written over since. Held by the
+	 * surface itself and never by target and side, because the two spellings do not name surfaces
+	 * one to one: a target nobody doubles answers its main surface for either side, and a write
+	 * filed under one spelling has to evict what the other spelling filled. One object for the
+	 * frame rather than one per range, cleared where the walk says so: what it remembers is only
+	 * ever true inside one walk.
+	 */
+	private final Set<TargetSurface> currentChains = new HashSet<>();
 
 	/** What colortex0 is emptied to, refilled once a frame. One object, because a clear is a frame. */
 	private final Vector4f fogClear = new Vector4f(0.0F, 0.0F, 0.0F, 1.0F);
@@ -2171,22 +2182,35 @@ public final class PackChain {
 		// it short of knowing which passes do not overlap.
 		CommandEncoder encoder = device.createCommandEncoder();
 		GpuBuffer buffer = this.block.currentBuffer();
+		// The chains this walk has filled and nothing has written over since, by target and side.
+		// Emptied at the head because the range starts after geometry the plan does not see, and
+		// again wherever a write this loop cannot place lands: the seed paints targets of its own
+		// list, and the deferred emptying inside a draw clears every target still owed one.
+		this.currentChains.clear();
 		for (int at = from; at < to; at++) {
 			if (!this.seeded && at == seedAt) {
 				paintSeed(encoder, ready);
+				this.currentChains.clear();
 			}
 
 			PackPass pass = this.programs.get(at);
 
-			// Right before the program that reads them, and no earlier: a chain is only true of the
-			// level nought it was built from, and every pass between the two may have written it.
-			// The reduction opens render passes of its own, which is why this is here rather than
-			// inside the draw: a pass cannot be opened while another is recording.
+			// Right before the first program that reads them after a write: a chain is only true
+			// of the level nought it was built from, and every pass between the two may have
+			// written it. The reduction opens render passes of its own, which is why this is here
+			// rather than inside the draw: a pass cannot be opened while another is recording. A
+			// chain filled for an earlier reader and written over by nothing since is still true,
+			// so it is not refilled: two readers in a row used to pay two whole chains for one
+			// image.
 			for (PackPass.LodRead read : pass.lodReads()) {
-				this.mipmaps.generate(encoder, device, this.quad,
-						this.targets.surface(read.target(), read.side()));
+				TargetSurface surface = this.targets.surface(read.target(), read.side());
+				if (surface != null && !this.currentChains.contains(surface)
+						&& this.mipmaps.generate(encoder, device, this.quad, surface)) {
+					this.currentChains.add(surface);
+				}
 			}
 
+			boolean emptying = this.targets.hasPendingClears();
 			GpuBufferSlice uniforms = buffer.slice(pass.uniformOffset(), pass.uniformSize());
 			if (pass == this.last) {
 				pass.drawFinal(encoder, ready.mainView(), this.targets, depth, distant, this.quad,
@@ -2194,6 +2218,15 @@ public final class PackChain {
 			} else {
 				pass.draw(encoder, this.targets, depth, distant, this.quad, uniforms,
 						ready.main().width, ready.main().height);
+			}
+
+			if (emptying) {
+				this.currentChains.clear();
+			} else {
+				for (ChainPlan.Attachment attachment : pass.attachments()) {
+					this.currentChains.remove(
+							this.targets.surface(attachment.target(), attachment.side()));
+				}
 			}
 		}
 

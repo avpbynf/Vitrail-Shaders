@@ -707,9 +707,10 @@ final class ColorTargets {
 	 * Which targets one program reads at a lod, narrowed to those that carry a chain.
 	 * <p>
 	 * Per program and not the union, because this is what decides when a chain is rebuilt. A chain
-	 * is only valid until something writes level nought again, so it is refilled before each program
-	 * that reads one; taking the union here would rebuild every chain before every program that
-	 * happens to sample the target, which is ten render passes apiece for a result nothing reads.
+	 * is only valid until something writes level nought again, so it is refilled before the next
+	 * program that reads one after such a write; taking the union here would rebuild every chain
+	 * before every program that happens to sample the target, which is ten render passes apiece
+	 * for a result nothing reads.
 	 */
 	Set<Integer> lodReads(String program) {
 		return this.plan.directives().mipmapRequests().getOrDefault(program, Set.of()).stream()

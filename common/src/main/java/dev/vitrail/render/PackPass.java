@@ -300,6 +300,14 @@ final class PackPass {
 	}
 
 	/**
+	 * The colour targets this program draws into, with the half of each, which is what lets the
+	 * caller know a chain it filled is no longer true of its base once this program has run.
+	 */
+	List<ChainPlan.Attachment> attachments() {
+		return this.attachments;
+	}
+
+	/**
 	 * Whether this program declares the sampler the smoothed centre depth was moved onto, which is
 	 * what decides that the pass drawing that texel is worth running at all.
 	 * <p>

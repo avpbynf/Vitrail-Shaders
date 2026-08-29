@@ -50,6 +50,11 @@ what the next one holds.
   surface lit by the wrong program, with nothing in the log pointing at it. The failure now names
   itself at launch. The one exception is the line this mod adds to the F3 overlay, which is
   allowed to go missing because nothing on screen depends on it.
+- **A texture's chain of shrunken copies is rebuilt only when its base has changed.** Packs that
+  blur or expose through those copies asked for the whole chain to be rebuilt before every pass
+  that reads one, even when nothing had touched the image in between; two readers in a row now
+  pay one rebuild instead of two. The copies read are the same ones. Not measured, so this says
+  work removed and not frames gained.
 - **Two pieces of per-frame work on the graphics card are gone, and the picture is the same.**
   The far terrain's own depth image is emptied by the pass that draws into it rather than by a
   command of its own, which also spares the full stop of the card that such a command carries.
