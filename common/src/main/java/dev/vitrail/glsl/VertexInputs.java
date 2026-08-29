@@ -89,6 +89,14 @@ public enum VertexInputs {
 	GLINT,
 
 	/**
+	 * The mesh a block's breaking overlay is drawn from: the four elements of
+	 * {@code DefaultVertexFormat.BLOCK} and nothing else. It comes in by the entity door like the
+	 * glint and is no more that mesh than the glint is: {@link CrumblingVertex} carries what the four
+	 * answer for, why the light map is answered at full light, and what the missing normal costs.
+	 */
+	CRUMBLING,
+
+	/**
 	 * The game's own sky meshes. Alone among these, it is not one format: {@code SkyRenderer} binds
 	 * four between its eight passes, so the elements to declare come from the pass rather than from
 	 * this constant. {@link SkyVertex} carries the renaming and says what the sky has not got.
@@ -150,7 +158,7 @@ public enum VertexInputs {
 	 * the mesh.
 	 */
 	public boolean fullbright() {
-		return this == ENTITY_FULLBRIGHT;
+		return this == ENTITY_FULLBRIGHT || this == CRUMBLING;
 	}
 
 	/**
@@ -204,6 +212,7 @@ public enum VertexInputs {
 			case TERRAIN, TERRAIN_SEPARATE_AO -> SodiumVertex.ATTRIBUTES;
 			case ENTITY, ENTITY_FULLBRIGHT -> EntityVertex.ATTRIBUTES;
 			case GLINT -> GlintVertex.ATTRIBUTES;
+			case CRUMBLING -> CrumblingVertex.ATTRIBUTES;
 			case PARTICLE -> ParticleVertex.ATTRIBUTES;
 			case SKY -> SkyVertex.ATTRIBUTES;
 			case CLOUDS -> CloudVertex.ATTRIBUTES;

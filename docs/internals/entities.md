@@ -319,8 +319,8 @@ as dark as the block it stands on, and the additive blend the reference hangs on
 what would make that darkness the thing being added. The element is still declared and still bound
 either way, because the head has to declare the whole format; what changes is one line of it.
 
-**The glint.** It is the only piece served here that is not drawn from an entity mesh, and the only
-one whose pipeline carries more than one render type's worth of answers. It is four compiled pieces
+**The glint.** It is one of the two pieces served here that are not drawn from an entity mesh, and
+the only one whose pipeline carries more than one render type's worth of answers. It is four compiled pieces
 of one program name, one per moment, because the side of the deferred stage is baked into a piece and
 the glint arrives on both: which carrier goes where is the game's sort, an enchanted book being
 submitted among the solid features foil and all, an enchanted armour piece and a trident and a shield
@@ -337,9 +337,22 @@ really alternates pays each time it comes back; geometry that does not alternate
 pair in the game is known to reach it, which is not a reason to leave it open: the cost of being
 wrong is silent and the cost of the guard is one draw.
 
+**The cracks over a block being mined** are the other piece drawn from a mesh of the game's, the
+block format, and they are here rather than with the terrain because the game submits them through
+these same feature renderers. Leaving them to the game is not the neutral answer it looks like: the
+game draws them among the translucent features, which is the stretch the full-screen layer catches,
+and that layer is cleared to transparent black and composed as though every draw in it blended by
+alpha. The crumbling multiplies instead, so left there it multiplies against the clear and the
+cracks come out opaque black rather than darkening the face they lie on. Served, the multiply lands
+on the picture, which is where the game meant to put it.
+
 Three families in this window stay the game's, and are carried in flat by the full-screen layer: the
-beacon beam, the lightning, and the text of a name plate or a sign. All three bind a mesh this door
-cannot decode. That is not taken on trust either. Every piece states the format it claims, and the
+beacon beam, the lightning, and the text of a name plate or a sign. The lightning and the text bind
+a mesh this door cannot decode. The beam binds the block format, which the door now reads, and what
+it still wants is a row of its own: the reference gives it another program, no alpha test and its
+fog per fragment, so it is not the cracks' row under another name.
+
+That is not taken on trust either. Every piece states the format it claims, and the
 claim is compared against what the pipeline really binds before the pack is read for it, because the
 failure it guards is the silent one from
 [the terrain page](terrain.md#vertex-inputs-are-matched-by-name-and-one-direction-is-silent): a

@@ -250,10 +250,12 @@ them. The mesh only carries them while the pack is drawing the entities or the h
 switch asks the game to rebuild the world, the same door F3+A uses, and it does not ask for a
 restart.
 
-That is the whole reason the beacon beam, the lightning bolt and the text of a sign or a name plate
-still come from the game's own shader: they bind the block, position-colour and glyph layouts. They
-reach the pack's image through the layer described below, which means they are visible but flat, and
-drawn in front of what should hide them.
+That is the whole reason the lightning bolt and the text of a sign or a name plate still come from
+the game's own shader: they bind the position-colour and glyph layouts, which nothing here reads.
+The beacon beam is with them for another reason, the block layout it binds being read since the
+cracks of a mined block are drawn through the pack: what the beam still wants is a pass of its own.
+All three reach the pack's image through the layer described below, which means they are visible but
+flat, and drawn in front of what should hide them.
 
 Which target is seeded is the first draw buffer of the pass that draws the terrain, resolved through
 the fallback tree, and it is not always target zero: one pack of the corpus serves its terrain

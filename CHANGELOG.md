@@ -80,6 +80,12 @@ what the next one holds.
 
 ### Fixed
 
+- **Breaking a block no longer paints flat black cracks over it.** The overlay that spreads as a
+  block is mined was left to the game, and it multiplies its texture onto what is already drawn;
+  it was landing on an empty layer instead of on the picture, so every crack came out opaque
+  black from the first stage rather than darkening the face as it broke. It is drawn through the
+  pack now, on `gbuffers_damagedblock` and its fallback onto the terrain, which is what a pack
+  expects to be asked for.
 - **A pack written with the old shadow lookups could be translated wrong, without a word.**
   Wrapping those lookups shifted the translator's own note of which words are macro names,
   which could rename one of them or leave a local variable reading a global value instead.
