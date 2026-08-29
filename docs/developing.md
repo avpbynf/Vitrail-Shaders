@@ -273,6 +273,17 @@ anything for the switch to bite on. It is an instrument and not a setting to kee
 replacement a pack feeding whole world coordinates to a sine gets whatever the driver makes of
 them.
 
+**Where a pack load's time goes is in the log at every load that installs a chain.** A first
+report prints beside the pack-opened line and carries the translation alone, that being all the
+load itself runs; the modules follow on the first draws and the compile workers, counted at the
+game's own compiler so that every road lands in the tally, and the report that closes the
+background warmup reads both figures with the families in. What a first draw pays after that
+report stays in the tally rather than in any line. The spans are summed per program across the
+compile workers, so the two figures compare with each other rather than with the wall clock,
+and the driver's own pipeline build is in neither. The split is what says whether a faster load
+needs a translation cache or a reflection cache, which are different designs keyed on different
+things.
+
 **The card's time per pass is in the log on request.** Started with `-Dvitrail.passTimings=N`
 among the JVM arguments, the game prints every N seconds a table of GPU time per render pass
 label, the game's and Sodium's passes beside the pack's, sorted by cost, with the share of the pass
