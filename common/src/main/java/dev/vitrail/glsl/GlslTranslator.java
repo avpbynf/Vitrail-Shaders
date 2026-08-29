@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 /**
  * Turns one flattened pack unit into GLSL a Vulkan compiler will take.
@@ -166,6 +167,21 @@ public final class GlslTranslator {
 
 	/** The comparison a {@code sampler2DShadow} would have had the hardware make. */
 	private static final String SHADOW_COMPARE = "ofShadowCompare";
+
+	/**
+	 * Whether every comparison goes back to the arithmetic of {@link #SHADOW_COMPARE} instead of
+	 * staying on the sampler. The hardware road cannot be watched from inside: a comparison bound
+	 * wrong does not fail, it hands back a fraction of the wrong thing, and the picture stays
+	 * credible. So the trade is on a switch, the way the pass barrier is: an image that comes right
+	 * with this on has named the comparison sampler rather than the pass that shows it, in one
+	 * launch and without a build.
+	 * <p>
+	 * The property is read here so that the harness answers it too; the file in the game directory
+	 * is the render side's to see, which is what {@link #askSoftCompare} is for.
+	 */
+	private static final boolean SOFT_COMPARE = Boolean.getBoolean("vitrail.softShadowCompare");
+
+	private static volatile boolean softCompareArmed;
 
 	/**
 	 * What a call to {@code sin} or {@code cos} becomes: a sine of this translation's own, and
@@ -363,10 +379,16 @@ public final class GlslTranslator {
 	private final Map<String, VolumeAtlas> readVolumes = new LinkedHashMap<>();
 
 	/**
-	 * The samplers the pack declared as comparison samplers, and which are declared here as ordinary
-	 * ones. {@link #rewriteShadowCompare} says why they cannot stay what they were.
+	 * The comparison samplers whose comparison is made in arithmetic, their declarations rewritten
+	 * ordinary. {@link #collectComparisonSamplers} says how a name lands here rather than below.
 	 */
 	private final List<Scoped> comparisonSamplers = new ArrayList<>();
+
+	/**
+	 * The comparison samplers that keep their spelling, so the lookup compiles to a depth-reference
+	 * sample and the binding owes each name a comparison sampler.
+	 */
+	private final List<Scoped> hardwareComparisonSamplers = new ArrayList<>();
 
 	/**
 	 * The samplers a function takes as a parameter, over the lines of that function. Nothing is
@@ -423,8 +445,12 @@ public final class GlslTranslator {
 	private int volumeLookups;
 	private int volumesLeftAlone;
 
-	/** Lookups this unit makes the comparison for itself, because the backend cannot. */
+	/** Lookups on a comparison sampler, whichever of the two roads makes the comparison. */
 	private int shadowCompares;
+
+	/** The lookups of those that were really rewritten onto {@link #SHADOW_COMPARE}, which is what
+	 * says whether the header owes the helper at all. */
+	private int softRewrites;
 
 	/** Calls to {@code sin} or {@code cos} sent through the reduced-argument helpers. */
 	private int trigCalls;
@@ -610,6 +636,21 @@ public final class GlslTranslator {
 		return new Stage(translator);
 	}
 
+	/**
+	 * Sends every unit translated from here on down the {@link #SHADOW_COMPARE} road, or lets it
+	 * back off it, which matters as much: the switch is read again at every pack load, so removing
+	 * the arming file and reloading has to put the comparison back on the sampler without a
+	 * restart. Called by whoever can see the game directory; the system property is this class's
+	 * own to read, so a harness run answers it without a game around.
+	 */
+	public static void askSoftCompare(boolean asked) {
+		softCompareArmed = asked;
+	}
+
+	private static boolean softCompare() {
+		return SOFT_COMPARE || softCompareArmed;
+	}
+
 	private void rewrite() {
 		collectMacroNames();
 		collectDeclarations();
@@ -617,8 +658,8 @@ public final class GlslTranslator {
 		// much later, after the depth conversion, and a set filled there would be empty at the one
 		// moment it decides something.
 		collectComparisonSamplers();
-		// After it, and for the same reason: the comparison has already been taken out of the
-		// spelling by then, so a compared parameter is collected here under sampler2D like any other.
+		// After it, and for the same reason: the road has been settled by then, so a compared
+		// parameter is collected here like any other sampler, under whichever spelling it kept.
 		collectSamplerParameters();
 		collectStorageBlocks();
 		collectDrawBuffers();
@@ -1227,23 +1268,34 @@ public final class GlslTranslator {
 				}
 
 				if (close >= 0) {
-					// A legacy shadow lookup on a sampler this backend cannot compare with is
-					// rewritten here rather than later: the injection below fuses the name into one
-					// token with the parenthesis, and the depth conversion matches names.
+					// A legacy shadow lookup is rewritten here rather than later: the injection
+					// below fuses the name into one token with the parenthesis, and the depth
+					// conversion matches names.
 					int first = significantAfter(callOpener(index));
-					boolean compared = first >= 0
+					String argument = first >= 0
 							&& this.tokens.get(first).kind() == Kind.IDENTIFIER
-							&& comparisonAt(this.tokens.get(first).text(), lines[index]);
+							? this.tokens.get(first).text() : null;
+					boolean hardware = argument != null
+							&& hardwareComparisonAt(argument, lines[index]);
+					boolean compared = argument != null && !hardware
+							&& comparisonAt(argument, lines[index]);
 
-					// Only the plain lookups are ours to make, as in rewriteShadowCompare and for
-					// the same reason: a projective comparison divides before it compares, which is
-					// a different expression and not a different name. It keeps the modern spelling
-					// and is counted rather than quietly turned into something it is not.
+					// Only the plain lookups are the arithmetic road's to make, as in
+					// rewriteShadowCompare and for the same reason: a projective comparison divides
+					// before it compares, which is a different expression and not a different name.
+					// It keeps the modern spelling and is counted rather than quietly turned into
+					// something it is not. The hardware road has no such edge: textureProj on a
+					// comparison sampler is the division and the comparison in one call, so it
+					// counts as a comparison made rather than as one left on the floor.
 					if (compared && shadow.equals("textureProj")) {
 						this.unwrappedShadowCalls++;
 						compared = false;
-					} else if (compared) {
+					} else if (compared || hardware) {
 						this.shadowCompares++;
+					}
+
+					if (compared) {
+						this.softRewrites++;
 					}
 
 					// The wrap adds an opening parenthesis, so it has to add a closing one too.
@@ -1810,32 +1862,45 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Turns a lookup on a comparison sampler into a comparison this engine makes itself.
+	 * Recognises a lookup on a comparison sampler, and on the arithmetic road puts
+	 * {@link #SHADOW_COMPARE} in its place.
 	 * <p>
-	 * <strong>The declaration is rewritten because the backend cannot honour it.</strong> A
-	 * {@code sampler2DShadow} asks the hardware to compare the third coordinate against the texel
-	 * and hand back a fraction, and {@code GpuSampler} carries no comparison at all: two address
-	 * modes, two filters, an anisotropy and a maximum level of detail. Bound as an ordinary sampler
-	 * the comparison means nothing, and what a pack gets back is not a wrong shadow but no shadow
-	 * information whatever, which reads on screen as a world entirely in shadow.
+	 * <strong>On the hardware road nothing is rewritten at all.</strong> The declaration kept its
+	 * spelling, so the lookup compiles to a depth-reference sample and the comparison is made by
+	 * the sampler the binding put under the name, {@code GL_COMPARE_REF_TO_TEXTURE} in the terms
+	 * Iris binds it in. The call is still counted and still answers true, because whatever road
+	 * makes the comparison, what comes back is a fraction of the light and not a depth.
 	 * <p>
-	 * Only the plain lookups are rewritten. A projective or gathered comparison is left as it stands
-	 * and counted: what it needs is a different expression, not a different name, and a call that
-	 * silently kept a hardware comparison is exactly the thing this whole rewrite exists to stop.
+	 * The arithmetic road exists because {@code GpuSampler} carries no comparison at all: two
+	 * address modes, two filters, an anisotropy and a maximum level of detail. Bound as an ordinary
+	 * sampler the comparison means nothing, and what a pack gets back is not a wrong shadow but no
+	 * shadow information whatever, which reads on screen as a world entirely in shadow. On that
+	 * road only the plain lookups are rewritten; a projective or gathered comparison is left as it
+	 * stands and counted, since what it needs is a different expression, not a different name.
 	 *
 	 * @param line where the call stands, since a comparison sampler taken as a parameter only means
 	 *             one inside the function that took it
 	 * @return whether this call was a comparison, in which case it is not a depth read as well
 	 */
 	private boolean rewriteShadowCompare(int index, int line) {
-		if (this.comparisonSamplers.isEmpty()) {
+		if (this.comparisonSamplers.isEmpty() && this.hardwareComparisonSamplers.isEmpty()) {
 			return false;
 		}
 
 		int open = callOpener(index);
 		int first = open < 0 ? -1 : significantAfter(open);
-		if (first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER
-				|| !comparisonAt(this.tokens.get(first).text(), line)) {
+		if (first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER) {
+			return false;
+		}
+
+		String argument = this.tokens.get(first).text();
+		if (hardwareComparisonAt(argument, line)) {
+			this.shadowCompares++;
+
+			return true;
+		}
+
+		if (!comparisonAt(argument, line)) {
 			return false;
 		}
 
@@ -1851,6 +1916,7 @@ public final class GlslTranslator {
 		// which is what a comparison sampler with no mipmaps would have done anyway.
 		replace(index, SHADOW_COMPARE);
 		this.shadowCompares++;
+		this.softRewrites++;
 
 		return true;
 	}
@@ -3144,13 +3210,15 @@ public final class GlslTranslator {
 		// writes every sampler in the order the program settled, which is what MoltenVK numbers.
 		boolean opaque = LegacyGlsl.isOpaqueType(type);
 
-		// The comparison is already out of the token stream by now, taken there by
-		// collectComparisonSamplers, so this only has to record it under the same spelling.
-		String plain = withoutComparison(type);
-
+		// Recorded under the spelling the token carries, which is the road decision made real:
+		// collectComparisonSamplers has already taken the comparison out of every declaration it
+		// sent to the arithmetic, and one still spelling it is one the binding owes a comparison
+		// sampler, so the header has to keep saying so. Taking it out here again is what once
+		// declared a kept comparison ordinary, and every lookup on it stopped compiling.
+		//
 		// Recorded for an opaque uniform alone, which is the only declaration these can be
 		// written on and the only one that reads them back out of the header.
-		if (!readDeclarators(parts, cursor + 1, plain, opaque ? String.join(" ", memory) : "",
+		if (!readDeclarators(parts, cursor + 1, type, opaque ? String.join(" ", memory) : "",
 				opaque ? this.samplers : this.blockMembers)) {
 			return;
 		}
@@ -3159,8 +3227,10 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Finds every sampler the pack declared as a comparison sampler, takes the comparison out of its
-	 * declaration, and remembers the name so that {@link #rewriteShadowCompare} knows its lookups.
+	 * Finds every sampler the pack declared as a comparison sampler, remembers the name so that
+	 * {@link #rewriteShadowCompare} knows its lookups, and settles which of the two roads each
+	 * takes: the declaration keeps its spelling and the binding carries a comparison sampler, or it
+	 * is declared ordinary and {@link #SHADOW_COMPARE} makes the comparison in arithmetic.
 	 * <p>
 	 * A pass of its own, and early, because of when the others run: the uniforms are lifted after
 	 * the depth conversion, and the conversion is the one place that has to know. It walks the
@@ -3178,11 +3248,32 @@ public final class GlslTranslator {
 	 * is not composite1; taking the dead one would make every lookup on that name a comparison, in a
 	 * program whose texture is not one. The bracket count still walks every token, live or not,
 	 * because it is the shape of the text and not a statement about the program.
+	 * <p>
+	 * The road is decided per declaration, by the name and by nothing a stage chooses, so the same
+	 * name answers the same way in every stage that spells it the same. A file-scope declaration
+	 * keeps its spelling when every name it introduces is one of the shadow map's own and the pack
+	 * has not taken the name over as a custom image, because those are the names the binding can
+	 * really put a comparison sampler under; anything else compared is rewritten ordinary and
+	 * handed the arithmetic, as every name once was. What this cannot close is a pack spelling one
+	 * name two ways across the stages of one program: the sampler is the pipeline's, so the plain
+	 * spelling would read through the comparison, undefined exactly as it is under Iris, and the
+	 * binding says so by name when it meets one.
+	 * <p>
+	 * A parameter follows the unit: it keeps its spelling where the unit keeps a comparison at file
+	 * scope, since that is what its callers pass, and goes back to ordinary with everything else,
+	 * which is what the callers hold then. A unit mixing both roads at file scope leaves a helper
+	 * with one type and a caller with the other, which fails to compile, loudly; no pack of the
+	 * corpus does. A compute unit is all-arithmetic whatever it declares, its descriptors being
+	 * pushed on a road the render-pass substitution never sees, and so is every unit of a launch
+	 * whose soft-compare switch is armed.
 	 */
 	private void collectComparisonSamplers() {
 		int[] lines = lineNumbers();
 		int depth = 0;
 		int parameters = -1;
+		boolean arithmetic = softCompare() || this.stage == ProgramStage.COMPUTE;
+		List<Integer> parameterTypes = new ArrayList<>();
+		List<Scoped> parameterNames = new ArrayList<>();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -3206,11 +3297,11 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			replace(index, plain);
-
 			// Every identifier this declaration introduces, and how far what it introduces them
 			// into reaches. Array bounds and commas are not identifiers, so they are stepped over.
 			int last = depth > 0 ? functionEnd(parameters) : this.tokens.size() - 1;
+			List<Scoped> introduced = new ArrayList<>();
+			boolean bindable = !arithmetic;
 			for (int scan = significantAfter(index); scan >= 0; scan = significantAfter(scan)) {
 				Token next = this.tokens.get(scan);
 				if (next.operator(";") || (depth > 0 && (next.operator(",") || next.operator(")")))) {
@@ -3218,10 +3309,39 @@ public final class GlslTranslator {
 				}
 
 				if (next.kind() == Kind.IDENTIFIER) {
-					this.comparisonSamplers.add(new Scoped(next.text(), lines[index], lines[last]));
+					introduced.add(new Scoped(next.text(), lines[index], lines[last]));
+					if (depth == 0 && (SamplerPlan.classify(next.text())
+							!= SamplerPlan.Kind.SHADOW_DEPTH
+							|| CustomImages.named(next.text()))) {
+						bindable = false;
+					}
 				}
 			}
+
+			// A parameter waits for the file-scope verdict, since what it must match is whatever
+			// its callers will be holding by then.
+			if (depth > 0) {
+				parameterTypes.add(index);
+				parameterNames.addAll(introduced);
+			} else if (bindable) {
+				this.hardwareComparisonSamplers.addAll(introduced);
+			} else {
+				replace(index, plain);
+				this.comparisonSamplers.addAll(introduced);
+			}
 		}
+
+		if (!this.hardwareComparisonSamplers.isEmpty()) {
+			this.hardwareComparisonSamplers.addAll(parameterNames);
+
+			return;
+		}
+
+		for (int index : parameterTypes) {
+			replace(index, withoutComparison(this.tokens.get(index).text()));
+		}
+
+		this.comparisonSamplers.addAll(parameterNames);
 	}
 
 	/**
@@ -3795,6 +3915,11 @@ public final class GlslTranslator {
 		return scoped(this.comparisonSamplers, name, line);
 	}
 
+	/** The same question for the comparison samplers that kept their spelling. */
+	private boolean hardwareComparisonAt(String name, int line) {
+		return scoped(this.hardwareComparisonSamplers, name, line);
+	}
+
 	/** Whether one of these names means what the list says it does on this line. */
 	private static boolean scoped(List<Scoped> names, String name, int line) {
 		for (Scoped scoped : names) {
@@ -3968,17 +4093,17 @@ public final class GlslTranslator {
 			}
 		}
 
-		// The four taps a hardware comparison blends, made here because 26.2 has no comparison to
-		// bind: GpuSampler carries two address modes, two filters, an anisotropy and a maximum level
-		// of detail, and neither GlSampler nor VulkanGpuSampler ever writes a compare mode. What the
-		// hardware does is compare each of the four texels a bilinear filter would
-		// have taken and blend the four RESULTS, so that is what this does: textureGather brings the
-		// four back whatever filter is bound, the comparison is made on each, and the blend uses the
-		// weights of the filter. Comparing an already filtered depth is the one thing it must not
-		// do, and that is the difference: the average of four depths is a surface standing nowhere,
-		// while the average of four comparisons is a fraction of the light, which is the whole point
-		// of the thing. Iris binds GL_LINEAR plus GL_COMPARE_REF_TO_TEXTURE for it, in
-		// ShadowRenderTargets.getSamplerFor.
+		// The four taps a hardware comparison blends, for the lookups the road decision sent here:
+		// GpuSampler carries no compare mode, so when the comparison cannot ride the binding, what
+		// the hardware does is done in arithmetic instead. The hardware compares each of the four
+		// texels a bilinear filter would have taken and blends the four RESULTS, so that is what
+		// this does: textureGather brings the four back whatever filter is bound, the comparison is
+		// made on each, and the blend uses the weights of the filter. Comparing an already filtered
+		// depth is the one thing it must not do, and that is the difference: the average of four
+		// depths is a surface standing nowhere, while the average of four comparisons is a fraction
+		// of the light, which is the whole point of the thing. Iris binds GL_LINEAR plus
+		// GL_COMPARE_REF_TO_TEXTURE for it, in ShadowRenderTargets.getSamplerFor, and the hardware
+		// road binds the same pair through the descriptor instead of coming here.
 		//
 		// Not conditioned on shadowHardwareFiltering, and nothing here could condition it: the
 		// header is written per stage, before any of the pack's directives are folded. It costs
@@ -3993,7 +4118,7 @@ public final class GlslTranslator {
 		//
 		// The level of detail is dropped, which is what a comparison sampler with no mipmaps would
 		// have done with it anyway: nothing ever fills a chain on the shadow map.
-		if (this.shadowCompares > 0) {
+		if (this.softRewrites > 0) {
 			lines.add("float " + SHADOW_COMPARE + "(sampler2D ofMap, vec3 ofAt) {"
 					+ " vec4 ofTests = step(vec4(ofAt.z), textureGather(ofMap, ofAt.xy, 0));"
 					+ " vec2 ofPart = fract(ofAt.xy * vec2(textureSize(ofMap, 0)) - 0.5);"
@@ -4356,17 +4481,29 @@ public final class GlslTranslator {
 				this.covers ? 1 : 0, this.depthLookups,
 				this.parameterLookups, this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
-				List.copyOf(this.conflicts), comparedSamplers(), List.copyOf(this.storageBlocks),
+				List.copyOf(this.conflicts), comparedSamplers(), hardwareComparedSamplers(),
+				List.copyOf(this.storageBlocks),
 				this.volumeLookups, this.volumesLeftAlone, this.trigCalls, this.gameTextureMatrix,
 				this.gameModelView);
 	}
 
 	/**
-	 * The comparison samplers this stage is handed from outside, which are the only ones anything
-	 * binds: one taken as a parameter is a name inside a function and never a descriptor.
+	 * The comparison samplers this stage is handed from outside, both roads together, which are the
+	 * only ones anything binds: one taken as a parameter is a name inside a function and never a
+	 * descriptor.
 	 */
 	private List<String> comparedSamplers() {
-		return this.comparisonSamplers.stream()
+		return descriptors(Stream.concat(this.comparisonSamplers.stream(),
+				this.hardwareComparisonSamplers.stream()));
+	}
+
+	/** The bound ones of the road that kept its spelling, which the binding owes a comparison. */
+	private List<String> hardwareComparedSamplers() {
+		return descriptors(this.hardwareComparisonSamplers.stream());
+	}
+
+	private List<String> descriptors(Stream<Scoped> scoped) {
+		return scoped
 				.map(Scoped::name)
 				.distinct()
 				.filter(this.samplers::containsKey)

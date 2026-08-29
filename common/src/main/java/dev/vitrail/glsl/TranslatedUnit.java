@@ -92,9 +92,12 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 *                           reads back a value the stage never wrote
 	 * @param conflictNames      the names behind {@code uniformConflicts}, so a run over a corpus
 	 *                           can name them rather than only count them
-	 * @param comparedSamplers   the samplers the pack asked the hardware to compare and that are
-	 *                           declared here as ordinary ones. Read off the declarations rather
-	 *                           than off {@code samplers}, whose types have already been rewritten
+	 * @param comparedSamplers   the samplers the pack asked the hardware to compare, read off the
+	 *                           declarations, both roads together
+	 * @param hardwareCompared   the ones of those that kept their comparison spelling, so that the
+	 *                           binding owes each a comparison sampler and the lookup is the
+	 *                           hardware's. The rest are declared ordinary, with the comparison
+	 *                           made in arithmetic where each lookup stood
 	 * @param storageBlocks      the storage blocks this unit declares at file scope. A
 	 *                           {@code bufferObject} that matches one is bound; the rest refuse
 	 *                           the program that carries them
@@ -122,7 +125,8 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 			int depthLookups, int parameterLookups,
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
-			List<String> conflictNames, List<String> comparedSamplers, List<String> storageBlocks,
+			List<String> conflictNames, List<String> comparedSamplers,
+			List<String> hardwareCompared, List<String> storageBlocks,
 			int volumeLookups, int volumesLeftAlone, int trigCalls, int gameTextureMatrix,
 			int gameModelView) {
 	}

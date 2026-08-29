@@ -43,6 +43,7 @@ final class ConstantTextures {
 
 	private final TextureTarget black;
 	private final TextureTarget white;
+	private final TextureTarget farPlane;
 	private final Map<PbrMap, TextureTarget> flatMaps = new EnumMap<>(PbrMap.class);
 
 	/**
@@ -52,6 +53,7 @@ final class ConstantTextures {
 	private ConstantTextures(GpuDevice device) {
 		this.black = new TextureTarget("Vitrail terrain black", 1, 1, false, FORMAT);
 		this.white = new TextureTarget("Vitrail terrain white", 1, 1, false, FORMAT);
+		this.farPlane = new TextureTarget("Vitrail far plane", 1, 1, true, FORMAT);
 		for (PbrMap map : PbrMap.values()) {
 			this.flatMaps.put(map, new TextureTarget("Vitrail terrain " + map.sampler(), 1, 1,
 					false, FORMAT));
@@ -60,6 +62,7 @@ final class ConstantTextures {
 		CommandEncoder encoder = device.createCommandEncoder();
 		encoder.clearColorTexture(this.black.getColorTexture(), OPAQUE_BLACK);
 		encoder.clearColorTexture(this.white.getColorTexture(), OPAQUE_WHITE);
+		encoder.clearDepthTexture(this.farPlane.getDepthTexture(), 1.0);
 		this.flatMaps.forEach((map, target) ->
 				encoder.clearColorTexture(target.getColorTexture(), map.missing()));
 	}
@@ -89,6 +92,7 @@ final class ConstantTextures {
 
 		instance.black.destroyBuffers();
 		instance.white.destroyBuffers();
+		instance.farPlane.destroyBuffers();
 		instance.flatMaps.values().forEach(TextureTarget::destroyBuffers);
 		instance = null;
 	}
@@ -99,6 +103,26 @@ final class ConstantTextures {
 
 	GpuTextureView white() {
 		return this.white.getColorTextureView();
+	}
+
+	/**
+	 * The far plane in a depth format, for a shadow name a comparison sampler reads. The comparison
+	 * is only defined against a depth image, so the RGBA white above cannot answer it; this one
+	 * texel holds one, which is the far plane of the map's own window, and a comparison against it
+	 * says "nothing between here and the light" exactly as the white does for a plain read. Read
+	 * without a comparison it answers one in the red channel, which is the component a depth read
+	 * takes, so serving it to a name only some programs compare changes neither.
+	 */
+	GpuTextureView farPlane() {
+		return this.farPlane.getDepthTextureView();
+	}
+
+	/**
+	 * The same texel for a caller that cannot make the set, because it is inside a render pass
+	 * where the clears above are refused. Null until somebody outside one has asked.
+	 */
+	static GpuTextureView farPlaneIfReady() {
+		return instance == null ? null : instance.farPlane();
 	}
 
 	/** One texel of what the absence of this material map means. */
