@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.dh.DhLods;
+import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.mixin.GpuDeviceAccessor;
 import dev.vitrail.pack.option.OptionValue;
@@ -604,6 +605,9 @@ public final class PackChain {
 		// Here and not lower down: it decides what the translation emits, and every road
 		// below this point that reads a pack translates one.
 		DriverTrig.read(gameDirectory);
+		// Beside the trig switch and for the same reason: what follows is what these tallies
+		// are a tally of.
+		LoadClock.reset();
 		// The storage blocks the translator files away, emptied at the head of a load and NOT beside
 		// the CustomImages line in release(), though the two are installed on the same line.
 		//
@@ -894,6 +898,14 @@ public final class PackChain {
 				// thread the player is waiting on, and each opens the pack for itself.
 				Vitrail.logger().info("Opened {} {} times to load it", chain.packName(),
 						ShaderPackSource.openings() - openings);
+				// Once per installed chain, whatever else this load does or fails to do later:
+				// the second report, with the families in, only exists when a warmup fans out.
+				// Translation only, because this method does no device work by design: the
+				// modules follow on the first draws and the workers, and land in the next report.
+				Vitrail.logger().info("Translating cost {} ms over {} translator calls before "
+						+ "the chain went live; the modules follow on the draws and the workers, "
+						+ "counted into the report that closes the warmup",
+						LoadClock.translationMillis(), LoadClock.translated());
 			}
 
 			active.startFamilyPrefetch();
@@ -2936,6 +2948,13 @@ public final class PackChain {
 						+ "first draw, {} ms of background work, translations included",
 						this.warmServed.get(), this.warmWalked.get(),
 						(System.nanoTime() - start.get()) / 1_000_000L);
+				// Beside the total it explains. The spans are summed per program across workers,
+				// so together they can pass the wall clock of the load; they compare with each
+				// other, not with it.
+				Vitrail.logger().info("With the families in, translating cost {} ms over {} "
+						+ "translator calls and making modules cost {} ms over {} modules, "
+						+ "shaderc and SPIRV-Cross together", LoadClock.translationMillis(),
+						LoadClock.translated(), LoadClock.moduleMillis(), LoadClock.modules());
 			}
 
 			return (Void) null;

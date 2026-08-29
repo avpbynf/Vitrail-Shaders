@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.mixin.CommandEncoderAccessor;
@@ -379,27 +380,40 @@ final class PackCompute implements AutoCloseable {
 				return;
 			}
 
-			ByteBuffer spirv = compileSpirv(unit.text());
-			if (spirv == null) {
-				return;
-			}
-
+			// Clocked as module work like everything the game's compiler makes: shaderc first,
+			// then the reflection inside ComputeShader.compile. Neither goes through the game's
+			// compiler, so the funnel clock cannot see them and this road counts itself. The
+			// layout and the pipeline below stay outside the figure: they are Vulkan object
+			// creation, not module work. One outer finally so that every exit, the refusal and
+			// the throw included, is counted exactly once.
+			long began = System.nanoTime();
 			try {
-				ComputeShader.Compiled compiled = ComputeShader.compile(vulkan, this.label, spirv);
-				this.shaderModule = compiled.module();
-				this.entries = compiled.entries();
-				// Named and still dispatched, which is what the graphics path does with the same
-				// ceiling: a device is only obliged to allow this many descriptors in one pushed
-				// set, and going past it is undefined rather than slow. Said here, once, so that a
-				// driver error later has a line in the log that predicted it.
-				if (this.entries.size() > PUSH_DESCRIPTORS) {
-					Vitrail.logger().warn("shadow compute {} pushes {} descriptors in one set, past "
-							+ "the {} a device commonly allows at once", this.path,
-							this.entries.size(), PUSH_DESCRIPTORS);
+				ByteBuffer spirv = compileSpirv(unit.text());
+				if (spirv == null) {
+					return;
 				}
-			} catch (Exception e) {
-				Vitrail.logger().warn("shadow compute {} SPIR-V failed: {}", this.path, e.toString());
-				return;
+
+				try {
+					ComputeShader.Compiled compiled =
+							ComputeShader.compile(vulkan, this.label, spirv);
+					this.shaderModule = compiled.module();
+					this.entries = compiled.entries();
+					// Named and still dispatched, which is what the graphics path does with the
+					// same ceiling: a device is only obliged to allow this many descriptors in one
+					// pushed set, and going past it is undefined rather than slow. Said here, once,
+					// so that a driver error later has a line in the log that predicted it.
+					if (this.entries.size() > PUSH_DESCRIPTORS) {
+						Vitrail.logger().warn("shadow compute {} pushes {} descriptors in one set, "
+								+ "past the {} a device commonly allows at once", this.path,
+								this.entries.size(), PUSH_DESCRIPTORS);
+					}
+				} catch (Exception e) {
+					Vitrail.logger().warn("shadow compute {} SPIR-V failed: {}", this.path,
+							e.toString());
+					return;
+				}
+			} finally {
+				LoadClock.module(System.nanoTime() - began);
 			}
 
 			try (MemoryStack stack = MemoryStack.stackPush()) {

@@ -148,8 +148,15 @@ public final class ProgramTranslator {
 	 */
 	public static Set<String> reads(ExpandedUnit vertex, VertexInputs inputs, AlphaTest alphaTest,
 			boolean coverage, String program, Map<String, VolumeAtlas> volumes) {
-		return GlslTranslator.prepare(vertex, ProgramStage.VERTEX, inputs, inputs.elements(),
-				alphaTest, coverage, program, volumes).reads();
+		// Clocked like the whole translations: this half-translation is real translator work a
+		// chunk program pays before its full one, and leaving it out would undercount terrain.
+		long began = System.nanoTime();
+		try {
+			return GlslTranslator.prepare(vertex, ProgramStage.VERTEX, inputs, inputs.elements(),
+					alphaTest, coverage, program, volumes).reads();
+		} finally {
+			LoadClock.translation(System.nanoTime() - began);
+		}
 	}
 
 	/**
@@ -176,6 +183,19 @@ public final class ProgramTranslator {
 	 * @param volumes by the name the pack samples them under, each with the layout of its atlas
 	 */
 	public static TranslatedProgram translate(Map<ProgramStage, ExpandedUnit> units,
+			VertexInputs inputs, List<String> boundElements, AlphaTest alphaTest, boolean coverage,
+			String program, Map<String, VolumeAtlas> volumes) {
+		// Every overload above funnels through here, which is what makes this the one place a
+		// program's whole translation can be clocked.
+		long began = System.nanoTime();
+		try {
+			return translated(units, inputs, boundElements, alphaTest, coverage, program, volumes);
+		} finally {
+			LoadClock.translation(System.nanoTime() - began);
+		}
+	}
+
+	private static TranslatedProgram translated(Map<ProgramStage, ExpandedUnit> units,
 			VertexInputs inputs, List<String> boundElements, AlphaTest alphaTest, boolean coverage,
 			String program, Map<String, VolumeAtlas> volumes) {
 		Map<ProgramStage, GlslTranslator.Stage> prepared = new LinkedHashMap<>();
