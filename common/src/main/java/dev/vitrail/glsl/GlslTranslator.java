@@ -4071,6 +4071,7 @@ public final class GlslTranslator {
 				case ENTITY, ENTITY_FULLBRIGHT -> lines.addAll(
 						EntityVertex.prologue(this.used, this.synthesized, this.inputs.fullbright()));
 				case GLINT -> lines.addAll(GlintVertex.prologue(this.used, this.synthesized));
+				case CRUMBLING -> lines.addAll(CrumblingVertex.prologue(this.used, this.synthesized));
 				case PARTICLE -> lines.addAll(ParticleVertex.prologue(this.used, this.synthesized));
 				case SKY -> lines.addAll(SkyVertex.prologue(this.bound, this.used, this.synthesized));
 				case CLOUDS -> lines.addAll(CloudVertex.prologue(this.used, this.synthesized));

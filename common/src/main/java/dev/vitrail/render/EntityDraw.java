@@ -108,9 +108,10 @@ import java.util.stream.Stream;
  * {@link FeatureLayer} carries it, with what Iris does instead and what it costs the image.
  * <p>
  * <strong>What is still the game's inside this window</strong>, and therefore still goes to that
- * layer, is the beacon beam, the lightning, and the text of a name plate or a sign. All three of
- * those families bind a mesh this door cannot decode, which {@link #decodable} says and which is why
- * none of them is a row here. The shadow map is a family of its own and is NOT in either window, a
+ * layer, is the beacon beam, the lightning, and the text of a name plate or a sign. The lightning
+ * and the text bind a mesh this door cannot decode, which {@link #decodable} says and which is why
+ * neither is a row here; the beam binds the block format, which the door reads for the crumbling,
+ * and what it still wants is a row of its own. The shadow map is a family of its own and is NOT in either window, a
  * pass of its own that neither bracket reaches.
  * <p>
  * <strong>The eyes are not among them</strong>: they alone of the four bind
@@ -118,8 +119,9 @@ import java.util.stream.Stream;
  * {@link #FIXED}, which says why it is not the mob table.
  * <p>
  * <strong>An enchantment's glint comes in by this same door and is alone in it</strong>, in two ways
- * that are one: it is the only piece served here that is not drawn from an entity mesh, and the only
- * one whose pipeline carries more than one render type's worth of answers. {@link #GLINT_EARLY}
+ * that are one: it is one of the two pieces served here that are not drawn from an entity mesh, the
+ * cracks over a mined block being the other, and the only one whose pipeline carries more than one
+ * render type's worth of answers. {@link #GLINT_EARLY}
  * carries what that costs it, which is four pieces where every other family has one per table.
  * <p>
  * <strong>The hand comes in by this same door and is not one of those.</strong> {@link HandDraw}
@@ -239,7 +241,8 @@ public final class EntityDraw {
 	 *                      carries false here
 	 * @param fullbright    whether the game draws this piece at full light, so that the light map
 	 *                      names are answered with a constant and the sampler behind them with one
-	 *                      white texel. True for the two rows of {@link #FIXED} and no other so far.
+	 *                      white texel. True for the three rows of {@link #FIXED} and no other so
+	 *                      far.
 	 *                      <strong>A column of the row and not a reading of the program name</strong>,
 	 *                      which is where Iris keeps it as well: its lighting model hangs off the
 	 *                      {@code ShaderKey} ({@code pipeline/programs/ShaderKey.java:44,45}), and
@@ -296,22 +299,37 @@ public final class EntityDraw {
 		}
 
 		/**
+		 * Whether this piece is the overlay that spreads over a block being mined, asked of the
+		 * PIPELINE for the reason {@link #glint} is: what it answers differently is its MESH, the game
+		 * drawing it from the block format rather than from the entity one.
+		 */
+		@SuppressWarnings("ReferenceEquality")
+		boolean crumbling() {
+			return this.pipeline == RenderPipelines.CRUMBLING;
+		}
+
+		/**
 		 * The format this piece is drawn from, which is the entity mesh for every row but the glint's
-		 * four.
+		 * four and the crumbling's one.
 		 * <p>
-		 * Derived from {@link #glint} rather than tabulated beside it, so that the two cannot drift: a
-		 * row whose format did not match the pipeline it names would declare the wrong inputs and read
-		 * its texture coordinates off whatever the format really carries, without a word being said.
-		 * {@link #decodable} is where the claim is checked against the pipeline in hand.
+		 * Derived from {@link #glint} and {@link #crumbling} rather than tabulated beside them, so
+		 * that a row and its format cannot drift: a row whose format did not match the pipeline it
+		 * names would declare the wrong inputs and read its texture coordinates off whatever the
+		 * format really carries, without a word being said. {@link #decodable} is where the claim is
+		 * checked against the pipeline in hand.
 		 * <p>
 		 * The entity one is {@link EntityMesh}'s rather than the game's own: this is what a pipeline
 		 * of this engine's is built to bind, and it is what the game's own entity pipelines report
 		 * while the mesh carries. The rows are only ever read while it does, {@link #served} refusing
 		 * the whole family otherwise, so the two answers cannot be taken under different ones. The
-		 * glint keeps the game's, its two elements being untouched by any of this.
+		 * other two keep the game's, their elements being untouched by any of this.
 		 */
 		VertexFormat format() {
-			return glint() ? DefaultVertexFormat.POSITION_TEX : EntityMesh.format();
+			if (glint()) {
+				return DefaultVertexFormat.POSITION_TEX;
+			}
+
+			return crumbling() ? DefaultVertexFormat.BLOCK : EntityMesh.format();
 		}
 
 		/**
@@ -332,10 +350,17 @@ public final class EntityDraw {
 				return VertexInputs.GLINT;
 			}
 
+			// One crumbling contract, the camera's, answering the light map at full light: the map
+			// files no twin for it, the FIXED row's javadoc saying why the reference's map never
+			// receives this draw.
+			if (crumbling()) {
+				return VertexInputs.CRUMBLING;
+			}
+
 			return this.fullbright ? VertexInputs.ENTITY_FULLBRIGHT : VertexInputs.ENTITY;
 		}
 
-		/** One word for the log, which has to say which of the four families a line is about. */
+		/** What the log calls this line, which has to say which of the five families it is about. */
 		String family() {
 			if (shadow()) {
 				return "entities in the shadow map";
@@ -343,6 +368,10 @@ public final class EntityDraw {
 
 			if (glint()) {
 				return "glint";
+			}
+
+			if (crumbling()) {
+				return "block breaking";
 			}
 
 			return hand() ? "hand" : "entities";
@@ -519,6 +548,14 @@ public final class EntityDraw {
 	private static final String ENTITIES_TRANSLUCENT = "gbuffers_entities_translucent";
 
 	private static final String BLOCK_TRANSLUCENT = "gbuffers_block_translucent";
+
+	/**
+	 * What the cracks spreading over a block being mined ask for. It falls back onto the terrain
+	 * ({@code ProgramFallbacks} carries the tree), which is where Iris sends it too,
+	 * {@code ProgramId.DamagedBlock} naming {@code Terrain} as its parent at
+	 * {@code shaderpack/loading/ProgramId.java:33}.
+	 */
+	private static final String DAMAGED_BLOCK = "gbuffers_damagedblock";
 
 	/**
 	 * What the glowing eyes of a mob ask for, and the one name of this class that answers whatever
@@ -875,7 +912,8 @@ public final class EntityDraw {
 	 */
 	private static void shadowTwins(Map<RenderPipeline, Element> from) {
 		from.values().stream()
-				.filter(mob -> mob.pipeline() != RenderPipelines.ENTITY_SHADOW)
+				.filter(mob -> mob.pipeline() != RenderPipelines.ENTITY_SHADOW
+						&& mob.pipeline() != RenderPipelines.CRUMBLING)
 				.map(mob -> new Element(mob.pipeline(), "shadow_" + mob.element(), SHADOW_ENTITIES,
 						CUTOUT, RenderStage.ENTITIES, false))
 				.forEach(element -> SHADOW_ELEMENTS.put(element.pipeline(), element));
@@ -966,8 +1004,8 @@ public final class EntityDraw {
 	}
 
 	/**
-	 * The pieces whose program does not depend on what else is going on, which is the eyes and
-	 * nothing else so far.
+	 * The pieces whose program does not depend on what else is going on, which is the eyes and the
+	 * overlay a block being mined is drawn under.
 	 * <p>
 	 * <strong>A table of its own because Iris keys these rows differently, and the difference is
 	 * exactly what a twin would destroy.</strong> Most rows of {@link #ELEMENTS} reach Iris through
@@ -1017,7 +1055,7 @@ public final class EntityDraw {
 	 * <p>
 	 * <strong>Both bind {@code DefaultVertexFormat.ENTITY}</strong> ({@code RenderPipelines.java:361}
 	 * and the {@code ENTITY_EMISSIVE_SNIPPET} at {@code :64}), which is why this family could be
-	 * served at all and the four beside it could not: the door decodes that one format.
+	 * served at all when the door decoded that format alone.
 	 * <p>
 	 * Neither render type carries a layering transform or a texture transform
 	 * ({@code rendertype/RenderTypes.java:190-198,242-244}), so there is no depth nudge to reproduce
@@ -1038,6 +1076,46 @@ public final class EntityDraw {
 	 * declared {@code LightingModel.LIGHTMAP} ({@code pipeline/programs/ShaderKey.java:79}) where the
 	 * two the camera reaches are {@code FULLBRIGHT} ({@code :44,45}), so the twins take the row every
 	 * other caster gets rather than the full light of their own side.
+	 *
+	 * <h4>The cracks over a block being mined</h4>
+	 *
+	 * <strong>The second family here, and it is here for the reason the eyes are.</strong> Iris keys
+	 * it on a constant, {@code p -> ShaderKey.CRUMBLING} ({@code pipeline/IrisPipelines.java:79}),
+	 * which consults neither the hand nor the block entity phase. That phase is the one a twin would
+	 * really be reached in, a chest being as breakable as the stone beside it, and the twin would ask
+	 * for {@code gbuffers_block} inside a draw Iris keeps on {@code gbuffers_damagedblock}.
+	 * <p>
+	 * The key is {@code ProgramId.DamagedBlock} at a tenth, drawn at full light with the fog off
+	 * ({@code pipeline/programs/ShaderKey.java:61}). The tenth is what {@link #CUTOUT} already is
+	 * here; the name falls back onto the terrain, which is Iris's tree as well.
+	 * <p>
+	 * <strong>It is the one row of this door drawn from a mesh of the world.</strong> The game binds
+	 * {@code DefaultVertexFormat.BLOCK} for it, four elements and no normal, where every other row is
+	 * the entity mesh or the glint's two: {@link VertexInputs#CRUMBLING} is the contract that reads it
+	 * and {@code CrumblingVertex} carries what the four answer for and what the missing normal costs.
+	 * <p>
+	 * <strong>Leaving it to the game is not the neutral answer it looks like.</strong> The game draws
+	 * it in the {@code SubmitNodeCollection.breakingOverlay} phase, which
+	 * {@code FeatureRenderDispatcher.PreparedFrame.executeTranslucent} runs between the translucent
+	 * blocks and the water mask, and that call is the stretch {@code PackChain.openFeatures}
+	 * redirects into {@link FeatureLayer}; that
+	 * layer is cleared to transparent black and composed as though every draw caught in it blended by
+	 * alpha. This pipeline multiplies instead, {@code DST_COLOR} by {@code SRC_COLOR}, so left there
+	 * it multiplies against the clear and every crack comes out black. Served, it multiplies onto the
+	 * colour the chain composed, which is where the game would have put it.
+	 * <p>
+	 * <strong>It has no shadow twin here, and that is Iris's map rather than a divergence.</strong>
+	 * Iris holds a shadow key for this pipeline,
+	 * {@code assignToShadow(RenderPipelines.CRUMBLING, p -> ShaderKey.SHADOW_TEX)}
+	 * ({@code pipeline/IrisPipelines.java:95}), but its shadow stage replays only what it submits
+	 * itself, the entities and the block entities
+	 * ({@code shadows/ShadowRenderer.java:572,580}), so the overlay over a mined block never
+	 * reaches its map and the key sits unused. Here the light's walk replays the game's whole
+	 * translucent feature window, overlay included, so a filed twin fed the map a draw the
+	 * reference never makes. What that draw wrote there was the map's COLOUR half alone, the
+	 * vanilla state keeping its depth write off ({@code RenderPipelines.CRUMBLING}, kept by
+	 * {@code EntityProgram.intoMap}); a pack reading {@code shadowcolor} then tints the sun with
+	 * the crack, and the face being mined wears a crack-shaped shadow.
 	 */
 	private static final Map<RenderPipeline, Element> FIXED = new LinkedHashMap<>();
 
@@ -1047,11 +1125,16 @@ public final class EntityDraw {
 		FIXED.put(RenderPipelines.ENTITY_TRANSLUCENT_EMISSIVE,
 				new Element(RenderPipelines.ENTITY_TRANSLUCENT_EMISSIVE, "eyes_emissive", SPIDER_EYES,
 						CUTOUT, RenderStage.NONE, false, true));
+		// Under NONE and not under DESTROY, which the stage enum carries and nobody poses: Iris
+		// declares that phase too (pipeline/WorldRenderingPhase.java:20) and never sets it, so a pack
+		// reading renderStage here reads what it reads there.
+		FIXED.put(RenderPipelines.CRUMBLING, new Element(RenderPipelines.CRUMBLING, "crumbling",
+				DAMAGED_BLOCK, CUTOUT, RenderStage.NONE, false, true));
 	}
 
 	static {
 		// Here and not beside the call for the mob table: this one is declared below it, so a block up
-		// there would read it while it is still empty and lose both rows without a word.
+		// there would read it while it is still empty and lose every row of it without a word.
 		shadowTwins(FIXED);
 	}
 
@@ -1426,10 +1509,11 @@ public final class EntityDraw {
 		// ten draws in a hand pass.
 		boolean inMoment = (element != null && element.hand()) ? HandDraw.wanted()
 				: wanted && element != null && inWindow(element);
-		// And the mesh has to be carrying, whatever the moment says. Every row but the glint's is read
-		// against EntityMesh.format, so a draw served before the mesh settled would bind fifty-six
-		// bytes of layout over a vertex of thirty-six. It lasts from the load that
-		// asked until the extract that rebuilds the world, which is one frame in the ordinary case.
+		// And the mesh has to be carrying, whatever the moment says. Every row but the glint's and the
+		// crumbling's is read against EntityMesh.format, so a draw served before the mesh settled
+		// would bind fifty-six bytes of layout over a vertex of thirty-six. It lasts from the load
+		// that asked until the extract that rebuilds the world, which is one frame in the ordinary
+		// case.
 		//
 		// What it costs is NOT the same thing on the two roads, and saying it once would be wrong on
 		// the second. In the picture's windows a no hands the draw back, so the frame's mobs are drawn
@@ -1960,16 +2044,22 @@ public final class EntityDraw {
 	 * <p>
 	 * The vertex head declares the elements of that format BY NAME, and an element the stage does not
 	 * declare shifts the location of every one after it without a word being said: the picture stays a
-	 * picture and reads its texture coordinates out of the light map. Two formats come in by this door
-	 * now, the entity mesh and the glint's two elements, so the claim is the piece's and the check is
-	 * against the game's own binding.
+	 * picture and reads its texture coordinates out of the light map. Three formats come in by this
+	 * door now, the entity mesh, the glint's two elements and the block one the crumbling is drawn
+	 * from, so the claim is the piece's and the check is against the game's own binding.
 	 * <p>
-	 * It is also what keeps the three families beside the eyes out of these tables, and that is a
-	 * fact about this engine rather than about them: the beacon beam binds
-	 * {@code DefaultVertexFormat.BLOCK}, the lightning and the dragon rays {@code POSITION_COLOR} and
-	 * the world text {@code POSITION_TEX_LIGHTMAP_COLOR}, and {@code VertexInputs} has a decoder for
-	 * none of the three. A row added for any of them would be caught here and reported, rather than
-	 * drawn out of the wrong offsets.
+	 * It is also what keeps two of the families beside the eyes out of these tables, and that is a
+	 * fact about this engine rather than about them: the lightning and the dragon rays bind
+	 * {@code POSITION_COLOR} and the world text {@code POSITION_TEX_LIGHTMAP_COLOR}, and
+	 * {@code VertexInputs} has a decoder for neither. A row added for either would be caught here and
+	 * reported, rather than drawn out of the wrong offsets.
+	 * <p>
+	 * <strong>The beacon beam is no longer one of them and is still not served</strong>, which is
+	 * worth separating: it binds {@code DefaultVertexFormat.BLOCK} as the crumbling does, so this
+	 * gate would let it through. What it wants is a row, and the row is not the crumbling's under
+	 * another name. Iris gives it {@code ProgramId.BeaconBeam} with no alpha test and its fog per
+	 * fragment ({@code pipeline/programs/ShaderKey.java:70}), where the crumbling is
+	 * {@code DamagedBlock} at a tenth with the fog off, and the two agree on the light alone.
 	 */
 	private static boolean decodable(Element element) {
 		VertexFormat format = element.pipeline().getVertexFormatBinding(0);
@@ -2000,7 +2090,7 @@ public final class EntityDraw {
 				.toList();
 	}
 
-	/** The fixed rows this engine can decode the mesh of, which today is both of them. */
+	/** The fixed rows this engine can decode the mesh of, which today is all three of them. */
 	private static List<Element> fixed() {
 		return FIXED.values().stream().filter(EntityDraw::decodable).toList();
 	}
