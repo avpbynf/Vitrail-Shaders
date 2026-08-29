@@ -2026,10 +2026,12 @@ public final class PackChain {
 
 		awaitFamilyWarmups();
 
-		// The far terrain's two corner rings and the one-texel constants survive every release on
-		// purpose, so the shutdown is the one caller that really frees them.
+		// The far terrain's two corner rings, the one-texel constants and the comparison sampler
+		// survive every release on purpose, so the shutdown is the one caller that really frees
+		// them.
 		DistantDraw.close();
 		ConstantTextures.close();
+		ShadowCompare.close();
 	}
 
 	/**

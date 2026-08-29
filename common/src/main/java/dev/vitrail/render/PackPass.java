@@ -257,6 +257,11 @@ final class PackPass {
 		}
 
 		this.pipeline = builder.build();
+
+		// Filed against the pipeline and not the program, because the pipeline is what the
+		// descriptor walk can see when it has to answer for a name.
+		ShadowCompare.note(this.pipeline, this.path, loaded);
+
 		noteGaps(declared);
 	}
 
@@ -553,13 +558,16 @@ final class PackPass {
 				// against the camera. It follows the image rather than the convention of the
 				// target, which is what makes it the same answer as the shadow map's.
 				case DEPTH -> depth(binding.sampler(), targets, depthView);
-				// White where the map is not there, and white is the far plane rather than a
-				// placeholder: a shadowtex lookup is the one depth read the translation never wraps,
-				// so the map stores the forward window and a lookup that finds nothing has to say
-				// "nothing between here and the light". Black would put the world in its own shadow.
+				// The far plane where the map is not there, rather than a placeholder: a shadowtex
+				// lookup is the one depth read the translation never wraps, so the map stores the
+				// forward window and a lookup that finds nothing has to say "nothing between here
+				// and the light". Black would put the world in its own shadow. In a depth format
+				// first, because a comparison sampler is only defined against one; the RGBA white
+				// stays as the answer of last resort for the frames before the constants exist.
 				case SHADOW_DEPTH -> or(this.loaded.samplers().withoutTranslucents(binding.sampler())
 						? targets.shadow().depthWithoutTranslucents()
-						: targets.shadow().depth(), targets.white());
+						: targets.shadow().depth(),
+						or(ConstantTextures.farPlaneIfReady(), targets.white()));
 				case SHADOW_COLOUR -> or(targets.shadow().colour(binding.index()), targets.white());
 				case NOISE -> targets.noise();
 				// White until the pass behind it has drawn once, which is the far plane in the pack's

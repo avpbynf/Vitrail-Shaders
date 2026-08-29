@@ -875,6 +875,11 @@ final class ColorTargets {
 			return false;
 		}
 
+		// The device's own set first, made here because this runs outside any pass and the passes
+		// below cannot: it carries the far plane in a depth format, which is the one fallback a
+		// comparison sampler can be bound against.
+		ConstantTextures.of(RenderSystem.getDevice());
+
 		// One pixel each, and clamped when they are bound, so the value is what a lookup reads
 		// wherever it lands. None of them carries a chain: a constant has nothing to average, and
 		// the noise image is a field a pack indexes itself rather than one anything reads at a lod.

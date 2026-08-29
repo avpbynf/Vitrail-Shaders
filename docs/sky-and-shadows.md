@@ -74,7 +74,7 @@ the pack gets a view without translucents), but it is never converted, so it has
 the convention the pack expects. The two are the same rule, hand the pack the window it reads in,
 applied at different places.
 
-### A shadow sampler implies a comparison this backend cannot express
+### A shadow sampler implies a comparison the game's sampler cannot express
 
 This was the hard wall of the whole feature, and it is worth stating precisely.
 
@@ -87,14 +87,23 @@ Bound naively, a shadow sampler becomes an ordinary sampler and the comparison m
 symptom is not a crash: the entire world comes back uniformly in shadow, which looks exactly like a
 badly drawn shadow map, and sends you looking in the wrong place.
 
-The engine instead strips the comparison from the declaration and rewrites each *plain* read into a
-comparison emitted in the translated shader, in the sense the format specifies and every pack is
-written against. It agrees with the forward depth window, where nearer to the light is smaller.
+The engine answers it on two roads. Where the names behind the declaration are the shadow map's
+own, the declaration keeps its spelling, the lookup compiles to a depth-reference sample, and the
+binding slips a comparison sampler made in Vulkan's own terms under the name, past the game's
+abstraction: linear filtering, clamped edges, and the LEQUAL sense the format specifies, agreeing
+with the forward depth window where nearer to the light is smaller. It is the pair Iris binds when
+a pack asks for its hardware shadow filtering, and a projective comparison needs nothing more
+there: the call is the division and the comparison in one.
 
-Only the plain lookups. A projective or gathered comparison divides or spreads before it compares,
-which needs a different expression and not a different name, so it is left as it stands and counted
-instead: a call that silently kept a hardware comparison is exactly what the rewrite exists to
-stop.
+Everything else compared, and every compute program, takes the arithmetic road: the comparison is
+stripped from the declaration and each *plain* read is rewritten into a comparison emitted in the
+translated shader, the same four texels compared and then blended by the same bilinear weights the
+hardware would use. Only the plain lookups: a projective or gathered comparison divides or spreads
+before it compares, which needs a different expression and not a different name, so it is left as
+it stands and counted instead. A launch can send every unit down this road with a file
+`vitrail/soft-shadow-compare` in the game directory or `-Dvitrail.softShadowCompare=true`, for the
+day the comparison sampler is suspected of a wrong image: bound wrong it does not fail, it hands
+back a credible fraction of the wrong thing.
 
 Two ordering traps come with it. The comparison samplers have to be collected *before* the depth
 rewrite runs, because uniforms are only lifted afterwards and the set that decides would otherwise

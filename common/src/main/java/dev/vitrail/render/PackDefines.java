@@ -58,6 +58,10 @@ public final class PackDefines {
 	 * every symbol here is fixed for as long as the world is.
 	 */
 	public static void install() {
+		// Beside the machine table because it is the same moment: a launch-wide answer the
+		// translation has to hold before the first unit is read, and this is the one caller that
+		// stands before every read with the game directory in reach.
+		ShadowCompare.armIfAsked();
 		EngineDefines.machine(gather());
 		settle();
 	}

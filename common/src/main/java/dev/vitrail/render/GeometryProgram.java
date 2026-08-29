@@ -747,6 +747,10 @@ final class GeometryProgram {
 
 		this.pipeline = builder.build();
 
+		// Filed against the pipeline and not the program, because the pipeline is what the
+		// descriptor walk can see when it has to answer for a name.
+		ShadowCompare.note(this.pipeline, this.path, loaded);
+
 		// A storage block this engine has no bufferObject for is the one refusal that does not
 		// announce itself. An unbindable sampler stops the pipeline from being built and this class
 		// already falls back on that; a storage block compiles, never enters a bind group, and
@@ -1760,19 +1764,23 @@ final class GeometryProgram {
 	}
 
 	/**
-	 * The shadow map, or white for the far plane.
+	 * The shadow map, or the far plane where there is none.
 	 * <p>
-	 * White, and the same white {@link #depth(String)} falls back to, for the same reason: a
-	 * {@code shadowtex} lookup is never rewritten, so what is stored is what the pack reads, and the
-	 * map stores the forward window where one is the far plane. A shadow lookup that finds nothing
-	 * has to say "nothing between here and the light".
+	 * The far plane, for the reason {@link #depth(String)} answers white: a {@code shadowtex}
+	 * lookup is never rewritten, so what is stored is what the pack reads, and the map stores the
+	 * forward window where one is the far plane. A shadow lookup that finds nothing has to say
+	 * "nothing between here and the light". It is the depth-format texel and not the RGBA white,
+	 * because the name may be read through a comparison sampler, which is only defined against a
+	 * depth image; read plainly its red channel answers the one the white texel did, and the red
+	 * channel is what a depth read takes.
 	 * <p>
-	 * A shadow pass reads white whatever the map holds: the image it would read is an attachment of
-	 * the very pass it is drawn in, and sampling an attachment is a thing Vulkan gives no meaning to.
+	 * A shadow pass reads the far plane whatever the map holds: the image it would read is an
+	 * attachment of the very pass it is drawn in, and sampling an attachment is a thing Vulkan
+	 * gives no meaning to.
 	 */
 	private GpuTextureView shadowDepth(String sampler) {
 		if (this.pass.shadow()) {
-			return this.constants.white();
+			return this.constants.farPlane();
 		}
 
 		// shadowtex1 is the map without the translucents and shadowtex0 the map with them. Serving
@@ -1784,7 +1792,7 @@ final class GeometryProgram {
 				? this.shadow.depthWithoutTranslucents()
 				: this.shadow.depth();
 
-		return map == null ? this.constants.white() : map;
+		return map == null ? this.constants.farPlane() : map;
 	}
 
 	/** A shadow colour target, on the same two rules as the depth above. */
@@ -2173,19 +2181,29 @@ final class GeometryProgram {
 
 		// Said because nothing on screen would. A pack declaring sampler2DShadow asks the hardware
 		// to compare and hand back a filtered fraction; blaze3d's GpuSampler carries no comparison
-		// at all, so the translation makes it instead: four texels gathered, four steps, and the
-		// same bilinear blend the hardware would have applied. Nothing of the shape is lost. What
-		// it costs is the gather and the arithmetic, on a lookup a PCF loop makes many times.
+		// at all, so the map's own names are bound under the comparison sampler this engine makes
+		// in Vulkan's terms, and anything else compared is made in the shader instead: four texels
+		// gathered, four steps, and the same bilinear blend the hardware would have applied.
 		//
-		// Asked of the notes and not of the samplers: by the time a sampler is one of those, its
-		// type has been rewritten to the ordinary one and there is nothing left to recognise.
+		// Asked of the notes and not of the samplers: on the arithmetic road the type has been
+		// rewritten to the ordinary one and there is nothing left to recognise.
+		List<String> hardware = this.loaded.program().stages().values().stream()
+				.flatMap(unit -> unit.notes().hardwareCompared().stream())
+				.distinct()
+				.toList();
+		if (!hardware.isEmpty()) {
+			Vitrail.logger().info("{} asked the hardware to compare {}, which the binding carries "
+					+ "as a comparison sampler", this.path, hardware);
+		}
+
 		List<String> compared = this.loaded.program().stages().values().stream()
 				.flatMap(unit -> unit.notes().comparedSamplers().stream())
 				.distinct()
+				.filter(name -> !hardware.contains(name))
 				.toList();
 		if (!compared.isEmpty()) {
-			Vitrail.logger().info("{} asked the hardware to compare {}, which this backend cannot "
-					+ "bind, so the comparison is made in the shader over the four texels the "
+			Vitrail.logger().info("{} asked the hardware to compare {}, which this binding does not "
+					+ "carry, so the comparison is made in the shader over the four texels the "
 					+ "hardware would have blended", this.path, compared);
 		}
 

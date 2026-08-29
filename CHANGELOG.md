@@ -35,6 +35,15 @@ what the next one holds.
 
 ### Changed
 
+- **A shadow lookup a pack asks the hardware to compare is now compared by the hardware.** A
+  pack declaring `sampler2DShadow` used to have that comparison rebuilt in shader
+  arithmetic on every tap, a dozen instructions where a comparison sampler pays one, and a
+  shadow's blur loop makes many taps per pixel. The comparison now rides the sampler, the pair
+  Iris binds when a pack asks for its hardware shadow filtering, which every pack that declares
+  the type does; the picture it computes is the same blend of the same four texels. For a
+  machine where the sampler road is suspected of a wrong image, a file
+  `vitrail/soft-shadow-compare` in the game directory, or `-Dvitrail.softShadowCompare=true`,
+  puts the arithmetic back in one launch, and removing it again takes a pack reload.
 - **A patch of this mod that stops fitting the game now refuses to start it, instead of drawing a
   wrong picture.** Those patches used to be dropped without a word when a game or Sodium update
   moved what they attach to, and what reached the screen was an effect quietly missing or a
