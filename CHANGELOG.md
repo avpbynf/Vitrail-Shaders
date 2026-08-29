@@ -106,6 +106,12 @@ what the next one holds.
   three used to share one line that named none of them, and the third only showed itself a
   world later, as an error about two lists of attributes that said nothing about the order
   that made them differ. Each now says which one it was, where it happened.
+- **The game no longer crashes when AsyncParticles draws its GPU-accelerated particles under a
+  shaderpack.** AsyncParticles can move its particles to the GPU and record their draws itself,
+  into the very pass this mod had opened over the pack's colour targets, with pipelines built
+  for a single target: the frame died on a colour attachment count mismatch a few seconds into
+  the world. Those draws now take the pack's own particle programs, rebuilt over
+  AsyncParticles' vertex layout, which is what Iris draws them with as well.
 
 ## 0.8.1-beta
 
