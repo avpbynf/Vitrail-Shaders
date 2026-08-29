@@ -37,7 +37,7 @@ import java.util.function.Supplier;
  * backend: scaled copies on the same command buffer, not a render pass per level. A pass per level
  * was the only public path, and each one ends with a full memory barrier. Iris pays one driver
  * call. The blit loop is that call: transfer barriers between levels so each read sees the write
- * below it, then the encoder's own full barrier once so the rest of the frame can sample the chain.
+ * below it, then one barrier naming what a filled chain owes the rest of the frame.
  * <p>
  * Closing a pass still runs the encoder's full barrier. Our own labels start with {@code Vitrail}
  * and get a write-then-sample barrier instead, the rest of the frame keeping the original wait.
@@ -207,7 +207,7 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 				}
 			}
 
-			VulkanCommandEncoder.memoryBarrier(commands, stack);
+			vitrail$chainTailBarrier(commands, stack);
 			return true;
 		} catch (RuntimeException e) {
 			Vitrail.logger().error("Blit mipmaps failed on {}, falling back to a pass per level",
@@ -245,6 +245,39 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 		VkDependencyInfo info = VkDependencyInfo.calloc(stack)
 				.sType$Default()
 				.pImageMemoryBarriers(barrier);
+		KHRSynchronization2.vkCmdPipelineBarrier2KHR(commands, info);
+	}
+
+	/**
+	 * What the filled chain owes the rest of the frame, named instead of the whole of memory. The
+	 * only writes standing unsynchronised at this point are the blits themselves: the pass that
+	 * wrote the base has already closed on its own barrier, and that is also what ordered the
+	 * first blit's read. What can touch the chain next is a sampled read from any shader stage, a
+	 * pass writing the base again, or another transfer; the image is a colour target, so no depth
+	 * stage ever meets it. The wide wait never reaches here: {@code vitrail$generateMipmaps}
+	 * refuses while it is armed, and the caller then pays a pass per level, each closing on the
+	 * game's own barrier.
+	 */
+	@Unique
+	private static void vitrail$chainTailBarrier(VkCommandBuffer commands, MemoryStack stack) {
+		VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack)
+				.sType$Default()
+				.srcStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR)
+				.srcAccessMask(KHRSynchronization2.VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR)
+				.dstStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR)
+				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR);
+		VkDependencyInfo info = VkDependencyInfo.calloc(stack)
+				.sType$Default()
+				.pMemoryBarriers(barrier);
 		KHRSynchronization2.vkCmdPipelineBarrier2KHR(commands, info);
 	}
 
