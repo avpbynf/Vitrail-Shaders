@@ -156,6 +156,14 @@ public final class ChainPlan {
 					// targets as written in every place a plan is built for, which is every place
 					// none of the six is standing.
 					new NamedProgram("gbuffers_spidereyes", true, false, NOT_EVERYWHERE),
+					// The overlay over a block being mined, drawn among the translucent features
+					// beside the eyes and on the same side of the stage. Left out of this list, its
+					// family drew one output onto the game's cleared target, and the multiply the
+					// overlay blends with came out opaque black over every crack.
+					//
+					// Not counted, on the hand's argument: a crack is drawn where somebody is mining
+					// a block, which is a per frame answer no per place map may carry.
+					new NamedProgram("gbuffers_damagedblock", true, false, NOT_EVERYWHERE),
 					// The hand's two passes, which straddle the stage as the particles do and for the
 					// same kind of reason: the solid one is drawn among the game's opaque features and
 					// the blending one at the end of the level. Not counted, and not by a switch:
