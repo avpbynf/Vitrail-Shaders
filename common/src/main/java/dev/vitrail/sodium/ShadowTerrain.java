@@ -31,7 +31,6 @@ import net.minecraft.world.phys.Vec3;
 
 import org.jspecify.annotations.Nullable;
 
-import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.joml.Vector3d;
@@ -227,14 +226,14 @@ public final class ShadowTerrain {
 		try {
 			FogParameters fog = ((MixinSodiumWorldRenderer) renderer).vitrail$lastFogParameters();
 			// The shape the pack asked for, and a box around the camera cut out of it wherever a
-			// shadow distance bounds the walk. By default that shape is the camera's own volume swept
-			// along the light rather than the light's own: a section that cannot drop anything onto
-			// what the camera can see is thrown away before it is drawn. Whether a bound applies at
-			// all is the pack's business at least as often as the player's, most of the corpus
-			// declaring a render multiplier and being held at its own half plane whatever the slider
-			// says, and the plan carries the arbitration already made.
-			ShadowCullFrustum.Chosen cull =
-					ShadowCullFrustum.of(plan, new FrustumIntersection(light));
+			// shadow distance bounds the walk. Distance, default and Advanced keep that box and
+			// no planes. Advanced is the named divergence ShadowCullFrustum.of carries:
+			// Complementary Low lands there and the sweep pops leaves. The safe zone still
+			// sweeps. Whether a bound applies at all is the pack's business at least as often as
+			// the player's, most of the corpus declaring a render multiplier and being held at
+			// its own half plane whatever the slider says, and the plan carries the arbitration
+			// already made.
+			ShadowCullFrustum.Chosen cull = ShadowCullFrustum.of(plan);
 			Viewport viewport = new Viewport(cull.frustum(),
 					new Vector3d(camera.x, camera.y, camera.z));
 			manager.finalizeRenderLists(minecraft.gameRenderer.mainCamera(), viewport,
@@ -270,10 +269,8 @@ public final class ShadowTerrain {
 
 			if (measuring && seen > 0) {
 				measured = BlockStateIds.generation();
-				Vitrail.logger().info("Shadow cull walked {} sections for the light against {} "
-						+ "for the camera, {} of the light's with geometry to draw, on block "
-						+ "table {}, culling {}",
-						walkKept, seen, walkDrawn, measured, walkCulling);
+				Vitrail.logger().info("shadow-cull {} kept={} camera={} drawn={} blocks={}",
+						walkCulling, walkKept, seen, walkDrawn, measured);
 			}
 
 			draw(renderer, minecraft, camera);
@@ -403,7 +400,7 @@ public final class ShadowTerrain {
 	 *                so a count without this flag beside it would announce sections that no draw
 	 *                ever reads. Iris says the same thing in the same place, {@code (no terrain)}
 	 *                appended to its own line ({@code shadows/ShadowRenderer.java:776})
-	 * @param culling the shape the walk measured against, in the words the log line uses
+	 * @param culling the shape the walk measured against, as the overlay token
 	 */
 	public record Walk(int kept, int drawn, int total, boolean terrain, String culling) {
 	}

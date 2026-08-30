@@ -183,15 +183,28 @@ the map.
 
 `shadow.culling` is read, and **its three written words do not mean what they look like they mean**.
 It is not a switch: it names one of four shapes the light measures a section against, and the
-default is the tightest of them rather than the loosest.
+default is the box around the player, which is looser than the sweep Iris Advanced uses.
 
-- nothing written, or `true`: the camera's own volume swept along the light. A section that cannot
-  drop anything onto what the camera can see is thrown away before it is drawn.
-- `false`: no sweep. The light walks its own volume, the one the map is drawn in, which is what this
-  engine did for every pack before the sweep existed.
-- `reversed` or `safe_zone`, two spellings of one word: the same sweep, plus a box at the pack's own
-  `voxelDistance` that is kept whatever the sweep says of it, for a pack that samples its map from
-  places the sweep knows nothing about.
+- nothing written: a box around the player, unless the shadow program voxelises, in which case
+  it takes that same box for Iris's reason rather than this engine's. Iris would sweep along the
+  light here. This engine does not: see the workaround below.
+- `true`: the same player box. Iris Advanced sweeps the camera volume along the light
+  (`shadows/ShadowRenderer.java:372`). Complementary Low writes this word and lands there.
+- `false`: no sweep. A box around the player, and no planes, which is the reference's
+  `BoxCullingFrustum`. When that box is wider than the world that is loaded, or not positive,
+  everything is kept.
+- `reversed` or `safe_zone`, two spellings of one word: the camera volume swept along the light,
+  plus a box at the pack's own `voxelDistance` that is kept whatever the sweep says of it, for a
+  pack that samples its map from places the sweep knows nothing about. Unchanged from Iris.
+
+**Advanced and the silent default take a box around the player on this engine, not the sweep.**
+Iris Advanced builds `AdvancedShadowCullingFrustum`. The sweep here pops single leaf blocks at
+the sun silhouette as the player moves, and Iris Advanced does not. The 26.2 walk hands Sodium
+a camera-relative box and the swept planes, and that pair drops a leaf the silhouette still
+needs. The box is the workaround. What it costs the image is a wider shadow than Iris Advanced
+draws. An empty file `vitrail/swept-shadow-cull` in the game folder, or
+`-Dvitrail.sweptShadowCull=true`, puts the sweep back. The safe zone is unchanged and still
+sweeps.
 
 A word this cannot read leaves the default standing rather than the answer a valid line above it
 gave, which is what the reference does with it.
@@ -221,10 +234,10 @@ outside that arbitration and both do so in the reference: `false` reads the pack
 never the player's setting, and the safe zone reads neither, its two boxes being the pack's
 throughout.
 
-Iris has a fifth road into the first line, and this engine cannot take it: it drops the sweep for a
-pack whose shadow program ships a geometry stage, on the grounds that such a pack is moving its
-vertices somewhere the camera's volume cannot predict. Nothing here runs a geometry stage at all, so
-no pack can move a vertex that way and the question does not arise.
+The same first line also drops the sweep when the shadow program voxelises. A geometry stage on
+that program is enough, even when this engine never binds it, and so is an image load / store that
+the preprocessor left standing, which is the reference's `setUsesImages`. A name gated off does
+not count.
 
 ## Settings, and how a user changes them
 

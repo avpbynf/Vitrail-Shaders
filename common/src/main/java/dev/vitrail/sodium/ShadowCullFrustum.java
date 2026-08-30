@@ -1,9 +1,10 @@
 package dev.vitrail.sodium;
 
+import dev.vitrail.pack.source.ShadowCullState;
 import dev.vitrail.render.ShadowCullPlan;
+import dev.vitrail.render.SweptShadowCull;
 
 import net.caffeinemc.mods.sodium.client.render.viewport.frustum.Frustum;
-import net.caffeinemc.mods.sodium.client.render.viewport.frustum.SimpleFrustum;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 
 import org.joml.FrustumIntersection;
@@ -181,56 +182,83 @@ public final class ShadowCullFrustum implements Frustum {
 	 * The four arms are Iris's {@code createShadowFrustum}
 	 * ({@code shadows/ShadowRenderer.java:298-372}), split between here and
 	 * {@code PackValues.shadowCullPlan}, which holds the distances because that is where every other
-	 * distance is arbitrated. What is left here is the choice of SHAPE, and one branch of Iris's
-	 * first test is answered rather than measured: <strong>a pack cannot voxelise on this engine,
-	 * because a geometry stage is never run at all.</strong> Iris takes a shadow program that ships
-	 * one as the pack moving its vertices somewhere the camera's volume cannot predict, and turns the
-	 * sweep off for it ({@code :164-165,302}); here every pipeline is built from the vertex and the
-	 * fragment stages alone ({@code render/GeometryProgram}), so a {@code .gsh} is translated and
-	 * never bound, no vertex moves, and the branch Iris takes without voxelisation is the only one
-	 * that can be right.
+	 * distance is arbitrated. What is left here is the choice of SHAPE.
+	 * {@link dev.vitrail.pack.source.ShadowCullState#DISTANCE},
+	 * {@link dev.vitrail.pack.source.ShadowCullState#DEFAULT} and
+	 * {@link dev.vitrail.pack.source.ShadowCullState#ADVANCED} keep a box around the player and
+	 * no planes. Distance, and default when the shadow program voxelises, are Iris's
+	 * {@code BoxCullingFrustum} ({@code :302-323}). Voxelisation is a geometry stage present
+	 * <em>or</em> an image load / store still standing on that program ({@code :163-165},
+	 * {@code setUsesImages}), not a {@code .gsh} this engine binds. A bound wider than the loaded
+	 * world, or not positive, drops the box too and keeps everything, which is Iris's
+	 * {@code NonCullingFrustum} ({@code :317-318}), not the light's own volume.
+	 * {@link dev.vitrail.pack.source.ShadowCullState#SAFE_ZONE} still sweeps along the light.
 	 * <p>
-	 * <strong>{@link dev.vitrail.pack.source.ShadowCullState#DISTANCE} keeps the light's own volume
-	 * where Iris keeps nothing</strong>, its {@code BoxCullingFrustum} carrying a box and no planes
-	 * ({@code shadows/frustum/fallback/BoxCullingFrustum.java}). That is not a shape this engine can
-	 * be asked for and it costs the image nothing: the volume is what the map is DRAWN with, so a
-	 * section outside it is clipped by the rasteriser and cannot reach the map however it is walked,
-	 * and the one thing that could have moved a vertex out from under it, a geometry stage, is the
-	 * thing that never runs. Iris drops the planes there because for IT that is not true.
+	 * <strong>Advanced is a workaround, not a styled divergence.</strong> Iris Advanced builds
+	 * {@code AdvancedShadowCullingFrustum} ({@code shadows/ShadowRenderer.java:372}), the camera
+	 * volume swept along the light, and a pack that wrote nothing lands there too unless it
+	 * voxelises ({@code :302}). Complementary Low writes {@code shadow.culling=true} and is
+	 * Advanced. On this engine that sweep pops single leaf blocks at the sun silhouette, one
+	 * section at a time as the player moves, and Iris Advanced does not. The 26.2 walk hands
+	 * Sodium a camera-relative box and this file's planes, and that pair is what drops a leaf
+	 * the silhouette still needs. Complementary Low therefore takes the player box here, the
+	 * same AlwaysVisible-plus-cube Distance already uses. What it costs the image is casters
+	 * outside the camera silhouette still reaching the map, a wider shadow than Iris Advanced
+	 * draws, in exchange for leaves that stop popping. A file {@code vitrail/swept-shadow-cull},
+	 * or {@code -Dvitrail.sweptShadowCull=true}, puts the sweep back so a reading can name the
+	 * old road.
 	 *
-	 * @param plan  what the pack asked for and what the frame is aimed at
-	 * @param light the light's own view projection, the volume the map is drawn with
+	 * @param plan what the pack asked for and what the frame is aimed at
 	 */
-	public static Chosen of(ShadowCullPlan plan, FrustumIntersection light) {
-		String shape;
-		Frustum frustum;
+	public static Chosen of(ShadowCullPlan plan) {
+		boolean sweepAdvanced = SweptShadowCull.asked();
+		boolean box = plan.state() == ShadowCullState.DISTANCE
+				|| (plan.state() == ShadowCullState.DEFAULT
+						&& (plan.voxelised() || !sweepAdvanced))
+				|| (plan.state() == ShadowCullState.ADVANCED && !sweepAdvanced);
 
-		switch (plan.state()) {
-			case DISTANCE -> {
-				shape = "the light's own volume, asked for by the pack";
-				frustum = new SimpleFrustum(light);
-			}
-			case SAFE_ZONE -> {
-				shape = "swept along the light, keeping " + plan.safeZone() + " blocks of safe zone";
-				frustum = new ShadowCullFrustum(plan.camera(), plan.light(), plan.safeZone());
-			}
-			default -> {
-				shape = "swept along the light";
-				frustum = new ShadowCullFrustum(plan.camera(), plan.light(), -1.0F);
-			}
+		Frustum frustum;
+		String shape;
+		if (box) {
+			frustum = AlwaysVisible.INSTANCE;
+			shape = plan.bound() < 0.0F ? "NONE" : "BOX";
+		} else if (plan.state() == ShadowCullState.SAFE_ZONE) {
+			frustum = new ShadowCullFrustum(plan.camera(), plan.light(), plan.safeZone());
+			shape = "SWEPT";
+		} else {
+			frustum = new ShadowCullFrustum(plan.camera(), plan.light(), -1.0F);
+			shape = "SWEPT";
 		}
 
-		return plan.bound() < 0.0F ? new Chosen(frustum, shape)
-				: new Chosen(new ShadowCull(frustum, plan.bound(), plan.safeZone()),
-						shape + ", within " + plan.bound() + " blocks");
+		String token = token(plan, shape);
+		return plan.bound() < 0.0F ? new Chosen(frustum, token)
+				: new Chosen(new ShadowCull(frustum, plan.bound(), plan.safeZone()), token);
 	}
 
 	/**
-	 * What the walk ended up measuring against, and the words for the one line the shadow stage
-	 * prints about it. The two travel together so that the line cannot name a shape the walk did not
+	 * What the walk ended up measuring against, and the compact token the overlay and the log
+	 * print for it. The two travel together so that the line cannot name a shape the walk did not
 	 * use.
 	 */
 	public record Chosen(Frustum frustum, String culling) {
+	}
+
+	/** Pack state, shape, then {@code r=} bound and {@code z=} safe zone when those apply. */
+	private static String token(ShadowCullPlan plan, String shape) {
+		StringBuilder line = new StringBuilder();
+		line.append(plan.state().name()).append(' ').append(shape);
+		if (plan.bound() >= 0.0F) {
+			line.append(" r=").append(num(plan.bound()));
+		}
+		if (plan.state() == ShadowCullState.SAFE_ZONE && plan.safeZone() >= 0.0F) {
+			line.append(" z=").append(num(plan.safeZone()));
+		}
+		return line.toString();
+	}
+
+	private static String num(float value) {
+		int whole = (int) value;
+		return whole == value ? Integer.toString(whole) : Float.toString(value);
 	}
 
 	private void build(Matrix4fc camera) {
@@ -438,5 +466,38 @@ public final class ShadowCullFrustum implements Frustum {
 		}
 
 		return inside ? FrustumIntersection.INSIDE : FrustumIntersection.INTERSECT;
+	}
+
+	/**
+	 * Iris's {@code NonCullingFrustum} for Sodium's contract: every box is inside, so the walk
+	 * is bounded only by the cube {@link ShadowCull} wraps around this, or by nothing when that
+	 * cube is not there.
+	 */
+	private static final class AlwaysVisible implements Frustum {
+
+		private static final AlwaysVisible INSTANCE = new AlwaysVisible();
+
+		@Override
+		public boolean testAab(float minX, float minY, float minZ, float maxX, float maxY,
+				float maxZ) {
+			return true;
+		}
+
+		@Override
+		public int intersectAab(float minX, float minY, float minZ, float maxX, float maxY,
+				float maxZ) {
+			return FrustumIntersection.INSIDE;
+		}
+
+		@Override
+		public boolean testSection(float originX, float originY, float originZ) {
+			return true;
+		}
+
+		@Override
+		public boolean testSectionExpanded(float originX, float originY, float originZ,
+				float extend) {
+			return true;
+		}
 	}
 }

@@ -686,7 +686,20 @@ public final class TerrainDraw {
 		TerrainDraw self = PackChain.terrain();
 
 		return self == null ? null : self.values.shadowCullPlan(PackChain.shadowDistance(),
-				renderDistanceChunks(), light, camera);
+				renderDistanceChunks(), light, camera, self.voxelisesShadow());
+	}
+
+	/**
+	 * Whether any shadow terrain program of this pack voxelises, a geometry stage present or an
+	 * image load / store still standing on it. Iris asks the same of
+	 * {@code SHADOW_TERRAIN_CUTOUT}; the three shadow halves share one file on every pack that
+	 * ships one, and any of them answering is enough.
+	 */
+	private boolean voxelisesShadow() {
+		return this.loaded.entrySet().stream()
+				.filter(entry -> entry.getKey().shadow())
+				.map(Map.Entry::getValue)
+				.anyMatch(PackProgram.Loaded::voxelises);
 	}
 
 	/**

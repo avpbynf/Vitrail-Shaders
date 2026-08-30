@@ -18,18 +18,22 @@ import org.joml.Vector3f;
  * The two matrices are the caller's own scratch, written into and handed back, because this is built
  * once a frame at the end of the frame and nothing here is worth an allocation.
  *
- * @param state    which of the four shapes the pack asked for
- * @param light    where the light stands, a unit vector from the origin in world space
- * @param camera   the camera's view projection, the volume the sweep starts from, in the OpenGL clip
- *                 convention. See {@code dev.vitrail.sodium.ShadowCullFrustum} for why the
- *                 convention is load bearing and what reading the drawn matrix would cost
- * @param bound    how far from the camera the walk still gathers, in blocks, or negative where
- *                 nothing bounds it. Already arbitrated between the pack and the player by
- *                 {@link PackValues#shadowCullPlan}, and it is the box
- *                 {@code dev.vitrail.sodium.ShadowCull} carries whichever shape sits inside it
- * @param safeZone the inner box of the safe zone state, which is kept whatever the sweep says of it,
- *                 or negative for the three states that have none
+ * @param state     which of the four shapes the pack asked for
+ * @param voxelised whether the shadow program voxelises, a geometry stage present or an image
+ *                  load / store still standing on it. {@link ShadowCullState#DEFAULT} then takes
+ *                  the same box as {@link ShadowCullState#DISTANCE}, which is Iris
+ *                  {@code shadows/ShadowRenderer.java:302}
+ * @param light     where the light stands, a unit vector from the origin in world space
+ * @param camera    the camera's view projection, the volume the sweep starts from, in the OpenGL clip
+ *                  convention. See {@code dev.vitrail.sodium.ShadowCullFrustum} for why the
+ *                  convention is load bearing and what reading the drawn matrix would cost
+ * @param bound     how far from the camera the walk still gathers, in blocks, or negative where
+ *                  nothing bounds it. Already arbitrated between the pack and the player by
+ *                  {@link PackValues#shadowCullPlan}, and it is the box
+ *                  {@code dev.vitrail.sodium.ShadowCull} carries whichever shape sits inside it
+ * @param safeZone  the inner box of the safe zone state, which is kept whatever the sweep says of it,
+ *                  or negative for the three states that have none
  */
-public record ShadowCullPlan(ShadowCullState state, Vector3f light, Matrix4f camera, float bound,
-		float safeZone) {
+public record ShadowCullPlan(ShadowCullState state, boolean voxelised, Vector3f light,
+		Matrix4f camera, float bound, float safeZone) {
 }

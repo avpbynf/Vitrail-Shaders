@@ -133,6 +133,14 @@ what the next one holds.
   outside a block, so the world dropped to vanilla. The machine symbols are now installed
   before the pack is opened, so those uniforms enter the block and the reload draws the
   pack. The toggle still reloads; it does not keep the pack on without one.
+- **Leaf shadows stay more stable while you move.** Complementary's Low profile, and any pack
+  that asks for Advanced shadow culling, now walks a box around you instead of the tight
+  silhouette along the sun. Leaves stop popping as you walk. Shadows can reach a little
+  farther than they do under Iris Advanced, and the wider walk draws more sections, so the
+  frame can cost more. The Medium profile, which asks for a safe zone, is unchanged. An
+  empty file `vitrail/swept-shadow-cull` in the game folder, or
+  `-Dvitrail.sweptShadowCull=true`, puts the old silhouette back.
+
 
 - **The button that opens a pack's settings is no longer dead until the pack has been loaded
   once.** It was live only while a pack was already drawing, so the first pack anybody picks on
