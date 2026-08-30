@@ -108,6 +108,11 @@ what the next one holds.
   numbers varyings by count, and a matrix occupies several slots. Each matrix is now split into
   one vector per column before compile. Complementary never declared one, so it did not show
   the oval.
+- **Turning Distant Horizons on reloads Complementary and then draws it.** The pack used to
+  be reread with Distant Horizons present and then refused, because four uniforms stayed
+  outside a block, so the world dropped to vanilla. The machine symbols are now installed
+  before the pack is opened, so those uniforms enter the block and the reload draws the
+  pack. The toggle still reloads; it does not keep the pack on without one.
 
 - **The button that opens a pack's settings is no longer dead until the pack has been loaded
   once.** It was live only while a pack was already drawing, so the first pack anybody picks on
