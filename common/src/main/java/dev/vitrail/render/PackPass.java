@@ -31,6 +31,7 @@ import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.renderer.BindGroupLayouts;
@@ -451,8 +452,46 @@ final class PackPass {
 	}
 
 	/**
-	 * Opens and closes its own render pass, which is what makes the next one able to read what
-	 * this one wrote: the Vulkan backend ends a pass with a full memory barrier. Nothing is
+	 * The images this program samples, resolved to the textures {@link GeometryHold} compares.
+	 * Null when the sampler plan cannot name them all: the caller must not join.
+	 */
+	private List<GpuTexture> sampledImages(ColorTargets targets, GpuTextureView depthView,
+			GpuTextureView distantView) {
+		if (this.samplerBindings.size() != this.samplers.size()) {
+			return null;
+		}
+
+		List<GpuTexture> sampled = new ArrayList<>();
+		for (int at = 0; at < this.samplers.size(); at++) {
+			SamplerPlan.Binding binding = this.samplerBindings.get(at);
+			if (binding.kind() == SamplerPlan.Kind.UNBINDABLE) {
+				return null;
+			}
+
+			GpuTextureView view = switch (binding.kind()) {
+				case COLORTEX -> targets.view(binding.index(), binding.side());
+				case DEPTH -> depth(binding.sampler(), targets, depthView);
+				case DISTANT_DEPTH -> SamplerPlan.distantWithoutWater(binding.sampler())
+						? or(targets.depth().distantOpaque(), targets.white())
+						: or(distantView, targets.white());
+				default -> null;
+			};
+			if (binding.kind() == SamplerPlan.Kind.COLORTEX && view == null) {
+				return null;
+			}
+
+			if (view != null) {
+				sampled.add(view.texture());
+			}
+		}
+
+		return sampled;
+	}
+
+	/**
+	 * Records this program into a render pass, joining the one already recording when it writes
+	 * the same images and samples none of them. A join that would read an attachment still bound
+	 * is refused, and the Vulkan store then happens on the close that follows. Nothing is
 	 * allocated here. The first write of a target this frame loads as a clear, which is
 	 * {@code glClear} as the FBO is bound; later writes load what the last pass left.
 	 */
@@ -489,7 +528,8 @@ final class PackPass {
 			targets.flushPending(encoder);
 		}
 
-		try (RenderPass pass = encoder.createRenderPass(descriptor)) {
+		try (RenderPass pass = GeometryHold.openFullscreen(encoder, descriptor,
+				sampledImages(targets, depthView, distantView))) {
 			record(pass, targets, depthView, distantView, quad, uniforms);
 		}
 	}

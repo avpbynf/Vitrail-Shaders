@@ -2244,10 +2244,9 @@ public final class PackChain {
 						this.programs.size())
 				: -1;
 
-		// Each pass opens and closes its own render pass. Closing one is what makes the next able
-		// to read it: the Vulkan backend ends a pass with a full memory barrier, so the cost of
-		// the chain is one whole serialisation of the GPU per program and there is no way around
-		// it short of knowing which passes do not overlap.
+		// Consecutive full-screen programs that write the same images and sample none of them
+		// keep one Vulkan pass and only switch pipeline. A later program that samples what the
+		// last wrote, a mip chain, a pending clear or a different set of attachments ends it.
 		CommandEncoder encoder = device.createCommandEncoder();
 		GpuBuffer buffer = this.block.currentBuffer();
 		// The chains this walk has filled and nothing has written over since, by target and side.
@@ -2331,6 +2330,13 @@ public final class PackChain {
 		if (!this.seeded && seedAt >= from && seedAt <= to) {
 			paintSeed(encoder, ready);
 		}
+
+		// A deferred hold left standing would meet the translucent geometry that follows this
+		// half: those programs write the images the deferreds just flipped onto, and
+		// GeometryHold.open would join them without asking whether the water samples what the
+		// deferred still has attached. Iris rebinds between composites and geometry; this is
+		// that rebind.
+		GeometryHold.flush(() -> "the pack chain of this half closing");
 	}
 
 	/** What one frame of the chain is drawn against, settled once and read by both halves. */

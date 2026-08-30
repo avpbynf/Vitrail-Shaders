@@ -13,7 +13,7 @@ import java.util.OptionalDouble;
 import java.util.function.Supplier;
 
 /**
- * Keeps one Vulkan render pass open across geometry that Iris would have drawn into the same FBO.
+ * Keeps one Vulkan render pass open across draws that write the same colour and depth images.
  * <p>
  * Iris binds {@code defaultFB} once and leaves it bound through solid, cutout, sky pieces and
  * entities ({@code pipeline/IrisRenderingPipeline.java:1383-1388}). Each of those is a
@@ -21,10 +21,14 @@ import java.util.function.Supplier;
  * stop OpenGL's bind is not. Consecutive programs that write the same colour and depth images, at
  * the same area, therefore keep the pass that is already recording and only switch pipeline.
  * <p>
- * A later pass that samples what the last one wrote, or that names different attachments, or that
- * is a composite, a copy or a clear, ends the hold first. The encoder mixin is that door: every
- * foreign {@code createRenderPass}, copy or clear flushes. This class's own open is the exception,
- * so a matching geometry program does not flush itself.
+ * Full-screen pack programs go through {@link #openFullscreen}: they join only when the images and
+ * the area match and the new program samples none of the attachments still bound. Iris still issues
+ * a separate GL draw per composite, often into a flipped target; folding two that do not depend on
+ * each other is a Vulkan-only win. A later pass that samples what the last one wrote, that names
+ * different attachments, that clears, that cannot name every sampled image, or a copy, a mip chain
+ * or a depth conversion, ends the hold first. The encoder mixin is that door for every foreign
+ * {@code createRenderPass}. This class's own open is the exception, so a matching program does not
+ * flush itself.
  */
 public final class GeometryHold {
 
@@ -37,6 +41,9 @@ public final class GeometryHold {
 	private static final int COUNT_DIFFERS = -3;
 	private static final int DEPTH_DIFFERS = -4;
 	private static final int AREA_DIFFERS = -5;
+	private static final int PLAN_INCOMPLETE = -6;
+	private static final int CLEARS = -7;
+	private static final int SAMPLES_HELD = -8;
 
 	private static RenderPass current;
 	private static GpuTexture[] colours;
@@ -69,7 +76,24 @@ public final class GeometryHold {
 	 * Load-ops on a reused descriptor are ignored: the first open already applied them.
 	 */
 	public static RenderPass open(CommandEncoder encoder, RenderPassDescriptor descriptor) {
-		int fit = fit(descriptor);
+		return open(encoder, descriptor, fit(descriptor));
+	}
+
+	/**
+	 * Opens a pass for a full-screen pack program, or hands back the one already recording when it
+	 * writes the same images, at the same area, and samples none of them.
+	 * <p>
+	 * Geometry {@link #open} does not ask this: those programs paint over the world rather than
+	 * filter it. A later composite that samples what the hold still has attached would read an
+	 * image the pass has not stored. {@code sampled} null means the sampler plan cannot name every
+	 * image, and that is a refusal: a join would be a guess.
+	 */
+	public static RenderPass openFullscreen(CommandEncoder encoder, RenderPassDescriptor descriptor,
+			List<GpuTexture> sampled) {
+		return open(encoder, descriptor, fitFullscreen(descriptor, sampled));
+	}
+
+	private static RenderPass open(CommandEncoder encoder, RenderPassDescriptor descriptor, int fit) {
 		if (fit == JOINS) {
 			resetArea(current);
 
@@ -135,8 +159,8 @@ public final class GeometryHold {
 	}
 
 	/**
-	 * Ends the hold so a copy, a clear, a composite or a different framebuffer can run, naming what
-	 * is ending it so the next family to open can say why it had to.
+	 * Ends the hold so a copy, a clear, a mip chain, a depth conversion or a different framebuffer
+	 * can run, naming what is ending it so the next family to open can say why it had to.
 	 *
 	 * @param cause what the census reports against the pass that opens next, or {@code null} where
 	 *              the caller has already reported one of its own
@@ -201,6 +225,50 @@ public final class GeometryHold {
 	}
 
 	/**
+	 * {@link #fit} plus the reasons a full-screen program cannot join even when the images match: a
+	 * clear load-op, a sample of an image the hold still has attached, or a sampler plan that cannot
+	 * name every image. Asked only when the images would otherwise join, so a first open is still
+	 * {@link #NO_HOLD} rather than one of those.
+	 */
+	private static int fitFullscreen(RenderPassDescriptor descriptor, List<GpuTexture> sampled) {
+		int fit = fit(descriptor);
+		if (fit != JOINS) {
+			return fit;
+		}
+
+		if (sampled == null) {
+			return PLAN_INCOMPLETE;
+		}
+
+		if (clears(descriptor)) {
+			return CLEARS;
+		}
+
+		return samplesHeld(sampled) ? SAMPLES_HELD : JOINS;
+	}
+
+	private static boolean samplesHeld(List<GpuTexture> sampled) {
+		for (int at = 0; at < sampled.size(); at++) {
+			GpuTexture texture = sampled.get(at);
+			if (texture == null) {
+				continue;
+			}
+
+			if (texture == depth) {
+				return true;
+			}
+
+			for (GpuTexture colour : colours) {
+				if (texture == colour) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * What {@link #fit} found, in words, for the census line. Reached only while a census is armed.
 	 * <p>
 	 * The no-hold answer is the one that carries the frame's real story: the family did not fail any
@@ -215,6 +283,9 @@ public final class GeometryHold {
 			case COUNT_DIFFERS -> "it writes a different number of colour images";
 			case DEPTH_DIFFERS -> "its depth image is not the one held";
 			case AREA_DIFFERS -> "its area is not the one held";
+			case PLAN_INCOMPLETE -> "its sampler plan cannot name every image it samples";
+			case CLEARS -> "it clears an attachment";
+			case SAMPLES_HELD -> "it samples an attachment of the hold";
 			case NO_HOLD -> ended == null ? "nothing was being held" : "the hold ended on " + ended.get();
 			default -> "it joins";
 		};
