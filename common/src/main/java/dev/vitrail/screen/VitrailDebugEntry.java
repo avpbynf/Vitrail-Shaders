@@ -18,7 +18,9 @@ import org.jspecify.annotations.Nullable;
  * The engine's lines of the F3 screen, in Iris's wording so a capture of one reads against a
  * capture of the other: version, shaderpack, the scanned profile with the dirty count, then
  * Sodium's shadow {@code C: a/b D: d}. Color space is omitted: this engine has no color-space
- * setting to name, and inventing one would be a line Iris cannot match the other way.
+ * setting to name, and inventing one would be a line Iris cannot match the other way. While a
+ * pack is still compiling, one extra line carries the overlay's own words
+ * ({@code overlay.vitrail.compiling}) so F3 can hide that overlay without going silent.
  * <p>
  * A pack that is not being drawn says why in one line, and the three reasons are kept apart the
  * way {@link PackChain} keeps them: asked off, named but missing, or refused. Saying "none" for a
@@ -43,6 +45,8 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 	public void display(DebugScreenDisplayer displayer, @Nullable Level level,
 			@Nullable LevelChunk clientChunk, @Nullable LevelChunk serverChunk) {
 		displayer.addToGroup(GROUP, PREFIX + "Version: " + Vitrail.platform().modVersion());
+		PackChain.compilingWords().ifPresent(words ->
+				displayer.addToGroup(GROUP, PREFIX + words.getString()));
 
 		PackChain.session().ifPresentOrElse(session -> {
 			displayer.addToGroup(GROUP, PREFIX + "Shaderpack: " + session.packFileName());

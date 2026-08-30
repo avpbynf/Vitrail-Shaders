@@ -1586,6 +1586,50 @@ public final class PackChain {
 	}
 
 	/**
+	 * True while a pack's programs are still compiling: the world held back, or the leftover
+	 * families still walking in the background. The overlay and the F3 line both read this so
+	 * they cannot disagree on the moment the words belong on screen.
+	 */
+	public static boolean compiling() {
+		PackChain chain = active;
+		if (disabled || !chainWanted || chain == null) {
+			return false;
+		}
+
+		return !chain.familiesWarmed && (warming() || chain.drawable());
+	}
+
+	/**
+	 * The overlay's compiling sentence, the walked-out-of-total count riding along once the
+	 * tasks have a plate. Empty when nothing is in flight. F3 prepends the same prefix its
+	 * other lines already wear.
+	 */
+	public static Optional<Component> compilingWords() {
+		PackChain chain = active;
+		if (!compiling() || chain == null) {
+			return Optional.empty();
+		}
+
+		return Optional.of(compilingLabel(chain));
+	}
+
+	/**
+	 * The overlay's compiling sentence and the F3 line share this so a count cannot drift
+	 * between the two. Bare words until the tasks have a plate, rather than a "0 of 0"
+	 * that reads as stuck.
+	 */
+	private static Component compilingLabel(PackChain chain) {
+		Component words = Component.translatable(ScreenText.COMPILING);
+		int total = chain.warmTotal.get();
+		if (total > 0) {
+			words = words.copy()
+					.append(" " + Math.min(chain.warmWalked.get(), total) + "/" + total);
+		}
+
+		return words;
+	}
+
+	/**
 	 * Compiles as many programs as a short budget on this frame will take, then returns. One
 	 * program a frame was the wait the player sat through at two frames per second; several a
 	 * frame, with the world not drawn, is the same work without that picture.
@@ -1674,7 +1718,9 @@ public final class PackChain {
 	 * Reached from the HUD's own extraction, after every vanilla layer, and quiet everywhere
 	 * else: no chain, a chain that can never draw, the show over, the terrain loading screen
 	 * (where vanilla extracts no HUD at all and the tail of the extraction still runs), and the
-	 * F3 screen, whose first lines sit exactly where the mark does.
+	 * F3 screen, whose first lines sit exactly where the mark does. Under F3 the compiling
+	 * sentence rides {@link dev.vitrail.screen.VitrailDebugEntry} instead, so the corner does
+	 * not fight vanilla's debug block. F3 closed, this overlay is unchanged.
 	 */
 	public static void extractCompileIcon(GuiGraphicsExtractor graphics) {
 		Minecraft minecraft = Minecraft.getInstance();
@@ -1684,17 +1730,16 @@ public final class PackChain {
 			return;
 		}
 
-		// Under F3 the mark bows out, its corner being where the debug block's first lines sit,
-		// EXCEPT while the world is held back: F3 is exactly the key a player presses at a
-		// screen with no world in it, and the corner is the only thing that says why. An overlap
-		// read over debug lines beats an absence read as a defect.
-		if (minecraft.gui.hud.getDebugOverlay().showDebugScreen() && !warming()) {
+		// Under F3 the mark always bows out: the corner is vanilla's debug block, and the
+		// compiling words live on the Vitrail F3 line. Keeping the overlay up while the
+		// world is held back used to fight that block for the same pixels.
+		if (minecraft.gui.hud.getDebugOverlay().showDebugScreen()) {
 			return;
 		}
 
 		// In flight covers both moments of a load, the held world and the background compiles;
 		// a chain that is neither in flight nor drawable was refused and shows nothing.
-		boolean inFlight = !chain.familiesWarmed && (warming() || chain.drawable());
+		boolean inFlight = compiling();
 		if (!inFlight && !(chain.familiesWarmed && chain.drawable())) {
 			return;
 		}
@@ -1713,18 +1758,7 @@ public final class PackChain {
 			float phase = (now % PULSE_MILLIS) / (float) PULSE_MILLIS;
 			float pulse = 0.75F + 0.25F * (float) Math.cos(2.0 * Math.PI * phase);
 			icon(graphics, ease * pulse);
-
-			// The count rides along once the tasks have a plate: walked out of total, the total
-			// growing family by family the way a loading bar's does. Bare words before that,
-			// rather than a "0 of 0" that reads as stuck.
-			Component words = Component.translatable(ScreenText.COMPILING);
-			int total = chain.warmTotal.get();
-			if (total > 0) {
-				words = words.copy()
-						.append(" " + Math.min(chain.warmWalked.get(), total) + "/" + total);
-			}
-
-			word(graphics, font, words, textX, textY, ease);
+			word(graphics, font, compilingLabel(chain), textX, textY, ease);
 
 			return;
 		}
