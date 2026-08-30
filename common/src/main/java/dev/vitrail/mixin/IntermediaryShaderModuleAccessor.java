@@ -7,8 +7,8 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 import java.util.List;
 
 /**
- * The sampler and uniform-buffer lists on a reflected module, without naming the package-private
- * record types those lists hold.
+ * The four reflected lists on a module, without naming the package-private record types those
+ * lists hold.
  */
 @Mixin(IntermediaryShaderModule.class)
 @SuppressWarnings("rawtypes")
@@ -21,4 +21,12 @@ public interface IntermediaryShaderModuleAccessor {
 	@Accessor("uniformBuffers")
 	@SuppressWarnings("rawtypes")
 	List vitrail$uniformBuffers();
+
+	@Accessor("outputs")
+	@SuppressWarnings("rawtypes")
+	List vitrail$outputs();
+
+	@Accessor("inputs")
+	@SuppressWarnings("rawtypes")
+	List vitrail$inputs();
 }

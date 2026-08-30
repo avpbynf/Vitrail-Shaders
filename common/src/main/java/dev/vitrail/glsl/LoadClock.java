@@ -8,11 +8,16 @@ import java.util.concurrent.atomic.AtomicLong;
  * translation of the pack's GLSL, and turning the translated text into modules, which is shaderc
  * and the SPIRV-Cross reflection together.
  * <p>
- * <strong>It exists because the split decides what gets built next.</strong> With shaderc served
- * from disk and the driver's own cache accepted, a load still costs seconds, so the remaining
- * cost is one of these two, and they call for different remedies: a translation cache is keyed
- * on the pack and the settings before any text exists, a reflection cache stores binding tables
- * against bytes that already do. Building either without this number is building blind.
+ * <strong>It exists because the split decided what got built next.</strong> With shaderc alone
+ * served from disk this figure only halved, which said the reflection was the other half of the
+ * WORK and that a cache of the bytes on their own could not reach it. What answers that is the
+ * module cache, which stores the binding tables beside the bytes they were read off, so a served
+ * unit costs a file read and the key that found it, and nothing native at all.
+ * <p>
+ * <strong>What that buys is work removed and not time.</strong> Measured on the bench: a load
+ * with both caches warm builds no module and translates no program, and the wait before the pack
+ * draws is the same as a load that builds every one of them. So this figure says what the engine
+ * spends and it does not say what a player waits, and the two have been measured apart.
  * <p>
  * The module count listens at the game's own compiler, which is the funnel every road goes
  * through: the background warmup, the terrain, the composite passes, and whatever a first draw
