@@ -166,6 +166,15 @@ each one changes what the next one sees:
    no reason to: it links two stages the way OpenGL does, where an output nobody reads is legal.
    What forces it here is a backend that pairs the two lists by counting rather than by name.
 
+**A matrix varying is one name and several locations.** OpenGL links by name, so a `varying mat3`
+occupies three slots and the next name still finds itself. This backend numbers by count: a matrix
+left as one SPIR-V variable is one reflected name occupying three locations, and `createFromSpirv`
+then numbers the next varying onto the second column. The translator splits each file-scope matrix
+`in` / `out` into one vector per column before compile, rebuilds the matrix as a local, and copies
+the columns in the wrapper. The pack body still writes and reads the original name. AstraLex's
+night planet is the image of leaving that undone: a billboard through a walked-on `mat3` stretches
+into an oval.
+
 A consequence for measurement, and it is sharper than it looks: **a per-unit check cannot see this
 class of defect at all**, because it never pairs a vertex stage with its fragment stage. Neither
 can a check that compiles both stages in one invocation of a desktop GLSL compiler, which is the
