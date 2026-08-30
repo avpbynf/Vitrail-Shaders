@@ -108,10 +108,11 @@ public final class PackValues {
 	/**
 	 * Reads one pack's directives and its own uniforms.
 	 * <p>
-	 * The machine is installed first and not last, and the caller has to read a pack's values
-	 * before translating its programs. The biome symbols decide which branch of
-	 * {@code shaders.properties} is live and which branch of the GLSL compiles, so they have to be
-	 * in the table before either is read.
+	 * The machine has to have been installed before this pack was opened. The biome symbols decide
+	 * which branch of {@code shaders.properties} is live and which branch of the GLSL compiles, so
+	 * they have to be in the table before either is read, and {@code SettingSet} copies that table
+	 * at {@code OpenedPack.open}. Installing here would be too late for the expander, and would
+	 * point the translator at a newer table than the one the expander walked.
 	 *
 	 * @param pack      the pack, already opened and already read for its settings. Handed in rather
 	 *                  than opened here because the load reads it half a dozen times over, and
@@ -122,7 +123,6 @@ public final class PackValues {
 	 */
 	public static PackValues read(OpenedPack pack, String dimension) throws IOException {
 		PackValues values = new PackValues();
-		PackDefines.install();
 
 		ShaderPackSource source = pack.source();
 		OptionIndex options = pack.options();

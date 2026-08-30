@@ -3322,7 +3322,13 @@ public final class GlslTranslator {
 
 			// A declaration in a branch nobody takes stays where it is. Moving it to the header
 			// would make it unconditional, and packs do declare a name as a uniform in one branch
-			// and as an ordinary global in the other.
+			// and as an ordinary global in the other. Complementary's dhProjection six are the
+			// other side of that rule: they are ordinary pack uniforms under DISTANT_HORIZONS,
+			// Iris registers them as such (CommonUniforms.java:184-186, MatrixUniforms.java:41-45)
+			// and OpenGL accepts the loose form. They enter OfGlobals only when that branch is
+			// live. If the expander never saw the symbol and the header still defines it, they
+			// stay in the body and Vulkan refuses the unit; PackChain.load installs the table
+			// before SettingSet.resolve so the two readers agree.
 			if (this.unit.isLive(lines[index])) {
 				liftOne(index);
 			}

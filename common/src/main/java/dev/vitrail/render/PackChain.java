@@ -858,6 +858,15 @@ public final class PackChain {
 					+ "is written as a plain number", askedFor.shadowMapScale());
 			}
 
+			// Before OpenedPack.open, not after. SettingSet.resolve copies EngineDefines.table as
+			// it is built, and the expander's liveness is that copy. The translator writes the
+			// live machine() table back out as #define lines. Installed after the copy, the two
+			// disagree: DISTANT_HORIZONS lands in the header, the DH uniforms stay in the body
+			// because liftUniforms will not move a dead line, and Vulkan refuses a non-opaque
+			// uniform outside a block. Complementary's deferred1 died that way on a DH toggle.
+			// Iris has one table for both jobs, StandardMacros.java:64-65.
+			PackDefines.install();
+
 			try (OpenedPack opened = OpenedPack.open(pack, chosen, settings.profile())) {
 				// The world decides the directory, and the pack decides which world that is: a folder
 				// may be named anything and mapped in dimension.properties, so the name is read from
@@ -865,8 +874,6 @@ public final class PackChain {
 				String place = PackPlace.place(opened.source());
 				String world = PackPlace.world();
 
-				// Before the translation and not after: this is what installs the machine's own
-				// symbols, and the biome ones among them decide which branch of the pack compiles.
 				PackValues values = PackValues.read(opened, place);
 
 				long began = System.nanoTime();
