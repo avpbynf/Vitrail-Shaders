@@ -103,6 +103,12 @@ what the next one holds.
 
 ### Fixed
 
+- **AstraLex night skies are round again.** A pack that interpolates a 3x3 matrix between
+  vertex and fragment, AstraLex's planet among them, was stretched into an oval: this backend
+  numbers varyings by count, and a matrix occupies several slots. Each matrix is now split into
+  one vector per column before compile. Complementary never declared one, so it did not show
+  the oval.
+
 - **The button that opens a pack's settings is no longer dead until the pack has been loaded
   once.** It was live only while a pack was already drawing, so the first pack anybody picks on
   a fresh install could not be configured at all: the only way in was to load it at whatever

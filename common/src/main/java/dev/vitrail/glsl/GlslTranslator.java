@@ -62,14 +62,21 @@ import java.util.stream.Stream;
  * what stands within eight centimetres of the camera, so it blurred nothing at all.
  * <p>
  * The fragment outputs carry one rule that is not GLSL's and cannot be read off the language.
- * 26.2 does not keep the location a stage declares: {@code IntermediaryShaderModule.createFromSpirv}
- * asks SPIR-V reflection for the outputs and writes the rank of each one over its own location
- * decoration. The order reflection answers in is the order the compiler first met the names in, so
- * a stage that writes output one before output zero has the two swapped, and nothing says a word
- * about it. Everything below about outputs exists for that: they are all declared here, from zero
- * up with no gaps, and named once each in ascending order by a function ahead of anything the pack
- * wrote and called first thing in {@code main}. The rank is then the location and the rewrite is
- * the identity.
+	 * 26.2 does not keep the location a stage declares: {@code IntermediaryShaderModule.createFromSpirv}
+	 * asks SPIR-V reflection for the outputs and writes the rank of each one over its own location
+	 * decoration. The order reflection answers in is the order the compiler first met the names in, so
+	 * a stage that writes output one before output zero has the two swapped, and nothing says a word
+	 * about it. Everything below about outputs exists for that: they are all declared here, from zero
+	 * up with no gaps, and named once each in ascending order by a function ahead of anything the pack
+	 * wrote and called first thing in {@code main}. The rank is then the location and the rewrite is
+	 * the identity.
+	 * <p>
+	 * The same rank-is-location rewrite is why a {@code varying mat3} cannot be left as one variable.
+	 * A GLSL matrix occupies one location per column, three for a {@code mat3}, but it is still one
+	 * reflected name, so the next varying is numbered onto column two. OpenGL links by name and
+	 * never asks the question; the workaround here is to split each matrix varying into that many
+	 * vectors before compilation and rebuild the matrix as a local, which is what
+	 * {@link #splitMatrixVaryings} does. Iris is not copied.
  */
 public final class GlslTranslator {
 
@@ -80,6 +87,12 @@ public final class GlslTranslator {
 
 	/** The one varying the engine names itself, so the one both stages have to agree about. */
 	private static final String FOG_COORD = "of_FogFragCoord";
+
+	/**
+	 * Prefix of the vectors a matrix varying is split into. Pack names never start with {@code of_},
+	 * so a column cannot collide with a varying the pack already declared.
+	 */
+	private static final String MATRIX_COLUMN = "of_vmat_";
 
 	/**
 	 * The hit flash and the damage tint, which is a varying wherever the mesh carries the overlay and
@@ -418,6 +431,12 @@ public final class GlslTranslator {
 	/** The same, as the declarations they came from, so that one can be taken back out whole. */
 	private final List<FileScope> declaredOutputScopes = new ArrayList<>();
 
+	/**
+	 * Matrix varyings rewritten as one vector per column, so {@code createFromSpirv} can number
+	 * them without overlap. Empty when the stage declared none.
+	 */
+	private final List<SplitMatrix> splitMatrices = new ArrayList<>();
+
 	/** Inputs {@link #dropUnprovidedInputs} took out, which this stage no longer declares. */
 	private final Set<String> droppedInputs = new LinkedHashSet<>();
 
@@ -720,6 +739,11 @@ public final class GlslTranslator {
 		this.regions = regions();
 		orderFragmentOutputs();
 		wrapMain();
+		// After wrapMain, because the wrapper is where the columns are copied and reconstructed, and
+		// before collectVaryings, because a matrix left as one out is one SPIR-V variable occupying
+		// three locations and createFromSpirv then numbers the next name onto the second column.
+		splitMatrixVaryings();
+		wrapMainForMatrixSplits();
 		// Last, and it has to be: rewriteIdentifiers is where varying becomes in or out, and
 		// dropUnprovidedInputs blanks the ranges recorded here, so nothing may move between the two.
 		collectVaryings();
@@ -2591,6 +2615,179 @@ public final class GlslTranslator {
 	}
 
 	/**
+	 * One matrix varying rewritten as one vector per column.
+	 *
+	 * @param input true when this stage reads the matrix ({@code in}), false when it writes it
+	 */
+	private record SplitMatrix(String name, String matrixType, String columnType, int columns,
+			String qualifier, boolean input) {
+	}
+
+	/**
+	 * Turns each file-scope matrix {@code in} / {@code out} into one vector per column.
+	 * <p>
+	 * {@code IntermediaryShaderModule.createFromSpirv} numbers locations by the rank of each
+	 * reflected variable, {@code 0..n-1} with no stride. A GLSL {@code mat3} is one variable and
+	 * occupies three consecutive locations, so the next varying is numbered onto the second
+	 * column and the rotation the pack stored is no longer orthonormal. AstraLex's night planet
+	 * is the image of that: a billboard {@code xy / z} through a walked-on {@code mat3}.
+	 * <p>
+	 * OpenGL links by name and never asks. The workaround here is to take the declaration out of
+	 * the body and emit the matrix as a local in the header, beside one vector per column: the pack
+	 * body still writes and reads the original name, and the wrapper copies the columns. Arrays
+	 * are left alone; no pack of the corpus writes one, and AstraLex's four matrices are not arrays.
+	 */
+	private void splitMatrixVaryings() {
+		if (this.stage == ProgramStage.COMPUTE) {
+			return;
+		}
+
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() != null || !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			boolean input = token.identifier("in");
+			boolean output = token.identifier("out");
+			if (!input && !output) {
+				continue;
+			}
+
+			if (input && this.stage == ProgramStage.VERTEX) {
+				continue;
+			}
+
+			FileScope declared = fileScopeDeclaration(index);
+			if (declared == null) {
+				continue;
+			}
+
+			MatrixColumns layout = matrixColumns(declared.type());
+			if (layout == null) {
+				continue;
+			}
+
+			boolean anyArray = declared.names().stream().anyMatch(name ->
+					declared.declarators().getOrDefault(name, "").contains("["));
+			if (anyArray) {
+				continue;
+			}
+
+			blankRange(declared.start(), declared.end());
+
+			for (String name : declared.names()) {
+				this.splitMatrices.add(new SplitMatrix(name, declared.type(), layout.columnType(),
+						layout.columns(), declared.qualifier(), input));
+			}
+		}
+	}
+
+	/**
+	 * Wraps {@code main} when a matrix was split and nothing else had wrapped it, so the columns
+	 * have a place to be copied from and the reconstructed matrix has a place to be assigned.
+	 * <p>
+	 * {@link #mainName} is not enough here. {@link #orderFragmentOutputs} has already run, and on a
+	 * fragment that is not wrapped for alpha or coverage it replaces the opening brace with a
+	 * {@code RAW} token. {@code mainName} then no longer sees that brace and returns -1, the
+	 * header still emits a wrapper because the matrices were split, and the body keeps its own
+	 * {@code main}: two bodies, which is the compile error a fragment with matrix varyings hits.
+	 * The injected brace is still a body of {@code main}, so it is accepted here.
+	 */
+	private void wrapMainForMatrixSplits() {
+		if (this.mainWrapped || this.splitMatrices.isEmpty()) {
+			return;
+		}
+
+		int name = mainName();
+		if (name < 0) {
+			name = mainNameAfterOutputOrder();
+		}
+
+		if (name < 0) {
+			return;
+		}
+
+		replace(name, PACK_MAIN);
+		this.mainWrapped = true;
+	}
+
+	/**
+	 * The {@code main} whose opening brace {@link #orderFragmentOutputs} already replaced, or -1.
+	 * Same walk as {@link #mainName}, except a {@code RAW} token that still opens with a brace
+	 * counts as the body.
+	 */
+	private int mainNameAfterOutputOrder() {
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (!token.identifier("main") || token.directive() != null
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int close = matchingBracket(callOpener(index));
+			int brace = significantAfter(close);
+			if (brace >= 0) {
+				Token after = this.tokens.get(brace);
+				if (after.kind() == Kind.RAW && after.text().startsWith("{")) {
+					return index;
+				}
+			}
+		}
+
+		return -1;
+	}
+
+	/** Column count and vector type of a GLSL matrix, or null when the type is not a matrix. */
+	private record MatrixColumns(String columnType, int columns) {
+	}
+
+	/**
+	 * {@code mat3} is three {@code vec3}, {@code mat4x3} is four {@code vec3}, {@code dmat2} is two
+	 * {@code dvec2}. Anything else, including a vector, answers null.
+	 */
+	private static MatrixColumns matrixColumns(String type) {
+		String prefix = "";
+		String rest = type;
+		if (rest.startsWith("dmat")) {
+			prefix = "d";
+			rest = rest.substring(1);
+		}
+
+		if (!rest.startsWith("mat")) {
+			return null;
+		}
+
+		rest = rest.substring(3);
+		int columns;
+		int rows;
+		int by = rest.indexOf('x');
+		try {
+			if (by < 0) {
+				columns = Integer.parseInt(rest);
+				rows = columns;
+			} else {
+				columns = Integer.parseInt(rest.substring(0, by));
+				rows = Integer.parseInt(rest.substring(by + 1));
+			}
+		} catch (NumberFormatException ignored) {
+			return null;
+		}
+
+		if (columns < 2 || columns > 4 || rows < 2 || rows > 4) {
+			return null;
+		}
+
+		return new MatrixColumns(prefix + "vec" + rows, columns);
+	}
+
+	private static String matrixColumnName(String matrix, int column) {
+		return MATRIX_COLUMN + matrix + "_" + column;
+	}
+
+	/**
 	 * Wraps the body's own main so that the owed varyings can be assigned before it runs, where
 	 * nothing had wrapped it already.
 	 * <p>
@@ -4222,6 +4419,17 @@ public final class GlslTranslator {
 			}
 		}
 
+		for (SplitMatrix split : this.splitMatrices) {
+			lines.add(split.matrixType() + " " + split.name() + ";");
+			String storage = split.input() ? "in" : "out";
+			String qualified = split.qualifier().isEmpty()
+					? storage + " " + split.columnType()
+					: split.qualifier() + " " + storage + " " + split.columnType();
+			for (int column = 0; column < split.columns(); column++) {
+				lines.add(qualified + " " + matrixColumnName(split.name(), column) + ";");
+			}
+		}
+
 		// From zero up with no gaps, because a location the game finds nothing declared at is not
 		// left empty: it renumbers what is there and everything above the gap moves down one.
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
@@ -4269,7 +4477,7 @@ public final class GlslTranslator {
 		// The pack's body is concatenated after the header, so its own main is only a name here and
 		// has to be declared before it can be called.
 		if (this.depthEpilogue || this.terrainPrologue || this.distantPrologue || this.entityWrapped
-				|| wrapsFragment() || owesInitialisers()) {
+				|| wrapsFragment() || owesInitialisers() || !this.splitMatrices.isEmpty()) {
 			lines.add("void " + PACK_MAIN + "();");
 			// The mask goes last of all, after the discard: a fragment the alpha test threw away
 			// covered nothing, and marking it covered would leave a hole where a leaf was.
@@ -4281,7 +4489,9 @@ public final class GlslTranslator {
 					+ (wrapsFragment() ? ORDER_OUTPUTS + "(); " : "")
 					+ coveragePrologue()
 					+ owedPrologue()
+					+ matrixPrologue()
 					+ PACK_MAIN + "();"
+					+ matrixEpilogue()
 					+ (this.depthEpilogue ? " gl_Position.z = " + DEPTH_CONV
 							+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w;" : "")
 					+ (this.alphaEpilogue
@@ -4308,6 +4518,52 @@ public final class GlslTranslator {
 		StringBuilder assignments = new StringBuilder();
 		this.owedOutputs.forEach((name, qualified) ->
 				assignments.append(initialiser(name, qualified)).append(' '));
+
+		return assignments.toString();
+	}
+
+	/**
+	 * Rebuilds each input matrix from its columns before the pack body runs, so a read of the
+	 * original name still sees a {@code mat3}.
+	 */
+	private String matrixPrologue() {
+		StringBuilder assignments = new StringBuilder();
+		for (SplitMatrix split : this.splitMatrices) {
+			if (!split.input()) {
+				continue;
+			}
+
+			assignments.append(split.name()).append(" = ").append(split.matrixType()).append('(');
+			for (int column = 0; column < split.columns(); column++) {
+				if (column > 0) {
+					assignments.append(", ");
+				}
+
+				assignments.append(matrixColumnName(split.name(), column));
+			}
+
+			assignments.append("); ");
+		}
+
+		return assignments.toString();
+	}
+
+	/**
+	 * Copies each output matrix onto its columns after the pack body ran, so the interface the
+	 * next stage reads is the value the pack wrote.
+	 */
+	private String matrixEpilogue() {
+		StringBuilder assignments = new StringBuilder();
+		for (SplitMatrix split : this.splitMatrices) {
+			if (split.input()) {
+				continue;
+			}
+
+			for (int column = 0; column < split.columns(); column++) {
+				assignments.append(matrixColumnName(split.name(), column)).append(" = ")
+						.append(split.name()).append('[').append(column).append("]; ");
+			}
+		}
 
 		return assignments.toString();
 	}
