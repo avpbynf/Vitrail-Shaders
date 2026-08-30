@@ -31,6 +31,12 @@ public final class ScreenText {
 	public static final String PACKS_TITLE = "options.vitrail.packs_title";
 
 	/**
+	 * The engine's own Sodium page, next to the pack list. Not the game's video-settings title:
+	 * that screen is already open, and naming this page the same hid that it is ours.
+	 */
+	public static final String PAGE_TITLE = "options.vitrail.page_title";
+
+	/**
 	 * The selector for what a startup that ended badly comes back to, its tooltip, and its three
 	 * values.
 	 * <p>
@@ -46,11 +52,10 @@ public final class ScreenText {
 	public static final String CRASH_API_GAME = "options.vitrail.crash_graphics_api.game";
 
 	/**
-	 * How far the light reaches, on the video settings page this engine owns, with its two
-	 * tooltips: what the setting does, and what it says instead while a pack has taken the distance
-	 * out of the player's hands. Iris's {@code options.iris.shadowDistance} and its
-	 * {@code .enabled} and {@code .disabled}. The page's own name is the game's
-	 * {@code options.videoTitle} and is not repeated here.
+	 * How far the light reaches, on the engine page this mod owns, with its two tooltips: what
+	 * the setting does, and what it says instead while a pack has taken the distance out of the
+	 * player's hands. The control is Iris's; the words on the row are this engine's, kept short
+	 * so they fit beside the slider.
 	 */
 	public static final String SHADOW_DISTANCE = "options.vitrail.shadow_distance";
 	public static final String SHADOW_DISTANCE_TOOLTIP = "options.vitrail.shadow_distance_tooltip";
@@ -71,6 +76,14 @@ public final class ScreenText {
 	 */
 	public static final String RENDER_SCALE = "options.vitrail.render_scale";
 	public static final String RENDER_SCALE_TOOLTIP = "options.vitrail.render_scale_tooltip";
+
+	/**
+	 * How large the compiled-shader disk store may grow. No counterpart in Iris, so both strings
+	 * are this project's own. The tooltip names the default and says the change applies at once.
+	 */
+	public static final String MODULE_CACHE_CEILING = "options.vitrail.module_cache_ceiling";
+	public static final String MODULE_CACHE_CEILING_TOOLTIP =
+			"options.vitrail.module_cache_ceiling_tooltip";
 
 	/** The grey line under the title, one per view. */
 	public static final String SELECT_TITLE = "pack.vitrail.select_title";

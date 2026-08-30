@@ -87,12 +87,14 @@ import java.util.stream.Stream;
  * file system offers it and a plain replace where it does not, and nothing here is forced to the
  * platter, so what answers for a file after a power cut is the digest behind it and not the move.
  * <p>
- * <strong>The disk is bounded</strong>, at half a gigabyte, and bounded per edition: the files sit
- * under a directory named for the mod and game versions, and any directory named for another
- * edition is deleted when this one opens. Without that an update would fill a fresh set of keys on
- * top of the set it had just made unreachable, and two packs plus one update would go over the
- * ceiling with nothing in the way. Past the ceiling the units nothing has asked for lately go
- * first, down to three quarters of it so that the sweep is not paid again at the very next write.
+ * <strong>The disk is bounded</strong>, at half a gigabyte by default, and bounded per edition:
+ * the files sit under a directory named for the mod and game versions, and any directory named
+ * for another edition is deleted when this one opens. Without that an update would fill a fresh
+ * set of keys on top of the set it had just made unreachable, and two packs plus one update
+ * would go over the ceiling with nothing in the way. The Sodium slider writes the number, and
+ * a store already over it is swept at once. Past the ceiling the units nothing has asked for
+ * lately go first, down to three quarters of it so that the sweep is not paid again at the
+ * very next write.
  * <p>
  * <strong>The folder's name is narrower than the key</strong>, and deliberately: the key also
  * carries the loader, its version and the LWJGL build, so a NeoForge or an LWJGL bump makes every
@@ -135,8 +137,19 @@ public final class ModuleCache {
 	 */
 	private static final long MOST_BYTES = 64L * 1024L * 1024L;
 
-	private static final long CEILING_BYTES = 512L * 1024L * 1024L;
-	private static final long SWEEP_TARGET = CEILING_BYTES / 4L * 3L;
+	/**
+	 * How large the store may grow, in mebibytes, offered on the Sodium page. Half a gigabyte is
+	 * what this class shipped as a constant; the slider keeps that as its untouched value.
+	 */
+	public static final int MIN_CEILING_MIB = 128;
+	public static final int MAX_CEILING_MIB = 2048;
+	public static final int DEFAULT_CEILING_MIB = 512;
+	public static final int CEILING_STEP_MIB = 128;
+
+	private static final String CEILING_FILE = "module-cache-ceiling.txt";
+
+	private static volatile int ceilingMib = DEFAULT_CEILING_MIB;
+	private static volatile boolean ceilingLoaded;
 
 	/** How long a sweep that could not finish stays out of the way of the next write. */
 	private static final long SWEEP_BACKOFF_NANOS = 60_000_000_000L;
@@ -172,6 +185,103 @@ public final class ModuleCache {
 	private static volatile boolean saidAboutWriting;
 
 	private ModuleCache() {
+	}
+
+	/**
+	 * How large the store may grow, in mebibytes, which is what the Sodium slider reads. An
+	 * absent or unreadable file is {@link #DEFAULT_CEILING_MIB}.
+	 */
+	public static int ceilingMib() {
+		if (!ceilingLoaded) {
+			loadCeiling();
+		}
+
+		return ceilingMib;
+	}
+
+	/**
+	 * Writes the ceiling and keeps the live answer, so the next store sees it. A store already
+	 * over the new number is swept at once: no pack reload and no restart.
+	 */
+	public static void setCeilingMib(int mib) {
+		int asked = snapCeiling(mib);
+		writeCeiling(asked);
+		ceilingMib = asked;
+		ceilingLoaded = true;
+		nextSweepNanos = 0L;
+		Path root = directory;
+		if (root != null && BYTES.get() > bytesOf(asked)) {
+			sweep(root);
+		}
+	}
+
+	private static void loadCeiling() {
+		synchronized (LOCK) {
+			if (ceilingLoaded) {
+				return;
+			}
+
+			ceilingMib = readCeilingFile();
+			ceilingLoaded = true;
+		}
+	}
+
+	private static int readCeilingFile() {
+		Path file;
+		try {
+			file = Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID).resolve(CEILING_FILE);
+		} catch (RuntimeException e) {
+			return DEFAULT_CEILING_MIB;
+		}
+
+		try {
+			if (!Files.isRegularFile(file)) {
+				return DEFAULT_CEILING_MIB;
+			}
+
+			String text = Files.readString(file, StandardCharsets.UTF_8).trim();
+
+			return snapCeiling(Integer.parseInt(text));
+		} catch (NumberFormatException e) {
+			Vitrail.logger().warn("vitrail/{} is not a size in mebibytes, so the default {} is used",
+					CEILING_FILE, DEFAULT_CEILING_MIB);
+
+			return DEFAULT_CEILING_MIB;
+		} catch (IOException | RuntimeException e) {
+			return DEFAULT_CEILING_MIB;
+		}
+	}
+
+	private static void writeCeiling(int mib) {
+		try {
+			Path file = Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID)
+					.resolve(CEILING_FILE);
+			Files.createDirectories(file.getParent());
+			Files.writeString(file, mib + "\n", StandardCharsets.UTF_8);
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().error("Vitrail could not write the module cache ceiling to vitrail/{}",
+					CEILING_FILE, e);
+		}
+	}
+
+	private static int snapCeiling(int asked) {
+		int clamped = Math.clamp(asked, MIN_CEILING_MIB, MAX_CEILING_MIB);
+		int steps = (clamped - MIN_CEILING_MIB + CEILING_STEP_MIB / 2) / CEILING_STEP_MIB;
+
+		return Math.clamp(MIN_CEILING_MIB + steps * CEILING_STEP_MIB, MIN_CEILING_MIB,
+				MAX_CEILING_MIB);
+	}
+
+	private static long bytesOf(int mib) {
+		return (long) mib * 1024L * 1024L;
+	}
+
+	private static long ceilingBytes() {
+		return bytesOf(ceilingMib());
+	}
+
+	private static long sweepTarget() {
+		return ceilingBytes() / 4L * 3L;
 	}
 
 	/**
@@ -408,7 +518,7 @@ public final class ModuleCache {
 			return;
 		}
 
-		if (BYTES.get() > CEILING_BYTES) {
+		if (BYTES.get() > ceilingBytes()) {
 			sweep(root);
 		}
 	}
@@ -697,7 +807,7 @@ public final class ModuleCache {
 				long before = total;
 
 				for (Unit unit : units) {
-					if (total <= SWEEP_TARGET) {
+					if (total <= sweepTarget()) {
 						break;
 					}
 
@@ -715,7 +825,7 @@ public final class ModuleCache {
 			} finally {
 				BYTES.set(total);
 
-				if (total > CEILING_BYTES) {
+				if (total > ceilingBytes()) {
 					nextSweepNanos = System.nanoTime() + SWEEP_BACKOFF_NANOS;
 				}
 			}
