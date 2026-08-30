@@ -40,6 +40,9 @@ what the next one holds.
   is out of the key. Computes are compiled by this engine, not by the game's shader compiler;
   what is kept is the compiled module and its bind table, the same files graphics shaders
   already write under `vitrail/modules`. Vulkan pipelines are built each load as before.
+- **F3 names the pack the way Iris does.** The profile line is the scanned name or Custom, with
+  how many options sit outside it, and the shadow line is Sodium's `C: a/b D: d` without this
+  engine's own cull dialect.
 
 - **Loading a pack a second time no longer compiles its shaders again.** The compiled module
   and the table of what it binds are kept under

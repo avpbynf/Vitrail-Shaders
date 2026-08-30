@@ -190,6 +190,70 @@ public final class MenuValues {
 		return match(this::pending);
 	}
 
+	/**
+	 * Which profile the values the pack was built with amount to, or the empty string when they
+	 * amount to none of them.
+	 * <p>
+	 * The overlay asks this and not {@link #matchedProfile}, which is what the screen is about to
+	 * apply. A capture with F3 open has to name what is drawn, not what is waiting on Apply.
+	 */
+	public String matchedAppliedProfile() {
+		return match(this::applied);
+	}
+
+	/**
+	 * Iris's F3 profile sentence ({@code ShaderPack.java:276}): the scanned name or
+	 * {@code Custom}, then how many applied options sit outside that profile.
+	 * <p>
+	 * The count is applied-minus-profile, the same subtraction Iris does
+	 * ({@code getOptionsChanged} of the loaded values minus that of the matched profile). A pack
+	 * that matches Low exactly reads {@code (+0 options changed by user)}; two extras on top of
+	 * Low read {@code (+2 options changed by user)}; nothing matching reads {@code Custom} and
+	 * the whole applied count.
+	 */
+	public String profileInfo() {
+		String matched = matchedAppliedProfile();
+		String name = matched.isEmpty() ? "Custom" : matched;
+		int extra = appliedOptionsChanged() - profileOptionsChanged(matched);
+		return "Profile: " + name + " (+" + extra + " option"
+				+ (extra == 1 ? "" : "s") + " changed by user)";
+	}
+
+	/** Applied settings that are not the pack's own default, the ones Iris keeps in its maps. */
+	private int appliedOptionsChanged() {
+		int count = 0;
+		for (String name : this.menu.optionNames()) {
+			if (!applied(name).equals(packDefault(name))) {
+				count++;
+			}
+		}
+
+		return count;
+	}
+
+	/**
+	 * Settings the matched profile itself moves off the pack's default. An empty name is Custom,
+	 * which has none, the way Iris builds an empty {@code MutableOptionValues} when the scan
+	 * matches nothing.
+	 */
+	private int profileOptionsChanged(String profileName) {
+		if (profileName.isEmpty()) {
+			return 0;
+		}
+
+		int count = 0;
+		for (Map.Entry<String, String> setting : this.menu.profile(profileName).entrySet()) {
+			if (this.menu.option(setting.getKey()).isEmpty()) {
+				continue;
+			}
+			if (!setting.getValue().equals(packDefault(setting.getKey()))) {
+				count++;
+			}
+		}
+
+		return count;
+	}
+
 	private String match(UnaryOperator<String> layer) {
 		String best = "";
 		int constraints = -1;

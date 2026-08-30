@@ -15,11 +15,10 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The engine's lines of the F3 screen: version, the pack being drawn, and the profile it stands
- * on. They are the heart of what Iris shows, because they answer the questions a screenshot gets asked -
- * which engine drew this, with which pack, set how - and a capture with the F3 open is how those
- * questions arrive. Without them a Vitrail frame and an Iris frame of the same pack read as the
- * same picture.
+ * The engine's lines of the F3 screen, in Iris's wording so a capture of one reads against a
+ * capture of the other: version, shaderpack, the scanned profile with the dirty count, then
+ * Sodium's shadow {@code C: a/b D: d}. Color space is omitted: this engine has no color-space
+ * setting to name, and inventing one would be a line Iris cannot match the other way.
  * <p>
  * A pack that is not being drawn says why in one line, and the three reasons are kept apart the
  * way {@link PackChain} keeps them: asked off, named but missing, or refused. Saying "none" for a
@@ -47,10 +46,7 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 
 		PackChain.session().ifPresentOrElse(session -> {
 			displayer.addToGroup(GROUP, PREFIX + "Shaderpack: " + session.packFileName());
-			String profile = session.settings().profile();
-			if (!profile.isEmpty()) {
-				displayer.addToGroup(GROUP, PREFIX + "Profile: " + profile);
-			}
+			displayer.addToGroup(GROUP, PREFIX + session.profileInfo());
 			if (level != null) {
 				shadowLines(displayer);
 			}
@@ -58,32 +54,22 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 	}
 
 	/**
-	 * What the shadow map cost to fill, said the way the reference says it so that a capture of one
-	 * screen reads against a capture of the other.
+	 * What the shadow map cost to fill, said the way Iris says it on the default F3
+	 * ({@code gui/debug/IrisDebugEntry.java:26}): Sodium's {@code C: a/b D: d} for the light.
+	 * The cull shape stays in the log ({@code ShadowTerrain}'s {@code shadow-cull} line), not
+	 * here: a capture next to Iris has to read the same family of lines, and
+	 * {@code ADVANCED BOX r=} is a dialect only this engine speaks.
 	 * <p>
-	 * The first line is Sodium's own shape for the camera, which Iris reuses for the light and
-	 * shows by default ({@code gui/debug/IrisDebugEntry}, raising its shadow flag around the ask):
-	 * sections drawn over sections loaded, then the render distance. <strong>The number to read
-	 * against Iris is the first one</strong>, both sides counting the sections that carry block
-	 * geometry and no others.
-	 * <p>
-	 * The second line is what Iris keeps for its debug options and this engine has no reason to
-	 * hide: the shape the walk measured against, and how many sections came back. Two counts that
-	 * differ by little say the cull is running and finding nothing to drop, which is a state worth
-	 * seeing rather than guessing at.
+	 * <strong>The number to read against Iris is the first one</strong>, both sides counting the
+	 * sections that carry block geometry and no others. Iris does not append {@code (no terrain)}
+	 * on this default line; that fragment lives on its extra debug entry.
 	 */
 	private static void shadowLines(DebugScreenDisplayer displayer) {
 		ShadowTerrain.Walk walk = ShadowTerrain.lastWalk();
-		if (walk == null) {
-			displayer.addToGroup(GROUP, PREFIX + "Shadows: (unavailable)");
-			return;
-		}
-
-		displayer.addToGroup(GROUP, PREFIX + "Shadows: C: " + walk.drawn() + "/" + walk.total()
-				+ " D: " + Minecraft.getInstance().options.getEffectiveRenderDistance()
-				+ (walk.terrain() ? "" : " (no terrain)"));
-		displayer.addToGroup(GROUP, PREFIX + "Shadow cull: " + walk.kept() + " sections kept, "
-				+ walk.culling());
+		int drawn = walk == null ? 0 : walk.drawn();
+		int total = walk == null ? 0 : walk.total();
+		displayer.addToGroup(GROUP, PREFIX + "Shadows: C: " + drawn + "/" + total
+				+ " D: " + Minecraft.getInstance().options.getEffectiveRenderDistance());
 	}
 
 	/**
