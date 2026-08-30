@@ -960,10 +960,13 @@ final class GeometryProgram {
 	 * A draw a mod records into a pass this engine opened arrives with a vertex layout of the mod's
 	 * own, and a pipeline reads its buffer through the layout it was built with: binding
 	 * {@link #prepare}'s answer over such a mesh would read every attribute at the wrong offset.
-	 * The variant is this program's pipeline with the caller's layout on binding nought and
-	 * everything else kept, under a location of its own so the device caches the two apart. The
-	 * shaders do not move, so the layout is refused unless it leads with the attributes this
-	 * program names, which {@link #rebuild} sets out.
+	 * The variant is this program's pipeline with the caller's layout on binding nought, every
+	 * STATE of the pipeline kept, and the comparison note refiled beside it: the answers keyed on
+	 * the pipeline OBJECT rather than read off it do not travel through a rebuild on their own,
+	 * and {@code ShadowCompare} is one, so {@link #reshapeAs} files the variant where it files the
+	 * base. It sits under a location of its own so the device caches the two apart. The shaders
+	 * do not move, so the layout is refused unless it leads with the attributes this program
+	 * names, which {@link #rebuild} sets out.
 	 * <p>
 	 * Recompiled through {@code precompilePipeline} on every call, for the reason {@link #compile}
 	 * gives: a resource reload empties the device cache, and the call is a lookup while the cache
@@ -1085,7 +1088,15 @@ final class GeometryProgram {
 			}
 		}
 
-		return builder.build();
+		RenderPipeline built = builder.build();
+
+		// The comparison note is keyed on the pipeline object, not read off its states, so it is
+		// the one answer a rebuild does not carry by itself. Left unfiled, the descriptor walk
+		// answers no for every compared name of this program and the variant's depth-reference
+		// lookups run on an ordinary sampler, undefined and silent.
+		ShadowCompare.noteBeside(built, this.pipeline);
+
+		return built;
 	}
 
 	/** Whether {@link #compile} has already paid shaderc for this pipeline. */
