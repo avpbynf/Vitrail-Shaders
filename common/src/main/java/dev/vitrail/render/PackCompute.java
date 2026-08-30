@@ -32,6 +32,7 @@ import com.mojang.blaze3d.vulkan.VulkanGpuBuffer;
 import com.mojang.blaze3d.vulkan.VulkanGpuSampler;
 import com.mojang.blaze3d.vulkan.VulkanGpuTextureView;
 import com.mojang.blaze3d.vulkan.VulkanUtils;
+import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -80,6 +81,14 @@ final class PackCompute implements AutoCloseable {
 
 	private static final int SHADERC_VULKAN_1_2 = 4202496;
 	private static final int SHADERC_COMPUTE = 2;
+
+	/**
+	 * Stage token hashed into {@link ModuleCache}'s key for this road, and nowhere else. The
+	 * game's compiler never sees a compute: shaderc kind, optimisation and target live only in
+	 * {@link Pass#compileSpirv}. Naming those here keeps a later {@code ShaderType.COMPUTE}
+	 * through {@code GlslCompiler} from serving this blob, or the other way around.
+	 */
+	private static final String MODULE_CACHE_STAGE = "COMPUTE/shaderc-opt2-vulkan1.2";
 
 	/**
 	 * A common ceiling on a pushed descriptor set, the same one the graphics side carries in
@@ -381,21 +390,45 @@ final class PackCompute implements AutoCloseable {
 			}
 
 			// Clocked as module work like everything the game's compiler makes: shaderc first,
-			// then the reflection inside ComputeShader.compile. Neither goes through the game's
-			// compiler, so the funnel clock cannot see them and this road counts itself. The
-			// layout and the pipeline below stay outside the figure: they are Vulkan object
-			// creation, not module work. One outer finally so that every exit, the refusal and
-			// the throw included, is counted exactly once.
+			// then the reflection inside createFromSpirv. Neither goes through the game's
+			// compiler, so the funnel clock cannot see them and this road counts itself. A cache
+			// hit skips both and still clocks the file read, the same way GlslCompilerMixin
+			// clocks a served graphics unit. The layout and the pipeline below stay outside the
+			// figure: they are Vulkan object creation, not module work. One outer finally so that
+			// every exit, the refusal and the throw included, is counted exactly once.
+			//
+			// Iris has no disk store for this. ProgramBuilder.beginCompute
+			// (ProgramBuilder.java:71-84) then GlShader (GlShader.java:24-49) calls
+			// glCompileShader on the render thread, and the binary cache is the OpenGL driver's
+			// (Iris.java:133-136 asks that driver for ten parallel compile threads). This engine's
+			// compute never entered GlslCompiler.createIntermediary, so it never entered
+			// ModuleCache either; the same store now holds it, same file layout, a stage token
+			// that names our shaderc options so a graphics COMPUTE through the game's compiler
+			// cannot serve this blob.
 			long began = System.nanoTime();
+			IntermediaryShaderModule module = null;
 			try {
-				ByteBuffer spirv = compileSpirv(unit.text());
-				if (spirv == null) {
-					return;
+				String source = unit.text();
+				String key = ModuleCache.keyOf(source, MODULE_CACHE_STAGE);
+				module = ModuleCache.lookup(key, this.label);
+				ByteBuffer spirv = null;
+				if (module == null) {
+					spirv = compileSpirv(source);
+					if (spirv == null) {
+						ModuleCache.building();
+						return;
+					}
+
+					ModuleCache.building();
 				}
 
 				try {
-					ComputeShader.Compiled compiled =
-							ComputeShader.compile(vulkan, this.label, spirv);
+					if (module == null) {
+						module = IntermediaryShaderModule.createFromSpirv(this.label, spirv);
+						ModuleCache.store(key, module);
+					}
+
+					ComputeShader.Compiled compiled = ComputeShader.compile(vulkan, module);
 					this.shaderModule = compiled.module();
 					this.entries = compiled.entries();
 					// Named and still dispatched, which is what the graphics path does with the
@@ -413,6 +446,10 @@ final class PackCompute implements AutoCloseable {
 					return;
 				}
 			} finally {
+				if (module != null) {
+					module.close();
+				}
+
 				LoadClock.module(System.nanoTime() - began);
 			}
 

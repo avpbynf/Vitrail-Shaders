@@ -96,8 +96,15 @@ public final class ComputeShader {
 		}
 	}
 
-	public static Compiled compile(VulkanDevice vulkan, String name, ByteBuffer spirv) {
-		try (IntermediaryShaderModule module = IntermediaryShaderModule.createFromSpirv(name, spirv)) {
+	/**
+	 * Remaps bindings and creates the device shader module. The SPIR-V and the reflection tables
+	 * are already on {@code module}, whether they came from {@code createFromSpirv} or from
+	 * {@link ModuleCache}. Does not close {@code module}: a cached unit and a just-reflected one
+	 * have the same lifetime as this call, and {@code rebind} rewrites the bytes after the store
+	 * has copied them.
+	 */
+	public static Compiled compile(VulkanDevice vulkan, IntermediaryShaderModule module) {
+		try {
 			IntermediaryShaderModuleAccessor access =
 					(IntermediaryShaderModuleAccessor) (Object) module;
 			List<VulkanBindGroupLayout.Entry> entries = new ArrayList<>();

@@ -48,13 +48,23 @@ import java.util.stream.Stream;
  * stored beside the bytes it read rather than replayed over them.
  * <p>
  * <strong>The key IS the input, hashed</strong>, and nothing else: the exact text handed to the
- * compiler, the stage it is compiled for, the debug name the module carries, and everything that
- * decides what that text turns into, which is the mod's version, the game's, the loader with its
- * own version, and the LWJGL build whose bundled shaderc and SPIRV-Cross do the work. Nothing is
- * keyed on a pack name or a file path, so there is no invalidation to get wrong and none is
+ * compiler, the stage it is compiled for, and everything that decides what that text turns into,
+ * which is the mod's version, the game's, the loader with its own version, and the LWJGL build
+ * whose bundled shaderc and SPIRV-Cross do the work. Nothing is keyed on a pack name, a file path
+ * or the debug name the module carries, so there is no invalidation to get wrong and none is
  * written. An edited shader, a moved pack setting, a translator that emits one word differently, a
  * loader that patches the compiler: each is a different key, and the blob under the old one is
  * never asked for again.
+ * <p>
+ * <strong>The debug name stays out of the key on purpose.</strong> The game's pipeline cache is
+ * keyed on the identifier and never on the text, so this engine puts the load number in that name
+ * ({@code pack/<load>/...}): two chains must not share an identifier when their GLSL differs
+ * ({@code docs/internals/game-graphics-api.md}). The disk key already carries the text, so hashing
+ * the load number as well would make every Apply, every R and every portal a miss of identical
+ * GLSL. F3+T does not bump the load and already hit; a pack reload now hits too. The live name is
+ * still handed to {@link #lookup} so the rebuilt module carries the identifier this chain's
+ * pipelines will ask for. Two texts colliding under one blob would need a SHA-256 collision of
+ * the source, which is not the trap the load number exists to prevent.
  * <p>
  * <strong>What is stored is the module as its maker handed it over</strong>, at the one instant at
  * which it is finished and nothing has yet bent it to a pipeline: the bytes, the uniform buffers
@@ -169,13 +179,17 @@ public final class ModuleCache {
 	 * <p>
 	 * Worked out once by the caller and handed to both ends, because the source of a composite runs
 	 * to hundreds of kilobytes and hashing it twice to answer one question is work for nothing.
+	 * <p>
+	 * The debug name is not an argument. It used to be, and a pack reload then missed every unit
+	 * whose GLSL had not moved, because the name carries the load number ({@code pack/<load>/...})
+	 * and {@code PackChain} increments that number on every new chain. The file layout did not
+	 * change, so the format token stays; old blobs under the names-in-the-key hashes sit until
+	 * the sweep collects them.
 	 *
-	 * @param filename the debug name the module carries, which the compiler writes into the module
-	 *                 it emits and which therefore belongs in the key
-	 * @param source   the text the compiler was handed, the pipeline's defines already injected
-	 * @param stage    vertex or fragment, which decides the whole compile
+	 * @param source the text the compiler was handed, the pipeline's defines already injected
+	 * @param stage  vertex, fragment, or the compute recipe token, which decides the whole compile
 	 */
-	public static @Nullable String keyOf(String filename, String source, String stage) {
+	public static @Nullable String keyOf(String source, String stage) {
 		if (directory() == null || !ModuleShape.available()) {
 			return null;
 		}
@@ -189,7 +203,6 @@ public final class ModuleCache {
 		feed(digest, Vitrail.platform().loaderVersion());
 		feed(digest, Version.getVersion());
 		feed(digest, stage);
-		feed(digest, filename);
 		feed(digest, source);
 
 		return HexFormat.of().formatHex(digest.digest());

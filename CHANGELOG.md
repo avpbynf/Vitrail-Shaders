@@ -35,8 +35,14 @@ what the next one holds.
 
 ### Changed
 
-- **Loading a pack a second time no longer compiles its shaders again.** Everything the game
-  makes of a shader, the compiled module and the table of what it binds, is kept under
+- **Compute shaders now hit the compiled-module cache on a pack reload.** They used to miss
+  every time because the disk key hashed the load number the debug name carries. That number
+  is out of the key. Computes are compiled by this engine, not by the game's shader compiler;
+  what is kept is the compiled module and its bind table, the same files graphics shaders
+  already write under `vitrail/modules`. Vulkan pipelines are built each load as before.
+
+- **Loading a pack a second time no longer compiles its shaders again.** The compiled module
+  and the table of what it binds are kept under
   `vitrail/modules` in the game folder and read back when the same shader comes round again, so
   a warm load does no compiling and no inspecting at all. Editing a shader or moving a pack
   setting changes what is asked for, and so does updating the mod, the game or the loader, and
