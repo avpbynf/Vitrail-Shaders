@@ -9,11 +9,11 @@ import org.joml.FrustumIntersection;
  * shadow distance bounds a walk that is otherwise the pack's own.
  * <p>
  * <strong>A box and not a shorter frustum, and that is the whole reason this class exists.</strong>
- * The shape inside is either the light's own volume, built from the pack's half plane and what the
- * shadow map is DRAWN with, or the camera's volume swept along the light
- * ({@link ShadowCullFrustum}), and narrowing either would change which casters reach the map rather
- * than how far the walk goes. What a shadow distance asks for is different and cheaper: keep the
- * shape, and stop walking the world beyond a cube of that many blocks around the player. Iris draws
+ * The shape inside is either always visible, so this cube is the whole of the walk, or the camera's
+ * volume swept along the light ({@link ShadowCullFrustum}), and narrowing either would change which
+ * casters reach the map rather than how far the walk goes. What a shadow distance asks for is
+ * different and cheaper: keep the shape, and stop walking the world beyond a cube of that many
+ * blocks around the player. Iris draws
  * the same distinction with the same shape, an axis-aligned cube tested on each axis independently,
  * {@code shadows/frustum/BoxCuller.java}, and hangs it off each of its own frustums the same way.
  * <p>

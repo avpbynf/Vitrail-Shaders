@@ -324,9 +324,11 @@ public final class PackValues {
 	 *                             against
 	 * @param light                scratch for the light vector, written and carried into the plan
 	 * @param camera               scratch for the camera's volume, likewise
+	 * @param voxelised            whether the shadow program voxelises, already read off that
+	 *                             program rather than guessed from a {@code .gsh} being bound
 	 */
 	public ShadowCullPlan shadowCullPlan(int userChunks, int renderDistanceChunks, Vector3f light,
-			Matrix4f camera) {
+			Matrix4f camera, boolean voxelised) {
 		ViewMatrices view = this.state.view();
 		camera.set(view.gbufferProjection()).mul(view.gbufferModelView());
 
@@ -349,7 +351,7 @@ public final class PackValues {
 			default -> bound = shadowRenderDistance(userChunks, renderDistanceChunks);
 		}
 
-		return new ShadowCullPlan(this.shadowCull,
+		return new ShadowCullPlan(this.shadowCull, voxelised,
 				CelestialValues.shadowLightVector(this.state, light), camera, bound, safeZone);
 	}
 

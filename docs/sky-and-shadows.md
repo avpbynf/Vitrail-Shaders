@@ -263,9 +263,12 @@ the map is taken to be read for direct shadowing and for volumetrics, not for li
 caster you cannot see. That is the reference's assumption, and packs are written against it.
 
 **The shape is the pack's to choose**, through `shadow.culling`, and the four states and their words
-are described once under [the pack format](pack-format.md). The distance is a separate axis and
-composes with all of them: whichever shape is chosen, the box a shadow distance asks for is cut out
-of it, so the sweep and the bound never have to know about each other.
+are described once under [the pack format](pack-format.md). Advanced, and the silent default when
+the pack does not voxelise, take a box around the player on this engine rather than that sweep:
+the sweep pops leaves at the sun silhouette here, and Iris Advanced does not. The safe zone still
+sweeps. The distance is a separate axis and composes with all of them: whichever shape is chosen,
+the box a shadow distance asks for is cut out of it, so the sweep and the bound never have to know
+about each other.
 
 Two things about the arithmetic are recorded here because a reader will look for them. The planes are
 pulled out of the camera's view projection, and the clip volume that matrix targets decides what
@@ -295,8 +298,9 @@ a shorter distance, and tests the caster's bounding box against it
 difference runs both ways: a caster inside the light's frustum and inside the box but outside that
 narrower frustum is kept here and dropped there, and one whose box grazes Iris's bound while its
 position sits outside ours is the reverse. Nothing makes Iris's shape impossible here; it has simply
-not been written yet, and since the terrain moved to the swept shape the two halves of the walk no
-longer measure against the same thing.
+not been written yet. Advanced terrain walks a box here rather than the sweep, so the two halves
+already differ; even where the terrain does sweep (the safe zone), the movers still measure against
+the light frustum rather than that same sweep.
 
 ### The experiment that separates the two failure modes
 

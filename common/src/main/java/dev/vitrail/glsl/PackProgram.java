@@ -98,6 +98,32 @@ public final class PackProgram {
 		}
 
 		/**
+		 * Whether this program voxelises, in Iris's sense: a geometry stage is present, or an image
+		 * load / store uniform survived translation.
+		 * <p>
+		 * Iris reads the geometry file at {@code shadows/ShadowRenderer.java:163-165} and then ORs
+		 * in {@code setUsesImages} when the compiled shadow program has image bindings
+		 * ({@code :224-225}, {@code ExtendedShader.hasActiveImages}). A {@code .gsh} is enough even
+		 * when this engine never binds it; an image uniform that the preprocessor left standing is
+		 * enough without one. A name gated off, Complementary LOW's {@code voxel_img} behind
+		 * {@code COLORED_LIGHTING_INTERNAL}, does not count.
+		 */
+		public boolean voxelises() {
+			if (this.program.stages().containsKey(ProgramStage.GEOMETRY)) {
+				return true;
+			}
+
+			return this.program.samplers().stream().anyMatch(Loaded::imageUniform);
+		}
+
+		private static boolean imageUniform(TranslatedUnit.Uniform sampler) {
+			String type = sampler.type();
+
+			return type.startsWith("image") || type.startsWith("iimage")
+					|| type.startsWith("uimage");
+		}
+
+		/**
 		 * The samplers this program declares under a type no pipeline can carry, with their types.
 		 * <p>
 		 * Both stages at once, which is why it is answered from the translation rather than from the
