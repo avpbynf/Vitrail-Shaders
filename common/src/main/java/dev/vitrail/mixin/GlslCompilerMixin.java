@@ -54,13 +54,16 @@ public abstract class GlslCompilerMixin {
 	 * shaderc sees: the method splices the compiler's own two global defines in behind the
 	 * version directive. They are built once in its constructor out of literals and nothing can
 	 * move them, so they say the same thing about every unit and cannot tell two of them apart.
+	 * The debug name is handed to {@link ModuleCache#lookup} so the rebuilt module carries this
+	 * chain's identifier, and it is not hashed: that name carries the load number the disk key
+	 * must not see.
 	 */
 	@WrapMethod(method = "createIntermediary", require = 1)
 	private IntermediaryShaderModule vitrail$module(String filename, String source, ShaderType type,
 			Operation<IntermediaryShaderModule> original) {
 		long began = System.nanoTime();
 		try {
-			String key = ModuleCache.keyOf(filename, source, type.name());
+			String key = ModuleCache.keyOf(source, type.name());
 			IntermediaryShaderModule served = ModuleCache.lookup(key, filename);
 			if (served != null) {
 				return served;
