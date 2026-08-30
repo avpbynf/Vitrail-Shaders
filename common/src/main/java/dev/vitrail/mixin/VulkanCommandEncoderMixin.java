@@ -42,7 +42,9 @@ import java.util.function.Supplier;
  * Closing a pass still runs the encoder's full barrier. Our own labels start with {@code Vitrail}
  * and get a write-then-sample barrier instead, the rest of the frame keeping the original wait.
  * {@link PassBarrier} puts the original wait back on ours too, and sends the mip chain back to a
- * pass per level, for a machine where the narrow one is suspected of a wrong image.
+ * pass per level, for a machine where the named one is suspected of a wrong image. The same class
+ * also drops compute and transfer from that destination, behind a second file, so those two
+ * stages can be measured rather than assumed.
  */
 @Mixin(VulkanCommandEncoder.class)
 public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
@@ -98,7 +100,7 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 		// leaves nothing of the narrow one standing. {@link PassBarrier} carries why that switch
 		// exists at all.
 		if (label != null && !PassBarrier.full() && vitrail$ours(label)) {
-			vitrail$framebufferBarrier(commands, stack);
+			vitrail$framebufferBarrier(commands, stack, PassBarrier.narrow());
 		} else {
 			VulkanCommandEncoder.memoryBarrier(commands, stack);
 		}
@@ -111,7 +113,30 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 	}
 
 	@Unique
-	private static void vitrail$framebufferBarrier(VkCommandBuffer commands, MemoryStack stack) {
+	private static void vitrail$framebufferBarrier(VkCommandBuffer commands, MemoryStack stack,
+			boolean narrow) {
+		// Compute and every transfer sit on the destination by default: a pass of ours can be
+		// followed by a pack's own dispatch, and a mip blit of a target the pass just wrote is
+		// a transfer. Dropping those two is what {@link PassBarrier#narrow()} measures, and only
+		// that: the source is untouched, and the wide wait never reaches here.
+		long dstStages = KHRSynchronization2.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR
+				| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR
+				| KHRSynchronization2.VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR
+				| KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
+		long dstAccess = KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
+				| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
+				| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR
+				| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR
+				| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR
+				| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT_KHR
+				| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR;
+		if (!narrow) {
+			dstStages |= KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR
+					| KHRSynchronization2.VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR;
+			dstAccess |= KHRSynchronization2.VK_ACCESS_2_TRANSFER_READ_BIT_KHR
+					| KHRSynchronization2.VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR;
+		}
+
 		VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack)
 				.sType$Default()
 				// The shader stages are here for the image stores of a pack's own geometry, which
@@ -127,28 +152,15 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 				// declared in a pack's vertex unit is kept and bound like any other
 				// (ProgramTranslator collects the samplers of every stage), so a program whose
 				// vertex shader reads a target the pass before it wrote would race the write.
-				.dstStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR
-						| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR
-						| KHRSynchronization2.VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR
-						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR
-						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR
-						| KHRSynchronization2.VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR)
+				.dstStageMask(dstStages)
 				// The writes sit here beside the reads, and each of the three is reached every frame:
 				// a colour target the next pass writes, or that the emptying writes through its
 				// load-op; the depth image the next geometry pass tests and writes, and that the
 				// shadow map's own emptying clears; and the mip blit filling the levels of a target
 				// whose base the pass that just closed wrote. Named as reads alone, all three were
 				// write-after-write with nothing between them, which a driver is free to run in
-				// either order.
-				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_READ_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR);
+				// either order. The last of those three is the transfer the narrow switch drops.
+				.dstAccessMask(dstAccess);
 		VkDependencyInfo info = VkDependencyInfo.calloc(stack)
 				.sType$Default()
 				.pMemoryBarriers(barrier);

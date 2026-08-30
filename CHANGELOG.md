@@ -15,6 +15,17 @@ what the next one holds.
 
 ### Added
 
+- **A switch that measures what waiting for compute and for copies costs at the close of a pass.**
+  An empty file `vitrail/narrow-pass-barrier` in the game folder, or
+  `-Dvitrail.narrowPassBarrier=true`. A pack's passes end on a wait naming the stages the pass
+  after them reads and writes in, and two of those stages are there for a pack's own dispatch and
+  for the copies that fill a target's mip chain. The switch drops those two so what they cost a
+  frame can be read in one world rather than across two builds, and the log says which of the two
+  states a session ran in either way. Off is the default and is the engine as it stands; armed, a
+  pack's compute can read a target before the write to it is visible and the copies lose their
+  order, which is what makes it an instrument and not a setting to keep.
+  `vitrail/full-pass-barrier` still wins over it.
+
 - **A pack can read the shadow map under a second, hardware-compared name.** `shadowtex0HW` and
   `shadowtex1HW` are bound now, to the same two depth images as `shadowtex0` and `shadowtex1`,
   and each is compared by the hardware where the pack declares it that way. Both names read back
