@@ -146,6 +146,19 @@ public final class ShadowCompare {
 		noted = true;
 	}
 
+	/**
+	 * Files a rebuilt variant beside the pipeline it was rebuilt from. A reshape swaps the vertex
+	 * layout and nothing a comparison depends on, so the names are the base's, shared rather than
+	 * copied; nothing is filed where the base filed nothing. The warnings stay with the base's
+	 * filing: they speak of the pack's text, which the variant has not changed.
+	 */
+	static void noteBeside(RenderPipeline variant, RenderPipeline base) {
+		Set<String> names = COMPARED.get(base);
+		if (names != null) {
+			COMPARED.put(variant, names);
+		}
+	}
+
 	/** Whether any pipeline has filed anything, asked before the per-name question is worth asking. */
 	public static boolean noted() {
 		return noted;
