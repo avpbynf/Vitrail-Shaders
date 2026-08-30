@@ -65,23 +65,29 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f shadowProjectionInverse = new Matrix4f();
 
 	/**
-	 * The pair the shadow map on hand was drawn with, which is the previous frame's, because the map
+	 * The pair the shadow map on hand was drawn with, usually the previous frame's, because the map
 	 * is drawn at the end of a frame for the next one. It is what every sampling pass is told as
 	 * {@code shadowModelView}, and it is the drawn pair moved onto this frame's camera.
 	 * <p>
 	 * <strong>That move is not a refinement, it is the difference between a lookup that lands and
 	 * one that does not.</strong> These matrices act on player space, and player space is the world
 	 * measured from wherever the camera of the frame doing the measuring stands. The map was drawn
-	 * around where the camera stood a frame ago, so the drawn matrix handed over as it is asks about
-	 * the point one frame of camera motion away from the one being shaded, and every shadow in the
-	 * picture sits that far out of place for as long as the player is moving. Adding the motion back
-	 * costs one translation and makes this pair say exactly what the map holds.
+	 * around where the camera stood when it was drawn, so the drawn matrix handed over as it is asks
+	 * about a point that far away from the one being shaded, and every shadow in the picture sits
+	 * that far out of place for as long as the player is moving. Adding the motion back costs one
+	 * translation and makes this pair say exactly what the map holds.
+	 * <p>
+	 * <strong>Usually the previous frame's, and not always, which is why the distance is measured
+	 * rather than assumed.</strong> The shadow stage opens and gives up without drawing on several
+	 * roads, so the map can be older than one frame with nothing saying so, and the motion added
+	 * back is the motion since the frame that really drew. {@code heldShadowModelView} holds that
+	 * pair.
 	 * <p>
 	 * Publishing the fresh pair instead does not do it either, and that is worth saying because it
 	 * looks like it should: the grid snap the pair carries is a function of the camera, so it lands
 	 * on the same place while the camera stays inside a cell and jumps a whole cell the frame it
-	 * leaves one, which is a map read a hundred texels out for that frame. What is left a frame late
-	 * here is the sun angle alone.
+	 * leaves one, which is a map read a hundred texels out for that frame. What is left late here is
+	 * the sun angle alone, and one frame of it on every frame that drew.
 	 */
 	private final Matrix4f mapShadowModelView = new Matrix4f();
 	private final Matrix4f mapShadowModelViewInverse = new Matrix4f();
@@ -90,6 +96,30 @@ public final class ViewMatrices implements ViewSource {
 
 	/** Where the camera stood when the pair above was built, so the re-origin has a distance. */
 	private final Vector3d shadowCamera = new Vector3d();
+
+	/**
+	 * The pair the map ON HAND was really drawn with, before any re-origin, and where the camera
+	 * stood at that moment. Where no stage is running at all there is no map on hand, and these
+	 * follow the fresh pair every frame instead, which is what a skipped-false, drew-false frame
+	 * asks for and what keeps the sun turning in the four matrices the whole corpus reads
+	 * regardless.
+	 * <p>
+	 * <strong>Kept apart from the frame's own history because the two only agree while every frame
+	 * draws a map.</strong> The shadow stage returns without drawing on several roads and its
+	 * throws are caught rather than fatal, so the map can be two frames old or older with nothing
+	 * saying so. Measuring the re-origin from here rather than from the previous frame is what makes
+	 * it the real distance instead of one frame of it, and the difference is exactly what a player
+	 * sees as the shadows sliding while they walk.
+	 * <p>
+	 * <strong>Held is not the same word as drawn</strong>, and the distinction is worth the longer
+	 * name: {@link #drawnShadowModelView()} answers the pair the map ABOUT to be drawn will use,
+	 * which is this frame's, where these three are the pair the map already on hand was drawn with,
+	 * which may be several frames old.
+	 */
+	private final Matrix4f heldShadowModelView = new Matrix4f();
+	private final Matrix4f heldShadowProjection = new Matrix4f();
+	private final Matrix4f heldShadowProjectionInverse = new Matrix4f();
+	private final Vector3d heldCamera = new Vector3d();
 
 	private final Vector4f convention = new Vector4f(ClipSpace.REVERSED);
 
@@ -399,24 +429,44 @@ public final class ViewMatrices implements ViewSource {
 	 * it stands.
 	 *
 	 * @param shadowAngle the angle of whichever body is casting, already divided by 360
+	 * @param skipped     true when the shadow stage opened and gave up without drawing, so the map
+	 *                    on hand is older than one frame and the held pair must not be overwritten
 	 */
 	void advanceShadow(float shadowAngle, float sunPathRotation, float intervalSize,
 			Vector3dc camera, float distance, float nearPlane, float farPlane, boolean endFlash,
-			float flashXAngle, float flashYAngle) {
-		// Shifted down before the fresh pair is built, the same move advance makes for previous:
-		// what was drawn with last frame is what the map on hand holds.
+			float flashXAngle, float flashYAngle, boolean skipped) {
+		// Shifted down before the fresh pair is built, the same move advance makes for previous,
+		// but NOT on a frame that opened a stage and gave up: what the map holds then is what an
+		// earlier draw was given, and that frame left it exactly where it was.
+		//
+		// A frame that ran no stage at all shifts like any other, and leaving it out is what turned
+		// this guard into a defect worse than the one it fixes. Nothing samples a map then, the
+		// stage being closed by a pack without a shadow program, by a shadow distance of nought or
+		// by a stage that failed and emptied the map behind it, but the four matrices are read by
+		// the composite stage of the whole corpus regardless. Frozen on the seed frame they would
+		// carry the sun angle of the first frame of the session for the rest of it, under a
+		// translate growing without bound as the player walks.
+		if (this.shadowSeeded && !skipped) {
+			this.heldShadowModelView.set(this.shadowModelView);
+			this.heldShadowProjection.set(this.shadowProjection);
+			this.heldShadowProjectionInverse.set(this.shadowProjectionInverse);
+			this.heldCamera.set(this.shadowCamera);
+		}
+
 		if (this.shadowSeeded) {
 			// On the right, where the grid snap already stands, so that the motion is added to the
 			// point before the light turns it rather than after: both offsets are distances in
 			// player space, and one applied on the far side of the rotation would be a different
-			// place on the ground.
-			this.mapShadowModelView.set(this.shadowModelView)
-					.translate((float) (camera.x() - this.shadowCamera.x),
-							(float) (camera.y() - this.shadowCamera.y),
-							(float) (camera.z() - this.shadowCamera.z));
+			// place on the ground. It stays right when the span is more than one frame, the product
+			// reducing to the held pair applied to the point expressed in the held frame's own
+			// player space whatever the distance.
+			this.mapShadowModelView.set(this.heldShadowModelView)
+					.translate((float) (camera.x() - this.heldCamera.x),
+							(float) (camera.y() - this.heldCamera.y),
+							(float) (camera.z() - this.heldCamera.z));
 			this.mapShadowModelView.invert(this.mapShadowModelViewInverse);
-			this.mapShadowProjection.set(this.shadowProjection);
-			this.mapShadowProjectionInverse.set(this.shadowProjectionInverse);
+			this.mapShadowProjection.set(this.heldShadowProjection);
+			this.mapShadowProjectionInverse.set(this.heldShadowProjectionInverse);
 		}
 
 		this.shadowCamera.set(camera);
@@ -462,11 +512,17 @@ public final class ViewMatrices implements ViewSource {
 
 		if (!this.shadowSeeded) {
 			// The first frame has no map and no history, so the published pair is the fresh one:
-			// wrong by nothing, since there is nothing to sample yet.
+			// wrong by nothing, since there is nothing to sample yet. The drawn pair is seeded with
+			// it as well, so that a second frame arriving before any map was drawn re-origins from
+			// somewhere real rather than from an identity nobody set.
 			this.mapShadowModelView.set(this.shadowModelView);
 			this.mapShadowModelViewInverse.set(this.shadowModelViewInverse);
 			this.mapShadowProjection.set(this.shadowProjection);
 			this.mapShadowProjectionInverse.set(this.shadowProjectionInverse);
+			this.heldShadowModelView.set(this.shadowModelView);
+			this.heldShadowProjection.set(this.shadowProjection);
+			this.heldShadowProjectionInverse.set(this.shadowProjectionInverse);
+			this.heldCamera.set(camera);
 			this.shadowSeeded = true;
 		}
 	}

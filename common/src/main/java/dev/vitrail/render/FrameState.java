@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.dh.DhDepth;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.PackDirectives;
+import dev.vitrail.sodium.ShadowTerrain;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.values.FrameSmoothed;
 import dev.vitrail.uniform.WorldState;
@@ -490,7 +491,7 @@ public final class FrameState implements WorldState {
 				this.directives.shadowIntervalSize(), this.shift.unshifted(),
 				this.directives.shadowDistance(), this.directives.shadowNearPlane(),
 				this.directives.shadowFarPlane(), inEndFlash(), this.endFlashXAngle,
-				this.endFlashYAngle);
+				this.endFlashYAngle, ShadowTerrain.takeMapState() == ShadowTerrain.MapState.SKIPPED);
 	}
 
 	/**

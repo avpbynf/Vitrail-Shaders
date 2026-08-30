@@ -59,8 +59,9 @@ of the wrong thing and looks like a shadow map all the same.
 Separately, that stage typically multiplies the inverse shadow matrices by the fixed-function
 transform helper and counts on the product collapsing. It only collapses if the inverses and the
 pair under the helper are the *same frame's*, so the catalogue answers from the pair being drawn
-with, this frame's, while the published shadow matrices are the previous frame's. That is a
-consequence of drawing the map a frame ahead, described further down.
+with, this frame's, while the published shadow matrices are usually the previous frame's. That is a
+consequence of drawing the map a frame ahead, described further down. When the shadow stage opens
+and then skips the map, that published pair is held: it is not rebuilt from this frame's camera.
 
 ### Shadow depth uses the opposite convention from the scene
 

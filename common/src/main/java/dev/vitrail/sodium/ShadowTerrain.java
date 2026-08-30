@@ -129,6 +129,49 @@ public final class ShadowTerrain {
 	}
 
 	/**
+	 * What a frame left behind for the published shadow pair to measure itself from.
+	 * <p>
+	 * <strong>The published pair moves itself the camera motion separating it from the map, and it
+	 * can only do that if it knows how much motion that is.</strong> The walk below returns without
+	 * drawing on four roads and its throws are caught, so a frame drawing no map says nothing in any
+	 * log. The three cases are not one: a stage that opened and gave up leaves a map older than the
+	 * frame, while a stage that never opened leaves no map at all, and telling those apart is the
+	 * difference between a correction that tracks and one that freezes on the first frame of the
+	 * session.
+	 */
+	public enum MapState {
+
+		/** The stage opened and drew, so the map on hand is the ending frame's own. */
+		DREW,
+
+		/** The stage opened and gave up before drawing, so the map on hand is older than one frame. */
+		SKIPPED,
+
+		/**
+		 * No stage ran, so nothing is sampling a map of ours and there is nothing to stay faithful
+		 * to. The pack still reads the four matrices, the whole corpus doing so from its composites,
+		 * so the fresh pair is what they are given and the sun goes on turning in them.
+		 */
+		NONE
+	}
+
+	private static boolean served;
+
+	private static boolean drew;
+
+	/**
+	 * Reads the state and clears it, so one map cannot be counted fresh by two frames. Called once a
+	 * frame at the head of the frame, where the flags still carry what the previous frame's tail
+	 * did.
+	 */
+	public static MapState takeMapState() {
+		MapState taken = drew ? MapState.DREW : served ? MapState.SKIPPED : MapState.NONE;
+		served = false;
+		drew = false;
+		return taken;
+	}
+
+	/**
 	 * Walks the world for the light and draws the shadow map, using the state captured when this
 	 * frame was set up. One draw per capture: a frame that never set a graph up draws no map.
 	 * <p>
@@ -173,6 +216,10 @@ public final class ShadowTerrain {
 			walkCulling = null;
 			return;
 		}
+
+		// Past this line a stage is open and the pack is sampling a map of ours, so a frame that
+		// gives up below leaves one older than itself rather than none at all.
+		served = true;
 
 		RenderSectionManager manager =
 				((MixinSodiumWorldRenderer) renderer).vitrail$renderSectionManager();
@@ -277,6 +324,7 @@ public final class ShadowTerrain {
 			}
 
 			draw(renderer, minecraft, camera);
+			drew = true;
 		} finally {
 			// The flag finalizeRenderLists just lowered, back up whatever happened above: the
 			// camera's walk at the top of the next frame has to rebuild, or the world would be

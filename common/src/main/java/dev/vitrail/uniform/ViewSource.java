@@ -117,10 +117,11 @@ public interface ViewSource {
 	/**
 	 * The four published shadow matrices are the pair the shadow map ON HAND was drawn with, moved
 	 * onto this frame's camera. The map is drawn at the end of a frame for the next one, so its
-	 * light direction and its grid cell are the previous frame's; but these matrices act on player
-	 * space, which every frame measures from wherever its own camera stands, so the drawn matrix
-	 * handed over as it is would ask about a point one frame of camera motion away from the one
-	 * being shaded. What is left a frame late once that motion is added back is the sun angle alone.
+	 * light direction and its grid cell are those of the frame that drew it, usually the previous
+	 * one and older wherever the stage gave up without drawing. These matrices act on player space,
+	 * which every frame measures from wherever its own camera stands, so the drawn matrix handed
+	 * over as it is would ask about a point that whole distance away from the one being shaded.
+	 * What is left late once that motion is added back is the sun angle alone.
 	 * The {@code drawn} four are the pair as it stands, for the one stage that draws the map itself.
 	 */
 	Matrix4fc shadowModelView();

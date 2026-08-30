@@ -17,8 +17,9 @@ import org.joml.Matrix4f;
  * is a shadow map of exactly the wrong thing and looks like a shadow map all the same.
  * <p>
  * Everything here reads the DRAWN pair, this frame's, where the published {@code shadowModelView}
- * is the previous frame's: the map is drawn at the end of a frame for the next one, so the pair a
- * sampling pass needs is one frame older than the pair this stage draws with. The four explicit
+ * belongs to the frame that drew the map now on hand: the map is drawn at the end of a frame for
+ * the next one, so the pair a sampling pass needs is older than the pair this stage draws with, by
+ * one frame wherever every frame draws and by more wherever the stage gave up. The four explicit
  * names are overridden below for the same reason, and it is not optional: {@code shadow.vsh}
  * multiplies {@code shadowModelViewInverse * shadowProjectionInverse * ftransform()} and counts on
  * the product collapsing, which it only does when the inverses and the pair under

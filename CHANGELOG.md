@@ -103,6 +103,12 @@ what the next one holds.
 
 ### Fixed
 
+- **A skipped shadow map no longer walks the light with the player.** When the shadow stage
+  opens and then gives up without drawing, the published matrices now keep the camera of the
+  frame that last drew the map, instead of treating the miss as a fresh map. Written for the
+  Mac reports on #161 where lighting followed the player. It has not been tried on a Mac
+  from this machine.
+
 - **The button that opens a pack's settings is no longer dead until the pack has been loaded
   once.** It was live only while a pack was already drawing, so the first pack anybody picks on
   a fresh install could not be configured at all: the only way in was to load it at whatever
