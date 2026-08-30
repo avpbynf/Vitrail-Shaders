@@ -651,6 +651,24 @@ public final class GlslTranslator {
 		return SOFT_COMPARE || softCompareArmed;
 	}
 
+	/**
+	 * The state of every switch that changes what this translator EMITS, as one word.
+	 * <p>
+	 * It exists for {@link TranslationCache}, and it is the whole of what that cache cannot work
+	 * out from the arguments it is handed: a translation kept on disk is the same answer only while
+	 * these are the same, and a switch missing from this line would serve a unit emitted under the
+	 * other state, which is a wrong picture with no error anywhere to point at it.
+	 * <p>
+	 * <strong>It lives here, beside the switches, because that is the only place it stays
+	 * true.</strong> A switch added to this class is a line away from this method; a list of them
+	 * kept over in the cache is a file away, and the day somebody adds the next one that file is
+	 * the one they will not open.
+	 */
+	public static String emissionSwitches() {
+		return (reduceTrig ? "trig-reduced" : "trig-driver")
+				+ (softCompare() ? " compare-in-shader" : " compare-on-sampler");
+	}
+
 	private void rewrite() {
 		collectMacroNames();
 		collectDeclarations();

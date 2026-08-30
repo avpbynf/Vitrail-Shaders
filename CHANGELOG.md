@@ -48,6 +48,16 @@ what the next one holds.
   the two hundred odd shaders a cold one compiles, and the wait before the pack draws is the
   same to the second. What a pack load really costs sits somewhere neither this nor the log
   line is looking.
+- **Loading a pack again no longer rewrites its shaders from scratch.** Turning a pack's GLSL
+  into the dialect this backend speaks is one of the three things a pack load pays for, and it
+  is the same answer every time the same pack comes back. What it came to is kept under
+  `vitrail/translations` in the game folder and read back instead. Editing a shader, moving a
+  pack setting, changing the shadow map scale, updating the mod or the game, or switching one of
+  the mod's own measurement switches all change what is asked for, and anything that has changed
+  is rewritten as before. Each version keeps its own folder and takes the older ones away with
+  it, the whole thing is capped at a quarter of a gigabyte, and the log says how many programs
+  came off the disk and how many were rewritten. It removes work rather than time: the wait
+  before a pack draws is the same, and what changes is that none of it is spent here.
 - **A shadow lookup a pack asks the hardware to compare is now compared by the hardware.** A
   pack declaring `sampler2DShadow` used to have that comparison rebuilt in shader
   arithmetic on every tap, a dozen instructions where a comparison sampler pays one, and a

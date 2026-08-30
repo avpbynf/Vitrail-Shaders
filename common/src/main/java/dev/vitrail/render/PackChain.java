@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.glsl.TranslationCache;
 import dev.vitrail.mixin.GpuDeviceAccessor;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
@@ -617,8 +618,15 @@ public final class PackChain {
 		// below this point that reads a pack translates one.
 		DriverTrig.read(gameDirectory);
 		// Beside the trig switch and for the same reason: what follows is what these tallies
-		// are a tally of.
+		// are a tally of. The cache empties its own on the same line, so that its counts and the
+		// clock's milliseconds are read off one load.
+		//
+		// Two loads can smear into each other here, in both directions, exactly as they do for
+		// the clock: a family worker of the chain that has just been released lands its own
+		// hits after this reset, and a swap empties the tallies while the outgoing chain's
+		// workers are still translating.
 		LoadClock.reset();
+		TranslationCache.reset();
 		// The storage blocks the translator files away, emptied at the head of a load and NOT beside
 		// the CustomImages line in release(), though the two are installed on the same line.
 		//
@@ -917,6 +925,14 @@ public final class PackChain {
 						+ "the chain went live; the modules follow on the draws and the workers, "
 						+ "counted into the report that closes the warmup",
 						LoadClock.translationMillis(), LoadClock.translated());
+				// Both ways, whichever way it went. A cache that only speaks when it helps leaves
+				// every later reading of a log ambiguous, since a silence would then mean either
+				// that nothing was served or that nothing was asked. It rides the line above rather
+				// than standing on its own, so a load this method turned back from is silent on
+				// both counts rather than on one of the two.
+				Vitrail.logger().info("Translation cache: {} programs served from disk, {} "
+								+ "translated, counted at the same point of the load as the line "
+								+ "above", TranslationCache.served(), TranslationCache.translated());
 			}
 
 			active.startFamilyPrefetch();
