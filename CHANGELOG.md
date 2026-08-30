@@ -15,6 +15,11 @@ what the next one holds.
 
 ### Added
 
+- **A Cache Cap slider on the video settings page**, how much compiled-shader disk this
+  engine may keep, 128 to 2048 mebibytes in steps of 128. `512 MiB` is the old hardcoded
+  ceiling and the default. Moving it applies at once, with no pack reload: lowering may drop
+  unused cached shaders. Written in `vitrail/module-cache-ceiling.txt`.
+
 - **A Shadow Map Scale slider under Video Settings**, on the mod's page beside Max Shadow
   Distance. The shadow map is drawn at the chosen fraction of the resolution the pack asked
   for, 25 to 100 percent, and the setting outlives whichever pack is chosen. Moving it reloads
@@ -46,6 +51,9 @@ what the next one holds.
 - **The compiling overlay no longer covers F3.** While the debug screen is open, "Compiling
   shaders..." rides the Vitrail F3 line instead of the corner. Close F3 and the corner overlay
   is as it was.
+- **Video-settings labels tell the truth about reload.** Titles are shorter so they fit the
+  row. Each tooltip says whether the change applies at once, at the next frame, or reloads
+  the pack.
 
 - **Loading a pack a second time no longer compiles its shaders again.** The compiled module
   and the table of what it binds are kept under

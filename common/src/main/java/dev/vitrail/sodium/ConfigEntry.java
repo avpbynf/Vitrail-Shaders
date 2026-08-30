@@ -1,5 +1,6 @@
 package dev.vitrail.sodium;
 
+import dev.vitrail.render.ModuleCache;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.StartupGuard;
 import dev.vitrail.render.TerrainDraw;
@@ -83,6 +84,10 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	private static final Identifier GRAPHICS_API =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "graphics_api");
 
+	/** How large the compiled-shader disk store may grow, on the engine page. */
+	private static final Identifier MODULE_CACHE_CEILING =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "module_cache_ceiling");
+
 	/** What the selector offers while the pack draws the world, and what it offers otherwise. */
 	private static final Set<TextureFilteringMethod> WITHOUT_RGSS =
 			Set.of(TextureFilteringMethod.NONE, TextureFilteringMethod.ANISOTROPIC);
@@ -100,15 +105,14 @@ public final class ConfigEntry implements ConfigEntryPoint {
 						.setName(Component.translatable(ScreenText.PACKS_TITLE))
 						.setScreenConsumer(parent ->
 								Minecraft.getInstance().gui.setScreen(new SettingsScreen(parent))))
-				// Named by the game's own key rather than by one of ours: it is the words the game
-				// already writes over its video settings, translated everywhere this mod is not.
 				.addPage(builder.createOptionPage()
-						.setName(Component.translatable("options.videoTitle"))
+						.setName(Component.translatable(ScreenText.PAGE_TITLE))
 						.addOptionGroup(builder.createOptionGroup()
 								.addOption(shadowDistance(builder))
 								.addOption(shadowMapScale(builder))
 								.addOption(renderScale(builder))
-								.addOption(graphicsApi(builder))))
+								.addOption(graphicsApi(builder))
+								.addOption(moduleCacheCeiling(builder))))
 				// RGSS is shader code, written into the game's own terrain shader and into Sodium's,
 				// so it is worth nothing while the pack's terrain program is the one drawing: the
 				// player moves the selector and the image does not move. ANISOTROPIC keeps working,
@@ -234,6 +238,24 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				// LATER launch starts on and costs the running frame nothing at all. Sodium's own
 				// impact labels are about the frame being drawn.
 				.setStorageHandler(() -> {});
+	}
+
+	/**
+	 * How large the compiled-shader store may grow, in mebibytes. The file and the live ceiling
+	 * move together, so a lower number sweeps at once and a higher one is seen by the next store.
+	 * No pack reload and no restart.
+	 */
+	private static OptionBuilder moduleCacheCeiling(ConfigBuilder builder) {
+		return builder.createIntegerOption(MODULE_CACHE_CEILING)
+				.setName(Component.translatable(ScreenText.MODULE_CACHE_CEILING))
+				.setTooltip(_ -> Component.translatable(ScreenText.MODULE_CACHE_CEILING_TOOLTIP))
+				.setDefaultValue(ModuleCache.DEFAULT_CEILING_MIB)
+				.setRange(new Range(ModuleCache.MIN_CEILING_MIB, ModuleCache.MAX_CEILING_MIB,
+						ModuleCache.CEILING_STEP_MIB))
+				.setBinding(ModuleCache::setCeilingMib, ModuleCache::ceilingMib)
+				.setValueFormatter(mib -> Component.literal(mib + " MiB"))
+				.setStorageHandler(() -> {})
+				.setImpact(OptionImpact.LOW);
 	}
 
 	/**
