@@ -10,16 +10,16 @@ import java.util.Locale;
 
 /**
  * What {@code vitrail/pack.txt} carries: which pack was chosen, whether shaders are on at all, how
- * far the player asked the light to reach, what fraction of the window the world renders at, and
- * how much of the shadow map the pack asked for is actually drawn.
+ * far the player asked the light to reach, what fraction of the window the world renders at, how
+ * much of the shadow map the pack asked for is actually drawn, and how often that map is recorded.
  * <p>
- * <b>The last three are not about a pack, and they are here for the reason the other two are.</b>
+ * <b>The last four are not about a pack, and they are here for the reason the other two are.</b>
  * Iris keeps its own in the same properties file as {@code shaderPack} and {@code enableShaders},
  * {@code maxShadowRenderDistance} in {@code config/IrisConfig.java:178,206}, because it is the same
  * kind of thing: one number the player set once, that outlives whichever pack is loaded and has to
  * be there before one is. A file of its own would be a second file to find, to write and to keep in
- * step. The render scale and the shadow map scale have no counterpart in Iris and follow the same
- * rule for the same reason.
+ * step. The render scale, the shadow map scale and the refresh cadence have no counterpart in Iris
+ * and follow the same rule for the same reason.
  * <p>
  * <b>Two facts and not one, and that is what the screen's toggle needs.</b> Iris keeps
  * {@code shaderPack} and {@code enableShaders} apart in its own properties file, so turning shaders
@@ -36,7 +36,7 @@ import java.util.Locale;
  * settings be run against the pack corpus without starting the game.
  */
 public record PackFile(String name, boolean enabled, int shadowDistance, int renderScale,
-		int shadowMapScale) {
+		int shadowMapScale, ShadowRefresh shadowRefresh) {
 
 	/** The word that means no pack rather than the name of one, kept from the one line format. */
 	public static final String NONE = "none";
@@ -46,6 +46,7 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 	private static final String SHADOW_DISTANCE_KEY = "shadowdistance";
 	private static final String RENDER_SCALE_KEY = "renderscale";
 	private static final String SHADOW_MAP_SCALE_KEY = "shadowmapscale";
+	private static final String SHADOW_REFRESH_KEY = "shadowrefresh";
 
 	/**
 	 * The range the shadow distance is offered and stored over, in CHUNKS, and Iris's own: zero to
@@ -98,7 +99,7 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 
 	/** Nothing chosen. Shaders are on, so choosing a pack is all it takes to draw one. */
 	public static final PackFile EMPTY = new PackFile("", true, DEFAULT_SHADOW_DISTANCE,
-			DEFAULT_RENDER_SCALE, DEFAULT_SHADOW_MAP_SCALE);
+			DEFAULT_RENDER_SCALE, DEFAULT_SHADOW_MAP_SCALE, ShadowRefresh.DEFAULT);
 
 	public PackFile {
 		name = name.trim();
@@ -109,11 +110,12 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 		shadowDistance = Math.clamp(shadowDistance, MIN_SHADOW_DISTANCE, MAX_SHADOW_DISTANCE);
 		renderScale = Math.clamp(renderScale, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
 		shadowMapScale = Math.clamp(shadowMapScale, MIN_SHADOW_MAP_SCALE, MAX_SHADOW_MAP_SCALE);
+		shadowRefresh = shadowRefresh == null ? ShadowRefresh.DEFAULT : shadowRefresh;
 	}
 
 	/**
 	 * What the file says, or {@link #EMPTY} when it is not there. A line that is neither a comment nor
-	 * one of the five keys is ignored rather than refused: this file is edited by hand.
+	 * one of the six keys is ignored rather than refused: this file is edited by hand.
 	 * <p>
 	 * Decoded through the {@code String} constructor rather than through {@code Files.readString},
 	 * which THROWS on a byte that is not UTF-8. The rule the lines below are read under, that
@@ -140,9 +142,9 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 
 			return NONE.equalsIgnoreCase(bare)
 					? new PackFile("", false, DEFAULT_SHADOW_DISTANCE, DEFAULT_RENDER_SCALE,
-							DEFAULT_SHADOW_MAP_SCALE)
+							DEFAULT_SHADOW_MAP_SCALE, ShadowRefresh.DEFAULT)
 					: new PackFile(bare, true, DEFAULT_SHADOW_DISTANCE, DEFAULT_RENDER_SCALE,
-							DEFAULT_SHADOW_MAP_SCALE);
+							DEFAULT_SHADOW_MAP_SCALE, ShadowRefresh.DEFAULT);
 		}
 
 		String name = "";
@@ -150,6 +152,7 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 		int shadowDistance = DEFAULT_SHADOW_DISTANCE;
 		int renderScale = DEFAULT_RENDER_SCALE;
 		int shadowMapScale = DEFAULT_SHADOW_MAP_SCALE;
+		ShadowRefresh shadowRefresh = ShadowRefresh.DEFAULT;
 		for (String line : content.lines().toList()) {
 			String trimmed = line.trim();
 			if (trimmed.isEmpty() || trimmed.startsWith("#")) {
@@ -174,12 +177,14 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 				case SHADOW_DISTANCE_KEY -> shadowDistance = number(value, shadowDistance);
 				case RENDER_SCALE_KEY -> renderScale = number(value, renderScale);
 				case SHADOW_MAP_SCALE_KEY -> shadowMapScale = number(value, shadowMapScale);
+				case SHADOW_REFRESH_KEY -> shadowRefresh = ShadowRefresh.parse(value);
 				default -> {
 				}
 			}
 		}
 
-		return new PackFile(name, enabled, shadowDistance, renderScale, shadowMapScale);
+		return new PackFile(name, enabled, shadowDistance, renderScale, shadowMapScale,
+				shadowRefresh);
 	}
 
 	/** The file's text, decoded rather than refused, with any byte order mark taken off. */
@@ -202,7 +207,7 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 	 * leaving any of them to be inferred from its absence.
 	 * <p>
 	 * <b>Two things write this file and neither owns all of it</b>, the settings screen picking a
-	 * pack and the video settings moving one of its three numbers. Whichever writes has to carry the
+	 * pack and the video settings moving one of its four numbers. Whichever writes has to carry the
 	 * other's lines through, which is why both go through a read of the file first rather than
 	 * building a record out of what they happen to hold.
 	 * <p>
@@ -222,7 +227,8 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 						+ ENABLED_KEY + "=" + chosen.enabled() + "\n"
 						+ SHADOW_DISTANCE_KEY + "=" + chosen.shadowDistance() + "\n"
 						+ RENDER_SCALE_KEY + "=" + chosen.renderScale() + "\n"
-						+ SHADOW_MAP_SCALE_KEY + "=" + chosen.shadowMapScale() + "\n",
+						+ SHADOW_MAP_SCALE_KEY + "=" + chosen.shadowMapScale() + "\n"
+						+ SHADOW_REFRESH_KEY + "=" + chosen.shadowRefresh().word() + "\n",
 				StandardCharsets.UTF_8);
 		try {
 			try {
@@ -262,30 +268,37 @@ public record PackFile(String name, boolean enabled, int shadowDistance, int ren
 
 	public PackFile withName(String name) {
 		return new PackFile(name, this.enabled, this.shadowDistance, this.renderScale,
-				this.shadowMapScale);
+				this.shadowMapScale, this.shadowRefresh);
 	}
 
 	public PackFile withEnabled(boolean enabled) {
 		return new PackFile(this.name, enabled, this.shadowDistance, this.renderScale,
-				this.shadowMapScale);
+				this.shadowMapScale, this.shadowRefresh);
 	}
 
 	/** Both halves of a pack choice at once, leaving whatever else the file carries where it is. */
 	public PackFile withChoice(String name, boolean enabled) {
 		return new PackFile(name, enabled, this.shadowDistance, this.renderScale,
-				this.shadowMapScale);
+				this.shadowMapScale, this.shadowRefresh);
 	}
 
 	public PackFile withShadowDistance(int chunks) {
-		return new PackFile(this.name, this.enabled, chunks, this.renderScale, this.shadowMapScale);
+		return new PackFile(this.name, this.enabled, chunks, this.renderScale, this.shadowMapScale,
+				this.shadowRefresh);
 	}
 
 	public PackFile withRenderScale(int percent) {
 		return new PackFile(this.name, this.enabled, this.shadowDistance, percent,
-				this.shadowMapScale);
+				this.shadowMapScale, this.shadowRefresh);
 	}
 
 	public PackFile withShadowMapScale(int percent) {
-		return new PackFile(this.name, this.enabled, this.shadowDistance, this.renderScale, percent);
+		return new PackFile(this.name, this.enabled, this.shadowDistance, this.renderScale, percent,
+				this.shadowRefresh);
+	}
+
+	public PackFile withShadowRefresh(ShadowRefresh cadence) {
+		return new PackFile(this.name, this.enabled, this.shadowDistance, this.renderScale,
+				this.shadowMapScale, cadence);
 	}
 }

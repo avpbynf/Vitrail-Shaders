@@ -7,6 +7,7 @@ import dev.vitrail.screen.ScreenText;
 import dev.vitrail.screen.SettingsScreen;
 import dev.vitrail.settings.GraphicsApiChoice;
 import dev.vitrail.settings.PackFile;
+import dev.vitrail.settings.ShadowRefresh;
 import dev.vitrail.Vitrail;
 
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
@@ -75,6 +76,10 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	private static final Identifier RENDER_SCALE =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "render_scale");
 
+	/** How often the shadow map is re-recorded, beside the distance and the scale. */
+	private static final Identifier SHADOW_REFRESH =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "shadow_refresh");
+
 	/** The fraction of the shadow map the pack asked for that is drawn, beside both. */
 	private static final Identifier SHADOW_MAP_SCALE =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "shadow_map_scale");
@@ -106,6 +111,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 						.setName(Component.translatable("options.videoTitle"))
 						.addOptionGroup(builder.createOptionGroup()
 								.addOption(shadowDistance(builder))
+								.addOption(shadowRefresh(builder))
 								.addOption(shadowMapScale(builder))
 								.addOption(renderScale(builder))
 								.addOption(graphicsApi(builder))))
@@ -280,6 +286,28 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				// compile time. It has nothing left to do here: the binding above writes pack.txt
 				// as it is moved, where the reference's binding only moves a field and its handler
 				// saves the whole config file afterwards, IrisConfig.java:67.
+				.setStorageHandler(() -> {})
+				.setImpact(OptionImpact.HIGH);
+	}
+
+	/**
+	 * How often the shadow map is re-recorded. Every frame is Iris and the default; the other two
+	 * keep the last map. Stored in {@code pack.txt} beside the distance above, and applied on the
+	 * next walk with no reload.
+	 */
+	private static OptionBuilder shadowRefresh(ConfigBuilder builder) {
+		return builder.createEnumOption(SHADOW_REFRESH, ShadowRefresh.class)
+				.setName(Component.translatable(ScreenText.SHADOW_REFRESH))
+				.setTooltip(_ -> Component.translatable(ScreenText.SHADOW_REFRESH_TOOLTIP))
+				.setDefaultValue(ShadowRefresh.DEFAULT)
+				.setBinding(cadence -> PackChain.shadowRefresh(Vitrail.platform().gameDirectory(),
+								cadence),
+						PackChain::shadowRefresh)
+				.setElementNameProvider(cadence -> Component.translatable(switch (cadence) {
+					case EVERY_FRAME -> ScreenText.SHADOW_REFRESH_EVERY;
+					case EVERY_TWO_FRAMES -> ScreenText.SHADOW_REFRESH_TWO;
+					case WHEN_CAMERA_MOVES -> ScreenText.SHADOW_REFRESH_MOVED;
+				}))
 				.setStorageHandler(() -> {})
 				.setImpact(OptionImpact.HIGH);
 	}

@@ -1,11 +1,13 @@
 package dev.vitrail.render;
 
+import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
+import dev.vitrail.settings.ShadowRefresh;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -18,8 +20,10 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.phys.Vec3;
 
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 import org.joml.Vector3f;
 
 import java.io.IOException;
@@ -86,6 +90,30 @@ public final class TerrainDraw {
 	 * the pack, because a shadow program failing says nothing about the three the camera draws with.
 	 */
 	private static volatile boolean shadowWanted;
+
+	/**
+	 * Bumped on every pack load and every stage failure, so a skip cannot keep a map that was
+	 * destroyed or never drawn.
+	 */
+	private static int shadowEpoch;
+
+	private static int seenShadowEpoch = -1;
+
+	/** Whether a walk has filled the map since {@link #shadowEpoch} last moved. */
+	private static boolean shadowMapFilled;
+
+	/** Toggled by {@link ShadowRefresh#EVERY_TWO_FRAMES} so the skip lands on alternate frames. */
+	private static boolean skipAlternate;
+
+	private static Vec3 lastShadowCamera;
+
+	private static final Matrix4f LAST_SHADOW_VIEW = new Matrix4f();
+
+	/**
+	 * How far the camera has to move, in blocks, before {@link ShadowRefresh#WHEN_CAMERA_MOVES}
+	 * records again. Standing still is identical; this is only float noise.
+	 */
+	private static final float CAMERA_MOVE = 1.0e-4F;
 
 	/**
 	 * Whether the renderer is drawing the shadow map rather than the world at this instant.
@@ -298,6 +326,7 @@ public final class TerrainDraw {
 	/** Whether the shadow map is drawn, from the loaded options. */
 	static void shadowWanted(boolean asked) {
 		shadowWanted = asked;
+		shadowEpoch++;
 	}
 
 	/**
@@ -326,6 +355,8 @@ public final class TerrainDraw {
 	 */
 	public static void shadowStageFailed(RuntimeException e) {
 		shadowWanted = false;
+		shadowEpoch++;
+		shadowMapFilled = false;
 		Vitrail.logger().error("Vitrail stopped drawing the shadow map after an error in the stage, "
 				+ "so every shadowtex lookup of the pack reads the far plane", e);
 
@@ -493,6 +524,74 @@ public final class TerrainDraw {
 		if (self != null && device != null && self.owner.mayReadShadowWithoutTranslucents()) {
 			self.targets.shadow().copyWithoutTranslucents(device.createCommandEncoder());
 		}
+	}
+
+	/**
+	 * Whether this frame should re-record the shadow map, or keep the last one.
+	 * <p>
+	 * Default is every frame, which is Iris. The player can ask for every other frame, or only when
+	 * the camera has moved. The first frame of a pack, a load or a stage that emptied the map always
+	 * records, so a skip cannot leave an uninitialised or destroyed image.
+	 * <p>
+	 * Distant Horizons writes the same map after it is cleared, and there is no separate skip path
+	 * that would refresh the far terrain alone. While DH is usable the map is always recorded, the
+	 * conservative answer: a skip would freeze near and far shadows together, and updating DH
+	 * without clearing would need a second command buffer this batch must not open.
+	 */
+	public static boolean shouldRecordShadow(Vec3 camera, Matrix4fc modelView) {
+		if (seenShadowEpoch != shadowEpoch) {
+			seenShadowEpoch = shadowEpoch;
+			shadowMapFilled = false;
+			skipAlternate = false;
+			lastShadowCamera = null;
+		}
+
+		if (!shadowMapFilled) {
+			return true;
+		}
+
+		if (DhLods.usable()) {
+			return true;
+		}
+
+		return switch (PackChain.shadowRefresh()) {
+			case EVERY_FRAME -> true;
+			case EVERY_TWO_FRAMES -> {
+				skipAlternate = !skipAlternate;
+				yield !skipAlternate;
+			}
+			case WHEN_CAMERA_MOVES -> cameraMoved(camera, modelView);
+		};
+	}
+
+	/** The walk filled the map. Later skips may keep it. */
+	public static void shadowMapFilled(Vec3 camera, Matrix4fc modelView) {
+		shadowMapFilled = true;
+		skipAlternate = false;
+		lastShadowCamera = camera;
+		LAST_SHADOW_VIEW.set(modelView);
+	}
+
+	/** The map was emptied or never drawn. The next frame must record. */
+	public static void shadowMapDropped() {
+		shadowMapFilled = false;
+		skipAlternate = false;
+		lastShadowCamera = null;
+	}
+
+	private static boolean cameraMoved(Vec3 camera, Matrix4fc modelView) {
+		if (lastShadowCamera == null) {
+			return true;
+		}
+
+		double dx = camera.x - lastShadowCamera.x;
+		double dy = camera.y - lastShadowCamera.y;
+		double dz = camera.z - lastShadowCamera.z;
+		if (dx * dx + dy * dy + dz * dz > (double) CAMERA_MOVE * CAMERA_MOVE) {
+			return true;
+		}
+
+		return !LAST_SHADOW_VIEW.equals(modelView, CAMERA_MOVE);
 	}
 
 	/**

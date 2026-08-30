@@ -66,6 +66,17 @@ public final class ScreenText {
 	public static final String SHADOW_MAP_SCALE_TOOLTIP = "options.vitrail.shadow_map_scale_tooltip";
 
 	/**
+	 * How often the shadow map is re-recorded, under the two above and on the same page. No
+	 * counterpart in Iris: the default is every frame, which is what Iris does, and the other
+	 * values are an extra delay the player chooses.
+	 */
+	public static final String SHADOW_REFRESH = "options.vitrail.shadow_refresh";
+	public static final String SHADOW_REFRESH_TOOLTIP = "options.vitrail.shadow_refresh_tooltip";
+	public static final String SHADOW_REFRESH_EVERY = "options.vitrail.shadow_refresh.every_frame";
+	public static final String SHADOW_REFRESH_TWO = "options.vitrail.shadow_refresh.every_two";
+	public static final String SHADOW_REFRESH_MOVED = "options.vitrail.shadow_refresh.when_moved";
+
+	/**
 	 * What fraction of the window the world renders at before being upscaled, on the same page as
 	 * the two above. No counterpart in Iris, so both strings are this project's own.
 	 */

@@ -15,6 +15,12 @@ what the next one holds.
 
 ### Added
 
+- **A Shadow Refresh setting under Video Settings**, on the mod's page beside Max Shadow
+  Distance. By default the shadow map is still redrawn every frame, which is what other
+  shader loaders do. Every 2 frames and When the camera moves keep the last map instead,
+  which costs less and adds a little lag to shadows while you move. Standing still looks
+  the same. Distant Horizons keeps updating its far terrain either way.
+
 - **A Shadow Map Scale slider under Video Settings**, on the mod's page beside Max Shadow
   Distance. The shadow map is drawn at the chosen fraction of the resolution the pack asked
   for, 25 to 100 percent, and the setting outlives whichever pack is chosen. Moving it reloads

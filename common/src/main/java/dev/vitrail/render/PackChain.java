@@ -24,6 +24,7 @@ import dev.vitrail.settings.PackFile;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.settings.SettingsFile;
 import dev.vitrail.settings.SettingsLayers;
+import dev.vitrail.settings.ShadowRefresh;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.screen.ScreenText;
@@ -191,6 +192,15 @@ public final class PackChain {
 	 * either way.
 	 */
 	private static volatile int shadowDistance = PackFile.DEFAULT_SHADOW_DISTANCE;
+
+	/**
+	 * How often the shadow map is re-recorded, the other line of {@code pack.txt} that is not about
+	 * which pack to draw.
+	 * <p>
+	 * Held apart from {@link #askedFor} for the same reason the distance above is: the selector moves
+	 * it with no load behind it.
+	 */
+	private static volatile ShadowRefresh shadowRefresh = ShadowRefresh.DEFAULT;
 
 	/**
 	 * Whether this frame's values have been moved on yet.
@@ -673,6 +683,7 @@ public final class PackChain {
 			// same rule; whether it ENGAGES is asked per frame against drawingPack(), so the roads
 			// below that draw nothing need no line of their own to keep the world at the window.
 			shadowDistance = askedFor.shadowDistance();
+			shadowRefresh = askedFor.shadowRefresh();
 			RenderScale.wanted(askedFor.renderScale());
 			// Here and not lower down, because it is read during the expansion of the pack's very
 			// first unit: the shadow map's size is a declaration of the pack's own text, and the
@@ -1314,6 +1325,34 @@ public final class PackChain {
 	 */
 	public static int shadowDistance() {
 		return shadowDistance;
+	}
+
+	/**
+	 * How often the shadow map is re-recorded. Read every frame the stage decides whether to walk,
+	 * so it answers from memory rather than from the file.
+	 */
+	public static ShadowRefresh shadowRefresh() {
+		return shadowRefresh;
+	}
+
+	/**
+	 * Takes a new cadence and puts it away, and takes effect on the next shadow walk rather than on
+	 * a reload: nothing about a pack changes, only whether this frame records the map or keeps the
+	 * last one.
+	 * <p>
+	 * The file is READ BEFORE IT IS WRITTEN, on the shape of {@link #shadowDistance(Path, int)} and
+	 * for its reasons.
+	 */
+	public static void shadowRefresh(Path gameDirectory, ShadowRefresh cadence) {
+		shadowRefresh = cadence == null ? ShadowRefresh.DEFAULT : cadence;
+
+		Path file = packFile(gameDirectory);
+		try {
+			PackFile.write(file, PackFile.read(file).withShadowRefresh(shadowRefresh));
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().error("Vitrail could not write the shadow refresh cadence to {}", file,
+					e);
+		}
 	}
 
 	/**

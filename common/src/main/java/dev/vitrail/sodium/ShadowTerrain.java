@@ -59,6 +59,11 @@ import org.joml.Vector3f;
  * difference is put back where the pair is published, {@code ViewMatrices}, and without it every
  * shadow in the picture sits one frame of camera motion out of place.
  * <p>
+ * A player can add a further delay, {@link dev.vitrail.settings.ShadowRefresh}: skip the walk on
+ * some frames and keep the last map. Default is still every frame. That skip never opens a second
+ * command buffer; it is the existing path taken or not. Distant Horizons writes the same map, so
+ * while it is usable the walk always runs, see {@link TerrainDraw#shouldRecordShadow}.
+ * <p>
  * Nothing of the draw itself is ours. {@code drawChunkLayer} is Sodium's own public entry; what
  * changes is that our two mixins answer differently while {@link TerrainDraw#shadowPass} holds its
  * flag, so the pipeline is the pack's {@code shadow} program and the render pass is opened on the
@@ -161,6 +166,10 @@ public final class ShadowTerrain {
 			return;
 		}
 
+		if (!TerrainDraw.shouldRecordShadow(camera, MODEL_VIEW)) {
+			return;
+		}
+
 		// Ordered so that a stage that cannot open leaves the render lists untouched: the walk
 		// below hands them to the light, and from that point on the camera has to be given them
 		// back whatever else happens.
@@ -169,6 +178,7 @@ public final class ShadowTerrain {
 			// programs may be refused so the stage never opens, but the clear still has to run
 			// or the voxel volume keeps stale writes; the compute itself runs at the head of
 			// the frame, from the frame graph setup, whatever this stage does.
+			TerrainDraw.shadowMapDropped();
 			PackChain.clearCustomImages();
 			walkCulling = null;
 			return;
@@ -182,6 +192,7 @@ public final class ShadowTerrain {
 		// and the record's own note says what taking one of them a frame later would keep and drop.
 		ShadowCullPlan plan = TerrainDraw.shadowCullPlan(LIGHT_VECTOR, CAMERA);
 		if (manager == null || light == null || plan == null) {
+			TerrainDraw.shadowMapDropped();
 			return;
 		}
 
@@ -277,6 +288,7 @@ public final class ShadowTerrain {
 			}
 
 			draw(renderer, minecraft, camera);
+			TerrainDraw.shadowMapFilled(camera, MODEL_VIEW);
 		} finally {
 			// The flag finalizeRenderLists just lowered, back up whatever happened above: the
 			// camera's walk at the top of the next frame has to rebuild, or the world would be
