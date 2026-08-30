@@ -1,5 +1,6 @@
 package dev.vitrail.settings;
 
+import dev.vitrail.pack.menu.MenuValues;
 import dev.vitrail.pack.menu.PackMenu;
 import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.OptionValue;
@@ -92,6 +93,15 @@ public record PackSession(Path gameDirectory, Path packPath, String packFileName
 	/** The pack's own file with {@code options.txt} over it, ready to build the pack with. */
 	public SettingsLayers.Resolved settings() {
 		return SettingsLayers.resolve(this.saved, this.forced);
+	}
+
+	/**
+	 * Iris's F3 profile sentence for what is drawn right now, not for what the settings screen
+	 * is about to apply. Built from the same scan the selector uses
+	 * ({@link dev.vitrail.pack.menu.MenuValues#profileInfo}).
+	 */
+	public String profileInfo() {
+		return MenuValues.of(this.menu, this.saved.values(), forcedText()).profileInfo();
 	}
 
 	/**

@@ -231,6 +231,11 @@ public final class PackMenu {
 		return this.options.size();
 	}
 
+	/** Every setting the pages place, for a scan that has to visit each. */
+	public Set<String> optionNames() {
+		return this.options.keySet();
+	}
+
 	/** From the most constrained to the least, which is the order the selector walks through. */
 	public List<String> profileNames() {
 		return this.profileOrder;

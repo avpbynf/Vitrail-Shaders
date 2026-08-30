@@ -281,9 +281,9 @@ than in the light's clip space, which is also the space the boxes arrive in, so 
 is owed anywhere: the light's own volume never enters the cull at all.
 
 What this buys is read off the log, where the shadow stage prints how many sections the light walked,
-how many the camera walked and which shape was used, or off the debug screen, which carries the shape
-and the count that survived it. The picture is the place it will NOT show, because keeping a section
-too many costs a draw and not a pixel.
+how many the camera walked and which shape was used. The debug screen carries only the counts,
+`Shadows: C: a/b D: d`, and not the shape. The picture is the place it will NOT show, because keeping
+a section too many costs a draw and not a pixel.
 
 All of the above is about the terrain. What moves is culled separately, and there is an open
 divergence there worth stating plainly, because it is a gap and not a workaround. A caster is
