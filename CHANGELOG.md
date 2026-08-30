@@ -43,6 +43,9 @@ what the next one holds.
 - **F3 names the pack the way Iris does.** The profile line is the scanned name or Custom, with
   how many options sit outside it, and the shadow line is Sodium's `C: a/b D: d` without this
   engine's own cull dialect.
+- **The compiling overlay no longer covers F3.** While the debug screen is open, "Compiling
+  shaders..." rides the Vitrail F3 line instead of the corner. Close F3 and the corner overlay
+  is as it was.
 
 - **Loading a pack a second time no longer compiles its shaders again.** The compiled module
   and the table of what it binds are kept under
