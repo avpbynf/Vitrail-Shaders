@@ -591,7 +591,7 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 				did = true;
 			}
 
-			this.list.host.focusBottomRow();
+			this.list.host.packChosen();
 
 			return did;
 		}

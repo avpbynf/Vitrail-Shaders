@@ -162,6 +162,14 @@ public final class ScreenText {
 	 */
 	public static final String PACK_MISSING = "options.vitrail.pack_missing";
 
+	/**
+	 * The fourth reason, and the only one about a pack that is perfectly fine: it was read and it
+	 * lays no settings out, which a pack is entitled to do. One argument, the pack's own file name,
+	 * because this is said while that name is on the row above it and {@link #NO_PACK} over it would
+	 * read as a fault of this mod.
+	 */
+	public static final String NO_SETTINGS = "options.vitrail.no_settings";
+
 	public static final String OPEN_SETTINGS = "key.vitrail.open_settings";
 
 	/**

@@ -103,6 +103,14 @@ what the next one holds.
 
 ### Fixed
 
+- **The button that opens a pack's settings is no longer dead until the pack has been loaded
+  once.** It was live only while a pack was already drawing, so the first pack anybody picks on
+  a fresh install could not be configured at all: the only way in was to load it at whatever
+  profile its author shipped, which on a small machine is the one launch that hurts. It is now
+  live for the pack the list has selected, and pressing it reads that pack, which is parsing and
+  no work on the graphics card, and puts its settings on screen while the loaded pack goes on
+  drawing. Setting a heavy pack to its low profile before ever loading it now costs one load
+  instead of two. A pack that lays no settings out says so instead of opening an empty page.
 - **Breaking a block no longer paints flat black cracks over it.** The overlay that spreads as a
   block is mined was left to the game, and it multiplies its texture onto what is already drawn;
   it was landing on an empty layer instead of on the picture, so every crack came out opaque

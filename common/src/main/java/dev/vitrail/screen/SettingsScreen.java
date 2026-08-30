@@ -550,8 +550,14 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	 * The loaded pack is adopted as it always was when it IS the one selected, which is the ordinary
 	 * case and costs nothing: its session is already read.
 	 * <p>
-	 * A pack that cannot be read leaves the view where it was rather than opening an empty page over
-	 * a row of buttons, and says why on the bottom line.
+	 * A pack that cannot be read, and a pack that reads and lays nothing out, both leave the view
+	 * where it was rather than opening an empty page over a row of buttons. The first says why on
+	 * the bottom line, in red, because it is a fault. The second says it under the title, because it
+	 * is not: the reading was the whole point of the click and it happened.
+	 * <p>
+	 * A preview is only adopted once it is going to be kept. Adopting first and giving up after
+	 * would drop the page the player had walked into on the pack that is drawing, since taking a
+	 * session on drops any page the new one does not lay out.
 	 */
 	private void previewChosen() {
 		PackList list = this.packList;
@@ -574,14 +580,36 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 			Path path = PackLoader.directory(gameDirectory()).resolve(chosen);
 			PackSession preview = PackSession.read(gameDirectory(), path,
 					this.minecraft == null ? "en_us" : this.minecraft.options.languageCode);
+			if (preview.menu().main().slots().isEmpty()) {
+				announce(Component.translatable(ScreenText.NO_SETTINGS, preview.packFileName()));
+				giveUp(loaded);
+
+				return;
+			}
+
 			this.previewing = true;
 			adopt(preview);
 			this.error = null;
 		} catch (IOException | RuntimeException e) {
 			this.error = String.valueOf(e.getMessage());
 			Vitrail.logger().error("Vitrail could not read {} to show its settings", chosen, e);
-			this.optionsOpen = false;
+			giveUp(loaded);
 		}
+	}
+
+	/**
+	 * Leaves the view where the click came from, with the pack that was drawing back on screen.
+	 * <p>
+	 * <strong>Both halves matter.</strong> Without the first, the click opens a page with nothing on
+	 * it. Without the second, this screen is left holding a pack it read and threw away: the preview
+	 * flag would stay raised, and {@link #syncWithLoadedPack} refuses by design to swap a previewed
+	 * pack away under the player, so the loaded pack would never come back and every line drawn from
+	 * a session, the forced count on the bottom line included, would be the abandoned pack's.
+	 */
+	private void giveUp(@Nullable PackSession loaded) {
+		this.optionsOpen = false;
+		this.previewing = false;
+		adopt(loaded);
 	}
 
 	private void refreshViewSwitch() {
@@ -592,14 +620,54 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 
 		button.setMessage(Component
 				.translatable(this.optionsOpen ? ScreenText.PACKS : ScreenText.TITLE));
-		// Dead while there is nothing to configure, and it says why on hover: a folder with no pack in
-		// it and a pack that failed to read look the same from here otherwise.
+		// Live for the pack the LIST has selected, and not for the pack that happens to be loaded.
+		// Asking the loaded one was a circle: the first pack anybody ever picks has never been read,
+		// so nothing said it had settings, so the button that would have read it stayed dead, and
+		// the only way out was to load the pack at its own default profile first, which is exactly
+		// what reading without loading exists to avoid.
+		//
+		// A pack this screen has already read answers for itself, and a pack it has not is taken to
+		// have settings until the reading says otherwise. Being wrong that way costs one click and
+		// one sentence; being wrong the other way is the circle above.
 		PackList list = this.packList;
-		boolean anythingToConfigure = this.session != null
-				&& (list == null || list.shadersEnabled())
-				&& !this.session.menu().main().slots().isEmpty();
+		PackSession shown = this.session;
+		String chosen = list == null ? "" : list.chosenName();
+		boolean unread = !chosen.isEmpty() && (shown == null || !chosen.equals(shown.packFileName()));
+		boolean laysSomethingOut = shown != null && !shown.menu().main().slots().isEmpty();
+		boolean anythingToConfigure = (list == null || list.shadersEnabled())
+				&& (unread || laysSomethingOut);
 		button.active = this.optionsOpen || anythingToConfigure;
-		button.setTooltip(button.active ? null : Tooltip.create(noPackReason()));
+		// Dead only where this screen KNOWS there is nothing, and it says which nothing on hover: a
+		// folder with no pack in it, a pack turned off on purpose, a name the folder has not got, and
+		// a pack that was read and lays nothing out are four different answers.
+		button.setTooltip(button.active ? null : Tooltip.create(nothingToConfigure()));
+	}
+
+	/**
+	 * Why the view switch is dead, which is a different question once a pack can be read without
+	 * being loaded: a pack on screen that lays nothing out is not the same nothing as no pack at all,
+	 * and saying {@link ScreenText#NO_PACK} over a pack whose name is on the row above reads as a
+	 * fault of this mod.
+	 * <p>
+	 * The toggle is asked first and not last. It is the one answer that is about a choice rather
+	 * than about a pack, so it outranks whatever the pack on screen would have said: a player who
+	 * has just turned shaders off is told that, not that the pack they can still see the name of
+	 * has no settings.
+	 */
+	private Component nothingToConfigure() {
+		PackList list = this.packList;
+		if (list != null && !list.shadersEnabled()) {
+			// The toggle's own words, which is what makes the connection obvious: the sentence on
+			// the dead button is the one written on the row right above it.
+			return Component.translatable(ScreenText.SHADERS_DISABLED);
+		}
+
+		PackSession shown = this.session;
+		if (shown != null) {
+			return Component.translatable(ScreenText.NO_SETTINGS, shown.packFileName());
+		}
+
+		return noPackReason();
 	}
 
 	/**
@@ -645,8 +713,12 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	}
 
 	@Override
-	public void focusBottomRow() {
+	public void packChosen() {
 		setFocused(this.folderButton);
+		// The switch is live for what the list has selected, so it has to hear that the selection
+		// moved. Nothing else rebuilds this screen when a row is clicked, and without this the very
+		// first pack picked on a fresh install left the button dead until something else did.
+		refreshViewSwitch();
 	}
 
 	@Override
@@ -920,6 +992,11 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 					.withStyle(ChatFormatting.ITALIC, ChatFormatting.YELLOW));
 			// Selected straight away: somebody who has just dragged a pack in wants to use it.
 			list.select(name);
+			// And the switch is told, because it is live for what the list has selected and this is
+			// the one road to a selection that does not go through a row being pressed. Without it
+			// a dropped pack sits selected under a dead button until something unrelated rebuilds
+			// the screen.
+			refreshViewSwitch();
 
 			return;
 		}

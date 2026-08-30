@@ -50,6 +50,7 @@
 	"options.vitrail.no_pack": "Yüklü bir shader paketi yok",
 	"options.vitrail.pack_off": "Shader paketi yok: oyun kendi görüntüsünü çiziyor",
 	"options.vitrail.pack_missing": "\"%s\" Shader Paketi senin Shader Paket klasöründe yok",
+	"options.vitrail.no_settings": "\"%s\" Shader Paketinin ayarı yok",
 	"key.vitrail.open_settings": "Shader paketi ayarlarını aç",
 	"key.vitrail.reload_pack": "Shaderları Yenile",
 	"options.vitrail.pack_reloaded": "Shaderlar Yeniden Yüklendi!",
