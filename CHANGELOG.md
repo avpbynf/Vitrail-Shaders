@@ -13,6 +13,16 @@ what the next one holds.
 
 ## Unreleased
 
+### Changed
+
+- **A pack's render passes end on the images they wrote, not on a wait for the whole of device
+  memory.** Closing one still orders everything the rest of the frame samples of it or writes over
+  it, and the volumes a pack's geometry writes through image stores keep a wait of their own; what
+  changes is that the driver is told which images are concerned instead of being told to wait for
+  all of them. The picture is the same. Where the attachments of a closing pass cannot be listed,
+  the wide wait is used rather than a partial list, and `vitrail/full-pass-barrier` still puts it
+  back everywhere.
+
 ### Fixed
 
 - **The block outline is drawn by the pack, as Iris draws it.** The thin box around the block

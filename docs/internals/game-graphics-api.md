@@ -109,8 +109,11 @@ On top of that, closing a render pass ends it with a **full memory barrier**: al
 all commands, memory read and memory write. The other operations that touch textures (clearing,
 copying, uploading) end the same way. That is still what the game does for its own passes.
 
-Passes this engine labels (`Vitrail ...`) close with a narrower barrier instead, naming what the
-rest of the frame samples of the pass **and** what it writes over it. Both halves are needed and only
+Passes this engine labels (`Vitrail ...`) close on the images they wrote instead: one barrier per
+colour and depth attachment, naming what the rest of the frame samples of that image **and** what it
+writes over it, beside a memory barrier for the storage volumes a pack's geometry reaches through
+`imageStore`, which no attachment list can name. A close that never saw an attachment list falls
+back to the wide wait rather than emitting an incomplete one. Both halves are needed and only
 the first is obvious: two Vulkan passes writing one image are ordered by nothing, where the bound
 framebuffer of OpenGL orders them for free, and the emptying of a target now rides the load-op of
 a pass rather than being a clear of its own, which makes it one of those writes. Consecutive

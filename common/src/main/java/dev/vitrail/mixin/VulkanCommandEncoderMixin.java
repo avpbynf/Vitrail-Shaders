@@ -2,9 +2,13 @@ package dev.vitrail.mixin;
 
 import dev.vitrail.render.MipmapCommands;
 import dev.vitrail.render.PassBarrier;
+import dev.vitrail.render.PassImages;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.systems.RenderPassBackend;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuTexture;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vulkan.VulkanCommandEncoder;
 import com.mojang.blaze3d.vulkan.VulkanConst;
 import com.mojang.blaze3d.vulkan.VulkanGpuTexture;
@@ -27,6 +31,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.function.Supplier;
 
@@ -40,9 +45,11 @@ import java.util.function.Supplier;
  * below it, then one barrier naming what a filled chain owes the rest of the frame.
  * <p>
  * Closing a pass still runs the encoder's full barrier. Our own labels start with {@code Vitrail}
- * and get a write-then-sample barrier instead, the rest of the frame keeping the original wait.
- * {@link PassBarrier} puts the original wait back on ours too, and sends the mip chain back to a
- * pass per level, for a machine where the narrow one is suspected of a wrong image.
+ * and get a write-then-sample barrier on the colour and depth images that pass wrote, plus a
+ * storage-only memory barrier for the volumes a pack's geometry {@code imageStore}s into. The rest
+ * of the frame keeps the original wait. {@link PassBarrier} puts the original wait back on ours
+ * too, and sends the mip chain back to a pass per level, for a machine where the narrow one is
+ * suspected of a wrong image.
  */
 @Mixin(VulkanCommandEncoder.class)
 public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
@@ -56,6 +63,15 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 	@Unique
 	private Supplier<String> vitrail$closingLabel;
 
+	@Inject(method = "createRenderPass", at = @At("RETURN"), require = 1)
+	private void vitrail$rememberImages(RenderPassDescriptor descriptor,
+			CallbackInfoReturnable<RenderPassBackend> cir) {
+		Supplier<String> label = descriptor.label();
+		if (label != null && vitrail$ours(label)) {
+			PassImages.remember(descriptor);
+		}
+	}
+
 	@Inject(method = "submitRenderPass", at = @At("HEAD"), require = 1)
 	private void vitrail$rememberLabel(CallbackInfo ci) {
 		this.vitrail$closingLabel = this.currentRenderPass == null
@@ -67,7 +83,7 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 	 * The game ends every pass with a full memory barrier. Iris does not: it binds an FBO and
 	 * draws. On MoltenVK that full barrier is a Metal wait, which is the extra queue-submit count
 	 * on Apple Silicon. Our own passes need write-then-sample and write-then-write, and get a
-	 * dependency naming those two rather than the whole of memory.
+	 * per-image barrier on the attachments they wrote rather than a wait over the whole of memory.
 	 * <p>
 	 * <strong>Write-then-write is half of it, and leaving it out is what an FBO gives for free.</strong>
 	 * Under OpenGL two draws into the bound framebuffer land in the order they were issued, so Iris
@@ -97,9 +113,13 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 		// The wide wait first, so that arming it takes every pass back to what the game does and
 		// leaves nothing of the narrow one standing. {@link PassBarrier} carries why that switch
 		// exists at all.
-		if (label != null && !PassBarrier.full() && vitrail$ours(label)) {
+		if (label != null && vitrail$ours(label) && !PassBarrier.full()) {
 			vitrail$framebufferBarrier(commands, stack);
 		} else {
+			if (label != null && vitrail$ours(label)) {
+				PassImages.take();
+			}
+
 			VulkanCommandEncoder.memoryBarrier(commands, stack);
 		}
 	}
@@ -110,12 +130,57 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 		return name != null && name.startsWith("Vitrail");
 	}
 
+	/**
+	 * Iris binds an FBO and draws, with no barrier
+	 * ({@code pipeline/IrisRenderingPipeline.java:1383-1388}). Closing a pass here is
+	 * {@code vkCmdEndRendering} then a barrier ({@code VulkanCommandEncoder.submitRenderPass} at
+	 * 324-334): dynamic rendering does not keep a framebuffer bound, so the next pass is ordered
+	 * by nothing unless we say so. Cost to the image is none when this list of attachments is
+	 * complete. Layouts stay GENERAL, which is how every game texture lives
+	 * ({@code docs/internals/game-graphics-api.md}).
+	 * <p>
+	 * Storage writes stay a {@code VkMemoryBarrier2} of their own: the VMA volumes a pack
+	 * {@code imageStore}s into are not named from this encoder. An empty attachment list falls
+	 * back to the previous global wait rather than emitting an incomplete image list.
+	 */
 	@Unique
 	private static void vitrail$framebufferBarrier(VkCommandBuffer commands, MemoryStack stack) {
+		PassImages.Snapshot written = PassImages.take();
+		int images = written.empty() ? 0 : vitrail$vulkanAttachments(written);
+		if (images == 0) {
+			vitrail$globalPassBarrier(commands, stack);
+
+			return;
+		}
+
+		VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(images, stack);
+		int at = 0;
+		for (GpuTextureView colour : written.colours()) {
+			if (vitrail$vulkan(colour) != null) {
+				vitrail$fillAttachment(barriers.get(at++), stack, colour);
+			}
+		}
+
+		if (vitrail$vulkan(written.depth()) != null) {
+			vitrail$fillAttachment(barriers.get(at), stack, written.depth());
+		}
+
+		VkDependencyInfo info = VkDependencyInfo.calloc(stack)
+				.sType$Default()
+				.pMemoryBarriers(vitrail$storageBarrier(stack))
+				.pImageMemoryBarriers(barriers);
+		KHRSynchronization2.vkCmdPipelineBarrier2KHR(commands, info);
+	}
+
+	/**
+	 * The previous close-of-pass wait, kept for the road where the attachment list did not
+	 * arrive. It names every access a pass of ours can leave behind, at the cost of covering all
+	 * of device memory.
+	 */
+	@Unique
+	private static void vitrail$globalPassBarrier(VkCommandBuffer commands, MemoryStack stack) {
 		VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack)
 				.sType$Default()
-				// The shader stages are here for the image stores of a pack's own geometry, which
-				// land in the volumes its compute reads and its gbuffers sample.
 				.srcStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR
@@ -123,23 +188,12 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 				.srcAccessMask(KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR)
-				// The vertex stage samples too, and leaving it out is not theoretical: a sampler
-				// declared in a pack's vertex unit is kept and bound like any other
-				// (ProgramTranslator collects the samplers of every stage), so a program whose
-				// vertex shader reads a target the pass before it wrote would race the write.
 				.dstStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR)
-				// The writes sit here beside the reads, and each of the three is reached every frame:
-				// a colour target the next pass writes, or that the emptying writes through its
-				// load-op; the depth image the next geometry pass tests and writes, and that the
-				// shadow map's own emptying clears; and the mip blit filling the levels of a target
-				// whose base the pass that just closed wrote. Named as reads alone, all three were
-				// write-after-write with nothing between them, which a driver is free to run in
-				// either order.
 				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR
@@ -153,6 +207,90 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 				.sType$Default()
 				.pMemoryBarriers(barrier);
 		KHRSynchronization2.vkCmdPipelineBarrier2KHR(commands, info);
+	}
+
+	@Unique
+	private static VkMemoryBarrier2.Buffer vitrail$storageBarrier(MemoryStack stack) {
+		return VkMemoryBarrier2.calloc(1, stack)
+				.sType$Default()
+				.srcStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR)
+				.srcAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR)
+				.dstStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR)
+				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR);
+	}
+
+	@Unique
+	private static void vitrail$fillAttachment(VkImageMemoryBarrier2 barrier, MemoryStack stack,
+			GpuTextureView view) {
+		VulkanGpuTexture image = vitrail$vulkan(view);
+		if (image == null) {
+			return;
+		}
+
+		int aspect = VulkanConst.formatAspectMask(image.getFormat());
+		boolean depth = (aspect & VK10.VK_IMAGE_ASPECT_DEPTH_BIT) != 0
+				|| (aspect & VK10.VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+		VkImageSubresourceRange range = VkImageSubresourceRange.calloc(stack)
+				.aspectMask(aspect)
+				.baseMipLevel(view.baseMipLevel())
+				.levelCount(view.mipLevels())
+				.baseArrayLayer(0)
+				.layerCount(Math.max(1, image.getDepthOrLayers()));
+		barrier.sType$Default()
+				.srcStageMask(depth
+						? KHRSynchronization2.VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR
+						: KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
+				.srcAccessMask(depth
+						? KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR
+						: KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR)
+				.dstStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR
+						| (depth
+								? KHRSynchronization2.VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR
+										| KHRSynchronization2.VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR
+								: KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR))
+				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR
+						| (depth
+								? KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT_KHR
+										| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR
+								: KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR
+										| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR))
+				.oldLayout(VK10.VK_IMAGE_LAYOUT_GENERAL)
+				.newLayout(VK10.VK_IMAGE_LAYOUT_GENERAL)
+				.srcQueueFamilyIndex(VK10.VK_QUEUE_FAMILY_IGNORED)
+				.dstQueueFamilyIndex(VK10.VK_QUEUE_FAMILY_IGNORED)
+				.image(image.vkImage())
+				.subresourceRange(range);
+	}
+
+	@Unique
+	private static int vitrail$vulkanAttachments(PassImages.Snapshot written) {
+		int count = 0;
+		for (GpuTextureView colour : written.colours()) {
+			if (vitrail$vulkan(colour) != null) {
+				count++;
+			}
+		}
+
+		if (vitrail$vulkan(written.depth()) != null) {
+			count++;
+		}
+
+		return count;
+	}
+
+	@Unique
+	private static VulkanGpuTexture vitrail$vulkan(GpuTextureView view) {
+		return view != null && view.texture() instanceof VulkanGpuTexture image ? image : null;
 	}
 
 	@Override
