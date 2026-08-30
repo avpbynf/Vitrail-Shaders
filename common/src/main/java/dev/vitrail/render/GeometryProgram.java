@@ -397,6 +397,12 @@ final class GeometryProgram {
 	 * pass open resolved for it. Read by the bind and by nothing else.
 	 */
 	private final Sampled[] bound;
+
+	/**
+	 * Sampled names whose image follows the DRAW, handed to {@link SettledDescriptors} so the push
+	 * can leave the rest standing.
+	 */
+	private final Set<String> moving;
 	private final RenderPipeline pipeline;
 	private final ShaderSource source;
 
@@ -655,6 +661,14 @@ final class GeometryProgram {
 		this.bound = this.samplers.stream()
 				.map(name -> new Sampled(name, material(name), ATLAS.contains(name)))
 				.toArray(Sampled[]::new);
+		Set<String> moving = new HashSet<>();
+		for (Sampled one : this.bound) {
+			if (one.followsTheImage()) {
+				moving.add(one.name);
+			}
+		}
+
+		this.moving = Set.copyOf(moving);
 
 		String vertex = loaded.program().stages().get(ProgramStage.VERTEX).text();
 		String fragment = loaded.program().stages().get(ProgramStage.FRAGMENT).text();
@@ -1244,15 +1258,19 @@ final class GeometryProgram {
 							: "");
 		}
 
-		pass.setUniform(UNIFORM_BLOCK, blockSlice());
-		StorageBuffers.bind(pass, this.storage);
-
 		// The rest are already standing in this pass, put there by this program's own last bind into
 		// it, and writing them again would allocate a pair and put back what the map already holds.
-		// {@link #settledIn} says what can undo that and why nothing else can.
+		// {@link #settledIn} says what can undo that and why nothing else can. The GPU walk is the
+		// same question: {@link SettledDescriptors} leaves those names out of the next push.
 		boolean settle = settledIn != pass || settled != this;
 		settledIn = pass;
 		settled = this;
+		SettledDescriptors.prepare(this.pipeline, this.moving, settle);
+
+		if (settle) {
+			pass.setUniform(UNIFORM_BLOCK, blockSlice());
+			StorageBuffers.bind(pass, this.storage);
+		}
 
 		for (Sampled one : this.bound) {
 			if (one.followsTheImage()) {
@@ -1289,6 +1307,7 @@ final class GeometryProgram {
 		// release, so its static bind can reach a program that has never come back through here.
 		settledIn = null;
 		settled = null;
+		SettledDescriptors.clear();
 		boolean labPbr = PbrAtlases.labPbr();
 		for (Sampled one : this.bound) {
 			one.interpolates = one.material != null && one.material.interpolates(labPbr);
@@ -1742,6 +1761,7 @@ final class GeometryProgram {
 		if (settled == this) {
 			settled = null;
 			settledIn = null;
+			SettledDescriptors.clear();
 		}
 	}
 

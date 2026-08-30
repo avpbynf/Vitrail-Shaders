@@ -2,12 +2,15 @@ package dev.vitrail.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanRenderPass;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
+import dev.vitrail.render.SettledDescriptors;
 import dev.vitrail.render.ShadowCompare;
 import dev.vitrail.render.StorageBuffers;
 import dev.vitrail.render.StorageImages;
+import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkDescriptorBufferInfo;
 import org.lwjgl.vulkan.VkDescriptorImageInfo;
 import org.lwjgl.vulkan.VkWriteDescriptorSet;
@@ -29,6 +32,10 @@ import java.util.List;
  * on {@code blockDataBuffer}. The comparison is the same shape of gap: no {@code GpuSampler}
  * describes one, so {@link ShadowCompare} makes it in Vulkan's own terms and this walk puts its
  * handle under the names the pipeline registered when it was built.
+ * <p>
+ * After the first push of a geometry program into a pass, {@link SettledDescriptors} shrinks the
+ * write list to uniforms plus sampled names that follow the draw. The substitutions below still
+ * run on every name that is written; a name left out keeps what the last full push put there.
  */
 @Mixin(VulkanRenderPass.class)
 public abstract class VulkanRenderPassMixin {
@@ -39,15 +46,41 @@ public abstract class VulkanRenderPassMixin {
 	@Shadow
 	protected VulkanRenderPipeline pipeline;
 
+	@WrapOperation(method = "pushDescriptors", require = 2,
+			at = @At(value = "INVOKE", target = "Ljava/util/List;size()I"))
+	private int vitrail$size(List<?> entries, Operation<Integer> original) {
+		return SettledDescriptors.size(entries, original.call(entries), info());
+	}
+
 	@WrapOperation(method = "pushDescriptors", require = 1,
 			at = @At(value = "INVOKE", target = "Ljava/util/List;get(I)Ljava/lang/Object;", ordinal = 0))
 	private Object vitrail$entry(List<?> entries, int index, Operation<Object> original) {
-		Object entry = original.call(entries, index);
+		Object entry = original.call(entries, SettledDescriptors.index(index, info()));
 		if (entry instanceof VulkanBindGroupLayout.Entry named) {
 			CURRENT.set(named);
 		}
 
 		return entry;
+	}
+
+	@WrapOperation(method = "pushDescriptors", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lorg/lwjgl/vulkan/VkWriteDescriptorSet;dstBinding(I)"
+							+ "Lorg/lwjgl/vulkan/VkWriteDescriptorSet;"))
+	private VkWriteDescriptorSet vitrail$binding(VkWriteDescriptorSet set, int binding,
+			Operation<VkWriteDescriptorSet> original) {
+		return original.call(set, SettledDescriptors.index(binding, info()));
+	}
+
+	@WrapOperation(method = "pushDescriptors", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lorg/lwjgl/vulkan/KHRPushDescriptor;vkCmdPushDescriptorSetKHR("
+							+ "Lorg/lwjgl/vulkan/VkCommandBuffer;IJI"
+							+ "Lorg/lwjgl/vulkan/VkWriteDescriptorSet$Buffer;)V"))
+	private void vitrail$pushed(VkCommandBuffer commands, int bindPoint, long layout, int set,
+			VkWriteDescriptorSet.Buffer writes, Operation<Void> original) {
+		original.call(commands, bindPoint, layout, set, writes);
+		SettledDescriptors.afterPush(info());
 	}
 
 	@WrapOperation(method = "pushDescriptors", require = 1,
@@ -131,6 +164,11 @@ public abstract class VulkanRenderPassMixin {
 		}
 
 		return original.call(set, type);
+	}
+
+	@Unique
+	private RenderPipeline info() {
+		return this.pipeline == null ? null : this.pipeline.info();
 	}
 
 	@Unique
