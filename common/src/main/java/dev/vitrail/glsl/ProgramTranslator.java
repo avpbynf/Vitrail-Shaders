@@ -186,10 +186,25 @@ public final class ProgramTranslator {
 			VertexInputs inputs, List<String> boundElements, AlphaTest alphaTest, boolean coverage,
 			String program, Map<String, VolumeAtlas> volumes) {
 		// Every overload above funnels through here, which is what makes this the one place a
-		// program's whole translation can be clocked.
+		// program's whole translation can be clocked, and the one place it can be kept.
+		//
+		// The clock encloses the cache rather than sitting beside it, so a served program is
+		// counted like a translated one: the figure is what getting a program cost, whichever way
+		// it came, and a load whose translation post has collapsed says so instead of going quiet.
 		long began = System.nanoTime();
 		try {
-			return translated(units, inputs, boundElements, alphaTest, coverage, program, volumes);
+			String key = TranslationCache.keyOf(units, inputs, boundElements, alphaTest, coverage,
+					program, volumes);
+			TranslatedProgram served = TranslationCache.lookup(key, inputs);
+			if (served != null) {
+				return served;
+			}
+
+			TranslatedProgram built =
+					translated(units, inputs, boundElements, alphaTest, coverage, program, volumes);
+			TranslationCache.store(key, built);
+
+			return built;
 		} finally {
 			LoadClock.translation(System.nanoTime() - began);
 		}

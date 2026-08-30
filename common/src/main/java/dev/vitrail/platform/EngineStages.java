@@ -1,5 +1,6 @@
 package dev.vitrail.platform;
 
+import dev.vitrail.glsl.TranslationCache;
 import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.HandDraw;
 import dev.vitrail.render.ModuleCache;
@@ -63,9 +64,38 @@ public final class EngineStages {
 		// at whatever the arena held. EntityMeshSerializer says the rest.
 		EntityMeshSerializer.register();
 
+		// Before the pack, because the first pack read is the one whose translation is worth
+		// keeping. The cache knows nothing of a game and takes its directory from here, which is
+		// what lets its whole package go on compiling and running without one.
+		openTranslationCache();
+
 		// The report of the pack goes with the reading of it, in PackChain, where which pack is
 		// being drawn is known.
 		PackChain.load(Vitrail.platform().gameDirectory());
+	}
+
+	/**
+	 * Puts the translation cache under the game directory, named for the edition whose translations
+	 * it holds.
+	 * <p>
+	 * The edition is the mod's version and the game's, and it names a whole set of keys at once: a
+	 * translator that emits one word differently answers differently to every key it ever held, so
+	 * a RELEASE takes its predecessor's folder away rather than filling a second one beside it.
+	 * Two builds declaring one version share the folder and every key in it, which is every build
+	 * made between two releases; what answers that in the workshop is deleting the folder by hand.
+	 * The loader is not in the name, and does not need to be: the two loaders run the same
+	 * translator over the same text, and what does differ between them is in the key of every
+	 * entry.
+	 */
+	private static void openTranslationCache() {
+		TranslationCache.install(
+				Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID),
+				Vitrail.platform().modVersion() + "+mc" + Vitrail.platform().minecraftVersion());
+
+		if (!TranslationCache.installed()) {
+			Vitrail.logger().warn("No translation cache this run, so every pack load translates "
+					+ "from scratch: {}", TranslationCache.problem());
+		}
 	}
 
 	/**
