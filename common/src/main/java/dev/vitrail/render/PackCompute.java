@@ -131,6 +131,8 @@ final class PackCompute implements AutoCloseable {
 	private final Set<Integer> storageTargets;
 
 	private boolean announced;
+	private boolean fallbackAnnounced;
+	private ShadowComputeQueue asyncQueue;
 
 	/** The passes whose computes have been announced once, which is once per pass and not per frame. */
 	private final Set<String> announcedChains = new LinkedHashSet<>();
@@ -329,6 +331,33 @@ final class PackCompute implements AutoCloseable {
 			afterShadowGeometry(commands, stack);
 		}
 
+		VulkanCommandEncoder vulkanEncoder = vulkanEncoder(encoder);
+		VkCommandBuffer record = commands;
+		ShadowComputeQueue async = null;
+		if (AsyncCompute.on() && vulkanEncoder != null && ShadowComputeQueue.dedicated(vulkan)) {
+			try {
+				if (this.asyncQueue == null) {
+					this.asyncQueue = ShadowComputeQueue.create(vulkan);
+				}
+
+				async = this.asyncQueue;
+				record = async.begin();
+			} catch (RuntimeException e) {
+				if (!this.fallbackAnnounced) {
+					this.fallbackAnnounced = true;
+					Vitrail.logger().info("Shadow compute stays on the graphics command buffer: {}",
+							e.toString());
+				}
+
+				async = null;
+				record = commands;
+			}
+		} else if (AsyncCompute.on() && !this.fallbackAnnounced) {
+			this.fallbackAnnounced = true;
+			Vitrail.logger().info("Shadow compute stays on the graphics command buffer: no "
+					+ "dedicated compute queue to overlap with");
+		}
+
 		// Asked of the game and not of ColorTargets, which is the same number one frame late or
 		// nought on the first. ColorTargets.screenWidth is only written by its ensure(), which
 		// runs inside the world render, while this dispatch is placed at the head of the frame
@@ -342,7 +371,7 @@ final class PackCompute implements AutoCloseable {
 		int height = main == null ? 0 : main.height;
 		for (Pass pass : this.passes) {
 			try {
-				pass.dispatch(vulkan, commands, values, targets, width, height, null);
+				pass.dispatch(vulkan, record, values, targets, width, height, null);
 			} catch (RuntimeException e) {
 				if (pass.failed.add(e.toString())) {
 					Vitrail.logger().warn("shadow compute {} failed: {}", pass.path, e.toString());
@@ -351,7 +380,17 @@ final class PackCompute implements AutoCloseable {
 		}
 
 		try (MemoryStack stack = MemoryStack.stackPush()) {
-			afterCompute(commands, stack);
+			afterCompute(record, stack);
+		}
+
+		if (async != null) {
+			async.submit(vulkanEncoder, record);
+			VkCommandBuffer graphics = commands(encoder);
+			if (graphics != null) {
+				try (MemoryStack stack = MemoryStack.stackPush()) {
+					afterCompute(graphics, stack);
+				}
+			}
 		}
 
 		if (!this.announced) {
@@ -363,6 +402,11 @@ final class PackCompute implements AutoCloseable {
 
 	@Override
 	public void close() {
+		if (this.asyncQueue != null) {
+			this.asyncQueue.close();
+			this.asyncQueue = null;
+		}
+
 		this.passes.forEach(Pass::close);
 	}
 
@@ -375,6 +419,11 @@ final class PackCompute implements AutoCloseable {
 	private static VulkanDevice vulkan(GpuDevice device) {
 		GpuDeviceBackend backend = ((GpuDeviceAccessor) device).vitrail$backend();
 		return backend instanceof VulkanDevice found ? found : null;
+	}
+
+	private static VulkanCommandEncoder vulkanEncoder(CommandEncoder encoder) {
+		return ((CommandEncoderAccessor) encoder).vitrail$backend() instanceof VulkanCommandEncoder found
+				? found : null;
 	}
 
 	/**
@@ -434,7 +483,8 @@ final class PackCompute implements AutoCloseable {
 	 * Makes the shadow fragment {@code imageStore} into voxel volumes visible to
 	 * {@code shadowcomp}'s {@code texelFetch} of the same images. The game's barrier is
 	 * compute-to-compute storage only, which does not cover a sampled read of a volume the
-	 * geometry just wrote.
+	 * geometry just wrote. Cross-queue the volumes are concurrent, so this stays a memory
+	 * barrier ({@code VK_QUEUE_FAMILY_IGNORED}); {@link ShadowComputeQueue} carries the wait.
 	 */
 	private static void afterShadowGeometry(VkCommandBuffer commands, MemoryStack stack) {
 		shaderBarrier(commands, stack,
@@ -450,7 +500,8 @@ final class PackCompute implements AutoCloseable {
 
 	/**
 	 * Makes the floodfill {@code imageStore} visible to the next frame's gbuffers, which sample
-	 * those volumes as {@code sampler3D}.
+	 * those volumes as {@code sampler3D}. Same concurrent rule as {@link #afterShadowGeometry}:
+	 * no ownership transfer to name, the semaphore is the cross-queue half.
 	 */
 	private static void afterCompute(VkCommandBuffer commands, MemoryStack stack) {
 		shaderBarrier(commands, stack, VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,

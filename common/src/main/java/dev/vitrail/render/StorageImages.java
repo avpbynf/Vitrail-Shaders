@@ -563,7 +563,7 @@ public final class StorageImages implements AutoCloseable {
 						| VK12.VK_IMAGE_USAGE_SAMPLED_BIT
 						| VK12.VK_IMAGE_USAGE_TRANSFER_SRC_BIT
 						| VK12.VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-				imageInfo.sharingMode(VK12.VK_SHARING_MODE_EXCLUSIVE);
+				sharing(vulkan, imageInfo, stack);
 				imageInfo.samples(VK12.VK_SAMPLE_COUNT_1_BIT);
 				VmaAllocationCreateInfo allocationInfo = VmaAllocationCreateInfo.calloc(stack);
 				allocationInfo.usage(8);
@@ -652,6 +652,23 @@ public final class StorageImages implements AutoCloseable {
 				}
 			});
 		}
+	}
+
+	/**
+	 * Exclusive when compute shares the graphics family, which is every MoltenVK device and the
+	 * switch-off path. Concurrent listing both families when they differ, so a floodfill submitted
+	 * on the spare compute queue can store without an ownership transfer.
+	 */
+	private static void sharing(VulkanDevice vulkan, VkImageCreateInfo imageInfo, MemoryStack stack) {
+		int graphics = vulkan.graphicsQueue().queueFamilyIndex();
+		int compute = vulkan.computeQueue().queueFamilyIndex();
+		if (!AsyncCompute.on() || graphics == compute) {
+			imageInfo.sharingMode(VK12.VK_SHARING_MODE_EXCLUSIVE);
+			return;
+		}
+
+		imageInfo.sharingMode(VK12.VK_SHARING_MODE_CONCURRENT);
+		imageInfo.pQueueFamilyIndices(stack.ints(graphics, compute));
 	}
 
 	private static int imageType(PackTexture.Shape shape) {
