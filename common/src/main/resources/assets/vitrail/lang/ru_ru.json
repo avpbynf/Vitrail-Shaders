@@ -50,6 +50,7 @@
 	"options.vitrail.no_pack": "Набор шейдеров не загружен",
 	"options.vitrail.pack_off": "Набора шейдеров нет: игра рисует собственное изображение",
 	"options.vitrail.pack_missing": "Набора шейдеров \"%s\" нет в вашей папке с наборами шейдеров",
+	"options.vitrail.no_settings": "У набора шейдеров \"%s\" нет настроек",
 	"key.vitrail.open_settings": "Открыть настройки набора шейдеров",
 	"key.vitrail.reload_pack": "Перезагрузить шейдеры",
 	"options.vitrail.pack_reloaded": "Шейдеры перезагружены.",

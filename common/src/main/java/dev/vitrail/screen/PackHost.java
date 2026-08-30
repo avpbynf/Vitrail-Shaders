@@ -29,9 +29,12 @@ public interface PackHost {
 	void shadersToggled();
 
 	/**
-	 * Called when a row is picked, moving the focus down to the screen's bottom row. Iris does this so
-	 * that a keyboard lands on the way out rather than staying in the list, since picking a pack is
-	 * the last thing anybody does on this view.
+	 * Called when a row is picked, for the two things a pick owes the screen.
+	 * <p>
+	 * The focus goes down to the bottom row. Iris does this so that a keyboard lands on the way out
+	 * rather than staying in the list, since picking a pack is the last thing anybody does on this
+	 * view. And the button that walks into a pack's settings is refreshed, because the pack it would
+	 * read is the one that has just been picked.
 	 */
-	void focusBottomRow();
+	void packChosen();
 }

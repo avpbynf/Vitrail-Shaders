@@ -50,6 +50,7 @@
 	"options.vitrail.no_pack": "シェーダーパックが読み込まれていません",
 	"options.vitrail.pack_off": "シェーダーパックなし：ゲームが自前の映像を描画します",
 	"options.vitrail.pack_missing": "シェーダーパック「%s」がシェーダーパックフォルダーにありません",
+	"options.vitrail.no_settings": "シェーダーパック「%s」には設定がありません",
 	"key.vitrail.open_settings": "シェーダーパックの設定を開く",
 	"key.vitrail.reload_pack": "シェーダーを再読み込み",
 	"options.vitrail.pack_reloaded": "シェーダーを再読み込みしました！",

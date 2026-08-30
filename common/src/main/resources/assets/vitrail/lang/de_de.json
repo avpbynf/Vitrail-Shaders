@@ -50,6 +50,7 @@
 	"options.vitrail.no_pack": "Es ist kein Shaderpaket geladen",
 	"options.vitrail.pack_off": "Kein Shaderpaket: Das Spiel zeichnet sein eigenes Bild",
 	"options.vitrail.pack_missing": "Das Shaderpaket \"%s\" ist nicht in deinem Shaderpaket-Ordner",
+	"options.vitrail.no_settings": "Das Shaderpaket \"%s\" hat keine Einstellungen",
 	"key.vitrail.open_settings": "Shader-Einstellungen öffnen",
 	"key.vitrail.reload_pack": "Shader neu laden",
 	"options.vitrail.pack_reloaded": "Shader neu geladen!",
