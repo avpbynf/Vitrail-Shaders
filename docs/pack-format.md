@@ -183,12 +183,12 @@ the map.
 
 `shadow.culling` is read, and **its three written words do not mean what they look like they mean**.
 It is not a switch: it names one of four shapes the light measures a section against, and the
-default is the box around the player, which is looser than the sweep Iris Advanced uses.
+default is the camera volume swept along the light, the shape Iris Advanced uses.
 
-- nothing written: a box around the player, unless the shadow program voxelises, in which case
-  it takes that same box for Iris's reason rather than this engine's. Iris would sweep along the
-  light here. This engine does not: see the workaround below.
-- `true`: the same player box. Iris Advanced sweeps the camera volume along the light
+- nothing written: the camera volume swept along the light, unless the shadow program voxelises,
+  in which case a box around the player, and that second case is Iris's own reason rather than
+  this engine's.
+- `true`: the same sweep. Iris Advanced sweeps the camera volume along the light
   (`shadows/ShadowRenderer.java:372`). Complementary Low writes this word and lands there.
 - `false`: no sweep. A box around the player, and no planes, which is the reference's
   `BoxCullingFrustum`. When that box is wider than the world that is loaded, or not positive,
@@ -197,14 +197,13 @@ default is the box around the player, which is looser than the sweep Iris Advanc
   plus a box at the pack's own `voxelDistance` that is kept whatever the sweep says of it, for a
   pack that samples its map from places the sweep knows nothing about. Unchanged from Iris.
 
-**Advanced and the silent default take a box around the player on this engine, not the sweep.**
-Iris Advanced builds `AdvancedShadowCullingFrustum`. The sweep here pops single leaf blocks at
-the sun silhouette as the player moves, and Iris Advanced does not. The 26.2 walk hands Sodium
-a camera-relative box and the swept planes, and that pair drops a leaf the silhouette still
-needs. The box is the workaround. What it costs the image is a wider shadow than Iris Advanced
-draws. An empty file `vitrail/swept-shadow-cull` in the game folder, or
-`-Dvitrail.sweptShadowCull=true`, puts the sweep back. The safe zone is unchanged and still
-sweeps.
+**Advanced and the silent default sweep here, as they do under Iris.** A box around the player
+instead is available behind an empty file `vitrail/box-shadow-cull` in the game folder, or
+`-Dvitrail.boxShadowCull=true`. It is not the default, because it keeps
+everything the shadow distance reaches: on one bench scene the silhouette drew 322 sections
+against the box's 875, and across two scenes the box ran twelve to twenty-eight percent slower
+than the sweep. It also stops bounding anything at all once the shadow distance reaches the
+render distance. The safe zone is unchanged and still sweeps with the pack's own box.
 
 A word this cannot read leaves the default standing rather than the answer a valid line above it
 gave, which is what the reference does with it.

@@ -2,7 +2,7 @@ package dev.vitrail.sodium;
 
 import dev.vitrail.pack.source.ShadowCullState;
 import dev.vitrail.render.ShadowCullPlan;
-import dev.vitrail.render.SweptShadowCull;
+import dev.vitrail.render.BoxShadowCull;
 
 import net.caffeinemc.mods.sodium.client.render.viewport.frustum.Frustum;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
@@ -183,10 +183,9 @@ public final class ShadowCullFrustum implements Frustum {
 	 * ({@code shadows/ShadowRenderer.java:298-372}), split between here and
 	 * {@code PackValues.shadowCullPlan}, which holds the distances because that is where every other
 	 * distance is arbitrated. What is left here is the choice of SHAPE.
-	 * {@link dev.vitrail.pack.source.ShadowCullState#DISTANCE},
-	 * {@link dev.vitrail.pack.source.ShadowCullState#DEFAULT} and
-	 * {@link dev.vitrail.pack.source.ShadowCullState#ADVANCED} keep a box around the player and
-	 * no planes. Distance, and default when the shadow program voxelises, are Iris's
+	 * {@link dev.vitrail.pack.source.ShadowCullState#DISTANCE}, and
+	 * {@link dev.vitrail.pack.source.ShadowCullState#DEFAULT} where the shadow program voxelises,
+	 * keep a box around the player and no planes, which is Iris's
 	 * {@code BoxCullingFrustum} ({@code :302-323}). Voxelisation is a geometry stage present
 	 * <em>or</em> an image load / store still standing on that program ({@code :163-165},
 	 * {@code setUsesImages}), not a {@code .gsh} this engine binds. A bound wider than the loaded
@@ -194,28 +193,21 @@ public final class ShadowCullFrustum implements Frustum {
 	 * {@code NonCullingFrustum} ({@code :317-318}), not the light's own volume.
 	 * {@link dev.vitrail.pack.source.ShadowCullState#SAFE_ZONE} still sweeps along the light.
 	 * <p>
-	 * <strong>Advanced is a workaround, not a styled divergence.</strong> Iris Advanced builds
-	 * {@code AdvancedShadowCullingFrustum} ({@code shadows/ShadowRenderer.java:372}), the camera
-	 * volume swept along the light, and a pack that wrote nothing lands there too unless it
-	 * voxelises ({@code :302}). Complementary Low writes {@code shadow.culling=true} and is
-	 * Advanced. On this engine that sweep pops single leaf blocks at the sun silhouette, one
-	 * section at a time as the player moves, and Iris Advanced does not. The 26.2 walk hands
-	 * Sodium a camera-relative box and this file's planes, and that pair is what drops a leaf
-	 * the silhouette still needs. Complementary Low therefore takes the player box here, the
-	 * same AlwaysVisible-plus-cube Distance already uses. What it costs the image is casters
-	 * outside the camera silhouette still reaching the map, a wider shadow than Iris Advanced
-	 * draws, in exchange for leaves that stop popping. A file {@code vitrail/swept-shadow-cull},
-	 * or {@code -Dvitrail.sweptShadowCull=true}, puts the sweep back so a reading can name the
-	 * old road.
+	 * <strong>Advanced and the silent default sweep, which is what Iris does.</strong> Iris builds
+	 * {@code AdvancedShadowCullingFrustum} ({@code shadows/ShadowRenderer.java:372}) for both, a
+	 * pack that wrote nothing landing there unless it voxelises ({@code :302}), and so does this.
+	 * The box those two took for one day is behind
+	 * {@link dev.vitrail.render.BoxShadowCull}, which carries what it cost and why it is no
+	 * longer the road.
 	 *
 	 * @param plan what the pack asked for and what the frame is aimed at
 	 */
 	public static Chosen of(ShadowCullPlan plan) {
-		boolean sweepAdvanced = SweptShadowCull.asked();
+		boolean boxAsked = BoxShadowCull.asked();
 		boolean box = plan.state() == ShadowCullState.DISTANCE
-				|| (plan.state() == ShadowCullState.DEFAULT
-						&& (plan.voxelised() || !sweepAdvanced))
-				|| (plan.state() == ShadowCullState.ADVANCED && !sweepAdvanced);
+				|| (plan.state() == ShadowCullState.DEFAULT && plan.voxelised())
+				|| ((plan.state() == ShadowCullState.DEFAULT
+						|| plan.state() == ShadowCullState.ADVANCED) && boxAsked);
 
 		Frustum frustum;
 		String shape;
