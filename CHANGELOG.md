@@ -51,6 +51,13 @@ what the next one holds.
   a frame without their shadow while you walk, if you run a mod that narrows what the game
   considers visible. That is being fixed at its cause instead.
 
+- **A switch that hands every sine and cosine a pack writes back to the graphics driver.** An
+  empty file `vitrail/driver-trig` in the game folder, or `-Dvitrail.driverTrig=true`. They are
+  normally replaced at load with a helper that keeps its accuracy over a whole world coordinate,
+  where a driver's own can shed the low bits and show as shimmer. The switch exists so the two
+  can be compared in one world rather than across two builds, and the log says which of them a
+  pack load ended up with either way. A pack that defines its own sine keeps it in both states.
+
 ### Changed
 
 - **Compute shaders now hit the compiled-module cache on a pack reload.** They used to miss
