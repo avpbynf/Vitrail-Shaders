@@ -23,6 +23,17 @@ what the next one holds.
   it: the difference is the caster's half width, under a block for most mobs and a few for the
   largest, and the shadow lands as far out as it does there.
 
+- **A mob the player cannot see casts no shadow.** With Sodium's entity culling on, which is
+  its default, a creature standing where the player's view does not reach, behind the player
+  first of all, was left out of the shadow map even where its shadow fell in plain sight, and
+  it came back the moment the player turned towards it. The casters that move are now chosen
+  after the light's own walk of the world, off what the light sees, as Iris does.
+
+- **The shadow map stopped where the camera's fog did.** With Sodium's fog occlusion on, rain
+  and water shortened the walk that fills the shadow map along with the one that draws the
+  world, so a far hill still casting into the view dropped out of the map. The light's walk is
+  no longer shortened by the camera's fog.
+
 ## 0.9.0-beta
 
 ### Added

@@ -171,12 +171,24 @@ ground under a mob with that map, and the game's oval on top of it would be a se
 author ever saw under their own pack. Under a pack without a map the oval is the only shadow a mob
 has, and it stays, drawn with the translucent entity program as Iris draws it.
 
-The two halves of that second walk are gathered at different moments, and it is not a tidiness.
-The entities are worked out before the light's own walk of the sections, since nothing that decides
-whether one is kept moves with that walk. The block entities can only be gathered after it: what
-says which sections to ask is the set of render lists the walk has just filled, and the terrain
-renderer hands them over off those lists. Asked any earlier, the question has the camera's answer or
-none at all.
+Both halves of that second walk are gathered after the light's own walk of the sections, and the
+order is not a tidiness. What decides whether a moving caster is kept is the terrain renderer's
+entity culling, which answers off the occlusion tree the last walk left behind: before the light's
+walk that tree is the camera's, so a mob behind the player would be dropped from a map its shadow
+belongs in; after it, the tree is the light's. (The terrain renderer never culls a caster whose
+box touches a section with no geometry in it, so a tall mob under open air was never missing.) The
+block entities have the same dependency in a plainer form: what says which sections to ask is the
+set of render lists the walk has just filled, and the terrain renderer hands them over off those
+lists. Asked any earlier, either question has the camera's answer or none at all.
+
+The walk itself is bounded by the render distance and by the pack's shadow distance, and by
+nothing else of the camera's. The
+terrain renderer would also stop it at the fog's cull distance when its fog occlusion is on, which
+is the right bound for the picture and the wrong one for the map: rain or water shortens it, and a
+hill still casting into the view would leave the map with it. The reference turns fog occlusion off
+for both walks whenever a pack is loaded; here the camera's walk still keeps its own fog. That is a
+gap of the picture and not of the map: under a pack whose fog is thinner than the game's, a hill
+past the game's fog distance is drawn there and cut here, and the shadow map is not what closes it.
 
 Which families reach the map at all is the pack's to decide, through six keys of
 `shaders.properties` and one `const float` of its source. Those keys and the trap in two of them
