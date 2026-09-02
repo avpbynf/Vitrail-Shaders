@@ -468,7 +468,7 @@ final class ColorTargets {
 			clear(encoder, this.grey, MID_GREY);
 			clear(encoder, this.unwritten, UNWRITTEN);
 			uploadNoise(encoder);
-			this.packSurfaces.forEach((image, surface) -> upload(encoder, surface, image.rgba()));
+			this.packSurfaces.forEach((image, surface) -> upload(encoder, surface, image.pixels()));
 		}
 
 		this.pendingClears.clear();
@@ -953,7 +953,7 @@ final class ColorTargets {
 			// it already reads black.
 			try {
 				this.packSurfaces.put(image, new TargetSurface(
-						"Vitrail " + image.texture().sampler(), CONSTANT_FORMAT, false, image.width(),
+						"Vitrail " + image.texture().sampler(), image.format(), false, image.width(),
 						image.height()));
 			} catch (RuntimeException e) {
 				note(image.texture().sampler() + " could not be allocated at " + image.width() + "x"
