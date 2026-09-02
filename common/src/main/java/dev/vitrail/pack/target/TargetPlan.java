@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -222,18 +223,47 @@ public final class TargetPlan {
 			String file = key.file();
 			int dot = file.lastIndexOf('.');
 			String path = dot < 0 ? file : file.substring(0, dot);
-			String name = key.name().baseName();
+			// The file, letter included, relative to the place: deferred4_a and deferred4 are two
+			// computes of one pass, run in that order, and the stage that runs them opens each
+			// under its own name.
+			String prefix = draft.place.isEmpty() ? "" : draft.place + "/";
+			String stem = path.startsWith(prefix) ? path.substring(prefix.length()) : path;
 			if (Boolean.FALSE.equals(toggles.get(path))) {
-				off.put(name, conditions.getOrDefault(path, "shaders.properties"));
+				off.put(stem, conditions.getOrDefault(path, "shaders.properties"));
 				continue;
 			}
 
-			kept.add(name);
+			kept.add(stem);
 		}
 
-		// Several files answer for one name once the letter is off it, and the name runs as soon
-		// as one of them is on: what the plan carries downstream is the name.
-		off.keySet().removeAll(kept);
+		// Iris reads the letters of one name in order and stops at the first one missing
+		// (ProgramSet.readComputeArray), so a deferred4_b shipped without a deferred4_a is a file
+		// it never opens, and neither does this.
+		Map<String, List<String>> byBase = new LinkedHashMap<>();
+		for (String stem : kept) {
+			byBase.computeIfAbsent(ProgramNames.parse(stem)
+					.map(ProgramNames.ProgramName::baseName)
+					.orElse(stem), _ -> new ArrayList<>()).add(stem);
+		}
+
+		for (List<String> stems : byBase.values()) {
+			Set<String> letters = new HashSet<>();
+			for (String stem : stems) {
+				letters.add(ProgramNames.computeLetter(stem));
+			}
+
+			for (String stem : stems) {
+				String letter = ProgramNames.computeLetter(stem);
+				for (char c = 'a'; c < (letter.isEmpty() ? 'a' : letter.charAt(0)); c++) {
+					if (!letters.contains(String.valueOf(c))) {
+						kept.remove(stem);
+						draft.unreachableComputes.add(stem);
+						break;
+					}
+				}
+			}
+		}
+
 		draft.computes = List.copyOf(kept);
 		draft.disabledComputes.putAll(off);
 	}
@@ -547,8 +577,11 @@ public final class TargetPlan {
 	}
 
 	/**
-	 * Compute entry points this place ships, by bare name. Shadowcomp is dispatched after the
-	 * shadow map; the rest are named in {@link #notes()} until a stage exists for them.
+	 * Compute entry points this place ships and keeps on, by file name without the extension,
+	 * letter included: {@code deferred4_a} and {@code deferred4} are two of them. Shadowcomp is
+	 * dispatched at the head of the frame, a compute hanging off a begin, prepare, deferred,
+	 * composite or final pass right before that pass, and the rest are named in {@link #notes()}
+	 * until a stage exists for them.
 	 */
 	public List<String> computes() {
 		return this.computes;
@@ -689,16 +722,43 @@ public final class TargetPlan {
 			List<String> shadow = draft.computes.stream()
 					.filter(name -> ProgramNames.shadowComposite(ProgramNames.familyOf(name)))
 					.toList();
-			List<String> other = draft.computes.stream()
+			// Hanging off a pass this place draws: the chain dispatches them before it. Iris also
+			// runs a compute whose pass has no fragment program, as a pass of its own
+			// (CompositeRenderer.java:135-141), and the chain has no step for that yet.
+			List<String> chained = draft.computes.stream()
 					.filter(name -> !ProgramNames.shadowComposite(ProgramNames.familyOf(name)))
+					.filter(name -> ProgramNames.computeBase(name)
+							.filter(draft.running::contains).isPresent())
+					.toList();
+			List<String> orphaned = draft.computes.stream()
+					.filter(name -> !shadow.contains(name) && !chained.contains(name))
+					.filter(name -> ProgramNames.computeBase(name).isPresent())
+					.toList();
+			List<String> other = draft.computes.stream()
+					.filter(name -> !shadow.contains(name) && !chained.contains(name)
+							&& !orphaned.contains(name))
 					.toList();
 			if (!shadow.isEmpty()) {
 				notes.add("shadow compute served: " + shadow);
 			}
 
+			if (!chained.isEmpty()) {
+				notes.add("compute programs dispatched before the pass they hang off: " + chained);
+			}
+
+			if (!orphaned.isEmpty()) {
+				notes.add("compute programs skipped, the pass they hang off does not run here and "
+						+ "the reference runs them as a pass of their own: " + orphaned);
+			}
+
 			if (!other.isEmpty()) {
 				notes.add("compute programs skipped, no stage exists for them yet: " + other);
 			}
+		}
+
+		if (!draft.unreachableComputes.isEmpty()) {
+			notes.add("compute programs past a gap in their letters, which the reference never "
+					+ "opens: " + draft.unreachableComputes);
 		}
 
 		// Named apart from the passes the engine leaves out, because nothing here is missing: the
@@ -825,6 +885,9 @@ public final class TargetPlan {
 		private final List<String> running = new ArrayList<>();
 		private final Map<String, String> disabled = new LinkedHashMap<>();
 		private final Map<String, String> disabledComputes = new LinkedHashMap<>();
+
+		/** Compute files past a gap in their letters, which the reference never opens. */
+		private final List<String> unreachableComputes = new ArrayList<>();
 		private final Set<String> shadowComposites = new TreeSet<>();
 		private final Set<Integer> written = new TreeSet<>();
 		private final Set<Integer> sampled = new TreeSet<>();

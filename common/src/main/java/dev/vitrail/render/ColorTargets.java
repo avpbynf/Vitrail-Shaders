@@ -31,6 +31,7 @@ import org.joml.Vector4fc;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -265,6 +266,16 @@ final class ColorTargets {
 	 * rewrite every constant and re-upload every texture the pack ships on each one of them.
 	 */
 	private boolean fullDeferOwed;
+
+	/**
+	 * The targets a compute of the pack writes as {@code colorimgN}, which have to be created with
+	 * the storage usage: the bit is baked into the image, so it is known before the first
+	 * allocation and never added to one.
+	 */
+	private Set<Integer> storageTargets = Set.of();
+
+	/** The targets a compute asked to store into and the device refused, each said once. */
+	private final Set<Integer> storageRefused = new HashSet<>();
 
 	private boolean broken;
 
@@ -644,6 +655,16 @@ final class ColorTargets {
 		return device == null
 				? ASSUMED_COLOR_ATTACHMENTS
 				: Math.max(1, device.getDeviceInfo().limits().maxColorAttachments());
+	}
+
+	/**
+	 * Names the targets a compute of the pack writes as an image, before any of them is allocated.
+	 * Whether the device makes a storage image of a target's format is asked at its allocation, on
+	 * the render thread where a device exists, and a refusal is said there: the target is
+	 * allocated as it was and the compute naming it is refused at its first dispatch.
+	 */
+	void storageTargets(Set<Integer> targets) {
+		this.storageTargets = Set.copyOf(targets);
 	}
 
 	/**
@@ -1061,15 +1082,22 @@ final class ColorTargets {
 		if (surface == null) {
 			GpuFormat format = this.formats.get(index);
 			TargetDirectives directives = this.plan.directives();
+			boolean storage = this.storageTargets.contains(index) && GpuFormats.storageCapable(format);
+			if (this.storageTargets.contains(index) && !storage && this.storageRefused.add(index)) {
+				Vitrail.logger().warn("{} is written by a compute as an image, and this device makes "
+						+ "no storage image of {}, so that compute is not dispatched", name, format);
+			}
 			// Named before it is allocated, on purpose. RG11B10_FLOAT as a colour attachment is
 			// not something the Vulkan specification guarantees and nothing in the game asks the
 			// driver whether it has it, so the last line written has to name the format asked for.
 			// The declaration comes with it, because a wrong image starts at a wrong declaration
 			// and reading it off the picture is what has to stop being necessary.
-			Vitrail.logger().info("Allocating {} as {} at {}x{}, {} level(s), declared {} at {}", name,
+			Vitrail.logger().info("Allocating {} as {} at {}x{}, {} level(s), declared {} at {}{}", name,
 					format, width, height, TargetSurface.levelsFor(mipped, width, height),
-					directives.format(index).declared(), directives.formatSource(index));
-			side.put(index, new TargetSurface("Vitrail " + name, format, mipped, width, height));
+					directives.format(index).declared(), directives.formatSource(index),
+					storage ? ", writable from a compute" : "");
+			side.put(index, new TargetSurface("Vitrail " + name, format, mipped, storage, width,
+					height));
 		} else {
 			surface.resize(width, height);
 		}

@@ -76,6 +76,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -475,8 +476,15 @@ public final class PackChain {
 		// on the frames DH really draws a far terrain.
 		this.distant = new DistantDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
+		// The passes the chain will draw, read off the plan: the pass objects themselves are only
+		// built on the render thread, after this constructor.
 		this.compute = PackCompute.load(opened, chain.place(), chain.targets().computes(), this.load,
-				values.shadowGeometryCatalog());
+				values.shadowGeometryCatalog(), values.catalog(),
+				ordered(chain.chain()).stream().map(ChainPlan.Pass::program)
+						.collect(Collectors.toSet()));
+		// Before the first frame allocates a target: the usage a compute needs is baked into the
+		// image at creation, and nothing can add it afterwards.
+		this.targets.storageTargets(this.compute.storageTargets());
 	}
 
 	/**
@@ -2252,6 +2260,28 @@ public final class PackChain {
 
 			PackPass pass = this.programs.get(at);
 
+			boolean emptying = this.targets.hasPendingClears();
+			if (this.compute.hangsOff(pass.program())) {
+				// The frame's clears are paid before the computes and not inside the draw after
+				// them, where the first pass of the frame pays them: a compute storing into a
+				// target still owed its clear would have its stores emptied by the very pass it
+				// hangs off.
+				if (emptying) {
+					this.targets.flushPending(encoder);
+				}
+
+				// The computes hanging off this pass run right before it, on the halves it reads,
+				// as Iris does, and before the chains below are filled, as Iris fills them after
+				// its dispatch (CompositeRenderer.java:287-313): a compute storing into a target
+				// the pass reads at a lod is what the chain has to be built from. Outside any
+				// render pass: a dispatch is a command of its own, and the barriers around it are
+				// what let the pass sample what the compute stored.
+				this.compute.dispatchBefore(pass.program(), encoder, device, this.values,
+						this.targets, this.chain.targets().schedule().step(pass.program())
+								.orElse(null), ready.main().width, ready.main().height);
+				this.currentChains.clear();
+			}
+
 			// Right before the first program that reads them after a write: a chain is only true
 			// of the level nought it was built from, and every pass between the two may have
 			// written it. The reduction opens render passes of its own, which is why this is here
@@ -2267,7 +2297,6 @@ public final class PackChain {
 				}
 			}
 
-			boolean emptying = this.targets.hasPendingClears();
 			GpuBufferSlice uniforms = buffer.slice(pass.uniformOffset(), pass.uniformSize());
 			if (pass == this.last) {
 				pass.drawFinal(encoder, ready.mainView(), this.targets, depth, distant, this.quad,

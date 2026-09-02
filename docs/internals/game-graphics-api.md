@@ -251,15 +251,22 @@ which has a compute kind the game never passes only because the Java enumeration
 for it. None of that needs a mixin: those methods are public.
 
 What does need going around is texture creation. The usage-bit mapping never sets the Vulkan
-storage bit, so a storage image has to be allocated through VMA rather than through
-`createTexture`. That is an extension of how the device is used, not of the device class.
+storage bit, so a storage image of the pack's own has to be allocated through VMA rather than
+through `createTexture`. That is an extension of how the device is used, not of the device class.
+A colour target a compute writes as `colorimgN` is a different case: it has to stay the texture
+the passes attach and sample, so the bit is added to what that mapping returns, by a mixin on it,
+for the one creation that asks for it and only in a format the device makes a storage image of,
+asked of the device.
 
 None of this is inference. A compute shader built with that shaderc, dispatched against a storage
 image allocated through VMA, writes texels the same frame reads back unchanged: the road is open,
 and nothing of it was ever in the backend's way. The stage that walks it is `PackCompute`, which
-compiles a pack's `shadowcomp` and dispatches it at the head of the frame. Which programs it serves,
-including the pack's own switch deciding whether it serves any at all, and why that moment rather
-than beside the shadow map that feeds it, is answered where the pack's chain is.
+compiles a pack's `shadowcomp` and dispatches it at the head of the frame, and compiles the
+computes hanging off a full screen pass and dispatches them right before that pass, between two
+barriers of its own since the game's render pass boundary orders graphics against graphics only.
+Which programs it serves, including the pack's own switch deciding whether it serves any at all,
+and why the shadow moment rather than beside the shadow map that feeds it, is answered where the
+pack's chain is.
 
 ## Small things that cost a lot to rediscover
 

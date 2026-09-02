@@ -50,10 +50,13 @@ zero to the first empty slot drops real programs.
 
 A compute program hangs a single-letter suffix off a name that has to be valid without it, and the
 suffix is recognised on the numbered families and on two of the unnumbered names, not on the
-geometry names. Vitrail reads those files and names them in the log. One family of them runs, the
-shadow compute, translated like any other unit and dispatched once a frame wherever the pack's own
-toggle keeps it. The rest are named and go no further, so what their order among themselves would
-be is the reference's business and not this engine's yet.
+geometry names. Vitrail reads those files and names them in the log. The shadow compute runs,
+translated like any other unit and dispatched once a frame wherever the pack's own toggle keeps
+it, and so does a compute hanging off a pass the chain draws, begin, prepare, deferred,
+composite or final: dispatched right before that pass, the letter-less file first and then the
+letters in order, as the reference runs them. The reference stops at the first letter missing,
+and so does this: a `_b` shipped without its `_a` is named and never opened. A compute hanging
+off setup is named and goes no further, setup having no moment in this engine's frame yet.
 
 Stages are never paired or cross-checked. A compute program and a fragment program with the same
 slot name coexist as independent entries, which is a real case.
@@ -131,7 +134,8 @@ every pack with an unusual dimension name.
 name by a single letter, so `world0/composite21_a` is a key of its own and a pack switching off
 `world0/composite21` has said nothing about it. The reference keeps such a compute and runs it
 with no fragment stage at all, which is why the lookup cannot fall back to the name the letter
-came off.
+came off. This engine keeps it too, and then has no pass to hang it off: it is named in the log
+as skipped, and its dispatch is a gap still owed.
 
 Both an empty value and a non-evaluable expression mean enabled: this file is read fail-open.
 

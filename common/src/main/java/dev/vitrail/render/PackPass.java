@@ -284,6 +284,11 @@ final class PackPass {
 		return this.path;
 	}
 
+	/** The program name alone, {@code composite3}, which is what the schedule and the computes key on. */
+	String program() {
+		return this.pass.program();
+	}
+
 	int uniformOffset() {
 		return this.offset;
 	}

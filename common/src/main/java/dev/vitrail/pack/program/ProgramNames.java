@@ -36,6 +36,14 @@ public final class ProgramNames {
 	/** Families that stand alone. */
 	private static final Set<String> SIMPLE = Set.of("shadow", "final");
 
+	/**
+	 * The full screen families whose passes a compute may hang off, which is every family the
+	 * chain draws. Setup is the one left out: Iris runs it once at load and this engine has no
+	 * such moment yet.
+	 */
+	private static final Set<String> CHAINED = Set.of("begin", "prepare", "deferred", "composite",
+			"final");
+
 	/** Highest slot the format allows on a numbered family. */
 	private static final int MAX_SLOT = 99;
 
@@ -125,6 +133,30 @@ public final class ProgramNames {
 	/** The family a program belongs to, {@code composite} for {@code composite4}. */
 	public static String familyOf(String baseName) {
 		return parse(baseName).map(ProgramName::family).orElse(baseName);
+	}
+
+	/**
+	 * The full screen pass a compute file hangs off, {@code deferred4} for {@code deferred4_a} and
+	 * for {@code deferred4} itself: Iris reads the letter-less file first and the lettered ones
+	 * after it, stopping at the first letter missing ({@code ProgramSet.readComputeArray}), all
+	 * off the same pass. Empty for a file that hangs off nothing this engine runs as a pass,
+	 * setup among them. Whether the pass itself runs, and whether the letter follows on from the
+	 * one before, is the plan's to say.
+	 *
+	 * @param file the compute file's name without its extension, which is a name of its own
+	 */
+	public static Optional<String> computeBase(String file) {
+		return parse(file)
+				.filter(name -> CHAINED.contains(name.family()))
+				.map(ProgramName::baseName);
+	}
+
+	/**
+	 * The letter that orders the computes of one pass, the letter-less file first and then
+	 * {@code a} before {@code b}.
+	 */
+	public static String computeLetter(String file) {
+		return parse(file).map(ProgramName::computeSuffix).orElse("");
 	}
 
 	public static Optional<ProgramName> parse(String baseName) {

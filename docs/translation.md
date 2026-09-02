@@ -318,18 +318,25 @@ for that path, three different mechanisms, and it is worth knowing which:
   a vertex stage and a fragment stage and nothing else, and the device exposes no way to precompile
   anything but a render pipeline. The Vulkan backend behind that facade already has a compute-capable
   queue, a public `VkDevice`, and the shaderc the game embeds, whose compute kind the facade never
-  passes. That path has been made to dispatch and to write, and a pack's own shadowcomp goes down
-  it: translated like any other unit, compiled by the same shaderc, dispatched at the head of the
-  frame. Only where the pack keeps it, and a pack that switches the program off takes with it the
-  declarations that program reads, so one switched off does not draw nothing, it does not compile.
-  The other compute names are named in the log and go no further, translation included.
+  passes. That path has been made to dispatch and to write, and a pack's computes go down it:
+  translated like any other unit, compiled by the same shaderc. A shadowcomp is dispatched at the
+  head of the frame, and a compute hanging off a pass the chain draws, begin, prepare, deferred,
+  composite or final, right before that pass, the letter-less file first and then in letter
+  order, reading and writing the colour targets on the halves the pass itself reads, which is the
+  reference's moment and side for it. Only where the pack keeps it, and a pack that switches the
+  program off takes with it the declarations that program reads, so one switched off does not
+  draw nothing, it does not compile. A setup compute, and a compute whose pass the chain does not
+  draw, which the reference runs as a pass of its own, are named in the log and go no further,
+  translation included.
 - **Storage buffers and storage images are worse than refused on the facade: they are ignored.**
   Reflection asks for uniform buffers, sampled images, outputs and inputs, and never enumerates
   them. On the facade's own walk they pass compilation and are bound to nothing, so the walk is
   widened around it: the reflected entries gain those names, the layout emits a storage type for
-  them, and the descriptor written at bind time carries the handle. The image itself is allocated
-  through VMA and bound as a push descriptor, because the game's texture usage bits never set the
-  Vulkan storage flag and `createTexture` therefore cannot be that image.
+  them, and the descriptor written at bind time carries the handle. An image of the pack's own is
+  allocated through VMA and bound as a push descriptor, because the game's texture usage bits
+  never set the Vulkan storage flag on their own; a colour target a compute stores into has to
+  stay the texture the passes attach, so there the flag is added to what that conversion returns,
+  for the one creation that asks.
 
 No amount of translation work makes a pack compute unit or a pack storage image pass through the
 facade. Vulkan itself supports all of them. The layer above does not, and the backend below it

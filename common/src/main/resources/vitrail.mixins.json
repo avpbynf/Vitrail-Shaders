@@ -75,6 +75,7 @@
 		"VulkanBindGroupLayoutMixin",
 		"VulkanCommandEncoderAccessor",
 		"VulkanCommandEncoderMixin",
+		"VulkanConstMixin",
 		"VulkanDeviceMixin",
 		"VulkanQueueSubmitMixin",
 		"VulkanRenderPassMixin",

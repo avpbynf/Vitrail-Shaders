@@ -10,6 +10,8 @@ import dev.vitrail.pack.program.ProgramNames;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
+import dev.vitrail.pack.target.TargetName;
+import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.UniformCatalog;
@@ -58,22 +60,36 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * The pack's shadow compute passes, dispatched at the head of the frame, in the parity of the
- * gbuffers that read what they propagate; the volumes they read are the previous frame's
- * shadow-geometry writes, one frame late like the shadow map itself.
+ * The pack's compute passes: the shadow computes, dispatched at the head of the frame, and the
+ * computes hanging off a full screen pass, dispatched right before that pass.
  * <p>
- * Complementary's floodfill lives in {@code shadowcomp.csh}. The Java facade has no compute, so
- * the pipeline is built the way the storage probe was: shaderc kind 2, a VMA storage image,
- * push descriptors. Iris runs it inside its shadow render ({@code ShadowRenderer.java:631-632},
- * the debug group and the {@code compositeRenderer.renderAll()} under it), before its gbuffers in
- * the SAME frame. Under this engine's deferred shadow stage, the head of the frame is that
- * moment's translation.
+ * The shadow computes run in the parity of the gbuffers that read what they propagate; the
+ * volumes they read are the previous frame's shadow-geometry writes, one frame late like the
+ * shadow map itself. Complementary's floodfill lives in {@code shadowcomp.csh}. Iris runs it
+ * inside its shadow render ({@code ShadowRenderer.java:631-632}, the debug group and the
+ * {@code compositeRenderer.renderAll()} under it), before its gbuffers in the SAME frame. Under
+ * this engine's deferred shadow stage, the head of the frame is that moment's translation.
+ * <p>
+ * The chained computes, {@code deferred4_a.csh} for {@code deferred4}, run where Iris runs them:
+ * in a loop right before their pass, with a memory barrier after ({@code CompositeRenderer.java:287-297}),
+ * reading and storing the colour targets on the halves that pass reads. Photon builds its sky
+ * lighting in one, and without it everything in shadow was black.
+ * <p>
+ * The Java facade has no compute, so the pipeline is built the way the storage probe was: shaderc
+ * kind 2, push descriptors, and a storage image that is either the pack's own through VMA or a
+ * colour target created with the usage for it.
  *
  * @see <a href="https://github.com/IrisShaders/Iris">Iris ComputeProgram, LGPL-3.0</a>
  */
@@ -98,30 +114,80 @@ final class PackCompute implements AutoCloseable {
 	 */
 	private static final int PUSH_DESCRIPTORS = 32;
 
+	/** The pattern of a colour target written as an image, {@code colorimg4} for {@code colortex4}. */
+	private static final Pattern COLOUR_IMAGE = Pattern.compile("\\bcolorimg(\\d+)\\b");
+
+	/** The shadow computes, dispatched at the head of the frame. */
 	private final List<Pass> passes;
+
+	/**
+	 * The computes hanging off a full screen pass, by that pass, each list in letter order. Iris
+	 * dispatches them right before the pass ({@code CompositeRenderer.java:287-297}, the loop over
+	 * {@code compositePass.computes} with a memory barrier after), and so does the chain here.
+	 */
+	private final Map<String, List<Pass>> chained;
+
+	/** The targets some compute writes as {@code colorimgN}, which are created writable for it. */
+	private final Set<Integer> storageTargets;
+
 	private boolean announced;
 
-	private PackCompute(List<Pass> passes) {
+	/** The passes whose computes have been announced once, which is once per pass and not per frame. */
+	private final Set<String> announcedChains = new LinkedHashSet<>();
+
+	private PackCompute(List<Pass> passes, Map<String, List<Pass>> chained,
+			Set<Integer> storageTargets) {
 		this.passes = List.copyOf(passes);
+		this.chained = Map.copyOf(chained);
+		this.storageTargets = Set.copyOf(storageTargets);
 	}
 
 	static PackCompute none() {
-		return new PackCompute(List.of());
+		return new PackCompute(List.of(), Map.of(), Set.of());
+	}
+
+	/** The targets to create writable from a compute, read before the first allocation. */
+	Set<Integer> storageTargets() {
+		return this.storageTargets;
+	}
+
+	/** Whether any compute hangs off that full screen pass. */
+	boolean hangsOff(String program) {
+		return this.chained.containsKey(program);
 	}
 
 	/**
-	 * Reads every shadow compute the pack ships, out of the opening the load already holds.
+	 * Reads every compute the pack ships and the plan kept, out of the opening the load already
+	 * holds: the shadow computes for the head of the frame, and the computes hanging off a pass of
+	 * the chain for the moment before that pass.
 	 * <p>
 	 * The opening is handed in and not taken here, and this loop is why it matters: read a program
 	 * at a time from a pack path, each turn mounted the archive again and walked every source file
-	 * of it to rebuild the same index of the same settings, so a pack with four shadow computes
-	 * paid for four whole readings of itself to translate four files.
+	 * of it to rebuild the same index of the same settings, so a pack with four computes paid for
+	 * four whole readings of itself to translate four files.
+	 *
+	 * @param running the programs the chain draws, which is where a chained compute can hang. A
+	 *                compute whose pass is not among them is read by Iris and dispatched with no
+	 *                fragment stage at all ({@code CompositeRenderer.java:135-141}); here it is
+	 *                named and left, since the chain has no step to hang it off yet
 	 */
 	static PackCompute load(OpenedPack pack, String place, List<String> computes, int load,
-			UniformCatalog catalog) {
+			UniformCatalog shadowCatalog, UniformCatalog chainCatalog, Set<String> running) {
 		List<Pass> passes = new ArrayList<>();
+		Map<String, List<Pass>> chained = new LinkedHashMap<>();
+		Set<Integer> storageTargets = new LinkedHashSet<>();
 		for (String name : computes) {
-			if (!ProgramNames.shadowComposite(ProgramNames.familyOf(name))) {
+			boolean shadow = ProgramNames.shadowComposite(ProgramNames.familyOf(name));
+			Optional<String> base = ProgramNames.computeBase(name);
+			// Setup has no moment in this frame yet. The plan already names it.
+			if (!shadow && base.isEmpty()) {
+				continue;
+			}
+
+			if (!shadow && !running.contains(base.get())) {
+				Vitrail.logger().warn("compute {} hangs off {}, which this chain does not draw, so "
+						+ "it is not dispatched: the reference runs it as a pass of its own",
+						name, base.get());
 				continue;
 			}
 
@@ -138,22 +204,98 @@ final class PackCompute implements AutoCloseable {
 				// as one where the shader means sixteen, the guess asks for a group per pixel and
 				// stalls the frame instead of drawing it wrong.
 				if (!compute.get().sized()) {
-					Vitrail.logger().warn("shadow compute {} is not dispatched: it leaves its work "
+					Vitrail.logger().warn("compute {} is not dispatched: it leaves its work "
 							+ "group count to the engine and writes its local size as something "
 							+ "other than a number, so how much work it asks for cannot be read",
 							path);
 					continue;
 				}
 
-				passes.add(new Pass(compute.get(), catalog, load, path));
-				Vitrail.logger().info("Loaded shadow compute {} ({})", path, sizing(compute.get()));
+				Pass pass = new Pass(compute.get(), shadow ? shadowCatalog : chainCatalog, load,
+						path, shadow ? null : base.get());
+				if (shadow) {
+					passes.add(pass);
+					Vitrail.logger().info("Loaded shadow compute {} ({})", path, sizing(compute.get()));
+				} else {
+					chained.computeIfAbsent(base.get(), _ -> new ArrayList<>()).add(pass);
+					storageTargets.addAll(colourImagesOf(compute.get()));
+					Vitrail.logger().info("Loaded compute {} before {} ({})", path, base.get(),
+							sizing(compute.get()));
+				}
 			} catch (IOException | RuntimeException e) {
-				Vitrail.logger().warn("shadow compute {} could not be translated: {}", path,
-						e.toString());
+				Vitrail.logger().warn("compute {} could not be translated: {}", path, e.toString());
 			}
 		}
 
-		return new PackCompute(passes);
+		chained.values().forEach(list -> list.sort(
+				Comparator.comparing(pass -> ProgramNames.computeLetter(pass.name))));
+
+		return new PackCompute(passes, chained, storageTargets);
+	}
+
+	/** The colour targets a compute names as an image, read off its translated text. */
+	private static Set<Integer> colourImagesOf(PackProgram.Compute compute) {
+		Set<Integer> indices = new LinkedHashSet<>();
+		TranslatedUnit unit = compute.loaded().program().stages().get(ProgramStage.COMPUTE);
+		if (unit == null) {
+			return indices;
+		}
+
+		Matcher matcher = COLOUR_IMAGE.matcher(unit.text());
+		while (matcher.find()) {
+			indices.add(Integer.parseInt(matcher.group(1)));
+		}
+
+		return indices;
+	}
+
+	/**
+	 * Dispatches the computes hanging off that full screen pass, right before it, as Iris does.
+	 * Nothing happens for a pass with none, which is every pass of most packs.
+	 *
+	 * @param step the halves that pass reads and writes, which is where its computes read a colour
+	 *             target from and write one to: Iris binds both the sampler and the image on the
+	 *             flipped state of that moment ({@code IrisImages.addRenderTargetImages})
+	 */
+	void dispatchBefore(String program, CommandEncoder encoder, GpuDevice device, PackValues values,
+			ColorTargets targets, TargetSchedule.Bound step, int width, int height) {
+		List<Pass> attached = this.chained.get(program);
+		if (attached == null || attached.isEmpty()) {
+			return;
+		}
+
+		// The hold first, as the head-of-frame dispatch does: the first pass of a chain half can
+		// still have the geometry's render pass object open over it, and ending the pass
+		// underneath would leave that object to close a pass the encoder no longer has.
+		GeometryHold.flush(() -> "the compute dispatch before " + program);
+		GpuRecording.endPass(encoder);
+		VkCommandBuffer commands = commands(encoder);
+		VulkanDevice vulkan = vulkan(device);
+		if (commands == null || vulkan == null) {
+			return;
+		}
+
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			beforeChainCompute(commands, stack);
+		}
+
+		for (Pass pass : attached) {
+			try {
+				pass.dispatch(vulkan, commands, values, targets, width, height, step);
+			} catch (RuntimeException e) {
+				if (pass.failed.add(e.toString())) {
+					Vitrail.logger().warn("compute {} failed: {}", pass.path, e.toString());
+				}
+			}
+		}
+
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			afterChainCompute(commands, stack);
+		}
+
+		if (this.announcedChains.add(program)) {
+			Vitrail.logger().info("Dispatched {} compute pass(es) before {}", attached.size(), program);
+		}
 	}
 
 	void dispatch(PackValues values, ColorTargets targets) {
@@ -200,7 +342,7 @@ final class PackCompute implements AutoCloseable {
 		int height = main == null ? 0 : main.height;
 		for (Pass pass : this.passes) {
 			try {
-				pass.dispatch(vulkan, commands, values, targets, width, height);
+				pass.dispatch(vulkan, commands, values, targets, width, height, null);
 			} catch (RuntimeException e) {
 				if (pass.failed.add(e.toString())) {
 					Vitrail.logger().warn("shadow compute {} failed: {}", pass.path, e.toString());
@@ -320,6 +462,37 @@ final class PackCompute implements AutoCloseable {
 						| VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
 	}
 
+	/**
+	 * Makes what the passes before this point drew, colour writes and storage writes alike, visible
+	 * to a compute that samples or stores it. The render pass has already closed on the game's own
+	 * barrier, which orders graphics against graphics; this names the compute stage as the reader.
+	 */
+	private static void beforeChainCompute(VkCommandBuffer commands, MemoryStack stack) {
+		shaderBarrier(commands, stack, VK13.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+				VK13.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+						| VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+				VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				VK13.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+						| VK13.VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+						| VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+	}
+
+	/**
+	 * Makes a compute's image stores visible to the pass that follows, which samples them, and to
+	 * the attachment writes a later pass makes to the same target. Iris's memory barrier after its
+	 * loop, {@code CompositeRenderer.java:297}: image access, texture fetch and shader storage.
+	 */
+	private static void afterChainCompute(VkCommandBuffer commands, MemoryStack stack) {
+		shaderBarrier(commands, stack, VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				VK13.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+				VK13.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT
+						| VK13.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				VK13.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+						| VK13.VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
+						| VK13.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+						| VK13.VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+	}
+
 	private static void shaderBarrier(VkCommandBuffer commands, MemoryStack stack, long srcStage,
 			long srcAccess, long dstStage, long dstAccess) {
 		VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack).sType$Default();
@@ -337,6 +510,11 @@ final class PackCompute implements AutoCloseable {
 		private final PackProgram.Compute compute;
 		private final PackUniforms uniforms;
 		private final String path;
+		private final String name;
+
+		/** The full screen pass this compute hangs off, or null for a shadow compute. */
+		private final String program;
+
 		private final String label;
 		private final Set<String> failed = new LinkedHashSet<>();
 		private MappableRingBuffer block;
@@ -347,15 +525,22 @@ final class PackCompute implements AutoCloseable {
 		private List<VulkanBindGroupLayout.Entry> entries = List.of();
 		private boolean compiled;
 
-		private Pass(PackProgram.Compute compute, UniformCatalog catalog, int load, String path) {
+		private Pass(PackProgram.Compute compute, UniformCatalog catalog, int load, String path,
+				String program) {
 			this.compute = compute;
 			this.path = path;
+			this.name = path.substring(path.lastIndexOf('/') + 1);
+			this.program = program;
 			this.label = "pack/" + load + "/" + path + "/compute";
 			this.uniforms = new PackUniforms(compute.loaded().program().uniforms(), catalog);
 		}
 
+		/**
+		 * @param step the halves of the pass this compute hangs off, or null for a shadow compute,
+		 *             which reads no colour target
+		 */
 		private void dispatch(VulkanDevice vulkan, VkCommandBuffer commands, PackValues values,
-				ColorTargets targets, int width, int height) {
+				ColorTargets targets, int width, int height, TargetSchedule.Bound step) {
 			if (!this.compiled) {
 				compile(vulkan);
 			}
@@ -368,7 +553,7 @@ final class PackCompute implements AutoCloseable {
 			try (MemoryStack stack = MemoryStack.stackPush()) {
 				VulkanCommandEncoder.memoryBarrier(commands, stack);
 				VK12.vkCmdBindPipeline(commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, this.pipeline);
-				pushDescriptors(commands, stack, targets);
+				pushDescriptors(commands, stack, targets, step);
 				// The screen and not the shadow map: Iris sizes a shadow composite's compute off
 				// the main render target, ShadowCompositeRenderer.java:212, and the resolution of
 				// the shadow map is what it sizes the shadow GEOMETRY computes off instead,
@@ -436,12 +621,12 @@ final class PackCompute implements AutoCloseable {
 					// pushed set, and going past it is undefined rather than slow. Said here, once,
 					// so that a driver error later has a line in the log that predicted it.
 					if (this.entries.size() > PUSH_DESCRIPTORS) {
-						Vitrail.logger().warn("shadow compute {} pushes {} descriptors in one set, "
+						Vitrail.logger().warn("compute {} pushes {} descriptors in one set, "
 								+ "past the {} a device commonly allows at once", this.path,
 								this.entries.size(), PUSH_DESCRIPTORS);
 					}
 				} catch (Exception e) {
-					Vitrail.logger().warn("shadow compute {} SPIR-V failed: {}", this.path,
+					Vitrail.logger().warn("compute {} SPIR-V failed: {}", this.path,
 							e.toString());
 					return;
 				}
@@ -458,11 +643,11 @@ final class PackCompute implements AutoCloseable {
 				createPipeline(vulkan, stack);
 			} catch (RuntimeException e) {
 				destroy(vulkan);
-				Vitrail.logger().warn("shadow compute {} pipeline failed: {}", this.path, e.toString());
+				Vitrail.logger().warn("compute {} pipeline failed: {}", this.path, e.toString());
 			}
 
 			if (this.pipeline != 0L) {
-				Vitrail.logger().info("Compiled shadow compute {} ({})", this.path,
+				Vitrail.logger().info("Compiled compute {} ({})", this.path,
 						sizing(this.compute));
 			}
 		}
@@ -488,7 +673,7 @@ final class PackCompute implements AutoCloseable {
 						filename, entry, options);
 				int status = Shaderc.shaderc_result_get_compilation_status(result);
 				if (status != 0) {
-					Vitrail.logger().warn("shadow compute shaderc: {}",
+					Vitrail.logger().warn("compute shaderc: {}",
 							Shaderc.shaderc_result_get_error_message(result));
 					return null;
 				}
@@ -517,7 +702,8 @@ final class PackCompute implements AutoCloseable {
 			for (int i = 0; i < this.entries.size(); i++) {
 				VulkanBindGroupLayout.Entry entry = this.entries.get(i);
 				boolean storage = CustomImages.storage(entry.name())
-						|| StorageImages.storageBinding(entry.name());
+						|| StorageImages.storageBinding(entry.name())
+						|| COLOUR_IMAGE.matcher(entry.name()).matches();
 				int type;
 				if (entry.type() == VulkanBindGroupLayout.VulkanBindGroupEntryType.UNIFORM_BUFFER) {
 					type = StorageBuffers.named(entry.name())
@@ -539,7 +725,7 @@ final class PackCompute implements AutoCloseable {
 			LongBuffer layoutPtr = stack.callocLong(1);
 			VulkanUtils.crashIfFailure(vulkan,
 					VK12.vkCreateDescriptorSetLayout(vulkan.vkDevice(), layoutInfo, null, layoutPtr),
-					"shadow compute set layout");
+					"compute set layout");
 			this.setLayout = layoutPtr.get(0);
 			LongBuffer setLayouts = stack.callocLong(1).put(0, this.setLayout);
 			VkPipelineLayoutCreateInfo pipelineLayoutInfo = VkPipelineLayoutCreateInfo.calloc(stack)
@@ -549,7 +735,7 @@ final class PackCompute implements AutoCloseable {
 			VulkanUtils.crashIfFailure(vulkan,
 					VK12.vkCreatePipelineLayout(vulkan.vkDevice(), pipelineLayoutInfo, null,
 							pipelineLayoutPtr),
-					"shadow compute pipeline layout");
+					"compute pipeline layout");
 			this.pipelineLayout = pipelineLayoutPtr.get(0);
 		}
 
@@ -568,7 +754,7 @@ final class PackCompute implements AutoCloseable {
 			LongBuffer pipelinePtr = stack.callocLong(1);
 			VulkanUtils.crashIfFailure(vulkan,
 					VK12.vkCreateComputePipelines(vulkan.vkDevice(), 0L, infos, null, pipelinePtr),
-					"shadow compute pipeline");
+					"compute pipeline");
 			this.pipeline = pipelinePtr.get(0);
 		}
 
@@ -587,7 +773,7 @@ final class PackCompute implements AutoCloseable {
 		}
 
 		private void pushDescriptors(VkCommandBuffer commands, MemoryStack stack,
-				ColorTargets targets) {
+				ColorTargets targets, TargetSchedule.Bound step) {
 			if (this.entries.isEmpty()) {
 				return;
 			}
@@ -628,6 +814,11 @@ final class PackCompute implements AutoCloseable {
 
 				StorageImages.Bound bound = StorageImages.bound(entry.name());
 				VkDescriptorImageInfo.Buffer imageInfo = VkDescriptorImageInfo.calloc(1, stack);
+				if (bound == null && step != null && colourTarget(write, imageInfo, entry.name(),
+						targets, step, this.program)) {
+					continue;
+				}
+
 				if (bound == null) {
 					// The samplers the engine serves every pack program, noisetex and the shadow
 					// set among them: shadowcomp reads them the way a composite does, and only a
@@ -656,6 +847,63 @@ final class PackCompute implements AutoCloseable {
 
 			KHRPushDescriptor.vkCmdPushDescriptorSetKHR(commands,
 					VK12.VK_PIPELINE_BIND_POINT_COMPUTE, this.pipelineLayout, 0, writes);
+		}
+
+		/**
+		 * A colour target, read as {@code colortexN} or written as {@code colorimgN}, on the half
+		 * the pass this compute hangs off reads: Iris binds both off the same flipped state
+		 * ({@code IrisSamplers.addRenderTargetSamplers}, {@code IrisImages.addRenderTargetImages}),
+		 * so a compute stores into the very half the pass after it will sample.
+		 *
+		 * @param program the pass this compute hangs off, whose lod reads say whether the target
+		 *                is sampled through its chain
+		 * @return whether the name was one, and the write filled
+		 */
+		private static boolean colourTarget(VkWriteDescriptorSet write,
+				VkDescriptorImageInfo.Buffer imageInfo, String name, ColorTargets targets,
+				TargetSchedule.Bound step, String program) {
+			Matcher image = COLOUR_IMAGE.matcher(name);
+			if (image.matches()) {
+				int index = Integer.parseInt(image.group(1));
+				TargetSurface surface = targets.surface(index, step.read(index));
+				if (surface == null || !surface.storage()
+						|| !(surface.storageView() instanceof VulkanGpuTextureView view)) {
+					throw new IllegalStateException(name + " is not a target created writable from "
+							+ "a compute");
+				}
+
+				imageInfo.sampler(0L);
+				imageInfo.imageView(view.vkImageView());
+				imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
+				write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+				write.pImageInfo(imageInfo);
+				return true;
+			}
+
+			OptionalInt index = TargetName.index(name);
+			if (index.isEmpty()) {
+				return false;
+			}
+
+			TargetSurface surface = targets.surface(index.getAsInt(), step.read(index.getAsInt()));
+			if (surface == null || !(surface.view() instanceof VulkanGpuTextureView view)) {
+				throw new IllegalStateException(name + " is not an allocated colour target");
+			}
+
+			// Clamped, filtered and mipmapped the way the pass this hangs off binds the same
+			// target: the pack's own indexing stays inside the image, an integer format takes no
+			// filtering, and the chain is only in reach once something has written it and the
+			// pass reads the target at a lod. Iris has one texture with one set of parameters
+			// for both, so a compute and its pass sample it the same way.
+			boolean mipmaps = surface.chainWritten()
+					&& targets.lodReads(program).contains(index.getAsInt());
+			imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(false,
+					targets.filter(index.getAsInt()), mipmaps)).vkSampler());
+			imageInfo.imageView(view.vkImageView());
+			imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
+			write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+			write.pImageInfo(imageInfo);
+			return true;
 		}
 
 		private void close() {

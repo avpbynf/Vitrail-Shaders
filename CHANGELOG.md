@@ -46,6 +46,13 @@ what the next one holds.
   under one of those, so the include the switches guard was skipped and its terrain and shadow
   programs compiled against a function that was not there.
 
+- **Photon's shadows are lit again.** The compute programs a pack attaches to its full screen
+  passes were named in the log and skipped, so whatever they prepared for the pass after them was
+  never there: Photon computes its sky lighting in one, and everything in shadow, the hand first,
+  was black for the lack of it. Those programs now run, right before the pass they belong to. A
+  compute whose pass the pack ships no fragment program for, and one attached to a setup program,
+  are still skipped, and the log still names them.
+
 - **A mob standing just past the pack's shadow reach for entities keeps its shadow while any
   of it still reaches inside.** A pack that stops its moving casters short of the terrain
   (Complementary does, at an eighth of its shadow distance) had that reach measured on the
