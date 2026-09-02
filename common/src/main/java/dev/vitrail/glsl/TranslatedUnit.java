@@ -79,6 +79,14 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 *                           is the size of the blind spot such a rule would have; the engine
 	 *                           binds an image already in the pack's window rather than rewrite the
 	 *                           ones it can see
+	 * @param pinnedLookups      lookups rewritten onto the base level of their image, because the
+	 *                           sampler they go through is bound without a chain and the reference's
+	 *                           filter never selects a level on one
+	 * @param unpinnedParameterLookups
+	 *                           lookups through a sampler the enclosing function was handed that
+	 *                           were left as they stood, because some call of that function hands
+	 *                           the parameter something the pass could not read as a sampler bound
+	 *                           at the base, or because the parameter's type has no level to pin
 	 * @param fragCoordZ         reads of {@code gl_FragCoord.z} converted
 	 * @param fragCoordXyz       reads of {@code gl_FragCoord.xyz}, where only the third component
 	 *                           is a depth and the rewrite has to rebuild the vector
@@ -122,7 +130,8 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	public record Notes(int fragmentOutputs, int dynamicFragData, int uniformConflicts,
 			int shadowCalls, int unwrappedShadow, int strippedExtensions,
 			int depthEpilogue, int alphaEpilogue, int coverage,
-			int depthLookups, int parameterLookups,
+			int depthLookups, int parameterLookups, int pinnedLookups,
+			int unpinnedParameterLookups,
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames, List<String> comparedSamplers,

@@ -96,6 +96,31 @@ to a function, or written with a compound assignment, cannot be rewritten where 
 are counted rather than guessed at. What the translator never rewrites at all is a **lookup through
 a sampler**. Those are served by converting the *image* instead, once, when the depth is taken.
 
+**A lookup through a sampler bound without a mip chain is pinned to the base level.**
+`texture(s, uv)` becomes `textureLod(s, uv, 0.0)`, a level the pack wrote out becomes nought, and a
+bias or a pair of derivatives, which only ever chose a level, is dropped. The reference binds the
+depth textures nearest and never mipmapped, the noise linear, and a colour target through the
+target's own sampler, mipmapped once a program's `colortexNMipmapEnabled` turned its chain on; under
+OpenGL a filter without a mipmap in its name never selects a level, whatever level of detail the
+lookup computed or carried. Vulkan has no such filter. Every sampler selects a level, the one bound
+where no chain exists is told to stay at the base, and measured on one driver that is not what a
+lookup got: AstraLex marches a reflection ray across the opaque depth in its translucent pass,
+thirty steps with an early exit, reading the depth with `texture` at a coordinate each step
+computes, and on some steps the depth that came back was not the image's, so the ray landed where it
+never reached and every glass pane bloomed a saturated blue over its wall, on some frames and not
+others. The same read at an explicit level of nought was right on every frame. So the level is
+written into the text, which is what the reference's filter amounted to. The rewrite is by the name
+of the sampler, and a sampler a function takes as a parameter, the blind spot the depth conversion
+below describes, is read through its call sites instead: the parameter is pinned when every call
+hands it a sampler already pinned or a parameter already proven, outright in a full screen program
+that asks for no chain at all, and its lookups are counted and left otherwise, a function some macro
+calls included. The shadow map's samplers are pinned with the rest, since nothing here fills a chain
+on the map whatever mipmap directive the pack wrote, which is an older gap of the shadow bindings
+and not of this rewrite. The engine gives a chain to the program that asked for it
+and to that program alone, where the reference keeps the mipmap filter on the target for the rest
+of the frame; that is an older divergence of the bindings, and the rewrite does not change what
+those later programs read.
+
 **One uniform becomes a sampler, because its value never comes back from the card.**
 `centerDepthSmooth` is the depth at the middle of the screen, faded by the pack's own half-life,
 and it is what a depth of field focuses on. It is accumulated in a one-texel image that a pass of

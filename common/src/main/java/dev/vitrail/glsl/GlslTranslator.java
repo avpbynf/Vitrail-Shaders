@@ -7,9 +7,11 @@ import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.ProgramNames;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
+import dev.vitrail.pack.target.ConstDirectives;
 import dev.vitrail.pack.target.DrawBuffers;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.SamplerTypes;
+import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.pack.texture.VolumeAtlas;
@@ -25,6 +27,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -343,6 +346,12 @@ public final class GlslTranslator {
 	/** What the word sampler is followed by when the declaration asks for a comparison. */
 	private static final String SHADOW_SHAPE = "Shadow";
 
+	/** The level {@link #pinLookupLevels} writes into a lookup, as GLSL text. */
+	private static final String BASE_LEVEL = "0.0";
+
+	/** The suffix of the const directive that asks a chain for a target, {@code TargetDirectives}'s. */
+	private static final String MIPMAP_SUFFIX = "MipmapEnabled";
+
 	/** How far into a sprite a chunk mesh's texture coordinate has to be pulled. */
 	private static final String TEX_SHRINK = "of_TexShrink";
 
@@ -467,6 +476,19 @@ public final class GlslTranslator {
 	 * rewritten from them; they are what {@link #countDepthLookup} measures the blind spot with.
 	 */
 	private final List<Scoped> samplerParameters = new ArrayList<>();
+
+	/**
+	 * Those of {@link #samplerParameters} whose type has no level to pin, a rectangle, a buffer or
+	 * a multisample sampler, so that {@link #pinLookupLevels} leaves a lookup through one alone.
+	 */
+	private final List<Scoped> unlevelledParameters = new ArrayList<>();
+
+	/**
+	 * The same parameters again, each with the function that takes it and its place in that
+	 * function's list, which is what lets {@link #pinLookupLevels} read the call sites and learn
+	 * what a parameter can stand for.
+	 */
+	private final List<SamplerParameter> typedParameters = new ArrayList<>();
 
 	/** Outputs the pack declares itself, by the location it asked for, moved into the header. */
 	private final Map<Integer, Output> packOutputs = new TreeMap<>();
@@ -623,6 +645,16 @@ public final class GlslTranslator {
 
 	private int depthLookups;
 	private int parameterLookups;
+
+	/** Lookups {@link #pinLookupLevels} pinned to the base level of their image. */
+	private int pinnedLookups;
+
+	/**
+	 * Lookups through a sampler the enclosing function was handed that the same pass left as they
+	 * stood, some call of the function handing that parameter something the pass could not read as
+	 * a sampler bound at the base, or the parameter having no level to pin.
+	 */
+	private int unpinnedParameterLookups;
 	private int fragCoordZ;
 	private int fragCoordXyz;
 	private int fragCoordUnhandled;
@@ -796,6 +828,10 @@ public final class GlslTranslator {
 		// have had a chance to wrap.
 		moveCenterDepth();
 		liftUniforms();
+		// After the lifting, which is where the samplers of the file are recorded by name and type,
+		// and after the depth, so that a comparison that road rewrote is under a name of ours by
+		// now and the lookups left standing are the ones that really sample an image.
+		pinLookupLevels();
 		// Decided before the outputs are ordered and applied after: whether the fragment body is
 		// wrapped is what decides where the ascending call goes, and both are settled from the one
 		// answer rather than each asking again.
@@ -1962,6 +1998,10 @@ public final class GlslTranslator {
 	private record Closing(int at, String text, String directive) {
 	}
 
+	/** A sampler parameter, by the function taking it and its position in that function's list. */
+	private record SamplerParameter(String function, int position, Scoped scope) {
+	}
+
 	/**
 	 * One name that means something particular over the lines where it does. A uniform reaches the
 	 * end of the unit and a parameter stops at its own closing brace.
@@ -2135,6 +2175,394 @@ public final class GlslTranslator {
 		} else if (scoped(this.samplerParameters, name, line)) {
 			this.parameterLookups++;
 		}
+	}
+
+	/**
+	 * Pins every lookup through a sampler bound without a mip chain to the base level of its image:
+	 * {@code texture(s, uv)} becomes {@code textureLod(s, uv, 0.0)}, a level the pack wrote out
+	 * becomes nought, and a bias or a pair of derivatives, which only ever chose a level, is
+	 * dropped.
+	 * <p>
+	 * <strong>What it restores is the reference's own filtering.</strong> Iris binds the three
+	 * depth textures nearest and never mipmapped ({@code IrisSamplers.addWorldDepthSamplers} and
+	 * {@code addCompositeSamplers}), the noise linear ({@code addNoiseSampler}), and a colour target
+	 * through the target's own sampler, linear or nearest as its format allows and mipmapped only
+	 * once a program's {@code colortexNMipmapEnabled} turned the chain on
+	 * ({@code CompositeRenderer.setupMipmapping}). Under OpenGL a minification filter without a
+	 * mipmap in its name never selects a level: whatever level of detail a lookup computes from its
+	 * derivatives, or carries as an argument, the base image answers it. Vulkan has no such filter.
+	 * Every sampler selects a level, and the one this engine binds where no chain exists is told to
+	 * stay within a quarter of a level of the base, which ought to come to the same thing.
+	 * Measured, it does not: AstraLex marches a reflection ray across {@code depthtex1} in its
+	 * translucent pass, thirty steps with a {@code break}, reading the depth with {@code texture}
+	 * at a coordinate each step computes, and what came back on some of those steps was not the
+	 * depth, so the ray landed on a pixel it never reached and every glass pane of a village
+	 * bloomed a saturated blue over its wall, on some frames and not others. The same read at an
+	 * explicit level of nought came back right on every frame, as its first composite's re-read of
+	 * the depth at a refracted coordinate did. Whether it is the derivatives of a coordinate made
+	 * under a divergent branch or the clamp itself that the driver answers with something other
+	 * than the base is the driver's to know. Pinning the level is what the reference's filter
+	 * amounts to, and it is decidable here, from the text.
+	 * <p>
+	 * <strong>Which lookups.</strong> In a program drawn over the screen, every sampler declared at
+	 * file scope that the program asks no chain for, the request being read off the same
+	 * {@code colortexNMipmapEnabled} directives {@code TargetDirectives} reads; in a geometry
+	 * program, the names the engine serves out of a colour target, a depth, the noise or the shadow
+	 * map, and never the atlas or a material map, which carry chains and are read through them.
+	 * The shadow map's samplers are pinned with the rest, whatever mipmap directive the pack
+	 * wrote for them, because nothing of this engine fills a chain on the map. A sampler a
+	 * function takes as a parameter has no name to classify, as {@link #countDepthLookup} says,
+	 * so its call sites are read instead: the parameter is pinned when every call of its function
+	 * hands it a sampler already pinned or a parameter already proven, and outright, call sites
+	 * unread, in a program drawn over the screen that asks for no chain at all, since every image
+	 * such a parameter could stand for is read at the base there. A parameter one call hands
+	 * something else, or one that some macro calls its function through, is left as it stood and
+	 * its lookups counted. A comparison sampler is left to {@link #rewriteShadowCompare}, a name
+	 * the pack made a macro of to the preprocessor, and a rectangle, buffer or multisample sampler
+	 * has no levelled lookup to pin.
+	 * <p>
+	 * A pack image laid over the name of a colour target is classified as the target in a geometry
+	 * program, since only the binding knows the difference, and is pinned with it; nothing fills a
+	 * chain on such an image either, so it reads the same.
+	 */
+	private void pinLookupLevels() {
+		if (this.stage != ProgramStage.FRAGMENT || this.program.isEmpty()) {
+			return;
+		}
+
+		boolean fullScreen = fullScreenPass();
+		Set<String> chained = chainedSamplers();
+		Set<String> pinned = new HashSet<>();
+		for (Map.Entry<String, String> sampler : this.samplers.entrySet()) {
+			String name = sampler.getKey();
+			if (chained.contains(name) || !levelled(sampler.getValue())) {
+				continue;
+			}
+
+			if (fullScreen || servedOutOfATarget(name)) {
+				pinned.add(name);
+			}
+		}
+
+		List<Scoped> proven = provenParameters(pinned, fullScreen && chained.isEmpty());
+		int[] lines = lineNumbers();
+		List<Closing> levels = new ArrayList<>();
+
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.IDENTIFIER || token.directive() != null || token.macroName()
+					|| !LegacyGlsl.LEVELLED_LOOKUPS.contains(token.text())
+					|| this.packMacros.contains(token.text())) {
+				continue;
+			}
+
+			int open = callOpener(index);
+			int close = matchingBracket(open);
+			int first = significantAfter(open);
+			if (close < 0 || first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER) {
+				continue;
+			}
+
+			String name = this.tokens.get(first).text();
+			int line = lines[index];
+			if (this.packMacros.contains(name) || comparisonAt(name, line)
+					|| hardwareComparisonAt(name, line)) {
+				continue;
+			}
+
+			// The parameter first, because a function may name one after a sampler of the file's
+			// and mean its own inside its body.
+			if (scoped(this.samplerParameters, name, line)) {
+				if (!scoped(proven, name, line)) {
+					this.unpinnedParameterLookups++;
+					continue;
+				}
+			} else if (!pinned.contains(name)) {
+				continue;
+			}
+
+			if (pinLookup(index, open, close, levels)) {
+				this.pinnedLookups++;
+			}
+		}
+
+		insertClosings(levels);
+	}
+
+	/**
+	 * The sampler parameters every call site of whose function hands a sampler read at the base:
+	 * a pinned name of the file, or a parameter already proven the same way, until nothing more
+	 * can be proven. On that road a function nothing calls proves nothing, and a call whose
+	 * argument is anything else, an expression, a macro, a name nothing classifies, keeps its
+	 * parameter out.
+	 *
+	 * @param all whether every parameter of a levelled type is proven outright, call sites unread,
+	 *            which is the case of a program drawn over the screen asking for no chain
+	 */
+	private List<Scoped> provenParameters(Set<String> pinned, boolean all) {
+		List<Scoped> proven = new ArrayList<>();
+		if (all) {
+			for (Scoped parameter : this.samplerParameters) {
+				if (!this.unlevelledParameters.contains(parameter)) {
+					proven.add(parameter);
+				}
+			}
+
+			return proven;
+		}
+
+		int[] lines = lineNumbers();
+		boolean grew = true;
+		while (grew) {
+			grew = false;
+			for (SamplerParameter parameter : this.typedParameters) {
+				if (proven.contains(parameter.scope())
+						|| this.unlevelledParameters.contains(parameter.scope())
+						|| !callsHandOver(parameter, pinned, proven, lines)) {
+					continue;
+				}
+
+				proven.add(parameter.scope());
+				grew = true;
+			}
+		}
+
+		return proven;
+	}
+
+	/**
+	 * Whether every call of this parameter's function hands it a sampler read at the base, and
+	 * there is at least one call. A definition or a prototype of the function is told from a call
+	 * by what precedes the name, a builtin type or {@code void}; anything else, an operator, a
+	 * keyword, a struct's name, is read as a call, and a definition read that way refuses the
+	 * parameter, its declaration being no sampler's name. A function named on a preprocessor line
+	 * is called from wherever that macro is used, which no scan of the tokens can see, so such a
+	 * function proves nothing.
+	 */
+	private boolean callsHandOver(SamplerParameter parameter, Set<String> pinned,
+			List<Scoped> proven, int[] lines) {
+		boolean called = false;
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (!token.identifier(parameter.function())) {
+				continue;
+			}
+
+			if (token.directive() != null) {
+				return false;
+			}
+
+			int open = callOpener(index);
+			int before = significantBefore(index);
+			if (open < 0 || (before >= 0 && this.tokens.get(before).kind() == Kind.IDENTIFIER
+					&& returnsAType(this.tokens.get(before).text()))) {
+				continue;
+			}
+
+			int close = matchingBracket(open);
+			if (close < 0) {
+				return false;
+			}
+
+			List<Integer> commas = topLevelCommas(open, close);
+			if (commas.size() < parameter.position()) {
+				return false;
+			}
+
+			int start = parameter.position() == 0 ? open : commas.get(parameter.position() - 1);
+			int end = commas.size() > parameter.position() ? commas.get(parameter.position()) : close;
+			int argument = significantAfter(start);
+			if (argument < 0 || significantAfter(argument) != end
+					|| this.tokens.get(argument).kind() != Kind.IDENTIFIER) {
+				return false;
+			}
+
+			String name = this.tokens.get(argument).text();
+			int line = lines[argument];
+			boolean handed = scoped(this.samplerParameters, name, line)
+					? scoped(proven, name, line)
+					: pinned.contains(name);
+			if (!handed) {
+				return false;
+			}
+
+			called = true;
+		}
+
+		return called;
+	}
+
+	/** Whether a function name preceded by this word is a definition rather than a call. */
+	private static boolean returnsAType(String word) {
+		return LegacyGlsl.TYPE_NAMES.contains(word);
+	}
+
+	/**
+	 * The samplers this program asks a chain for, under the names it declares them by: the targets
+	 * its {@code colortexNMipmapEnabled} directives name, whatever spelling the sampler took. Read
+	 * the way {@code TargetDirectives} reads them, on the live lines of this unit and the last
+	 * declaration winning. The shadow map's own mipmap directives are not read: Iris honours them
+	 * on the map's samplers and this engine fills no chain on the map, so its shadow lookups read
+	 * the base whatever the pack asked, pinned or not, and that is the older gap rather than this
+	 * pass's.
+	 */
+	private Set<String> chainedSamplers() {
+		Set<Integer> targets = new HashSet<>();
+		for (ConstDirectives.Directive directive : ConstDirectives.read(this.unit)) {
+			boolean on = directive.value().equals("true");
+			if (!directive.type().equals("bool") || !(on || directive.value().equals("false"))) {
+				continue;
+			}
+
+			Optional<TargetName.Suffixed> split = TargetName.split(directive.name());
+			if (split.isPresent() && split.get().suffix().equals(MIPMAP_SUFFIX)) {
+				if (on) {
+					targets.add(split.get().index());
+				} else {
+					targets.remove(split.get().index());
+				}
+			}
+		}
+
+		Set<String> chained = new HashSet<>();
+		for (String name : this.samplers.keySet()) {
+			OptionalInt index = TargetName.index(name);
+			if (index.isPresent() && targets.contains(index.getAsInt())) {
+				chained.add(name);
+			}
+		}
+
+		return chained;
+	}
+
+	/**
+	 * Whether a name is one the engine binds an image of its own under in every family and never
+	 * gives a chain to in a geometry program: a colour target, a depth of the world or of the far
+	 * terrain, the noise, or the shadow map's depth and colour, on which nothing of this engine
+	 * fills a chain in any family.
+	 */
+	private static boolean servedOutOfATarget(String name) {
+		return switch (SamplerPlan.classify(name)) {
+			case COLORTEX, DEPTH, NOISE, DISTANT_DEPTH, SHADOW_DEPTH, SHADOW_COLOUR -> true;
+			default -> false;
+		};
+	}
+
+	/**
+	 * Whether a sampler declared so has a level to pin. A rectangle, a buffer and a multisample
+	 * image have one level and no lookup that takes one, and a comparison sampler is another pass's.
+	 *
+	 * @param declaration the type alone, or the declaration {@link #liftUniforms} recorded, which
+	 *                    is the type followed by the name
+	 */
+	private static boolean levelled(String declaration) {
+		for (String word : declaration.split(" ", -1)) {
+			String shape = SamplerTypes.shapeOf(word);
+			if (shape != null) {
+				return !shape.contains("Rect") && !shape.contains("Buffer") && !shape.contains("MS")
+						&& !shape.endsWith(SHADOW_SHAPE);
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * One lookup onto the base level, in whichever spelling it was written, or false for a call
+	 * with fewer arguments than its spelling takes, which the compiler will name for itself.
+	 *
+	 * @param levels where the literal goes when it is a new argument rather than a replaced one,
+	 *               applied once the scan is over so that no index moves under it
+	 */
+	private boolean pinLookup(int index, int open, int close, List<Closing> levels) {
+		List<Integer> commas = topLevelCommas(open, close);
+		String directive = this.tokens.get(index).directive();
+
+		switch (this.tokens.get(index).text()) {
+			case "texture", "textureGrad" -> {
+				if (commas.isEmpty()) {
+					return false;
+				}
+
+				// The bias of the one and the two derivatives of the other are what the level was
+				// computed from, and the level is a literal now.
+				replace(index, "textureLod");
+				dropArgumentsFrom(commas, 2, close);
+				levels.add(new Closing(close, ", " + BASE_LEVEL, directive));
+			}
+			case "textureOffset" -> {
+				if (commas.size() < 2) {
+					return false;
+				}
+
+				replace(index, "textureLodOffset");
+				dropArgumentsFrom(commas, 3, close);
+				levels.add(new Closing(commas.get(1), ", " + BASE_LEVEL, directive));
+			}
+			case "textureGradOffset" -> {
+				if (commas.size() != 4) {
+					return false;
+				}
+
+				// The two derivatives make way for the literal and the offset stays where it is.
+				replace(index, "textureLodOffset");
+				setArgument(commas, 2, close, BASE_LEVEL);
+				dropArgument(commas, 3, close);
+			}
+			default -> {
+				if (commas.size() < 2) {
+					return false;
+				}
+
+				setArgument(commas, 2, close, BASE_LEVEL);
+			}
+		}
+
+		return true;
+	}
+
+	/** The commas that separate a call's arguments, and none of the ones nested inside them. */
+	private List<Integer> topLevelCommas(int open, int close) {
+		List<Integer> commas = new ArrayList<>();
+		int depth = 0;
+
+		for (int scan = open + 1; scan < close; scan++) {
+			Token token = this.tokens.get(scan);
+			if (token.kind() != Kind.OPERATOR) {
+				continue;
+			}
+
+			if (token.operator("(") || token.operator("[") || token.operator("{")) {
+				depth++;
+			} else if (token.operator(")") || token.operator("]") || token.operator("}")) {
+				depth--;
+			} else if (depth == 0 && token.operator(",")) {
+				commas.add(scan);
+			}
+		}
+
+		return commas;
+	}
+
+	/** Blanks the argument at this position, counted from nought, and every one after it. */
+	private void dropArgumentsFrom(List<Integer> commas, int at, int close) {
+		if (commas.size() >= at) {
+			blankRange(commas.get(at - 1), close - 1);
+		}
+	}
+
+	/** Blanks the argument at this position alone, counted from nought, with the comma before it. */
+	private void dropArgument(List<Integer> commas, int at, int close) {
+		int end = commas.size() > at ? commas.get(at) - 1 : close - 1;
+		blankRange(commas.get(at - 1), end);
+	}
+
+	/** Puts a literal in place of the argument at this position, counted from nought. */
+	private void setArgument(List<Integer> commas, int at, int close, String text) {
+		int first = significantAfter(commas.get(at - 1));
+		int end = commas.size() > at ? commas.get(at) - 1 : close - 1;
+		blankRange(commas.get(at - 1) + 1, end);
+		inject(first, text);
 	}
 
 	/**
@@ -4073,17 +4501,21 @@ public final class GlslTranslator {
 		int[] lines = lineNumbers();
 		int depth = 0;
 		int parameters = -1;
+		int position = 0;
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.directive() == null && token.operator("(")) {
 				if (depth == 0) {
 					parameters = index;
+					position = 0;
 				}
 
 				depth++;
 			} else if (token.directive() == null && token.operator(")")) {
 				depth--;
+			} else if (token.directive() == null && depth == 1 && token.operator(",")) {
+				position++;
 			}
 
 			// Inside a parenthesis and nowhere else, which is what tells a parameter from a
@@ -4096,8 +4528,18 @@ public final class GlslTranslator {
 
 			int name = significantAfter(index);
 			if (name >= 0 && this.tokens.get(name).kind() == Kind.IDENTIFIER) {
-				this.samplerParameters.add(new Scoped(this.tokens.get(name).text(), lines[index],
-						lines[functionEnd(parameters)]));
+				Scoped parameter = new Scoped(this.tokens.get(name).text(), lines[index],
+						lines[functionEnd(parameters)]);
+				this.samplerParameters.add(parameter);
+				if (!levelled(token.text())) {
+					this.unlevelledParameters.add(parameter);
+				}
+
+				int function = significantBefore(parameters);
+				if (function >= 0 && this.tokens.get(function).kind() == Kind.IDENTIFIER) {
+					this.typedParameters.add(new SamplerParameter(this.tokens.get(function).text(),
+							position, parameter));
+				}
 			}
 		}
 	}
@@ -4210,6 +4652,14 @@ public final class GlslTranslator {
 	 * never runs.
 	 */
 	private boolean movesCenterDepth() {
+		return fullScreenPass();
+	}
+
+	/**
+	 * Whether the pass this file is the entry point of is drawn over a quad by this engine: named,
+	 * not a geometry family, and not a shadow composite, which this engine never runs.
+	 */
+	private boolean fullScreenPass() {
 		String family = ProgramNames.familyOf(this.program);
 
 		return !this.program.isEmpty() && !ProgramNames.geometry(family)
@@ -5452,7 +5902,8 @@ public final class GlslTranslator {
 				this.conflicts.size(), this.shadowCalls, this.unwrappedShadowCalls,
 				this.strippedExtensions, this.depthEpilogue ? 1 : 0, this.alphaEpilogue ? 1 : 0,
 				this.covers ? 1 : 0, this.depthLookups,
-				this.parameterLookups, this.fragCoordZ, this.fragCoordXyz,
+				this.parameterLookups, this.pinnedLookups, this.unpinnedParameterLookups,
+				this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
 				List.copyOf(this.conflicts), comparedSamplers(), hardwareComparedSamplers(),
 				List.copyOf(this.storageBlocks),
@@ -5502,9 +5953,18 @@ public final class GlslTranslator {
 	/** Empties a range but keeps its line breaks, so error messages still point at the right line. */
 	private void blankRange(int start, int end) {
 		for (int index = start; index <= end; index++) {
-			if (this.tokens.get(index).kind() != Kind.NEWLINE) {
-				this.tokens.set(index, Token.BLANK);
+			Token token = this.tokens.get(index);
+			if (token.kind() == Kind.NEWLINE) {
+				continue;
 			}
+
+			// A comment or a spliced line carries its breaks inside one token, and they are kept
+			// as well: the passes that ask which line a name is on take their numbers once and
+			// read them after blanking, so a break lost here moves every name after it.
+			long breaks = token.text().chars().filter(c -> c == '\n').count();
+			this.tokens.set(index, breaks == 0
+					? Token.BLANK
+					: new Token(Kind.SPACE, "\n".repeat((int) breaks), token.directive()));
 		}
 	}
 
