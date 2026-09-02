@@ -374,6 +374,14 @@ public final class GlslTranslator {
 	private final Map<String, Set<String>> macroBodies = new HashMap<>();
 
 	/**
+	 * The macros whose replacement text is exactly one name, by macro: a second spelling of that
+	 * name. Photon declares {@code uniform sampler3D depthtex0} and reads it as
+	 * {@code ATMOSPHERE_SCATTERING_LUT}, so a lookup written through the alias is a lookup of the
+	 * volume. A macro defined twice to two different names stands for neither here.
+	 */
+	private final Map<String, String> macroAliases = new HashMap<>();
+
+	/**
 	 * What {@link #constantName} answered for each macro, so that a macro named from many places
 	 * is judged once: eighty macros naming each other ten at a time would otherwise be walked a
 	 * hundred million times within the hop bound.
@@ -1101,6 +1109,7 @@ public final class GlslTranslator {
 	 * macro name or leave a shadowed read on the block value with nothing logged either way.
 	 */
 	private void collectMacroNames() {
+		int[] lines = lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.kind() != Kind.HASH || !LegacyGlsl.NAMING_DIRECTIVES.contains(token.directive())) {
@@ -1117,8 +1126,42 @@ public final class GlslTranslator {
 				String macro = this.tokens.get(name).text();
 				this.packMacros.add(macro);
 				this.macroBodies.computeIfAbsent(macro, _ -> new HashSet<>()).addAll(bodyNames(name));
+				// Only a live line says what the macro stands for where the lookups are: a define
+				// in a branch nobody took would otherwise hand a live name to a volume. A live
+				// define of anything else unsays an alias, and two aliases that disagree stand for
+				// neither, which the empty text records.
+				if (this.unit.isLive(lines[index])) {
+					this.macroAliases.merge(macro, aliasOf(name).orElse(""),
+							(first, second) -> first.equals(second) ? first : "");
+				}
 			}
 		}
+	}
+
+	/**
+	 * The one name a macro's replacement text consists of, or empty when the text is anything
+	 * else: several tokens, a parameter list, or nothing at all.
+	 */
+	private Optional<String> aliasOf(int name) {
+		String target = null;
+		for (int scan = name + 1; scan < this.tokens.size(); scan++) {
+			Token token = this.tokens.get(scan);
+			if (token.kind() == Kind.NEWLINE) {
+				break;
+			}
+
+			if (token.trivia()) {
+				continue;
+			}
+
+			if (token.kind() != Kind.IDENTIFIER || target != null) {
+				return Optional.empty();
+			}
+
+			target = token.text();
+		}
+
+		return Optional.ofNullable(target);
 	}
 
 	/**
@@ -3953,9 +3996,10 @@ public final class GlslTranslator {
 	 * out, and that file is what every one of those declarations was going to read.
 	 * <p>
 	 * Nothing is moved unless everything can be. A name this unit reaches any other way than as
-	 * {@code texture(name, vec3)} is counted and left exactly as it stands, declaration included, so
-	 * the program stays refused with the message it had. There is no site in the corpus like that,
-	 * and the count is what would say one had appeared.
+	 * {@code texture(name, vec3)}, the name being the declared one or a macro the unit defines as
+	 * exactly that name, is counted and left exactly as it stands, declaration included, so the
+	 * program stays refused with the message it had. There is no site in the corpus like that, and
+	 * the count is what would say one had appeared.
 	 */
 	private void flattenVolumes() {
 		if (this.volumes.isEmpty()) {
@@ -3973,16 +4017,28 @@ public final class GlslTranslator {
 		List<Integer> declarations = new ArrayList<>();
 		Map<Integer, Integer> lookups = new LinkedHashMap<>();
 		boolean elsewhere = this.packMacros.contains(name);
+		Set<String> spellings = spellingsOf(name);
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
-			if (token.kind() != Kind.IDENTIFIER || !token.text().equals(name)
+			if (token.kind() != Kind.IDENTIFIER || !spellings.contains(token.text())
 					|| !this.unit.isLive(lines[index])) {
 				continue;
 			}
 
-			int callee = token.directive() == null ? plainLookup(index) : -1;
-			if (token.directive() == null && volumeDeclaration(index)) {
+			if (token.directive() != null) {
+				// The preprocessor's own lines: an alias being defined or tested is its business,
+				// and the name standing as an alias's replacement text IS the alias. The name on
+				// any other directive is a use this pass cannot follow.
+				if (token.text().equals(name) && !aliasBody(index)) {
+					elsewhere = true;
+				}
+
+				continue;
+			}
+
+			int callee = plainLookup(index);
+			if (token.text().equals(name) && volumeDeclaration(index)) {
 				declarations.add(index);
 			} else if (callee >= 0) {
 				lookups.put(index, callee);
@@ -4017,6 +4073,41 @@ public final class GlslTranslator {
 		if (!lookups.isEmpty()) {
 			this.readVolumes.put(name, atlas);
 		}
+	}
+
+	/** The name and every macro the unit defines as exactly that name, aliases of aliases included. */
+	private Set<String> spellingsOf(String name) {
+		Set<String> spellings = new HashSet<>();
+		spellings.add(name);
+		boolean grew = true;
+		while (grew) {
+			grew = false;
+			for (Map.Entry<String, String> alias : this.macroAliases.entrySet()) {
+				if (spellings.contains(alias.getValue()) && spellings.add(alias.getKey())) {
+					grew = true;
+				}
+			}
+		}
+
+		return spellings;
+	}
+
+	/**
+	 * Whether this token, on a directive, is the whole replacement text of a macro standing for it:
+	 * the {@code depthtex0} of {@code #define ATMOSPHERE_SCATTERING_LUT depthtex0}.
+	 */
+	private boolean aliasBody(int index) {
+		for (int scan = index - 1; scan >= 0; scan--) {
+			Token token = this.tokens.get(scan);
+			if (token.trivia()) {
+				continue;
+			}
+
+			return token.macroName()
+					&& this.tokens.get(index).text().equals(this.macroAliases.get(token.text()));
+		}
+
+		return false;
 	}
 
 	/**
@@ -4089,10 +4180,12 @@ public final class GlslTranslator {
 	/**
 	 * The trilinear read of a volume, over the atlas its slices were laid out in.
 	 * <p>
-	 * The hardware does the two dimensional half: each slice carries one texel of gutter holding the
-	 * wrapped copy of its far edge, so a bilinear tap at the edge of a tile reads what {@code REPEAT}
-	 * would have read on a real volume rather than the slice next door. Only the depth is done here,
-	 * two taps and a mix, because nothing interpolates between tiles of an atlas.
+	 * The hardware does the two dimensional half: each slice carries one texel of gutter holding
+	 * what lies past its edge, the far edge for a volume that repeats and the edge itself for one
+	 * that clamps, so a bilinear tap at the edge of a tile reads what {@code REPEAT} or
+	 * {@code CLAMP} would have read on a real volume rather than the slice next door. Only the depth
+	 * is done here, two taps and a mix, because nothing interpolates between tiles of an atlas, and
+	 * the slice index repeats or clamps as the pack asked.
 	 * <p>
 	 * The half texel is the whole of the arithmetic: a lookup at {@code u} samples the volume at
 	 * {@code u * size - 0.5} in texels, and the atlas coordinate has to land on the same pair of
@@ -4102,28 +4195,36 @@ public final class GlslTranslator {
 	 */
 	private static List<String> volumeHelper(String name, VolumeAtlas atlas) {
 		String depth = whole(atlas.depth());
+		String last = Integer.toString(atlas.depth() - 1);
 		String tiles = Integer.toString(atlas.tilesPerRow());
 
-		return List.of(
-				"vec4 " + VOLUME_LOOKUP + name + "(sampler2D ofMap, vec3 ofAt) {",
-				"\tvec3 ofQ = fract(ofAt);",
-				"\tfloat ofZ = ofQ.z * " + depth + " - 0.5;",
-				"\tfloat ofBase = floor(ofZ);",
-				"\tvec2 ofIn = ofQ.xy * vec2(" + whole(atlas.width()) + ", " + whole(atlas.height())
-						+ ") + " + whole(VolumeAtlas.GUTTER) + ";",
-				"\tint ofNear = int(mod(ofBase, " + depth + "));",
-				"\tint ofFar = int(mod(ofBase + 1.0, " + depth + "));",
-				"\tvec2 ofTile = vec2(" + whole(atlas.tileStride()) + ", " + whole(atlas.tileHeight())
-						+ ");",
-				"\tvec2 ofSize = vec2(" + whole(atlas.atlasWidth()) + ", " + whole(atlas.atlasHeight())
-						+ ");",
-				"\tvec2 ofA = (vec2(ofNear % " + tiles + ", ofNear / " + tiles
-						+ ") * ofTile + ofIn) / ofSize;",
-				"\tvec2 ofB = (vec2(ofFar % " + tiles + ", ofFar / " + tiles
-						+ ") * ofTile + ofIn) / ofSize;",
-				"\treturn vec4(mix(texture(ofMap, ofA).x, texture(ofMap, ofB).x, ofZ - ofBase), "
-						+ "0.0, 0.0, 1.0);",
-				"}");
+		List<String> lines = new ArrayList<>();
+		lines.add("vec4 " + VOLUME_LOOKUP + name + "(sampler2D ofMap, vec3 ofAt) {");
+		lines.add(atlas.clamp() ? "\tvec3 ofQ = clamp(ofAt, 0.0, 1.0);" : "\tvec3 ofQ = fract(ofAt);");
+		lines.add("\tfloat ofZ = ofQ.z * " + depth + " - 0.5;");
+		lines.add("\tfloat ofBase = floor(ofZ);");
+		lines.add("\tvec2 ofIn = ofQ.xy * vec2(" + whole(atlas.width()) + ", " + whole(atlas.height())
+				+ ") + " + whole(VolumeAtlas.GUTTER) + ";");
+		if (atlas.clamp()) {
+			lines.add("\tint ofNear = clamp(int(ofBase), 0, " + last + ");");
+			lines.add("\tint ofFar = clamp(int(ofBase) + 1, 0, " + last + ");");
+		} else {
+			lines.add("\tint ofNear = int(mod(ofBase, " + depth + "));");
+			lines.add("\tint ofFar = int(mod(ofBase + 1.0, " + depth + "));");
+		}
+
+		lines.add("\tvec2 ofTile = vec2(" + whole(atlas.tileStride()) + ", " + whole(atlas.tileHeight())
+				+ ");");
+		lines.add("\tvec2 ofSize = vec2(" + whole(atlas.atlasWidth()) + ", " + whole(atlas.atlasHeight())
+				+ ");");
+		lines.add("\tvec2 ofA = (vec2(ofNear % " + tiles + ", ofNear / " + tiles
+				+ ") * ofTile + ofIn) / ofSize;");
+		lines.add("\tvec2 ofB = (vec2(ofFar % " + tiles + ", ofFar / " + tiles
+				+ ") * ofTile + ofIn) / ofSize;");
+		lines.add("\treturn mix(texture(ofMap, ofA), texture(ofMap, ofB), clamp(ofZ - ofBase, 0.0, 1.0));");
+		lines.add("}");
+
+		return lines;
 	}
 
 	/** An integer as a GLSL float literal, spelled by hand so that no locale can put a comma in it. */

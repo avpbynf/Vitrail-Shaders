@@ -33,7 +33,7 @@ import java.util.Map;
 final class TranslatedProgramCodec {
 
 	/** Bumped by hand when the layout changes. It is part of the key, so old blobs go unread. */
-	static final String FORMAT = "vitrail-translation-1";
+	static final String FORMAT = "vitrail-translation-2";
 
 	private TranslatedProgramCodec() {
 	}

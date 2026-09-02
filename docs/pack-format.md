@@ -407,6 +407,14 @@ meaning what it meant.
 **A three-dimensional volume is flattened onto a two-dimensional atlas**, its declaration rewritten
 under a forged name, and each read replaced by a helper that reads two slices and interpolates.
 This works because the backend refuses the declared type, not what actually sits behind the sampler.
+The atlas keeps the blob's own channel type, an unsigned byte, an unsigned short or a half float
+a channel, and the addressing the pack asked for is baked into it: a repeating volume carries the far edge in the
+gutter of each slice and the helper wraps, a clamped one carries the edge again and the helper
+clamps. A read written through a macro that stands for exactly the sampler's name is a read of the
+volume; one reached any other way leaves the program refused, and the log counts it. The volume
+answers only the `sampler3D` declarations of its name: a `sampler2D` of the same name in the same
+stage goes on reading the colour target, as under the reference, which renames a declaration to a
+custom texture only when its type matches the texture's shape.
 The rename is applied in every program carrying the declaration, not only in the targeted stage: the
 reference renames only in the targeted stage, which leaves an unbound three-dimensional sampler
 alive elsewhere: tolerated by the old backend, refused by this one.

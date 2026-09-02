@@ -289,8 +289,7 @@ public final class PackTextures {
 		// out: the length of the blob is checked and its shape is not. Refused by name, like the
 		// rest, so the sampler reads black.
 		if (flattenable(texture)) {
-			PackTexture.Raw shape = raw.orElseThrow();
-			VolumeAtlas atlas = VolumeAtlas.of(shape.sizeX(), shape.sizeY(), shape.sizeZ());
+			VolumeAtlas atlas = VolumeAtlas.of(raw.orElseThrow(), texture.clamp());
 			if (!atlas.fits()) {
 				refused.add(new Refused(key, value, path + " lays out flat as " + atlas.atlasWidth()
 						+ "x" + atlas.atlasHeight() + ", which is past what a texture can be", stage,
@@ -299,14 +298,12 @@ public final class PackTextures {
 			}
 		} else if (volume(texture)) {
 			// A hole rather than a rule, and one that costs the whole pack, so it is said out loud
-			// where the refusal that follows cannot say it. The gutter carries wrapped copies of the
-			// far edge and the printed helper wraps, so serving a clamped volume with them would be
-			// right everywhere except within half a texel of the border, which is the plausible
-			// wrong picture this engine will not draw. It bites easily: a blob is clamped by
-			// default, so a volume shipped WITHOUT its .mcmeta lands here, and the sampler3D it
-			// leaves standing takes every program that declares it.
-			notes.add(path + " is a volume the pack asks to clamp, which is not laid out flat here, "
-					+ "so " + sampler + " stays a sampler3D and no program declaring it can be built");
+			// where the refusal that follows cannot say it: a channel type or order the atlas does
+			// not lay out, or an extent of nought, and the sampler3D left standing takes every
+			// program that declares it. VolumeAtlas.serves says which are laid out and why.
+			notes.add(path + " is a volume of " + raw.orElseThrow().pixelFormat() + " "
+					+ raw.orElseThrow().pixelType() + ", which is not laid out flat here, so " + sampler
+					+ " stays a sampler3D and no program declaring it can be built");
 		}
 
 		supplied.add(texture);
@@ -427,19 +424,18 @@ public final class PackTextures {
 	 * the declaration itself, so every program carrying that declaration is rewritten, and the same
 	 * atlas has to answer for all of them.
 	 * <p>
-	 * Three things have to hold and each of them is a way the picture would be wrong rather than
-	 * absent. The blob has to be three dimensional, since nothing else is laid out in slices; it has
-	 * to hold one byte a texel, which is what the atlas knows how to spread; and the pack has to
-	 * have asked to REPEAT, because the wrapping is baked into the gutter and into the helper and
+	 * Two things have to hold and each of them is a way the picture would be wrong rather than
+	 * absent. The blob has to be three dimensional, since nothing else is laid out in slices, and
+	 * of a channel type the atlas carries as it is. How the pack asked it addressed goes into the
+	 * layout, because the repeat or the clamp is baked into the gutter and into the helper and
 	 * neither can be undone at the sampler. Everything else stays refused with its own line.
 	 */
 	public Map<String, VolumeAtlas> volumes() {
 		Map<String, VolumeAtlas> flat = new LinkedHashMap<>();
 		for (PackTexture texture : this.supplied) {
 			if (flattenable(texture)) {
-				PackTexture.Raw raw = texture.raw().orElseThrow();
 				flat.putIfAbsent(texture.sampler(),
-						VolumeAtlas.of(raw.sizeX(), raw.sizeY(), raw.sizeZ()));
+						VolumeAtlas.of(texture.raw().orElseThrow(), texture.clamp()));
 			}
 		}
 
@@ -447,17 +443,13 @@ public final class PackTextures {
 	}
 
 	private static boolean flattenable(PackTexture texture) {
-		return volume(texture) && !texture.clamp();
+		return texture.raw().filter(VolumeAtlas::serves).isPresent();
 	}
 
-	/**
-	 * A blob of the one shape this lays out flat, whatever addressing it asks for: three dimensional
-	 * and one byte a texel.
-	 */
+	/** A blob of the one shape this lays out flat, whatever it holds and however it is addressed. */
 	private static boolean volume(PackTexture texture) {
 		return texture.raw()
 				.filter(raw -> raw.shape() == PackTexture.Shape.TEXTURE_3D)
-				.filter(raw -> raw.pixelType().bytesPerTexel(raw.pixelFormat()) == 1L)
 				.isPresent();
 	}
 
@@ -481,17 +473,26 @@ public final class PackTextures {
 	 * <p>
 	 * A stage override is asked first. Nothing in the corpus writes both forms for one name, and if
 	 * one ever does, the form that names a stage is the more precise of the two.
+	 * <p>
+	 * A volume is never the answer here, under either form. Iris renames a declaration to the
+	 * pack's texture only when the declared type matches the texture's shape
+	 * ({@code TextureTransformer.isTypeValid}), so a {@code sampler3D} of that name reads the
+	 * blob and a {@code sampler2D} of the same name in the same stage goes on reading the colour
+	 * target. Here the translation moves every {@code sampler3D} declaration onto a forged name,
+	 * and the volume answers under that name alone: Photon lays its noise over {@code colortex0}
+	 * for the composite stage and reads the scene as {@code sampler2D colortex0} in the same
+	 * stage, and served by name that scene was the noise, red and nothing else.
 	 */
 	public Optional<PackTexture> resolve(TextureStage stage, String sampler) {
 		Map<String, PackTexture> forStage = this.overrides.getOrDefault(stage, Map.of());
 		for (String spelling : spellings(sampler)) {
 			PackTexture found = forStage.get(spelling);
 			if (found != null) {
-				return Optional.of(found);
+				return Optional.of(found).filter(texture -> !volume(texture));
 			}
 		}
 
-		return Optional.ofNullable(this.named.get(sampler));
+		return Optional.ofNullable(this.named.get(sampler)).filter(texture -> !volume(texture));
 	}
 
 	/**
@@ -508,11 +509,23 @@ public final class PackTextures {
 	 * Both spellings because a colour target answers to two names and the override is written under
 	 * one of them: Complementary writes {@code texture.gbuffers.gaux4} and its gbuffers may sample
 	 * either word. Iris looks an override up under every name of the unit for the same reason.
+	 * <p>
+	 * A volume takes no name over: it is served under the forged name the translation gives a
+	 * {@code sampler3D} declaration, and a plain name of that spelling stays what it was, which is
+	 * what {@link #resolve} says too.
 	 */
 	public Set<String> suppliedTo(TextureStage stage) {
-		Set<String> names = new LinkedHashSet<>(this.named.keySet());
-		this.overrides.getOrDefault(stage, Map.of()).keySet()
-				.forEach(sampler -> names.addAll(spellings(sampler)));
+		Set<String> names = new LinkedHashSet<>();
+		this.named.forEach((sampler, texture) -> {
+			if (!volume(texture)) {
+				names.add(sampler);
+			}
+		});
+		this.overrides.getOrDefault(stage, Map.of()).forEach((sampler, texture) -> {
+			if (!volume(texture)) {
+				names.addAll(spellings(sampler));
+			}
+		});
 		this.diverted.getOrDefault(stage, Set.of())
 				.forEach(sampler -> names.addAll(spellings(sampler)));
 		this.divertedEverywhere.forEach(sampler -> names.addAll(spellings(sampler)));

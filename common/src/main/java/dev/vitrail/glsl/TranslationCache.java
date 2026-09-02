@@ -324,6 +324,8 @@ public final class TranslationCache {
 			digest.update(intBytes(volume.getValue().width()));
 			digest.update(intBytes(volume.getValue().height()));
 			digest.update(intBytes(volume.getValue().depth()));
+			// The helper's text differs between a volume that repeats and one that clamps.
+			digest.update(new byte[] {(byte) (volume.getValue().clamp() ? 1 : 0)});
 		}
 
 		for (ProgramStage stage : ProgramStage.values()) {

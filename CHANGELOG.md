@@ -15,6 +15,17 @@ what the next one holds.
 
 ### Fixed
 
+- **Photon draws.** Three things stood between its files and its picture. Its atmosphere table
+  is a three-dimensional volume of half floats asked to clamp, and the flat atlas that stands in
+  for a volume took one byte a texel and a repeating volume only, so the three deferred passes
+  reading the table, the sky map, the clouds and the shading itself, were dropped; the atlas now
+  keeps a blob's channel type and lays a clamped volume out with its edges repeated. Its volumes
+  are read through macros standing for the sampler's name, which the rewrite of those reads did
+  not follow; it does. And a volume laid over the name of a colour target for one stage took the
+  plain `sampler2D` reads of that name in the same stage with it, where the reference renames
+  only a `sampler3D` of that name: Photon's composites read its cloud noise where the scene should
+  have been, and every pixel came out red.
+
 - **A pack that writes a constant through a macro is no longer refused whole for it.** A
   `const` whose initialiser the Vulkan compiler would not take loses the keyword at load, and
   whether it would was judged on the names written on the line: a macro's name passed whatever

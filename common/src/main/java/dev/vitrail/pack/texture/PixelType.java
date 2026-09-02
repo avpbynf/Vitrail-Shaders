@@ -60,4 +60,9 @@ public enum PixelType {
 	public long bytesPerTexel(PixelFormat format) {
 		return this.packed ? this.bytes : (long) this.bytes * format.components();
 	}
+
+	/** Bytes in one channel, which for a packed type is the whole word the channels share. */
+	public int channelBytes() {
+		return this.bytes;
+	}
 }

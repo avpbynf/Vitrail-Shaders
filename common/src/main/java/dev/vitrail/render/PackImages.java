@@ -9,6 +9,8 @@ import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.pack.texture.VolumeAtlas;
 import dev.vitrail.uniform.NoiseTexture;
 
+import com.mojang.blaze3d.GpuFormat;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
@@ -64,15 +66,18 @@ final class PackImages {
 	/**
 	 * One texture of the pack, decoded into the bytes that will be uploaded.
 	 *
-	 * @param rgba  four bytes a texel, in the order the encoder wants them, which is the order
-	 *              {@link NoiseTexture} already produces for the noise image
-	 * @param shape one clause for the log, saying what was read and how big it came out
+	 * @param pixels four channels a texel in the order the encoder wants them, which is the order
+	 *               {@link NoiseTexture} already produces for the noise image; a byte a channel for
+	 *               an image, and the blob's own channel type for a volume laid out flat
+	 * @param format what the surface is allocated as, which is what the pixels are
+	 * @param shape  one clause for the log, saying what was read and how big it came out
 	 */
 	@SuppressWarnings("ArrayRecordComponent")
-	record Image(PackTexture texture, int width, int height, byte[] rgba, String shape) {
+	record Image(PackTexture texture, int width, int height, byte[] pixels, GpuFormat format,
+			String shape) {
 
 		long bytes() {
-			return this.rgba.length;
+			return this.pixels.length;
 		}
 	}
 
@@ -168,8 +173,8 @@ final class PackImages {
 				PackTexture.Raw raw = texture.raw().orElseThrow();
 
 				return new Image(texture, atlas.atlasWidth(), atlas.atlasHeight(),
-						atlas.spread(bytes), raw.sizeX() + "x" + raw.sizeY() + "x" + raw.sizeZ()
-								+ " laid out flat as " + atlas.atlasWidth() + "x"
+						atlas.spread(bytes), format(atlas), raw.sizeX() + "x" + raw.sizeY() + "x"
+								+ raw.sizeZ() + " laid out flat as " + atlas.atlasWidth() + "x"
 								+ atlas.atlasHeight());
 			}
 
@@ -186,7 +191,7 @@ final class PackImages {
 
 			NoiseTexture.Image decoded = NoiseTexture.decode(bytes);
 
-			return new Image(texture, decoded.width(), decoded.height(), decoded.rgba(),
+			return new Image(texture, decoded.width(), decoded.height(), decoded.rgba(), GpuFormat.RGBA8_UNORM,
 					decoded.width() + "x" + decoded.height());
 		} catch (IOException | RuntimeException e) {
 			notes.add(texture.path() + " could not be read: " + e.getMessage() + ", so "
@@ -252,7 +257,7 @@ final class PackImages {
 
 			NoiseTexture.Image decoded = NoiseTexture.decode(bytes);
 
-			return new Image(texture, decoded.width(), decoded.height(), decoded.rgba(),
+			return new Image(texture, decoded.width(), decoded.height(), decoded.rgba(), GpuFormat.RGBA8_UNORM,
 					decoded.width() + "x" + decoded.height());
 		} catch (IOException | RuntimeException e) {
 			notes.add(path + " could not be read: " + e.getMessage() + ", so " + texture.sampler()
@@ -299,9 +304,9 @@ final class PackImages {
 	/**
 	 * What the log says about a texture that IS served, once it is known how big it came out.
 	 * <p>
-	 * A volume says where its wrapping is done, because that is the one thing a reader could not
-	 * work out from the sampler: the atlas itself is bound clamped, and the repeat lives in the
-	 * helper the translation printed.
+	 * A volume says where its addressing is done, because that is the one thing a reader could not
+	 * work out from the sampler: the atlas itself is bound clamped, and the repeat or the clamp the
+	 * pack asked for lives in the helper the translation printed.
 	 */
 	static String describe(Image image) {
 		PackTexture texture = image.texture();
@@ -313,7 +318,28 @@ final class PackImages {
 				.orElse("every stage") + " " + texture.sampler() + " reads " + texture.path()
 				+ ", " + image.shape() + ", " + (texture.blur() ? "linear" : "nearest") + " and "
 				+ (texture.clamp() ? "clamped" : "repeating")
-				+ (flat ? ", the repeat done by the shader" : "");
+				+ (flat ? ", the " + (texture.clamp() ? "clamp" : "repeat") + " done by the shader"
+						: "");
+	}
+
+	/**
+	 * What a flattened volume is allocated as: four channels of the blob's own type, so that the
+	 * bytes go up as the file holds them.
+	 * <p>
+	 * The channel type decides and the internal format the declaration names does not, which is a
+	 * divergence from GL where the two disagree: GL stores what the declaration says and converts
+	 * the bytes on the way in, so a half float uploaded into a normalised sixteen bit format lands
+	 * clamped to one, where here it keeps its value. Every volume of the corpus declares the format
+	 * its bytes are in, so nothing draws differently for it today, and a pack that disagrees gets
+	 * its bytes unconverted rather than a conversion written for a case nothing exercises.
+	 */
+	private static GpuFormat format(VolumeAtlas atlas) {
+		return switch (atlas.type()) {
+			case UNSIGNED_BYTE -> GpuFormat.RGBA8_UNORM;
+			case UNSIGNED_SHORT -> GpuFormat.RGBA16_UNORM;
+			case HALF_FLOAT -> GpuFormat.RGBA16_FLOAT;
+			default -> throw new IllegalStateException(atlas.type() + " is not a type an atlas holds");
+		};
 	}
 
 	/**
