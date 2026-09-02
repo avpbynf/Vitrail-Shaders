@@ -42,12 +42,23 @@ import org.joml.Vector3f;
  * <p>
  * The stage stands at the end of a frame and not at its top, and that placement is the culling
  * design. The world is walked a second time for the light, under the shape
- * {@link ShadowCullFrustum} chooses for it, which reuses the very lists
- * the camera's walk just filled: {@code ChunkRenderList} is one persistent object per region, so
+ * {@link ShadowCullFrustum} chooses for it. <strong>The walk is the light's own</strong>: it is
+ * Sodium's synchronous traversal of every built section, under the light's frustum alone, with no
+ * occlusion and no fog, so nothing the camera can or cannot see decides what the map holds. What
+ * it reuses is the CONTAINERS: {@code ChunkRenderList} is one persistent object per region, so
  * there is nothing to save and restore, only an order to respect. Advancing the frame counter first
  * is what lets the second walk of a frame reset those lists instead of overflowing them, and raising
  * {@code needsRenderListUpdate} afterwards is what makes the camera's walk at the top of the next
  * frame take them back. One extra walk per frame, no bookkeeping.
+ * <p>
+ * The one thing the walk leaves behind for the length of the stage is the occlusion tree Sodium
+ * answers visibility questions from, which is the light's after the walk and the camera's before
+ * it. The entities are gathered AFTER the walk for that reason: Sodium's entity culling asks that
+ * tree, and asked before the walk it drops every caster whose sections the camera's walk did not
+ * reach, a mob behind the player first of all (spared: a box touching a section with no geometry,
+ * a glowing or named mob, a huge one). Iris extracts its entities inside its shadow scope, where
+ * that tree is never the camera's ({@code shadows/ShadowRenderer.java:549}, the swap at
+ * {@code compat/sodium/mixin/MixinRenderSectionManagerShadow.java:150}).
  * <p>
  * <strong>The price is that the shadows are one frame late</strong>, drawn with this frame's sun for
  * the next frame's picture. That is a deliberate divergence from Iris, which culls, draws and reads
@@ -194,12 +205,7 @@ public final class ShadowTerrain {
 		boolean measuring = measured != BlockStateIds.generation();
 		int seen = measuring ? sections(manager.getRenderLists()) : 0;
 
-		// Which entities the light can see is worked out here, and for them the position settles
-		// nothing: they are kept or dropped by a frustum and by a section's own state, neither of
-		// which this walk moves. The block entities are the opposite case and are taken further
-		// down, once the light has render lists of its own.
 		ShadowCasters casters = TerrainDraw.shadowCasters();
-		ShadowGeometry.gather(light, camera, casters);
 
 		// The frame counter first, and it is the piece easiest to miss: the per region lists only
 		// reset themselves for the first walk of a frame, so a second walk under the same number
@@ -224,7 +230,6 @@ public final class ShadowTerrain {
 			}
 		}
 		try {
-			FogParameters fog = ((MixinSodiumWorldRenderer) renderer).vitrail$lastFogParameters();
 			// The shape the pack asked for, and a box around the camera cut out of it wherever a
 			// shadow distance bounds the walk. Distance, default and Advanced keep that box and
 			// no planes. Advanced is the named divergence ShadowCullFrustum.of carries:
@@ -236,15 +241,24 @@ public final class ShadowTerrain {
 			ShadowCullFrustum.Chosen cull = ShadowCullFrustum.of(plan);
 			Viewport viewport = new Viewport(cull.frustum(),
 					new Vector3d(camera.x, camera.y, camera.z));
+			// No fog, whatever the camera's walk was bounded by. With Sodium's fog occlusion on, the
+			// walk stops at the fog's cull distance, and the camera's fog is the wrong bound for the
+			// light: rain or water shortens it, and a hill that still casts into the view would
+			// leave the map with it. Iris turns fog occlusion off for both walks whenever a pack is
+			// loaded (compat/sodium/mixin/MixinRenderSectionManager.java, iris$disableFogOcclusion);
+			// the camera's walk here still keeps its own fog, a gap of the picture and not of the
+			// map, and not this stage's to close.
 			manager.finalizeRenderLists(minecraft.gameRenderer.mainCamera(), viewport,
-					fog == null ? FogParameters.NONE : fog, true);
+					FogParameters.NONE, true);
 
-			// The block entities, HERE and not with the entities above: this is the first line of the
-			// stage at which the light has render lists of its own, and they are what says which
-			// sections to ask. Sodium's door onto them is the one Iris reaches through the game's
-			// extraction (shadows/ShadowRenderer.java:668, cancelled and served by the same mixin);
-			// the game's own visible sections are never filled at all under Sodium, so the walk that
-			// read them found a world with no chests in it.
+			// The entities, now that the tree Sodium answers visibility from is the light's, and the
+			// class note says what asking the camera's would drop. The block entities follow: this
+			// is the first line of the stage at which the light has render lists of its own, and
+			// they are what says which sections to ask. Sodium's door onto them is the one Iris
+			// reaches through the game's extraction (shadows/ShadowRenderer.java:668, cancelled and
+			// served by the same mixin); the game's own visible sections are never filled at all
+			// under Sodium, so the walk that read them found a world with no chests in it.
+			ShadowGeometry.gather(light, camera, casters);
 			ClientLevel level = minecraft.level;
 			if (level != null) {
 				ShadowGeometry.gatherBlockEntities((state, partial) -> renderer.extractBlockEntities(

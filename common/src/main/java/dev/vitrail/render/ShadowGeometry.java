@@ -103,20 +103,28 @@ public final class ShadowGeometry {
 	}
 
 	/**
-	 * Works out which entities the light can see, before the light's own walk of the sections runs.
+	 * Works out which entities the light can see, AFTER the light's own walk of the sections has
+	 * run, and the order is load bearing.
 	 * <p>
-	 * <strong>For the entities the order settles nothing, and it is worth saying why.</strong> A
-	 * caster is kept or dropped by {@code LevelRenderer.isSectionCompiledAndVisible}, which Sodium
-	 * replaces outright ({@code mixin/core/render/world/LevelRendererMixin}) and answers off its own
-	 * section state; the game's own answer, a fade since the section's own upload
-	 * ({@code chunk/SectionRenderDispatcher.java:223-225}), is not the one that runs here. Neither
-	 * that state nor the frustum this builds is moved by the walk below, so asked before or after it
-	 * the test answers the same thing. Iris carries the same test
-	 * ({@code shadows/ShadowRenderer.java:703-705}). This sits here because it is the plainer place
-	 * to ask, and for no other reason.
+	 * Past the early exits of {@code shouldRender} itself (a renderer not affected by culling, the
+	 * distance test), a caster is kept or dropped by two tests.
+	 * {@code LevelRenderer.isSectionCompiledAndVisible}, which Sodium replaces outright
+	 * ({@code mixin/core/render/world/LevelRendererMixin}), answers "built" off the section's own
+	 * state and is moved by nothing. The frustum test of {@code shouldRender} is the one Sodium's
+	 * entity culling reaches into ({@code SodiumWorldRenderer.isEntityVisible}), and that answers
+	 * off the occlusion tree the last walk left in {@code RenderSectionManager.renderTree}. Before
+	 * the light's walk that tree is the camera's, so a mob whose sections the camera's walk did not
+	 * reach, one behind the player first of all, casts nothing; after the walk it is the light's,
+	 * and the test answers for the map being drawn. Sodium spares three things from that tree, and
+	 * they were never missing: a caster whose box touches a section with no geometry in it, one
+	 * that glows or wears a name, and one too large to test. Iris extracts its entities inside its
+	 * shadow scope ({@code shadows/ShadowRenderer.java:549}), where the tree is never the camera's:
+	 * the swap at {@code compat/sodium/mixin/MixinRenderSectionManagerShadow.java:150} installs a
+	 * field nothing assigns, so the tree there is the shadow walk's own on the frames that rebuild
+	 * its lists, and none at all on the others.
 	 * <p>
-	 * <strong>For the block entities the order decides everything</strong>, and they are taken in
-	 * {@link #gatherBlockEntities} instead, which says why.
+	 * The block entities are taken in {@link #gatherBlockEntities} instead, off the light's own
+	 * render lists, which says why.
 	 *
 	 * @param light   the light's own view projection, the matrix the terrain is culled against
 	 * @param camera  where the frame was drawn from, which the map is built around
@@ -477,9 +485,13 @@ public final class ShadowGeometry {
 	 * an axis-aligned cube about the camera cut out of it, and the game's own {@code shouldRender}
 	 * hands both the caster's culling box inflated by half a block ({@code :703} there,
 	 * {@code entity/EntityRenderer.java:73-78}). {@link Reached} is that cube asked of that box.
-	 * What stands beside it is the light's own frustum rather than the sweep, and that is the open
-	 * gap: a caster inside the cube and the light's volume but outside the sweep is kept here and
-	 * dropped there, which costs a draw and never a pixel, the sweep being built so that nothing
+	 * What stands beside it in the planes is the light's own frustum rather than the sweep, but the
+	 * sweep reaches the caster all the same, by Sodium's road: {@code shouldRender} asks the terrain
+	 * renderer's tree, and after the light's walk that tree holds the sections the walk visited
+	 * under {@code ShadowCullFrustum}, so a caster inside the cube and the light's volume but
+	 * outside the sweep is dropped here unless its box touches a section with no geometry in it.
+	 * Iris keeps that caster on the frames its shadow lists are not rebuilt, its tree being none
+	 * then; either way it costs a draw and never a pixel, the sweep being built so that nothing
 	 * outside it can shadow what the camera sees. The other way round is empty: Iris's entity
 	 * frustum never asks the light's volume, so a caster outside it is kept there and dropped here,
 	 * but outside the light's volume is outside the map, and what Iris keeps of it draws nothing.
