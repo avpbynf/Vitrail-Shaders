@@ -68,10 +68,14 @@ function that disagree about them are a real conflict.
 
 **`const` on a variable whose initialiser is not a constant expression is stripped.** Vulkan
 refuses a global `const mat3` initialised from `transpose(...)`, or from a uniform, which OpenGL
-drivers took as merely immutable. The keyword comes off and the value stays. A declaration whose
-initialiser is only literals, type constructors and names the unit itself defines is left alone,
-because an array size still needs a real constant. Parameters keep `const`: that spelling means
-immutable, not compile-time.
+drivers took as merely immutable. The keyword comes off and the value stays. The rule is coarser
+than the compiler's, which folds a builtin over literals and keeps the keyword: here a declaration
+whose initialiser is only literals and type constructors is left alone, because an array size still
+needs a real constant, and any call or any other global takes the keyword off. A macro the unit
+defines is judged by what it stands for, since the compiler sees the body and not the name: one
+standing for a number leaves the keyword on, one hiding a call or another global takes it off, and
+that matters because what the compiler does refuse is a global this same rule had already demoted.
+Parameters keep `const`: that spelling means immutable, not compile-time.
 
 **Names that collide with newer builtins are renamed.** A function a pack defines can collide with
 a builtin introduced after the version the pack targets, and the error does not name the collision:
