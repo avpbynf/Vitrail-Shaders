@@ -264,9 +264,9 @@ caster you cannot see. That is the reference's assumption, and packs are written
 
 **The shape is the pack's to choose**, through `shadow.culling`, and the four states and their words
 are described once under [the pack format](pack-format.md). Advanced, and the silent default when
-the pack does not voxelise, take a box around the player on this engine rather than that sweep:
-the sweep pops leaves at the sun silhouette here, and Iris Advanced does not. The safe zone still
-sweeps. The distance is a separate axis and composes with all of them: whichever shape is chosen,
+the pack does not voxelise, sweep as they do under Iris; a box around the player in their place is
+available behind a switch, described there too. The safe zone sweeps as well. The distance is a
+separate axis and composes with all of them: whichever shape is chosen,
 the box a shadow distance asks for is cut out of it, so the sweep and the bound never have to know
 about each other.
 
