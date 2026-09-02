@@ -26,6 +26,12 @@ what the next one holds.
   only a `sampler3D` of that name: Photon's composites read its cloud noise where the scene should
   have been, and every pixel came out red.
 
+- **Every target starts from its clear colour when a pack loads or the window resizes**, both
+  halves of it and whether or not the pack asks for a clear every frame. A half nothing drew into
+  while the shaders were still compiling could keep whatever the driver had left in it, and a
+  pack that keeps a target from one frame to the next then read that as its history. The
+  reference clears everything once at that moment, and so does this.
+
 - **A pack that writes a constant through a macro is no longer refused whole for it.** A
   `const` whose initialiser the Vulkan compiler would not take loses the keyword at load, and
   whether it would was judged on the names written on the line: a macro's name passed whatever

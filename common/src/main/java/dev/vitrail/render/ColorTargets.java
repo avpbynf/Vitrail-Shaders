@@ -254,7 +254,10 @@ final class ColorTargets {
 	 * left on the books, and an entry leaves them where a pass descriptor is BUILT rather than where
 	 * one opens. A frame that builds descriptors and opens none of them therefore clears the books
 	 * without emptying anything, and this comes down with them. That gap is older than this flag and
-	 * it is where the remaining hole is, not in the carrying.
+	 * it is not in the carrying. What it used to cost was a target starting from whatever the
+	 * driver had left in it; since every half of every target is emptied outright the moment the
+	 * round is decided, it costs a recorded clear that is dropped after the texels were emptied
+	 * anyway.
 	 * <p>
 	 * Warm up is the case this exists for, and it is the ordinary road rather than an odd one: the
 	 * terrain opens the targets and hands the frame straight back, once per frame, for as long as
@@ -436,9 +439,11 @@ final class ColorTargets {
 	 * <p>
 	 * A record is paid afterwards, by the load-op of the first pass that attaches the surface or by
 	 * the flush that takes whatever is left, and {@link #fullDeferOwed} is what carries it over a
-	 * frame that pays nothing. The rest of a full round is not a target at all, the constants, the
-	 * noise field and the textures the pack ships, and that part is written here and now on
-	 * {@link #clearOwed} alone, once per reallocation and never again while one is merely carried.
+	 * frame that pays nothing. On {@link #clearOwed} alone, once per reallocation and never again
+	 * while one is merely carried, a second part is written here and now: the constants, the noise
+	 * field and the textures the pack ships, which are not targets and fold into no load-op, and
+	 * both halves of every target, emptied outright so that a half no pass attaches while the
+	 * programs are still compiling does not wait on a record that can be dropped.
 	 * <p>
 	 * The shadow map is deliberately not in this list. It is drawn at the end of a frame for the
 	 * next one, so what it holds when the frame opens is exactly what the gbuffers are about to
@@ -469,6 +474,21 @@ final class ColorTargets {
 			clear(encoder, this.unwritten, UNWRITTEN);
 			uploadNoise(encoder);
 			this.packSurfaces.forEach((image, surface) -> upload(encoder, surface, image.pixels()));
+
+			// Every half of every target, here and now rather than as a load-op. A half no pass
+			// attaches while the programs are still compiling keeps its load-op on the books until
+			// a frame that builds a descriptor and opens none drops the record, which is the hole
+			// fullDeferOwed names, and a target the pack keeps between frames then starts from
+			// whatever the driver left in it. Iris clears both framebuffers of every target on the
+			// first frame after an allocation, clear flag or not (ClearPassCreator with fullClear),
+			// and this is that clear, paid once per reallocation.
+			for (int index : this.plan.ordered()) {
+				Vector4fc colour = this.fogCleared && index == FOG_TARGET
+						? fog
+						: this.clearColours.get(index);
+				clear(encoder, this.mainSide.get(index), colour);
+				clear(encoder, this.altSide.get(index), colour);
+			}
 		}
 
 		this.pendingClears.clear();
@@ -1155,7 +1175,8 @@ final class ColorTargets {
 	 * four thirds of a clear rather than one.
 	 * <p>
 	 * Used for the one-pixel constants, which no pack pass writes and which therefore cannot fold
-	 * into a load-op.
+	 * into a load-op, and once per reallocation for both halves of every target, where the load-op
+	 * the round records may never be paid.
 	 */
 	private static void clear(CommandEncoder encoder, TargetSurface surface, Vector4fc colour) {
 		GpuTexture texture = surface == null ? null : surface.texture();
