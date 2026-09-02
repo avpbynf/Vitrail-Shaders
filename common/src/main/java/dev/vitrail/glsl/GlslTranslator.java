@@ -28,6 +28,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -77,7 +79,8 @@ import java.util.stream.Stream;
 	 * never asks the question; the workaround here is to split each matrix varying into that many
 	 * vectors before compilation and rebuild the matrix as a local, which is what
 	 * {@link #splitMatrixVaryings} does. A struct varying is the same case with a member per
-	 * location, and {@link #splitStructVaryings} does the same to it. Iris is not copied.
+	 * location, an array varying with an element per location, and {@link #splitStructVaryings}
+	 * and {@link #splitArrayVaryings} do the same to them. Iris is not copied.
  */
 public final class GlslTranslator {
 
@@ -98,6 +101,15 @@ public final class GlslTranslator {
 	/** The prefix of a varying standing for one member of a struct varying. */
 	private static final String STRUCT_MEMBER = "of_vstruct_";
 
+	/** The prefix of a varying standing for one element of an array varying. */
+	private static final String ARRAY_ELEMENT = "of_varr_";
+
+	/**
+	 * A declarator's array suffix, one dimension sized by a number the pack wrote out: one to
+	 * a few hundred elements, since no interface has that many locations and a zero is no array.
+	 */
+	private static final Pattern ARRAY_SUFFIX = Pattern.compile("\\[\\s*([1-9]\\d{0,2})\\s*\\]$");
+
 	/**
 	 * The member types a struct varying is split over: one location apiece, nothing nested, and
 	 * nothing a varying may not be, which rules the booleans out.
@@ -106,9 +118,13 @@ public final class GlslTranslator {
 			"float", "vec2", "vec3", "vec4", "int", "ivec2", "ivec3", "ivec4",
 			"uint", "uvec2", "uvec3", "uvec4", "double", "dvec2", "dvec3", "dvec4");
 
-	/** The member types that may not be interpolated, so their varying is flat whatever the pack wrote. */
+	/**
+	 * The member types that may not be interpolated, so their varying is flat whatever the pack
+	 * wrote: the integers, and the doubles the language holds to the same rule.
+	 */
 	private static final Set<String> INTEGER_MEMBER_TYPES = Set.of(
-			"int", "ivec2", "ivec3", "ivec4", "uint", "uvec2", "uvec3", "uvec4");
+			"int", "ivec2", "ivec3", "ivec4", "uint", "uvec2", "uvec3", "uvec4",
+			"double", "dvec2", "dvec3", "dvec4");
 
 	/**
 	 * The hit flash and the damage tint, which is a varying wherever the mesh carries the overlay and
@@ -486,6 +502,12 @@ public final class GlslTranslator {
 	 */
 	private final List<SplitStruct> splitStructs = new ArrayList<>();
 
+	/**
+	 * Array varyings rewritten as one varying per element, for the same numbering again. Empty
+	 * when the stage declared none.
+	 */
+	private final List<SplitArray> splitArrays = new ArrayList<>();
+
 	/** Inputs {@link #dropUnprovidedInputs} took out, which this stage no longer declares. */
 	private final Set<String> droppedInputs = new LinkedHashSet<>();
 
@@ -793,6 +815,7 @@ public final class GlslTranslator {
 		// three locations and createFromSpirv then numbers the next name onto the second column.
 		splitMatrixVaryings();
 		splitStructVaryings();
+		splitArrayVaryings();
 		wrapMainForSplits();
 		// Last, and it has to be: rewriteIdentifiers is where varying becomes in or out, and
 		// dropUnprovidedInputs blanks the ranges recorded here, so nothing may move between the two.
@@ -2815,7 +2838,8 @@ public final class GlslTranslator {
 	 * OpenGL links by name and never asks. The workaround here is to take the declaration out of
 	 * the body and emit the matrix as a local in the header, beside one vector per column: the pack
 	 * body still writes and reads the original name, and the wrapper copies the columns. Arrays
-	 * are left alone; no pack of the corpus writes one, and AstraLex's four matrices are not arrays.
+	 * of matrices are left alone; no pack of the corpus writes one, and AstraLex's four matrices
+	 * are not arrays.
 	 */
 	private void splitMatrixVaryings() {
 		if (this.stage == ProgramStage.COMPUTE) {
@@ -2876,7 +2900,8 @@ public final class GlslTranslator {
 	 * The injected brace is still a body of {@code main}, so it is accepted here.
 	 */
 	private void wrapMainForSplits() {
-		if (this.mainWrapped || (this.splitMatrices.isEmpty() && this.splitStructs.isEmpty())) {
+		if (this.mainWrapped || (this.splitMatrices.isEmpty() && this.splitStructs.isEmpty()
+				&& this.splitArrays.isEmpty())) {
 			return;
 		}
 
@@ -3175,6 +3200,78 @@ public final class GlslTranslator {
 	}
 
 	/**
+	 * One array varying rewritten as one varying per element.
+	 *
+	 * @param input true when this stage reads the array ({@code in}), false when it writes it
+	 */
+	private record SplitArray(String name, String type, int size, String qualifier, boolean input) {
+	}
+
+	/**
+	 * Turns each file-scope array {@code in} / {@code out} of scalars or vectors into one varying
+	 * per element, for the reason the matrices and the structs are split: an array is one
+	 * reflected variable over as many locations as it has elements, and one rank. Photon's
+	 * {@code flat in vec3 sky_sh[9]} carries its sky harmonics into the deferred shading, and the
+	 * two varyings after it were numbered onto its elements.
+	 * <p>
+	 * Only a single dimension sized by a number the pack wrote out is split: a size written as a
+	 * name, a macro the unit still carries or a constant expression, is left alone with the
+	 * declaration. A statement declaring an array beside a plain name is left alone too, so that
+	 * the two are not pulled apart.
+	 * <p>
+	 * Only what the vertex stage writes and the fragment stage reads: a geometry or tessellation
+	 * stage declares its per-vertex inputs as arrays that are no varying arrays, and a fragment
+	 * stage's output array is a set of colour outputs, which the header numbers on its own.
+	 */
+	private void splitArrayVaryings() {
+		boolean output = this.stage == ProgramStage.VERTEX;
+		if (!output && this.stage != ProgramStage.FRAGMENT) {
+			return;
+		}
+
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() != null || !this.unit.isLive(lines[index])
+					|| !token.identifier(output ? "out" : "in")) {
+				continue;
+			}
+
+			FileScope declared = fileScopeDeclaration(index);
+			if (declared == null || !STRUCT_MEMBER_TYPES.contains(declared.type())) {
+				continue;
+			}
+
+			List<SplitArray> found = new ArrayList<>();
+			for (String name : declared.names()) {
+				String prefix = declared.type() + " " + name;
+				String declarator = declared.declarators().getOrDefault(name, "");
+				Matcher size = declarator.startsWith(prefix)
+						? ARRAY_SUFFIX.matcher(declarator.substring(prefix.length()))
+						: null;
+				if (size == null || !size.matches()) {
+					found.clear();
+					break;
+				}
+
+				found.add(new SplitArray(name, declared.type(), Integer.parseInt(size.group(1)),
+						declared.qualifier(), !output));
+			}
+
+			if (found.isEmpty()) {
+				continue;
+			}
+
+			blankRange(declared.start(), declared.end());
+			this.splitArrays.addAll(found);
+		}
+	}
+
+	private static String arrayElementName(String array, int element) {
+		return ARRAY_ELEMENT + array + "_" + element;
+	}
+
+	/**
 	 * Wraps the body's own main so that the owed varyings can be assigned before it runs, where
 	 * nothing had wrapped it already.
 	 * <p>
@@ -3339,9 +3436,12 @@ public final class GlslTranslator {
 				// backend compiles each stage to its own module rather than linking them, so the
 				// disagreement lands as a compile error naming neither stage. What it costs the
 				// image is nothing: the pass is lost either way, here through the refusal it
-				// already had and there through a module that does not build, and no pack of the
-				// corpus declares a varying array. The declarator carrying brackets is what tells
-				// one, the type name alone never doing so.
+				// already had and there through a module that does not build. The one array
+				// varying the corpus declares, Photon's sky harmonics, is split into its elements
+				// before this runs, and those elements are not offered here either: an input array
+				// the vertex stage never wrote would stay declared, which no pack of the corpus
+				// does. The declarator carrying brackets is what tells one, the type name alone
+				// never doing so.
 				if (declared.declarators().getOrDefault(name, "").equals(declared.type() + " " + name)) {
 					this.unprovidedInputs.put(name, declared.qualifier().isEmpty()
 							? declared.type()
@@ -4924,6 +5024,24 @@ public final class GlslTranslator {
 			}
 		}
 
+		// The array as a global of the pack's name, then one varying per element in index order,
+		// flat where the element may not be interpolated.
+		for (SplitArray split : this.splitArrays) {
+			lines.add(split.type() + " " + split.name() + "[" + split.size() + "];");
+			String storage = split.input() ? "in" : "out";
+			String qualifier = split.qualifier();
+			if (INTEGER_MEMBER_TYPES.contains(split.type()) && !qualifier.contains("flat")) {
+				qualifier = qualifier.isEmpty() ? "flat" : "flat " + qualifier;
+			}
+
+			String qualified = qualifier.isEmpty()
+					? storage + " " + split.type()
+					: qualifier + " " + storage + " " + split.type();
+			for (int element = 0; element < split.size(); element++) {
+				lines.add(qualified + " " + arrayElementName(split.name(), element) + ";");
+			}
+		}
+
 		// From zero up with no gaps, because a location the game finds nothing declared at is not
 		// left empty: it renumbers what is there and everything above the gap moves down one.
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
@@ -4972,7 +5090,7 @@ public final class GlslTranslator {
 		// has to be declared before it can be called.
 		if (this.depthEpilogue || this.terrainPrologue || this.distantPrologue || this.entityWrapped
 				|| wrapsFragment() || owesInitialisers() || !this.splitMatrices.isEmpty()
-				|| !this.splitStructs.isEmpty()) {
+				|| !this.splitStructs.isEmpty() || !this.splitArrays.isEmpty()) {
 			lines.add("void " + PACK_MAIN + "();");
 			// The mask goes last of all, after the discard: a fragment the alpha test threw away
 			// covered nothing, and marking it covered would leave a hole where a leaf was.
@@ -4986,9 +5104,11 @@ public final class GlslTranslator {
 					+ owedPrologue()
 					+ matrixPrologue()
 					+ structPrologue()
+					+ arrayPrologue()
 					+ PACK_MAIN + "();"
 					+ matrixEpilogue()
 					+ structEpilogue()
+					+ arrayEpilogue()
 					+ (this.depthEpilogue ? " gl_Position.z = " + DEPTH_CONV
 							+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w;" : "")
 					+ (this.alphaEpilogue
@@ -5106,6 +5226,40 @@ public final class GlslTranslator {
 			for (StructMember member : split.members()) {
 				assignments.append(structMemberName(split.name(), member.name())).append(" = ")
 						.append(split.name()).append('.').append(member.name()).append("; ");
+			}
+		}
+
+		return assignments.toString();
+	}
+
+	/** Fills each input array from its elements before the pack body runs. */
+	private String arrayPrologue() {
+		StringBuilder assignments = new StringBuilder();
+		for (SplitArray split : this.splitArrays) {
+			if (!split.input()) {
+				continue;
+			}
+
+			for (int element = 0; element < split.size(); element++) {
+				assignments.append(split.name()).append('[').append(element).append("] = ")
+						.append(arrayElementName(split.name(), element)).append("; ");
+			}
+		}
+
+		return assignments.toString();
+	}
+
+	/** Copies each output array onto its elements after the pack body ran. */
+	private String arrayEpilogue() {
+		StringBuilder assignments = new StringBuilder();
+		for (SplitArray split : this.splitArrays) {
+			if (split.input()) {
+				continue;
+			}
+
+			for (int element = 0; element < split.size(); element++) {
+				assignments.append(arrayElementName(split.name(), element)).append(" = ")
+						.append(split.name()).append('[').append(element).append("]; ");
 			}
 		}
 

@@ -59,6 +59,11 @@ what the next one holds.
   saturated on every lake past a hundred blocks. A struct handed between stages is now taken
   apart and put back together the way a matrix already was.
 
+- **An array handed between a pack's stages arrives whole.** Photon hands its sky harmonics to
+  its deferred shading as an array of nine values, and the two values declared after it reached
+  that stage read off the wrong slots. An array is now taken apart and put back together the way
+  a matrix and a struct are.
+
 - **A mob standing just past the pack's shadow reach for entities keeps its shadow while any
   of it still reaches inside.** A pack that stops its moving casters short of the terrain
   (Complementary does, at an eighth of its shadow distance) had that reach measured on the
