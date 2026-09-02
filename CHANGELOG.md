@@ -64,6 +64,12 @@ what the next one holds.
   that stage read off the wrong slots. An array is now taken apart and put back together the way
   a matrix and a struct are.
 
+- **AstraLex's window panes no longer bloom blue over their walls.** Its glass reflections march
+  a ray across the depth of the world, and on some steps the depth read back was not the image's,
+  so the ray landed on a pixel it never reached and the pane lit up with it, on some frames and
+  not others. A lookup through a sampler that carries no mipmap chain is now asked for the base
+  level of its image outright, which is what the reference's filtering always answered.
+
 - **A mob standing just past the pack's shadow reach for entities keeps its shadow while any
   of it still reaches inside.** A pack that stops its moving casters short of the terrain
   (Complementary does, at an eighth of its shadow distance) had that reach measured on the

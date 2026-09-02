@@ -73,6 +73,16 @@ public final class LegacyGlsl {
 			"textureGather", "textureGatherOffset", "textureGatherOffsets");
 
 	/**
+	 * The lookups that select a level of detail, whether they compute it from the derivatives of
+	 * their coordinate or take it as an argument, and so the ones whose level the translator can pin
+	 * to the base. A fetch names its level and a gather has none, so neither is here, and the
+	 * projective forms are left as they stand.
+	 */
+	public static final Set<String> LEVELLED_LOOKUPS = Set.of(
+			"texture", "textureLod", "textureOffset", "textureLodOffset", "textureGrad",
+			"textureGradOffset");
+
+	/**
 	 * Words GLSL 4.60 reserves that packs still use as ordinary names. Renaming them is only safe
 	 * where they are used as a name, which the translator decides; this table only says what they
 	 * become.
