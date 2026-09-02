@@ -1,9 +1,17 @@
 package dev.vitrail.render;
 
+import dev.vitrail.mixin.GpuDeviceAccessor;
 import dev.vitrail.pack.target.TargetFormat;
 
 import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.systems.GpuDevice;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.vulkan.VulkanConst;
+import com.mojang.blaze3d.vulkan.VulkanDevice;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.vulkan.VK10;
+import org.lwjgl.vulkan.VkFormatProperties;
 
 /**
  * The one place a pack's colour format becomes a device format.
@@ -78,5 +86,29 @@ final class GpuFormats {
 	/** An integer format carries no filtering, and asking a sampler for it is invalid on Vulkan. */
 	static FilterMode filterFor(TargetFormat format) {
 		return format.integer() ? FilterMode.NEAREST : FilterMode.LINEAR;
+	}
+
+	/**
+	 * Whether this device makes a storage image of that format, which is what a compute writing a
+	 * colour target as {@code colorimgN} needs. Asked of the device rather than read off a table,
+	 * the way the attachment count is: the specification's required set is short and a card
+	 * offers well past it, and a target created without the bit on a device that would have taken
+	 * it costs the compute for nothing. Iris asks nothing here because GL decides it at bind time.
+	 * False with no Vulkan device to ask, which is no device to store into either.
+	 */
+	static boolean storageCapable(GpuFormat format) {
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (device == null
+				|| !(((GpuDeviceAccessor) device).vitrail$backend() instanceof VulkanDevice vulkan)) {
+			return false;
+		}
+
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			VkFormatProperties properties = VkFormatProperties.calloc(stack);
+			VK10.vkGetPhysicalDeviceFormatProperties(vulkan.vkDevice().getPhysicalDevice(),
+					VulkanConst.toVk(format), properties);
+
+			return (properties.optimalTilingFeatures() & VK10.VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0;
+		}
 	}
 }

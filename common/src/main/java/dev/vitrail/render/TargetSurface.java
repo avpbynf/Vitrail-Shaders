@@ -40,6 +40,9 @@ final class TargetSurface implements AutoCloseable {
 	private final GpuFormat format;
 	private final boolean mipped;
 
+	/** Whether a compute of the pack writes this target as an image, which is a usage bit at creation. */
+	private final boolean storage;
+
 	private GpuTexture texture;
 	private GpuTextureView view;
 
@@ -71,9 +74,19 @@ final class TargetSurface implements AutoCloseable {
 	 *               level and one view, exactly as before there were chains at all
 	 */
 	TargetSurface(String label, GpuFormat format, boolean mipped, int width, int height) {
+		this(label, format, mipped, false, width, height);
+	}
+
+	/**
+	 * @param storage whether a compute of the pack writes this target as a storage image, which
+	 *                has to be said at creation: the usage is baked into the image
+	 */
+	TargetSurface(String label, GpuFormat format, boolean mipped, boolean storage, int width,
+			int height) {
 		this.label = label;
 		this.format = format;
 		this.mipped = mipped;
+		this.storage = storage;
 		allocate(width, height);
 	}
 
@@ -133,6 +146,22 @@ final class TargetSurface implements AutoCloseable {
 	}
 
 	/**
+	 * The base level alone, which is what a storage descriptor takes: Vulkan binds an image view of
+	 * exactly one level there, and a compute writes level nought. The same object as {@link #view}
+	 * on a surface with no chain, where the whole view is one level already.
+	 */
+	GpuTextureView storageView() {
+		GpuTextureView base = levelView(0);
+
+		return base == null ? this.view : base;
+	}
+
+	/** Whether this surface was created writable from a compute, which nothing can add afterwards. */
+	boolean storage() {
+		return this.storage;
+	}
+
+	/**
 	 * One level on its own, for the reduction to draw into. A render pass attaches a view and writes
 	 * whatever it covers, so a view of one level is how a single level is written without touching
 	 * the rest of the chain.
@@ -178,8 +207,17 @@ final class TargetSurface implements AutoCloseable {
 		// gets it back. The chain makes this real rather than theoretical, since one surface now
 		// creates up to a dozen views instead of one.
 		try {
-			this.texture = device.createTexture(this.label, USAGE, this.format, width, height, 1,
-					levels);
+			// The flag is read by the mixin on the game's usage conversion, inside this one call,
+			// and lowered whatever the call did: a throw that left it up would mark the next
+			// texture anybody creates.
+			TextureUsage.requestStorage(this.storage);
+			try {
+				this.texture = device.createTexture(this.label, USAGE, this.format, width, height, 1,
+						levels);
+			} finally {
+				TextureUsage.requestStorage(false);
+			}
+
 			this.view = device.createTextureView(this.texture);
 
 			if (levels > 1) {
