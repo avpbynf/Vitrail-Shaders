@@ -15,6 +15,14 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack that writes a constant through a macro is no longer refused whole for it.** A
+  `const` whose initialiser the Vulkan compiler would not take loses the keyword at load, and
+  whether it would was judged on the names written on the line: a macro's name passed whatever
+  it stood for, so a macro over a value this engine had already had to demote left a constant
+  the compiler then refused, and one pass refusing takes the whole pack down. The macro is now
+  read through. Photon writes its fog colours that way, and was refused at load on its blending
+  pass.
+
 - **A mob standing just past the pack's shadow reach for entities keeps its shadow while any
   of it still reaches inside.** A pack that stops its moving casters short of the terrain
   (Complementary does, at an eighth of its shadow distance) had that reach measured on the

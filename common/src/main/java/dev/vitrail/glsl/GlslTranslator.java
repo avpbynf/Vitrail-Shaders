@@ -327,6 +327,12 @@ public final class GlslTranslator {
 	 */
 	private static final int MAX_STATEMENT_TOKENS = 4096;
 
+	/**
+	 * How far one macro may lead to another before the name is taken as non-constant, the same
+	 * figure {@code PreprocessorExpression} allows a chain of settings.
+	 */
+	private static final int MAX_MACRO_HOPS = 8;
+
 
 	private final ExpandedUnit unit;
 	private final ProgramStage stage;
@@ -360,6 +366,19 @@ public final class GlslTranslator {
 
 	/** Names the pack defines as macros. Their uses belong to the preprocessor, not to us. */
 	private final Set<String> packMacros = new HashSet<>();
+
+	/**
+	 * What the replacement text of each macro names, its own parameters left out. Read where a
+	 * name has to be judged as the compiler will see it, once the macro is gone.
+	 */
+	private final Map<String, Set<String>> macroBodies = new HashMap<>();
+
+	/**
+	 * What {@link #constantName} answered for each macro, so that a macro named from many places
+	 * is judged once: eighty macros naming each other ten at a time would otherwise be walked a
+	 * hundred million times within the hop bound.
+	 */
+	private final Map<String, Boolean> macroConstant = new HashMap<>();
 
 	/** Names the unit declares under a built-in type, which is how a declaration is told apart. */
 	private final Set<String> declaredNames = new HashSet<>();
@@ -1095,9 +1114,48 @@ public final class GlslTranslator {
 
 			this.tokens.set(name, this.tokens.get(name).naming());
 			if (token.directive().equals("define")) {
-				this.packMacros.add(this.tokens.get(name).text());
+				String macro = this.tokens.get(name).text();
+				this.packMacros.add(macro);
+				this.macroBodies.computeIfAbsent(macro, _ -> new HashSet<>()).addAll(bodyNames(name));
 			}
 		}
+	}
+
+	/**
+	 * Every identifier the replacement text of a macro names. The parameters of a function-like
+	 * macro are left out: they stand for the arguments, and the arguments are judged where they are
+	 * written. The parenthesis is a parameter list only when it touches the name, which is the
+	 * preprocessor's own rule; after a space it is the first token of the body.
+	 */
+	private Set<String> bodyNames(int name) {
+		Set<String> parameters = new HashSet<>();
+		int scan = name + 1;
+		if (scan < this.tokens.size() && this.tokens.get(scan).operator("(")) {
+			for (scan++; scan < this.tokens.size(); scan++) {
+				Token token = this.tokens.get(scan);
+				if (token.kind() == Kind.NEWLINE || token.operator(")")) {
+					break;
+				}
+
+				if (token.kind() == Kind.IDENTIFIER) {
+					parameters.add(token.text());
+				}
+			}
+		}
+
+		Set<String> names = new HashSet<>();
+		for (; scan < this.tokens.size(); scan++) {
+			Token token = this.tokens.get(scan);
+			if (token.kind() == Kind.NEWLINE) {
+				break;
+			}
+
+			if (token.kind() == Kind.IDENTIFIER && !parameters.contains(token.text())) {
+				names.add(token.text());
+			}
+		}
+
+		return names;
 	}
 
 	/**
@@ -2134,14 +2192,17 @@ public final class GlslTranslator {
 	 * and type constructors is left alone. Parameters keep {@code const}: that spelling means
 	 * immutable, not compile-time, and the language allows it.
 	 * <p>
-	 * A name the unit {@code #define}s is left alone too, and it has to be: this pass reads tokens,
-	 * the macro is expanded later by the compiler, and what stands here is a name where a literal
-	 * will be. Mellow builds its outline offsets out of {@code OUTLINE_THICKNESS}, a constructor
-	 * multiplied by it four times over, and hands the array to {@code textureGatherOffsets}, which
-	 * takes nothing but a constant expression. Read as non-constant, the keyword came off a
-	 * declaration that was constant all along, one fullscreen pass of the pack would not compile,
-	 * and a pack one of whose passes does not compile draws nothing at all. What #157 was about is
-	 * a call and a uniform, neither of which a macro name is.
+	 * A name the unit {@code #define}s is judged by what it stands for, and it has to be both ways:
+	 * this pass reads tokens, the macro is expanded later by the compiler, and what stands here is a
+	 * name where the compiler will see the body. Mellow builds its outline offsets out of
+	 * {@code OUTLINE_THICKNESS}, a constructor multiplied by it four times over, and hands the
+	 * array to {@code textureGatherOffsets}, which takes nothing but a constant expression: that
+	 * macro stands for a number, so the keyword stays, and read as non-constant the keyword came
+	 * off a declaration that was constant all along and one fullscreen pass of the pack would not
+	 * compile. Photon writes its fog colours through {@code from_srgb}, a macro over {@code pow}
+	 * and a matrix this very pass demotes: judged by the macro's name alone the keyword stayed, the
+	 * compiler refused what the name stood for, and a pack one of whose passes does not compile
+	 * draws nothing at all.
 	 */
 	private void demoteNonConstantInitialisers() {
 		int parens = 0;
@@ -2174,7 +2235,7 @@ public final class GlslTranslator {
 
 	/**
 	 * Whether this {@code const} declaration assigns something Vulkan will not take as a constant
-	 * expression: any identifier that is neither a type constructor nor a macro this unit defines.
+	 * expression: any identifier {@link #constantName} does not vouch for.
 	 */
 	private boolean nonConstantInitialiser(int keyword, int end) {
 		boolean seenEquals = false;
@@ -2189,13 +2250,66 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			if (!LegacyGlsl.TYPE_NAMES.contains(token.text())
-					&& !this.packMacros.contains(token.text())) {
+			if (!constantName(token.text(), new HashSet<>())) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Whether this name is taken as constant inside an initialiser: a type constructor, or a macro
+	 * of the pack whose replacement text names nothing but those. A macro is read through because
+	 * it is gone by the time the compiler judges the line, and a call or another global inside it
+	 * counts exactly as it would written out. That is the coarseness of the rule above and not the
+	 * compiler's: the compiler folds a builtin over literals and keeps the keyword, and what it
+	 * refuses is a global this very pass demoted, which a macro is one way of naming. Reverie
+	 * writes ten colours through a macro over {@code mix}, {@code pow} and {@code step}, and they
+	 * lose a keyword the compiler would have kept, at no cost to the image.
+	 */
+	private boolean constantName(String name, Set<String> path) {
+		if (LegacyGlsl.TYPE_NAMES.contains(name)) {
+			return true;
+		}
+
+		if (!this.packMacros.contains(name)) {
+			return false;
+		}
+
+		Boolean judged = this.macroConstant.get(name);
+		if (judged != null) {
+			return judged;
+		}
+
+		// A macro naming itself is not expanded again by the preprocessor either.
+		if (path.contains(name)) {
+			return true;
+		}
+
+		// A chain of names is bounded as PreprocessorExpression bounds its own: a pack is
+		// downloaded content, and the overflow is an error nothing above here catches. Past the
+		// bound the name counts as non-constant, which costs the keyword and nothing else.
+		if (path.size() >= MAX_MACRO_HOPS) {
+			return false;
+		}
+
+		path.add(name);
+		try {
+			boolean constant = true;
+			for (String inside : this.macroBodies.getOrDefault(name, Set.of())) {
+				if (!constantName(inside, path)) {
+					constant = false;
+					break;
+				}
+			}
+
+			this.macroConstant.put(name, constant);
+
+			return constant;
+		} finally {
+			path.remove(name);
+		}
 	}
 
 	/**
