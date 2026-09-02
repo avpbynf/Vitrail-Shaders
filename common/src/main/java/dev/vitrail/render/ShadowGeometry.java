@@ -20,6 +20,7 @@ import net.minecraft.world.TickRateManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import org.joml.Matrix4f;
@@ -98,18 +99,6 @@ public final class ShadowGeometry {
 	private static boolean blockEntitiesAsked;
 	private static boolean emittersOnly;
 
-	/**
-	 * How far a caster that moves may stand from the camera and still reach the map, or a NEGATIVE
-	 * value where nothing bounds it beyond the light's own frustum.
-	 * <p>
-	 * Negative and not "not positive", because zero is a bound like any other: a pack that writes
-	 * {@code entityShadowDistanceMul 0}, or a player who drags the shadow distance to the bottom, is
-	 * asking for no moving caster in the map at all, and Iris hands both of them a box culler built
-	 * at zero rather than no culler ({@code shadows/ShadowRenderer.java:333-354}).
-	 */
-	private static float reach = -1.0F;
-
-
 	private ShadowGeometry() {
 	}
 
@@ -162,22 +151,19 @@ public final class ShadowGeometry {
 			return;
 		}
 
-		// The light's frustum, prepared about the camera because that is what the whole map is built
-		// around: the terrain is culled against this very matrix, and an entity measured against
-		// another one would be dropped out of a map its own shadow belongs in.
-		Frustum frustum = new Frustum(new Matrix4f(), light);
-		frustum.prepare(camera.x, camera.y, camera.z);
-
-		// The pack's own bound on the casters that move, read once for the walk. Iris measures them
-		// against a SECOND, shorter frustum where the pack asked for one, built at the shadow
-		// distance times entityShadowDistanceMul (shadows/ShadowRenderer.java:536-541); here the
-		// shape stays the light's and only the reach is cut, which is what the multiplier means.
+		// The light's frustum with the pack's reach cut out of it, prepared about the camera because
+		// that is what the whole map is built around: the terrain is culled against this very
+		// matrix, and an entity measured against another one would be dropped out of a map its own
+		// shadow belongs in. The reach is the pack's bound on the casters that move, read once for
+		// the walk, and Reached says what it is tested on.
 		//
 		// It is one bound and not two: the shadow distance the player set is folded into this same
 		// number rather than applied beside it, because Iris builds the entity frustum out of the
-		// PRODUCT of the two multipliers (:540) and the world's own is negative whenever the player
-		// governs. PackValues.entityShadowDistance carries that arithmetic and its sign.
-		reach = TerrainDraw.entityShadowDistance();
+		// PRODUCT of the two multipliers (shadows/ShadowRenderer.java:540) and the world's own is
+		// negative whenever the player governs. PackValues.entityShadowDistance carries that
+		// arithmetic and its sign.
+		Frustum frustum = new Reached(light, TerrainDraw.entityShadowDistance());
+		frustum.prepare(camera.x, camera.y, camera.z);
 
 		// The light's own camera, built the way Iris builds it and NOT the frame's borrowed: a state
 		// extracted fresh from the player camera (shadows/ShadowRenderer.java:390) and then
@@ -484,27 +470,24 @@ public final class ShadowGeometry {
 	 * refuses here anyway, by a different road. What is added is that test, and it is Iris's
 	 * ({@code shadows/ShadowRenderer.java:701}): a spectator is not in the world to be lit.
 	 * <p>
-	 * <strong>The pack's own reach is a bound of a DIFFERENT SHAPE from Iris's, and that is an open
-	 * gap rather than a workaround.</strong> Where the pack asked for one, Iris rebuilds a whole
-	 * second shadow frustum for the casters that move, at a shorter distance
-	 * ({@code shadows/ShadowRenderer.java:536-541}), and tests the caster's bounding box against it
-	 * ({@code :703}); where it did not, the entity frustum is the terrain's ({@code :537}). Here the
-	 * light's frustum is kept in both cases and the reach alone is cut, as an axis-aligned box about
-	 * the camera measured on the caster's POSITION. The two keep-sets are not nested, so the
-	 * difference runs both ways: a caster inside the light's frustum and inside the box but outside
-	 * that narrower frustum is kept here and dropped there, and one whose bounding box grazes Iris's
-	 * bound while its position stands outside ours is the reverse. Nothing makes Iris's shape
-	 * impossible here.
+	 * <strong>The pack's reach is measured on the caster's culling box, as Iris measures it, and the
+	 * shape beside it is not yet Iris's.</strong> Where the pack asked its movers to stop short,
+	 * Iris rebuilds a whole second shadow frustum for them at that distance
+	 * ({@code shadows/ShadowRenderer.java:536-541}): the camera's volume swept along the light with
+	 * an axis-aligned cube about the camera cut out of it, and the game's own {@code shouldRender}
+	 * hands both the caster's culling box inflated by half a block ({@code :703} there,
+	 * {@code entity/EntityRenderer.java:73-78}). {@link Reached} is that cube asked of that box.
+	 * What stands beside it is the light's own frustum rather than the sweep, and that is the open
+	 * gap: a caster inside the cube and the light's volume but outside the sweep is kept here and
+	 * dropped there, which costs a draw and never a pixel, the sweep being built so that nothing
+	 * outside it can shadow what the camera sees. The other way round is empty: Iris's entity
+	 * frustum never asks the light's volume, so a caster outside it is kept there and dropped here,
+	 * but outside the light's volume is outside the map, and what Iris keeps of it draws nothing.
+	 * Nothing makes Iris's shape impossible here.
 	 */
 	private static boolean visible(Minecraft minecraft, EntityRenderDispatcher entities, Entity entity,
 			Frustum frustum, Vec3 at) {
 		if (entity instanceof Player spectator && spectator.isSpectator()) {
-			return false;
-		}
-
-		if (reach >= 0.0F && (Math.abs(entity.getX() - at.x) > reach
-				|| Math.abs(entity.getY() - at.y) > reach
-				|| Math.abs(entity.getZ() - at.z) > reach)) {
 			return false;
 		}
 
@@ -557,6 +540,79 @@ public final class ShadowGeometry {
 			Vitrail.logger().info("On this frame the light's walk submitted {} entities and {} block "
 					+ "entities into the shadow map, on block table {}", entities, blockEntities,
 					counted);
+		}
+	}
+
+	/**
+	 * The light's frustum with the pack's reach cut out of it, which is what a caster that moves is
+	 * measured against.
+	 * <p>
+	 * <strong>The reach is a cube about the camera, asked of the caster's culling box and not of its
+	 * position, and the box is what decides.</strong> Iris hangs a {@code BoxCuller} off its entity
+	 * frustum and asks it of the box the game's {@code shouldRender} hands over, the caster's culling
+	 * box inflated by half a block ({@code shadows/frustum/BoxCuller.java}, {@code isCulled(AABB)},
+	 * reached from {@code shadows/ShadowRenderer.java:703} through
+	 * {@code entity/EntityRenderer.java:73-78}). A caster is kept as long as any of that box reaches
+	 * back inside the reach on every axis, so a wide one standing past the distance still lays its
+	 * shadow where a small one would not. Asked of the position instead, as this walk once did, the
+	 * difference is the caster's half width: under a block for most mobs, a few for the largest, and
+	 * seven for the test caster this was measured with, a cow scaled sixteen times, which cast under
+	 * Iris four blocks past the reach and cast nothing here.
+	 * <p>
+	 * <strong>Asked inside the frustum, so what the game never asks the frustum about escapes the
+	 * reach, exactly as it does under Iris.</strong> A renderer that answers
+	 * {@code affectedByCulling} false, a leash holder's box, the vehicle carrying the player: the
+	 * game settles those before or beside {@code isVisible} ({@code entity/EntityRenderer.java:69,
+	 * 82-88}), and the old position test, standing in front of {@code shouldRender}, bounded them
+	 * all. What it also costs is the game's own preamble, a distance test and an inflated box built
+	 * for every caster within the game's render distance before the cube can refuse it, where three
+	 * subtractions used to refuse first. That is Iris's cost too.
+	 * <p>
+	 * <strong>Negative means no reach, and not "not positive"</strong>, because zero is a bound like
+	 * any other: a pack that writes {@code entityShadowDistanceMul 0}, or a player who drags the
+	 * shadow distance to the bottom, is asking for no moving caster in the map at all, and Iris hands
+	 * both of them a box culler built at zero rather than no culler
+	 * ({@code shadows/ShadowRenderer.java:333-354}, and the safe zone's own distance culler at
+	 * {@code :370} likewise).
+	 * <p>
+	 * The cube is asked first and the planes after, which is Iris's order under both of its shapes
+	 * ({@code AdvancedShadowCullingFrustum.isVisible(AABB)}, and the distance culler of
+	 * {@code SafeZoneCullingFrustum.isVisible(AABB)}), so a box the cube refuses never reaches the
+	 * planes. The planes are the light's own and not the sweep Iris tests, and {@link #visible}
+	 * carries what that costs.
+	 */
+	private static final class Reached extends Frustum {
+
+		/** Half the side of the cube, in blocks, or negative where nothing bounds the casters. */
+		private final float reach;
+
+		Reached(Matrix4f light, float reach) {
+			super(new Matrix4f(), light);
+			this.reach = reach;
+		}
+
+		@Override
+		public boolean isVisible(AABB box) {
+			return !culled(box) && super.isVisible(box);
+		}
+
+		/**
+		 * Iris's {@code BoxCuller.isCulled}: wholly past the reach on any one axis is out. Centred
+		 * on what {@code prepare} was handed, read back off the frustum so that the cube and the
+		 * planes can never be centred apart.
+		 */
+		private boolean culled(AABB box) {
+			if (this.reach < 0.0F) {
+				return false;
+			}
+
+			double x = getCamX();
+			double y = getCamY();
+			double z = getCamZ();
+
+			return box.maxX < x - this.reach || box.minX > x + this.reach
+					|| box.maxY < y - this.reach || box.minY > y + this.reach
+					|| box.maxZ < z - this.reach || box.minZ > z + this.reach;
 		}
 	}
 

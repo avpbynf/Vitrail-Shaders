@@ -11,6 +11,18 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **A mob standing just past the pack's shadow reach for entities keeps its shadow while any
+  of it still reaches inside.** A pack that stops its moving casters short of the terrain
+  (Complementary does, at an eighth of its shadow distance) had that reach measured on the
+  caster's position, so a mob whose body reached back inside the distance lost its whole shadow
+  where Iris drew it. The reach is measured on the caster's bounding box now, as Iris measures
+  it: the difference is the caster's half width, under a block for most mobs and a few for the
+  largest, and the shadow lands as far out as it does there.
+
 ## 0.9.0-beta
 
 ### Added

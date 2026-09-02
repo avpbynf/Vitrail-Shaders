@@ -362,8 +362,9 @@ public final class TerrainDraw {
 	}
 
 	/**
-	 * How far from the camera a caster that moves may still be and reach the map, or a value that is
-	 * not positive where the pack sets no bound of its own. Answered here for the same reason the
+	 * How far from the camera a caster that moves may still be and reach the map, or minus one where
+	 * nothing bounds it beyond the light's own frustum. Zero is a bound and not the absence of one,
+	 * which {@link PackValues#shadowRenderDistance} says why. Answered here for the same reason the
 	 * caster set is: one directive, one reading.
 	 */
 	public static float entityShadowDistance() {
