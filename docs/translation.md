@@ -183,7 +183,14 @@ then numbers the next varying onto the second column. The translator splits each
 `in` / `out` into one vector per column before compile, rebuilds the matrix as a local, and copies
 the columns in the wrapper. The pack body still writes and reads the original name. AstraLex's
 night planet is the image of leaving that undone: a billboard through a walked-on `mat3` stretches
-into an oval.
+into an oval. A struct varying is the same case with one location per member, and it gets the
+same treatment: the definition is read off the unit, the declaration becomes one varying per
+member, and the struct is rebuilt around the pack's `main`. A struct with a matrix, an array or
+a struct among its members is left as it is. Photon's fog coefficients cross its water program
+that way, three `vec3` in one struct, and left whole they reached the fragment stage wrong: the
+fog its reflections computed with them painted every distant lake red, and the same program
+handed three varyings draws the lake as the reference does. A plain array varying is one name
+over several locations too, and it is not split yet.
 
 A consequence for measurement, and it is sharper than it looks: **a per-unit check cannot see this
 class of defect at all**, because it never pairs a vertex stage with its fragment stage. Neither

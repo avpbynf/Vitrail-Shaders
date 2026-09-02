@@ -53,6 +53,12 @@ what the next one holds.
   compute whose pass the pack ships no fragment program for, and one attached to a setup program,
   are still skipped, and the log still names them.
 
+- **Photon's distant water is no longer red, and no longer striped.** A pack may hand a stage a
+  struct of values in one go, and Photon hands its water program its fog coefficients that way.
+  That struct reached the other stage wrong, so the fog Photon's reflections computed with it
+  saturated on every lake past a hundred blocks. A struct handed between stages is now taken
+  apart and put back together the way a matrix already was.
+
 - **A mob standing just past the pack's shadow reach for entities keeps its shadow while any
   of it still reaches inside.** A pack that stops its moving casters short of the terrain
   (Complementary does, at an eighth of its shadow distance) had that reach measured on the

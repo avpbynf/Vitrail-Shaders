@@ -76,7 +76,8 @@ import java.util.stream.Stream;
 	 * reflected name, so the next varying is numbered onto column two. OpenGL links by name and
 	 * never asks the question; the workaround here is to split each matrix varying into that many
 	 * vectors before compilation and rebuild the matrix as a local, which is what
-	 * {@link #splitMatrixVaryings} does. Iris is not copied.
+	 * {@link #splitMatrixVaryings} does. A struct varying is the same case with a member per
+	 * location, and {@link #splitStructVaryings} does the same to it. Iris is not copied.
  */
 public final class GlslTranslator {
 
@@ -93,6 +94,21 @@ public final class GlslTranslator {
 	 * so a column cannot collide with a varying the pack already declared.
 	 */
 	private static final String MATRIX_COLUMN = "of_vmat_";
+
+	/** The prefix of a varying standing for one member of a struct varying. */
+	private static final String STRUCT_MEMBER = "of_vstruct_";
+
+	/**
+	 * The member types a struct varying is split over: one location apiece, nothing nested, and
+	 * nothing a varying may not be, which rules the booleans out.
+	 */
+	private static final Set<String> STRUCT_MEMBER_TYPES = Set.of(
+			"float", "vec2", "vec3", "vec4", "int", "ivec2", "ivec3", "ivec4",
+			"uint", "uvec2", "uvec3", "uvec4", "double", "dvec2", "dvec3", "dvec4");
+
+	/** The member types that may not be interpolated, so their varying is flat whatever the pack wrote. */
+	private static final Set<String> INTEGER_MEMBER_TYPES = Set.of(
+			"int", "ivec2", "ivec3", "ivec4", "uint", "uvec2", "uvec3", "uvec4");
 
 	/**
 	 * The hit flash and the damage tint, which is a varying wherever the mesh carries the overlay and
@@ -464,6 +480,12 @@ public final class GlslTranslator {
 	 */
 	private final List<SplitMatrix> splitMatrices = new ArrayList<>();
 
+	/**
+	 * Struct varyings rewritten as one varying per member, for the same numbering. Empty when the
+	 * stage declared none, which is every stage of the corpus but Photon's.
+	 */
+	private final List<SplitStruct> splitStructs = new ArrayList<>();
+
 	/** Inputs {@link #dropUnprovidedInputs} took out, which this stage no longer declares. */
 	private final Set<String> droppedInputs = new LinkedHashSet<>();
 
@@ -770,7 +792,8 @@ public final class GlslTranslator {
 		// before collectVaryings, because a matrix left as one out is one SPIR-V variable occupying
 		// three locations and createFromSpirv then numbers the next name onto the second column.
 		splitMatrixVaryings();
-		wrapMainForMatrixSplits();
+		splitStructVaryings();
+		wrapMainForSplits();
 		// Last, and it has to be: rewriteIdentifiers is where varying becomes in or out, and
 		// dropUnprovidedInputs blanks the ranges recorded here, so nothing may move between the two.
 		collectVaryings();
@@ -2852,8 +2875,8 @@ public final class GlslTranslator {
 	 * {@code main}: two bodies, which is the compile error a fragment with matrix varyings hits.
 	 * The injected brace is still a body of {@code main}, so it is accepted here.
 	 */
-	private void wrapMainForMatrixSplits() {
-		if (this.mainWrapped || this.splitMatrices.isEmpty()) {
+	private void wrapMainForSplits() {
+		if (this.mainWrapped || (this.splitMatrices.isEmpty() && this.splitStructs.isEmpty())) {
 			return;
 		}
 
@@ -2942,6 +2965,213 @@ public final class GlslTranslator {
 
 	private static String matrixColumnName(String matrix, int column) {
 		return MATRIX_COLUMN + matrix + "_" + column;
+	}
+
+	/** One member of a struct a varying is declared under, in the order the struct lists it. */
+	private record StructMember(String type, String name) {
+	}
+
+	/**
+	 * One struct varying rewritten as one varying per member.
+	 *
+	 * @param input true when this stage reads the struct ({@code in}), false when it writes it
+	 */
+	private record SplitStruct(String name, String structType, List<StructMember> members,
+			String qualifier, boolean input) {
+	}
+
+	/**
+	 * Turns each file-scope struct {@code in} / {@code out} into one varying per member, for the
+	 * reason {@link #splitMatrixVaryings} turns a matrix into its columns: a struct is one
+	 * reflected variable occupying as many locations as it has members, and the rank the game
+	 * numbers it by is one. Photon's {@code flat in OverworldFogParameters fog_params}, three
+	 * {@code vec3} of fog coefficients, reached its water fragment stage wrong under that
+	 * numbering, and the fog its reflections computed with them painted every distant lake red;
+	 * handed over as three varyings, the same program draws the lake as the reference does.
+	 * <p>
+	 * The definition is read off the unit itself, since the type is the pack's own. Only a struct
+	 * whose members are all scalars or vectors is split: a member that is a matrix, an array or a
+	 * struct of its own would need the same treatment one level down, and no pack of the corpus
+	 * writes one. Arrays of structs are left alone as arrays of matrices are.
+	 */
+	private void splitStructVaryings() {
+		if (this.stage == ProgramStage.COMPUTE) {
+			return;
+		}
+
+		Map<String, List<StructMember>> definitions = structDefinitions();
+		if (definitions.isEmpty()) {
+			return;
+		}
+
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() != null || !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			boolean input = token.identifier("in");
+			boolean output = token.identifier("out");
+			if (!input && !output) {
+				continue;
+			}
+
+			if (input && this.stage == ProgramStage.VERTEX) {
+				continue;
+			}
+
+			// Read against the struct types the unit defines: the plain reader only knows the
+			// language's own types, which is why a struct varying was never a declaration to it.
+			FileScope declared = fileScopeDeclaration(index, definitions.keySet());
+			if (declared == null) {
+				continue;
+			}
+
+			List<StructMember> members = definitions.get(declared.type());
+
+			boolean anyArray = declared.names().stream().anyMatch(name ->
+					declared.declarators().getOrDefault(name, "").contains("["));
+			if (anyArray) {
+				continue;
+			}
+
+			blankRange(declared.start(), declared.end());
+
+			for (String name : declared.names()) {
+				this.splitStructs.add(new SplitStruct(name, declared.type(), members,
+						declared.qualifier(), input));
+			}
+		}
+
+		// The definition moves to the header with the global that carries the pack's name: the
+		// wrapper that rebuilds the struct stands in the header, above the body, and the type has
+		// to exist there. The body's own definition goes blank so the type is not defined twice.
+		Set<String> moved = new HashSet<>();
+		for (SplitStruct split : this.splitStructs) {
+			if (!moved.add(split.structType())) {
+				continue;
+			}
+
+			int[] definition = definitionRange(split.structType());
+			if (definition != null) {
+				blankRange(definition[0], definition[1]);
+			}
+		}
+	}
+
+	/**
+	 * Every struct the unit defines on a live line whose members are all scalars or vectors, by
+	 * type name. A struct with any other member is left out, so its varyings stay as they are.
+	 */
+	private Map<String, List<StructMember>> structDefinitions() {
+		Map<String, List<StructMember>> definitions = new LinkedHashMap<>();
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (!token.identifier("struct") || token.directive() != null
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int name = significantAfter(index);
+			int open = significantAfter(name);
+			if (name < 0 || open < 0 || this.tokens.get(name).kind() != Kind.IDENTIFIER
+					|| !this.tokens.get(open).operator("{")) {
+				continue;
+			}
+
+			int close = matchingBracket(open);
+			int semicolon = significantAfter(close);
+			// A definition that declares an instance in the same breath, "struct T { ... } t;",
+			// is left alone: taking it out of the body would take the instance with it.
+			if (close < 0 || semicolon < 0 || !this.tokens.get(semicolon).operator(";")) {
+				continue;
+			}
+
+			List<StructMember> members = structMembers(open + 1, close - 1);
+			if (members != null && !members.isEmpty()) {
+				definitions.putIfAbsent(this.tokens.get(name).text(), members);
+			}
+		}
+
+		return definitions;
+	}
+
+	/**
+	 * The members declared between a struct's braces, or null where one of them is not a scalar
+	 * or a vector: a member with brackets, a matrix, a sampler or another struct.
+	 */
+	private List<StructMember> structMembers(int start, int end) {
+		List<StructMember> members = new ArrayList<>();
+		List<Integer> statement = new ArrayList<>();
+		for (int scan : significantRange(start, end)) {
+			Token token = this.tokens.get(scan);
+			if (!token.operator(";")) {
+				statement.add(scan);
+				continue;
+			}
+
+			if (statement.size() < 2) {
+				return null;
+			}
+
+			String type = this.tokens.get(statement.get(0)).text();
+			if (!STRUCT_MEMBER_TYPES.contains(type)) {
+				return null;
+			}
+
+			for (int part = 1; part < statement.size(); part++) {
+				Token piece = this.tokens.get(statement.get(part));
+				if (piece.operator(",")) {
+					continue;
+				}
+
+				if (piece.kind() != Kind.IDENTIFIER) {
+					return null;
+				}
+
+				members.add(new StructMember(type, piece.text()));
+			}
+
+			statement.clear();
+		}
+
+		return statement.isEmpty() ? members : null;
+	}
+
+	/**
+	 * The first live definition of that struct, from its {@code struct} keyword to the semicolon
+	 * closing it, or null where the unit holds none.
+	 */
+	private int[] definitionRange(String structType) {
+		int[] lines = lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (!token.identifier("struct") || token.directive() != null
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int name = significantAfter(index);
+			int open = significantAfter(name);
+			if (name < 0 || open < 0 || !this.tokens.get(name).identifier(structType)
+					|| !this.tokens.get(open).operator("{")) {
+				continue;
+			}
+
+			int close = matchingBracket(open);
+			int semicolon = significantAfter(close);
+			if (close >= 0 && semicolon >= 0 && this.tokens.get(semicolon).operator(";")) {
+				return new int[] {index, semicolon};
+			}
+		}
+
+		return null;
+	}
+
+	private static String structMemberName(String struct, String member) {
+		return STRUCT_MEMBER + struct + "_" + member;
 	}
 
 	/**
@@ -3359,6 +3589,15 @@ public final class GlslTranslator {
 	 * and are never read back through here.
 	 */
 	private FileScope fileScopeDeclaration(int keyword) {
+		return fileScopeDeclaration(keyword, LegacyGlsl.TYPE_NAMES);
+	}
+
+	/**
+	 * The same, for a declaration whose type is among those named rather than among the
+	 * language's own: the struct types a unit defines, which the split of struct varyings reads
+	 * and nothing else asks for.
+	 */
+	private FileScope fileScopeDeclaration(int keyword, Set<String> types) {
 		int end = statementEnd(keyword);
 		int start = end < 0 ? -1 : statementStart(keyword);
 		if (start < 0) {
@@ -3399,7 +3638,7 @@ public final class GlslTranslator {
 		}
 
 		String type = this.tokens.get(parts.get(cursor)).text();
-		if (!LegacyGlsl.TYPE_NAMES.contains(type)) {
+		if (!types.contains(type)) {
 			return null;
 		}
 
@@ -4651,6 +4890,40 @@ public final class GlslTranslator {
 			}
 		}
 
+		// The struct's definition, once per type, then the global of the pack's name, then one
+		// varying per member in the order the struct lists them, so that both stages number them
+		// alike. The definition is written from the members read off the body, whose own copy is
+		// blank by now.
+		Set<String> defined = new HashSet<>();
+		for (SplitStruct split : this.splitStructs) {
+			if (defined.add(split.structType())) {
+				StringBuilder definition = new StringBuilder("struct ").append(split.structType())
+						.append(" { ");
+				for (StructMember member : split.members()) {
+					definition.append(member.type()).append(' ').append(member.name()).append("; ");
+				}
+
+				lines.add(definition.append("};").toString());
+			}
+
+			lines.add(split.structType() + " " + split.name() + ";");
+			String storage = split.input() ? "in" : "out";
+			for (StructMember member : split.members()) {
+				// An integer member is flat whatever the pack wrote on the struct, as the entity
+				// identifiers are: the language allows nothing else, and a struct of floats may
+				// legally carry no qualifier at all.
+				String qualifier = split.qualifier();
+				if (INTEGER_MEMBER_TYPES.contains(member.type()) && !qualifier.contains("flat")) {
+					qualifier = qualifier.isEmpty() ? "flat" : "flat " + qualifier;
+				}
+
+				String qualified = qualifier.isEmpty()
+						? storage + " " + member.type()
+						: qualifier + " " + storage + " " + member.type();
+				lines.add(qualified + " " + structMemberName(split.name(), member.name()) + ";");
+			}
+		}
+
 		// From zero up with no gaps, because a location the game finds nothing declared at is not
 		// left empty: it renumbers what is there and everything above the gap moves down one.
 		for (int slot = 0; slot <= this.maxFragmentOutput; slot++) {
@@ -4698,7 +4971,8 @@ public final class GlslTranslator {
 		// The pack's body is concatenated after the header, so its own main is only a name here and
 		// has to be declared before it can be called.
 		if (this.depthEpilogue || this.terrainPrologue || this.distantPrologue || this.entityWrapped
-				|| wrapsFragment() || owesInitialisers() || !this.splitMatrices.isEmpty()) {
+				|| wrapsFragment() || owesInitialisers() || !this.splitMatrices.isEmpty()
+				|| !this.splitStructs.isEmpty()) {
 			lines.add("void " + PACK_MAIN + "();");
 			// The mask goes last of all, after the discard: a fragment the alpha test threw away
 			// covered nothing, and marking it covered would leave a hole where a leaf was.
@@ -4711,8 +4985,10 @@ public final class GlslTranslator {
 					+ coveragePrologue()
 					+ owedPrologue()
 					+ matrixPrologue()
+					+ structPrologue()
 					+ PACK_MAIN + "();"
 					+ matrixEpilogue()
+					+ structEpilogue()
 					+ (this.depthEpilogue ? " gl_Position.z = " + DEPTH_CONV
 							+ ".x * gl_Position.z + " + DEPTH_CONV + ".y * gl_Position.w;" : "")
 					+ (this.alphaEpilogue
@@ -4783,6 +5059,53 @@ public final class GlslTranslator {
 			for (int column = 0; column < split.columns(); column++) {
 				assignments.append(matrixColumnName(split.name(), column)).append(" = ")
 						.append(split.name()).append('[').append(column).append("]; ");
+			}
+		}
+
+		return assignments.toString();
+	}
+
+	/**
+	 * Rebuilds each input struct from its members before the pack body runs, so a read of the
+	 * original name still sees the struct. A constructor takes the members in declaration order,
+	 * which is the order they were declared in as varyings.
+	 */
+	private String structPrologue() {
+		StringBuilder assignments = new StringBuilder();
+		for (SplitStruct split : this.splitStructs) {
+			if (!split.input()) {
+				continue;
+			}
+
+			assignments.append(split.name()).append(" = ").append(split.structType()).append('(');
+			for (int member = 0; member < split.members().size(); member++) {
+				if (member > 0) {
+					assignments.append(", ");
+				}
+
+				assignments.append(structMemberName(split.name(), split.members().get(member).name()));
+			}
+
+			assignments.append("); ");
+		}
+
+		return assignments.toString();
+	}
+
+	/**
+	 * Copies each output struct onto its members after the pack body ran, so the interface the next
+	 * stage reads is the value the pack wrote.
+	 */
+	private String structEpilogue() {
+		StringBuilder assignments = new StringBuilder();
+		for (SplitStruct split : this.splitStructs) {
+			if (split.input()) {
+				continue;
+			}
+
+			for (StructMember member : split.members()) {
+				assignments.append(structMemberName(split.name(), member.name())).append(" = ")
+						.append(split.name()).append('.').append(member.name()).append("; ");
 			}
 		}
 
