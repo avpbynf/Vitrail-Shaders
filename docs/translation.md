@@ -190,7 +190,10 @@ a struct among its members is left as it is. Photon's fog coefficients cross its
 that way, three `vec3` in one struct, and left whole they reached the fragment stage wrong: the
 fog its reflections computed with them painted every distant lake red, and the same program
 handed three varyings draws the lake as the reference does. A plain array varying is one name
-over several locations too, and it is not split yet.
+over several locations too, and it is split the same way, one varying per element: Photon's
+sky harmonics reach its deferred shading as nine `vec3` in one array, with two varyings declared
+after them. Only a single dimension sized by a number the pack wrote out is taken; a size behind
+a constant expression stays with the declaration.
 
 A consequence for measurement, and it is sharper than it looks: **a per-unit check cannot see this
 class of defect at all**, because it never pairs a vertex stage with its fragment stage. Neither
