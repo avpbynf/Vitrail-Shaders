@@ -18,6 +18,12 @@ Two properties follow, and both are load-bearing:
 conditional branch, so the include graph is a function of the resolved option values. Changing a
 setting rebuilds the units; it does not patch them.
 
+**A condition is decided on the line the compiler reads.** A backslash before a line break joins
+the next line onto this one before the compiler sees a directive, so the expander decides a
+condition, matches an include and tracks a define on the joined text. What it writes out is the
+lines as they were, unless a setting rewrote the line: the compiler joins them again, and it joins
+once, so a joined line written out could end on a backslash the pack never meant as a continuation.
+
 **Order at load matters.** The table of values that supplies a pack's defines has to be installed
 *before* the pack is read, because those symbols decide which branches compile. Read the pack first
 and it sees none of them. The same table is only meaningful once a world exists, so the reload path

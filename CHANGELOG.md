@@ -23,6 +23,12 @@ what the next one holds.
   read through. Photon writes its fog colours that way, and was refused at load on its blending
   pass.
 
+- **A condition continued over several lines with a backslash is read whole.** The pack's
+  conditionals decide which includes are followed, and one continued past its first line was
+  decided on that fragment alone, which stood for true. Photon undefines its waving switches
+  under one of those, so the include the switches guard was skipped and its terrain and shadow
+  programs compiled against a function that was not there.
+
 - **A mob standing just past the pack's shadow reach for entities keeps its shadow while any
   of it still reaches inside.** A pack that stops its moving casters short of the terrain
   (Complementary does, at an eighth of its shadow distance) had that reach measured on the
