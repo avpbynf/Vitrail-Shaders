@@ -288,19 +288,25 @@ how many the camera walked and which shape was used. The debug screen carries on
 `Shadows: C: a/b D: d`, and not the shape. The picture is the place it will NOT show, because keeping
 a section too many costs a draw and not a pixel.
 
-All of the above is about the terrain. What moves is culled separately, and there is an open
-divergence there worth stating plainly, because it is a gap and not a workaround. A caster is
-measured against the light's own frustum, the box the map is drawn in, and where the pack asked for a
-shorter reach, that reach is cut as an axis-aligned box about the camera tested on the caster's
-position. Iris instead measures the movers against the same swept shape as the terrain, rebuilt at
-a shorter distance, and tests the caster's bounding box against it
-(`shadows/ShadowRenderer.java:536-541` then `:703`). The two keep-sets are different shapes, so the
-difference runs both ways: a caster inside the light's frustum and inside the box but outside that
-narrower frustum is kept here and dropped there, and one whose box grazes Iris's bound while its
-position sits outside ours is the reverse. Nothing makes Iris's shape impossible here; it has simply
-not been written yet. Advanced terrain walks a box here rather than the sweep, so the two halves
-already differ; even where the terrain does sweep (the safe zone), the movers still measure against
-the light frustum rather than that same sweep.
+All of the above is about the terrain. What moves is culled separately, against the light's own
+frustum, the box the map is drawn in, with the pack's reach cut out of it. Where the pack asks its
+movers to stop short of the terrain, through `entityShadowDistanceMul`, the reach is an axis-aligned
+cube about the camera, and it is asked of the caster's bounding box inflated by half a block, the box
+the game's own `shouldRender` hands every frustum. That cube and that box are Iris's
+(`shadows/frustum/BoxCuller.java`, reached from `shadows/ShadowRenderer.java:703`), and the box is
+what matters: a caster is kept as long as any of it reaches back inside the reach, so a giant
+standing past the distance still lays its shadow where a small one would not, exactly as far out as
+it does under Iris. Asked of the caster's position, the same giant loses its whole shadow, and the
+picture is where that shows.
+
+What remains open is the shape beside the cube, and it is a gap and not a workaround. Iris measures
+the movers against the same swept camera volume as the terrain, rebuilt at the shorter distance
+(`shadows/ShadowRenderer.java:536-541`); here they measure against the light's frustum. A caster
+inside the cube and the light's box but outside the sweep is kept here and dropped there, which
+costs a draw and never a pixel, the sweep being built so that nothing outside it can shadow what the
+camera sees. The other way round is empty: Iris never asks the light's box of a mover, so one outside
+it is kept there and dropped here, but outside the light's box is outside the map, and what Iris
+keeps of it draws nothing. Nothing makes Iris's shape impossible here; it has not been written yet.
 
 ### The experiment that separates the two failure modes
 
