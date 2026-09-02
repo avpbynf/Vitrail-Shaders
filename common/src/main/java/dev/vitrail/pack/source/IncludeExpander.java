@@ -110,7 +110,7 @@ public final class IncludeExpander {
 
 		ConditionStack conditions = new ConditionStack();
 
-		for (String line : this.source.readLines(file)) {
+		for (Logical logical : logicalLines(this.source.readLines(file))) {
 			// Checked here and not only on the way in. One file is enough on its own: a pack that
 			// ships a single shader of a million lines never expands anything, so a budget read
 			// once per file would never be read at all.
@@ -119,8 +119,9 @@ public final class IncludeExpander {
 				break;
 			}
 
+			String line = logical.text();
 			if (handleCondition(line, conditions, state)) {
-				state.emit(line, true);
+				state.emit(logical.physical(), true);
 				continue;
 			}
 
@@ -139,7 +140,7 @@ public final class IncludeExpander {
 
 			if (!conditions.active()) {
 				// Kept as it was, so that what the compiler discards is what is written here.
-				state.emit(line, false);
+				state.emit(logical.physical(), false);
 				continue;
 			}
 
@@ -149,16 +150,66 @@ public final class IncludeExpander {
 				// ones come from includes and would be an error where they land.
 				if (state.version == null) {
 					state.version = version.group(1).replaceAll("//.*", "").trim();
-					state.emit(line, true);
+					state.emit(logical.physical(), true);
 				}
 
 				continue;
 			}
 
-			state.emit(track(line, state), true);
+			String tracked = track(line, state);
+			if (tracked.equals(line)) {
+				state.emit(logical.physical(), true);
+			} else {
+				state.emit(tracked, true);
+			}
 		}
 
 		state.onPath.remove(relative);
+	}
+
+	/**
+	 * One line as the compiler reads it, and the lines of the file it was written over.
+	 * <p>
+	 * A backslash before a line break joins the next line onto this one before the compiler reads
+	 * a single directive, so the directives are matched and the conditions decided on the joined
+	 * text. Read line by line as written, a condition continued over three lines is decided on its
+	 * first: Photon undefines its waving switches under one written that way, the fragment on the
+	 * first line could not be decided and so stood for true, the switches came off the table, and
+	 * the include they guard was skipped while the compiler, seeing the whole condition, kept the
+	 * code that calls into it.
+	 * <p>
+	 * What is EMITTED stays the lines as written, because the compiler joins them again and joins
+	 * once: Bliss ends a comment with three backslashes and a blank line under it, the compiler
+	 * takes the last backslash with the blank line and the comment ends there, and a joined line
+	 * written out would end with the two backslashes left, which the compiler would then take
+	 * with the line of code below. Sixteen units lost a declaration that way. The one line written
+	 * out joined is a {@code #define} a setting rewrote, which no pack of the corpus continues.
+	 */
+	private record Logical(String text, List<String> physical) {
+	}
+
+	private static List<Logical> logicalLines(List<String> lines) {
+		List<Logical> logical = new ArrayList<>(lines.size());
+		StringBuilder joined = new StringBuilder();
+		List<String> physical = new ArrayList<>();
+		for (String line : lines) {
+			physical.add(line);
+			if (line.endsWith("\\")) {
+				joined.append(line, 0, line.length() - 1);
+				continue;
+			}
+
+			joined.append(line);
+			logical.add(new Logical(joined.toString(), List.copyOf(physical)));
+			joined.setLength(0);
+			physical.clear();
+		}
+
+		if (!physical.isEmpty()) {
+			logical.add(new Logical(joined.toString(), List.copyOf(physical)));
+		}
+
+		return logical;
 	}
 
 	/** Returns true when the line was a conditional directive and has been accounted for. */
@@ -312,6 +363,10 @@ public final class IncludeExpander {
 			this.live.set(this.output.size(), taken);
 			this.output.add(line);
 			this.characters += line.length() + 1;
+		}
+
+		private void emit(List<String> lines, boolean taken) {
+			lines.forEach(line -> emit(line, taken));
 		}
 
 		private boolean overBudget() {
