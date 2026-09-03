@@ -283,6 +283,11 @@ public final class FrameState implements WorldState {
 		this.view.passColour(colour);
 	}
 
+	/** The alpha reference of the program the pass about to write its block draws with. */
+	public void passAlphaTest(float reference) {
+		this.view.passAlphaTest(reference);
+	}
+
 	/** What the pass about to write its block draws. Set beside the three above, and for once. */
 	public void renderStage(RenderStage stage) {
 		this.stage = stage;
@@ -1727,6 +1732,11 @@ public final class FrameState implements WorldState {
 	@Override
 	public Vector4fc passColour() {
 		return this.view.passColour();
+	}
+
+	@Override
+	public float passAlphaTest() {
+		return this.view.passAlphaTest();
 	}
 
 	@Override

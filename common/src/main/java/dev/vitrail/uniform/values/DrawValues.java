@@ -9,8 +9,8 @@ import org.joml.Matrix4f;
 /**
  * What a pass drawn over a quad gets instead of the fixed function state a program would have had.
  * <p>
- * None of these depends on the world, which is why they are the first thing the catalogue answers
- * and the only thing it answers before the frame state is filled in. A full screen pass has no
+ * The matrices depend on nothing, which is why they are the first thing the catalogue answers
+ * and can be answered before the frame state is filled in. A full screen pass has no
  * model view worth the name: the model view is the identity and the projection is the one that
  * carries the quad onto the screen, so their product is the projection.
  * <p>
@@ -139,6 +139,9 @@ public final class DrawValues {
 		builder.add("entityId", UniformShape.INT, (_, out) -> out.set(0));
 		builder.add("blockEntityId", UniformShape.INT, (_, out) -> out.set(-1));
 		builder.add("currentRenderedItemId", UniformShape.INT, (_, out) -> out.set(-1));
-		builder.add("alphaTestRef", UniformShape.FLOAT, (_, out) -> out.set(0.0F));
+		// What the pass's own program discards at, and in a pass drawn over a quad the reference
+		// held when the chain wrote its one block for the frame: ViewSource.passAlphaTest says
+		// what Iris hands a composite instead, and why the difference reaches no pack.
+		builder.add("alphaTestRef", UniformShape.FLOAT, (world, out) -> out.set(world.passAlphaTest()));
 	}
 }
