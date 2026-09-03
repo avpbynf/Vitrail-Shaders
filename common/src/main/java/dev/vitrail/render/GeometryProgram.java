@@ -1821,6 +1821,7 @@ final class GeometryProgram {
 		this.values.modelView(this.modelView, this.bob);
 		this.values.projection(this.projection);
 		this.values.passColour(this.passColour);
+		this.values.passAlphaTest(this.loaded.alphaTest().reference());
 		this.values.renderStage(this.pass.stage());
 
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {

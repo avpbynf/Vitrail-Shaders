@@ -3378,7 +3378,8 @@ public final class PackChain {
 		// this runs. Left standing, every composite of the frame would be told it was drawing the moon.
 		this.values.renderStage(RenderStage.NONE);
 
-		// And the same again for the three values a pass writes beside it. Two geometry families
+		// And the same again for three of the four values a pass writes beside it, the alpha
+		// reference being the one kept, ViewSource.passAlphaTest saying why. Two geometry families
 		// set a matrix of their own: the sky pushes the rotation of the day, and the hand is drawn
 		// under an identity model view and sets a whole projection besides, the head-up volume with
 		// its clip depth squeezed to an eighth. Whichever drew last would

@@ -266,6 +266,16 @@ public final class PackValues {
 	}
 
 	/**
+	 * What the next block's program discards at, which a pack reads as {@code alphaTestRef}. Set
+	 * beside the colour, and unlike the colour, the matrices and the render stage never dropped by
+	 * the chain: see {@link dev.vitrail.uniform.ViewSource#passAlphaTest} for what a composite
+	 * reads.
+	 */
+	public void passAlphaTest(float reference) {
+		this.state.passAlphaTest(reference);
+	}
+
+	/**
 	 * What the next block is written for, which a pack reads as {@code renderStage} and branches on
 	 * with {@code MC_RENDER_STAGE_*}. Set beside the convention and answering the same kind of
 	 * question, and said by every writer rather than inherited: this one is in the table a full

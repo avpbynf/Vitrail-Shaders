@@ -66,6 +66,11 @@ what the next one holds.
   tests for it was never posed: Bliss took its path without voxel emission, and Complementary
   only kept its two reflection targets at half resolution by the flat read above.
 
+- **`alphaTestRef` carries the alpha reference of the program being drawn**, the pack's own
+  `alphaTest` line or the default of the pass, as it does under Iris. It read nought in every
+  pass, so a program fading against it did so at the wrong threshold; a discard against it
+  was already made at the right one, by the test the translation adds.
+
 - **Photon draws.** Three things stood between its files and its picture. Its atmosphere table
   is a three-dimensional volume of half floats asked to clamp, and the flat atlas that stands in
   for a volume took one byte a texel and a repeating volume only, so the three deferred passes

@@ -106,6 +106,24 @@ public interface ViewSource {
 	 */
 	Vector4fc passColour();
 
+	/**
+	 * The alpha reference of the program the pass is drawn with, which a pack reads as
+	 * {@code alphaTestRef}. Iris posts it at every program setup and never clears it
+	 * ({@code pipeline/programs/ExtendedShader.java:179}, {@code SodiumShader.java:181}, into
+	 * {@code uniforms/CapturedRenderingState.java:113}), so each of its composites reads the
+	 * reference of the last program set up before it, and nought before any program has drawn.
+	 * Answered the same way for a geometry pass: set before it writes its block, and left standing.
+	 * <p>
+	 * A full screen pass parts from that by one step, and it is written down rather than served:
+	 * the chain writes ONE block per frame, whichever half asks first
+	 * ({@code render/PackChain.writeBlocks}, mapping it again under commands already recorded
+	 * against it being a write to memory a command holds), so every composite of the frame reads
+	 * the reference held when that block was written, the last geometry program of the early half,
+	 * where Iris would hand the late half the last program before it. What it costs the image:
+	 * nothing on the corpus, the one pack reading the name reading it in geometry programs alone.
+	 */
+	float passAlphaTest();
+
 	Matrix4fc gbufferProjection();
 
 	Matrix4fc gbufferProjectionInverse();

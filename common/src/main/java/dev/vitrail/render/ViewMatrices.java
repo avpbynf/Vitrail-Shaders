@@ -143,6 +143,8 @@ public final class ViewMatrices implements ViewSource {
 	/** The colour the pass modulates its draw by, white until a pass says otherwise. */
 	private static final Vector4f OPAQUE_WHITE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 	private final Vector4f passColour = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
+	/** What the pass's program discards at, nought until a pass says otherwise, never dropped. */
+	private float passAlphaTest;
 	private float far;
 	private int renderDistanceChunks;
 	private boolean seeded;
@@ -550,6 +552,11 @@ public final class ViewMatrices implements ViewSource {
 		this.passColour.set(colour == null ? OPAQUE_WHITE : colour);
 	}
 
+	/** The alpha reference of the program the pass draws with. */
+	void passAlphaTest(float reference) {
+		this.passAlphaTest = reference;
+	}
+
 	/** Called when the world changes, so that no history crosses a dimension. */
 	void reset() {
 		this.seeded = false;
@@ -627,6 +634,11 @@ public final class ViewMatrices implements ViewSource {
 	@Override
 	public Vector4fc passColour() {
 		return this.passColour;
+	}
+
+	@Override
+	public float passAlphaTest() {
+		return this.passAlphaTest;
 	}
 
 	@Override
