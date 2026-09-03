@@ -13,6 +13,17 @@ what the next one holds.
 
 ## Unreleased
 
+### Changed
+
+- **A pack's programs stop rewriting the textures that do not move between two draws.** Every
+  draw of a geometry program used to hand the driver the whole list of images it reads, and most
+  of that list is the same image from one draw to the next inside a single pass: only the ones
+  that belong to the draw itself, a mob's own skin among them, actually change. Those are written
+  again and the rest are left where the first draw of the pass put them, which is fewer of them to
+  build and to hand over per draw. Anything that binds a pipeline of its own inside the pass, the
+  game's own immediate draws and a distant-terrain renderer among them, puts the next write back
+  to the full list, because the driver is free to drop what was left standing at that point.
+
 ### Fixed
 
 - **The block outline is drawn by the pack, as Iris draws it.** The thin box around the block

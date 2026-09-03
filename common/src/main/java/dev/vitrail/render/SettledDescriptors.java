@@ -35,6 +35,12 @@ public final class SettledDescriptors {
 	/** Applied after the first full push of a freshly settled program. */
 	private static Set<String> pending;
 
+	/**
+	 * Set when a pipeline that is not the prepared one has been bound into the pass, which drops
+	 * everything left standing until one full push has gone out again.
+	 */
+	private static boolean disturbed;
+
 	private static List<?> cachedEntries;
 
 	private static int[] mapped;
@@ -53,12 +59,35 @@ public final class SettledDescriptors {
 		pipeline = bound;
 		cachedEntries = null;
 		mapped = null;
-		if (settle) {
+		if (settle || disturbed) {
 			SettledDescriptors.moving = null;
 			pending = moving;
+			disturbed = false;
 		} else {
 			SettledDescriptors.moving = moving;
 			pending = null;
+		}
+	}
+
+	/**
+	 * A pipeline has been bound into the pass. Binding one whose layout is not compatible with the
+	 * layout the descriptors were pushed under discards them, so nothing this class left standing
+	 * can be assumed to stand any more, and the next push of ours goes out at full width. The game
+	 * answers the same fact its own way, marking every descriptor dirty after each
+	 * {@code vkCmdBindPipeline} and pushing all of them again.
+	 * <p>
+	 * The passes a hold adopts are what makes this reachable every frame: the game's immediate
+	 * draws and a distant-terrain renderer record into the pass a geometry program opened, and
+	 * each of them binds a pipeline of its own between two of our draws.
+	 */
+	@SuppressWarnings("ReferenceEquality")
+	public static void bound(RenderPipeline pipeline) {
+		if (SettledDescriptors.pipeline != pipeline) {
+			disturbed = true;
+			moving = null;
+			pending = null;
+			cachedEntries = null;
+			mapped = null;
 		}
 	}
 
@@ -69,6 +98,7 @@ public final class SettledDescriptors {
 		pending = null;
 		cachedEntries = null;
 		mapped = null;
+		disturbed = false;
 	}
 
 	/** After a push that really went out, so a settle's first walk is complete before the rest shrink. */

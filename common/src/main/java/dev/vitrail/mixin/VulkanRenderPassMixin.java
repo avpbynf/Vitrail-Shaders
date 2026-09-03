@@ -18,6 +18,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
 
@@ -35,7 +37,9 @@ import java.util.List;
  * <p>
  * After the first push of a geometry program into a pass, {@link SettledDescriptors} shrinks the
  * write list to uniforms plus sampled names that follow the draw. The substitutions below still
- * run on every name that is written; a name left out keeps what the last full push put there.
+ * run on every name that is written; a name left out keeps what the last full push put there,
+ * which holds only as long as no other pipeline is bound into the pass, so every
+ * {@code setPipeline} is reported and a foreign one puts the next push back to its full width.
  */
 @Mixin(VulkanRenderPass.class)
 public abstract class VulkanRenderPassMixin {
@@ -45,6 +49,11 @@ public abstract class VulkanRenderPassMixin {
 
 	@Shadow
 	protected VulkanRenderPipeline pipeline;
+
+	@Inject(method = "setPipeline", at = @At("TAIL"), require = 1)
+	private void vitrail$pipelineBound(RenderPipeline bound, CallbackInfo callback) {
+		SettledDescriptors.bound(bound);
+	}
 
 	@WrapOperation(method = "pushDescriptors", require = 2,
 			at = @At(value = "INVOKE", target = "Ljava/util/List;size()I"))
