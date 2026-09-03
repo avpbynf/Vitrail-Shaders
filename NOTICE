@@ -830,6 +830,24 @@ GNU Lesser General Public License version 3
   element draws its arrow with seven hex digits rather than eight, LinkElementWidget line 64, so the
   arrow comes out at six per cent alpha; it is drawn opaque here.
 
+  common/src/main/java/dev/vitrail/pack/texture/BufferObject.java and
+  common/src/main/java/dev/vitrail/pack/texture/ImageInformation.java read the bufferObject and
+  image directives with the grammars of net.irisshaders.iris.shaderpack.properties.ShaderProperties,
+  the two-word and four-word forms of a buffer and the sampler, formats, clear and size words of an
+  image, together with the two ceilings that file enforces: no buffer index past twelve, lines 407
+  and 431, and no seventeenth image, line 519. The ceilings are reproduced because a pack's
+  declarations are counted against them. A line the ceiling refuses is dropped and named here where
+  Iris logs and returns.
+
+  common/src/main/java/dev/vitrail/render/PackCompute.java dispatches a pack's computes at the
+  moments net.irisshaders.iris.pipeline.CompositeRenderer dispatches them, lines 287 to 297: in a
+  loop right before the full screen pass they hang off, the letter-less file first and then in
+  letter order, with a memory barrier after, reading and writing the colour targets on the halves
+  that pass reads. The shadow computes run at the head of the frame here where Iris runs them
+  inside its shadow render, ShadowRenderer lines 631 and 632, and the file says what that
+  translation costs. The pipeline they are built into, shaderc's compute kind reached past the
+  game's facade with push descriptors and a storage image through VMA, is this project's own.
+
   Nothing else in Vitrail is derived from Iris. Of its GLSL transformation machinery, which links
   against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that
   code is here, and the translator in dev.vitrail.glsl is this project's own.
