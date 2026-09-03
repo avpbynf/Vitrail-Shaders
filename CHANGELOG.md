@@ -61,6 +61,11 @@ what the next one holds.
   Complementary's water blend and its weather target's `off` held whatever the define or the
   setting around them said.
 
+- **Packs are told the block emission attribute is there**, as Iris tells them. The chunk
+  mesh already carried a block's own light beside its mid-block offset, but the flag a pack
+  tests for it was never posed: Bliss took its path without voxel emission, and Complementary
+  only kept its two reflection targets at half resolution by the flat read above.
+
 - **Photon draws.** Three things stood between its files and its picture. Its atmosphere table
   is a three-dimensional volume of half floats asked to clamp, and the flat atlas that stands in
   for a volume took one byte a texel and a repeating volume only, so the three deferred passes
