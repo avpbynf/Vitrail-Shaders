@@ -15,6 +15,16 @@ what the next one holds.
 
 ### Fixed
 
+- **Leaves keep the same self-shadow wherever the camera stands.** The shadow map is drawn
+  with Sodium's chunk renderer, which keeps one filled batch of draw commands per region and
+  pass and only refills it when the region's sections change or the camera crosses a section
+  boundary in or next to the region. The camera's draw fills that batch without the faces the
+  camera cannot see, and where the light and the camera kept the same sections the shadow draw
+  took the camera's batch as it stood: the faces between the sun and the leaves were missing
+  from the map, and a canopy's self-shadow came and went region by region as the player walked,
+  every tree lighter or darker according to where they stood, where Iris showed one shadow. The
+  shadow draw now keeps filled batches of its own, as Iris does.
+
 - **Photon draws.** Three things stood between its files and its picture. Its atmosphere table
   is a three-dimensional volume of half floats asked to clamp, and the flat atlas that stands in
   for a volume took one byte a texel and a repeating volume only, so the three deferred passes

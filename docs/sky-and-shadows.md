@@ -258,6 +258,17 @@ Finally, per-face batch culling has to be disabled for the shadow pass, and the 
 not enough to do it: batches choose which faces to submit before any pipeline exists, and a face
 the camera cannot see is exactly the face standing between the sun and the ground.
 
+Disabling it at the point where a batch is filled is still not enough, because Sodium keeps the
+filled batch. One batch per region and pass survives until the region's render list changes or the
+camera crosses a section boundary inside the region or steps into or out of it, and whoever fills it
+decides the faces it holds. Where the light and the camera keep the same sections of a region, which
+is every region fully in view, nothing refills the batch between the camera's draw and the shadow
+draw, so the shadow draw took the camera's batch with the camera's holes in it. The symptom was a
+canopy whose self-shadow came and went as the player walked, one region at a time, refilled at the
+section boundaries crossed inside the tree's region. The shadow draw therefore keeps batches of its
+own, as Iris does with a second render list and a second batch map it swaps in for its shadow pass,
+and the second map is emptied wherever Sodium empties its own.
+
 ### The shape the light measures a section against
 
 The obvious shape is the box the map is drawn in, and it is the wrong one. The map only ever gets

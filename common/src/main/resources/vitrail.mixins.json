@@ -60,6 +60,7 @@
 		"RenderPassMixin",
 		"RenderPipelineAccessor",
 		"RenderPipelineMixin",
+		"MixinRenderRegion",
 		"RenderSectionManagerAccessor",
 		"RenderTargetAccessor",
 		"RenderTypeFeatureRendererGroupMixin",
