@@ -309,10 +309,11 @@ public final class ShadowTerrain {
 		// half binds the same NEAREST sampler as the gbuffer half or the game's under the legacy
 		// switch, either way through TerrainSampler and LegacyTerrainFilter and never through this
 		// argument. What this argument reaches is Sodium's own shader, on a pass handed back to it,
-		// which keeps the game's filtering there as it does in the gbuffers. Iris hands a sampler down
-		// the same road (shadows/ShadowRenderer.java:389) and its SodiumShader.setupState binds its
-		// own instead (pipeline/programs/SodiumShader.java:131).
-		GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR, true);
+		// and there Iris hands NEAREST down the same road (shadows/ShadowRenderer.java:389), where
+		// the gbuffers hand it the game's LINEAR: NEAREST here too, so that the one pass Sodium
+		// draws itself filters as it does under Iris. Iris's SodiumShader.setupState binds its own
+		// instead (pipeline/programs/SodiumShader.java:131), and so does ours.
+		GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST, true);
 
 		ShadowCasters casters = TerrainDraw.shadowCasters();
 

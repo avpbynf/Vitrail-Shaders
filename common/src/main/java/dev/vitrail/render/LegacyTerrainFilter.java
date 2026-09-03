@@ -2,9 +2,8 @@ package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
 
-import net.minecraft.client.Minecraft;
-
 import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * Whether a pack's terrain reads the block atlas through the game's filtered sampler, as this
@@ -32,10 +31,14 @@ public final class LegacyTerrainFilter {
 
 	private static final String ARM_FILE = "legacy-terrain-filter";
 
-	/** Null until first asked after a pack load, so the file is read once per load and not per pass. */
-	private static Boolean armed;
+	/**
+	 * Settled at the head of each pack load, like {@link DriverTrig}, and volatile for the reason
+	 * {@code RenderScale.percent} gives: the load may run on a loading worker while every reader
+	 * is the render thread.
+	 */
+	private static volatile boolean armed;
 
-	private static boolean announced;
+	private static volatile boolean announced;
 
 	private LegacyTerrainFilter() {
 	}
@@ -46,30 +49,19 @@ public final class LegacyTerrainFilter {
 	 * @return true while the file or the property asks for the old filter
 	 */
 	public static boolean armed() {
-		if (PROPERTY) {
-			announce(true);
-
-			return true;
-		}
-
-		if (armed == null) {
-			Minecraft minecraft = Minecraft.getInstance();
-			if (minecraft == null || minecraft.gameDirectory == null) {
-				return false;
-			}
-
-			armed = Files.isRegularFile(minecraft.gameDirectory.toPath()
-					.resolve("vitrail").resolve(ARM_FILE));
-		}
-
 		announce(armed);
 
 		return armed;
 	}
 
-	/** A new pack is being read, so the file is worth looking at again. */
-	public static void reset() {
-		armed = null;
+	/**
+	 * Read at the head of a pack load, so the file is looked at once per load and not per pass.
+	 * The game directory is handed in rather than asked of the game, as {@link DriverTrig#read}
+	 * takes it: the load already knows where it is reading from.
+	 */
+	public static void read(Path gameDirectory) {
+		armed = PROPERTY
+				|| Files.isRegularFile(gameDirectory.resolve(Vitrail.MOD_ID).resolve(ARM_FILE));
 		announced = false;
 	}
 
