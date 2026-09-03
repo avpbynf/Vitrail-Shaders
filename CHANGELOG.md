@@ -25,6 +25,25 @@ what the next one holds.
   every tree lighter or darker according to where they stood, where Iris showed one shadow. The
   shadow draw now keeps filled batches of its own, as Iris does.
 
+- **A pack's terrain reads the block atlas unfiltered, as Iris binds it.** The terrain and its
+  shadow map read the atlas through the game's own chunk sampler, LINEAR for min and mag, where
+  Iris throws that sampler away and binds NEAREST for every terrain draw. Both halves now bind
+  the same sampler Iris does, mipmaps and the player's anisotropy kept, short of the one thing
+  Iris adds for packs that declare they cannot bear anisotropy, which is not read yet. What a
+  filter can decide on cutout foliage is whether a fragment survives its alpha test, so the two
+  states can only differ where a leaf's edge falls inside a texel; compared against Iris on one
+  scene at three camera heights, the two engines shade the trees alike in both states, so this
+  is parity and not the cure of anything seen so far. Of the Texture Filtering setting, only the
+  anisotropy still reaches a pack's terrain; the filter itself still applies to everything a pack
+  does not draw.
+
+  An empty file `vitrail/legacy-terrain-filter` in the instance, or
+  `-Dvitrail.legacyTerrainFilter=true`, puts the old filtered sampler back on both the terrain and
+  its shadow, so the two states can be compared in one world by reloading the pack with the
+  Reload Shaders key (R by default) rather than by swapping builds. F3 + T does not read the
+  pack again and leaves the state as it was. The log names the state once per pack load, at the
+  first terrain the pack draws.
+
 - **Photon draws.** Three things stood between its files and its picture. Its atmosphere table
   is a three-dimensional volume of half floats asked to clamp, and the flat atlas that stands in
   for a volume took one byte a texel and a repeating volume only, so the three deferred passes

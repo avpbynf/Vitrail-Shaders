@@ -262,6 +262,16 @@ game's full memory barrier and sends the mip chain back to a pass per level. It 
 cannot be the cause of a wrong image, so it is the first thing to ask of a machine that draws one
 this one does not.
 
+**The block atlas filter can be put back the way it was.** An empty file
+`vitrail/legacy-terrain-filter` in the instance, or `-Dvitrail.legacyTerrainFilter=true`, sends a
+pack's terrain and its shadow back through the game's filtered sampler, which is what this engine
+bound before it took Iris's unfiltered one. It exists because what a filter can change is the
+silhouette of cutout foliage, and an eye judges that badly across two launches and worse across
+two builds. One world, one variable, and the Reload Shaders key between the two states: F3 + T
+rebuilds the pipelines without reading the pack again, so it does not switch. The state is written
+to the log once per pack load, at the first terrain the pack draws, whether the file is there or
+not, so a reading always names the state it belongs to.
+
 **The sine substitution can be taken off.** Every `sin` and `cos` a pack writes is replaced at load
 time by a reduced-argument helper of the translation's own, whatever the argument. An empty file
 `vitrail/driver-trig` in the instance, or `-Dvitrail.driverTrig=true` among the JVM arguments,

@@ -303,9 +303,15 @@ public final class ShadowTerrain {
 				((GameRendererStorage) minecraft.gameRenderer).sodium$getProjectionMatrix();
 		ChunkRenderMatrices matrices = new ChunkRenderMatrices(projection, MODEL_VIEW);
 
-		// Mipmapped and clamped, which is the game's own chunk sampler short of its anisotropy. It
-		// matters here rather than being tidiness: the cutout half of the shadow discards on the
-		// atlas's alpha, and a leaf sampled without mipmaps casts a shadow that crawls at distance.
+		// The game's own chunk sampler, mipmapped and clamped, and it is NOT what the pack's shadow
+		// programs read the atlas through: the renderer hands this to begin, where the chunk
+		// renderer mixin settles the pack's sampler for every pass, this one included, so the shadow
+		// half binds the same NEAREST sampler as the gbuffer half or the game's under the legacy
+		// switch, either way through TerrainSampler and LegacyTerrainFilter and never through this
+		// argument. What this argument reaches is Sodium's own shader, on a pass handed back to it,
+		// which keeps the game's filtering there as it does in the gbuffers. Iris hands a sampler down
+		// the same road (shadows/ShadowRenderer.java:389) and its SodiumShader.setupState binds its
+		// own instead (pipeline/programs/SodiumShader.java:131).
 		GpuSampler sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR, true);
 
 		ShadowCasters casters = TerrainDraw.shadowCasters();
