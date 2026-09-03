@@ -2,7 +2,9 @@ package dev.vitrail.mixin;
 
 import dev.vitrail.sodium.SodiumPasses;
 import dev.vitrail.pack.program.TerrainPass;
+import dev.vitrail.render.LegacyTerrainFilter;
 import dev.vitrail.render.TerrainDraw;
+import dev.vitrail.render.TerrainSampler;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.textures.GpuSampler;
@@ -51,13 +53,21 @@ public abstract class MixinShaderChunkRenderer {
 	protected VertexFormat vertexFormat;
 
 	/**
-	 * Takes the sampler the game configured for the block atlas, which {@code begin} is handed and
-	 * {@code compileProgram} is not.
+	 * Settles which sampler a pack's terrain reads the block atlas through, at the one point that is
+	 * handed the game's: {@code begin} has it and {@code compileProgram} does not. {@code begin}
+	 * calls {@code compileProgram}, so this always lands first.
 	 * <p>
-	 * Worth the second hook rather than settling for a sampler of our own: the game's is mipmapped
-	 * and ours was not, and a block atlas sampled without mipmaps shimmers at distance and bleeds
-	 * between sprites at their edges. {@code begin} calls {@code compileProgram}, so this always
-	 * lands first.
+	 * <strong>What the pack binds is ours and not the game's, and that is a correction rather than a
+	 * preference.</strong> The game filters the atlas LINEAR and Iris binds NEAREST for every terrain
+	 * draw, so a pack, which is written against Iris, expects NEAREST. What that filter decides on
+	 * cutout foliage is the silhouette rather than the colour, the fragment being discarded on the
+	 * atlas's alpha, and {@link TerrainSampler} carries the whole of it with the references on both
+	 * sides. {@link LegacyTerrainFilter} puts the game's back, terrain and shadow alike, for a
+	 * comparison. The choice is made where the pack is known to be drawing, so that a pass with no
+	 * pack behind it neither asks nor announces anything.
+	 * <p>
+	 * Every pass comes through here, the shadow map's included: the light's draw hands the game's
+	 * sampler down the same road, and the pack's shadow programs bind what is settled here.
 	 */
 	@Inject(method = "begin", at = @At("HEAD"))
 	private void vitrail$sampler(TerrainRenderPass pass, FogParameters parameters,

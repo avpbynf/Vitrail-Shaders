@@ -1428,9 +1428,11 @@ final class GeometryProgram {
 	}
 
 	/**
-	 * The sampler the game configured for the block atlas, which is mipmapped and filtered as the
-	 * user's own settings say. Worth taking rather than making one: a block atlas read without
-	 * mipmaps shimmers at distance, and the sprites bleed into each other at their edges.
+	 * The sampler this pack's terrain reads the block atlas through, mipmapped and carrying the
+	 * player's anisotropy, and NEAREST where the game's own is LINEAR. {@link TerrainSampler} is
+	 * where it is built and why: what an interpolated filter decides on cutout foliage is the
+	 * silhouette rather than the colour. Mipmaps are not the thing that changed and are still what
+	 * keeps a block atlas from shimmering at distance and bleeding between sprites at their edges.
 	 */
 	void sampler(GpuSampler sampler) {
 		this.atlasSampler = sampler;

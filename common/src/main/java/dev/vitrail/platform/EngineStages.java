@@ -10,6 +10,7 @@ import dev.vitrail.render.PbrTextures;
 import dev.vitrail.render.RenderScale;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
+import dev.vitrail.render.TerrainSampler;
 import dev.vitrail.sodium.EntityMeshSerializer;
 import dev.vitrail.screen.SettingsKey;
 import dev.vitrail.sodium.ShadowTerrain;
@@ -272,6 +273,11 @@ public final class EngineStages {
 		// The render scale's scaled world and its quad belong to the session too: they outlive
 		// every pack on purpose, so the end of the session is the one caller that frees them.
 		RenderScale.close();
+
+		// The block atlas sampler a pack's terrain binds, one per anisotropy the player asked for.
+		// Same lifetime and same reason: it belongs to the device rather than to any pack, and a
+		// sampler outliving its device is a handle into freed memory.
+		TerrainSampler.release();
 
 		// And the material maps, which belong to the resource pack rather than to any shader pack:
 		// nothing in a pack's lifetime touches them, so nothing but the end of the session does. Both

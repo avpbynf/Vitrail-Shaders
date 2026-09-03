@@ -799,12 +799,23 @@ public final class TerrainDraw {
 		}
 	}
 
-	/** The sampler the game configured for the block atlas, taken where a chunk pass begins. */
-	public static void sampler(GpuSampler sampler) {
+	/**
+	 * Settles the sampler this pack's terrain reads the block atlas through, where a chunk pass
+	 * begins. Ours rather than the game's, and {@link TerrainSampler} says why; the game's under
+	 * {@link LegacyTerrainFilter}, and the game's again before a device exists to build ours on,
+	 * which no pass drawn by a pack reaches. Nothing is asked or announced while no pack draws.
+	 *
+	 * @param game the sampler the game configured for its own chunk draws
+	 */
+	public static void sampler(GpuSampler game) {
 		TerrainDraw draw = PackChain.terrain();
-		if (draw != null) {
-			draw.programs.values().forEach(program -> program.sampler(sampler));
+		if (draw == null) {
+			return;
 		}
+
+		GpuSampler ours = LegacyTerrainFilter.armed() ? null : TerrainSampler.get();
+		GpuSampler bound = ours == null ? game : ours;
+		draw.programs.values().forEach(program -> program.sampler(bound));
 	}
 
 	/**

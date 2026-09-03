@@ -270,7 +270,8 @@ public final class TerrainProgram implements DumpedProgram {
 	}
 
 	/**
-	 * Takes the sampler the game configured for the block atlas, mipmaps and filtering included.
+	 * Takes the sampler this pack's terrain reads the block atlas through, mipmaps, filtering and
+	 * anisotropy included.
 	 *
 	 * @see GeometryProgram#sampler(GpuSampler)
 	 */
