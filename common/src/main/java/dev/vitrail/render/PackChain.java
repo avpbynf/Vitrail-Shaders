@@ -660,7 +660,7 @@ public final class PackChain {
 		// Taken before anything reads the folder, so that the count printed at the end of the load
 		// covers every opening the load made and not only the translation's.
 		int openings = ShaderPackSource.openings();
-		LegacyTerrainFilter.reset();
+		LegacyTerrainFilter.read(gameDirectory);
 		session = null;
 		lastError = null;
 		removed = List.of();
