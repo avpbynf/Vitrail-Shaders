@@ -54,6 +54,13 @@ what the next one holds.
   pack again and leaves the state as it was. The log names the state once per pack load, at the
   first terrain the pack draws.
 
+- **Blend overrides, target sizes, flips and `endFlashShadows` follow the pack's own settings.**
+  Those four families of `shaders.properties` lines were read whether or not the `#if` around
+  them held, so a line the pack had switched off still applied. Photon's two low-resolution
+  cloud targets took the size of the last of its four choices whichever was picked, and
+  Complementary's water blend and its weather target's `off` held whatever the define or the
+  setting around them said.
+
 - **Photon draws.** Three things stood between its files and its picture. Its atmosphere table
   is a three-dimensional volume of half floats asked to clamp, and the flat atlas that stands in
   for a volume took one byte a texel and a repeating volume only, so the three deferred passes

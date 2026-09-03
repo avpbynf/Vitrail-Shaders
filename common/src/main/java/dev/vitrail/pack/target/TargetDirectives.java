@@ -128,7 +128,7 @@ public final class TargetDirectives {
 		public Builder accept(ShaderProperties properties, Map<String, String> defines) {
 			Map<Integer, String> wanted = new TreeMap<>();
 
-			properties.sizeBuffers().forEach((buffer, value) -> {
+			properties.sizeBuffers(defines).forEach((buffer, value) -> {
 				Optional<Integer> index = boxed(buffer);
 				if (index.isEmpty()) {
 					this.notes.add("size.buffer." + buffer + " names no target we know of, ignored");

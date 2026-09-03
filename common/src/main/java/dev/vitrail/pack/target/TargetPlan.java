@@ -184,6 +184,7 @@ public final class TargetPlan {
 		List<ProgramSet.ProgramKey> entries = programs.fragmentsOf(draft.place);
 
 		Map<String, String> defines = settings.globalDefines(options);
+		draft.blend = properties.blend(defines);
 		read(source, options, settings, properties, entries, draft);
 		walk(properties, options, defines, entries, filter, draft);
 		computes(properties, options, defines, programs, draft);
@@ -343,7 +344,7 @@ public final class TargetPlan {
 			draft.geometryAt = draft.running.size();
 		}
 
-		draft.schedule = TargetSchedule.of(steps, properties.flips());
+		draft.schedule = TargetSchedule.of(steps, properties.flips(defines));
 	}
 
 	/**
@@ -699,7 +700,7 @@ public final class TargetPlan {
 					+ directives.mipmapRequests());
 		}
 
-		List<String> unreadable = draft.properties.blend().stream()
+		List<String> unreadable = draft.blend.stream()
 				.filter(directive -> directive.buffer() == null)
 				.filter(directive -> BlendMode.parse(directive.value()).isEmpty())
 				.map(directive -> directive.program() + "=" + directive.value())
@@ -709,7 +710,7 @@ public final class TargetPlan {
 					+ "keep the blending the engine would have used: " + unreadable);
 		}
 
-		List<String> perBuffer = draft.properties.blend().stream()
+		List<String> perBuffer = draft.blend.stream()
 				.filter(directive -> directive.buffer() != null)
 				.map(directive -> directive.program() + "." + directive.buffer())
 				.toList();
@@ -849,7 +850,7 @@ public final class TargetPlan {
 	 */
 	private static Map<String, BlendMode> blendOf(Draft draft) {
 		Map<String, BlendMode> blend = new LinkedHashMap<>();
-		for (ShaderProperties.BlendDirective directive : draft.properties.blend()) {
+		for (ShaderProperties.BlendDirective directive : draft.blend) {
 			if (directive.buffer() != null) {
 				continue;
 			}
@@ -898,6 +899,7 @@ public final class TargetPlan {
 		private String dimension;
 		private String place;
 		private ShaderProperties properties;
+		private List<ShaderProperties.BlendDirective> blend = List.of();
 		private TargetDirectives directives;
 		private TargetSchedule schedule;
 		private List<String> computes = List.of();
