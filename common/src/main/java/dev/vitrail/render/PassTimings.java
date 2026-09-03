@@ -163,8 +163,9 @@ public final class PassTimings {
 	 * <p>
 	 * The counts above say a family opened nine passes; without this, that nine can only be guessed
 	 * at, and a guess about a number is how a frame gets attacked at the wrong end. Only the passes
-	 * {@link GeometryHold} arbitrates appear here: a composite or a mip level is not a family
-	 * reopening, it is a pass of its own, and each of those is a cause rather than an effect.
+	 * {@link GeometryHold} arbitrates appear here, the full-screen passes of a pack included since
+	 * they may join the one before them, and a join is counted beside the refusals so that the
+	 * census can say it happened; a mip level is not a reopening, it is a pass of its own.
 	 */
 	private static final Map<String, Map<String, Integer>> censusReopens = new HashMap<>();
 

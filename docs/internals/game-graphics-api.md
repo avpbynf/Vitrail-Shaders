@@ -115,8 +115,9 @@ the first is obvious: two Vulkan passes writing one image are ordered by nothing
 framebuffer of OpenGL orders them for free, and the emptying of a target now rides the load-op of
 a pass rather than being a clear of its own, which makes it one of those writes. Consecutive
 geometry that writes the same colour and depth images stays in one pass, which is what Iris does by
-leaving `defaultFB` bound (`IrisRenderingPipeline.bindDefault`). A later composite, a copy, or a
-different framebuffer ends that hold first. Mip chains are filled with `vkCmdBlitImage` on the
+leaving `defaultFB` bound (`IrisRenderingPipeline.bindDefault`). A copy, a different framebuffer,
+or a composite that reads, clears or binds a storage image ends that hold first; a composite
+that writes the same images and reads none of them joins it. Mip chains are filled with `vkCmdBlitImage` on the
 frame's command buffer, the Vulkan form of `glGenerateMipmap`, rather than a pass per level, which
 gives up the barrier each of those passes ended on and keeps transfer barriers between the levels
 instead.

@@ -44,6 +44,7 @@ public final class GeometryHold {
 	private static final int PLAN_INCOMPLETE = -6;
 	private static final int CLEARS = -7;
 	private static final int SAMPLES_HELD = -8;
+	private static final int BINDS_STORAGE = -9;
 
 	private static RenderPass current;
 	private static GpuTexture[] colours;
@@ -86,16 +87,24 @@ public final class GeometryHold {
 	 * Geometry {@link #open} does not ask this: those programs paint over the world rather than
 	 * filter it. A later composite that samples what the hold still has attached would read an
 	 * image the pass has not stored. {@code sampled} null means the sampler plan cannot name every
-	 * image, and that is a refusal: a join would be a guess.
+	 * image, and that is a refusal: a join would be a guess. {@code bindsStorage} refuses as well:
+	 * a storage image is written through {@code imageStore} and not through an attachment, so no
+	 * attachment comparison can tell whether the program before it wrote what this one reads, and
+	 * only a closed pass orders that write before the read.
 	 */
 	public static RenderPass openFullscreen(CommandEncoder encoder, RenderPassDescriptor descriptor,
-			List<GpuTexture> sampled) {
-		return open(encoder, descriptor, fitFullscreen(descriptor, sampled));
+			List<GpuTexture> sampled, boolean bindsStorage) {
+		return open(encoder, descriptor, fitFullscreen(descriptor, sampled, bindsStorage));
 	}
 
 	private static RenderPass open(CommandEncoder encoder, RenderPassDescriptor descriptor, int fit) {
 		if (fit == JOINS) {
 			resetArea(current);
+			// Counted under the same roof as the refusals: a census that only listed why passes
+			// opened could not say whether a join ever happened at all.
+			if (PassTimings.censusArmed()) {
+				PassTimings.censusReopen(descriptor.label(), "joined the pass already recording");
+			}
 
 			return current;
 		}
@@ -230,7 +239,8 @@ public final class GeometryHold {
 	 * name every image. Asked only when the images would otherwise join, so a first open is still
 	 * {@link #NO_HOLD} rather than one of those.
 	 */
-	private static int fitFullscreen(RenderPassDescriptor descriptor, List<GpuTexture> sampled) {
+	private static int fitFullscreen(RenderPassDescriptor descriptor, List<GpuTexture> sampled,
+			boolean bindsStorage) {
 		int fit = fit(descriptor);
 		if (fit != JOINS) {
 			return fit;
@@ -238,6 +248,10 @@ public final class GeometryHold {
 
 		if (sampled == null) {
 			return PLAN_INCOMPLETE;
+		}
+
+		if (bindsStorage) {
+			return BINDS_STORAGE;
 		}
 
 		if (clears(descriptor)) {
@@ -286,6 +300,7 @@ public final class GeometryHold {
 			case PLAN_INCOMPLETE -> "its sampler plan cannot name every image it samples";
 			case CLEARS -> "it clears an attachment";
 			case SAMPLES_HELD -> "it samples an attachment of the hold";
+			case BINDS_STORAGE -> "it binds a storage image, which only a closed pass orders";
 			case NO_HOLD -> ended == null ? "nothing was being held" : "the hold ended on " + ended.get();
 			default -> "it joins";
 		};

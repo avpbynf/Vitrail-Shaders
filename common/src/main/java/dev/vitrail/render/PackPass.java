@@ -451,6 +451,17 @@ final class PackPass {
 				.collect(Collectors.joining(", "));
 	}
 
+	/** Whether one of this program's names is a storage image, written by imageStore and not by a pass. */
+	private boolean bindsStorage() {
+		for (SamplerPlan.Binding binding : this.samplerBindings) {
+			if (binding.kind() == SamplerPlan.Kind.CUSTOM_IMAGE) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/**
 	 * The images this program samples, resolved to the textures {@link GeometryHold} compares.
 	 * Null when the sampler plan cannot name them all: the caller must not join.
@@ -529,7 +540,7 @@ final class PackPass {
 		}
 
 		try (RenderPass pass = GeometryHold.openFullscreen(encoder, descriptor,
-				sampledImages(targets, depthView, distantView))) {
+				sampledImages(targets, depthView, distantView), bindsStorage())) {
 			record(pass, targets, depthView, distantView, quad, uniforms);
 		}
 	}

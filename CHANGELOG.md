@@ -13,6 +13,14 @@ what the next one holds.
 
 ## Unreleased
 
+### Changed
+
+- **Consecutive full-screen passes of a pack that write the same images share one render
+  pass** when the later one reads none of them. A pass that samples what the one before it
+  wrote, clears a target, fills a mip chain or binds a storage image still closes the pass
+  first, so the picture is the same and fewer passes close per frame. The pass census names
+  every join and every refusal with its reason.
+
 ### Fixed
 
 - **The block outline is drawn by the pack, as Iris draws it.** The thin box around the block
