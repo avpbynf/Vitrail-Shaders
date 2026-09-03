@@ -90,7 +90,7 @@ public final class PackReport {
 					PREFIX, properties.directiveCount(), properties.continuationCount(),
 					properties.profiles().size(), properties.customUniformTypes().size(),
 					properties.screenTokens().size(), properties.sliders().size(),
-					properties.blend().size(), pack.disabledPrograms().size());
+					properties.blendCount(), pack.disabledPrograms().size());
 
 			logIfAny("  keys not read", properties.ignoredPrefixes());
 		} else {

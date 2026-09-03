@@ -165,15 +165,12 @@ public final class ShaderProperties {
 	private final List<String> sliders;
 	private final List<String> requiredFeatures;
 	private final List<String> optionalFeatures;
-	private final List<BlendDirective> blend;
-	private final Map<String, String> sizeBuffers;
-	private final List<FlipDirective> flips;
 	private final Map<String, String> malformedAlphaTests;
 	private final Map<String, Integer> ignoredPrefixes;
 	private final int directiveCount;
+	private final int blendCount;
 	private final int continuationCount;
 	private final boolean present;
-	private final boolean endFlashShadows;
 
 	private ShaderProperties(Builder builder) {
 		this.lines = List.copyOf(builder.lines);
@@ -192,15 +189,12 @@ public final class ShaderProperties {
 		this.sliders = List.copyOf(builder.sliders);
 		this.requiredFeatures = List.copyOf(builder.requiredFeatures);
 		this.optionalFeatures = List.copyOf(builder.optionalFeatures);
-		this.blend = List.copyOf(builder.blend);
-		this.sizeBuffers = Map.copyOf(builder.sizeBuffers);
-		this.flips = List.copyOf(builder.flips);
 		this.malformedAlphaTests = Map.copyOf(builder.malformedAlphaTests);
 		this.ignoredPrefixes = Map.copyOf(builder.ignoredPrefixes);
 		this.directiveCount = builder.directiveCount;
+		this.blendCount = builder.blendCount;
 		this.continuationCount = builder.continuationCount;
 		this.present = builder.present;
-		this.endFlashShadows = builder.endFlashShadows;
 	}
 
 	public static ShaderProperties parse(ShaderPackSource source) throws IOException {
@@ -300,15 +294,17 @@ public final class ShaderProperties {
 			return;
 		}
 
-		Matcher blend = BLEND.matcher(line);
-		if (blend.matches()) {
-			builder.blend.add(new BlendDirective(blend.group(1), blend.group(2), blend.group(3).trim()));
+		// Consumed here for the census only; the values come out of blend, which walks the
+		// conditionals for the reason alphaTests gives just below.
+		if (BLEND.matcher(line).matches()) {
+			builder.blendCount++;
 			return;
 		}
 
 		// Consumed here for the census only; the values come out of alphaTests, which walks the
 		// conditionals, because the reference reads this family off its preprocessed copy of the
-		// file. Not every family: it reads the screens and the sliders off the raw one.
+		// file. Not every family: it reads the screens, the sliders, the profiles and the feature
+		// lists off the raw one.
 		Matcher alpha = ALPHA_TEST.matcher(line);
 		if (alpha.matches()) {
 			String value = alpha.group(2).trim();
@@ -354,12 +350,9 @@ public final class ShaderProperties {
 			return;
 		}
 
-		// Whether the pack means its shadows to follow the End flash. Off unless the pack says so,
-		// which is what decides where the shadow light points in that one dimension, and no pack of
-		// the corpus writes it.
-		Matcher endFlash = END_FLASH_SHADOWS.matcher(line);
-		if (endFlash.matches()) {
-			builder.endFlashShadows = endFlash.group(1).trim().equalsIgnoreCase("true");
+		// Consumed here for the census only; the value comes out of endFlashShadows, which walks
+		// the conditionals.
+		if (END_FLASH_SHADOWS.matcher(line).matches()) {
 			return;
 		}
 
@@ -404,12 +397,9 @@ public final class ShaderProperties {
 			return;
 		}
 
-		// The value is kept exactly as written. It is often not a number at all but the name of
-		// one of the pack's own settings, and substituting it needs those settings resolved,
-		// which this class deliberately knows nothing about.
-		Matcher size = SIZE_BUFFER.matcher(line);
-		if (size.matches()) {
-			builder.sizeBuffers.put(size.group(1), size.group(2).trim());
+		// Consumed here for the census only; the values come out of sizeBuffers, which walks the
+		// conditionals.
+		if (SIZE_BUFFER.matcher(line).matches()) {
 			return;
 		}
 
@@ -463,14 +453,12 @@ public final class ShaderProperties {
 			return;
 		}
 
+		// Consumed here for the census only, and only when the value is a boolean: the lines come
+		// out of flips, which walks the conditionals, and anything else falls through to the
+		// ignored keys.
 		Matcher flip = FLIP.matcher(line);
-		if (flip.matches()) {
-			String value = flip.group(3).trim();
-			if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false")) {
-				builder.flips.add(new FlipDirective(flip.group(1), flip.group(2),
-						value.equalsIgnoreCase("true")));
-				return;
-			}
+		if (flip.matches() && flipValue(flip) != null) {
+			return;
 		}
 
 		// Consumed here for the census only; the path comes out of noiseTexturePath, which walks
@@ -1019,10 +1007,9 @@ public final class ShaderProperties {
 	 * order.
 	 * <p>
 	 * Shared rather than written once per caller: what counts as live is the whole subtlety of it,
-	 * and two walks that agree today are two walks that can be edited on different days. Three
-	 * methods read it, the sky's four words and the fifth about the clouds, the weather's two and
-	 * the particles' ordering; two of the three call it twice, the sky for that fifth word and the
-	 * particles for their two spellings.
+	 * and two walks that agree today are two walks that can be edited on different days. Every
+	 * family the reference reads off its preprocessed copy comes through here, one reader each;
+	 * some call it twice, the sky for its fifth word and the particles for their two spellings.
 	 */
 	private List<Matcher> live(Pattern pattern, Map<String, String> defines) {
 		List<Matcher> matched = new ArrayList<>();
@@ -1391,12 +1378,22 @@ public final class ShaderProperties {
 	}
 
 	/**
-	 * Whether the pack asked for its shadows to follow the End flash, off unless it says otherwise.
-	 * It is the pack opting in, so it decides where the shadow light points in the End and nothing
-	 * else; the flash's own position is published either way.
+	 * Whether the pack asked for its shadows to follow the End flash, off unless it says otherwise,
+	 * under the conditionals. It is the pack opting in, so it decides where the shadow light points
+	 * in the End and nothing else; the flash's own position is published either way. A line
+	 * whose value is not one of the four boolean words leaves the previous one standing, which
+	 * is what the reference does with it. No pack of the corpus writes it.
 	 */
-	public boolean endFlashShadows() {
-		return this.endFlashShadows;
+	public boolean endFlashShadows(Map<String, String> defines) {
+		boolean asked = false;
+		for (Matcher line : live(END_FLASH_SHADOWS, defines)) {
+			Boolean value = truth(line.group(1).trim());
+			if (value != null) {
+				asked = value;
+			}
+		}
+
+		return asked;
 	}
 
 	/**
@@ -1641,22 +1638,59 @@ public final class ShaderProperties {
 		return this.optionalFeatures;
 	}
 
-	public List<BlendDirective> blend() {
-		return this.blend;
+	/**
+	 * The blend overrides the pack writes, in file order, under the conditionals. Conditionally
+	 * for the reason {@link #alphaTests} gives: Complementary writes its water blend under
+	 * {@code DISTANT_HORIZONS} and a weather target's {@code off} under a setting of its own, and
+	 * read flat both would hold whatever the define or the setting said.
+	 */
+	public List<BlendDirective> blend(Map<String, String> defines) {
+		List<BlendDirective> directives = new ArrayList<>();
+		for (Matcher line : live(BLEND, defines)) {
+			directives.add(new BlendDirective(line.group(1), line.group(2), line.group(3).trim()));
+		}
+
+		return directives;
 	}
 
 	/**
-	 * The size a pack asks a colour target to be, by the name it wrote, raw. The two tokens are
-	 * often settings rather than numbers, so reading them needs {@link TargetSize} and the
-	 * resolved settings.
+	 * The size a pack asks a colour target to be, by the name it wrote, raw, the last live line
+	 * for a name winning. The two tokens are often settings rather than numbers, so reading them
+	 * needs {@link TargetSize} and the resolved settings.
+	 * <p>
+	 * Under the conditionals, and this family is where a flat read costs the most: Photon writes
+	 * the size of two targets four times in the four arms of one setting, so a flat read hands
+	 * every choice the size of the last arm.
 	 */
-	public Map<String, String> sizeBuffers() {
-		return this.sizeBuffers;
+	public Map<String, String> sizeBuffers(Map<String, String> defines) {
+		Map<String, String> sizes = new LinkedHashMap<>();
+		for (Matcher line : live(SIZE_BUFFER, defines)) {
+			sizes.put(line.group(1), line.group(2).trim());
+		}
+
+		return sizes;
 	}
 
-	/** Where a pack takes the ping pong into its own hands. One line in the whole corpus. */
-	public List<FlipDirective> flips() {
-		return this.flips;
+	/**
+	 * Where a pack takes the ping pong into its own hands, under the conditionals. One line in the
+	 * whole corpus, and a line whose value is not one of the four boolean words is not one of
+	 * these, which is where the reference leaves it too.
+	 */
+	public List<FlipDirective> flips(Map<String, String> defines) {
+		List<FlipDirective> directives = new ArrayList<>();
+		for (Matcher line : live(FLIP, defines)) {
+			Boolean value = flipValue(line);
+			if (value != null) {
+				directives.add(new FlipDirective(line.group(1), line.group(2), value));
+			}
+		}
+
+		return directives;
+	}
+
+	/** The boolean a {@code flip} line carries, or null for a value that is not one. */
+	private static Boolean flipValue(Matcher flip) {
+		return truth(flip.group(3).trim());
 	}
 
 	/**
@@ -1710,6 +1744,11 @@ public final class ShaderProperties {
 
 	public int directiveCount() {
 		return this.directiveCount;
+	}
+
+	/** How many blend lines the file carries, live or not: a census, where {@link #blend} answers. */
+	public int blendCount() {
+		return this.blendCount;
 	}
 
 	public int continuationCount() {
@@ -1871,14 +1910,11 @@ public final class ShaderProperties {
 		private final List<String> sliders = new ArrayList<>();
 		private List<String> requiredFeatures = List.of();
 		private List<String> optionalFeatures = List.of();
-		private final List<BlendDirective> blend = new ArrayList<>();
-		private final Map<String, String> sizeBuffers = new LinkedHashMap<>();
-		private final List<FlipDirective> flips = new ArrayList<>();
 		private final Map<String, String> malformedAlphaTests = new LinkedHashMap<>();
 		private final Map<String, Integer> ignoredPrefixes = new LinkedHashMap<>();
 		private int directiveCount;
+		private int blendCount;
 		private int continuationCount;
 		private boolean present;
-		private boolean endFlashShadows;
 	}
 }
