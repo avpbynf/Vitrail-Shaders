@@ -619,6 +619,12 @@ public final class GlslTranslator {
 	 */
 	private boolean entityWrapped;
 
+	/**
+	 * Whether the pack's main is run twice and its clip position widened, which is what a lines
+	 * mesh asks of its vertex stage. {@link LinesVertex} says why the mesh needs it.
+	 */
+	private boolean linesWrapped;
+
 	/** Whether this stage really makes the overlay colour, which only the whole program can say. */
 	private boolean makesOverlayColour;
 
@@ -1165,6 +1171,19 @@ public final class GlslTranslator {
 		if (this.used.contains(LegacyGlsl.CAMERA_BOB)) {
 			block.add(TranslatedUnit.Uniform.of(LegacyGlsl.CAMERA_BOB,
 					"mat4 " + LegacyGlsl.CAMERA_BOB));
+		}
+
+		// The screen size the lines wrapper widens with, supplied under the pack's own two names
+		// wherever the pack did not declare them itself; declared ones come through liftUniforms.
+		// Declared anywhere: collectDeclarations does not know a scope, so a pack naming a local
+		// viewWidth would keep the member out and leave the wrapper reading a name nobody
+		// declared, the trap LegacyGlsl records for projectionMatrix. No pack of the corpus does.
+		if (this.linesWrapped) {
+			for (String name : List.of("viewWidth", "viewHeight")) {
+				if (!this.declaredNames.contains(name)) {
+					block.add(TranslatedUnit.Uniform.of(name, "float " + name));
+				}
+			}
 		}
 
 		block.addAll(asUniforms(this.blockMembers));
@@ -3220,7 +3239,8 @@ public final class GlslTranslator {
 		boolean distant = this.inputs == VertexInputs.DISTANT;
 		boolean depth = namesClipPosition();
 		boolean overlay = this.inputs.overlay();
-		if (!terrain && !distant && !depth && !overlay) {
+		boolean lines = this.inputs == VertexInputs.LINES;
+		if (!terrain && !distant && !depth && !overlay && !lines) {
 			return;
 		}
 
@@ -3233,6 +3253,14 @@ public final class GlslTranslator {
 		this.terrainPrologue = terrain;
 		this.distantPrologue = distant;
 		this.entityWrapped = overlay;
+		this.linesWrapped = lines;
+		if (lines) {
+			// The widening reads the screen size off the two uniforms a pack may read and often
+			// does not declare in this program; naming them here is what has the block supply them.
+			this.injectedNames.add("viewWidth");
+			this.injectedNames.add("viewHeight");
+		}
+
 		if (terrain) {
 			takeTexShrink();
 		}
@@ -5297,6 +5325,10 @@ public final class GlslTranslator {
 						EntityVertex.prologue(this.used, this.synthesized, this.inputs.fullbright()));
 				case GLINT -> lines.addAll(GlintVertex.prologue(this.used, this.synthesized));
 				case CRUMBLING -> lines.addAll(CrumblingVertex.prologue(this.used, this.synthesized));
+				case LINES -> {
+					lines.addAll(LinesVertex.prologue(this.used, this.synthesized));
+					lines.addAll(LinesVertex.widen());
+				}
 				case PARTICLE -> lines.addAll(ParticleVertex.prologue(this.used, this.synthesized));
 				case SKY -> lines.addAll(SkyVertex.prologue(this.bound, this.used, this.synthesized));
 				case CLOUDS -> lines.addAll(CloudVertex.prologue(this.used, this.synthesized));
@@ -5539,9 +5571,21 @@ public final class GlslTranslator {
 		// The pack's body is concatenated after the header, so its own main is only a name here and
 		// has to be declared before it can be called.
 		if (this.depthEpilogue || this.terrainPrologue || this.distantPrologue || this.entityWrapped
-				|| wrapsFragment() || owesInitialisers() || !this.splitMatrices.isEmpty()
-				|| !this.splitStructs.isEmpty() || !this.splitArrays.isEmpty()) {
+				|| this.linesWrapped || wrapsFragment() || owesInitialisers()
+				|| !this.splitMatrices.isEmpty() || !this.splitStructs.isEmpty()
+				|| !this.splitArrays.isEmpty()) {
 			lines.add("void " + PACK_MAIN + "();");
+			// The lines mesh runs the pack's main twice, the far end of the edge first and the
+			// vertex itself second, so that every varying holds the vertex's own value when the
+			// epilogues below read them, and widens between the two clip positions: Iris's own
+			// order (VanillaTransformer.java:214-222). The depth conversion still lands after,
+			// on the widened position, whose z the widening leaves alone.
+			String body = this.linesWrapped
+					? LinesVertex.OFFSET + " = Normal.xyz; " + PACK_MAIN + "(); vec4 of_LineEnd = "
+							+ "gl_Position; gl_Position = vec4(0.0); " + LinesVertex.OFFSET
+							+ " = vec3(0.0); " + PACK_MAIN + "(); " + LinesVertex.WIDEN
+							+ "(gl_Position, of_LineEnd);"
+					: PACK_MAIN + "();";
 			// The mask goes last of all, after the discard: a fragment the alpha test threw away
 			// covered nothing, and marking it covered would leave a hole where a leaf was.
 			lines.add("void main() { "
@@ -5555,7 +5599,7 @@ public final class GlslTranslator {
 					+ matrixPrologue()
 					+ structPrologue()
 					+ arrayPrologue()
-					+ PACK_MAIN + "();"
+					+ body
 					+ matrixEpilogue()
 					+ structEpilogue()
 					+ arrayEpilogue()

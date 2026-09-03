@@ -97,6 +97,14 @@ public enum VertexInputs {
 	CRUMBLING,
 
 	/**
+	 * The game's lines mesh, the block outline first among them: four elements out of which the
+	 * names a {@code gbuffers_line} program reads are made, and a wrapper around the pack's main
+	 * that widens each edge on the screen the way the game's own stage does. {@link LinesVertex}
+	 * carries the decode and the widening, and says what the mesh has not got.
+	 */
+	LINES,
+
+	/**
 	 * The game's own sky meshes. Alone among these, it is not one format: {@code SkyRenderer} binds
 	 * four between its eight passes, so the elements to declare come from the pass rather than from
 	 * this constant. {@link SkyVertex} carries the renaming and says what the sky has not got.
@@ -213,6 +221,7 @@ public enum VertexInputs {
 			case ENTITY, ENTITY_FULLBRIGHT -> EntityVertex.ATTRIBUTES;
 			case GLINT -> GlintVertex.ATTRIBUTES;
 			case CRUMBLING -> CrumblingVertex.ATTRIBUTES;
+			case LINES -> LinesVertex.ATTRIBUTES;
 			case PARTICLE -> ParticleVertex.ATTRIBUTES;
 			case SKY -> SkyVertex.ATTRIBUTES;
 			case CLOUDS -> CloudVertex.ATTRIBUTES;

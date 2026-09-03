@@ -164,6 +164,16 @@ public final class ChainPlan {
 					// Not counted, on the hand's argument: a crack is drawn where somebody is mining
 					// a block, which is a per frame answer no per place map may carry.
 					new NamedProgram("gbuffers_damagedblock", true, false, NOT_EVERYWHERE),
+					// The game's lines, the block outline first among them, drawn among the
+					// translucent features beside the overlay and on the same side of the stage.
+					// The same entry the overlay owed: without it the line program resolved to no
+					// attachment, its one output went to the game's cleared target, and what
+					// reached the picture of it came through the seed's depth cut, a partial line
+					// fighting the face it lies on, or nothing where the seed does not run.
+					//
+					// Not counted, on the hand's argument: an outline is drawn where somebody is
+					// aiming at a block, a per frame answer no per place map may carry.
+					new NamedProgram("gbuffers_line", true, false, NOT_EVERYWHERE),
 					// The hand's two passes, which straddle the stage as the particles do and for the
 					// same kind of reason: the solid one is drawn among the game's opaque features and
 					// the blending one at the end of the level. Not counted, and not by a switch:

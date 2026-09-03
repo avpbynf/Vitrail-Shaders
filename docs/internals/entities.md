@@ -346,6 +346,25 @@ alpha. The crumbling multiplies instead, so left there it multiplies against the
 cracks come out opaque black rather than darkening the face they lie on. Served, the multiply lands
 on the picture, which is where the game meant to put it.
 
+**The block outline** is the third piece drawn from a mesh of the game's, the lines format, and it
+is the one the full-screen layer could not carry at all rather than carry flat. The layer is composed
+onto the first target the pack's translucent pass writes, which is the scene colour for most packs
+and, for a pack that forward-shades its translucents into a target of their own, something else
+entirely: Photon writes refraction data there, and the outline composed into it came back as a faint
+refraction of the block behind. The reference never composes it: it draws the lines with the pack's
+`gbuffers_line`, falling back to `gbuffers_basic`, into whatever that program writes, and marks the
+draw with the outline stage, which is how a pack recolours or hides its selection box. The same is
+done here, from the same four elements, with one thing the mesh cannot carry made in the vertex
+stage: the game emits every edge as two vertices sharing the edge's direction as their normal, each
+written twice and indexed as two triangles, and its own vertex stage opens that degenerate quad on
+the screen, so the pack's main is run twice, once with the direction added to the position and once
+without, and the two clip positions are widened between them the way the game's stage does it, short
+of the slight shrink towards the eye the game applies first and Iris leaves to the pack. A pack that
+widens by itself, reading the direction off `vaNormal` as Complementary and Photon do, hands both
+runs one position and is left alone, where Iris would normalise nought. The width is
+the game's own, carried on the vertex, and the screen size comes from the two uniforms every pack may
+read, supplied where the pack did not declare them.
+
 Three families in this window stay the game's, and are carried in flat by the full-screen layer: the
 beacon beam, the lightning, and the text of a name plate or a sign. The lightning and the text bind
 a mesh this door cannot decode. The beam binds the block format, which the door now reads, and what
