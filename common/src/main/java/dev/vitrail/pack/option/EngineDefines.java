@@ -139,6 +139,14 @@ public final class EngineDefines {
 			defines.put("IRIS_FEATURE_CUSTOM_IMAGES", "");
 		}
 
+		// The block emission attribute is served: the chunk element carries the block's own light
+		// in the fourth component of at_midBlock, on the terrain and in the shadow map alike
+		// (SodiumVertex.MID_BLOCK). Iris poses the flag whatever the hardware
+		// (features/FeatureFlags.java:20), and packs decide more than a vertex read on it:
+		// Complementary sizes its two reflection targets under it, Bliss writes its voxel
+		// emission under it.
+		defines.put("IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE", "");
+
 		// The rest of IRIS_FEATURE_ stays unposted until each capability is served. See
 		// ShaderProperties.optionalFeatures for the other half of the answer, and PackChain for
 		// what a pack requiring one is told.

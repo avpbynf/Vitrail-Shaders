@@ -831,8 +831,10 @@ public final class PackChain {
 			// Read from the one file rather than from the report above, because a refusal has to
 			// hold at every load and the report is taken once.
 			List<String> required = new ArrayList<>(PackLoader.properties(pack).requiredFeatures());
-			// Only the names this engine has not built refuse the pack: custom images are served
-			// now, so a pack that cannot draw without them is simply right about what it needs.
+			// Only the names this engine has not built refuse the pack: the block emission
+			// attribute rides in the chunk element, and custom images are served now, so a pack
+			// that cannot draw without either is simply right about what it needs.
+			required.remove("BLOCK_EMISSION_ATTRIBUTE");
 			if (CustomImages.served()) {
 				required.remove("CUSTOM_IMAGES");
 			}

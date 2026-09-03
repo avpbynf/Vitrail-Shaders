@@ -1625,8 +1625,9 @@ public final class ShaderProperties {
 	/**
 	 * What the pack would use if it were there, and takes another path without. It is the list Iris
 	 * turns into {@code IRIS_FEATURE_} defines for the GLSL. This engine poses
-	 * {@code IRIS_FEATURE_CUSTOM_IMAGES} when the storage-image pipe is served, and none of the
-	 * others, which is what tells a pack to take the other path for those.
+	 * {@code IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE}, and {@code IRIS_FEATURE_CUSTOM_IMAGES} when
+	 * the storage-image pipe is served, and none of the others, which is what tells a pack to
+	 * take the other path for those.
 	 * <p>
 	 * Nothing in the engine reads this list, and that is deliberate rather than an oversight: there
 	 * is nothing here to decide from it. What taking the line out of the ignored keys buys is
