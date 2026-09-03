@@ -148,6 +148,7 @@ public final class VertexPrologue {
 			case "UV0", EntityVertex.MID_TEX_COORD -> "vec2";
 			case "UV1", "UV2" -> "ivec2";
 			case EntityVertex.IDENTIFIERS -> "uvec4";
+			case "LineWidth" -> "float";
 			default -> "vec4";
 		};
 	}

@@ -15,6 +15,16 @@ what the next one holds.
 
 ### Fixed
 
+- **The block outline is drawn by the pack, as Iris draws it.** The thin box around the block
+  aimed at was left to the game's own shader and painted into a layer this engine composes onto
+  the pack's picture at the spot where the pack blends its water; where a pack keeps something
+  other than its picture there, the box landed in it and came back as a faint ghost, a bright
+  refraction of the block behind under Photon. The pack now
+  draws the lines itself with its `gbuffers_line` program, or `gbuffers_basic` where it ships
+  none, under the outline render stage, so a pack's own selection box comes through: the
+  colour or rainbow Complementary offers for it, the box mode of Photon, the plain dark
+  outline of the rest.
+
 - **Leaves keep the same self-shadow wherever the camera stands.** The shadow map is drawn
   with Sodium's chunk renderer, which keeps one filled batch of draw commands per region and
   pass and only refills it when the region's sections change or the camera crosses a section
