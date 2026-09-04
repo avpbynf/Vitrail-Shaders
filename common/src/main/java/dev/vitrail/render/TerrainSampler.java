@@ -35,9 +35,13 @@ import java.util.OptionalDouble;
  * <p>
  * The anisotropy is the player's, read the way the game and Iris both read it, and the cache is
  * keyed by it so that changing the setting builds one more sampler rather than reusing a stale one.
- * Iris additionally forces it to one for a pack that cannot bear it, which this engine has no
- * equivalent of and does not pretend to. Released when the client closes, the one moment the device
- * is known to be going away with it.
+ * A pack that declares {@code breaksAnisotropy} is asked for one instead, whatever the player set,
+ * which is what Iris does at the same point ({@code samplers/IrisSamplers.java:250}): such a pack
+ * says that averaging across a sprite's border bleeds its neighbour into it, and that is a strip of
+ * the wrong texture along a block edge rather than a matter of taste. What the pack reads to know
+ * the setting is the {@code anisotropicFiltering} uniform, and that keeps the player's value on both
+ * engines ({@code uniforms/CommonUniforms.java:166-172}). Released when the client closes, the one
+ * moment the device is known to be going away with it.
  */
 public final class TerrainSampler {
 
@@ -47,7 +51,23 @@ public final class TerrainSampler {
 	 */
 	private static final Map<Integer, GpuSampler> BY_ANISOTROPY = new HashMap<>();
 
+	/**
+	 * Whether the pack now loaded declared that anisotropy breaks it. A static because this sampler
+	 * is one, and volatile because the pack that sets it is read on the loading worker while the
+	 * draws that ask for it run on the render thread.
+	 */
+	private static volatile boolean breaksAnisotropy;
+
 	private TerrainSampler() {
+	}
+
+	/**
+	 * Told what the pack about to be drawn declared, and told again with false when no pack is
+	 * drawn: this outlives any one chain, so a pack that could not bear anisotropy would otherwise
+	 * go on refusing it for the pack picked after it.
+	 */
+	public static void breaksAnisotropy(boolean breaks) {
+		breaksAnisotropy = breaks;
 	}
 
 	/**
@@ -65,7 +85,8 @@ public final class TerrainSampler {
 			return null;
 		}
 
-		int anisotropy = minecraft.options.textureFiltering().get() == TextureFilteringMethod.ANISOTROPIC
+		int anisotropy = !breaksAnisotropy
+				&& minecraft.options.textureFiltering().get() == TextureFilteringMethod.ANISOTROPIC
 				? minecraft.options.maxAnisotropyValue()
 				: 1;
 
