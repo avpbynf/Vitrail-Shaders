@@ -2182,9 +2182,12 @@ final class GeometryProgram {
 		// The shadow DEPTH is LINEAR too, and the reason a reader reaches for to keep it NEAREST
 		// does not hold: where the compare mode is on, a sampler averages the RESULTS of the
 		// four tests and never the depths, so nothing is ever compared against a surface that exists
-		// nowhere. Iris filters this LINEAR whatever the pack asks, its SamplingSettings starting at
-		// nearest=false, and adds GL_COMPARE_REF_TO_TEXTURE on top only where the pack writes
-		// shadowHardwareFiltering. The manual PCF loops packs write are the whole point either way,
+		// nowhere. Iris filters this LINEAR unless the pack asks otherwise, its SamplingSettings
+		// starting at nearest=false and shadowtexNearest with its per-index spellings turning that
+		// round (shadows/ShadowRenderer.java:267-280), and adds GL_COMPARE_REF_TO_TEXTURE on top
+		// only where the pack writes shadowHardwareFiltering. Those three names are not read here
+		// and no pack of the corpus writes one, which is what PackPass says of the same bind two
+		// files away. The manual PCF loops packs write are the whole point either way,
 		// since every tap of such a loop rides on this filter. It has to match PackPass, which binds
 		// the same name for the full screen passes: the two halves of one frame reading one map
 		// through two filters is a difference nothing would ever explain.

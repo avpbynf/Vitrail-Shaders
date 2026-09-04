@@ -62,12 +62,15 @@ public abstract class MixinShaderChunkRenderer {
 	 * draw, so a pack, which is written against Iris, expects NEAREST. What that filter decides on
 	 * cutout foliage is the silhouette rather than the colour, the fragment being discarded on the
 	 * atlas's alpha, and {@link TerrainSampler} carries the whole of it with the references on both
-	 * sides. {@link LegacyTerrainFilter} puts the game's back, terrain and shadow alike, for a
-	 * comparison. The choice is made where the pack is known to be drawing, so that a pass with no
-	 * pack behind it neither asks nor announces anything.
+	 * sides. {@link LegacyTerrainFilter} hands back whatever this road was given, for a comparison,
+	 * which is the game's LINEAR under the camera and NEAREST in the shadow map: what the switch
+	 * moves is the gbuffer half alone. The choice is made where the pack is known to be drawing, so
+	 * that a pass with no pack behind it neither asks nor announces anything.
 	 * <p>
-	 * Every pass comes through here, the shadow map's included: the light's draw hands the game's
-	 * sampler down the same road, and the pack's shadow programs bind what is settled here.
+	 * Every pass comes through here, the shadow map's included: the light's draw hands a sampler of
+	 * its own down the same road, NEAREST rather than the game's
+	 * ({@code sodium/ShadowTerrain.java:323}), and the pack's shadow programs bind what is settled
+	 * here.
 	 */
 	@Inject(method = "begin", at = @At("HEAD"))
 	private void vitrail$sampler(TerrainRenderPass pass, FogParameters parameters,

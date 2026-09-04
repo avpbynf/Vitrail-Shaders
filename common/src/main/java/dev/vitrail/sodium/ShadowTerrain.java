@@ -306,9 +306,16 @@ public final class ShadowTerrain {
 		// The game's own chunk sampler, mipmapped and clamped, and it is NOT what the pack's shadow
 		// programs read the atlas through: the renderer hands this to begin, where the chunk
 		// renderer mixin settles the pack's sampler for every pass, this one included, so the shadow
-		// half binds the same NEAREST sampler as the gbuffer half or the game's under the legacy
-		// switch, either way through TerrainSampler and LegacyTerrainFilter and never through this
-		// argument. What this argument reaches is Sodium's own shader, on a pass handed back to it,
+		// half binds the same NEAREST sampler as the gbuffer half, through TerrainSampler and never
+		// through this argument.
+		//
+		// The legacy switch does NOT part the two halves the way it reads: it puts the game's LINEAR
+		// back through LegacyTerrainFilter, which is the sampler the renderer hands begin, and the
+		// argument on this line is NEAREST rather than the game's. So the gbuffer half gets the
+		// game's filter back and the shadow half stays NEAREST either way, and an A/B taken with
+		// the switch measures the gbuffer change alone.
+		//
+		// What this argument reaches is Sodium's own shader, on a pass handed back to it,
 		// and there Iris hands NEAREST down the same road (shadows/ShadowRenderer.java:389), where
 		// the gbuffers hand it the game's LINEAR: NEAREST here too, so that the one pass Sodium
 		// draws itself filters as it does under Iris. Iris's SodiumShader.setupState binds its own

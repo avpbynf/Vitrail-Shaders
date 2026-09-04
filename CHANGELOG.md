@@ -73,8 +73,11 @@ what the next one holds.
   being LINEAR whatever it says, and it still applies to everything a pack does not draw.
 
   An empty file `vitrail/legacy-terrain-filter` in the instance, or
-  `-Dvitrail.legacyTerrainFilter=true`, puts the old filtered sampler back on both the terrain and
-  its shadow, so the two states can be compared in one world by reloading the pack with the
+  `-Dvitrail.legacyTerrainFilter=true`, puts the game's filtered sampler back on the terrain the
+  camera sees. The shadow map stays unfiltered either way: what the switch restores is the sampler
+  the chunk renderer was handed, and the shadow draw hands it one of its own that is unfiltered
+  already, so a comparison taken with the switch is a comparison of the camera's half alone. The
+  two states can be compared in one world by reloading the pack with the
   Reload Shaders key (R by default) rather than by swapping builds. F3 + T does not read the
   pack again and leaves the state as it was. The log names the state once per pack load, at the
   first terrain the pack draws.
