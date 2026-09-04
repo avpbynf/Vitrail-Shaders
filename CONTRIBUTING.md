@@ -251,6 +251,21 @@ workflow refuses it when the two disagree rather than publishing a jar named aft
 from the other. The target Minecraft version is in the artifact name and comes from the same file.
 A tag is pushed on `main` and on nothing else, which is what keeps that sentence true.
 
+Between two releases that line does not hold the version that went out, and it does not hold a
+version at all in the sense above: it holds the next one with `-dev` after it, `0.10.0-dev` once
+`0.9.0-beta` is published. The shape is deliberately one nothing will tag, and that is the point of
+it. No `-dev` version is ever tagged and none is ever published, the `release/<version>` branch is
+what takes the suffix off in the bump that is the whole of that branch, and the commit that opens
+the next version, the first to land on `dev` after a release, is what puts it back.
+
+A build off a topic branch appends that branch's name to the suffix, so a jar built on
+`fix/shadow-band` calls itself `0.10.0-dev.fix.shadow-band` and is not to be confused with anyone
+else's. Nothing about it is committed: the root `build.gradle` asks git which branch is checked
+out, and everything that states a version reads that one answer, so the jar name, both metadata
+files, the F3 line, the settings screen and the line the engine logs at load all say the same
+thing. `dev`, `main` and a detached head, which is what a release build is, are left with the bare
+suffix, and a version without `-dev` is not touched at all.
+
 Publishing, in order: rewrite the pack table at the head of
 [docs/compatibility.md](docs/compatibility.md) against whatever has been seen since the last one,
 bump `mod_version`, land those commits on `main` the way every other commit lands, push `main`,
