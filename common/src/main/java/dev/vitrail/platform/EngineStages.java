@@ -84,6 +84,9 @@ public final class EngineStages {
 	 * a RELEASE takes its predecessor's folder away rather than filling a second one beside it.
 	 * Two builds declaring one version share the folder and every key in it, which is every build
 	 * made between two releases; what answers that in the workshop is deleting the folder by hand.
+	 * The branch a build was made on is cut out of the version first, by
+	 * {@link Vitrail#cacheVersion()}, so that a topic build is one of those two builds and not the
+	 * owner of a folder of its own.
 	 * The loader is not in the name, and does not need to be: the two loaders run the same
 	 * translator over the same text, and what does differ between them is in the key of every
 	 * entry.
@@ -91,7 +94,7 @@ public final class EngineStages {
 	private static void openTranslationCache() {
 		TranslationCache.install(
 				Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID),
-				Vitrail.platform().modVersion() + "+mc" + Vitrail.platform().minecraftVersion());
+				Vitrail.cacheVersion() + "+mc" + Vitrail.platform().minecraftVersion());
 
 		if (!TranslationCache.installed()) {
 			Vitrail.logger().warn("No translation cache this run, so every pack load translates "
