@@ -15,6 +15,13 @@ what the next one holds.
 
 ### Fixed
 
+- **A texture a pack ships is read by a compute pass as the pack asked for it**, the blurring and
+  the wrapping written in the `.mcmeta` beside the file included, which is how a full-screen pass
+  already read it. A compute naming such a texture found no image behind the name at all: one
+  spelled like a colour target was answered with the target instead of the pack's own file, and
+  under any other spelling that one compute did nothing at all, leaving a line in the log while
+  the pass it belongs to drew on without whatever the compute was there to prepare.
+
 - **A volume a pack fills for itself is read the same way from every pass.** An image declared
   with an `image.` line is filtered by its format, smoothly unless it holds whole numbers, which
   is the one thing Iris settles on the image and every reader then inherits. Here the answer was
