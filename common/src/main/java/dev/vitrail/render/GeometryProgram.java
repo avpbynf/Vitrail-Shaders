@@ -12,7 +12,6 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.DrawBuffers;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
-import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.TextSink;
@@ -2189,15 +2188,12 @@ final class GeometryProgram {
 		// since every tap of such a loop rides on this filter. It has to match PackPass, which binds
 		// the same name for the full screen passes: the two halves of one frame reading one map
 		// through two filters is a difference nothing would ever explain.
-		// A custom image follows its format, which is Iris's rule (GlImage filters a non-integer
-		// image LINEAR): the floodfill volumes are rgba16f and the light they carry is continuous,
-		// so NEAREST turns every voxel into a lit brick with a hard edge. An integer volume keeps
-		// NEAREST, since ids do not average.
+		// A custom image follows its format, and it is asked of one place for the same reason the
+		// shadow map is: a volume read one way here and another from a composite is a difference
+		// nothing would ever explain. PackPass.customImageFilter is that place.
 		return switch (binding.kind()) {
 			case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
-			case CUSTOM_IMAGE -> CustomImages.image(sampler)
-					.map(image -> image.internalFormat().used().integer())
-					.orElse(true) ? FilterMode.NEAREST : FilterMode.LINEAR;
+			case CUSTOM_IMAGE -> PackPass.customImageFilter(sampler);
 			default -> FilterMode.NEAREST;
 		};
 	}

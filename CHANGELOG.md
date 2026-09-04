@@ -15,6 +15,16 @@ what the next one holds.
 
 ### Fixed
 
+- **A volume a pack fills for itself is read the same way from every pass.** An image declared
+  with an `image.` line is filtered by its format, smoothly unless it holds whole numbers, which
+  is the one thing Iris settles on the image and every reader then inherits. Here the answer was
+  decided in three places and only the geometry programs had it right: a full-screen pass and a
+  compute pass read every such image unfiltered. So the geometry half of a pack's lighting was
+  smooth and the full-screen half was not, whatever the settings. Photon's deferred shading and
+  Bliss's composites interpolate their light volumes, and showed the light in bricks the size of
+  a voxel with a hard edge; a pack that reads its volume texel by texel never saw it, no filter
+  reaching that kind of read.
+
 - **The block outline is drawn by the pack, as Iris draws it.** The thin box around the block
   aimed at was left to the game's own shader and painted into a layer this engine composes onto
   the pack's picture at the spot where the pack blends its water; where a pack keeps something

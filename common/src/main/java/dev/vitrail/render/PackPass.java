@@ -7,6 +7,7 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetSchedule;
+import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
@@ -633,9 +634,13 @@ final class PackPass {
 			//
 			// The three names that would ask for NEAREST back - shadowtexNearest, shadowtexNNearest
 			// and shadowNMinMagNearest - are not read: no pack of the corpus writes one.
+			//
+			// A custom image is the image's own answer and not this pass's, which is why it is
+			// asked of one place rather than decided here: see customImageFilter.
 			FilterMode filter = supplied != null ? supplied.filter() : switch (binding.kind()) {
 				case COLORTEX -> targets.filter(binding.index());
 				case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
+				case CUSTOM_IMAGE -> customImageFilter(sampler);
 				default -> FilterMode.NEAREST;
 			};
 
@@ -720,6 +725,29 @@ final class PackPass {
 	 */
 	static GpuSampler sampler(SamplerPlan.Kind kind, FilterMode filter, boolean mipmaps) {
 		return sampler(kind == SamplerPlan.Kind.NOISE, filter, mipmaps);
+	}
+
+	/**
+	 * How a custom image is filtered, which its FORMAT decides and not the pass reading it.
+	 * <p>
+	 * Iris settles this once and on the image itself, when it allocates it
+	 * ({@code gl/image/GlImage.java:51-53}): LINEAR unless the format is integer, and every
+	 * consumer then reads it through that one setting. There is no such place here, an image being
+	 * bound with a sampler of the caller's choosing, so this method is that place instead: the
+	 * geometry programs, the full screen passes and the compute passes all ask it, and a pack
+	 * therefore reads one volume the same way wherever it reads it from.
+	 * <p>
+	 * The floodfill volumes are {@code rgba16f} and the light they carry is continuous, so NEAREST
+	 * turns every voxel into a lit brick with a hard edge for the packs that interpolate them.
+	 * Most read them with {@code texelFetch}, which no filter reaches, which is why only some show
+	 * it. The format's half of the answer is {@link GpuFormats#filterFor}, which the colour targets
+	 * already go through; what is this method's own is the default for a name no {@code image.}
+	 * directive declared, and that is NEAREST.
+	 */
+	static FilterMode customImageFilter(String sampler) {
+		return CustomImages.image(sampler)
+				.map(image -> GpuFormats.filterFor(image.internalFormat().used()))
+				.orElse(FilterMode.NEAREST);
 	}
 
 	/** The same, where the addressing is the pack's own answer rather than the name's. */
