@@ -13,6 +13,7 @@ import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.texture.CustomImages;
+import dev.vitrail.pack.texture.TextureStage;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.UniformCatalog;
 import dev.vitrail.Vitrail;
@@ -521,6 +522,13 @@ final class PackCompute implements AutoCloseable {
 		/** The full screen pass this compute hangs off, or null for a shadow compute. */
 		private final String program;
 
+		/**
+		 * Which stage a {@code texture.<stage>.<sampler>} line has to name for this compute to read
+		 * the file behind it. A shadow compute is the {@code shadowcomp} stage by construction: it
+		 * hangs off no pass, so there is nothing else it could be.
+		 */
+		private final TextureStage textureStage;
+
 		private final String label;
 		private final Set<String> failed = new LinkedHashSet<>();
 		private MappableRingBuffer block;
@@ -537,6 +545,9 @@ final class PackCompute implements AutoCloseable {
 			this.path = path;
 			this.name = path.substring(path.lastIndexOf('/') + 1);
 			this.program = program;
+			this.textureStage = program == null
+					? TextureStage.SHADOWCOMP
+					: TextureStage.of(program).orElse(null);
 			this.label = "pack/" + load + "/" + path + "/compute";
 			this.uniforms = new PackUniforms(compute.loaded().program().uniforms(), catalog);
 		}
@@ -820,6 +831,26 @@ final class PackCompute implements AutoCloseable {
 
 				StorageImages.Bound bound = StorageImages.bound(entry.name());
 				VkDescriptorImageInfo.Buffer imageInfo = VkDescriptorImageInfo.calloc(1, stack);
+
+				// A texture the pack ships answers here exactly as it answers a full screen pass:
+				// which image, how it is filtered and how it is addressed outside zero to one are
+				// all the pack's to say, in one directive and the .mcmeta beside the file. Asked
+				// BEFORE the colour targets for the reason PackPass asks it first as well: a pack
+				// may lay a lookup table over the name of a real target for one stage, and reading
+				// the name first would hand the compute a copy of the scene as a lookup table.
+				ColorTargets.PackBinding supplied = bound == null
+						? targets.packTexture(this.textureStage, entry.name())
+						: null;
+				if (supplied != null && supplied.view() instanceof VulkanGpuTextureView served) {
+					imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(supplied.repeat(),
+							supplied.filter(), false)).vkSampler());
+					imageInfo.imageView(served.vkImageView());
+					imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
+					write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+					write.pImageInfo(imageInfo);
+					continue;
+				}
+
 				if (bound == null && step != null && colourTarget(write, imageInfo, entry.name(),
 						targets, step, this.program)) {
 					continue;
