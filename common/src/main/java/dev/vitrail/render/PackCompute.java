@@ -421,13 +421,19 @@ final class PackCompute implements AutoCloseable {
 	 * The same sampler state the graphics passes bind for the name. The noise field repeats and
 	 * is filtered, Iris's choice: a pack indexes it in texels well past one, and clamped it reads
 	 * the same edge row for the whole volume. The shadow set is filtered the way Iris filters its
-	 * shadow samplers. A pack's own image stays NEAREST and clamped, on the pack's own indexing.
+	 * shadow samplers. A volume the pack declared follows its format, through the one place that
+	 * answers that for every road, so a compute reads it exactly as the composite after it will.
 	 */
 	private static long samplerFor(String name) {
 		boolean noise = "noisetex".equals(name);
 		boolean shadow = name.startsWith("shadowtex") || name.startsWith("shadowcolor");
-		return ((VulkanGpuSampler) PackPass.sampler(noise,
-				noise || shadow ? FilterMode.LINEAR : FilterMode.NEAREST, false)).vkSampler();
+		// Every other name keeps the answer this line gave before there was one place to ask:
+		// customImageFilter is NEAREST for a name no image directive declared.
+		FilterMode filter = noise || shadow
+				? FilterMode.LINEAR
+				: PackPass.customImageFilter(name);
+
+		return ((VulkanGpuSampler) PackPass.sampler(noise, filter, false)).vkSampler();
 	}
 
 	/**
