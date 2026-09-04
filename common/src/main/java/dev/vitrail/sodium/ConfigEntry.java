@@ -130,8 +130,14 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				//
 				// Asked through UPDATE_ON_REBUILD rather than read once, so the list follows a pack
 				// loaded or dropped while the game is up rather than the state the screen was first
-				// built under. A stored RGSS is not carried around the gap: Sodium falls back to the
-				// option's default for a value its own allowed set no longer holds.
+				// built under.
+				//
+				// A stored RGSS survives the narrowing, and that is not something this overlay can
+				// change from here. Sodium answers a value its allowed set no longer holds with the
+				// option's default (EnumOption.validateValue), and its default for this option is
+				// RGSS itself (SodiumConfigBuilder.java:511), so the fall back lands on the value it
+				// was meant to replace: the selector opens on a name outside the set it offers, and
+				// the player cannot cycle back to it once they have moved off.
 				.registerOptionOverlay(FILTERING,
 						builder.createEnumOption(FILTERING, TextureFilteringMethod.class)
 								.setAllowedValuesProvider(

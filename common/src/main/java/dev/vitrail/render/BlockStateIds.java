@@ -185,8 +185,12 @@ public final class BlockStateIds {
 
 	/**
 	 * The number to put on the mesh for one block state, packed the way the shader unpacks it:
-	 * {@code ((id + 1) << 1) | isFluid}. The fluid bit is nought here, since every quad this is asked
-	 * for comes from the block renderer and the fluid renderer pushes its own.
+	 * {@code ((id + 1) << 1) | isFluid}.
+	 * <p>
+	 * <strong>The fluid bit is nought on every quad in the world.</strong> The fluid renderer comes
+	 * through this same method ({@code mixin/DefaultFluidRendererMixin.java:80}) rather than pushing
+	 * a number of its own, and {@link #packedFrom} sets no bit, so a pack reading {@code mc_Entity.y}
+	 * cannot tell water from any other block. That is issue 108 and it is not corrected here.
 	 */
 	public static int packed(BlockState state) {
 		int id = table.getInt(state);
