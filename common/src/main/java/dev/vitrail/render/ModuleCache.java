@@ -307,7 +307,7 @@ public final class ModuleCache {
 		MessageDigest digest = sha256();
 
 		feed(digest, FORMAT);
-		feed(digest, Vitrail.platform().modVersion());
+		feed(digest, Vitrail.cacheVersion());
 		feed(digest, Vitrail.platform().minecraftVersion());
 		feed(digest, Vitrail.platform().loaderName());
 		feed(digest, Vitrail.platform().loaderVersion());
@@ -649,9 +649,13 @@ public final class ModuleCache {
 		}
 	}
 
-	/** What names a whole set of keys at once, and therefore what names their directory. */
+	/**
+	 * What names a whole set of keys at once, and therefore what names their directory. The version
+	 * is the one {@link Vitrail#cacheVersion()} answers, so that a build off a topic branch shares
+	 * this folder with every other build between the same two releases rather than emptying it.
+	 */
 	private static String edition() {
-		return plain(Vitrail.platform().modVersion()) + "+mc"
+		return plain(Vitrail.cacheVersion()) + "+mc"
 				+ plain(Vitrail.platform().minecraftVersion());
 	}
 
