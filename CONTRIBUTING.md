@@ -40,9 +40,11 @@ dashes, saying what the branch does rather than which class it opens.
     fix/hand-bob-frame
     ci/commit-and-branch-format
 
-`release/0.5.0-beta` is the one shape that departs from it, the version being the whole of the
-name: such a branch carries the version bump and nothing else. No name records who wrote the
-branch, or when, or which issue it answers. That last one is a choice rather than an absence: the
+`release/0.5.0-beta` is one of the two shapes that depart from it, the version being the whole of
+the name: such a branch carries the version bump and nothing else. `build/open-0.6.0-dev` is the
+other, and it is that branch read backwards, carrying the commit that opens the next version once
+the tag is out. Those two are the only branch names with a dot in them. No name records who wrote
+the branch, or when, or which issue it answers. That last one is a choice rather than an absence: the
 commit that does the work names the issue it closes, and a branch name carrying the number would
 say it in the one place nothing reads it back from.
 

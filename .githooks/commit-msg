@@ -26,10 +26,17 @@ types='feat|fix|perf|refactor|docs|test|build|ci|chore'
 subject_re="^($types)(\([a-z0-9-]+\))?!?: [a-z].*[^.]$"
 # `release` is a branch prefix and not a commit type: what lands from such a branch is the version
 # bump, which is a `build`, that line of gradle.properties being the build's own. The version itself
-# is the name, so this is the one branch carrying dots.
+# is the name, so this is one of the two branches carrying dots.
 # Three numbers, then either `-alpha`, or `-beta`, or nothing: a counted pre-release is refused here
 # rather than at the tag, where the repair costs a branch already pushed under the wrong name.
-branch_re="^(($types)/[a-z0-9]+(-[a-z0-9]+)*|release/[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta))?)$"
+#
+# `build/open-<version>-dev` is the other, and it is the same branch read backwards: `release/` takes
+# the `-dev` suffix off the version for the tag, and this one puts the next version and its suffix
+# back the moment that tag is out. The version is again the whole of what the name has to say, and
+# the shape is written out here rather than left to the general rule because the general rule would
+# have to admit a dot everywhere to admit it here.
+semver='[0-9]+\.[0-9]+\.[0-9]+'
+branch_re="^(($types)/[a-z0-9]+(-[a-z0-9]+)*|release/$semver(-(alpha|beta))?|build/open-$semver-dev)$"
 
 die() {
 	echo "commit-msg: $1" >&2
