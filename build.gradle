@@ -3,12 +3,79 @@ plugins {
 	id "net.ltgt.errorprone" version "4.1.0" apply false
 }
 
+// Between two releases `dev` carries the version being written towards, suffixed `-dev`, so that
+// nothing built before a release can be read as that release. One ambiguity survives that suffix:
+// every topic branch open at the same time builds the same 0.10.0-dev, and a jar, a log line or a
+// screenshot out of one is indistinguishable from another's. So a build off a topic branch appends
+// the branch name to the suffix. It is appended here and committed nowhere, because the answer
+// depends on which branch is checked out and a committed one would be wrong on every other.
+//
+// This is the one place the number is decided, and everything that states it reads this: the jar
+// names, the two metadata files the loaders parse, and through them the F3 line, the settings
+// screen and the line the engine logs at load. They agree because there is nothing left for them
+// to disagree about.
+//
+// A version that does not end in `-dev` is never touched, which is the whole of what leaves a
+// release exactly what gradle.properties says. `.github/workflows/release.yml` compares the tag
+// against that line and refuses a mismatch, and it checks a tag out, so its head is detached and
+// carries no branch name to append anyway. `dev` and `main` are left bare for the other half of
+// the reason: there is nothing there to tell one build from another.
+def effectiveVersion = project.mod_version
+
+if (effectiveVersion.endsWith("-dev")) {
+	def branch = null
+
+	try {
+		def git = new ProcessBuilder("git", "rev-parse", "--abbrev-ref", "HEAD")
+				.directory(rootDir)
+				.redirectErrorStream(true)
+				.start()
+		def said = git.inputStream.getText("UTF-8").trim()
+
+		if (git.waitFor() == 0) {
+			branch = said
+		}
+	} catch (IOException ignored) {
+		// No git on the path, or no repository under this directory. A build out of a tarball is
+		// a legitimate build, and the bare suffix is the right answer for it rather than a stop.
+	}
+
+	// "HEAD" is what a detached head answers, which is what continuous integration checks out and
+	// what a release build therefore is.
+	if (branch != null && !(branch in ["dev", "main", "HEAD"])) {
+		// Where this ends up is a semantic version pre-release string, a run of identifiers of
+		// [-0-9A-Za-z] separated by dots: that is what Fabric Loader's SemanticVersionImpl matches
+		// everything after the first dash against, and a jar it refuses there does not load at
+		// all. So a slash becomes a dot, and anything outside the set is dropped rather than
+		// replaced, a replacement being only another character to justify. Empty identifiers go
+		// with them, because a name made entirely of dropped characters would otherwise leave a
+		// trailing dot, which is one of the strings that parser refuses.
+		//
+		// NeoForge asks something weaker, worth naming since the same string is handed to both:
+		// ModInfo takes any Maven version whose first character is a digit, and the major number
+		// in front satisfies that whatever follows it.
+		def slug = branch.replace("/", ".")
+				.replaceAll("[^0-9A-Za-z.-]", "")
+				.split("\\.")
+				.findAll { !it.isEmpty() }
+				.join(".")
+
+		if (!slug.isEmpty()) {
+			effectiveVersion = "${effectiveVersion}.${slug}"
+		}
+	}
+}
+
+// Put back on the project because both loader modules read it too, each of them naming it in the
+// metadata it expands and in the name of the jar it writes.
+ext.effectiveVersion = effectiveVersion
+
 subprojects {
 	apply plugin: "java"
 	apply plugin: "net.ltgt.errorprone"
 
 	group = project.group_id
-	version = project.mod_version
+	version = rootProject.effectiveVersion
 
 	repositories {
 		mavenCentral()
@@ -221,7 +288,7 @@ tasks.register("mergedJar", Jar) {
 	description = "Assembles the one jar that runs under either loader."
 
 	archiveBaseName = "vitrail"
-	archiveVersion = "${project.mod_version}+mc${project.minecraft_version}"
+	archiveVersion = "${project.effectiveVersion}+mc${project.minecraft_version}"
 
 	// Aimed at build/libs itself, because the base plugin's home for a root archive is
 	// build/distributions, and everything this build makes is read out of one directory.
