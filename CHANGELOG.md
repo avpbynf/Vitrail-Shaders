@@ -15,6 +15,14 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
+  Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
+  read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed
+  a strip of the neighbouring sprite along a block edge seen from low down, where the same packs
+  under Iris do not. Their terrain and their shadow map now read the block atlas without
+  anisotropy whatever the setting says, as Iris reads them. Everything the pack does not draw
+  keeps the player's value, and so does the number the pack itself reads for the setting.
+
 - **A texture a pack ships is read by a compute pass as the pack asked for it**, the blurring and
   the wrapping written in the `.mcmeta` beside the file included, which is how a full-screen pass
   already read it. A compute naming such a texture found no image behind the name at all: one
@@ -56,8 +64,7 @@ what the next one holds.
   atlas through the game's own chunk sampler and its shadow map through a cache sampler without
   anisotropy, both LINEAR for min and mag, where
   Iris throws that sampler away and binds NEAREST for every terrain draw. Both halves now bind
-  the same sampler Iris does, mipmaps and the player's anisotropy kept, short of the one thing
-  Iris adds for packs that declare they cannot bear anisotropy, which is not read yet. What a
+  the same sampler Iris does, mipmaps and the player's anisotropy kept. What a
   filter can decide on cutout foliage is whether a fragment survives its alpha test, so the two
   states can only differ where a leaf's edge falls inside a texel; compared against Iris on one
   scene at three camera heights, the two engines shade the trees alike in both states, so this

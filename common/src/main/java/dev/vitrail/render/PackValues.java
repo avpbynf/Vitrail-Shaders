@@ -93,6 +93,7 @@ public final class PackValues {
 	private ShadowCullState shadowCull = ShadowCullState.DEFAULT;
 
 	private boolean separateAo;
+	private boolean breaksAnisotropy;
 	private Optional<String> particleOrdering = Optional.empty();
 	private NoiseTexture.Image noiseImage;
 	private PackImages packImages = PackImages.none();
@@ -138,6 +139,7 @@ public final class PackValues {
 		values.dhShadow = properties.dhShadow(settings.globalDefines(options));
 		values.shadowCull = properties.shadowCull(settings.globalDefines(options));
 		values.separateAo = properties.separateAo(settings.globalDefines(options));
+		values.breaksAnisotropy = properties.breaksAnisotropy(settings.globalDefines(options));
 		values.particleOrdering = properties.particleOrdering(settings.globalDefines(options));
 		values.declare(properties, settings.globalDefines(options));
 		values.readNoise(properties, source, settings.globalDefines(options));
@@ -586,6 +588,16 @@ public final class PackValues {
 	 */
 	public boolean separateAo() {
 		return this.separateAo;
+	}
+
+	/**
+	 * Whether this pack declared that anisotropy breaks the way it reads the block atlas. What
+	 * answers it is the SAMPLER and not the translation: {@code TerrainSampler} asks for an
+	 * anisotropy of one while it holds, and the {@code anisotropicFiltering} uniform still carries
+	 * the player's value, which is the number a pack reads to know what it is up against.
+	 */
+	public boolean breaksAnisotropy() {
+		return this.breaksAnisotropy;
 	}
 
 	/**

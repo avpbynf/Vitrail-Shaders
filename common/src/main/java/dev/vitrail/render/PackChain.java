@@ -657,6 +657,10 @@ public final class PackChain {
 		// stops between two families once the chain is released, which leaves the one family already
 		// under way, and that is the whole of what can still land here.
 		CustomStorage.clear();
+		// Down before the folder is read rather than raised only where a pack asks for it: every
+		// road out of this method below has to leave the terrain sampler answering for the pack
+		// that will draw, and most of them draw no pack at all.
+		TerrainSampler.breaksAnisotropy(false);
 		// Taken before anything reads the folder, so that the count printed at the end of the load
 		// covers every opening the load made and not only the translation's.
 		int openings = ShaderPackSource.openings();
@@ -886,6 +890,12 @@ public final class PackChain {
 				String world = PackPlace.world();
 
 				PackValues values = PackValues.read(opened, place);
+				// The terrain sampler is a static that outlives any one chain, and this is the
+				// first point in the load where the pack's own answer exists. It has to be in force
+				// before a chunk pass begins rather than when the chain is installed: the sampler is
+				// settled from the renderer's begin, which the world's first draw reaches, and a
+				// pack that cannot bear anisotropy would otherwise read one frame with it.
+				TerrainSampler.breaksAnisotropy(values.breaksAnisotropy());
 
 				long began = System.nanoTime();
 				Optional<PackProgram.Chain> read =
@@ -3616,6 +3626,10 @@ public final class PackChain {
 		}
 
 		CustomImages.clear();
+		// Beside it, and said here as well as at the head of a load: leaving a world releases the
+		// chain without replacing it, so this is the moment the pack's declaration stops holding,
+		// whether or not another load ever follows.
+		TerrainSampler.breaksAnisotropy(false);
 		this.compute.close();
 		this.targets.release();
 		if (this.features != null) {

@@ -110,6 +110,10 @@ public final class ShaderProperties {
 	// lines like every other directive of this file, and the note on RAIN_DEPTH says why that is
 	// what the reference does too.
 	private static final Pattern SEPARATE_AO = Pattern.compile("^\\s*separateAo\\s*=\\s*(.*)$");
+	// Whether the pack declares that anisotropy breaks the way it reads the block atlas. Read on the
+	// live lines and on separateAo's rule in every respect, and answered the same way.
+	private static final Pattern BREAKS_ANISOTROPY =
+			Pattern.compile("^\\s*breaksAnisotropy\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
 	// The fifth word of that family, kept apart because it is the one that takes neither a yes nor a
@@ -394,6 +398,12 @@ public final class ShaderProperties {
 		// author that nothing looks at a line which had just overruled the one before it.
 		Matcher separateAo = SEPARATE_AO.matcher(line);
 		if (separateAo.matches()) {
+			return;
+		}
+
+		// On that same rule, and read for the same reason: a word this cannot read leaves the
+		// default standing rather than being stepped over.
+		if (BREAKS_ANISOTROPY.matcher(line).matches()) {
 			return;
 		}
 
@@ -1556,6 +1566,30 @@ public final class ShaderProperties {
 	public boolean separateAo(Map<String, String> defines) {
 		Boolean asked = null;
 		for (Matcher line : live(SEPARATE_AO, defines)) {
+			asked = truth(line.group(1).trim());
+		}
+
+		return Boolean.TRUE.equals(asked);
+	}
+
+	/**
+	 * Whether the pack declares that anisotropic filtering breaks the way it reads the block atlas,
+	 * live lines only, off unless it says otherwise.
+	 * <p>
+	 * A pack that asks for it is not asking for a look: it is saying that neighbouring sprites bleed
+	 * into each other at grazing angles once the sampler averages across their border, which is a
+	 * strip of the wrong texture along a block edge seen from low down. BSL and both Complementary
+	 * variants write it. Iris reads it into its directives
+	 * ({@code shaderpack/properties/ShaderProperties.java:212}) and forces the anisotropy of the
+	 * terrain sampler to one where it holds, whatever the player set
+	 * ({@code samplers/IrisSamplers.java:250}).
+	 * <p>
+	 * Read through {@link #live} and answered like {@link #separateAo}, whose note carries why the
+	 * last live line decides even when it carries a word this cannot read.
+	 */
+	public boolean breaksAnisotropy(Map<String, String> defines) {
+		Boolean asked = null;
+		for (Matcher line : live(BREAKS_ANISOTROPY, defines)) {
 			asked = truth(line.group(1).trim());
 		}
 
