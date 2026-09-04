@@ -48,7 +48,7 @@ dependencies {
 tasks.named("processResources", ProcessResources).configure {
 	def metadata = [
 		mod_id: project.mod_id,
-		mod_version: project.mod_version,
+		mod_version: rootProject.effectiveVersion,
 		minecraft_version: project.minecraft_version,
 		fabric_loader_version: project.fabric_loader_version
 	]
@@ -61,7 +61,7 @@ tasks.named("processResources", ProcessResources).configure {
 }
 
 tasks.named("jar", Jar).configure {
-	archiveVersion = "${project.mod_version}+mc${project.minecraft_version}"
+	archiveVersion = "${rootProject.effectiveVersion}+mc${project.minecraft_version}"
 	from project(":common").sourceSets.main.output
 
 	// The licence has to reach whoever receives the program, and what they receive is this jar.
