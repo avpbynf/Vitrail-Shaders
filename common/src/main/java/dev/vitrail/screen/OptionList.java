@@ -372,12 +372,25 @@ public final class OptionList extends WidgetList<OptionList.BaseEntry> {
 			return true;
 		}
 
+		/**
+		 * Queues whatever a settings file the player picked carries, once the platform's window has
+		 * been answered.
+		 * <p>
+		 * <b>Nothing holds the player on this screen while that window is up</b>, and the answer comes
+		 * back on the dialog's own thread, so it is put back on the game's thread and then dropped when
+		 * the screen has walked on. Importing queues values into the page and redraws it; doing that to
+		 * a screen the player has left moves settings nobody asked to move, off the thread that owns
+		 * the widgets. Iris makes the same comparison ({@code ShaderPackOptionList.java:386,399}) and
+		 * makes it from the dialog's thread.
+		 */
 		private boolean importSettings() {
 			ScreenDraw.clickSound();
 			if (!canOpenDialog()) {
 				return false;
 			}
 
+			Minecraft minecraft = Minecraft.getInstance();
+			Screen asking = minecraft.gui.screen();
 			Path origin = this.host.settingsFile();
 			FileDialog
 					.choose(FileDialog.Kind.OPEN, "Import Shader Settings from File", origin)
@@ -388,7 +401,11 @@ public final class OptionList extends WidgetList<OptionList.BaseEntry> {
 							return;
 						}
 
-						chosen.ifPresent(this.host::importSettings);
+						chosen.ifPresent(file -> minecraft.execute(() -> {
+							if (minecraft.gui.screen() == asking) {
+								this.host.importSettings(file);
+							}
+						}));
 					});
 
 			return true;
@@ -398,6 +415,10 @@ public final class OptionList extends WidgetList<OptionList.BaseEntry> {
 		 * Copies this pack's settings file to wherever the player asks for it, which is what Iris does
 		 * and why what is written is the applied settings rather than what is on screen: the file is
 		 * the applied settings.
+		 * <p>
+		 * No screen check and no hop back, unlike {@link #importSettings()}: the file to read is taken
+		 * before the window opens and the answer touches nothing the screen owns, so leaving the screen
+		 * mid-window still writes the pack the player was looking at when they asked.
 		 */
 		private boolean exportSettings() {
 			ScreenDraw.clickSound();

@@ -15,6 +15,15 @@ what the next one holds.
 
 ### Fixed
 
+- **Importing settings no longer acts on a screen you have already left.** The window that asks
+  which file to read is the system's own and does not hold the game, so the settings screen can be
+  closed while it is still up. Picking a file at that point queued its values anyway, into a page
+  nobody was looking at and from the picker's thread rather than the game's, so a pack ended up
+  carrying settings the player had walked away from. A file picked after leaving the screen is now
+  dropped, and one picked while the screen is still up is read on the game's own thread. Exporting
+  was never affected: it copies the settings file of the pack that was open when the button was
+  pressed, and touches nothing on screen.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed
