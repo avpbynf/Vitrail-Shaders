@@ -410,6 +410,9 @@ public final class GlslTranslator {
 	private int functionEndFor = -1;
 	private int functionEndAt;
 
+	/** What {@link #lineNumbers} last built, or null where a token has moved since. */
+	private int[] lineTable;
+
 	/** Names the pack defines as macros. Their uses belong to the preprocessor, not to us. */
 	private final Set<String> packMacros = new HashSet<>();
 
@@ -1593,10 +1596,10 @@ public final class GlslTranslator {
 		}
 
 		// Inserting shifts every index after it, so the last insertion is made first. It also ends
-		// every position taken before it: this loop and insertClosings are the only two places that
-		// move a token, so anything a later pass still has to know about a token is carried on the
-		// token, as Token#macroName is. A position kept across here would be read against somebody
-		// else's token, and the reading pass has no way to notice.
+		// every position taken before it, insertClosings being the one place that moves a token, so
+		// anything a later pass still has to know about a token is carried on the token, as
+		// Token#macroName is. A position kept across here would be read against somebody else's
+		// token, and the reading pass has no way to notice.
 		List<Closing> parentheses = new ArrayList<>(closings.size());
 		for (int at : closings) {
 			parentheses.add(new Closing(at, ")", null));
@@ -2700,11 +2703,12 @@ public final class GlslTranslator {
 	/**
 	 * Inserting shifts every index after it, so the last insertion is made first.
 	 * <p>
-	 * This and the closing loop at the end of {@link #rewriteIdentifiers} are the only two places
-	 * that move a token, and so the only two that can make a position stale. What a later pass has
-	 * to know about a token is carried on the token for that reason, as {@link Token#macroName()}
-	 * is: a position kept across either of them would be read against somebody else's token, and
-	 * nothing downstream can tell.
+	 * This is the one place that moves a token, both passes that close a wrap coming through it,
+	 * and so the one place that can make a position stale. What a later pass has to know about a
+	 * token is carried on the token for that reason, as {@link Token#macroName()} is: a position
+	 * kept across here would be read against somebody else's token, and nothing downstream can
+	 * tell. The two answers this class does keep about the list, the function end and the line
+	 * table, are thrown away here for the same reason.
 	 */
 	private void insertClosings(List<Closing> closings) {
 		if (closings.isEmpty()) {
@@ -2712,6 +2716,7 @@ public final class GlslTranslator {
 		}
 
 		this.functionEndFor = -1;
+		this.lineTable = null;
 
 		// One walk that copies the list with the closings dropped in, rather than one shift of
 		// every later token per closing: a stage carries hundreds of thousands of tokens and a
@@ -6174,10 +6179,20 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Which line of the expanded unit each token sits on. Recomputed rather than kept, because
-	 * wrapping a shadow lookup inserts tokens and moves every index after it.
+	 * Which line of the expanded unit each token sits on.
+	 * <p>
+	 * Kept between calls, which a stage makes twenty three times, and thrown away by
+	 * {@link #insertClosings}, the one pass that moves a token. Nothing else can make it stale:
+	 * every other helper that touches the list leaves the line breaks where they were, which
+	 * {@link #blankRange} goes out of its way to do. That is not this table's rule either, it is
+	 * the unit's: a break lost anywhere would move every line after it away from the one
+	 * {@link ExpandedUnit#isLive} is asked about, and no pass would have a way to notice.
 	 */
 	private int[] lineNumbers() {
+		if (this.lineTable != null) {
+			return this.lineTable;
+		}
+
 		int[] lines = new int[this.tokens.size()];
 		int line = 0;
 
@@ -6190,6 +6205,8 @@ public final class GlslTranslator {
 				}
 			}
 		}
+
+		this.lineTable = lines;
 
 		return lines;
 	}
