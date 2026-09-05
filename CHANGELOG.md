@@ -91,6 +91,18 @@ what the next one holds.
   in, which drags them out over several more. Every such buffer is now emptied whole the moment it
   is allocated, which is before the pack has drawn anything into it.
 
+- **A value a pack spreads over several lines stops at the end of its own branch.** A
+  `shaders.properties` value continued with a backslash was joined before the conditionals around
+  it were read, so a value whose last line carried a backslash too swallowed the `#else` or
+  `#endif` that closed its branch, and the conditional around it went dark with them. Photon
+  writes its moon brightness that way, one line per phase, and both sides of Moon Phase Affects
+  Brightness were wrong. Switched on, the table never parsed and the constant from the branch
+  meant to replace it was read instead, so the moon lit the ground the same on every night of the
+  cycle. Switched off, that constant sat inside the branch the swallowed `#else` had left open,
+  no brightness was declared at all, and the shaders read the missing one as zero: the moon gave
+  no light whatever, and every night away from a torch was as dark as a new moon. The moon now
+  dims through the cycle with the option on, and is a plain full moon every night with it off.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed

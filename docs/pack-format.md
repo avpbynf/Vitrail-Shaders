@@ -96,11 +96,24 @@ had no parent.
 Only `=` separates a key from its value, and **there is no end-of-line comment**: everything after
 the first `=` is the value.
 
-Backslash continuations are joined before the file is split into lines, and the joining rule
-swallows the following line's indentation, but never a blank line. That boundary is the whole of
-the rule and it is not a detail: widening it to "any whitespace" makes a continued key absorb
-whatever block follows it, and packs do end continuations on a blank line. One pack's main screen
-swallowed the commented-out block underneath when the rule was written the other way.
+**The conditionals are resolved first and the backslash continuations joined after**, which is the
+order the reference has by construction: its preprocessor runs over the whole file, and only the
+result of that is handed to a properties reader that knows how to join. Fold the file first and a
+value whose last continued line also ends on a backslash swallows the `#else` or `#endif` that
+closes its own branch, so the branch runs on into the one written to replace it and neither value
+comes out as the pack wrote it. Every key read against the pack's settings takes that road here,
+which is everything in this file bar the handful named next.
+
+Profiles, the settings screen with its pages and column counts, the sliders and the two feature
+lines are read the other way, off one flat fold of the file with the directives passed over. They
+have to be, since a profile decides the settings a conditional would be evaluated against, and the
+reference reads those same keys off its own non-preprocessed copy for the same reason.
+
+Either way the joining rule swallows the following line's indentation, but never a blank line. That
+boundary is the whole of the rule and it is not a detail: widening it to "any whitespace" makes a
+continued key absorb whatever block follows it, and packs do end continuations on a blank line. One
+pack's main screen swallowed the commented-out block underneath when the rule was written the other
+way.
 
 The recognised families include profiles, per-program enable flags, custom uniform and variable
 declarations, the settings screen and its pages, blending, alpha test and sliders, and also the

@@ -41,6 +41,23 @@ import java.util.regex.Pattern;
  * <p>
  * It also carries conditionals, and they matter: packs switch whole programs off with an
  * {@code #if} on a setting. Reading the file flat would report those programs as present.
+ * <p>
+ * <strong>Two roads run through this file, and which one a key takes is settled by whether a
+ * setting can decide it.</strong> Every reader handed a define table walks the lines as written,
+ * applying the conditionals first and joining the continuations after. That is the order the
+ * reference has by construction: it runs its preprocessor over the whole file and only then hands
+ * the result to {@code Properties.load}. Joining first lets a value that ends on a backslash
+ * swallow the {@code #else} or {@code #endif} that closes its own branch, and the branch then runs
+ * on into the one meant to replace it. Photon writes exactly that, its moon brightness spread over
+ * eleven continued lines of which the last one continues too.
+ * <p>
+ * The one pass in {@link #parse} takes the other road, a flat fold of the file read straight
+ * through with the directives stepped over, and it has to: it runs before any setting exists, and
+ * the profiles it reads are themselves what decide the settings a conditional would be evaluated
+ * against. What it keeps is what the reference reads off its own non-preprocessed copy for that
+ * same reason, the profiles, the screens with their pages and column counts, the sliders and the
+ * two feature lines, {@code properties/ShaderProperties.java:600} there. Everything else it
+ * recognises it only counts, the readers above answering for the value.
  */
 public final class ShaderProperties {
 
@@ -210,15 +227,27 @@ public final class ShaderProperties {
 
 		builder.present = true;
 
-		String text = String.join("\n", source.readLines(file.get()));
+		builder.lines = List.copyOf(source.readLines(file.get()));
+
+		String text = String.join("\n", builder.lines);
 		Matcher continuation = CONTINUATION.matcher(text);
 		while (continuation.find()) {
 			builder.continuationCount++;
 		}
 
-		builder.lines = List.of(CONTINUATION.matcher(text).replaceAll(" ").split("\n", -1));
-
+		// Counted on the lines as written and not on the fold below, since those are the lines the
+		// conditional readers apply: a directive a continued value swallows is one the file carries
+		// and one that decides a branch, so a census taken after the fold reports fewer directives
+		// than the pack has. Photon's #else at shaders.properties:495 is the one in the corpus.
 		for (String line : builder.lines) {
+			if (DIRECTIVE.matcher(line).matches()) {
+				builder.directiveCount++;
+			}
+		}
+
+		// The flat road of the two the class comment describes: no setting exists yet to decide a
+		// conditional with, so this reads the file folded and straight through.
+		for (String line : CONTINUATION.matcher(text).replaceAll(" ").split("\n", -1)) {
 			read(line, builder);
 		}
 
@@ -227,7 +256,6 @@ public final class ShaderProperties {
 
 	private static void read(String line, Builder builder) {
 		if (DIRECTIVE.matcher(line).matches()) {
-			builder.directiveCount++;
 			return;
 		}
 
@@ -592,24 +620,13 @@ public final class ShaderProperties {
 	 */
 	public Map<String, String> programConditions(Map<String, String> defines) {
 		Map<String, String> expressions = new LinkedHashMap<>();
-		ConditionStack conditions = new ConditionStack();
 
-		for (String line : this.lines) {
-			Matcher directive = DIRECTIVE.matcher(line);
-			if (directive.matches()) {
-				applyDirective(directive.group(1), line, conditions, defines);
-				continue;
-			}
-
-			if (!conditions.active()) {
-				continue;
-			}
-
+		PropertiesFile.walk(this.lines, defines, line -> {
 			Matcher program = PROGRAM_ENABLED.matcher(line);
 			if (program.matches()) {
 				expressions.put(program.group(1), program.group(2).trim());
 			}
-		}
+		});
 
 		return expressions;
 	}
@@ -834,25 +851,14 @@ public final class ShaderProperties {
 	 */
 	public List<CustomUniform> customUniforms(Map<String, String> defines) {
 		List<CustomUniform> uniforms = new ArrayList<>();
-		ConditionStack conditions = new ConditionStack();
 
-		for (String line : this.lines) {
-			Matcher directive = DIRECTIVE.matcher(line);
-			if (directive.matches()) {
-				applyDirective(directive.group(1), line, conditions, defines);
-				continue;
-			}
-
-			if (!conditions.active()) {
-				continue;
-			}
-
+		PropertiesFile.walk(this.lines, defines, line -> {
 			Matcher uniform = CUSTOM_UNIFORM.matcher(line);
 			if (uniform.matches()) {
 				uniforms.add(new CustomUniform(uniform.group(1).equals("uniform"), uniform.group(2),
 						uniform.group(3), Macros.expand(uniform.group(4).trim(), defines)));
 			}
-		}
+		});
 
 		return uniforms;
 	}
@@ -872,24 +878,17 @@ public final class ShaderProperties {
 	 */
 	public Map<String, String> customTextures(Map<String, String> defines) {
 		Map<String, String> declared = new LinkedHashMap<>();
-		ConditionStack conditions = new ConditionStack();
 
-		for (String line : this.lines) {
-			Matcher directive = DIRECTIVE.matcher(line);
-			if (directive.matches()) {
-				applyDirective(directive.group(1), line, conditions, defines);
-				continue;
-			}
-
-			if (!conditions.active() || TEXTURE_NOISE.matcher(line).matches()) {
-				continue;
+		PropertiesFile.walk(this.lines, defines, line -> {
+			if (TEXTURE_NOISE.matcher(line).matches()) {
+				return;
 			}
 
 			Matcher texture = CUSTOM_TEXTURE.matcher(line);
 			if (texture.matches()) {
 				declared.put(texture.group(1), texture.group(2).trim());
 			}
-		}
+		});
 
 		return declared;
 	}
@@ -1023,20 +1022,13 @@ public final class ShaderProperties {
 	 */
 	private List<Matcher> live(Pattern pattern, Map<String, String> defines) {
 		List<Matcher> matched = new ArrayList<>();
-		ConditionStack conditions = new ConditionStack();
 
-		for (String line : this.lines) {
-			Matcher directive = DIRECTIVE.matcher(line);
-			if (directive.matches()) {
-				applyDirective(directive.group(1), line, conditions, defines);
-				continue;
-			}
-
+		PropertiesFile.walk(this.lines, defines, line -> {
 			Matcher match = pattern.matcher(line);
-			if (conditions.active() && match.matches()) {
+			if (match.matches()) {
 				matched.add(match);
 			}
-		}
+		});
 
 		return matched;
 	}
@@ -1099,18 +1091,11 @@ public final class ShaderProperties {
 	public ImageInformation.Reading imageDirectives(Map<String, String> defines) {
 		List<ImageInformation> images = new ArrayList<>();
 		List<String> dropped = new ArrayList<>();
-		ConditionStack conditions = new ConditionStack();
 
-		for (String line : this.lines) {
-			Matcher directive = DIRECTIVE.matcher(line);
-			if (directive.matches()) {
-				applyDirective(directive.group(1), line, conditions, defines);
-				continue;
-			}
-
+		PropertiesFile.walk(this.lines, defines, line -> {
 			Matcher image = IMAGE.matcher(line);
-			if (!conditions.active() || !image.matches()) {
-				continue;
+			if (!image.matches()) {
+				return;
 			}
 
 			String name = image.group(1);
@@ -1118,14 +1103,14 @@ public final class ShaderProperties {
 			if (images.size() >= ImageInformation.LIMIT) {
 				dropped.add("image." + name + ": only " + ImageInformation.LIMIT
 						+ " storage images are allowed");
-				continue;
+				return;
 			}
 
 			String reason = readImage(name, value, defines, images);
 			if (reason != null) {
 				dropped.add("image." + name + " = " + value + ": " + reason);
 			}
-		}
+		});
 
 		return new ImageInformation.Reading(images, dropped);
 	}
@@ -1142,18 +1127,11 @@ public final class ShaderProperties {
 	public BufferObject.Reading bufferObjects(Map<String, String> defines) {
 		Map<Integer, BufferObject> buffers = new LinkedHashMap<>();
 		List<String> dropped = new ArrayList<>();
-		ConditionStack conditions = new ConditionStack();
 
-		for (String line : this.lines) {
-			Matcher directive = DIRECTIVE.matcher(line);
-			if (directive.matches()) {
-				applyDirective(directive.group(1), line, conditions, defines);
-				continue;
-			}
-
+		PropertiesFile.walk(this.lines, defines, line -> {
 			Matcher buffer = BUFFER_OBJECT.matcher(line);
-			if (!conditions.active() || !buffer.matches()) {
-				continue;
+			if (!buffer.matches()) {
+				return;
 			}
 
 			String reason = readBufferObject(buffer.group(1), buffer.group(2).trim(), buffers);
@@ -1161,7 +1139,7 @@ public final class ShaderProperties {
 				dropped.add("bufferObject." + buffer.group(1) + " = " + buffer.group(2).trim()
 						+ ": " + reason);
 			}
-		}
+		});
 
 		return new BufferObject.Reading(List.copyOf(buffers.values()), dropped);
 	}

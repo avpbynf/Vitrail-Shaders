@@ -65,10 +65,15 @@ public final class PropertiesFile {
 	 * never a blank line.
 	 */
 	public void walk(Map<String, String> defines, Consumer<String> line) {
+		walk(this.lines, defines, line);
+	}
+
+	/** The same walk over lines held elsewhere, so that {@link ShaderProperties} reads its own. */
+	static void walk(List<String> lines, Map<String, String> defines, Consumer<String> line) {
 		ConditionStack conditions = new ConditionStack();
 		StringBuilder joined = null;
 
-		for (String text : this.lines) {
+		for (String text : lines) {
 			Matcher directive = DIRECTIVE.matcher(text);
 			if (directive.matches()) {
 				apply(directive.group(1), text, conditions, defines);
