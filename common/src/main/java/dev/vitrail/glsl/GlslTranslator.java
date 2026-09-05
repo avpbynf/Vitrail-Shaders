@@ -2,6 +2,7 @@ package dev.vitrail.glsl;
 
 import dev.vitrail.glsl.GlslLexer.Kind;
 import dev.vitrail.glsl.GlslLexer.Token;
+import dev.vitrail.glsl.TokenStream.Closing;
 import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.ProgramNames;
@@ -19,7 +20,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -43,6 +43,10 @@ import java.util.stream.Stream;
  * and {@code attribute}, texture lookups renamed twenty years ago, and plain uniforms declared
  * loose at file scope, which Vulkan does not allow at all. None of that needs the program to be
  * understood, only read, so the work here is a rewrite over a token stream rather than a compiler.
+ * <p>
+ * The tokens themselves, and every way of reading them or changing them, belong to
+ * {@link TokenStream} rather than to this class. What is left here is the pipeline: one pass per
+ * rule, in the order {@link #rewrite} runs them, and the header written around what they leave.
  * <p>
  * Two things are deliberately left undone, and both were done by the measuring prototype.
  * No {@code layout(binding = )} is emitted, and no {@code layout(location = )} except on fragment
@@ -363,13 +367,6 @@ public final class GlslTranslator {
 	private static final int MAX_SOURCE_CHARACTERS = 4_000_000;
 
 	/**
-	 * How far a declaration may reach for its semicolon. A pack that leaves one out would
-	 * otherwise have the rest of the file scanned once per {@code uniform} it declares, which is
-	 * quadratic: forty thousand such lines took twenty-seven seconds.
-	 */
-	private static final int MAX_STATEMENT_TOKENS = 4096;
-
-	/**
 	 * How far one macro may lead to another before the name is taken as non-constant, the same
 	 * figure {@code PreprocessorExpression} allows a chain of settings.
 	 */
@@ -404,14 +401,7 @@ public final class GlslTranslator {
 
 	/** Whether the fragment stage is asked for the coverage mask on top of what the pack writes. */
 	private final boolean coverage;
-	private final List<Token> tokens;
-
-	/** The parameter list {@link #functionEnd} last answered for, and its answer. */
-	private int functionEndFor = -1;
-	private int functionEndAt;
-
-	/** What {@link #lineNumbers} last built, or null where a token has moved since. */
-	private int[] lineTable;
+	private final TokenStream tokens;
 
 	/** Names the pack defines as macros. Their uses belong to the preprocessor, not to us. */
 	private final Set<String> packMacros = new HashSet<>();
@@ -688,7 +678,7 @@ public final class GlslTranslator {
 					+ " characters, past the " + MAX_SOURCE_CHARACTERS + " a unit is allowed");
 		}
 
-		this.tokens = new ArrayList<>(GlslLexer.lex(text));
+		this.tokens = new TokenStream(GlslLexer.lex(text));
 	}
 
 	/**
@@ -1103,7 +1093,7 @@ public final class GlslTranslator {
 	 */
 	private String body(Set<String> shadowed) {
 		if (shadowed.isEmpty()) {
-			return GlslLexer.join(this.tokens);
+			return this.tokens.join();
 		}
 
 		StringBuilder text = new StringBuilder();
@@ -1208,19 +1198,19 @@ public final class GlslTranslator {
 	 * macro name or leave a shadowed read on the block value with nothing logged either way.
 	 */
 	private void collectMacroNames() {
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.kind() != Kind.HASH || !LegacyGlsl.NAMING_DIRECTIVES.contains(token.directive())) {
 				continue;
 			}
 
-			int name = macroNameAfter(index);
+			int name = this.tokens.macroNameAfter(index);
 			if (name < 0) {
 				continue;
 			}
 
-			this.tokens.set(name, this.tokens.get(name).naming());
+			this.tokens.naming(name);
 			if (token.directive().equals("define")) {
 				String macro = this.tokens.get(name).text();
 				this.packMacros.add(macro);
@@ -1318,14 +1308,14 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int before = significantBefore(index);
+			int before = this.tokens.significantBefore(index);
 			if (before < 0 || !LegacyGlsl.TYPE_NAMES.contains(this.tokens.get(before).text())) {
 				continue;
 			}
 
 			this.declaredNames.add(token.text());
 			this.declaredNames.addAll(continuationDeclarators(index));
-			if (LegacyGlsl.POST_120_BUILTINS.contains(token.text()) && callOpener(index) >= 0) {
+			if (LegacyGlsl.POST_120_BUILTINS.contains(token.text()) && this.tokens.callOpener(index) >= 0) {
 				this.shadowedBuiltins.add(token.text());
 			}
 		}
@@ -1349,7 +1339,7 @@ public final class GlslTranslator {
 	 * @param first the first declarator of the statement, the one the type stands in front of
 	 */
 	private List<String> continuationDeclarators(int first) {
-		int end = statementEnd(first);
+		int end = this.tokens.statementEnd(first);
 		if (end < 0) {
 			return List.of();
 		}
@@ -1358,8 +1348,8 @@ public final class GlslTranslator {
 		int depth = 0;
 		boolean expectName = false;
 
-		for (int index = significantAfter(first); index >= 0 && index <= end;
-				index = significantAfter(index)) {
+		for (int index = this.tokens.significantAfter(first); index >= 0 && index <= end;
+				index = this.tokens.significantAfter(index)) {
 			Token token = this.tokens.get(index);
 			if (token.operator("(") || token.operator("[") || token.operator("{")) {
 				depth++;
@@ -1390,7 +1380,7 @@ public final class GlslTranslator {
 	 * bracket of an array.
 	 */
 	private boolean declaratorFollows(int name) {
-		int next = significantAfter(name);
+		int next = this.tokens.significantAfter(name);
 		if (next < 0) {
 			return false;
 		}
@@ -1437,13 +1427,13 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			blankDirective(index);
+			this.tokens.blankDirective(index);
 		}
 	}
 
 	private void rewriteIdentifiers() {
 		List<Integer> closings = new ArrayList<>();
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -1466,7 +1456,7 @@ public final class GlslTranslator {
 			}
 
 			if (this.shadowedBuiltins.contains(name)) {
-				replace(index, "of_" + name);
+				this.tokens.replace(index, "of_" + name);
 				continue;
 			}
 
@@ -1486,12 +1476,13 @@ public final class GlslTranslator {
 
 			String fixed = LegacyGlsl.FIXED_FUNCTION.get(name);
 			if (fixed != null) {
-				replace(index, fixed);
+				this.tokens.replace(index, fixed);
 				continue;
 			}
 
 			if (name.equals("gl_VertexID") || name.equals("gl_InstanceID")) {
-				replace(index, name.equals("gl_VertexID") ? "gl_VertexIndex" : "gl_InstanceIndex");
+				this.tokens.replace(index,
+						name.equals("gl_VertexID") ? "gl_VertexIndex" : "gl_InstanceIndex");
 				continue;
 			}
 
@@ -1500,8 +1491,8 @@ public final class GlslTranslator {
 			}
 
 			String shadow = LegacyGlsl.SHADOW_FUNCTIONS.get(name);
-			if (shadow != null && callOpener(index) >= 0) {
-				int close = matchingBracket(callOpener(index));
+			if (shadow != null && this.tokens.callOpener(index) >= 0) {
+				int close = this.tokens.matchingBracket(this.tokens.callOpener(index));
 				if (close < 0) {
 					// Unbalanced from here, usually because a macro opened the parenthesis. The
 					// call is left alone and the compiler will say so, but silence here would
@@ -1513,7 +1504,7 @@ public final class GlslTranslator {
 					// A legacy shadow lookup is rewritten here rather than later: the injection
 					// below fuses the name into one token with the parenthesis, and the depth
 					// conversion matches names.
-					int first = significantAfter(callOpener(index));
+					int first = this.tokens.significantAfter(this.tokens.callOpener(index));
 					String argument = first >= 0
 							&& this.tokens.get(first).kind() == Kind.IDENTIFIER
 							? this.tokens.get(first).text() : null;
@@ -1541,7 +1532,7 @@ public final class GlslTranslator {
 					// The wrap adds an opening parenthesis, so it has to add a closing one too.
 					// Substituting the head alone is what left the prototype with eighty-six
 					// units ending in "unexpected SEMICOLON, expecting RIGHT_PAREN".
-					inject(index, "vec4(" + (compared ? SHADOW_COMPARE : shadow));
+					this.tokens.inject(index, "vec4(" + (compared ? SHADOW_COMPARE : shadow));
 					closings.add(close + 1);
 					this.shadowCalls++;
 					continue;
@@ -1549,8 +1540,8 @@ public final class GlslTranslator {
 			}
 
 			String modern = LegacyGlsl.DEPRECATED_FUNCTIONS.get(name);
-			if (modern != null && callOpener(index) >= 0) {
-				replace(index, modern);
+			if (modern != null && this.tokens.callOpener(index) >= 0) {
+				this.tokens.replace(index, modern);
 				continue;
 			}
 
@@ -1562,11 +1553,11 @@ public final class GlslTranslator {
 			// on the driver's own two can still say what the substitution would have had to bite
 			// on. With the switch off nothing is replaced and the token falls through to the
 			// readings below, exactly as any other name the pack calls does.
-			if ((name.equals("sin") || name.equals("cos")) && callOpener(index) >= 0
+			if ((name.equals("sin") || name.equals("cos")) && this.tokens.callOpener(index) >= 0
 					&& !this.declaredNames.contains(name)) {
 				this.trigSites++;
 				if (reduceTrig) {
-					replace(index, name.equals("sin") ? REDUCED_SIN : REDUCED_COS);
+					this.tokens.replace(index, name.equals("sin") ? REDUCED_SIN : REDUCED_COS);
 					this.trigCalls++;
 					continue;
 				}
@@ -1580,18 +1571,18 @@ public final class GlslTranslator {
 				// A geometry shader has varyings running both ways and the keyword cannot say
 				// which. Every other stage is unambiguous, and the corpus has few enough geometry
 				// programs that guessing wrong here is visible rather than silent.
-				replace(index, this.stage == ProgramStage.VERTEX ? "out" : "in");
+				this.tokens.replace(index, this.stage == ProgramStage.VERTEX ? "out" : "in");
 				continue;
 			}
 
 			if (name.equals("attribute")) {
-				replace(index, "in");
+				this.tokens.replace(index, "in");
 				continue;
 			}
 
 			String reserved = LegacyGlsl.RESERVED_NAMES.get(name);
-			if (reserved != null && callOpener(index) < 0) {
-				replace(index, reserved);
+			if (reserved != null && this.tokens.callOpener(index) < 0) {
+				this.tokens.replace(index, reserved);
 			}
 		}
 
@@ -1605,7 +1596,7 @@ public final class GlslTranslator {
 			parentheses.add(new Closing(at, ")", null));
 		}
 
-		insertClosings(parentheses);
+		this.tokens.insertClosings(parentheses);
 	}
 
 	/**
@@ -1629,27 +1620,27 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int fractOpen = callOpener(index);
-			int sine = fractOpen < 0 ? -1 : significantAfter(fractOpen);
+			int fractOpen = this.tokens.callOpener(index);
+			int sine = fractOpen < 0 ? -1 : this.tokens.significantAfter(fractOpen);
 			if (sine < 0 || !goldbergSine(this.tokens.get(sine))) {
 				continue;
 			}
 
-			int sineOpen = callOpener(sine);
-			int dot = sineOpen < 0 ? -1 : significantAfter(sineOpen);
+			int sineOpen = this.tokens.callOpener(sine);
+			int dot = sineOpen < 0 ? -1 : this.tokens.significantAfter(sineOpen);
 			if (dot < 0 || !this.tokens.get(dot).identifier("dot")) {
 				continue;
 			}
 
-			int dotOpen = callOpener(dot);
-			int dotClose = matchingBracket(dotOpen);
+			int dotOpen = this.tokens.callOpener(dot);
+			int dotClose = this.tokens.matchingBracket(dotOpen);
 			int comma = firstCallComma(dotOpen);
-			int argStart = dotOpen < 0 ? -1 : significantAfter(dotOpen);
-			int argEnd = comma < 0 ? -1 : significantBefore(comma);
-			int sineClose = matchingBracket(sineOpen);
-			int times = sineClose < 0 ? -1 : significantAfter(sineClose);
-			int scale = times < 0 ? -1 : significantAfter(times);
-			int fractClose = matchingBracket(fractOpen);
+			int argStart = dotOpen < 0 ? -1 : this.tokens.significantAfter(dotOpen);
+			int argEnd = comma < 0 ? -1 : this.tokens.significantBefore(comma);
+			int sineClose = this.tokens.matchingBracket(sineOpen);
+			int times = sineClose < 0 ? -1 : this.tokens.significantAfter(sineClose);
+			int scale = times < 0 ? -1 : this.tokens.significantAfter(times);
+			int fractClose = this.tokens.matchingBracket(fractOpen);
 			if (argStart < 0 || argEnd < argStart || times < 0 || scale < 0 || fractClose < 0
 					|| !this.tokens.get(times).operator("*")
 					|| !goldbergScale(this.tokens.get(scale))
@@ -1657,15 +1648,15 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int afterScale = significantAfter(scale);
+			int afterScale = this.tokens.significantAfter(scale);
 			if (afterScale != fractClose) {
 				continue;
 			}
 
 			boolean reduced = this.tokens.get(sine).identifier(REDUCED_SIN);
 			String argument = tokenText(argStart, argEnd);
-			blankRange(index, fractClose);
-			inject(index, HASH + "(" + argument + ")");
+			this.tokens.blankRange(index, fractClose);
+			this.tokens.inject(index, HASH + "(" + argument + ")");
 			// Off both counts, and the site comes off whichever name its sine still went under: the
 			// idiom is erased here, so it is not a call either helper was ever going to take.
 			if (this.trigSites > 0) {
@@ -1739,7 +1730,7 @@ public final class GlslTranslator {
 
 	/** The comma that separates the first argument of the call that opens here, or -1. */
 	private int firstCallComma(int open) {
-		int close = matchingBracket(open);
+		int close = this.tokens.matchingBracket(open);
 		if (open < 0 || close < 0) {
 			return -1;
 		}
@@ -1802,22 +1793,22 @@ public final class GlslTranslator {
 	 * @return whether this was a read of unit nought, false leaving the name to the ordinary rename
 	 */
 	private boolean rewriteGameTextureMatrix(int index) {
-		int open = significantAfter(index);
+		int open = this.tokens.significantAfter(index);
 		if (open < 0 || !this.tokens.get(open).operator("[")) {
 			return false;
 		}
 
-		int unit = significantAfter(open);
-		int close = matchingBracket(open);
-		if (unit < 0 || close < 0 || significantAfter(unit) != close
+		int unit = this.tokens.significantAfter(open);
+		int close = this.tokens.matchingBracket(open);
+		if (unit < 0 || close < 0 || this.tokens.significantAfter(unit) != close
 				|| !this.tokens.get(unit).text().equals("0")) {
 			return false;
 		}
 
-		inject(index, LegacyGlsl.GAME_TEXTURE_MATRIX);
-		blank(open);
-		blank(unit);
-		blank(close);
+		this.tokens.inject(index, LegacyGlsl.GAME_TEXTURE_MATRIX);
+		this.tokens.blank(open);
+		this.tokens.blank(unit);
+		this.tokens.blank(close);
 		this.injectedNames.add(LegacyGlsl.GAME_TEXTURE_MATRIX);
 		this.gameTextureMatrix++;
 
@@ -1857,24 +1848,24 @@ public final class GlslTranslator {
 	 *         ordinary rename
 	 */
 	private boolean rewriteDistantTextureMatrix(int index) {
-		int open = significantAfter(index);
+		int open = this.tokens.significantAfter(index);
 		if (open < 0 || !this.tokens.get(open).operator("[")) {
 			return false;
 		}
 
-		int unit = significantAfter(open);
-		int close = matchingBracket(open);
-		if (unit < 0 || close < 0 || significantAfter(unit) != close
+		int unit = this.tokens.significantAfter(open);
+		int close = this.tokens.matchingBracket(open);
+		if (unit < 0 || close < 0 || this.tokens.significantAfter(unit) != close
 				|| !(this.tokens.get(unit).text().equals("0")
 						|| this.tokens.get(unit).text().equals("1")
 						|| this.tokens.get(unit).text().equals("2"))) {
 			return false;
 		}
 
-		inject(index, "mat4(1.0)");
-		blank(open);
-		blank(unit);
-		blank(close);
+		this.tokens.inject(index, "mat4(1.0)");
+		this.tokens.blank(open);
+		this.tokens.blank(unit);
+		this.tokens.blank(close);
 
 		return true;
 	}
@@ -1938,7 +1929,7 @@ public final class GlslTranslator {
 	 */
 	private boolean rewriteGameModelView(int index, String name) {
 		if (name.equals("gl_ModelViewMatrix")) {
-			inject(index, DRAW_MODEL_VIEW);
+			this.tokens.inject(index, DRAW_MODEL_VIEW);
 		} else if (name.equals("modelViewMatrix")) {
 			// The one name here a pack may declare for itself, the {@code gl_} prefix being reserved,
 			// so the one that has to tell a use from a declaration. Without this the declarator is
@@ -1951,9 +1942,9 @@ public final class GlslTranslator {
 				return false;
 			}
 
-			inject(index, DRAW_MODEL_VIEW);
+			this.tokens.inject(index, DRAW_MODEL_VIEW);
 		} else if (name.equals("gl_ModelViewProjectionMatrix")) {
-			inject(index, "(of_ProjectionMatrix * " + DRAW_MODEL_VIEW + ")");
+			this.tokens.inject(index, "(of_ProjectionMatrix * " + DRAW_MODEL_VIEW + ")");
 			this.injectedNames.add("of_ProjectionMatrix");
 		} else {
 			return false;
@@ -1978,15 +1969,15 @@ public final class GlslTranslator {
 	 * first-name-only test for the block, so the two move together or neither does.
 	 */
 	private boolean declaring(int index) {
-		int before = significantBefore(index);
+		int before = this.tokens.significantBefore(index);
 
 		return before >= 0 && LegacyGlsl.TYPE_NAMES.contains(this.tokens.get(before).text());
 	}
 
 	private boolean rewriteFtransform(int index) {
-		int open = callOpener(index);
-		int close = matchingBracket(open);
-		if (close < 0 || significantAfter(open) != close) {
+		int open = this.tokens.callOpener(index);
+		int close = this.tokens.matchingBracket(open);
+		if (close < 0 || this.tokens.significantAfter(open) != close) {
 			return false;
 		}
 
@@ -1994,25 +1985,21 @@ public final class GlslTranslator {
 		// the spelling the corpus really uses for a glint, and a pack writing ftransform() would
 		// otherwise get the pass's matrix back through the door rewriteGameModelView closed.
 		if (LegacyGlsl.readsDrawModelView(this.program)) {
-			inject(index, "(of_ProjectionMatrix * " + DRAW_MODEL_VIEW + " * of_Vertex)");
+			this.tokens.inject(index, "(of_ProjectionMatrix * " + DRAW_MODEL_VIEW + " * of_Vertex)");
 			this.injectedNames.add("of_ProjectionMatrix");
 			this.injectedNames.add(LegacyGlsl.CAMERA_BOB);
 			this.injectedNames.add(LegacyGlsl.GAME_MODEL_VIEW);
 			this.gameModelView++;
 		} else {
-			inject(index, "(of_ModelViewProjectionMatrix * of_Vertex)");
+			this.tokens.inject(index, "(of_ModelViewProjectionMatrix * of_Vertex)");
 			this.injectedNames.add("of_ModelViewProjectionMatrix");
 		}
 
 		this.injectedNames.add("of_Vertex");
-		blank(open);
-		blank(close);
+		this.tokens.blank(open);
+		this.tokens.blank(close);
 
 		return true;
-	}
-
-	/** One closing the wrap owes, put in once the scan that found it has finished reading. */
-	private record Closing(int at, String text, String directive) {
 	}
 
 	/** A sampler parameter, by the function taking it and its position in that function's list. */
@@ -2055,7 +2042,7 @@ public final class GlslTranslator {
 	 */
 	private void convertDepth() {
 		List<Closing> closings = new ArrayList<>();
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -2104,7 +2091,7 @@ public final class GlslTranslator {
 			}
 		}
 
-		insertClosings(closings);
+		this.tokens.insertClosings(closings);
 	}
 
 	/**
@@ -2133,8 +2120,8 @@ public final class GlslTranslator {
 			return false;
 		}
 
-		int open = callOpener(index);
-		int first = open < 0 ? -1 : significantAfter(open);
+		int open = this.tokens.callOpener(index);
+		int first = open < 0 ? -1 : this.tokens.significantAfter(open);
 		if (first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER) {
 			return false;
 		}
@@ -2158,7 +2145,7 @@ public final class GlslTranslator {
 		// The name alone: the arguments of texture(sampler, vec3) are the arguments the comparison
 		// takes, so nothing has to be found or balanced. textureLod carries a level this ignores,
 		// which is what a comparison sampler with no mipmaps would have done anyway.
-		replace(index, SHADOW_COMPARE);
+		this.tokens.replace(index, SHADOW_COMPARE);
 		this.softRewrites++;
 
 		return true;
@@ -2177,8 +2164,8 @@ public final class GlslTranslator {
 	 * fall in neither count and are the reason the two are read together rather than differenced.
 	 */
 	private void countDepthLookup(int index, int line) {
-		int open = callOpener(index);
-		int first = open < 0 ? -1 : significantAfter(open);
+		int open = this.tokens.callOpener(index);
+		int first = open < 0 ? -1 : this.tokens.significantAfter(open);
 		if (first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER) {
 			return;
 		}
@@ -2259,7 +2246,7 @@ public final class GlslTranslator {
 		}
 
 		Set<Scoped> proven = provenParameters(pinned, fullScreen && chained.isEmpty());
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		List<Closing> levels = new ArrayList<>();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
@@ -2270,9 +2257,9 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int open = callOpener(index);
-			int close = matchingBracket(open);
-			int first = significantAfter(open);
+			int open = this.tokens.callOpener(index);
+			int close = this.tokens.matchingBracket(open);
+			int first = this.tokens.significantAfter(open);
 			if (close < 0 || first < 0 || this.tokens.get(first).kind() != Kind.IDENTIFIER) {
 				continue;
 			}
@@ -2300,7 +2287,7 @@ public final class GlslTranslator {
 			}
 		}
 
-		insertClosings(levels);
+		this.tokens.insertClosings(levels);
 	}
 
 	/**
@@ -2339,7 +2326,7 @@ public final class GlslTranslator {
 		}
 
 		Map<String, List<Integer>> sites = sitesOf(functions);
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		boolean grew = true;
 		while (grew) {
 			grew = false;
@@ -2398,14 +2385,14 @@ public final class GlslTranslator {
 				return false;
 			}
 
-			int open = callOpener(index);
-			int before = significantBefore(index);
+			int open = this.tokens.callOpener(index);
+			int before = this.tokens.significantBefore(index);
 			if (open < 0 || (before >= 0 && this.tokens.get(before).kind() == Kind.IDENTIFIER
 					&& returnsAType(this.tokens.get(before).text()))) {
 				continue;
 			}
 
-			int close = matchingBracket(open);
+			int close = this.tokens.matchingBracket(open);
 			if (close < 0) {
 				return false;
 			}
@@ -2417,8 +2404,8 @@ public final class GlslTranslator {
 
 			int start = parameter.position() == 0 ? open : commas.get(parameter.position() - 1);
 			int end = commas.size() > parameter.position() ? commas.get(parameter.position()) : close;
-			int argument = significantAfter(start);
-			if (argument < 0 || significantAfter(argument) != end
+			int argument = this.tokens.significantAfter(start);
+			if (argument < 0 || this.tokens.significantAfter(argument) != end
 					|| this.tokens.get(argument).kind() != Kind.IDENTIFIER) {
 				return false;
 			}
@@ -2532,7 +2519,7 @@ public final class GlslTranslator {
 
 				// The bias of the one and the two derivatives of the other are what the level was
 				// computed from, and the level is a literal now.
-				replace(index, "textureLod");
+				this.tokens.replace(index, "textureLod");
 				dropArgumentsFrom(commas, 2, close);
 				levels.add(new Closing(close, ", " + BASE_LEVEL, directive));
 			}
@@ -2541,7 +2528,7 @@ public final class GlslTranslator {
 					return false;
 				}
 
-				replace(index, "textureLodOffset");
+				this.tokens.replace(index, "textureLodOffset");
 				dropArgumentsFrom(commas, 3, close);
 				levels.add(new Closing(commas.get(1), ", " + BASE_LEVEL, directive));
 			}
@@ -2551,7 +2538,7 @@ public final class GlslTranslator {
 				}
 
 				// The two derivatives make way for the literal and the offset stays where it is.
-				replace(index, "textureLodOffset");
+				this.tokens.replace(index, "textureLodOffset");
 				setArgument(commas, 2, close, BASE_LEVEL);
 				dropArgument(commas, 3, close);
 			}
@@ -2593,22 +2580,22 @@ public final class GlslTranslator {
 	/** Blanks the argument at this position, counted from nought, and every one after it. */
 	private void dropArgumentsFrom(List<Integer> commas, int at, int close) {
 		if (commas.size() >= at) {
-			blankRange(commas.get(at - 1), close - 1);
+			this.tokens.blankRange(commas.get(at - 1), close - 1);
 		}
 	}
 
 	/** Blanks the argument at this position alone, counted from nought, with the comma before it. */
 	private void dropArgument(List<Integer> commas, int at, int close) {
 		int end = commas.size() > at ? commas.get(at) - 1 : close - 1;
-		blankRange(commas.get(at - 1), end);
+		this.tokens.blankRange(commas.get(at - 1), end);
 	}
 
 	/** Puts a literal in place of the argument at this position, counted from nought. */
 	private void setArgument(List<Integer> commas, int at, int close, String text) {
-		int first = significantAfter(commas.get(at - 1));
+		int first = this.tokens.significantAfter(commas.get(at - 1));
 		int end = commas.size() > at ? commas.get(at) - 1 : close - 1;
-		blankRange(commas.get(at - 1) + 1, end);
-		inject(first, text);
+		this.tokens.blankRange(commas.get(at - 1) + 1, end);
+		this.tokens.inject(first, text);
 	}
 
 	/**
@@ -2621,8 +2608,10 @@ public final class GlslTranslator {
 	 * every one of them.
 	 */
 	private void convertFragCoord(int index) {
-		int dot = significantAfter(index);
-		int swizzle = dot >= 0 && this.tokens.get(dot).operator(".") ? significantAfter(dot) : -1;
+		int dot = this.tokens.significantAfter(index);
+		int swizzle = dot >= 0 && this.tokens.get(dot).operator(".")
+				? this.tokens.significantAfter(dot)
+				: -1;
 		if (swizzle < 0 || this.tokens.get(swizzle).kind() != Kind.IDENTIFIER) {
 			// Reached some other way, a subscript or a whole vector handed to a function. Nothing
 			// in the corpus does it, and a pack that starts has to be visible rather than wrong.
@@ -2632,12 +2621,12 @@ public final class GlslTranslator {
 
 		String field = this.tokens.get(swizzle).text();
 		if (field.equals("z")) {
-			inject(index, "(" + DEPTH_CONV + ".z * gl_FragCoord.z + " + DEPTH_CONV + ".w)");
+			this.tokens.inject(index, "(" + DEPTH_CONV + ".z * gl_FragCoord.z + " + DEPTH_CONV + ".w)");
 			this.fragCoordZ++;
 		} else if (field.equals("xyz")) {
 			// Two screen components that convert to nothing and one depth that does not, so the
 			// vector has to be rebuilt. Seven sites, all in gbuffers.
-			inject(index, "vec3(gl_FragCoord.xy, " + DEPTH_CONV + ".z * gl_FragCoord.z + "
+			this.tokens.inject(index, "vec3(gl_FragCoord.xy, " + DEPTH_CONV + ".z * gl_FragCoord.z + "
 					+ DEPTH_CONV + ".w)");
 			this.fragCoordXyz++;
 		} else {
@@ -2648,8 +2637,8 @@ public final class GlslTranslator {
 			return;
 		}
 
-		blank(dot);
-		blank(swizzle);
+		this.tokens.blank(dot);
+		this.tokens.blank(swizzle);
 		takeDepthConv();
 	}
 
@@ -2677,11 +2666,11 @@ public final class GlslTranslator {
 			return;
 		}
 
-		int eq = significantAfter(index);
-		int after = significantAfter(eq);
+		int eq = this.tokens.significantAfter(index);
+		int after = this.tokens.significantAfter(eq);
 		boolean assignment = eq >= 0 && this.tokens.get(eq).operator("=")
 				&& (after < 0 || !this.tokens.get(after).operator("="));
-		int end = assignment ? statementEnd(eq) : -1;
+		int end = assignment ? this.tokens.statementEnd(eq) : -1;
 		if (end < 0) {
 			// Anything but a plain assignment ending in a semicolon. A compound one reads the
 			// value back before writing it and a fragment stage has no readable depth to start
@@ -2694,56 +2683,10 @@ public final class GlslTranslator {
 		// The pack's expression is parenthesised, which is not decoration: the right hand side may
 		// be a ternary, and multiplying into one without brackets changes what it means.
 		String directive = this.tokens.get(eq).directive();
-		inject(eq, "= (" + DEPTH_CONV + ".z * (");
+		this.tokens.inject(eq, "= (" + DEPTH_CONV + ".z * (");
 		closings.add(new Closing(end, ") + " + DEPTH_CONV + ".w)", directive));
 		takeDepthConv();
 		this.fragDepthWrites++;
-	}
-
-	/**
-	 * Inserting shifts every index after it, so the last insertion is made first.
-	 * <p>
-	 * This is the one place that moves a token, both passes that close a wrap coming through it,
-	 * and so the one place that can make a position stale. What a later pass has to know about a
-	 * token is carried on the token for that reason, as {@link Token#macroName()} is: a position
-	 * kept across here would be read against somebody else's token, and nothing downstream can
-	 * tell. The two answers this class does keep about the list, the function end and the line
-	 * table, are thrown away here for the same reason.
-	 */
-	private void insertClosings(List<Closing> closings) {
-		if (closings.isEmpty()) {
-			return;
-		}
-
-		this.functionEndFor = -1;
-		this.lineTable = null;
-
-		// One walk that copies the list with the closings dropped in, rather than one shift of
-		// every later token per closing: a stage carries hundreds of thousands of tokens and a
-		// few hundred closings, and the shifts were the whole cost of the pass. The order is the
-		// one the shifts produced: closings sharing a position land latest first, because each
-		// shift pushed the one inserted before it along.
-		closings.sort(Comparator.comparingInt(Closing::at));
-		List<Token> rebuilt = new ArrayList<>(this.tokens.size() + closings.size());
-		int next = 0;
-		for (int at = 0; at <= this.tokens.size(); at++) {
-			int first = next;
-			while (next < closings.size() && closings.get(next).at() == at) {
-				next++;
-			}
-
-			for (int closing = next - 1; closing >= first; closing--) {
-				Closing one = closings.get(closing);
-				rebuilt.add(new Token(Kind.RAW, one.text(), one.directive()));
-			}
-
-			if (at < this.tokens.size()) {
-				rebuilt.add(this.tokens.get(at));
-			}
-		}
-
-		this.tokens.clear();
-		this.tokens.addAll(rebuilt);
 	}
 
 	/**
@@ -2819,9 +2762,9 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int end = statementEnd(index);
+			int end = this.tokens.statementEnd(index);
 			if (end >= 0 && nonConstantInitialiser(index, end)) {
-				blank(index);
+				this.tokens.blank(index);
 			}
 		}
 	}
@@ -2917,7 +2860,7 @@ public final class GlslTranslator {
 			}
 
 			if (LegacyGlsl.PRECISION_QUALIFIERS.contains(token.text())) {
-				blank(index);
+				this.tokens.blank(index);
 				continue;
 			}
 
@@ -2925,11 +2868,12 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int qualifier = significantAfter(index);
-			if (qualifier >= 0 && LegacyGlsl.PRECISION_QUALIFIERS.contains(this.tokens.get(qualifier).text())) {
-				int end = statementEnd(index);
+			int qualifier = this.tokens.significantAfter(index);
+			if (qualifier >= 0
+					&& LegacyGlsl.PRECISION_QUALIFIERS.contains(this.tokens.get(qualifier).text())) {
+				int end = this.tokens.statementEnd(index);
 				if (end >= 0) {
-					blankRange(index, end);
+					this.tokens.blankRange(index, end);
 				}
 			}
 		}
@@ -2957,7 +2901,7 @@ public final class GlslTranslator {
 			}
 
 			if (token.identifier("gl_FragColor")) {
-				inject(index, "ofFragData0");
+				this.tokens.inject(index, "ofFragData0");
 				fragColor = true;
 				continue;
 			}
@@ -2975,12 +2919,12 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int open = significantAfter(index);
-			int number = significantAfter(open);
-			inject(index, "ofFragData" + slot);
-			blank(open);
-			blank(number);
-			blank(significantAfter(number));
+			int open = this.tokens.significantAfter(index);
+			int number = this.tokens.significantAfter(open);
+			this.tokens.inject(index, "ofFragData" + slot);
+			this.tokens.blank(open);
+			this.tokens.blank(number);
+			this.tokens.blank(this.tokens.significantAfter(number));
 			this.maxFragmentOutput = Math.max(this.maxFragmentOutput, slot);
 		}
 
@@ -2991,17 +2935,17 @@ public final class GlslTranslator {
 
 	/** The subscript of {@code gl_FragData[n]} when it is a literal in range, otherwise -1. */
 	private int literalIndexAfter(int index) {
-		int open = significantAfter(index);
+		int open = this.tokens.significantAfter(index);
 		if (open < 0 || !this.tokens.get(open).operator("[")) {
 			return -1;
 		}
 
-		int number = significantAfter(open);
+		int number = this.tokens.significantAfter(open);
 		if (number < 0 || this.tokens.get(number).kind() != Kind.NUMBER) {
 			return -1;
 		}
 
-		int close = significantAfter(number);
+		int close = this.tokens.significantAfter(number);
 		if (close < 0 || !this.tokens.get(close).operator("]")) {
 			return -1;
 		}
@@ -3040,7 +2984,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (!token.identifier("out") || token.directive() != null) {
@@ -3063,7 +3007,7 @@ public final class GlslTranslator {
 	 * a declaration follows the end of the last one or a layout qualifier.
 	 */
 	private boolean opensDeclaration(int index) {
-		int before = significantBefore(index);
+		int before = this.tokens.significantBefore(index);
 		if (before < 0) {
 			return true;
 		}
@@ -3074,13 +3018,13 @@ public final class GlslTranslator {
 	}
 
 	private void liftOutput(int keyword) {
-		int start = statementStart(keyword);
-		int end = statementEnd(keyword);
+		int start = this.tokens.statementStart(keyword);
+		int end = this.tokens.statementEnd(keyword);
 		if (start < 0 || end < 0) {
 			return;
 		}
 
-		List<Integer> parts = significantRange(start, end);
+		List<Integer> parts = this.tokens.significantRange(start, end);
 		int cursor = parts.indexOf(keyword);
 
 		// A type, one declarator and the semicolon, and nothing else. A pack that declares two
@@ -3106,7 +3050,7 @@ public final class GlslTranslator {
 		}
 
 		if (this.packOutputs.putIfAbsent(location, new Output(name.text(), type)) == null) {
-			blankRange(start, end);
+			this.tokens.blankRange(start, end);
 		}
 	}
 
@@ -3156,7 +3100,7 @@ public final class GlslTranslator {
 
 		int brace = mainBrace();
 		if (brace >= 0) {
-			inject(brace, "{ " + ORDER_OUTPUTS + "();");
+			this.tokens.inject(brace, "{ " + ORDER_OUTPUTS + "();");
 			this.ordered = true;
 		}
 	}
@@ -3247,12 +3191,13 @@ public final class GlslTranslator {
 	 * after the fact, once, whereas rewriting each write would compose the conversion once per write.
 	 * <p>
 	 * It is a wrapper around {@code main} and not an injection before its closing brace because
-	 * {@link #matchingBracket} cannot close a brace and, more to the point, counts operators without
-	 * looking at whether their line is live: {@link #liftUniforms} refuses to count brace depth for
-	 * that very reason, a pack opening a brace in one branch of an {@code #if} and closing it in
-	 * another. A misplaced closing brace would put the epilogue in the middle of the code. Wrapping
-	 * also survives an early {@code return} from {@code main}, which no vertex stage in the corpus
-	 * does, and the header is already where code of ours is written.
+	 * {@link TokenStream#matchingBracket} cannot close a brace and, more to the point, counts
+	 * operators without looking at whether their line is live: {@link #liftUniforms} refuses to
+	 * count brace depth for that very reason, a pack opening a brace in one branch of an
+	 * {@code #if} and closing it in another. A misplaced closing brace would put the epilogue in
+	 * the middle of the code. Wrapping also survives an early {@code return} from {@code main},
+	 * which no vertex stage in the corpus does, and the header is already where code of ours is
+	 * written.
 	 * <p>
 	 * The depth conversion is for vertex stages only. A geometry stage writes {@code gl_Position}
 	 * once per {@code EmitVertex}, so an epilogue would land in the wrong place, and a program
@@ -3267,7 +3212,7 @@ public final class GlslTranslator {
 	private void wrapMain() {
 		if (this.stage == ProgramStage.FRAGMENT) {
 			if (wrapsFragment()) {
-				replace(this.packMainName, PACK_MAIN);
+				this.tokens.replace(this.packMainName, PACK_MAIN);
 				this.mainWrapped = true;
 			}
 
@@ -3306,7 +3251,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		replace(name, PACK_MAIN);
+		this.tokens.replace(name, PACK_MAIN);
 		this.terrainPrologue = terrain;
 		this.distantPrologue = distant;
 		this.entityWrapped = overlay;
@@ -3359,7 +3304,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.directive() != null || !this.unit.isLive(lines[index])) {
@@ -3392,7 +3337,7 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			blankRange(declared.start(), declared.end());
+			this.tokens.blankRange(declared.start(), declared.end());
 
 			for (String name : declared.names()) {
 				this.splitMatrices.add(new SplitMatrix(name, declared.type(), layout.columnType(),
@@ -3427,7 +3372,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		replace(name, PACK_MAIN);
+		this.tokens.replace(name, PACK_MAIN);
 		this.mainWrapped = true;
 	}
 
@@ -3437,7 +3382,7 @@ public final class GlslTranslator {
 	 * counts as the body.
 	 */
 	private int mainNameAfterOutputOrder() {
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (!token.identifier("main") || token.directive() != null
@@ -3445,8 +3390,8 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int close = matchingBracket(callOpener(index));
-			int brace = significantAfter(close);
+			int close = this.tokens.matchingBracket(this.tokens.callOpener(index));
+			int brace = this.tokens.significantAfter(close);
 			if (brace >= 0) {
 				Token after = this.tokens.get(brace);
 				if (after.kind() == Kind.RAW && after.text().startsWith("{")) {
@@ -3542,7 +3487,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.directive() != null || !this.unit.isLive(lines[index])) {
@@ -3574,7 +3519,7 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			blankRange(declared.start(), declared.end());
+			this.tokens.blankRange(declared.start(), declared.end());
 
 			for (String name : declared.names()) {
 				this.splitStructs.add(new SplitStruct(name, declared.type(), members,
@@ -3593,7 +3538,7 @@ public final class GlslTranslator {
 
 			int[] definition = definitionRange(split.structType());
 			if (definition != null) {
-				blankRange(definition[0], definition[1]);
+				this.tokens.blankRange(definition[0], definition[1]);
 			}
 		}
 	}
@@ -3604,7 +3549,7 @@ public final class GlslTranslator {
 	 */
 	private Map<String, List<StructMember>> structDefinitions() {
 		Map<String, List<StructMember>> definitions = new LinkedHashMap<>();
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (!token.identifier("struct") || token.directive() != null
@@ -3612,15 +3557,15 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int name = significantAfter(index);
-			int open = significantAfter(name);
+			int name = this.tokens.significantAfter(index);
+			int open = this.tokens.significantAfter(name);
 			if (name < 0 || open < 0 || this.tokens.get(name).kind() != Kind.IDENTIFIER
 					|| !this.tokens.get(open).operator("{")) {
 				continue;
 			}
 
-			int close = matchingBracket(open);
-			int semicolon = significantAfter(close);
+			int close = this.tokens.matchingBracket(open);
+			int semicolon = this.tokens.significantAfter(close);
 			// A definition that declares an instance in the same breath, "struct T { ... } t;",
 			// is left alone: taking it out of the body would take the instance with it.
 			if (close < 0 || semicolon < 0 || !this.tokens.get(semicolon).operator(";")) {
@@ -3643,7 +3588,7 @@ public final class GlslTranslator {
 	private List<StructMember> structMembers(int start, int end) {
 		List<StructMember> members = new ArrayList<>();
 		List<Integer> statement = new ArrayList<>();
-		for (int scan : significantRange(start, end)) {
+		for (int scan : this.tokens.significantRange(start, end)) {
 			Token token = this.tokens.get(scan);
 			if (!token.operator(";")) {
 				statement.add(scan);
@@ -3683,7 +3628,7 @@ public final class GlslTranslator {
 	 * closing it, or null where the unit holds none.
 	 */
 	private int[] definitionRange(String structType) {
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (!token.identifier("struct") || token.directive() != null
@@ -3691,15 +3636,15 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int name = significantAfter(index);
-			int open = significantAfter(name);
+			int name = this.tokens.significantAfter(index);
+			int open = this.tokens.significantAfter(name);
 			if (name < 0 || open < 0 || !this.tokens.get(name).identifier(structType)
 					|| !this.tokens.get(open).operator("{")) {
 				continue;
 			}
 
-			int close = matchingBracket(open);
-			int semicolon = significantAfter(close);
+			int close = this.tokens.matchingBracket(open);
+			int semicolon = this.tokens.significantAfter(close);
 			if (close >= 0 && semicolon >= 0 && this.tokens.get(semicolon).operator(";")) {
 				return new int[] {index, semicolon};
 			}
@@ -3742,7 +3687,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.directive() != null || !this.unit.isLive(lines[index])
@@ -3775,7 +3720,7 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			blankRange(declared.start(), declared.end());
+			this.tokens.blankRange(declared.start(), declared.end());
 			this.splitArrays.addAll(found);
 		}
 	}
@@ -3809,7 +3754,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		replace(name, PACK_MAIN);
+		this.tokens.replace(name, PACK_MAIN);
 		this.mainWrapped = true;
 	}
 
@@ -3830,7 +3775,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.directive() != null || !this.unit.isLive(lines[index])) {
@@ -3854,7 +3799,7 @@ public final class GlslTranslator {
 		}
 
 		declared.names().forEach(name -> this.synthesized.putIfAbsent(name, declared.type()));
-		blankRange(declared.start(), declared.end());
+		this.tokens.blankRange(declared.start(), declared.end());
 	}
 
 	/**
@@ -3874,7 +3819,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.directive() != null || !this.unit.isLive(lines[index])) {
@@ -3930,7 +3875,7 @@ public final class GlslTranslator {
 		boolean dropped = false;
 		for (FileScope declared : unprovided) {
 			if (declared.names().stream().noneMatch(read::contains)) {
-				blankRange(declared.start(), declared.end());
+				this.tokens.blankRange(declared.start(), declared.end());
 				this.droppedInputs.addAll(declared.names());
 				dropped = true;
 				continue;
@@ -4022,13 +3967,13 @@ public final class GlslTranslator {
 			// From the start of the statement up to the type, which is the first token that is
 			// neither the keyword nor a qualifier. Either order has to be taken: GLSL accepts both,
 			// Mellow opens with flat, and fileScopeDeclaration already gathers them both ways.
-			for (int index : significantRange(scope.start(), scope.end())) {
+			for (int index : this.tokens.significantRange(scope.start(), scope.end())) {
 				String text = this.tokens.get(index).text();
 				if (!text.equals("out") && !LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(text)) {
 					break;
 				}
 
-				blank(index);
+				this.tokens.blank(index);
 			}
 
 			this.declaredOutputs.removeAll(scope.names());
@@ -4093,7 +4038,7 @@ public final class GlslTranslator {
 		}
 
 		int[] region = this.regions;
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		Map<String, Set<Integer>> shadowed = new HashMap<>();
 		Set<String> read = new HashSet<>();
 
@@ -4106,7 +4051,7 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int before = significantBefore(index);
+			int before = this.tokens.significantBefore(index);
 			boolean declares = before >= 0
 					&& LegacyGlsl.TYPE_NAMES.contains(this.tokens.get(before).text());
 			if (declares && region[index] >= 0) {
@@ -4141,7 +4086,7 @@ public final class GlslTranslator {
 					current++;
 					// Back over the signature, so that a parameter counts as declared inside the
 					// body it names things for rather than at file scope beside it.
-					int from = statementStart(index);
+					int from = this.tokens.statementStart(index);
 					for (int back = from < 0 ? index : from; back <= index; back++) {
 						region[back] = current;
 					}
@@ -4211,13 +4156,13 @@ public final class GlslTranslator {
 	 * and nothing else asks for.
 	 */
 	private FileScope fileScopeDeclaration(int keyword, Set<String> types) {
-		int end = statementEnd(keyword);
-		int start = end < 0 ? -1 : statementStart(keyword);
+		int end = this.tokens.statementEnd(keyword);
+		int start = end < 0 ? -1 : this.tokens.statementStart(keyword);
 		if (start < 0) {
 			return null;
 		}
 
-		List<Integer> parts = significantRange(start, end);
+		List<Integer> parts = this.tokens.significantRange(start, end);
 		int cursor = parts.indexOf(keyword);
 		if (cursor < 0) {
 			return null;
@@ -4237,7 +4182,8 @@ public final class GlslTranslator {
 
 		cursor++;
 		while (cursor < parts.size() && (isQualifier(this.tokens.get(parts.get(cursor)))
-				|| LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(this.tokens.get(parts.get(cursor)).text()))) {
+				|| LegacyGlsl.INTERPOLATION_QUALIFIERS
+						.contains(this.tokens.get(parts.get(cursor)).text()))) {
 			String text = this.tokens.get(parts.get(cursor)).text();
 			if (LegacyGlsl.INTERPOLATION_QUALIFIERS.contains(text)) {
 				qualifiers.add(text);
@@ -4280,7 +4226,10 @@ public final class GlslTranslator {
 	private int mainBrace() {
 		int name = mainName();
 
-		return name < 0 ? -1 : significantAfter(matchingBracket(callOpener(name)));
+		return name < 0
+				? -1
+				: this.tokens.significantAfter(
+						this.tokens.matchingBracket(this.tokens.callOpener(name)));
 	}
 
 	/**
@@ -4292,7 +4241,7 @@ public final class GlslTranslator {
 	 * compiler actually sees would name its outputs in whatever order the pack wrote them in.
 	 */
 	private int mainName() {
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (!token.identifier("main") || token.directive() != null
@@ -4300,8 +4249,8 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int close = matchingBracket(callOpener(index));
-			int brace = significantAfter(close);
+			int close = this.tokens.matchingBracket(this.tokens.callOpener(index));
+			int brace = this.tokens.significantAfter(close);
 			if (brace >= 0 && this.tokens.get(brace).operator("{")) {
 				return index;
 			}
@@ -4321,7 +4270,7 @@ public final class GlslTranslator {
 	 * the file.
 	 */
 	private void liftUniforms() {
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -4397,19 +4346,19 @@ public final class GlslTranslator {
 	}
 
 	private void liftOne(int keyword) {
-		int end = statementEnd(keyword);
+		int end = this.tokens.statementEnd(keyword);
 		if (end < 0) {
 			// Either a uniform block, which is already legal, or a declaration with no semicolon,
 			// which is a pack problem and not ours to paper over.
 			return;
 		}
 
-		int start = statementStart(keyword);
+		int start = this.tokens.statementStart(keyword);
 		if (start < 0) {
 			return;
 		}
 
-		List<Integer> parts = significantRange(start, end);
+		List<Integer> parts = this.tokens.significantRange(start, end);
 		int keywordAt = parts.indexOf(keyword);
 		if (keywordAt < 0) {
 			return;
@@ -4453,7 +4402,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		blankRange(start, end);
+		this.tokens.blankRange(start, end);
 	}
 
 	/**
@@ -4498,7 +4447,7 @@ public final class GlslTranslator {
 	 * whose soft-compare switch is armed.
 	 */
 	private void collectComparisonSamplers() {
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		int depth = 0;
 		int parameters = -1;
 		boolean arithmetic = softCompare() || this.stage == ProgramStage.COMPUTE;
@@ -4529,10 +4478,11 @@ public final class GlslTranslator {
 
 			// Every identifier this declaration introduces, and how far what it introduces them
 			// into reaches. Array bounds and commas are not identifiers, so they are stepped over.
-			int last = depth > 0 ? functionEnd(parameters) : this.tokens.size() - 1;
+			int last = depth > 0 ? this.tokens.functionEnd(parameters) : this.tokens.size() - 1;
 			List<Scoped> introduced = new ArrayList<>();
 			boolean bindable = !arithmetic;
-			for (int scan = significantAfter(index); scan >= 0; scan = significantAfter(scan)) {
+			for (int scan = this.tokens.significantAfter(index); scan >= 0;
+					scan = this.tokens.significantAfter(scan)) {
 				Token next = this.tokens.get(scan);
 				if (next.operator(";") || (depth > 0 && (next.operator(",") || next.operator(")")))) {
 					break;
@@ -4556,7 +4506,7 @@ public final class GlslTranslator {
 			} else if (bindable) {
 				this.hardwareComparisonSamplers.addAll(introduced);
 			} else {
-				replace(index, plain);
+				this.tokens.replace(index, plain);
 				this.comparisonSamplers.addAll(introduced);
 			}
 		}
@@ -4568,7 +4518,7 @@ public final class GlslTranslator {
 		}
 
 		for (int index : parameterTypes) {
-			replace(index, withoutComparison(this.tokens.get(index).text()));
+			this.tokens.replace(index, withoutComparison(this.tokens.get(index).text()));
 		}
 
 		this.comparisonSamplers.addAll(parameterNames);
@@ -4583,7 +4533,7 @@ public final class GlslTranslator {
 	 * counter, so the one thing it could not do was also the one thing nothing measured.
 	 */
 	private void collectSamplerParameters() {
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		int depth = 0;
 		int parameters = -1;
 		int position = 0;
@@ -4611,16 +4561,16 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int name = significantAfter(index);
+			int name = this.tokens.significantAfter(index);
 			if (name >= 0 && this.tokens.get(name).kind() == Kind.IDENTIFIER) {
 				Scoped parameter = new Scoped(this.tokens.get(name).text(), lines[index],
-						lines[functionEnd(parameters)]);
+						lines[this.tokens.functionEnd(parameters)]);
 				this.samplerParameters.add(parameter);
 				if (!levelled(token.text())) {
 					this.unlevelledParameters.add(parameter);
 				}
 
-				int function = significantBefore(parameters);
+				int function = this.tokens.significantBefore(parameters);
 				if (function >= 0 && this.tokens.get(function).kind() == Kind.IDENTIFIER) {
 					this.typedParameters.add(new SamplerParameter(this.tokens.get(function).text(),
 							position, parameter));
@@ -4698,7 +4648,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		List<Integer> members = new ArrayList<>();
 		List<Integer> reads = new ArrayList<>();
 
@@ -4729,7 +4679,7 @@ public final class GlslTranslator {
 		members.forEach(this::detachMember);
 
 		this.samplers.put(texel, SAMPLER_2D + " " + texel);
-		reads.forEach(read -> inject(read, LOOKUP + "(" + texel + ", vec2(0.5)).r"));
+		reads.forEach(read -> this.tokens.inject(read, LOOKUP + "(" + texel + ", vec2(0.5)).r"));
 	}
 
 	/**
@@ -4771,7 +4721,7 @@ public final class GlslTranslator {
 	private int declarationType(int name) {
 		int cursor = name;
 		while (cursor > 0) {
-			int before = significantBefore(cursor);
+			int before = this.tokens.significantBefore(cursor);
 			if (before < 0) {
 				return -1;
 			}
@@ -4787,7 +4737,7 @@ public final class GlslTranslator {
 
 			// The declarator this comma binds to the list. Anything else there, an initialiser or a
 			// closing bracket, is an expression and not a list this pass knows how to read.
-			int previous = significantBefore(before);
+			int previous = this.tokens.significantBefore(before);
 			if (previous < 0 || this.tokens.get(previous).kind() != Kind.IDENTIFIER) {
 				return -1;
 			}
@@ -4807,9 +4757,9 @@ public final class GlslTranslator {
 			return false;
 		}
 
-		int cursor = significantBefore(type);
+		int cursor = this.tokens.significantBefore(type);
 		while (cursor >= 0 && isQualifier(this.tokens.get(cursor))) {
-			cursor = significantBefore(cursor);
+			cursor = this.tokens.significantBefore(cursor);
 		}
 
 		return cursor >= 0 && this.tokens.get(cursor).identifier("uniform");
@@ -4825,31 +4775,31 @@ public final class GlslTranslator {
 	 * nothing, it is a syntax error.
 	 */
 	private void detachMember(int name) {
-		int before = significantBefore(name);
+		int before = this.tokens.significantBefore(name);
 		if (before >= 0 && this.tokens.get(before).operator(",")) {
-			blank(before);
-			blank(name);
+			this.tokens.blank(before);
+			this.tokens.blank(name);
 
 			return;
 		}
 
-		int after = significantAfter(name);
+		int after = this.tokens.significantAfter(name);
 		if (after >= 0 && this.tokens.get(after).operator(",")) {
-			blank(name);
-			blank(after);
+			this.tokens.blank(name);
+			this.tokens.blank(after);
 
 			return;
 		}
 
-		int start = statementStart(name);
-		int end = statementEnd(name);
+		int start = this.tokens.statementStart(name);
+		int end = this.tokens.statementEnd(name);
 		if (start < 0 || end < 0) {
 			// A declaration with no semicolon, which is a pack problem and not ours to paper over.
 			// Left whole rather than half emptied, the way the lifting leaves it.
 			return;
 		}
 
-		blankRange(start, end);
+		this.tokens.blankRange(start, end);
 	}
 
 	/**
@@ -4881,7 +4831,7 @@ public final class GlslTranslator {
 			return;
 		}
 
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		this.volumes.forEach((name, atlas) -> flattenOne(name, atlas, lines));
 	}
 
@@ -4935,13 +4885,13 @@ public final class GlslTranslator {
 
 		String forged = SamplerPlan.forged(name);
 		for (int declaration : declarations) {
-			replace(significantBefore(declaration), "sampler2D");
-			replace(declaration, forged);
+			this.tokens.replace(this.tokens.significantBefore(declaration), "sampler2D");
+			this.tokens.replace(declaration, forged);
 		}
 
 		lookups.forEach((argument, callee) -> {
-			replace(callee, VOLUME_LOOKUP + name);
-			replace(argument, forged);
+			this.tokens.replace(callee, VOLUME_LOOKUP + name);
+			this.tokens.replace(argument, forged);
 		});
 
 		this.volumeLookups += lookups.size();
@@ -4993,15 +4943,15 @@ public final class GlslTranslator {
 	 * that would leave the body reading a parameter nobody passes.
 	 */
 	private boolean volumeDeclaration(int index) {
-		int type = significantBefore(index);
+		int type = this.tokens.significantBefore(index);
 		if (type < 0 || this.tokens.get(type).kind() != Kind.IDENTIFIER
 				|| !"3D".equals(SamplerTypes.shapeOf(this.tokens.get(type).text()))) {
 			return false;
 		}
 
-		int cursor = significantBefore(type);
+		int cursor = this.tokens.significantBefore(type);
 		while (cursor >= 0 && isQualifier(this.tokens.get(cursor))) {
-			cursor = significantBefore(cursor);
+			cursor = this.tokens.significantBefore(cursor);
 		}
 
 		return cursor >= 0 && this.tokens.get(cursor).identifier("uniform");
@@ -5013,17 +4963,17 @@ public final class GlslTranslator {
 	 * and means something else, and the helper takes two.
 	 */
 	private int plainLookup(int index) {
-		int open = significantBefore(index);
+		int open = this.tokens.significantBefore(index);
 		if (open < 0 || !this.tokens.get(open).operator("(")) {
 			return -1;
 		}
 
-		int callee = significantBefore(open);
+		int callee = this.tokens.significantBefore(open);
 		if (callee < 0 || !this.tokens.get(callee).identifier(LOOKUP)) {
 			return -1;
 		}
 
-		int close = matchingBracket(open);
+		int close = this.tokens.matchingBracket(open);
 
 		return close >= 0 && arguments(open, close) == LOOKUP_ARGUMENTS ? callee : -1;
 	}
@@ -5122,7 +5072,7 @@ public final class GlslTranslator {
 	 * the reason a uniform in one is: the compiler will not see it either.
 	 */
 	private void collectStorageBlocks() {
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -5131,20 +5081,20 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int name = significantAfter(index);
+			int name = this.tokens.significantAfter(index);
 			if (name < 0 || this.tokens.get(name).kind() != Kind.IDENTIFIER) {
 				continue;
 			}
 
-			int brace = significantAfter(name);
+			int brace = this.tokens.significantAfter(name);
 			if (brace < 0 || !this.tokens.get(brace).operator("{")) {
 				continue;
 			}
 
 			int binding = layoutBinding(index);
 			note(this.tokens.get(name).text(), binding);
-			int close = matchingBracket(brace);
-			int instance = close < 0 ? -1 : significantAfter(close);
+			int close = this.tokens.matchingBracket(brace);
+			int instance = close < 0 ? -1 : this.tokens.significantAfter(close);
 			if (instance >= 0 && this.tokens.get(instance).kind() == Kind.IDENTIFIER) {
 				note(this.tokens.get(instance).text(), binding);
 			}
@@ -5186,12 +5136,12 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int equals = significantAfter(scan);
+			int equals = this.tokens.significantAfter(scan);
 			if (equals < 0 || !this.tokens.get(equals).operator("=")) {
 				continue;
 			}
 
-			int number = significantAfter(equals);
+			int number = this.tokens.significantAfter(equals);
 			if (number < 0 || this.tokens.get(number).kind() != Kind.NUMBER) {
 				continue;
 			}
@@ -5204,37 +5154,6 @@ public final class GlslTranslator {
 		}
 
 		return -1;
-	}
-
-	/**
-	 * The last token of the function a parameter list opens, which is the brace that closes the
-	 * body, or the parenthesis itself when the function is only declared.
-	 */
-	private int functionEnd(int parameters) {
-		// Asked once per parameter of a list and answered once per list: the walk to the
-		// function's closing brace is the same for every parameter, and every helper that
-		// touches a token forgets this first.
-		if (parameters == this.functionEndFor) {
-			return this.functionEndAt;
-		}
-
-		int end = walkFunctionEnd(parameters);
-		this.functionEndFor = parameters;
-		this.functionEndAt = end;
-
-		return end;
-	}
-
-	private int walkFunctionEnd(int parameters) {
-		int close = matchingBracket(parameters);
-		int brace = close < 0 ? -1 : significantAfter(close);
-		if (brace < 0 || !this.tokens.get(brace).operator("{")) {
-			return close < 0 ? this.tokens.size() - 1 : close;
-		}
-
-		int end = matchingBracket(brace);
-
-		return end < 0 ? this.tokens.size() - 1 : end;
 	}
 
 	/**
@@ -5308,7 +5227,7 @@ public final class GlslTranslator {
 			cursor++;
 
 			while (cursor < parts.size() && this.tokens.get(parts.get(cursor)).operator("[")) {
-				int close = matchingBracket(parts.get(cursor));
+				int close = this.tokens.matchingBracket(parts.get(cursor));
 				if (close < 0) {
 					return false;
 				}
@@ -5956,7 +5875,7 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			int before = significantBefore(index);
+			int before = this.tokens.significantBefore(index);
 			if (before >= 0 && LegacyGlsl.TYPE_NAMES.contains(this.tokens.get(before).text())) {
 				names.add(token.text());
 			}
@@ -5972,7 +5891,7 @@ public final class GlslTranslator {
 	 */
 	private Set<String> sampledNames() {
 		boolean[] declared = new boolean[this.tokens.size()];
-		int[] lines = lineNumbers();
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (!token.identifier("uniform") || token.directive() != null
@@ -6057,276 +5976,6 @@ public final class GlslTranslator {
 				.toList();
 	}
 
-
-	private void replace(int index, String text) {
-		this.functionEndFor = -1;
-		this.tokens.set(index, this.tokens.get(index).as(text));
-	}
-
-	/** Replaces a token with text of our own, which no later pass will match again. */
-	private void inject(int index, String text) {
-		this.functionEndFor = -1;
-		this.tokens.set(index, new Token(Kind.RAW, text, this.tokens.get(index).directive()));
-	}
-
-	private void blank(int index) {
-		this.functionEndFor = -1;
-		if (index >= 0) {
-			this.tokens.set(index, Token.BLANK);
-		}
-	}
-
-	/** Empties a range but keeps its line breaks, so error messages still point at the right line. */
-	private void blankRange(int start, int end) {
-		this.functionEndFor = -1;
-		for (int index = start; index <= end; index++) {
-			Token token = this.tokens.get(index);
-			if (token.kind() == Kind.NEWLINE) {
-				continue;
-			}
-
-			// A comment or a spliced line carries its breaks inside one token, and they are kept
-			// as well: the passes that ask which line a name is on take their numbers once and
-			// read them after blanking, so a break lost here moves every name after it.
-			long breaks = token.text().chars().filter(c -> c == '\n').count();
-			this.tokens.set(index, breaks == 0
-					? Token.BLANK
-					: new Token(Kind.SPACE, "\n".repeat((int) breaks), token.directive()));
-		}
-	}
-
-	private void blankDirective(int hash) {
-		this.functionEndFor = -1;
-		for (int index = hash; index < this.tokens.size(); index++) {
-			if (this.tokens.get(index).kind() == Kind.NEWLINE) {
-				return;
-			}
-
-			this.tokens.set(index, Token.BLANK);
-		}
-	}
-
-	/**
-	 * The next token that is neither space nor comment. A line break ends the search inside a
-	 * directive, since a directive is one line, and is stepped over everywhere else.
-	 */
-	private int significantAfter(int index) {
-		if (index < 0) {
-			return -1;
-		}
-
-		boolean directive = this.tokens.get(index).directive() != null;
-		for (int scan = index + 1; scan < this.tokens.size(); scan++) {
-			Token token = this.tokens.get(scan);
-			if (token.trivia()) {
-				continue;
-			}
-
-			if (token.kind() == Kind.NEWLINE) {
-				if (directive) {
-					return -1;
-				}
-
-				continue;
-			}
-
-			return scan;
-		}
-
-		return -1;
-	}
-
-	/**
-	 * The identifier a directive declares or tests, which is the second one on its line. The first
-	 * is the directive keyword itself.
-	 */
-	private int macroNameAfter(int hash) {
-		boolean keywordSeen = false;
-
-		for (int scan = hash + 1; scan < this.tokens.size(); scan++) {
-			Token token = this.tokens.get(scan);
-			if (token.kind() == Kind.NEWLINE) {
-				return -1;
-			}
-
-			if (token.trivia()) {
-				continue;
-			}
-
-			if (!keywordSeen) {
-				keywordSeen = true;
-				continue;
-			}
-
-			return token.kind() == Kind.IDENTIFIER ? scan : -1;
-		}
-
-		return -1;
-	}
-
-	/** The previous token that is neither space, comment nor line break, staying out of directives. */
-	private int significantBefore(int index) {
-		for (int scan = index - 1; scan >= 0; scan--) {
-			Token token = this.tokens.get(scan);
-			if (token.trivia() || token.kind() == Kind.NEWLINE) {
-				continue;
-			}
-
-			return token.directive() == null ? scan : -1;
-		}
-
-		return -1;
-	}
-
-	/**
-	 * Which line of the expanded unit each token sits on.
-	 * <p>
-	 * Kept between calls, which a stage makes twenty three times, and thrown away by
-	 * {@link #insertClosings}, the one pass that moves a token. Nothing else can make it stale:
-	 * every other helper that touches the list leaves the line breaks where they were, which
-	 * {@link #blankRange} goes out of its way to do. That is not this table's rule either, it is
-	 * the unit's: a break lost anywhere would move every line after it away from the one
-	 * {@link ExpandedUnit#isLive} is asked about, and no pass would have a way to notice.
-	 */
-	private int[] lineNumbers() {
-		if (this.lineTable != null) {
-			return this.lineTable;
-		}
-
-		int[] lines = new int[this.tokens.size()];
-		int line = 0;
-
-		for (int index = 0; index < this.tokens.size(); index++) {
-			lines[index] = line;
-			String text = this.tokens.get(index).text();
-			for (int at = 0; at < text.length(); at++) {
-				if (text.charAt(at) == '\n') {
-					line++;
-				}
-			}
-		}
-
-		this.lineTable = lines;
-
-		return lines;
-	}
-
-	/** The opening parenthesis of a call on the identifier at this index, or -1 if it is not one. */
-	private int callOpener(int index) {
-		int next = significantAfter(index);
-
-		return next >= 0 && this.tokens.get(next).operator("(") ? next : -1;
-	}
-
-	private int matchingBracket(int open) {
-		if (open < 0) {
-			return -1;
-		}
-
-		String opening = this.tokens.get(open).text();
-		String closing = switch (opening) {
-			case "(" -> ")";
-			case "{" -> "}";
-			default -> "]";
-		};
-		int depth = 0;
-
-		for (int scan = open; scan < this.tokens.size(); scan++) {
-			Token token = this.tokens.get(scan);
-			if (token.kind() != Kind.OPERATOR) {
-				continue;
-			}
-
-			if (token.operator(opening)) {
-				depth++;
-			} else if (token.operator(closing)) {
-				depth--;
-				if (depth == 0) {
-					return scan;
-				}
-			}
-		}
-
-		return -1;
-	}
-
-	/**
-	 * Where the statement containing this token starts: just past whatever ended the last one.
-	 * Returns -1 when no end to the previous statement is within reach, since blanking a range
-	 * whose beginning was guessed would erase code that is none of our business.
-	 */
-	private int statementStart(int index) {
-		int limit = Math.max(0, index - MAX_STATEMENT_TOKENS);
-		int start = -1;
-
-		for (int scan = index - 1; scan >= limit; scan--) {
-			Token token = this.tokens.get(scan);
-			boolean boundary = token.kind() == Kind.HASH || token.directive() != null
-					|| token.operator(";") || token.operator("{") || token.operator("}");
-			if (boundary) {
-				start = scan + 1;
-				break;
-			}
-		}
-
-		if (start < 0) {
-			// Reaching the first token is a real answer; running out of budget is not.
-			if (limit > 0) {
-				return -1;
-			}
-
-			start = 0;
-		}
-
-		while (start < index) {
-			Token token = this.tokens.get(start);
-			if (!token.trivia() && token.kind() != Kind.NEWLINE) {
-				break;
-			}
-
-			start++;
-		}
-
-		return start;
-	}
-
-	/** The semicolon closing this statement, or -1 if a brace opens first or none is found. */
-	private int statementEnd(int index) {
-		int depth = 0;
-		int last = Math.min(this.tokens.size(), index + MAX_STATEMENT_TOKENS);
-
-		for (int scan = index; scan < last; scan++) {
-			Token token = this.tokens.get(scan);
-			if (token.kind() != Kind.OPERATOR || token.directive() != null) {
-				continue;
-			}
-
-			String text = token.text();
-			if (text.equals("(") || text.equals("[")) {
-				depth++;
-			} else if (text.equals(")") || text.equals("]")) {
-				depth--;
-			} else if (depth == 0 && text.equals("{")) {
-				return -1;
-			} else if (depth == 0 && text.equals(";")) {
-				return scan;
-			}
-		}
-
-		return -1;
-	}
-
-	private List<Integer> significantRange(int start, int end) {
-		List<Integer> found = new ArrayList<>();
-		for (int scan = start; scan <= end; scan++) {
-			Token token = this.tokens.get(scan);
-			if (!token.trivia() && token.kind() != Kind.NEWLINE) {
-				found.add(scan);
-			}
-		}
-
-		return found;
-	}
 
 	/** Adds a memory qualifier to what a declaration carries, in the order the pack wrote it. */
 	private static void rememberMemoryQualifier(List<String> memory, Token token) {
