@@ -60,6 +60,13 @@ what the next one holds.
 
 ### Fixed
 
+- **A compute pass that reads the depth runs.** A compute a pack hangs off a full screen pass
+  could read every name that pass reads except `depthtex0`, `depthtex1`, `depthtex2`, the far
+  terrain's depth and `centerDepthSmooth`: those threw on every frame, so the compute never ran,
+  with one line in the log. Reverie's cloud compute reads `depthtex1`, and without it the images
+  its sky and clouds are built from stayed empty. The compute now reads the same depth as the pass
+  after it, which is what Iris gives it.
+
 - **Importing settings no longer acts on a screen you have already left.** The window that asks
   which file to read is the system's own and does not hold the game, so the settings screen can be
   closed while it is still up. Picking a file at that point queued its values anyway, into a page
