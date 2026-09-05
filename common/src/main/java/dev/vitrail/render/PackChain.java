@@ -763,28 +763,6 @@ public final class PackChain {
 				return;
 			}
 
-			// Where the pack is known, rather than over the whole folder before one was chosen, and
-			// once per pack rather than at every load. This reading walks the whole archive, and
-			// this method is the road every reload takes: a portal and an Apply both come back
-			// through here, on the render thread, and neither has anything new to report.
-			//
-			// Never fatal either, and that is the whole reason for the catch. It is a report and not
-			// the drawing, so its own failures stop here: letting one reach the catch below would
-			// turn a diagnosis that could not be taken into a pack that is not drawn.
-			if (!pack.equals(reported)) {
-				try {
-					PackReport.log(PackLoader.load(pack));
-					reported = pack;
-				} catch (IOException | RuntimeException e) {
-					// No promise about what happens next, deliberately: an archive that cannot be
-					// opened at all will not be opened by the lines below either, and the catch at
-					// the end of this method is what will have the last word. What this line buys is
-					// the failure that belongs to the report alone, in a measurement or a count, and
-					// it is said by the report so that it keeps the report's own prefix.
-					PackReport.couldNotRead(ShaderPackSource.nameOf(pack), e);
-				}
-			}
-
 			SettingsLayers.Resolved settings = open(gameDirectory, pack);
 
 			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());
@@ -911,6 +889,7 @@ public final class PackChain {
 			// uniform outside a block. Complementary's deferred1 died that way on a DH toggle.
 			// Iris has one table for both jobs, StandardMacros.java:64-65.
 			PackDefines.install();
+			report(pack);
 
 			try (OpenedPack opened = OpenedPack.open(pack, chosen, settings.profile())) {
 				// The world decides the directory, and the pack decides which world that is: a folder
@@ -970,9 +949,9 @@ public final class PackChain {
 				// moving.
 				DriverTrig.announce();
 				// The count, so that what a load costs is a figure in the log rather than a feeling.
-				// It covers the whole of this method, the report and the settings reading included,
-				// and the families are deliberately outside it: they translate on a worker, off the
-				// thread the player is waiting on, and each opens the pack for itself.
+				// It covers the whole of this method, the settings reading included, and the report
+				// and the families are deliberately outside it: both run on a worker, off the thread
+				// the player is waiting on, the families through one opening of their own.
 				Vitrail.logger().info("Opened {} {} times to load it", chain.packName(),
 						ShaderPackSource.openings() - openings);
 				// Once per installed chain, whatever else this load does or fails to do later:
@@ -1038,6 +1017,46 @@ public final class PackChain {
 			disabled = true;
 			lastError = "Could not prepare this pack: " + e;
 			Vitrail.logger().error("Vitrail could not prepare a pack's chain", e);
+		}
+	}
+
+	/**
+	 * The report of a pack, once per pack rather than at every load: this reading walks the
+	 * whole archive, and the load is the road every reload takes, a portal and an Apply both
+	 * coming back through it with nothing new to report.
+	 * <p>
+	 * Off the render thread, on an opening of its own: the walk takes a second and a half on
+	 * Complementary and its only product is the [pack] block of the log, which held the title
+	 * screen and every Apply for exactly that long. The lines land a little later than they
+	 * did and in the same order among themselves. Asked after the machine table is installed,
+	 * so the walk reads the same table as the load it describes, and outside the count of
+	 * openings the load prints, which no longer includes it.
+	 * <p>
+	 * Never fatal, and that is the whole reason for the catches: it is a report and not the
+	 * drawing, so its own failures stop here, and a failure gives the next load its chance to
+	 * report again. An executor refusing the task at shutdown is a report not taken, and not
+	 * a pack that is not drawn.
+	 */
+	private static void report(Path pack) {
+		if (pack.equals(reported)) {
+			return;
+		}
+
+		reported = pack;
+		try {
+			Util.backgroundExecutor().execute(() -> {
+				try {
+					PackReport.log(PackLoader.load(pack));
+				} catch (IOException | RuntimeException e) {
+					// Said by the report so that it keeps the report's own prefix: the failure
+					// belongs to a measurement or a count, and the load has the last word on
+					// whether the archive opens at all.
+					PackReport.couldNotRead(ShaderPackSource.nameOf(pack), e);
+					reported = null;
+				}
+			});
+		} catch (RejectedExecutionException e) {
+			reported = null;
 		}
 	}
 
