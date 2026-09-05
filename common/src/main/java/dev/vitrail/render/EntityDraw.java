@@ -27,6 +27,7 @@ import com.mojang.blaze3d.systems.ScissorState;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormatElement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.StagedVertexBuffer;
@@ -86,7 +87,7 @@ import java.util.stream.Stream;
  * is looked at ({@code SubmitNodeCollection.java:174-175}), so it is neither half. And the mob's
  * ground shadow never goes through that sort at all: {@code submitShadow} puts it in a phase of its
  * own ({@code :88-90}), which {@code executeTranslucent} runs FIRST, ahead of the translucent models
- * ({@code feature/FeatureRenderDispatcher.java:212}). It reaches this door all the same, and that
+ * ({@code feature/FeatureRenderDispatcher.java:211}). It reaches this door all the same, and that
  * had to be proved rather than assumed, its renderer being the one that could have had an
  * {@code executeGroup} of its own as the particles do:
  * {@code ShadowFeatureRenderer extends RenderTypeFeatureRenderer}
@@ -110,11 +111,12 @@ import java.util.stream.Stream;
  * {@link FeatureLayer} carries it, with what Iris does instead and what it costs the image.
  * <p>
  * <strong>What is still the game's inside this window</strong>, and therefore still goes to that
- * layer, is the beacon beam, the lightning, and the text of a name plate or a sign. The lightning
- * and the text bind a mesh this door cannot decode, which {@link #decodable} says and which is why
- * neither is a row here; the beam binds the block format, which the door reads for the crumbling,
- * and what it still wants is a row of its own. The shadow map is a family of its own and is NOT in either window, a
- * pass of its own that neither bracket reaches.
+ * layer, is the beacon beam and the lightning. What each wants is a ROW rather than a decoder: the
+ * contract that reads the beam's mesh is already here, the block format the door reads for the
+ * crumbling, and so is the one that reads the bolt's, the two elements it reads for a text
+ * display's background. The text of a name plate or a sign was among them until the eight text
+ * pipelines took rows in the table below. The shadow map is a family of its own and is NOT in
+ * either window, a pass of its own that neither bracket reaches.
  * <p>
  * <strong>The eyes are not among them</strong>: they alone of the four bind
  * {@code DefaultVertexFormat.ENTITY}, so they come in by this door with a table of their own,
@@ -326,8 +328,28 @@ public final class EntityDraw extends FamilyDraw {
 		}
 
 		/**
+		 * Whether this piece is one of the game's text quads, a name plate or a sign's board.
+		 * Asked of the PIPELINE like the three above and for the same reason, with one thing more:
+		 * the eight text pipelines bind FOUR formats between them, so the pipeline is not only what
+		 * answers this question but what answers {@link #format} after it.
+		 */
+		boolean text() {
+			return TEXT_FORMATS.containsKey(this.pipeline);
+		}
+
+		/**
+		 * Whether the sheet behind this piece is the single channel one, which is a question about the
+		 * pipeline again and the one thing this door has to undo before a pack reads {@code gtexture}.
+		 *
+		 * @see GlyphIntensity
+		 */
+		boolean intensity() {
+			return TEXT_INTENSITY.contains(this.pipeline);
+		}
+
+		/**
 		 * The format this piece is drawn from, which is the entity mesh for every row but the glint's
-		 * four, the crumbling's one and the three lines rows.
+		 * four, the crumbling's one, the three lines rows and the text's eight.
 		 * <p>
 		 * Derived from {@link #glint} and {@link #crumbling} rather than tabulated beside them, so
 		 * that a row and its format cannot drift: a row whose format did not match the pipeline it
@@ -339,7 +361,13 @@ public final class EntityDraw extends FamilyDraw {
 		 * of this engine's is built to bind, and it is what the game's own entity pipelines report
 		 * while the mesh carries. The rows are only ever read while it does, {@link #served} refusing
 		 * the whole family otherwise, so the two answers cannot be taken under different ones. The
-		 * other two keep the game's, their elements being untouched by any of this.
+		 * others keep the game's, their elements being untouched by any of this.
+		 * <p>
+		 * <strong>The text is the one family here whose rows do not share a format</strong>, so its
+		 * eight are tabulated in {@link #TEXT_FORMATS} rather than answered by a branch. What
+		 * separates them is 26.2's own layout: a glyph in the world carries a light map and a glyph
+		 * read through a wall does not, and a text display's background carries no texture coordinate
+		 * at all.
 		 */
 		VertexFormat format() {
 			if (glint()) {
@@ -350,7 +378,23 @@ public final class EntityDraw extends FamilyDraw {
 				return DefaultVertexFormat.POSITION_COLOR_NORMAL_LINE_WIDTH;
 			}
 
+			VertexFormat glyph = TEXT_FORMATS.get(this.pipeline);
+			if (glyph != null) {
+				return glyph;
+			}
+
 			return crumbling() ? DefaultVertexFormat.BLOCK : EntityMesh.format();
+		}
+
+		/**
+		 * The elements this piece's vertex stage declares, which is the contract's own list for
+		 * every family but the text: one {@link VertexInputs} there stands for four formats, so the
+		 * piece has to say which of them its pipeline binds.
+		 */
+		List<String> bound() {
+			return text()
+					? format().getElements().stream().map(VertexFormatElement::name).toList()
+					: inputs().elements();
 		}
 
 		/**
@@ -382,10 +426,14 @@ public final class EntityDraw extends FamilyDraw {
 				return VertexInputs.LINES;
 			}
 
+			if (text()) {
+				return VertexInputs.GLYPH;
+			}
+
 			return this.fullbright ? VertexInputs.ENTITY_FULLBRIGHT : VertexInputs.ENTITY;
 		}
 
-		/** What the log calls this line, which has to say which of the five families it is about. */
+		/** What the log calls this line, which has to say which of the six families it is about. */
 		String family() {
 			if (shadow()) {
 				return "entities in the shadow map";
@@ -401,6 +449,10 @@ public final class EntityDraw extends FamilyDraw {
 
 			if (lines()) {
 				return "block outline";
+			}
+
+			if (text()) {
+				return "text";
 			}
 
 			return hand() ? "hand" : "entities";
@@ -486,7 +538,7 @@ public final class EntityDraw extends FamilyDraw {
 		/** What the pack has to be read for to serve this piece, in terms the translation knows. */
 		private PackProgram.GeometryElement asked() {
 			return new PackProgram.GeometryElement(this.element, this.program, this.alphaTest,
-					inputs(), covers());
+					inputs(), bound(), covers());
 		}
 
 		/**
@@ -606,41 +658,119 @@ public final class EntityDraw extends FamilyDraw {
 	private static final AlphaTest CUTOUT = AlphaTest.ONE_TENTH;
 
 	/**
-	 * The three pipelines Iris assigns a program to OUTRIGHT rather than through one of the three
-	 * functions the block entity and hand phases are read inside, and which therefore keep the entity
-	 * program whatever is being drawn.
+	 * The eight pipelines the game draws text with and the format each of them binds, which is the
+	 * one family of this door whose rows do not share a mesh.
 	 * <p>
-	 * {@code pipeline/IrisPipelines.java:60,61,62}, all three {@code ShaderKey.ENTITIES_CUTOUT}. It is
-	 * the assignment being a CONSTANT that pins them: {@code getSolid}, {@code getCutout} and
-	 * {@code getTranslucent} are where the phase is consulted ({@code :191-218}), and a row that never
-	 * reaches one of the three cannot be moved by a phase. ONE of them draws block entities in this
-	 * game, the offset cutout, which a skull reaches through {@code SkullBlockRenderer:140}; the end
-	 * crystal beam has only entity renderers ({@code EnderDragonRenderer.java:38}) and the swirl only
-	 * an entity layer ({@code EnergySwirlLayer.java:30}), so their twins are rows nobody selects.
+	 * <strong>26.2 lays a glyph out in an order Iris never sees and drops the light map from three
+	 * of these pipelines.</strong> Iris keys its own widening on {@code POSITION_COLOR_TEX_LIGHTMAP}
+	 * ({@code mixin/vertices/MixinBufferBuilder.java:112-116}), which is what 26.1's single
+	 * {@code TEXT_SNIPPET} bound for every text pipeline it had. Here the world's glyph is
+	 * {@code POSITION_TEX_LIGHTMAP_COLOR}, carried by {@code WORLD_TEXT_SNIPPET}, while the
+	 * see-through pipelines are built straight on {@code TEXT_SNIPPET} and carry no light map at
+	 * all; the two backgrounds carry no texture coordinate. {@link Element#format} is read off this
+	 * table and {@link #decodable} checks it against the pipeline in hand, so a layout that moves
+	 * again is reported rather than read off the wrong offsets.
 	 * <p>
-	 * <strong>Read as a list here and not as a blend, and the swirl is why.</strong> It is the one row
-	 * of the table that blends and still asks for the writing half's name; asking the blend first,
-	 * which is what {@link #blockTwin} must not do, would give it {@code gbuffers_block_translucent}
-	 * where Iris keeps {@code gbuffers_entities}.
+	 * <strong>{@code TEXT_GRAYSCALE_POLYGON_OFFSET} is 26.2's and has no key in Iris at
+	 * all</strong>, whose table stops at {@code TEXT_POLYGON_OFFSET} and the two intensity rows
+	 * ({@code pipeline/IrisPipelines.java:72-78}). It is served like its two neighbours, which is
+	 * what Iris does with every other pairing of those two words: the polygon offset changes the
+	 * depth the game nudges the quad by and nothing a pack reads.
+	 */
+	private static final Map<RenderPipeline, VertexFormat> TEXT_FORMATS = Map.of(
+			RenderPipelines.TEXT, DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR,
+			RenderPipelines.TEXT_GRAYSCALE, DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR,
+			RenderPipelines.TEXT_POLYGON_OFFSET, DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR,
+			RenderPipelines.TEXT_GRAYSCALE_POLYGON_OFFSET,
+			DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR,
+			RenderPipelines.TEXT_SEE_THROUGH, DefaultVertexFormat.POSITION_TEX_COLOR,
+			RenderPipelines.TEXT_GRAYSCALE_SEE_THROUGH, DefaultVertexFormat.POSITION_TEX_COLOR,
+			RenderPipelines.TEXT_BACKGROUND, DefaultVertexFormat.POSITION_COLOR_LIGHTMAP,
+			RenderPipelines.TEXT_BACKGROUND_SEE_THROUGH, DefaultVertexFormat.POSITION_COLOR);
+
+	/**
+	 * The three of those eight whose font sheet holds ONE channel, and which the game therefore
+	 * reads with a shader define no pack has.
+	 * <p>
+	 * A grayscale sheet is {@code GpuFormat.R8_UNORM} ({@code FontTexture.java:31}), so a sampler
+	 * over it hands back the coverage in red and constants in the other three. The game's own text
+	 * fragment answers that with {@code IS_GRAYSCALE}, which is one line,
+	 * {@code texture(Sampler0, texCoord0).rrrr} ({@code assets/minecraft/shaders/core/text.fsh});
+	 * a pack has no such line and would read a glyph as opaque red. {@link GlyphIntensity} is the
+	 * answer and says how it is done here.
+	 * <p>
+	 * Read off the PIPELINE, which is one row wider than Iris's own predicate: {@code isIntensity}
+	 * names {@code TEXT_INTENSITY}, {@code TEXT_INTENSITY_BE} and {@code SHADOW_TEXT_INTENSITY}
+	 * ({@code pipeline/programs/ShaderKey.java:128}) and leaves {@code HAND_TEXT_INTENSITY} out, so
+	 * a grayscale glyph drawn inside a hand pass keeps the raw sheet there. A held map's text is
+	 * what reaches that pass, and it is the same sheet read the same way, so the pipeline answers
+	 * for the hand's rows here too.
+	 */
+	private static final Set<RenderPipeline> TEXT_INTENSITY = Set.of(
+			RenderPipelines.TEXT_GRAYSCALE,
+			RenderPipelines.TEXT_GRAYSCALE_POLYGON_OFFSET,
+			RenderPipelines.TEXT_GRAYSCALE_SEE_THROUGH);
+
+	/**
+	 * The pipelines Iris assigns a program to OUTRIGHT rather than through one of the three
+	 * functions the block entity and hand phases are read inside, and which therefore keep the
+	 * program their own row names whatever is being drawn.
+	 * <p>
+	 * {@code pipeline/IrisPipelines.java:60,61,62}, the first three all
+	 * {@code ShaderKey.ENTITIES_CUTOUT}. It is the assignment being a CONSTANT that pins them:
+	 * {@code getSolid}, {@code getCutout} and {@code getTranslucent} are where the phase is consulted
+	 * ({@code :191-218}), and a row that never reaches one of the three cannot be moved by a phase.
+	 * ONE of them draws block entities in this game, the offset cutout, which a skull reaches through
+	 * {@code SkullBlockRenderer:140}; the end crystal beam has only entity renderers
+	 * ({@code EnderDragonRenderer.java:38}) and the swirl only an entity layer
+	 * ({@code EnergySwirlLayer.java:30}), so their twins are rows nobody selects.
+	 * <p>
+	 * <strong>The two text backgrounds are here for that same reason, and NO block entity reaches
+	 * either.</strong> Iris keys both on {@code p -> ShaderKey.TEXT_BG}
+	 * ({@code pipeline/IrisPipelines.java:76-77}), a constant, where the glyph rows beside them go
+	 * through {@code getText} and take {@code TEXT_BE} under the block entity phase
+	 * ({@code :144-155}). What those two rows draw is a text display's own box, the only caller of
+	 * {@code RenderTypes.textBackground} and {@code textBackgroundSeeThrough} in the client being
+	 * {@code DisplayRenderer.TextDisplayRenderer}, which is an ENTITY renderer and hands its quads
+	 * in as custom geometry; the box behind a name plate is not drawn by either, being an effect
+	 * over the font's white glyph that keeps the glyph's own render type
+	 * ({@code BakedSheetGlyph.EffectInstance.renderType} into {@code GlyphRenderTypes.select}). So
+	 * the pin changes nothing any draw of this game can reach, and it is kept because it is Iris's
+	 * shape: a constant assignment is what says the phase may not move these two, and a text display
+	 * put inside a block entity's submit by a mod would find both engines answering alike.
 	 * <p>
 	 * <strong>The hand does not read this list, and that is a divergence this engine already
-	 * had.</strong> Iris's hand override lives in the same three functions, so a pinned row keeps the
-	 * entity program in a hand pass too, where {@link #twins} gives every row a hand program. Nothing
-	 * of it reaches the screen: none of the three can be submitted by the hand, which carries the arm
-	 * and what it holds, so those twins are compiled modules nobody selects.
+	 * had.</strong> Iris's hand override lives in the same three functions, so a pinned row keeps its
+	 * own program in a hand pass too, where {@link #twins} gives every row a hand program. Nothing
+	 * of it reaches the screen: none of the five can be submitted by the hand, which carries the arm
+	 * and what it holds, so those twins are compiled modules nobody selects. A held map's text is
+	 * the one thing that puts Iris's own {@code getText} in a hand pass, and it puts a GLYPH row
+	 * there and not one of these two: nothing but a text display reaches the two backgrounds, and no
+	 * text display is drawn inside a hand pass.
 	 */
 	private static final Set<RenderPipeline> PINNED = Set.of(
 			RenderPipelines.END_CRYSTAL_BEAM,
 			RenderPipelines.ENTITY_CUTOUT_Z_OFFSET,
-			RenderPipelines.ENERGY_SWIRL);
+			RenderPipelines.ENERGY_SWIRL,
+			RenderPipelines.TEXT_BACKGROUND,
+			RenderPipelines.TEXT_BACKGROUND_SEE_THROUGH);
 
 	/**
-	 * Every pipeline the game draws entity geometry with, and nothing else.
+	 * Every pipeline whose draws walk the entity program names, in the two runs the game sorts its
+	 * own submissions into.
 	 * <p>
 	 * The list is drawn from the pipelines of {@code RenderPipelines} that bind
 	 * {@code DefaultVertexFormat.ENTITY}, in two runs: those that declare no blend function, which
 	 * the game draws among its solid features, and those that do, which it draws among its
-	 * translucent ones. <strong>It is not all of them, and the ones left out are named rather than
+	 * translucent ones. <strong>The eight text pipelines are here as well and bind no such
+	 * format</strong>, which is what turned this from a table of one mesh into a table of one set of
+	 * NAMES: Iris sends a glyph to {@code ProgramId.EntitiesTrans} and, under the block entity
+	 * phase, to {@code ProgramId.BlockTrans} ({@code pipeline/programs/ShaderKey.java:62-65}), which
+	 * is the very pair the blending run below already walks. They earn their place in this table
+	 * rather than a table of their own because a group here is what shares a FILE and a picture:
+	 * text resolved apart would be a second walk of the same two names, and a place that could not
+	 * answer for them would take the mobs down with it or the other way round.
+	 * <strong>It is not all of them, and the ones left out are named rather than
 	 * counted</strong>: {@code EYES} ({@code RenderPipelines.java:351-364}) and
 	 * {@code ENTITY_TRANSLUCENT_EMISSIVE} ({@code :287-297}) bind that format and blend, and both are
 	 * the EYES family, which Iris serves with {@code gbuffers_spidereyes} through
@@ -738,6 +868,40 @@ public final class EntityDraw extends FamilyDraw {
 		// blending one. Nothing here has to be told that twice: the side is read off the pipeline,
 		// which blends, and the name is what the row says.
 		put(new Element(RenderPipelines.ENERGY_SWIRL, "energy_swirl", ENTITIES, CUTOUT));
+
+		// The text, still in the blending run and drawn among the game's translucent features with
+		// the six above it: the see-through name plates, the name plates and the texts are the
+		// third, fourth and fifth of the six phases executeTranslucent walks
+		// (feature/FeatureRenderDispatcher.java:213-215), which is the window this half is served
+		// in. Iris routes the whole family to ProgramId.EntitiesTrans through getText and
+		// getTextIntensity (pipeline/IrisPipelines.java:72-78 into
+		// pipeline/programs/ShaderKey.java:62-63), which is the name this run already asks for, so a
+		// glyph is drawn by whichever file serves a mob's translucent half. Every row carries the
+		// tenth those keys carry.
+		//
+		// THREE grayscale rows where Iris's table has two intensity pipelines: 26.2 renamed the word
+		// and added TEXT_GRAYSCALE_POLYGON_OFFSET, which Iris has no entry for at all, and it is
+		// served like the offset row beside it for the reason TEXT_POLYGON_OFFSET is served like TEXT.
+		put(new Element(RenderPipelines.TEXT, "text", ENTITIES_TRANSLUCENT, CUTOUT));
+		put(new Element(RenderPipelines.TEXT_GRAYSCALE, "text_grayscale", ENTITIES_TRANSLUCENT,
+				CUTOUT));
+		put(new Element(RenderPipelines.TEXT_POLYGON_OFFSET, "text_offset", ENTITIES_TRANSLUCENT,
+				CUTOUT));
+		put(new Element(RenderPipelines.TEXT_GRAYSCALE_POLYGON_OFFSET, "text_grayscale_offset",
+				ENTITIES_TRANSLUCENT, CUTOUT));
+		put(new Element(RenderPipelines.TEXT_SEE_THROUGH, "text_see_through", ENTITIES_TRANSLUCENT,
+				CUTOUT));
+		put(new Element(RenderPipelines.TEXT_GRAYSCALE_SEE_THROUGH, "text_grayscale_see_through",
+				ENTITIES_TRANSLUCENT, CUTOUT));
+		// The box a text display draws behind its lines, and the two rows of this family that PINNED
+		// holds to their own program: Iris keys them on a constant where the six above go through
+		// getText. Not a name plate's box, which is an effect over the font's white glyph and comes
+		// in on the six above with the letters it sits behind; the two render types below have one
+		// caller in the client and it is DisplayRenderer.TextDisplayRenderer.
+		put(new Element(RenderPipelines.TEXT_BACKGROUND, "text_background", ENTITIES_TRANSLUCENT,
+				CUTOUT));
+		put(new Element(RenderPipelines.TEXT_BACKGROUND_SEE_THROUGH, "text_background_see_through",
+				ENTITIES_TRANSLUCENT, CUTOUT));
 	}
 
 	/**
@@ -769,8 +933,8 @@ public final class EntityDraw extends FamilyDraw {
 	 * block program discards at a tenth, the solid rows included, because Iris's {@code getSolid}
 	 * under that phase answers {@code BLOCK_ENTITY} and not a solid key, and {@code BLOCK_ENTITY}
 	 * carries {@code ONE_TENTH_ALPHA} ({@code pipeline/programs/ShaderKey.java:66}) where
-	 * {@code ENTITIES_SOLID} carries {@code OFF} ({@code :38}). The two rows that keep the entity
-	 * program keep the entity threshold with it.
+	 * {@code ENTITIES_SOLID} carries {@code OFF} ({@code :38}). A row that keeps its own program
+	 * keeps its own threshold with it, which is {@link #PINNED} and nothing else.
 	 * <p>
 	 * <strong>Where the phase is posed is narrower than "a block entity is drawing", and the
 	 * difference is a known gap rather than a subtlety.</strong> Iris raises it on the render types
@@ -781,10 +945,13 @@ public final class EntityDraw extends FamilyDraw {
 	 * its own, a chest or a shield among them, and only the plain quad road stays at {@code NONE}.
 	 * Both engines answer alike there.
 	 * <p>
-	 * <strong>The glyphs are where they really differ, and it is a gap rather than a divergence.</strong>
-	 * Iris draws a sign's text under the block entity phase and with a program of its own; this engine
-	 * draws no text at all, so the sign's text is the game's, unshaded, and no stage of ours is wrong
-	 * because none is supplied. It is a family of its own and it is named as one above.
+	 * <strong>The glyphs reach the phase by a road of their own at both ends.</strong> Iris wraps the
+	 * render type a glyph is about to be drawn with while a block entity is being submitted
+	 * ({@code mixin/entity_render_context/MixinGlyphRenderType.java:19}); here the mark is taken on
+	 * the text submission at its construction and put back up around the visit that turns it into
+	 * vertices, which is {@code TextSubmitMixin} and {@code TextFeatureRendererMixin}. A sign's text
+	 * is therefore {@code gbuffers_block_translucent} on both engines and a name plate, submitted by
+	 * an entity renderer, is {@code gbuffers_entities_translucent} on both.
 	 * <p>
 	 * A piece here is a compiled module of its own, like every row above, so it carries a name of its
 	 * own. The name is the entity one with a word in front, because it lands in an identifier the
@@ -810,22 +977,24 @@ public final class EntityDraw extends FamilyDraw {
 	 * The block entity half of one mob piece: the same pipeline under the phase Iris poses, asking
 	 * for whichever program Iris's own table gives that pipeline while the phase is up.
 	 * <p>
-	 * The end crystal beam and the offset cutout keep the entity program and its threshold, because
-	 * that is what their row answers there whatever the phase; everything else takes the block
-	 * program and the tenth that comes with it. The phase itself is not a row of any table and does
-	 * not vary: it is what the origin of the draw says.
+	 * A pinned row keeps its own program and its threshold, because that is what its row answers
+	 * there whatever the phase; everything else takes the block program and the tenth that comes with
+	 * it. The phase itself is not a row of any table and does not vary: it is what the origin of the
+	 * draw says.
 	 * <p>
-	 * <strong>Three rows keep the entity program whatever the phase, and the blend has nothing to do
-	 * with which three.</strong> That is Iris's shape rather than a simplification of it: the energy
+	 * <strong>Five rows keep their own program whatever the phase, and the blend has nothing to do
+	 * with which five.</strong> That is Iris's shape rather than a simplification of it: the energy
 	 * swirl, the end crystal beam and the offset cutout are assigned {@code ENTITIES_CUTOUT} outright
-	 * ({@code pipeline/IrisPipelines.java:60,61,62}), which is a constant and not one of the three
+	 * ({@code pipeline/IrisPipelines.java:60,61,62}) and the two text backgrounds
+	 * {@code ShaderKey.TEXT_BG} ({@code :76,77}), which is a constant and not one of the three
 	 * functions the phase is read inside, so no phase can move them. The swirl is the one of the
-	 * three that blends, which is why the test below is a list and not the blend: asking the blend
-	 * first would have given it {@code gbuffers_block_translucent} where Iris keeps
-	 * {@code gbuffers_entities}. Every row that does reach {@code getTranslucent} answers
-	 * {@code BE_TRANSLUCENT} under the phase without the pipeline being consulted at all
-	 * ({@code pipeline/IrisPipelines.java:212-222}), so every other blending twin is
-	 * {@code gbuffers_block_translucent} and the tenth is already what its mob row carries.
+	 * three entity rows that blends, which is why the test below is a list and not the blend: asking
+	 * the blend first would have given it {@code gbuffers_block_translucent} where Iris keeps
+	 * {@code gbuffers_entities}, and it would have taken the backgrounds with it. Every row that
+	 * does reach {@code getTranslucent} answers {@code BE_TRANSLUCENT} under the phase without the
+	 * pipeline being consulted at all ({@code pipeline/IrisPipelines.java:212-222}), so every other
+	 * blending twin is {@code gbuffers_block_translucent} and the tenth is already what its mob row
+	 * carries.
 	 */
 	private static Element blockTwin(Element mob) {
 		if (PINNED.contains(mob.pipeline())) {
@@ -853,13 +1022,15 @@ public final class EntityDraw extends FamilyDraw {
 	 * separates the passes is which ITEMS go into them, and that is settled a step earlier, in the
 	 * submission; {@code HandDraw.skip} carries it.
 	 * <p>
-	 * <strong>Every row discards at a tenth, the solid ones included</strong>, and that is Iris's
+	 * <strong>An entity row discards at a tenth, the solid ones included</strong>, and that is Iris's
 	 * answer rather than an inheritance from the pipeline: its six hand keys over the entity format
 	 * all carry {@code ONE_TENTH_ALPHA} ({@code pipeline/programs/ShaderKey.java:46-48,52-54}), where
 	 * the entity solid key carries none. A hand row therefore does not keep the threshold of the mob
-	 * row it was made from. The three it has beyond those six are glyph keys and carry
-	 * {@code NON_ZERO_ALPHA} ({@code :49-51}); this engine draws no text at all, so no row here
-	 * corresponds to them.
+	 * row it was made from. <strong>A text row discards at any alpha at all instead</strong>, which
+	 * is the three glyph keys Iris has beyond those six, {@code HAND_TEXT},
+	 * {@code HAND_TEXT_TRANSLUCENT} and {@code HAND_TEXT_INTENSITY}, all {@code NON_ZERO_ALPHA}
+	 * ({@code :49-51}). That is the one place a hand twin does not take the threshold of the run it
+	 * came from, the picture's own text rows carrying the tenth their keys carry.
 	 * <p>
 	 * <strong>The blending pass reaches the arm and what it holds alike</strong>, and the second
 	 * half arrived with the entities' blending rows: a translucent block held in hand draws with a
@@ -886,8 +1057,8 @@ public final class EntityDraw extends FamilyDraw {
 	private static void twins(Map<RenderPipeline, Element> into, String prefix, String program,
 			RenderStage stage, boolean afterDeferred) {
 		ELEMENTS.values().stream()
-				.map(mob -> new Element(mob.pipeline(), prefix + mob.element(), program, CUTOUT,
-						stage, afterDeferred))
+				.map(mob -> new Element(mob.pipeline(), prefix + mob.element(), program,
+						mob.text() ? AlphaTest.NON_ZERO : CUTOUT, stage, afterDeferred))
 				.forEach(element -> into.put(element.pipeline(), element));
 	}
 
@@ -914,12 +1085,23 @@ public final class EntityDraw extends FamilyDraw {
 	 * dispatcher: a row here would be a module nobody ever selects. Iris's shadow table has no key
 	 * for {@code ENTITY_SHADOW} either, and for the same reason.
 	 * <p>
-	 * <strong>Every row discards at a tenth and none of them blends</strong>, both read rather than
-	 * chosen: the key carries {@code ONE_TENTH_ALPHA} whatever threshold its main twin had, and every
+	 * <strong>An entity row discards at a tenth and a text row at any alpha at all, and none of them
+	 * blends</strong>, all read rather than chosen: {@code SHADOW_ENTITIES_CUTOUT} carries
+	 * {@code ONE_TENTH_ALPHA} whatever threshold its main twin had and the three shadow text keys
+	 * carry {@code NON_ZERO_ALPHA} ({@code pipeline/programs/ShaderKey.java:91-93}), and every
 	 * shadow program of Iris is declared with {@code BlendModeOverride.OFF}
 	 * ({@code shaderpack/loading/ProgramId.java:13-19}). A blending row therefore draws into the map
 	 * outright, which is what a shadow map wants: the depth a surface stands at, not that depth mixed
 	 * with the one behind it.
+	 * <p>
+	 * <strong>The text has a twin here where the lines and the overlay have none</strong>, and the
+	 * difference is what the light's walk really submits: it replays the game's own translucent
+	 * feature window, the name plates and the texts among it, so a glyph reaches the map. Iris keys
+	 * the same three families to {@code ShaderKey.SHADOW_TEXT}, {@code SHADOW_TEXT_BG} and
+	 * {@code SHADOW_TEXT_INTENSITY}, all {@code ProgramId.ShadowEntities}
+	 * ({@code pipeline/IrisPipelines.java:119-125}). What a glyph writes there is the map's COLOUR
+	 * alone on the pipelines that write no depth, which is the three see-through ones, the vanilla
+	 * state being kept exactly.
 	 * <p>
 	 * <strong>Two tables feed it, {@link #ELEMENTS} and {@link #FIXED}</strong>, the second being what
 	 * puts a mob's glowing eyes in the map. The hand's two tables do not, and cannot: their rows are
@@ -956,7 +1138,7 @@ public final class EntityDraw extends FamilyDraw {
 				.filter(mob -> mob.pipeline() != RenderPipelines.ENTITY_SHADOW
 						&& mob.pipeline() != RenderPipelines.CRUMBLING && !mob.lines())
 				.map(mob -> new Element(mob.pipeline(), "shadow_" + mob.element(), SHADOW_ENTITIES,
-						CUTOUT, RenderStage.ENTITIES, false))
+						mob.text() ? AlphaTest.NON_ZERO : CUTOUT, RenderStage.ENTITIES, false))
 				.forEach(element -> SHADOW_ELEMENTS.put(element.pipeline(), element));
 	}
 
@@ -970,11 +1152,12 @@ public final class EntityDraw extends FamilyDraw {
 	 * <p>
 	 * Iris keys it on a CONSTANT, {@code p -> ShaderKey.GLINT}
 	 * ({@code pipeline/IrisPipelines.java:50}), where almost every row of {@link #ELEMENTS} reaches a
-	 * function that tests the hand and then the block entity phase. Three of them are pinned as well,
-	 * which {@link #PINNED} names and {@link #blockTwin} reads; what those three are pinned to is the
-	 * key an entity row reaches anyway, so the pin only keeps the phase off them. The glint's names a
-	 * program no other row of that table can reach. So a glint is a glint on a mob, on a chest and in
-	 * the hand alike, and the four pieces below differ in the MOMENT and never in the name.
+	 * function that tests the hand and then the block entity phase. Five of them are pinned as well,
+	 * which {@link #PINNED} names and {@link #blockTwin} reads; what those five are pinned to is the
+	 * key a row of their own run reaches anyway, so the pin only keeps the phase off them. The
+	 * glint's constant names a program no other row of that table can reach. So a glint is a glint
+	 * on a mob, on a chest and in the hand alike, and the four pieces below differ in the MOMENT and
+	 * never in the name.
 	 */
 	private static final String ARMOR_GLINT = "gbuffers_armor_glint";
 
@@ -1584,11 +1767,13 @@ public final class EntityDraw extends FamilyDraw {
 		boolean inMoment = (element != null && element.hand()) ? HandDraw.wanted()
 				: wanted && element != null && inWindow(element);
 		// And the mesh has to be carrying, whatever the moment says. Every row but the glint's, the
-		// crumbling's and the lines' is read against EntityMesh.format, so a draw served before the
-		// mesh settled
-		// would bind fifty-six bytes of layout over a vertex of thirty-six. It lasts from the load
-		// that asked until the extract that rebuilds the world, which is one frame in the ordinary
-		// case.
+		// crumbling's, the lines' and the text's is read against EntityMesh.format, so a draw served
+		// before the mesh settled would bind fifty-six bytes of layout over a vertex of thirty-six.
+		// It lasts from the load that asked until the extract that rebuilds the world, which is one
+		// frame in the ordinary case.
+		//
+		// All four are held behind it all the same, on the argument the glint is held out on below:
+		// they come in by this door, and a run of draws is one pass with one program.
 		//
 		// What it costs is NOT the same thing on the two roads, and saying it once would be wrong on
 		// the second. In the picture's windows a no hands the draw back, so the frame's mobs are drawn
@@ -1724,8 +1909,14 @@ public final class EntityDraw extends FamilyDraw {
 
 		// The image belongs to the DRAW and not to the pass: one pipeline draws every mob on screen
 		// and each of them brings its own skin, so this is set again for every draw recorded.
+		//
+		// A grayscale font sheet is handed over swizzled, which is the one place this door does not
+		// bind the game's own view: the sheet holds one channel and a pack has no IS_GRAYSCALE line
+		// to make four of it. GlyphIntensity says what it costs and where Iris does the same.
 		PreparedRenderType.Texture texture = image(prepared);
-		program.texture(texture == null ? null : texture.textureView(),
+		program.texture(texture == null ? null
+				: element.intensity() ? GlyphIntensity.view(texture.textureView())
+						: texture.textureView(),
 				texture == null ? null : texture.sampler());
 
 		this.open.setPipeline(this.bound);
@@ -1917,9 +2108,11 @@ public final class EntityDraw extends FamilyDraw {
 
 		// The deliberate one is named apart from the rest, because reporting a parity choice as a
 		// fault is how a reader is sent hunting something that is working. The walk also submits
-		// name tags, text and other geometry no shadow table anywhere has a row for, and those are
-		// the same silence the camera's table gives them. A mob's ground oval is not among what
-		// reaches here: EntityRenderDispatcherMixin keeps it off the mob while the map is drawn.
+		// the beacon beams and the bolts, which no shadow table anywhere has a row for, and those
+		// are the same silence the camera's table gives them. The name plates and the texts are no
+		// longer among them, the shadow table having a row for each. A mob's ground oval is not
+		// among what reaches here either: EntityRenderDispatcherMixin keeps it off the mob while the
+		// map is drawn.
 		//
 		// It is nearly a match rather than the gap it first reads as.
 		// Iris carries a shadow row for the glint (pipeline/IrisPipelines.java:111) and then cancels
@@ -2136,23 +2329,29 @@ public final class EntityDraw extends FamilyDraw {
 	 * <p>
 	 * The vertex head declares the elements of that format BY NAME, and an element the stage does not
 	 * declare shifts the location of every one after it without a word being said: the picture stays a
-	 * picture and reads its texture coordinates out of the light map. Four formats come in by this
+	 * picture and reads its texture coordinates out of the light map. Eight formats come in by this
 	 * door now, the entity mesh, the glint's two elements, the block one the crumbling is drawn
-	 * from and the lines one the block outline is, so the claim is the piece's and the check is
-	 * against the game's own binding.
+	 * from, the lines one the block outline is, and the four the text is, so the claim is the piece's
+	 * and the check is against the game's own binding.
 	 * <p>
-	 * It is also what keeps two of the families beside the eyes out of these tables, and that is a
-	 * fact about this engine rather than about them: the lightning and the dragon rays bind
-	 * {@code POSITION_COLOR} and the world text {@code POSITION_TEX_LIGHTMAP_COLOR}, and
-	 * {@code VertexInputs} has a decoder for neither. A row added for either would be caught here and
-	 * reported, rather than drawn out of the wrong offsets.
+	 * <strong>The text is what this gate is sharpest on</strong>, its eight rows sharing one
+	 * {@code VertexInputs} and naming four different formats: a row given the wrong one of the four
+	 * would compile, bind and draw, and read a glyph's colour out of the two bytes that hold its
+	 * light map. It is also the family whose layout has already moved once, 26.1 having drawn every
+	 * text pipeline from one {@code POSITION_COLOR_TEX_LIGHTMAP}, which is what Iris still keys on.
 	 * <p>
-	 * <strong>The beacon beam is no longer one of them and is still not served</strong>, which is
-	 * worth separating: it binds {@code DefaultVertexFormat.BLOCK} as the crumbling does, so this
-	 * gate would let it through. What it wants is a row, and the row is not the crumbling's under
-	 * another name. Iris gives it {@code ProgramId.BeaconBeam} with no alpha test and its fog per
-	 * fragment ({@code pipeline/programs/ShaderKey.java:70}), where the crumbling is
-	 * {@code DamagedBlock} at a tenth with the fog off, and the two agree on the light alone.
+	 * <strong>The lightning and the beacon beam are not served and this gate is not the reason
+	 * why</strong>, which is worth separating. A contract that reads either mesh is already here:
+	 * the beam binds {@code DefaultVertexFormat.BLOCK}, which {@link VertexInputs#CRUMBLING} reads,
+	 * and the lightning and the dragon rays bind {@code POSITION_COLOR}, which
+	 * {@link VertexInputs#GLYPH} reads for a text display's background. What each still wants is a
+	 * ROW, and neither row is another family's under a new name: Iris gives the beam
+	 * {@code ProgramId.BeaconBeam} with no alpha test and its fog per fragment
+	 * ({@code pipeline/programs/ShaderKey.java:70}), where the crumbling is {@code DamagedBlock} at
+	 * a tenth with the fog off, and the lightning {@code ProgramId.Lightning} drawn at full light
+	 * ({@code :55}). Written without its format tabulated, either row would claim the entity mesh,
+	 * which {@link Element#format} answers for any pipeline no table names, and this gate would
+	 * catch it.
 	 */
 	private static boolean decodable(Element element) {
 		VertexFormat format = element.pipeline().getVertexFormatBinding(0);
