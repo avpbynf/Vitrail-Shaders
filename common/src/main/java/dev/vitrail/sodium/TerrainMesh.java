@@ -532,7 +532,9 @@ public final class TerrainMesh implements ChunkVertexType {
 		for (int at = vertices.length - 1; at >= 0; at--) {
 			long from = pointer + (long) at * this.innerStride;
 			long to = pointer + (long) at * this.stride;
-			for (int word = this.innerStride - Integer.BYTES; word >= 0; word -= Integer.BYTES) {
+			// The first vertex does not move, both strides placing it at the pointer.
+			for (int word = at == 0 ? -1 : this.innerStride - Integer.BYTES; word >= 0;
+					word -= Integer.BYTES) {
 				MemoryUtil.memPutInt(to + word, MemoryUtil.memGetInt(from + word));
 			}
 

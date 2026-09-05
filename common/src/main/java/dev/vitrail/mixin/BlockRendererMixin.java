@@ -6,6 +6,7 @@ import dev.vitrail.render.BlockStateIds;
 import net.caffeinemc.mods.sodium.client.render.chunk.compile.pipeline.BlockRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexEncoder;
 import net.caffeinemc.mods.sodium.client.render.model.AbstractBlockRenderContext;
+import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -73,6 +74,19 @@ public abstract class BlockRendererMixin extends AbstractBlockRenderContext {
 		return vitrail$stamp(vertices);
 	}
 
+	/** The block the two words below were worked out for, so that its quads share them. */
+	@Unique
+	private BlockState vitrail$stampedState;
+
+	@Unique
+	private long vitrail$stampedAt = Long.MIN_VALUE;
+
+	@Unique
+	private int vitrail$stampedId = BlockStateIds.NONE;
+
+	@Unique
+	private int vitrail$stampedOrigin;
+
 	/**
 	 * Everything this quad carries about the block it came from: the number the pack gave it, where
 	 * it stands in its section, and what it emits.
@@ -87,12 +101,25 @@ public abstract class BlockRendererMixin extends AbstractBlockRenderContext {
 		// Sodium's own, one instance reused for every face of every block, so a field left alone
 		// keeps what the block before wrote: an offset measured against another block, which wraps
 		// into its byte without a word. A quad that knows one of the two still gets that one.
-		TerrainVertex.stampOrigin(vertices, this.pos == null
-				? 0
-				: TerrainVertex.pack(this.pos.getX(), this.pos.getY(), this.pos.getZ(),
-						this.state == null ? 0 : this.state.getLightEmission()));
+		//
+		// Worked out once per block and not once per quad: the id is a table lookup and the origin
+		// a light emission and a pack, and a block hands the same two to every one of its faces.
+		// The position is compared by value, the context reusing one mutable position for every
+		// block of a section.
+		BlockState state = this.state;
+		long at = this.pos == null ? Long.MIN_VALUE : this.pos.asLong();
+		if (state != this.vitrail$stampedState || at != this.vitrail$stampedAt) {
+			this.vitrail$stampedState = state;
+			this.vitrail$stampedAt = at;
+			this.vitrail$stampedId = state == null ? BlockStateIds.NONE : BlockStateIds.packed(state);
+			this.vitrail$stampedOrigin = this.pos == null
+					? 0
+					: TerrainVertex.pack(this.pos.getX(), this.pos.getY(), this.pos.getZ(),
+							state == null ? 0 : state.getLightEmission());
+		}
 
-		return TerrainVertex.stamp(vertices,
-				this.state == null ? BlockStateIds.NONE : BlockStateIds.packed(this.state));
+		TerrainVertex.stampOrigin(vertices, this.vitrail$stampedOrigin);
+
+		return TerrainVertex.stamp(vertices, this.vitrail$stampedId);
 	}
 }
