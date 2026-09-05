@@ -26,9 +26,11 @@ import java.util.Set;
  * {@code main} that runs the pack's own between a prologue and an epilogue. Writing that is not a
  * pass over the text and does not belong among them, which is the whole of why it is here.
  * <p>
- * A record of the answers rather than a view of the translator, so that what this can see is the
- * list below and stays the list below: every one of them is read here and not one is written back.
- * Built once, at render, which is the first moment they are all settled.
+ * A record of what the header is written from, so that what this can see is the list below and
+ * stays the list below: every one of them is read here and not one is written back. Several are
+ * the translator's own lists and maps rather than copies of them, and {@code splits} is the
+ * split itself; the record is built at render, which is after every pass has run and the last
+ * moment any of them is written, and it is read in the one expression that builds it.
  */
 record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, AlphaTest alphaTest,
 		Map<String, String> engineDefines, Map<String, String> memoryQualifiers, Set<String> used,

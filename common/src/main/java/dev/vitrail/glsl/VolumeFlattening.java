@@ -25,7 +25,9 @@ import java.util.Set;
  * <p>
  * Apart because what it needs is its own and narrow: the tokens, the unit's liveness, the volumes
  * the pack declared and the two tables of macro names, since a pack reads a volume through an
- * alias as readily as through the name it declared. What it leaves behind is the helpers the
+ * alias as readily as through the name it declared. The volumes are copied; the two tables are
+ * the translator's own, empty when this is made and filled by the pass that collects the macro
+ * names, which runs before {@link #flatten} does. What it leaves behind is the helpers the
  * header owes and the two counts that say a name could not be moved.
  */
 final class VolumeFlattening {

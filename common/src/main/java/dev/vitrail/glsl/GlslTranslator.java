@@ -73,22 +73,22 @@ import java.util.stream.Stream;
  * what stands within eight centimetres of the camera, so it blurred nothing at all.
  * <p>
  * The fragment outputs carry one rule that is not GLSL's and cannot be read off the language.
-	 * 26.2 does not keep the location a stage declares: {@code IntermediaryShaderModule.createFromSpirv}
-	 * asks SPIR-V reflection for the outputs and writes the rank of each one over its own location
-	 * decoration. The order reflection answers in is the order the compiler first met the names in, so
-	 * a stage that writes output one before output zero has the two swapped, and nothing says a word
-	 * about it. Everything below about outputs exists for that: they are all declared here, from zero
-	 * up with no gaps, and named once each in ascending order by a function ahead of anything the pack
-	 * wrote and called first thing in {@code main}. The rank is then the location and the rewrite is
-	 * the identity.
-	 * <p>
-	 * The same rank-is-location rewrite is why a {@code varying mat3} cannot be left as one variable.
-	 * A GLSL matrix occupies one location per column, three for a {@code mat3}, but it is still one
-	 * reflected name, so the next varying is numbered onto column two. OpenGL links by name and
-	 * never asks the question; the workaround here is to split each matrix varying into that many
-	 * vectors before compilation and rebuild the matrix as a local. A struct varying is the same
-	 * case with a member per location and an array varying with an element per location, and
-	 * {@link VaryingSplit} answers all three. Iris is not copied.
+ * 26.2 does not keep the location a stage declares: {@code IntermediaryShaderModule.createFromSpirv}
+ * asks SPIR-V reflection for the outputs and writes the rank of each one over its own location
+ * decoration. The order reflection answers in is the order the compiler first met the names in, so
+ * a stage that writes output one before output zero has the two swapped, and nothing says a word
+ * about it. Everything below about outputs exists for that: they are all declared here, from zero
+ * up with no gaps, and named once each in ascending order by a function ahead of anything the pack
+ * wrote and called first thing in {@code main}. The rank is then the location and the rewrite is
+ * the identity.
+ * <p>
+ * The same rank-is-location rewrite is why a {@code varying mat3} cannot be left as one variable.
+ * A GLSL matrix occupies one location per column, three for a {@code mat3}, but it is still one
+ * reflected name, so the next varying is numbered onto column two. OpenGL links by name and
+ * never asks the question; the workaround here is to split each matrix varying into that many
+ * vectors before compilation and rebuild the matrix as a local. A struct varying is the same
+ * case with a member per location and an array varying with an element per location, and
+ * {@link VaryingSplit} answers all three. Iris is not copied.
  */
 public final class GlslTranslator {
 
