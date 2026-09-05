@@ -55,11 +55,20 @@ public final class BlockStateIds {
 
 	/**
 	 * The largest number a declaration may carry. The encoder keeps {@link #PACKED_MASK} of what
-	 * {@link #packedFrom} produced, and that is even, so the last id whose packed form survives
-	 * whole is one below half the mask: 4194302 packs as 0x7FFFFE and 4194303 packs as 0x800000,
-	 * which the mask takes away entirely.
+	 * {@link #packedFrom} produced, which shifts the id over the {@link #FLUID} bit and leaves that
+	 * bit clear, so the value is even and the last id whose packed form survives whole is one below
+	 * half the mask: 4194302 packs as 0x7FFFFE and 4194303 packs as 0x800000, which the mask takes
+	 * away entirely.
 	 */
 	private static final int MAX_ID = (PACKED_MASK >> 1) - 1;
+
+	/**
+	 * The bit under the number, which is what a pack reads as {@code mc_Entity.y}: one on a quad the
+	 * fluid renderer drew and nought on every other quad in the world. Iris packs it in the same
+	 * place ({@code sodium/terrain/XHFPTerrainVertex.java:197}) and the shader side here is
+	 * written against that, building it as {@code a_BlockId & 1u}.
+	 */
+	private static final int FLUID = 1;
 
 	private static volatile Object2IntMap<BlockState> table = empty();
 
@@ -185,17 +194,28 @@ public final class BlockStateIds {
 
 	/**
 	 * The number to put on the mesh for one block state, packed the way the shader unpacks it:
-	 * {@code ((id + 1) << 1) | isFluid}.
-	 * <p>
-	 * <strong>The fluid bit is nought on every quad in the world.</strong> The fluid renderer comes
-	 * through this same method ({@code mixin/DefaultFluidRendererMixin.java:80}) rather than pushing
-	 * a number of its own, and {@link #packedFrom} sets no bit, so a pack reading {@code mc_Entity.y}
-	 * cannot tell water from any other block. That is issue 108 and it is not corrected here.
+	 * {@code ((id + 1) << 1) | isFluid}. The bit is nought here, which is what every quad but a
+	 * fluid's carries; the fluid renderer asks {@link #packedFluid} instead.
 	 */
 	public static int packed(BlockState state) {
 		int id = table.getInt(state);
 
 		return id < 0 ? NONE : packedFrom(id);
+	}
+
+	/**
+	 * The same number for a quad the fluid renderer drew, carrying the bit that tells a pack water
+	 * from any other block.
+	 * <p>
+	 * {@code null} for a fluid naming no block state, which still carries the bit: what the quad is
+	 * does not depend on the pack having named it, and Iris answers the same 1 there, its build task
+	 * handing an unmatched id straight on ({@code sodium/mixin/MixinChunkMeshBuildTask.java:70}).
+	 * <p>
+	 * <strong>The number travels on the vertex.</strong> Sections already meshed keep the bit they
+	 * were built with, so what shows this is a world built again and never a pack loaded again.
+	 */
+	public static int packedFluid(BlockState state) {
+		return (state == null ? NONE : packed(state)) | FLUID;
 	}
 
 	/**

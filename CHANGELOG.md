@@ -40,6 +40,15 @@ what the next one holds.
   sees the fire as an entity it never named, as it is under Iris, where before the fire read as
   the mob it wraps.
 
+- **A pack can tell water and lava from the blocks around them.** Half of the number a chunk quad
+  carries says whether the quad is a fluid, and it said no on every quad in the world, so a pack
+  that draws fluid surfaces apart drew them like stone. Both Complementary variants read it to hold
+  the mip level down on flowing lava, which their own comment says comes out broken without it, and
+  that guard is compiled in only with Anisotropic Filtering on 8 or 16, not on the 0 they ship nor
+  on 4: there the guard never fired and the lava kept the broken level. Fluid quads now say what
+  they are, in the terrain and in the shadow map alike, as they do under Iris, and they say it even
+  where the pack gave the fluid no number of its own.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed

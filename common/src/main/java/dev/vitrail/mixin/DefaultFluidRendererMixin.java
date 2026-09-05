@@ -24,8 +24,9 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Gives a fluid quad the number {@code block.properties} gave the fluid, which is what tells a pack
- * that water is water.
+ * Gives a fluid quad the number {@code block.properties} gave the fluid, and under it the bit that
+ * says the quad is a fluid at all, which is what tells a pack that water is water even where the
+ * pack named no fluid. {@link BlockStateIds#packedFluid} is the entry the block path does not take.
  * <p>
  * Fluids never went through {@code BlockRenderer} at all: they have a renderer of their own, and its
  * push takes a {@code Material} rather than the int the block path hands over, so there was nowhere
@@ -77,7 +78,7 @@ public abstract class DefaultFluidRendererMixin {
 			ChunkModelBuilder builder, Material material, ColorProvider<FluidState> colours,
 			FluidModel model, CallbackInfo callback) {
 		BlockState fluidBlock = fluidState == null ? null : fluidState.createLegacyBlock();
-		this.vitrail$id = fluidBlock == null ? BlockStateIds.NONE : BlockStateIds.packed(fluidBlock);
+		this.vitrail$id = BlockStateIds.packedFluid(fluidBlock);
 
 		// The fluid's own light and not that of the block sharing its position, for the reason the
 		// class comment gives about the id: a waterlogged stair is two things to draw, and these
