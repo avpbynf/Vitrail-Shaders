@@ -43,6 +43,14 @@ what the next one holds.
   appears when you choose a pack, apply a setting, or step through a portal. Nothing about the
   picture changes.
 
+- **A pack loads its entities, sky, clouds, weather, particles and far terrain in one reading.**
+  Each of those six families opened the pack again on the loading thread and worked out the same
+  plan and the same program tree for itself before reading its own files, which was most of the
+  archive walking a load did. They now share one reading, and the report of a pack that used to
+  hold the title screen and every Apply for a second or two is written from a background thread
+  instead. On Complementary Unbound the families take under a second of background work where
+  they took four. Nothing about the picture changes.
+
 ### Added
 
 - **Eight shadow colour buffers for a pack that asks for them.** A pack declaring
@@ -59,6 +67,12 @@ what the next one holds.
   not be drawn at all. A pack requiring either, or both, now loads.
 
 ### Fixed
+
+- **A `#if` decides like the compiler where one side of an `&&` or `||` cannot be worked out.**
+  A condition such as `X != 0 && 100 / X > 5` with `X` at zero was left undecided, because the
+  right side was worked out whatever the left one said, and an undecided condition kept its
+  branch in. The right side is now skipped where the left one has already decided, as the
+  preprocessor does, so such a branch is left out exactly as the pack meant it to be.
 
 - **A pack's storage buffers are read and written where the pack put them.** A pack that keeps
   its own data in a shader storage buffer, declared with `bufferObject` lines, had that buffer
