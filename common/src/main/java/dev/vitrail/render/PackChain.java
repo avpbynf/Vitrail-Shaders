@@ -961,6 +961,17 @@ public final class PackChain {
 				Vitrail.logger().info("Translation cache: {} programs served from disk, {} "
 								+ "translated, counted at the same point of the load as the line "
 								+ "above", TranslationCache.served(), TranslationCache.translated());
+				// Said from here and not from there: the cache lives in a package that names
+				// nothing the game brings, so it keeps the note and this takes it. Once a run is
+				// the cache's own latch and not this take. Here is also as early as a load can
+				// say it and no earlier: a load that turned back above, or a family translating
+				// on the worker started below, leaves the note for the load after this one.
+				String refused = TranslationCache.takeRefusal();
+				if (!refused.isEmpty()) {
+					Vitrail.logger().warn("In the translation cache, {}, so it was translated "
+							+ "instead. Said once a run: nothing about it stops a pack loading",
+							refused);
+				}
 			}
 
 			active.startFamilyPrefetch();

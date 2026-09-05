@@ -25,6 +25,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
@@ -61,8 +62,8 @@ import java.util.zip.InflaterOutputStream;
  * vertex format is written into the blob as well as into the key, and read back and compared, so a
  * key that has come apart from its blob is caught rather than believed.
  * <p>
- * Absent, unreadable, corrupt, or of a shape this build cannot read: every one of them is a MISS,
- * and a miss is the translation that would have happened anyway.
+ * Absent, unreadable, corrupt, larger than any translation is, or of a shape this build cannot
+ * read: every one of them is a MISS, and a miss is the translation that would have happened anyway.
  * <p>
  * The store is bounded at a quarter of a gigabyte and bounded per edition, and it is off until
  * somebody installs it. {@code -Dvitrail.translationDir=<path>} installs it outside the game, which
@@ -86,6 +87,14 @@ public final class TranslationCache {
 	/** SHA-256, sitting behind the blob in every file and answering for it. */
 	private static final int DIGEST_BYTES = 32;
 
+	/**
+	 * How large one file may be before it is refused unread. A translated program comes to a
+	 * quarter of a megabyte before it is squeezed, so this is two orders of magnitude of room; what
+	 * it is really for is a file that grew for a reason nothing here can name, which would
+	 * otherwise be read whole into the heap before anything got the chance to refuse it.
+	 */
+	private static final long MOST_BYTES = 64L * 1024L * 1024L;
+
 	private static final long CEILING_BYTES = 256L * 1024L * 1024L;
 	private static final long SWEEP_TARGET = CEILING_BYTES / 4L * 3L;
 
@@ -94,6 +103,9 @@ public final class TranslationCache {
 	private static final AtomicLong SERVED = new AtomicLong();
 	private static final AtomicLong TRANSLATED = new AtomicLong();
 	private static final AtomicLong BYTES = new AtomicLong();
+
+	/** The one blob refused rather than served this run, waiting for whoever has a logger. */
+	private static final AtomicReference<String> REFUSAL = new AtomicReference<>("");
 
 	/** Held for the one scan at install and for every sweep. */
 	private static final Object LOCK = new Object();
@@ -104,6 +116,9 @@ public final class TranslationCache {
 
 	/** How long a sweep that could not finish stays out of the way of the next write. */
 	private static volatile long nextSweepNanos;
+
+	/** Raised by the first refusal of the run and never lowered, which is what makes it one a run. */
+	private static volatile boolean refused;
 
 	static {
 		// Inside the try and not beside it: Path.of refuses a name Windows will not have, and an
@@ -171,6 +186,33 @@ public final class TranslationCache {
 		return directory != null;
 	}
 
+	/**
+	 * The one blob this run refused rather than served, taken and cleared, or empty when there was
+	 * none and empty for the rest of the run once it has been taken.
+	 * <p>
+	 * Taken rather than read, because there is no logger to reach from here: this package names
+	 * nothing a game brings, which is what lets the whole translator be run over the corpus without
+	 * starting one. The pack chain takes it at the end of a load, which is late by up to a load: a
+	 * load that turned back before it, or a family that translates on a worker after it, leaves the
+	 * note for the load after. Installed from {@code vitrail.translationDir} instead, nothing takes
+	 * it at all and a refusal there is silent, which is what running without a game costs.
+	 */
+	public static String takeRefusal() {
+		return REFUSAL.getAndSet("");
+	}
+
+	/**
+	 * Keeps the first refusal of the run and no other: the ones after it are the same story told
+	 * again. The latch stays up once it is raised, so a refusal in a later load finds the note
+	 * already said rather than saying it a second time.
+	 */
+	private static void refuse(String what) {
+		if (!refused) {
+			refused = true;
+			REFUSAL.set(what);
+		}
+	}
+
 	public static long served() {
 		return SERVED.get();
 	}
@@ -200,10 +242,25 @@ public final class TranslationCache {
 		Path file = root.resolve(key + SUFFIX);
 		byte[] raw;
 		try {
+			// Asked before the read and not after it: the digest sits behind the blob, so nothing
+			// can answer for a file that is not already whole in the heap, and a file that grew
+			// past what a translation is would be read before anything could refuse it.
+			if (Files.size(file) > MOST_BYTES) {
+				refuse("a stored translation is larger than any translation is");
+
+				return null;
+			}
+
 			raw = Files.readAllBytes(file);
 		} catch (IOException e) {
 			// Absent is the ordinary case and unreadable the rare one. What follows either way is
 			// the translation that would have happened anyway.
+			return null;
+		} catch (OutOfMemoryError e) {
+			// The size was asked for above, so this is a heap that was already at its edge rather
+			// than a file that lied about itself. It is still a miss and never a dead load.
+			refuse("there was no room to read a stored translation");
+
 			return null;
 		}
 
@@ -217,6 +274,14 @@ public final class TranslationCache {
 			byte[] blob = inflate(raw, length);
 			program = TranslatedProgramCodec.read(blob, blob.length, inputs);
 		} catch (IOException | RuntimeException e) {
+			return null;
+		} catch (OutOfMemoryError e) {
+			// Not the damaged file: the digest above answers for the bytes on disk, so damage is
+			// already a miss by the time the inflate begins. What the digest says nothing about is
+			// what those bytes unpack to, which leaves a file written to inflate far past the size
+			// it was refused on, or a heap that was already at its edge.
+			refuse("a stored translation did not fit the heap once it was unpacked");
+
 			return null;
 		}
 
