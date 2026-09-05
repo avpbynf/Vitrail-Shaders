@@ -1,5 +1,9 @@
 package dev.vitrail.pack.texture;
 
+import dev.vitrail.pack.model.PackTexture;
+import dev.vitrail.pack.model.PixelFormat;
+import dev.vitrail.pack.model.PixelType;
+
 import java.util.Set;
 
 /**

@@ -1,9 +1,14 @@
-package dev.vitrail.pack.source;
+package dev.vitrail.pack.load;
 
 import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.SettingSet;
 import dev.vitrail.pack.program.ProgramResolver;
 import dev.vitrail.pack.program.ProgramSet;
+import dev.vitrail.pack.source.DimensionSet;
+import dev.vitrail.pack.source.ExpansionStats;
+import dev.vitrail.pack.source.IncludeExpander;
+import dev.vitrail.pack.source.ShaderPackSource;
+import dev.vitrail.pack.source.ShaderProperties;
 
 import java.io.IOException;
 import java.nio.file.Files;

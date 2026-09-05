@@ -1,8 +1,8 @@
 package dev.vitrail.glsl;
 
 import dev.vitrail.pack.option.EngineDefines;
-import dev.vitrail.pack.program.AlphaTest;
-import dev.vitrail.pack.program.ProgramStage;
+import dev.vitrail.pack.model.AlphaTest;
+import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.texture.VolumeAtlas;
 

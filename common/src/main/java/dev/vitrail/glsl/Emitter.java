@@ -5,8 +5,8 @@ import dev.vitrail.glsl.VaryingSplit.SplitArray;
 import dev.vitrail.glsl.VaryingSplit.SplitMatrix;
 import dev.vitrail.glsl.VaryingSplit.SplitStruct;
 import dev.vitrail.glsl.VaryingSplit.StructMember;
-import dev.vitrail.pack.program.AlphaTest;
-import dev.vitrail.pack.program.ProgramStage;
+import dev.vitrail.pack.model.AlphaTest;
+import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.pack.texture.VolumeAtlas;
 

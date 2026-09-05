@@ -1,6 +1,6 @@
 package dev.vitrail.pack.option;
 
-import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.texture.CustomImages;
 
 import java.util.LinkedHashMap;

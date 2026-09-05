@@ -1,7 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.pack.target.ChainPlan;
-import dev.vitrail.pack.target.TargetName;
+import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.Vitrail;

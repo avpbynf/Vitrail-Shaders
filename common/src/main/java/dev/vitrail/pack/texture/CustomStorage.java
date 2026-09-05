@@ -1,5 +1,7 @@
 package dev.vitrail.pack.texture;
 
+import dev.vitrail.pack.model.BufferObject;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 

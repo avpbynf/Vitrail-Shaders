@@ -1,4 +1,4 @@
-package dev.vitrail.pack.texture;
+package dev.vitrail.pack.model;
 
 import java.util.Optional;
 

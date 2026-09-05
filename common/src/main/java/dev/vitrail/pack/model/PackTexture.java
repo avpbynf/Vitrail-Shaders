@@ -1,6 +1,6 @@
-package dev.vitrail.pack.texture;
+package dev.vitrail.pack.model;
 
-import dev.vitrail.pack.target.TargetFormat;
+import dev.vitrail.pack.model.TargetFormat;
 
 import java.util.Locale;
 import java.util.Optional;
@@ -71,7 +71,7 @@ public record PackTexture(String sampler, Optional<TextureStage> stage, String p
 		return gameResource(this.path);
 	}
 
-	static boolean gameResource(String path) {
+	public static boolean gameResource(String path) {
 		return path.indexOf(':') >= 0;
 	}
 

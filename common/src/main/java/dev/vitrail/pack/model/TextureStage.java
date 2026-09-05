@@ -1,6 +1,6 @@
-package dev.vitrail.pack.texture;
+package dev.vitrail.pack.model;
 
-import dev.vitrail.pack.program.ProgramNames;
+import dev.vitrail.pack.model.ProgramNames;
 
 import java.util.Optional;
 

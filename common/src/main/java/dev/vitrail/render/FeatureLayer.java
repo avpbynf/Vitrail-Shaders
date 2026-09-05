@@ -1,7 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.pack.target.ChainPlan;
-import dev.vitrail.pack.target.TargetName;
+import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;

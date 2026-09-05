@@ -1,5 +1,6 @@
 package dev.vitrail.pack.target;
 
+import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.source.IncludeExpander;
 
 import java.util.ArrayList;

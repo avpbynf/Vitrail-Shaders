@@ -1,5 +1,7 @@
 package dev.vitrail.pack.program;
 
+import dev.vitrail.pack.model.AlphaTest;
+import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.source.ShaderProperties;
 
 import java.util.Map;

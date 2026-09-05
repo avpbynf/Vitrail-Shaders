@@ -1,4 +1,4 @@
-package dev.vitrail.pack.program;
+package dev.vitrail.pack.model;
 
 /**
  * What a pack is told it is drawing, under the name {@code renderStage} and the constants

@@ -1,5 +1,8 @@
 package dev.vitrail.pack.target;
 
+import dev.vitrail.pack.model.TargetFormat;
+import dev.vitrail.pack.model.TargetName;
+import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.pack.source.IncludeExpander;
 import dev.vitrail.pack.source.ShaderProperties;
 

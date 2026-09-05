@@ -3,7 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.mixin.access.CommandEncoderAccessor;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.mixin.access.VulkanCommandEncoderAccessor;
-import dev.vitrail.pack.texture.BufferObject;
+import dev.vitrail.pack.model.BufferObject;
 import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.Vitrail;
 

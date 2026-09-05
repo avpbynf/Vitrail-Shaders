@@ -4,7 +4,7 @@ import dev.vitrail.pack.menu.MenuOption;
 import dev.vitrail.pack.menu.MenuValues;
 import dev.vitrail.pack.menu.PackMenu;
 import dev.vitrail.pack.option.OptionValue;
-import dev.vitrail.pack.source.PackLoader;
+import dev.vitrail.pack.load.PackLoader;
 
 import java.io.IOException;
 import java.nio.charset.Charset;

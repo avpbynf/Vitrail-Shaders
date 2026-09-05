@@ -3,7 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.EntityVertex;
 import dev.vitrail.glsl.LinesVertex;
 import dev.vitrail.glsl.PackProgram;
-import dev.vitrail.pack.program.ProgramFallbacks;
+import dev.vitrail.pack.model.ProgramFallbacks;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.Vitrail;

@@ -2,11 +2,11 @@ package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
-import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
-import dev.vitrail.pack.target.TargetSize;
+import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.PrimitiveTopology;

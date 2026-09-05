@@ -1,7 +1,8 @@
-package dev.vitrail.pack.source;
+package dev.vitrail.pack.load;
 
 import dev.vitrail.pack.option.PackOption;
 import dev.vitrail.pack.program.ProgramSet;
+import dev.vitrail.pack.source.ShaderProperties;
 
 import dev.vitrail.Vitrail;
 
