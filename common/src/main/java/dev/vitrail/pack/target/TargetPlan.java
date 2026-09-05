@@ -422,9 +422,12 @@ public final class TargetPlan {
 		TargetDirectives.Builder builder = TargetDirectives.builder();
 		long began = System.nanoTime();
 
-		// Iris's order, from ProgramSet.locateDirectives, and the last live declaration wins. One
-		// unit is held at a time: the worst of the corpus expands to four hundred kilobytes and
-		// one dimension has up to forty six of them.
+		// Iris's order, from ProgramSet.locateDirectives, and the last live declaration wins. The
+		// units are kept by the opening rather than dropped as this loop goes, which is what lets
+		// the walks a load repeats read them back instead of building them again: one dimension has
+		// up to forty six of them and the worst expands to four hundred kilobytes, but most of what
+		// a unit holds is the very strings the opening already keeps, so what keeping one adds is a
+		// list of references, the liveness bits, and the few lines the expansion wrote itself.
 		for (ProgramSet.ProgramKey key : ProgramSet.sorted(entries, ProgramNames::directiveRank)) {
 			Optional<Path> file = source.file(key.file());
 			if (file.isEmpty()) {

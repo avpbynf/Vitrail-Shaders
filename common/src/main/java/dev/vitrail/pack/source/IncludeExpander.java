@@ -96,32 +96,60 @@ public final class IncludeExpander {
 	}
 
 	/**
-	 * For the pack report's walk, whose flattening is left out of the load's clock.
+	 * For the pack report's walk, whose flattening is neither clocked as a load's nor kept by the
+	 * opening.
 	 * <p>
 	 * That walk expands every entry point the pack ships, once each, and it is made on the first
-	 * load of a given pack and on none of the reloads of it. Counted in, it would leave the figure
-	 * several times larger on one load than on the next with nothing on the line saying which of
-	 * the two had just been read, where what the line is for is what a load pays every time.
+	 * load of a given pack and on none of the reloads of it. Counted into the clock, it would leave
+	 * the figure several times larger on one load than on the next with nothing on the line saying
+	 * which of the two had just been read, where what the line is for is what a load pays every
+	 * time.
+	 * <p>
+	 * Kept by the opening, it would find nothing there ever, no entry point being asked for twice,
+	 * and would hold every unit it built alive to the end of a reading whose whole point is to
+	 * throw them away, three hundred and thirty-nine of them for the widest pack of the corpus.
 	 */
 	public static IncludeExpander forTheReport(ShaderPackSource source, SettingSet settings) {
 		return new IncludeExpander(source, settings, false);
 	}
 
 	/**
-	 * One entry file flattened, and the span it took posted to the load's clock. A load reads a
-	 * place of the pack several times over and this is paid before either compiled store can be
-	 * asked, so it is where a warm load's wait really goes.
+	 * One entry file flattened, and flattened once per opening of the pack and per settings it is
+	 * read under.
+	 * <p>
+	 * <strong>The memo is what makes a load pay for a unit once.</strong> A load walks one place of
+	 * the pack over and over: once for its directives, once for the chain, once for the chunk
+	 * programs, and once more for every compute program it ships. Each of those walks every fragment
+	 * entry of the place, and expanding one of Photon's costs tens of milliseconds, so the same unit
+	 * built a dozen times was the bulk of what a load with both compiled stores warm still waited on.
+	 * <p>
+	 * The pack report's walk neither reads the memo nor fills it, and {@link #forTheReport} says
+	 * why.
+	 * <p>
+	 * A unit that throws is not remembered, so whoever asks next reads the file again and meets the
+	 * same failure rather than a silence.
 	 */
 	public ExpandedUnit expand(Path entry) throws IOException {
+		String relative = this.source.rel(entry);
+		if (this.partOfALoad) {
+			Optional<ExpandedUnit> known = this.source.expandedUnit(this.settings, relative);
+			if (known.isPresent()) {
+				LoadClock.expansionServed();
+
+				return known.get();
+			}
+		}
+
 		long began = System.nanoTime();
 		State state = new State(this.settings.unitDefines(), this.loose);
 
 		expandFile(entry, 0, state);
 
-		ExpandedUnit unit = new ExpandedUnit(this.source.rel(entry), List.copyOf(state.output),
-				state.version, state.toStats(), state.live);
+		ExpandedUnit unit = new ExpandedUnit(relative, List.copyOf(state.output), state.version,
+				state.toStats(), state.live);
 		if (this.partOfALoad) {
 			LoadClock.expansion(System.nanoTime() - began);
+			this.source.rememberUnit(this.settings, relative, unit);
 		}
 
 		return unit;
@@ -532,8 +560,20 @@ public final class IncludeExpander {
 	public record ExpandedUnit(String entry, List<String> lines, String version,
 			ExpansionStats stats, BitSet live) {
 
+		/**
+		 * Copied in and copied out, a {@link BitSet} being mutable. In on its own was enough while
+		 * a unit was built for one reader and dropped; now that an opening hands the same unit back
+		 * to every walk of a load that asks for it, a reader that set a bit would set it for all
+		 * the others too, and the key a translation is found on disk by is taken over this set,
+		 * so a stray bit moves which cached program a unit lands on.
+		 */
 		public ExpandedUnit {
 			live = (BitSet) live.clone();
+		}
+
+		@Override
+		public BitSet live() {
+			return (BitSet) this.live.clone();
 		}
 
 		public String text() {

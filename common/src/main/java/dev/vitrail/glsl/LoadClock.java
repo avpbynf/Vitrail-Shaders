@@ -19,6 +19,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * of it, so counting it in would leave the figure several times larger on one load than on the
  * next with nothing on the line saying which of the two had just been read.
  * <p>
+ * It carries a second number, which is the units an opening handed back instead of building: a
+ * load walks one place of the pack over and over, for its directives, its chain, its chunk
+ * programs and each of its computes. That number says how much of the flattening was taken off
+ * rather than how fast what remained of it ran, and the two move apart, so a report that carried
+ * only the milliseconds could not tell a pack that got quicker from a machine that was busier.
+ * <p>
  * <strong>It exists because the split decided what got built next.</strong> With shaderc alone
  * served from disk this figure only halved, which said the reflection was the other half of the
  * WORK and that a cache of the bytes on their own could not reach it. What answers that is the
@@ -60,6 +66,8 @@ public final class LoadClock {
 
 	private static final AtomicInteger EXPANDED = new AtomicInteger();
 
+	private static final AtomicInteger EXPANSIONS_SERVED = new AtomicInteger();
+
 	private static final AtomicLong TRANSLATION_NANOS = new AtomicLong();
 
 	private static final AtomicInteger TRANSLATED = new AtomicInteger();
@@ -75,6 +83,7 @@ public final class LoadClock {
 	public static void reset() {
 		EXPANSION_NANOS.set(0);
 		EXPANDED.set(0);
+		EXPANSIONS_SERVED.set(0);
 		TRANSLATION_NANOS.set(0);
 		TRANSLATED.set(0);
 		MODULE_NANOS.set(0);
@@ -85,6 +94,11 @@ public final class LoadClock {
 	public static void expansion(long nanos) {
 		EXPANSION_NANOS.addAndGet(nanos);
 		EXPANDED.incrementAndGet();
+	}
+
+	/** One unit asked for again inside the opening that had already built it, and not rebuilt. */
+	public static void expansionServed() {
+		EXPANSIONS_SERVED.incrementAndGet();
 	}
 
 	/** One translator call's worth of {@link System#nanoTime} span, workers included. */
@@ -109,6 +123,10 @@ public final class LoadClock {
 
 	public static int expanded() {
 		return EXPANDED.get();
+	}
+
+	public static int expansionsServed() {
+		return EXPANSIONS_SERVED.get();
 	}
 
 	public static long translationMillis() {
