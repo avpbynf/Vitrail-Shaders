@@ -57,6 +57,13 @@ what the next one holds.
   reads the shader pack again when that changes what is declared, since the symbols decide which
   branch was compiled.
 
+- **`chunkFadeTimeInv` reads infinity with Chunk Fade set to none, as it does under Iris.** It read
+  zero in that setting, so a pack weighting a section by `min(1.0, age * chunkFadeTimeInv)` was held
+  at the start of a fade that never advanced, where under Iris the same expression reads as faded
+  in. Nothing in the packs that fade chunks changes with it: those read the `mc_chunkFade` attribute
+  rather than this uniform, and it is a pack written against the uniform that gets the Iris answer
+  now.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed
