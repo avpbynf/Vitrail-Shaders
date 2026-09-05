@@ -2143,6 +2143,15 @@ final class GeometryProgram {
 		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
 		SamplerPlan.Kind kind = binding.kind();
 
+		// A file of the pack's own counts when the file is there, on the same call the bind makes:
+		// what packTexture answers is what the draw reads. Left out of this list, Reverie's eight
+		// lookup tables and Complementary's cloud-water were all reported as one pixel on every
+		// geometry program while the draw was reading them, and the line sent a whole session
+		// after a black picture whose cause was elsewhere.
+		if (kind == SamplerPlan.Kind.PACK_TEXTURE) {
+			return this.targets.packTexture(TextureStage.GBUFFERS, sampler) != null;
+		}
+
 		return ATLAS.contains(sampler) || LIGHTMAP.equals(sampler) || OVERLAY.equals(sampler)
 				|| kind == SamplerPlan.Kind.COLORTEX
 				|| kind == SamplerPlan.Kind.CUSTOM_IMAGE
