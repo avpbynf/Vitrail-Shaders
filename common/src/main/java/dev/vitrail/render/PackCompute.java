@@ -159,6 +159,36 @@ final class PackCompute implements AutoCloseable {
 	}
 
 	/**
+	 * Whether a compute hanging off a full screen pass samples {@code centerDepthSmooth}, keyed
+	 * like the passes on the declaration surviving the translation. Such a compute is handed the
+	 * texel the same way its pass is, so a chain whose only reader is one has to fold it the same
+	 * way: Iris arms the fold from its compute builder as it does from a composite
+	 * ({@code pipeline/CompositeRenderer.java:466}).
+	 * <p>
+	 * The shadow computes do not count. They run at the head of the frame, before the opaque
+	 * world whose depth the fold takes exists, and Iris hands them no such sampler at all: its
+	 * shadow builder ({@code pipeline/IrisRenderingPipeline.java:544},
+	 * {@code createShadowComputes}) gives them the targets, the custom textures and images, the
+	 * level samplers, the noise and the shadow set, and the centre depth is bound nowhere but in
+	 * the composite and final builders. A shadow compute declaring the name reads here what the
+	 * fold last left, or white where nothing arms it, which is nearer what it reads under Iris
+	 * than a fold of its own would be.
+	 */
+	boolean readsCenterDepth() {
+		for (List<Pass> passes : this.chained.values()) {
+			for (Pass pass : passes) {
+				for (TranslatedUnit.Uniform sampler : pass.compute.loaded().program().samplers()) {
+					if (sampler.name().equals(SamplerPlan.centerDepth())) {
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Reads every compute the pack ships and the plan kept, out of the opening the load already
 	 * holds: the shadow computes for the head of the frame, and the computes hanging off a pass of
 	 * the chain for the moment before that pass.
