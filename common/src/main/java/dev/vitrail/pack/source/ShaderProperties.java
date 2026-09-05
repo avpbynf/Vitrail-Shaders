@@ -179,13 +179,11 @@ public final class ShaderProperties {
 	private final Map<String, String> profiles;
 	private final Map<String, String> customUniformTypes;
 	private final Set<String> screenTokens;
-	private final Map<String, List<String>> screens;
 	private final Map<String, List<ScreenToken>> screenLayout;
 	private final Map<String, Integer> columns;
 	private final List<String> sliders;
 	private final List<String> requiredFeatures;
 	private final List<String> optionalFeatures;
-	private final Map<String, String> malformedAlphaTests;
 	private final Map<String, Integer> ignoredPrefixes;
 	private final int directiveCount;
 	private final int blendCount;
@@ -199,7 +197,6 @@ public final class ShaderProperties {
 		this.profiles = Collections.unmodifiableMap(new LinkedHashMap<>(builder.profiles));
 		this.customUniformTypes = Map.copyOf(builder.customUniformTypes);
 		this.screenTokens = Set.copyOf(builder.screenTokens);
-		this.screens = Map.copyOf(builder.screens);
 		// Not Map.copyOf: the order pages are declared in is the order a screen offers them, and
 		// an immutable map does not keep one.
 		Map<String, List<ScreenToken>> layout = new LinkedHashMap<>();
@@ -209,7 +206,6 @@ public final class ShaderProperties {
 		this.sliders = List.copyOf(builder.sliders);
 		this.requiredFeatures = List.copyOf(builder.requiredFeatures);
 		this.optionalFeatures = List.copyOf(builder.optionalFeatures);
-		this.malformedAlphaTests = Map.copyOf(builder.malformedAlphaTests);
 		this.ignoredPrefixes = Map.copyOf(builder.ignoredPrefixes);
 		this.directiveCount = builder.directiveCount;
 		this.blendCount = builder.blendCount;
@@ -296,9 +292,7 @@ public final class ShaderProperties {
 			// A second line for the same page REPLACES the first, which is how the reference
 			// reads the pair: the last assignment of a key is the key. Only the layout starts
 			// over; the token census below keeps counting what the pack wrote, dead line or not.
-			List<String> layout = new ArrayList<>();
 			List<ScreenToken> slots = new ArrayList<>();
-			builder.screens.put(page, layout);
 			builder.screenLayout.put(page, slots);
 
 			// A run of SPACES and not a run of whitespace. The list directives are the only ones Iris
@@ -310,13 +304,8 @@ public final class ShaderProperties {
 					continue;
 				}
 
-				// A blank slot, written <empty>, is layout and has to be kept: it is how a pack
-				// lines its options up in columns.
 				if (SCREEN_TOKEN.matcher(token).matches()) {
 					builder.screenTokens.add(token);
-					layout.add(token);
-				} else if (token.equals("<empty>")) {
-					layout.add("");
 				}
 
 				slots.add(slotOf(token));
@@ -336,13 +325,7 @@ public final class ShaderProperties {
 		// conditionals, because the reference reads this family off its preprocessed copy of the
 		// file. Not every family: it reads the screens, the sliders, the profiles and the feature
 		// lists off the raw one.
-		Matcher alpha = ALPHA_TEST.matcher(line);
-		if (alpha.matches()) {
-			String value = alpha.group(2).trim();
-			if (AlphaTest.parse(value).isEmpty()) {
-				builder.malformedAlphaTests.put(alpha.group(1), value);
-			}
-
+		if (ALPHA_TEST.matcher(line).matches()) {
 			return;
 		}
 
@@ -1562,30 +1545,21 @@ public final class ShaderProperties {
 		return this.customUniformTypes;
 	}
 
-	/**
-	 * The pages a pack lays out, by name, the one it opens on being "". Each is the options in
-	 * the order they are written, with an empty string where the pack asked for a blank slot.
-	 * A name that is not an option is a sub page, and the key to find it under here.
-	 */
-	public Map<String, List<String>> screens() {
-		return this.screens;
-	}
-
 	public Set<String> screenTokens() {
 		return this.screenTokens;
 	}
 
 	/**
-	 * The same pages with every token kept: a blank slot, an option, a link to another page, the
-	 * profile selector, or the dump of everything no page named.
+	 * The pages a pack lays out with every token kept: a blank slot, an option, a link to another
+	 * page, the profile selector, or the dump of everything no page named. This is the form a
+	 * screen reads. Pages come in the order the pack declares them, the one it opens on being
+	 * ""; a name that is not an option is a sub page, and the key to find it under here.
 	 * <p>
-	 * {@link #screens()} and {@link #screenTokens()} keep the shape and the role they had, because
-	 * the measurements this project compares itself against were taken with them, and they drop the
-	 * three hundred and eighteen tokens of the corpus that are not an option name. They lose one
-	 * thing: reading {@code screen.columns} consumes that line, so it leaves behind no page named
-	 * {@code columns} that nothing could reach. Bliss is the one pack that writes it, and
-	 * it goes from sixty three pages to sixty two. This is the form a screen reads. Pages come in
-	 * the order the pack declares them, the one it opens on being "".
+	 * {@link #screenTokens()} keeps the role it had, because the measurements this project
+	 * compares itself against were taken with it, and it drops the three hundred and eighteen
+	 * tokens of the corpus that are not an option name. Reading {@code screen.columns} consumes
+	 * that line, so it leaves behind no page named {@code columns} that nothing could reach:
+	 * Bliss is the one pack that writes it, and it goes from sixty three pages to sixty two.
 	 */
 	public Map<String, List<ScreenToken>> screenLayout() {
 		return this.screenLayout;
@@ -1613,22 +1587,6 @@ public final class ShaderProperties {
 	 */
 	public List<String> requiredFeatures() {
 		return this.requiredFeatures;
-	}
-
-	/**
-	 * What the pack would use if it were there, and takes another path without. It is the list Iris
-	 * turns into the {@code IRIS_FEATURE_} defines a pack's GLSL finds
-	 * ({@code shaderpack/ShaderPack.java:247-251}). A flag is posed here the day the capability
-	 * behind it is served and not before, a define being a promise, and every other name stays
-	 * unposed, which is what tells a pack to take the other path for it. Iris poses a define only
-	 * where the pack lists the flag here; this engine poses the ones it serves for every pack, and
-	 * {@code EngineDefines.table} owns that difference and the list of names.
-	 * <p>
-	 * Kept whole and unfiltered, because it is also what the measurement made out of the game
-	 * counts, exactly as {@link #malformedAlphaTests} is.
-	 */
-	public List<String> optionalFeatures() {
-		return this.optionalFeatures;
 	}
 
 	/**
@@ -1703,7 +1661,8 @@ public final class ShaderProperties {
 	/**
 	 * What alpha each program discards at, where the pack overrides the default of the pass it is
 	 * drawn in, keyed by the name of the file that serves the pass and not the name the pass asked
-	 * for. A line this could not read is absent, and {@link #malformedAlphaTests()} names it.
+	 * for. A line this could not read is absent, and the program falls back to the default of its
+	 * pass.
 	 * <p>
 	 * Conditionally and not flat: the reference reads this family off its preprocessed copy of
 	 * the file, so an override written under a setting's {@code #if} has to come and go with the
@@ -1736,17 +1695,6 @@ public final class ShaderProperties {
 		}
 
 		return Optional.ofNullable(state);
-	}
-
-	/**
-	 * The {@code alphaTest} lines that name neither a function and a reference nor {@code off}.
-	 * <p>
-	 * Kept rather than dropped because the failure it guards against is silent: a program whose
-	 * override could not be read falls back to the default of its pass, which is a working picture
-	 * with the wrong threshold in it. Nothing in the corpus writes one.
-	 */
-	public Map<String, String> malformedAlphaTests() {
-		return this.malformedAlphaTests;
 	}
 
 	public int directiveCount() {
@@ -1911,13 +1859,11 @@ public final class ShaderProperties {
 		private final Map<String, String> profiles = new LinkedHashMap<>();
 		private final Map<String, String> customUniformTypes = new LinkedHashMap<>();
 		private final Set<String> screenTokens = new LinkedHashSet<>();
-		private final Map<String, List<String>> screens = new LinkedHashMap<>();
 		private final Map<String, List<ScreenToken>> screenLayout = new LinkedHashMap<>();
 		private final Map<String, Integer> columns = new LinkedHashMap<>();
 		private final List<String> sliders = new ArrayList<>();
 		private List<String> requiredFeatures = List.of();
 		private List<String> optionalFeatures = List.of();
-		private final Map<String, String> malformedAlphaTests = new LinkedHashMap<>();
 		private final Map<String, Integer> ignoredPrefixes = new LinkedHashMap<>();
 		private int directiveCount;
 		private int blendCount;
