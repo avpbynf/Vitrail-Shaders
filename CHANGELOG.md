@@ -45,6 +45,11 @@ what the next one holds.
   buffers some program of the pack names are allocated now, so a pack writing `shadowcolor0` alone
   pays for that one image where it used to pay for two.
 
+- **Two more capability flags are announced and no longer refuse a pack**, `HIGHER_SHADOWCOLOR`
+  and `SSBO`. The storage buffers behind the second were already built and filled from a pack's
+  own `bufferObject` lines, and the name was simply never claimed, so a pack that declared it could
+  not be drawn at all. A pack requiring either, or both, now loads.
+
 ### Fixed
 
 - **Importing settings no longer acts on a screen you have already left.** The window that asks

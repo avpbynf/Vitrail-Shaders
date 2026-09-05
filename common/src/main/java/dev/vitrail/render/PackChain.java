@@ -14,6 +14,7 @@ import dev.vitrail.pack.source.PackLoader;
 import dev.vitrail.pack.source.PackReport;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.target.ChainPlan;
+import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetName;
@@ -838,14 +839,28 @@ public final class PackChain {
 			// hold at every load and the report is taken once.
 			List<String> required = new ArrayList<>(PackLoader.properties(pack).requiredFeatures());
 			// Only the names this engine has not built refuse the pack: the block emission
-			// attribute rides in the chunk element, and custom images are served now, so a pack
-			// that cannot draw without either is simply right about what it needs.
-			required.remove("BLOCK_EMISSION_ATTRIBUTE");
-			// The second shadow depth name of each map is bound too, SamplerPlan.SHADOW_DEPTH.
-			required.remove("SEPARATE_HARDWARE_SAMPLERS");
+			// attribute rides in the chunk element, a pack declaring HIGHER_SHADOWCOLOR draws the
+			// light into the eight it asked for, a storage block is bound off the pack's own
+			// bufferObject, and custom images are served now, so a pack that cannot draw without one
+			// of those is simply right about what it needs. The list is the one EngineDefines poses
+			// IRIS_FEATURE_ for, and the two have to move together: a define is a promise, and a
+			// refusal is the same promise refused.
+			//
+			// Matched without regard to case, and that is not politeness: the list above is kept in
+			// the pack's own spelling, and Iris never reads it that way. It upper-cases a declared
+			// name before it looks the flag up (features/FeatureFlags.java:70), and the message it
+			// prints to pack authors spells the name in lower case,
+			// "iris.features.required/optional = ssbo" (shaderpack/ShaderPack.java:216). A pack
+			// that wrote what that message told it to would be refused here on a name this engine
+			// serves. ShaderProperties.declares already reads the same lists that way.
+			Set<String> served = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+			served.addAll(List.of("BLOCK_EMISSION_ATTRIBUTE", PackDirectives.HIGHER_SHADOWCOLOR,
+					"SSBO", "SEPARATE_HARDWARE_SAMPLERS"));
 			if (CustomImages.served()) {
-				required.remove("CUSTOM_IMAGES");
+				served.add("CUSTOM_IMAGES");
 			}
+
+			required.removeIf(served::contains);
 
 			if (!required.isEmpty()) {
 				disabled = true;

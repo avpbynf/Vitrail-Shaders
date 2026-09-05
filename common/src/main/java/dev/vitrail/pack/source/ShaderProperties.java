@@ -1606,8 +1606,10 @@ public final class ShaderProperties {
 	 * What the pack says it cannot be drawn without, in the pack's own spelling and unfiltered.
 	 * <p>
 	 * Whoever compares this list decides what the names mean; this class only reads them. Iris
-	 * refuses a pack naming one it cannot serve, and the same answer is the honest one here: this
-	 * engine serves none of them, so any name at all is a name it cannot answer.
+	 * refuses a pack naming one it cannot serve and the rule here is the same: {@code PackChain}
+	 * strikes off the names this engine has built, which are the ones {@code EngineDefines} poses
+	 * an {@code IRIS_FEATURE_} define for, and refuses the pack on whatever is left over. The two
+	 * move together, a define being the promise the refusal is the other half of.
 	 */
 	public List<String> requiredFeatures() {
 		return this.requiredFeatures;
