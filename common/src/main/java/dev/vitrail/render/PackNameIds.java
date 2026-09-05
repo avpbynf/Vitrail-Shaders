@@ -21,11 +21,12 @@ import net.minecraft.world.entity.EntityType;
  * every block a declaration covers, tags included, which is two hundred lines; a name here is looked
  * up as a name, and the only thing to do with it is remember the answer.
  * <p>
- * Two names of the entity file are not entity types at all, and they are the pack's own way of
+ * Three names of the entity file are not entity types at all, and they are the pack's own way of
  * asking about a case the registry has no key for: {@code minecraft:current_player} for the player
- * the camera is looking out of, and {@code minecraft:zombie_villager_converting} for one that is turning
- * back. Iris answers both here as well
- * ({@code mixin/entity_render_context/MixinEntityRenderDispatcher.java:44-47,64-77}).
+ * the camera is looking out of, {@code minecraft:zombie_villager_converting} for one that is turning
+ * back, and {@code minecraft:entity_flame} for the fire a burning mob is wrapped in. Iris answers
+ * all three as well ({@code mixin/entity_render_context/MixinEntityRenderDispatcher.java:44-47,64-77}
+ * and {@code mixin/entity_render_context/MixinFlameFeatureRenderer.java:20}).
  * <p>
  * The tables are read on the render thread and written on whichever thread loads a pack, so what
  * they share is one immutable table swapped whole. The cache is not immutable and does not need to
@@ -42,6 +43,10 @@ public final class PackNameIds {
 	/** And the one it asks about a zombie villager that is being cured under. */
 	private static final Identifier CONVERTING_VILLAGER =
 			Identifier.fromNamespaceAndPath("minecraft", "zombie_villager_converting");
+
+	/** And the one it asks about the fire a burning mob is wrapped in under. */
+	private static final Identifier ENTITY_FLAME =
+			Identifier.fromNamespaceAndPath("minecraft", "entity_flame");
 
 	private static volatile NameIds entities = NameIds.empty();
 
@@ -88,6 +93,15 @@ public final class PackNameIds {
 
 	public static int convertingVillager() {
 		return entities.id(CONVERTING_VILLAGER.toString());
+	}
+
+	/**
+	 * And for the fire on a burning mob, asked without a {@code names} question first: the other two
+	 * are alternatives to the entity type under them and have to say whether they apply at all, where
+	 * the flame is no kind of entity and has nothing to fall back on.
+	 */
+	public static int flame() {
+		return entities.id(ENTITY_FLAME.toString());
 	}
 
 	/**
