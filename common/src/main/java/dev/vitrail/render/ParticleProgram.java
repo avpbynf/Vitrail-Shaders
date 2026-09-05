@@ -3,19 +3,14 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
-import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.vulkan.VulkanDevice;
-import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 import java.util.List;
 import java.util.Set;
@@ -43,7 +38,7 @@ import java.util.Set;
  * {@link SkyProgram} gives: the word is what makes Sodium's mixin push twenty bytes of region offset
  * into the layout, and a particle mesh has no region.
  */
-final class ParticleProgram implements DumpedProgram {
+final class ParticleProgram extends FamilyProgram {
 
 	/** What the log calls this geometry, one word in the middle of a sentence. */
 	private static final String FAMILY = "particles";
@@ -61,10 +56,8 @@ final class ParticleProgram implements DumpedProgram {
 	 */
 	private static final Set<String> ANSWERED = Set.of();
 
-	private final GeometryProgram body;
-
 	private ParticleProgram(GeometryProgram body) {
-		this.body = body;
+		super(body);
 	}
 
 	/**
@@ -140,30 +133,12 @@ final class ParticleProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pass this program is drawn into, or null to leave the renderer the one it meant to open.
-	 *
-	 * @see GeometryProgram#descriptor
-	 */
-	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
-		return this.body.descriptor(colour, depth);
-	}
-
-	/**
 	 * Whether the pass to open is the plain one, with none of the pack's own targets named.
 	 *
 	 * @see GeometryProgram#plain
 	 */
 	boolean plain() {
 		return this.body.plain();
-	}
-
-	/**
-	 * Binds this program's block and every sampler it declares, inside the pass just opened.
-	 *
-	 * @see GeometryProgram#bind
-	 */
-	void bind(RenderPass pass) {
-		this.body.bind(pass);
 	}
 
 	/**
@@ -175,67 +150,4 @@ final class ParticleProgram implements DumpedProgram {
 		return this.body.reshape(device, layout);
 	}
 
-	/** @see GeometryProgram#compile */
-	@Override
-	public boolean compile(GpuDevice device) {
-		return this.body.compile(device);
-	}
-
-	/** @see GeometryProgram#compiled */
-	@Override
-	public boolean compiled() {
-		return this.body.compiled();
-	}
-
-	/** @see GeometryProgram#forgetCompiled */
-	@Override
-	public void forgetCompiled() {
-		this.body.forgetCompiled();
-	}
-
-	@Override
-	public boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
-		return this.body.warmAhead(device, compiler);
-	}
-
-	@Override
-	public void discardAhead() {
-		this.body.discardAhead();
-	}
-
-	/** @see GeometryProgram#decoded */
-	@Override
-	public String decoded(WorldState world) {
-		return this.body.decoded(world);
-	}
-
-	/** @see GeometryProgram#path */
-	@Override
-	public String path() {
-		return this.body.path();
-	}
-
-	/** @see GeometryProgram#label */
-	@Override
-	public String label() {
-		return this.body.label();
-	}
-
-	/**
-	 * Rotates the ring buffer, once the frame's draw has been recorded.
-	 *
-	 * @see GeometryProgram#rotate
-	 */
-	void rotate() {
-		this.body.rotate();
-	}
-
-	/**
-	 * Closes this program's block and the placeholder textures it made.
-	 *
-	 * @see GeometryProgram#release
-	 */
-	void release() {
-		this.body.release();
-	}
 }

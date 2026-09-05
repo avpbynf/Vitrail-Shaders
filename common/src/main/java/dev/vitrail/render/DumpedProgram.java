@@ -47,8 +47,9 @@ interface DumpedProgram {
 
 	/**
 	 * Compiles this program's pipeline on the pack-load worker, so its first draw finds the work
-	 * already paid instead of paying shaderc on the render thread. The six on-demand families
-	 * override it; the terrain does not, compiling while the world is still held back.
+	 * already paid instead of paying shaderc on the render thread. {@link FamilyProgram} hands it
+	 * to the program for the six on-demand families; the terrain turns it off, compiling while
+	 * the world is still held back.
 	 *
 	 * @param compiler the worker's own compiler, never the device's: the device's belongs to the
 	 *                 render thread along with the caches around it
