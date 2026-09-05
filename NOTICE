@@ -51,7 +51,12 @@ GNU Lesser General Public License version 3
   keeps its overrides for the whole frame; and the final rides with the composites, which is where
   net.irisshaders.iris.shaderpack.texture.TextureStage puts it. The stage each program falls in is
   worked out from this engine's own plan rather than from the flip snapshots Iris takes at link
-  time.
+  time. The pair shadowtex0HW and shadowtex1HW is the second name of each depth image that
+  SEPARATE_HARDWARE_SAMPLERS gives a pack, lines 179 to 183 of the former, read on 5 September
+  2026, and each reads the image its plain twin reads. The gate is not reproduced: Iris binds
+  them only where the pack poses the flag and asks for hardware filtering on that index, while
+  here every pack spelling them gets them, the comparison following the type the pack declared
+  rather than a directive.
 
   common/src/main/java/dev/vitrail/render/ColorTargets.java empties colortex0 to the frame's fog
   colour with an alpha of one, which is what net.irisshaders.iris.targets.ClearPass.execute does

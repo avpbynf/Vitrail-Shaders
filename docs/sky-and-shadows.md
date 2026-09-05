@@ -117,10 +117,12 @@ A pack can read the shadow map with translucent geometry included or excluded. T
 a *copy* taken between the opaque and translucent halves of the shadow stage, not a second render.
 The translucent shadow pass is served through the fallback tree, unblended and without alpha test.
 
-Two of the three names are fixed: one always reads the map without translucents, the other never
-does. Only the bare `shadow` moves, and it moves when a program also declares the water-shadow name:
-then that name reads the map with the translucents in it and `shadow` falls back to the one
-without. No pack of the corpus writes it at all.
+Each of the two images carries a second name as well, `shadowtex0HW` and `shadowtex1HW`, so that
+one program can read the one map both hardware-compared and plain. Those four names are fixed:
+`shadowtex1` and `shadowtex1HW` always read the map without translucents, `shadowtex0` and
+`shadowtex0HW` never do. Only the bare `shadow` moves, and it moves when a program also declares
+the water-shadow name: then that name reads the map with the translucents in it and `shadow` falls
+back to the one without. No pack of the corpus writes it at all.
 
 Coloured light through stained glass does not rest on that swap. It rests on the pair plus the
 shadow colour buffer: a point occluded in one image and clear in the other has something translucent

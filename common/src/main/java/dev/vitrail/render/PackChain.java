@@ -841,6 +841,8 @@ public final class PackChain {
 			// attribute rides in the chunk element, and custom images are served now, so a pack
 			// that cannot draw without either is simply right about what it needs.
 			required.remove("BLOCK_EMISSION_ATTRIBUTE");
+			// The second shadow depth name of each map is bound too, SamplerPlan.SHADOW_DEPTH.
+			required.remove("SEPARATE_HARDWARE_SAMPLERS");
 			if (CustomImages.served()) {
 				required.remove("CUSTOM_IMAGES");
 			}

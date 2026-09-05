@@ -13,6 +13,16 @@ what the next one holds.
 
 ## Unreleased
 
+### Added
+
+- **A pack can read the shadow map under a second, hardware-compared name.** `shadowtex0HW` and
+  `shadowtex1HW` are bound now, to the same two depth images as `shadowtex0` and `shadowtex1`,
+  and each is compared by the hardware where the pack declares it that way. Both names read back
+  black before, and a pack declaring it cannot be drawn without `SEPARATE_HARDWARE_SAMPLERS` was
+  refused at load over that name alone. That name refuses nothing now, though a pack that also
+  requires a name this engine has not built is still refused, the log listing what it asked for.
+  Nothing changes for a pack that never writes the two names.
+
 ### Fixed
 
 - **Importing settings no longer acts on a screen you have already left.** The window that asks

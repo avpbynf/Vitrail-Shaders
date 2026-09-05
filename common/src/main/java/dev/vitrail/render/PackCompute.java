@@ -405,8 +405,12 @@ final class PackCompute implements AutoCloseable {
 		ShadowTargets shadow = targets.shadow();
 		return switch (name) {
 			case "noisetex" -> targets.noise();
-			case "shadowtex0" -> orWhite(targets, shadow == null ? null : shadow.depth());
-			case "shadowtex1" ->
+			// The HW spelling reads the same image as its plain twin, which is the whole of what
+			// SEPARATE_HARDWARE_SAMPLERS asks for. A compute makes every comparison in arithmetic
+			// whatever the pack declared, so nothing but the name reaches this line.
+			case "shadowtex0", "shadowtex0HW" ->
+					orWhite(targets, shadow == null ? null : shadow.depth());
+			case "shadowtex1", "shadowtex1HW" ->
 					orWhite(targets, shadow == null ? null : shadow.depthWithoutTranslucents());
 			case "shadowcolor0" -> orWhite(targets, shadow == null ? null : shadow.colour(0));
 			case "shadowcolor1" -> orWhite(targets, shadow == null ? null : shadow.colour(1));
