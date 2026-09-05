@@ -8,7 +8,6 @@ import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSize;
-import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.PrimitiveTopology;
@@ -17,12 +16,12 @@ import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
+import com.mojang.blaze3d.vulkan.VulkanDevice;
+import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 import java.io.IOException;
 import java.util.EnumMap;
@@ -57,7 +56,7 @@ import java.util.Optional;
  * <strong>A family whose geometry is not Sodium's must not borrow it</strong>, or it takes the push
  * constants with it.
  */
-public final class TerrainProgram implements DumpedProgram {
+public final class TerrainProgram extends FamilyProgram {
 
 	/** The one name that decides everything. See the class comment before shortening it. */
 	private static final String NAMESPACE = Vitrail.MOD_ID + "_sodium";
@@ -65,12 +64,10 @@ public final class TerrainProgram implements DumpedProgram {
 	/** What the log calls this geometry, one word in the middle of a sentence. */
 	private static final String FAMILY = "chunk";
 
-	private final GeometryProgram body;
-
 	private TerrainProgram(TerrainPass pass, PackProgram.Loaded loaded, PackValues values, int load,
 			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets,
 			boolean chainRuns) {
-		this.body = new GeometryProgram(new GeometryProgram.Pass(FAMILY,
+		super(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				pass.name().toLowerCase(Locale.ROOT), NAMESPACE, SodiumVertex.ANSWERED,
 				pass.shadow(),
 				// The translucent half blends over the world, the two opaque ones write outright.
@@ -93,7 +90,21 @@ public final class TerrainProgram implements DumpedProgram {
 				null,
 				// Drawn in the game's own volume, so the dh matrices answer the game's.
 				false),
-				loaded, values, load, format, writes, targets, chainRuns);
+				loaded, values, load, format, writes, targets, chainRuns));
+	}
+
+	/**
+	 * Never ahead: the chunk programs compile while the world is still held back, on the render
+	 * thread where the renderer asks for its shader, and the load worker leaves them alone. The
+	 * six on-demand families take the base's road; this one turns it off where it stands.
+	 */
+	@Override
+	public boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+		return false;
+	}
+
+	@Override
+	public void discardAhead() {
 	}
 
 	/**
@@ -242,33 +253,6 @@ public final class TerrainProgram implements DumpedProgram {
 		return this.body.prepare(device, atlas);
 	}
 
-	/** @see GeometryProgram#compile */
-	@Override
-	public boolean compile(GpuDevice device) {
-		return this.body.compile(device);
-	}
-
-	/** @see GeometryProgram#compiled */
-	@Override
-	public boolean compiled() {
-		return this.body.compiled();
-	}
-
-	/** @see GeometryProgram#forgetCompiled */
-	@Override
-	public void forgetCompiled() {
-		this.body.forgetCompiled();
-	}
-
-	/**
-	 * Binds this program's block and every sampler it declares, inside the pass just opened.
-	 *
-	 * @see GeometryProgram#bind
-	 */
-	void bind(RenderPass pass) {
-		this.body.bind(pass);
-	}
-
 	/**
 	 * Takes the sampler this pack's terrain reads the block atlas through, mipmaps, filtering and
 	 * anisotropy included.
@@ -306,48 +290,4 @@ public final class TerrainProgram implements DumpedProgram {
 		return this.body.covers();
 	}
 
-	/**
-	 * The pass this program is drawn into, or null to leave the chunk renderer its own.
-	 *
-	 * @see GeometryProgram#descriptor
-	 */
-	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
-		return this.body.descriptor(colour, depth);
-	}
-
-	/**
-	 * Rotates the ring buffer, once the frame's draw has been recorded.
-	 *
-	 * @see GeometryProgram#rotate
-	 */
-	void rotate() {
-		this.body.rotate();
-	}
-
-	/** @see GeometryProgram#decoded */
-	@Override
-	public String decoded(WorldState world) {
-		return this.body.decoded(world);
-	}
-
-	/** @see GeometryProgram#path */
-	@Override
-	public String path() {
-		return this.body.path();
-	}
-
-	/** @see GeometryProgram#label */
-	@Override
-	public String label() {
-		return this.body.label();
-	}
-
-	/**
-	 * Closes this program's block and the placeholder textures it made.
-	 *
-	 * @see GeometryProgram#release
-	 */
-	void release() {
-		this.body.release();
-	}
 }

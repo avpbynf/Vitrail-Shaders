@@ -4,10 +4,8 @@ import dev.vitrail.glsl.EntityVertex;
 import dev.vitrail.glsl.LinesVertex;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.program.ProgramFallbacks;
-import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
-import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.platform.CompareOp;
@@ -15,13 +13,8 @@ import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vulkan.VulkanDevice;
-import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 import org.joml.Matrix4fc;
 
@@ -91,7 +84,7 @@ import java.util.Set;
  * {@code pipeline/IrisPipelines.java:150,160,193,205,217}), which is a narrower claim and the true
  * one.
  */
-final class EntityProgram implements DumpedProgram {
+final class EntityProgram extends FamilyProgram {
 
 	/** What the log calls this geometry, one word in the middle of a sentence. */
 	private static final String FAMILY = "entity";
@@ -121,10 +114,8 @@ final class EntityProgram implements DumpedProgram {
 		return element.lines() ? LinesVertex.ANSWERED : EntityVertex.ANSWERED;
 	}
 
-	private final GeometryProgram body;
-
 	private EntityProgram(GeometryProgram body) {
-		this.body = body;
+		super(body);
 	}
 
 	/**
@@ -320,59 +311,12 @@ final class EntityProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pass the run is recorded into, or null, which the caller answers with a plain pass of its
-	 * own or with a refusal.
-	 *
-	 * @see GeometryProgram#descriptor
-	 */
-	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
-		return this.body.descriptor(colour, depth);
-	}
-
-	/**
 	 * Whether the pass to open is the plain one, with none of the pack's own targets named.
 	 *
 	 * @see GeometryProgram#plain
 	 */
 	boolean plain() {
 		return this.body.plain();
-	}
-
-	/**
-	 * Binds this program's block and every sampler it declares, inside the pass just opened.
-	 *
-	 * @see GeometryProgram#bind
-	 */
-	void bind(RenderPass pass) {
-		this.body.bind(pass);
-	}
-
-	/** @see GeometryProgram#compile */
-	@Override
-	public boolean compile(GpuDevice device) {
-		return this.body.compile(device);
-	}
-
-	/** @see GeometryProgram#compiled */
-	@Override
-	public boolean compiled() {
-		return this.body.compiled();
-	}
-
-	/** @see GeometryProgram#forgetCompiled */
-	@Override
-	public void forgetCompiled() {
-		this.body.forgetCompiled();
-	}
-
-	@Override
-	public boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
-		return this.body.warmAhead(device, compiler);
-	}
-
-	@Override
-	public void discardAhead() {
-		this.body.discardAhead();
 	}
 
 	/**
@@ -385,39 +329,4 @@ final class EntityProgram implements DumpedProgram {
 		return this.body.readsGameTransforms();
 	}
 
-	/** @see GeometryProgram#decoded */
-	@Override
-	public String decoded(WorldState world) {
-		return this.body.decoded(world);
-	}
-
-	/** @see GeometryProgram#path */
-	@Override
-	public String path() {
-		return this.body.path();
-	}
-
-	/** @see GeometryProgram#label */
-	@Override
-	public String label() {
-		return this.body.label();
-	}
-
-	/**
-	 * Rotates the ring buffer, once the frame's draw has been recorded.
-	 *
-	 * @see GeometryProgram#rotate
-	 */
-	void rotate() {
-		this.body.rotate();
-	}
-
-	/**
-	 * Closes this program's block and the placeholder textures it made.
-	 *
-	 * @see GeometryProgram#release
-	 */
-	void release() {
-		this.body.release();
-	}
 }

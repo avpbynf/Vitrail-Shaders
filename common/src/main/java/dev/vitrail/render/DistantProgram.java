@@ -5,7 +5,6 @@ import dev.vitrail.glsl.DistantVertex;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
-import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.PrimitiveTopology;
@@ -14,9 +13,6 @@ import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.systems.RenderPassDescriptor;
-import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
 import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
@@ -70,7 +66,7 @@ import java.util.Optional;
  * into the layout, and DH's mesh has no region. It has a section instead, and that is what the
  * second uniform block is for.
  */
-final class DistantProgram implements DumpedProgram {
+final class DistantProgram extends FamilyProgram {
 
 	/** What the log calls this geometry, one word in the middle of a sentence. */
 	private static final String FAMILY = "far terrain";
@@ -102,10 +98,8 @@ final class DistantProgram implements DumpedProgram {
 	private static final DepthStencilState SHADOW_DEPTH =
 			new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true);
 
-	private final GeometryProgram body;
-
 	private DistantProgram(GeometryProgram body) {
-		this.body = body;
+		super(body);
 	}
 
 	/**
@@ -197,48 +191,12 @@ final class DistantProgram implements DumpedProgram {
 	}
 
 	/**
-	 * The pass this program is drawn into, or null to open the plain one.
-	 *
-	 * @see GeometryProgram#descriptor
-	 */
-	RenderPassDescriptor descriptor(GpuTextureView colour, GpuTextureView depth) {
-		return this.body.descriptor(colour, depth);
-	}
-
-	/**
 	 * Whether the pass to open is the plain one, with none of the pack's own targets named.
 	 *
 	 * @see GeometryProgram#plain
 	 */
 	boolean plain() {
 		return this.body.plain();
-	}
-
-	/**
-	 * Binds this program's block and every sampler it declares, inside the pass just opened.
-	 *
-	 * @see GeometryProgram#bind
-	 */
-	void bind(RenderPass pass) {
-		this.body.bind(pass);
-	}
-
-	/** @see GeometryProgram#compile */
-	@Override
-	public boolean compile(GpuDevice device) {
-		return this.body.compile(device);
-	}
-
-	/** @see GeometryProgram#compiled */
-	@Override
-	public boolean compiled() {
-		return this.body.compiled();
-	}
-
-	/** @see GeometryProgram#forgetCompiled */
-	@Override
-	public void forgetCompiled() {
-		this.body.forgetCompiled();
 	}
 
 	@Override
@@ -250,47 +208,7 @@ final class DistantProgram implements DumpedProgram {
 			return false;
 		}
 
-		return this.body.warmAhead(device, compiler);
+		return super.warmAhead(device, compiler);
 	}
 
-	@Override
-	public void discardAhead() {
-		this.body.discardAhead();
-	}
-
-	/** @see GeometryProgram#decoded */
-	@Override
-	public String decoded(WorldState world) {
-		return this.body.decoded(world);
-	}
-
-	/** @see GeometryProgram#path */
-	@Override
-	public String path() {
-		return this.body.path();
-	}
-
-	/** @see GeometryProgram#label */
-	@Override
-	public String label() {
-		return this.body.label();
-	}
-
-	/**
-	 * Rotates the ring buffer, once the frame's draws have been recorded.
-	 *
-	 * @see GeometryProgram#rotate
-	 */
-	void rotate() {
-		this.body.rotate();
-	}
-
-	/**
-	 * Closes this program's block and the placeholder textures it made.
-	 *
-	 * @see GeometryProgram#release
-	 */
-	void release() {
-		this.body.release();
-	}
 }
