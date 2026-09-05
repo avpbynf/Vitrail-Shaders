@@ -31,7 +31,9 @@ import org.lwjgl.vulkan.VkImageViewCreateInfo;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The storage images a pack declared with {@code image.NAME}, allocated on the Vulkan device.
@@ -49,6 +51,13 @@ public final class StorageImages implements AutoCloseable {
 
 	private final ImageInformation.Reading declared;
 	private final List<Allocated> allocated = new ArrayList<>();
+
+	/**
+	 * Every name a descriptor push may ask for, resolved to the view it gets, rebuilt whenever
+	 * {@link #allocated} changes. The push asks once per descriptor of every pass of the game,
+	 * Sodium's included, so the answer is a map read and never a walk.
+	 */
+	private Map<String, Bound> bindings = Map.of();
 	private int lastWidth;
 	private int lastHeight;
 	private boolean laidOut;
@@ -80,17 +89,23 @@ public final class StorageImages implements AutoCloseable {
 	}
 
 	private Bound lookup(String name) {
-		for (Allocated image : this.allocated) {
-			if (image.declared.name().equals(name)) {
-				return new Bound(image.view, true, image.declared.internalFormat().used().integer());
-			}
+		return this.bindings.get(name);
+	}
 
-			if (image.declared.sampler().filter(name::equals).isPresent()) {
-				return new Bound(image.view, false, image.declared.internalFormat().used().integer());
-			}
+	/**
+	 * The first image declaring a name answers for it, the image uniform before the sampler on
+	 * the same line, which is the order the walk this replaces read them in.
+	 */
+	private void rebind() {
+		Map<String, Bound> bound = new HashMap<>();
+		for (Allocated image : this.allocated) {
+			boolean integer = image.declared.internalFormat().used().integer();
+			bound.putIfAbsent(image.declared.name(), new Bound(image.view, true, integer));
+			image.declared.sampler().ifPresent(sampler ->
+					bound.putIfAbsent(sampler, new Bound(image.view, false, integer)));
 		}
 
-		return null;
+		this.bindings = Map.copyOf(bound);
 	}
 
 	/**
@@ -183,6 +198,7 @@ public final class StorageImages implements AutoCloseable {
 
 		this.lastWidth = screenWidth;
 		this.lastHeight = screenHeight;
+		rebind();
 		layoutIfNeeded();
 	}
 
@@ -489,6 +505,7 @@ public final class StorageImages implements AutoCloseable {
 		}
 
 		this.allocated.clear();
+		this.bindings = Map.of();
 		this.lastWidth = 0;
 		this.lastHeight = 0;
 		this.laidOut = false;
