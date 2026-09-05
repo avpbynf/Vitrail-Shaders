@@ -38,6 +38,7 @@ import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -124,6 +125,15 @@ final class PackPass {
 	 */
 	private final List<SamplerPlan.Binding> samplerBindings;
 
+	/**
+	 * For each of {@link #samplers}, what the pack supplies under that name, or null for every
+	 * other kind of binding and for a name the pack took over with nothing behind it. Settled
+	 * with the plan for the same reason as {@link #samplerBindings}: the resolution walked the
+	 * pack's texture directives by name per sampler, per pass and per frame, and only the view
+	 * behind the image can move.
+	 */
+	private final List<ColorTargets.PackSource> packSources;
+
 	private final List<String> storage;
 	private final List<LodRead> lodReads;
 
@@ -179,6 +189,13 @@ final class PackPass {
 		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.catalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
 		this.samplerBindings = this.samplers.stream().map(loaded.samplers()::binding).toList();
+		List<ColorTargets.PackSource> sources = new ArrayList<>();
+		for (int at = 0; at < this.samplers.size(); at++) {
+			sources.add(this.samplerBindings.get(at).kind() == SamplerPlan.Kind.PACK_TEXTURE
+					? targets.packSource(this.textureStage, this.samplers.get(at))
+					: null);
+		}
+		this.packSources = Collections.unmodifiableList(sources);
 		this.storage = loaded.storageBlocks().stream()
 				.distinct()
 				.filter(StorageBuffers::named)
@@ -560,11 +577,10 @@ final class PackPass {
 			// A texture the pack ships answers all three questions at once, and they are one
 			// answer: which image, how it is filtered, and how it is addressed outside zero to one
 			// are all the pack's to say, in the same directive and the same .mcmeta beside it.
-			ColorTargets.PackBinding supplied = binding.kind() == SamplerPlan.Kind.PACK_TEXTURE
-					? targets.packTexture(this.textureStage, sampler)
-					: null;
+			ColorTargets.PackSource source = this.packSources.get(at);
+			GpuTextureView supplied = source == null ? null : targets.packView(source.image());
 
-			GpuTextureView bound = supplied != null ? supplied.view() : switch (binding.kind()) {
+			GpuTextureView bound = supplied != null ? supplied : switch (binding.kind()) {
 				case COLORTEX -> targets.view(binding.index(), binding.side());
 				// White where no image is there, and white is the far plane rather than a
 				// placeholder: what a depth lookup reads is now an image already in the pack's own
@@ -635,7 +651,7 @@ final class PackPass {
 			//
 			// A custom image is the image's own answer and not this pass's, which is why it is
 			// asked of one place rather than decided here: see customImageFilter.
-			FilterMode filter = supplied != null ? supplied.filter() : switch (binding.kind()) {
+			FilterMode filter = supplied != null ? source.filter() : switch (binding.kind()) {
 				case COLORTEX -> targets.filter(binding.index());
 				case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
 				case CUSTOM_IMAGE -> customImageFilter(sampler);
@@ -671,7 +687,7 @@ final class PackPass {
 			// itself, in the .mcmeta beside the file.
 			pass.bindTexture(sampler, bound == null ? targets.black() : bound,
 					supplied != null
-							? sampler(supplied.repeat(), filter, false)
+							? sampler(source.repeat(), filter, false)
 							: sampler(binding.kind(), filter, mipmaps));
 		}
 	}
