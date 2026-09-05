@@ -294,9 +294,6 @@ public final class PackChain {
 	private final String world;
 	private final ColorTargets targets;
 
-	/** Fills the mip chains of the targets the programs of this place read at a lod. */
-	private final MipmapReduction mipmaps = new MipmapReduction();
-
 	/**
 	 * The chains {@link #drawRange} has filled and nothing has written over since. Held by the
 	 * surface itself and never by target and side, because the two spellings do not name surfaces
@@ -2417,15 +2414,14 @@ public final class PackChain {
 
 			// Right before the first program that reads them after a write: a chain is only true
 			// of the level nought it was built from, and every pass between the two may have
-			// written it. The reduction opens render passes of its own, which is why this is here
-			// rather than inside the draw: a pass cannot be opened while another is recording. A
-			// chain filled for an earlier reader and written over by nothing since is still true,
-			// so it is not refilled: two readers in a row used to pay two whole chains for one
-			// image.
+			// written it. The blits record outside any pass, which is why this is here rather
+			// than inside the draw: a transfer cannot be recorded while a pass is. A chain filled
+			// for an earlier reader and written over by nothing since is still true, so it is not
+			// refilled: two readers in a row used to pay two whole chains for one image.
 			for (PackPass.LodRead read : pass.lodReads()) {
 				TargetSurface surface = this.targets.surface(read.target(), read.side());
 				if (surface != null && !this.currentChains.contains(surface)
-						&& this.mipmaps.generate(encoder, device, this.quad, surface)) {
+						&& MipmapReduction.generate(encoder, surface)) {
 					this.currentChains.add(surface);
 				}
 			}

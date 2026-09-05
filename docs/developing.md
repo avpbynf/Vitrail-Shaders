@@ -258,9 +258,9 @@ changes need one.
 
 **The narrowed synchronisation can be put back.** An empty file `vitrail/full-pass-barrier` in the
 instance, or `-Dvitrail.fullPassBarrier=true` among the JVM arguments, closes every pass on the
-game's full memory barrier and sends the mip chain back to a pass per level. It is slower and it
-cannot be the cause of a wrong image, so it is the first thing to ask of a machine that draws one
-this one does not.
+game's full memory barrier and puts that same barrier between the levels of a mip chain. It is
+slower and it cannot be the cause of a wrong image, so it is the first thing to ask of a machine
+that draws one this one does not.
 
 **The block atlas filter can be put back the way it was.** An empty file
 `vitrail/legacy-terrain-filter` in the instance, or `-Dvitrail.legacyTerrainFilter=true`, sends a

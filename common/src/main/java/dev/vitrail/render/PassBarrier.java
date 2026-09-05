@@ -24,7 +24,7 @@ import java.nio.file.Files;
  * So: a file {@code vitrail/full-pass-barrier} in the game directory, or
  * {@code -Dvitrail.fullPassBarrier=true} where somebody has a launcher to type it in. Either puts
  * the game's own wait back on both roads where this engine traded one away: the close of a pass of
- * ours, and the mip chain, which gave up a pass per level and the barrier each of those ended on.
+ * ours, and the mip chain, whose blits are ordered by transfer barriers and a named tail instead.
  * It is slower and it cannot be the cause of anything, so an image that comes right with it names
  * the synchronisation.
  * <p>

@@ -8,8 +8,8 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.util.Mth;
 
 /**
- * One colour target of a pack: its texture, the view a sampler reads it whole through, and one view
- * per mip level for the reduction to draw into.
+ * One colour target of a pack: its texture, the view a sampler reads it whole through, and the
+ * view of its base level alone for a compute to store into.
  * <p>
  * This exists because {@link com.mojang.blaze3d.pipeline.TextureTarget} cannot express a mip chain.
  * {@code RenderTarget.createBuffers} calls {@code createTexture} with a level count of one, hard
@@ -17,18 +17,11 @@ import net.minecraft.util.Mth;
  * Everything else it did for us was one texture, one view and a resize, which is what is here.
  * <p>
  * The level count is a property of the target rather than of a program: several programs may read
- * the same target at a lod, and the chain that serves them is one. It is taken from the SMALLER
- * dimension, {@code log2(min(width, height)) + 1}, and that is a correction rather than a choice.
- * The device would accept a chain as long as the larger dimension allows, but
- * {@link GpuTexture#getWidth} shifts without clamping, and the render pass that writes a level
- * takes its area straight from that shift: on an ultrawide screen a chain sized on the width
- * reaches a level whose height shifts to nought, and the pass that would fill it is asked to cover
- * nothing. Sized on the smaller dimension every level has both extents at one texel or more.
- * <p>
- * What that costs is nothing the packs can feel: on 2560x1080 the last level is two texels by one
- * instead of one by one. BSL's automatic exposure asks for
- * {@code log2(viewHeight * AUTO_EXPOSURE_RADIUS)}, which is bounded by the height, so the level it
- * lands on exists either way.
+ * the same target at a lod, and the chain that serves them is one. It runs to one texel on the
+ * LONGER side, {@code log2(max(width, height)) + 1}, which is the chain OpenGL builds and the one
+ * every pack reading a lod was written against. The shorter side floors at one texel along the
+ * way, and the blit that fills the chain floors it too; {@link GpuTexture#getWidth} does not, so
+ * a level of that tail has to be sized by hand wherever its extent is wanted.
  */
 final class TargetSurface implements AutoCloseable {
 
@@ -47,10 +40,10 @@ final class TargetSurface implements AutoCloseable {
 	private GpuTextureView view;
 
 	/**
-	 * One view per level, each covering a single level, for a render pass to attach. Null for a
-	 * surface with no chain, where the only attachment is {@link #view}.
+	 * The base level alone, for a storage descriptor. Null for a surface with no chain, where
+	 * {@link #view} is one level already.
 	 */
-	private GpuTextureView[] levelViews;
+	private GpuTextureView baseView;
 
 	private int width;
 	private int height;
@@ -90,9 +83,16 @@ final class TargetSurface implements AutoCloseable {
 		allocate(width, height);
 	}
 
-	/** The chain is as long as the smaller dimension allows, and one level when nothing reads a lod. */
+	/**
+	 * The chain runs until the LONGER side is one texel, and is one level when nothing reads a lod.
+	 * <p>
+	 * The longer side and not the shorter, which is what OpenGL's full chain is and therefore what
+	 * every pack reading a lod was written against: on a 2560 by 1440 screen a chain counted off
+	 * the shorter side stops at 2 by 1, and a lod read past that level is clamped to it where
+	 * OpenGL had one more. The shorter side floors at one texel along the way, as it does there.
+	 */
 	static int levelsFor(boolean mipped, int width, int height) {
-		return mipped ? Mth.log2(Math.min(width, height)) + 1 : 1;
+		return mipped ? Mth.log2(Math.max(width, height)) + 1 : 1;
 	}
 
 	int width() {
@@ -151,27 +151,12 @@ final class TargetSurface implements AutoCloseable {
 	 * on a surface with no chain, where the whole view is one level already.
 	 */
 	GpuTextureView storageView() {
-		GpuTextureView base = levelView(0);
-
-		return base == null ? this.view : base;
+		return this.baseView == null ? this.view : this.baseView;
 	}
 
 	/** Whether this surface was created writable from a compute, which nothing can add afterwards. */
 	boolean storage() {
 		return this.storage;
-	}
-
-	/**
-	 * One level on its own, for the reduction to draw into. A render pass attaches a view and writes
-	 * whatever it covers, so a view of one level is how a single level is written without touching
-	 * the rest of the chain.
-	 */
-	GpuTextureView levelView(int level) {
-		if (this.levelViews == null || level < 0 || level >= this.levelViews.length) {
-			return null;
-		}
-
-		return this.levelViews[level];
 	}
 
 	/**
@@ -221,10 +206,7 @@ final class TargetSurface implements AutoCloseable {
 			this.view = device.createTextureView(this.texture);
 
 			if (levels > 1) {
-				this.levelViews = new GpuTextureView[levels];
-				for (int level = 0; level < levels; level++) {
-					this.levelViews[level] = device.createTextureView(this.texture, level, 1);
-				}
+				this.baseView = device.createTextureView(this.texture, 0, 1);
 			}
 		} catch (RuntimeException e) {
 			close();
@@ -238,14 +220,9 @@ final class TargetSurface implements AutoCloseable {
 	 */
 	@Override
 	public void close() {
-		if (this.levelViews != null) {
-			for (GpuTextureView levelView : this.levelViews) {
-				if (levelView != null) {
-					levelView.close();
-				}
-			}
-
-			this.levelViews = null;
+		if (this.baseView != null) {
+			this.baseView.close();
+			this.baseView = null;
 		}
 
 		if (this.view != null) {
