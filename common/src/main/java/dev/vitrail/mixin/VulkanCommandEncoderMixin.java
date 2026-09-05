@@ -19,6 +19,7 @@ import org.lwjgl.vulkan.VkImageBlit;
 import org.lwjgl.vulkan.VkImageMemoryBarrier2;
 import org.lwjgl.vulkan.VkImageSubresourceRange;
 import org.lwjgl.vulkan.VkMemoryBarrier2;
+import org.lwjgl.vulkan.VkViewport;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -35,14 +36,17 @@ import java.util.function.Supplier;
  * <p>
  * Mip chains go through {@code vkCmdBlitImage}, which is what {@code glGenerateMipmap} is on this
  * backend: scaled copies on the same command buffer, not a render pass per level. A pass per level
- * was the only public path, and each one ends with a full memory barrier. Iris pays one driver
- * call. The blit loop is that call: transfer barriers between levels so each read sees the write
- * below it, then one barrier naming what a filled chain owes the rest of the frame.
+ * was the only public path, each one ending on a full memory barrier, and the game refuses one on a
+ * level whose shorter side shifts to nought, which every chain that runs to one texel on its longer
+ * side has. Iris pays one driver call. The blit loop is that call: transfer barriers between
+ * levels so each read sees the write below it, then one barrier naming what a filled chain owes
+ * the rest of the frame.
  * <p>
  * Closing a pass still runs the encoder's full barrier. Our own labels start with {@code Vitrail}
  * and get a write-then-sample barrier instead, the rest of the frame keeping the original wait.
- * {@link PassBarrier} puts the original wait back on ours too, and sends the mip chain back to a
- * pass per level, for a machine where the narrow one is suspected of a wrong image.
+ * {@link PassBarrier} puts the original wait back on ours too, and between the blits of a chain in
+ * place of the transfer barriers, for a machine where the narrow ones are suspected of a wrong
+ * image.
  */
 @Mixin(VulkanCommandEncoder.class)
 public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
@@ -157,12 +161,7 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 
 	@Override
 	public boolean vitrail$generateMipmaps(GpuTexture texture) {
-		// Refused while the wide wait is armed, so the caller goes back to a pass per level and
-		// every one of those ends on the game's own barrier. The switch would otherwise leave the
-		// mip chain on transfer barriers alone, and a reporter whose image is still wrong with it on
-		// would clear the synchronisation for a road it never put back.
-		if (PassBarrier.full() || this.currentRenderPass != null
-				|| !(texture instanceof VulkanGpuTexture image)) {
+		if (this.currentRenderPass != null || !(texture instanceof VulkanGpuTexture image)) {
 			return false;
 		}
 
@@ -174,6 +173,10 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 		int aspect = VulkanConst.formatAspectMask(texture.getFormat());
 		int filter = integer(texture) ? VK10.VK_FILTER_NEAREST : VK10.VK_FILTER_LINEAR;
 		long vkImage = image.vkImage();
+		// The wide wait, when armed, stands where each transfer barrier would: a reporter whose
+		// image is still wrong with it on has then cleared the synchronisation of this road too,
+		// rather than of the passes alone.
+		boolean wide = PassBarrier.full();
 
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			VkCommandBuffer commands = vitrail$commandBuffer();
@@ -202,18 +205,44 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 				VK12.vkCmdBlitImage(commands, vkImage, VK10.VK_IMAGE_LAYOUT_GENERAL, vkImage,
 						VK10.VK_IMAGE_LAYOUT_GENERAL, region, filter);
 
-				if (level + 1 < levels) {
+				if (wide) {
+					VulkanCommandEncoder.memoryBarrier(commands, stack);
+				} else if (level + 1 < levels) {
 					vitrail$transferBarrier(commands, stack, vkImage, aspect, level);
 				}
 			}
 
-			vitrail$chainTailBarrier(commands, stack);
-			return true;
-		} catch (RuntimeException e) {
-			Vitrail.logger().error("Blit mipmaps failed on {}, falling back to a pass per level",
-					texture.getLabel(), e);
+			if (!wide) {
+				vitrail$chainTailBarrier(commands, stack);
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * The same call the pass constructor makes, with the extent said rather than the one shifted
+	 * off the attachment. Dynamic state on the pass's own command buffer, so it holds until the
+	 * next pass opens and sets its own.
+	 */
+	@Override
+	public boolean vitrail$viewport(int width, int height) {
+		if (this.currentRenderPass == null || width <= 0 || height <= 0) {
 			return false;
 		}
+
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			VkViewport.Buffer viewport = VkViewport.calloc(1, stack)
+					.x(0.0F)
+					.y(0.0F)
+					.width(width)
+					.height(height)
+					.minDepth(0.0F)
+					.maxDepth(1.0F);
+			VK12.vkCmdSetViewport(vitrail$commandBuffer(), 0, viewport);
+		}
+
+		return true;
 	}
 
 	/**
@@ -254,9 +283,8 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 	 * wrote the base has already closed on its own barrier, and that is also what ordered the
 	 * first blit's read. What can touch the chain next is a sampled read from any shader stage, a
 	 * pass writing the base again, or another transfer; the image is a colour target, so no depth
-	 * stage ever meets it. The wide wait never reaches here: {@code vitrail$generateMipmaps}
-	 * refuses while it is armed, and the caller then pays a pass per level, each closing on the
-	 * game's own barrier.
+	 * stage ever meets it. The wide wait never reaches here: while it is armed, the game's own
+	 * barrier already stands after the last blit.
 	 */
 	@Unique
 	private static void vitrail$chainTailBarrier(VkCommandBuffer commands, MemoryStack stack) {
