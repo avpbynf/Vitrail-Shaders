@@ -45,8 +45,9 @@ import java.util.stream.Stream;
  * The tokens themselves, and every way of reading them or changing them, belong to
  * {@link TokenStream} rather than to this class, and the header written in front of what the
  * passes leave belongs to {@link Emitter}. What is left here is the pipeline: one pass per rule,
- * in the order {@link #rewrite} runs them, one of them being {@link VaryingSplit}, which is a
- * class of its own for the state it carries out of the text.
+ * in the order {@link #rewrite} runs them. Two of those passes carry enough state out of the text
+ * to be classes of their own, {@link VaryingSplit} and {@link VolumeFlattening}, and the pipeline
+ * calls them where it would have run them.
  * <p>
  * Two things are deliberately left undone, and both were done by the measuring prototype.
  * No {@code layout(binding = )} is emitted, and no {@code layout(location = )} except on fragment
@@ -264,9 +265,6 @@ public final class GlslTranslator {
 	 */
 	static final String HASH = "ofHash";
 
-	/** What a lookup on a volume the pack ships is called once the volume has been laid out flat. */
-	private static final String VOLUME_LOOKUP = "ofTexture3D_";
-
 	/** The depth at the centre of the screen, which is accumulated in a texel rather than in a value. */
 	private static final String CENTER_DEPTH = "centerDepthSmooth";
 
@@ -285,9 +283,8 @@ public final class GlslTranslator {
 	private static final String DRAW_MODEL_VIEW =
 			"(" + LegacyGlsl.CAMERA_BOB + " * " + LegacyGlsl.GAME_MODEL_VIEW + ")";
 
-	/** The one call a volume lookup may be written as, and the number of arguments it takes. */
-	private static final String LOOKUP = "texture";
-	private static final int LOOKUP_ARGUMENTS = 2;
+	/** The one call a volume lookup may be written as. */
+	static final String LOOKUP = "texture";
 
 	/** What the word sampler is followed by when the declaration asks for a comparison. */
 	private static final String SHADOW_SHAPE = "Shadow";
@@ -332,10 +329,10 @@ public final class GlslTranslator {
 	private final String program;
 
 	/**
-	 * The volumes the pack ships and this engine serves flat, by the name the pack samples them
-	 * under. Empty everywhere but the two packs of the corpus that ship one.
+	 * The volumes the pack ships and this engine serves flat, and what moving them onto an atlas
+	 * left behind. Nothing to do everywhere but the two packs of the corpus that ship one.
 	 */
-	private final Map<String, VolumeAtlas> volumes;
+	private final VolumeFlattening volumes;
 
 	/** What the fragment stage discards at, which the fixed function pipeline used to hold. */
 	private final AlphaTest alphaTest;
@@ -390,9 +387,6 @@ public final class GlslTranslator {
 
 	/** Storage blocks this unit declares at file scope, each under the binding it was written at. */
 	private final List<TranslatedUnit.StorageBlock> storageBlocks = new ArrayList<>();
-
-	/** The volumes this unit reads, and so the helpers its header owes, by the pack's own name. */
-	private final Map<String, VolumeAtlas> readVolumes = new LinkedHashMap<>();
 
 	/**
 	 * The comparison samplers whose comparison is made in arithmetic, their declarations rewritten
@@ -471,8 +465,6 @@ public final class GlslTranslator {
 	private int dynamicFragData;
 	private int shadowCalls;
 	private int unwrappedShadowCalls;
-	private int volumeLookups;
-	private int volumesLeftAlone;
 
 	/** The lookups of those that were really rewritten onto {@link #SHADOW_COMPARE}, which is what
 	 * says whether the header owes the helper at all. */
@@ -592,7 +584,6 @@ public final class GlslTranslator {
 		this.alphaTest = alphaTest;
 		this.coverage = coverage;
 		this.program = program;
-		this.volumes = Collections.unmodifiableMap(new LinkedHashMap<>(volumes));
 
 		// Tokens cost far more than the text they came from, roughly seventy bytes each, so a unit
 		// the expander should never have produced has to be refused before it is read rather than
@@ -606,6 +597,8 @@ public final class GlslTranslator {
 
 		this.tokens = new TokenStream(GlslLexer.lex(text));
 		this.splits = new VaryingSplit(this.tokens, unit, stage, this::fileScopeDeclaration);
+		this.volumes = new VolumeFlattening(this.tokens, unit, volumes, this.packMacros,
+				this.macroAliases);
 	}
 
 	/**
@@ -735,7 +728,7 @@ public final class GlslTranslator {
 		// After the identifiers and before the depth, and both halves of that matter: the legacy
 		// spellings have to have become texture() before a lookup can be recognised, and what comes
 		// out of here is a call under a name of ours that the depth pass will not look at twice.
-		flattenVolumes();
+		this.volumes.flatten();
 		convertDepth();
 		dropPrecision();
 		// After precision, so a leftover highp does not sit between const and the type this pass
@@ -4268,261 +4261,6 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Moves every volume the pack ships onto a flat atlas: the declaration to a {@code sampler2D}
-	 * under a forged name, and each lookup to a helper that reads two slices and mixes them.
-	 * <p>
-	 * <strong>The declaration is what has to go, not the lookup.</strong>
-	 * {@code GlslCompiler.addToBindGroup} refuses anything the reflection reports as neither
-	 * {@code SpvDim2D} nor {@code SpvDimCube}, and the reflection lists a module's whole resource
-	 * list at optimisation level zero, so a {@code sampler3D} declared in a shared include and never
-	 * read costs the program its pipeline exactly as one sampled on every pixel does. Supplying a
-	 * real volume would not help either: the type is the refusal.
-	 * <p>
-	 * <strong>Every program carrying the declaration is rewritten, and Iris rewrites only the stage
-	 * the directive names.</strong> Its {@code TextureTransformer} runs per stage, so under it
-	 * Mellow's composites and its final keep a live {@code sampler3D colortex6} bound to nothing,
-	 * which GL tolerates and Vulkan does not. Renaming everywhere invents nothing: the pack has
-	 * named exactly one file for that identifier, with its shape, its size and its format written
-	 * out, and that file is what every one of those declarations was going to read.
-	 * <p>
-	 * Nothing is moved unless everything can be. A name this unit reaches any other way than as
-	 * {@code texture(name, vec3)}, the name being the declared one or a macro the unit defines as
-	 * exactly that name, is counted and left exactly as it stands, declaration included, so the
-	 * program stays refused with the message it had. There is no site in the corpus like that, and
-	 * the count is what would say one had appeared.
-	 */
-	private void flattenVolumes() {
-		if (this.volumes.isEmpty()) {
-			return;
-		}
-
-		int[] lines = this.tokens.lineNumbers();
-		this.volumes.forEach((name, atlas) -> flattenOne(name, atlas, lines));
-	}
-
-	private void flattenOne(String name, VolumeAtlas atlas, int[] lines) {
-		// The name token of a declaration, and the pair of tokens each lookup rewrites: the callee
-		// and the argument. Held rather than found again below, so that what is rewritten is what
-		// was judged.
-		List<Integer> declarations = new ArrayList<>();
-		Map<Integer, Integer> lookups = new LinkedHashMap<>();
-		boolean elsewhere = this.packMacros.contains(name);
-		Set<String> spellings = spellingsOf(name);
-
-		for (int index = 0; index < this.tokens.size(); index++) {
-			Token token = this.tokens.get(index);
-			if (token.kind() != Kind.IDENTIFIER || !spellings.contains(token.text())
-					|| !this.unit.isLive(lines[index])) {
-				continue;
-			}
-
-			if (token.directive() != null) {
-				// The preprocessor's own lines: an alias being defined or tested is its business,
-				// and the name standing as an alias's replacement text IS the alias. The name on
-				// any other directive is a use this pass cannot follow.
-				if (token.text().equals(name) && !aliasBody(index)) {
-					elsewhere = true;
-				}
-
-				continue;
-			}
-
-			int callee = plainLookup(index);
-			if (token.text().equals(name) && volumeDeclaration(index)) {
-				declarations.add(index);
-			} else if (callee >= 0) {
-				lookups.put(index, callee);
-			} else {
-				elsewhere = true;
-			}
-		}
-
-		// A unit that reads the name without declaring it has been handed the sampler by something
-		// this pass has not seen, so there is nothing here to rename it against.
-		if (declarations.isEmpty()) {
-			return;
-		}
-
-		if (elsewhere) {
-			this.volumesLeftAlone++;
-			return;
-		}
-
-		String forged = SamplerPlan.forged(name);
-		for (int declaration : declarations) {
-			this.tokens.replace(this.tokens.significantBefore(declaration), "sampler2D");
-			this.tokens.replace(declaration, forged);
-		}
-
-		lookups.forEach((argument, callee) -> {
-			this.tokens.replace(callee, VOLUME_LOOKUP + name);
-			this.tokens.replace(argument, forged);
-		});
-
-		this.volumeLookups += lookups.size();
-		if (!lookups.isEmpty()) {
-			this.readVolumes.put(name, atlas);
-		}
-	}
-
-	/** The name and every macro the unit defines as exactly that name, aliases of aliases included. */
-	private Set<String> spellingsOf(String name) {
-		Set<String> spellings = new HashSet<>();
-		spellings.add(name);
-		boolean grew = true;
-		while (grew) {
-			grew = false;
-			for (Map.Entry<String, String> alias : this.macroAliases.entrySet()) {
-				if (spellings.contains(alias.getValue()) && spellings.add(alias.getKey())) {
-					grew = true;
-				}
-			}
-		}
-
-		return spellings;
-	}
-
-	/**
-	 * Whether this token, on a directive, is the whole replacement text of a macro standing for it:
-	 * the {@code depthtex0} of {@code #define ATMOSPHERE_SCATTERING_LUT depthtex0}.
-	 */
-	private boolean aliasBody(int index) {
-		for (int scan = index - 1; scan >= 0; scan--) {
-			Token token = this.tokens.get(scan);
-			if (token.trivia()) {
-				continue;
-			}
-
-			return token.macroName()
-					&& this.tokens.get(index).text().equals(this.macroAliases.get(token.text()));
-		}
-
-		return false;
-	}
-
-	/**
-	 * Whether this name is being declared as a uniform of a three dimensional shape here.
-	 * <p>
-	 * The {@code uniform} is demanded and the type is not enough on its own: a function taking a
-	 * {@code sampler3D} parameter of the same name declares a name inside its own body, and renaming
-	 * that would leave the body reading a parameter nobody passes.
-	 */
-	private boolean volumeDeclaration(int index) {
-		int type = this.tokens.significantBefore(index);
-		if (type < 0 || this.tokens.get(type).kind() != Kind.IDENTIFIER
-				|| !"3D".equals(SamplerTypes.shapeOf(this.tokens.get(type).text()))) {
-			return false;
-		}
-
-		int cursor = this.tokens.significantBefore(type);
-		while (cursor >= 0 && isQualifier(this.tokens.get(cursor))) {
-			cursor = this.tokens.significantBefore(cursor);
-		}
-
-		return cursor >= 0 && this.tokens.get(cursor).identifier("uniform");
-	}
-
-	/**
-	 * The {@code texture} this name is the first argument of, or -1 when it is reached any other
-	 * way. The argument count is checked as well as the name: {@code texture(s, p, bias)} compiles
-	 * and means something else, and the helper takes two.
-	 */
-	private int plainLookup(int index) {
-		int open = this.tokens.significantBefore(index);
-		if (open < 0 || !this.tokens.get(open).operator("(")) {
-			return -1;
-		}
-
-		int callee = this.tokens.significantBefore(open);
-		if (callee < 0 || !this.tokens.get(callee).identifier(LOOKUP)) {
-			return -1;
-		}
-
-		int close = this.tokens.matchingBracket(open);
-
-		return close >= 0 && arguments(open, close) == LOOKUP_ARGUMENTS ? callee : -1;
-	}
-
-	/** How many arguments a call holds, counting the commas that belong to it and not to a nested one. */
-	private int arguments(int open, int close) {
-		int depth = 0;
-		int count = 1;
-
-		for (int index = open; index < close; index++) {
-			Token token = this.tokens.get(index);
-			if (token.kind() != Kind.OPERATOR || token.directive() != null) {
-				continue;
-			}
-
-			String text = token.text();
-			if (text.equals("(") || text.equals("[")) {
-				depth++;
-			} else if (text.equals(")") || text.equals("]")) {
-				depth--;
-			} else if (depth == 1 && text.equals(",")) {
-				count++;
-			}
-		}
-
-		return count;
-	}
-
-	/**
-	 * The trilinear read of a volume, over the atlas its slices were laid out in.
-	 * <p>
-	 * The hardware does the two dimensional half: each slice carries one texel of gutter holding
-	 * what lies past its edge, the far edge for a volume that repeats and the edge itself for one
-	 * that clamps, so a bilinear tap at the edge of a tile reads what {@code REPEAT} or
-	 * {@code CLAMP} would have read on a real volume rather than the slice next door. Only the depth
-	 * is done here, two taps and a mix, because nothing interpolates between tiles of an atlas, and
-	 * the slice index repeats or clamps as the pack asked.
-	 * <p>
-	 * The half texel is the whole of the arithmetic: a lookup at {@code u} samples the volume at
-	 * {@code u * size - 0.5} in texels, and the atlas coordinate has to land on the same pair of
-	 * texels the hardware would have blended. Every constant here comes from {@link VolumeAtlas} so
-	 * that this and the upload cannot drift apart; a layout written twice reads as noise, and noise
-	 * that is wrong looks exactly like noise that is right.
-	 */
-	static List<String> volumeHelper(String name, VolumeAtlas atlas) {
-		String depth = whole(atlas.depth());
-		String last = Integer.toString(atlas.depth() - 1);
-		String tiles = Integer.toString(atlas.tilesPerRow());
-
-		List<String> lines = new ArrayList<>();
-		lines.add("vec4 " + VOLUME_LOOKUP + name + "(sampler2D ofMap, vec3 ofAt) {");
-		lines.add(atlas.clamp() ? "\tvec3 ofQ = clamp(ofAt, 0.0, 1.0);" : "\tvec3 ofQ = fract(ofAt);");
-		lines.add("\tfloat ofZ = ofQ.z * " + depth + " - 0.5;");
-		lines.add("\tfloat ofBase = floor(ofZ);");
-		lines.add("\tvec2 ofIn = ofQ.xy * vec2(" + whole(atlas.width()) + ", " + whole(atlas.height())
-				+ ") + " + whole(VolumeAtlas.GUTTER) + ";");
-		if (atlas.clamp()) {
-			lines.add("\tint ofNear = clamp(int(ofBase), 0, " + last + ");");
-			lines.add("\tint ofFar = clamp(int(ofBase) + 1, 0, " + last + ");");
-		} else {
-			lines.add("\tint ofNear = int(mod(ofBase, " + depth + "));");
-			lines.add("\tint ofFar = int(mod(ofBase + 1.0, " + depth + "));");
-		}
-
-		lines.add("\tvec2 ofTile = vec2(" + whole(atlas.tileStride()) + ", " + whole(atlas.tileHeight())
-				+ ");");
-		lines.add("\tvec2 ofSize = vec2(" + whole(atlas.atlasWidth()) + ", " + whole(atlas.atlasHeight())
-				+ ");");
-		lines.add("\tvec2 ofA = (vec2(ofNear % " + tiles + ", ofNear / " + tiles
-				+ ") * ofTile + ofIn) / ofSize;");
-		lines.add("\tvec2 ofB = (vec2(ofFar % " + tiles + ", ofFar / " + tiles
-				+ ") * ofTile + ofIn) / ofSize;");
-		lines.add("\treturn mix(texture(ofMap, ofA), texture(ofMap, ofB), clamp(ofZ - ofBase, 0.0, 1.0));");
-		lines.add("}");
-
-		return lines;
-	}
-
-	/** An integer as a GLSL float literal, spelled by hand so that no locale can put a comma in it. */
-	private static String whole(int value) {
-		return value + ".0";
-	}
-
-	/**
 	 * Records every storage block the unit declares, so a {@code bufferObject} can be bound to it.
 	 * <p>
 	 * Named rather than rewritten because the game never looks for one.
@@ -4741,7 +4479,7 @@ public final class GlslTranslator {
 	private Emitter emitter() {
 		return new Emitter(this.stage, this.inputs, this.bound, this.alphaTest, this.engineDefines,
 				this.memoryQualifiers, this.used, this.declaredNames, this.synthesized,
-				this.readVolumes, this.packOutputs, this.maxFragmentOutput, this.owedOutputs,
+				this.volumes.read(), this.packOutputs, this.maxFragmentOutput, this.owedOutputs,
 				this.splits, this.gameTextureMatrix,
 				this.gameModelView, this.softRewrites, this.trigCalls, this.hashCalls,
 				this.mainWrapped, this.depthEpilogue, this.terrainPrologue, this.distantPrologue,
@@ -4838,7 +4576,7 @@ public final class GlslTranslator {
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
 				List.copyOf(this.conflicts), comparedSamplers(), hardwareComparedSamplers(),
 				List.copyOf(this.storageBlocks),
-				this.volumeLookups, this.volumesLeftAlone, this.trigCalls, this.gameTextureMatrix,
+				this.volumes.lookups(), this.volumes.leftAlone(), this.trigCalls, this.gameTextureMatrix,
 				this.gameModelView);
 	}
 
@@ -4875,7 +4613,7 @@ public final class GlslTranslator {
 		}
 	}
 
-	private static boolean isQualifier(Token token) {
+	static boolean isQualifier(Token token) {
 		return token.kind() == Kind.IDENTIFIER
 				&& (LegacyGlsl.MEMORY_QUALIFIERS.contains(token.text())
 						|| LegacyGlsl.PRECISION_QUALIFIERS.contains(token.text()));

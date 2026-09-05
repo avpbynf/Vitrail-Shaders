@@ -236,7 +236,7 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 
 		// Only where a lookup was moved. A stage carrying the declaration and never reading it, which
 		// is most of them, has its declaration flattened and owes no helper.
-		this.readVolumes.forEach((name, atlas) -> lines.addAll(GlslTranslator.volumeHelper(name, atlas)));
+		this.readVolumes.forEach((name, atlas) -> lines.addAll(VolumeFlattening.helper(name, atlas)));
 
 		// Declared on both sides or on neither, whether this stage reads it or not. A varying the
 		// vertex writes and the fragment never mentions is accepted in silence and shifts the
