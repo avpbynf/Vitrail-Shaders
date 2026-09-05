@@ -64,6 +64,14 @@ what the next one holds.
   rather than this uniform, and it is a pack written against the uniform that gets the Iris answer
   now.
 
+- **World-space reflections come back after the first launch.** Complementary Unbound on Ultra
+  gives its reflection pass a buffer the pack declares for itself. On the launch that read the
+  pack for the first time that pass ran; on every launch after it, the translation being reused
+  from the store on disk, the engine stopped recognising the buffer behind the name and dropped
+  the pass. The reflections went with it, two of the targets the pass writes were read by the
+  next one as the clear had left them, and the log named the pass as one it would not run. A
+  pass whose buffer the pack really never declared is still dropped, and still says so.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed

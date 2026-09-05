@@ -150,6 +150,7 @@ public final class PackProgram {
 		public List<String> storageBlocks() {
 			return this.program.stages().values().stream()
 					.flatMap(stage -> stage.notes().storageBlocks().stream())
+					.map(TranslatedUnit.StorageBlock::name)
 					.distinct()
 					.toList();
 		}
@@ -1392,6 +1393,7 @@ public final class PackProgram {
 						.filter(sampler -> SamplerTypes.refused(sampler.type()))
 						.forEach(sampler -> found.putIfAbsent(sampler.name(), sampler));
 				stage.notes().storageBlocks().stream()
+						.map(TranslatedUnit.StorageBlock::name)
 						.filter(block -> !storage.contains(block))
 						.filter(block -> !CustomStorage.named(block))
 						.forEach(storage::add);

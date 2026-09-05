@@ -43,6 +43,19 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	}
 
 	/**
+	 * One storage block a unit declares at file scope, with the {@code layout(..., binding = N)} it
+	 * carried, or {@code -1} when the pack wrote none.
+	 * <p>
+	 * The binding travels with the name because it is the only thing that ties a nameless
+	 * {@code bufferObject.N} to a block: Complementary writes {@code blockDataBuffer} at binding 0
+	 * and declares {@code bufferObject.0} with no name at all. Carried on the notes rather than
+	 * filed away as the text is read, so that a program served out of {@link TranslationCache}
+	 * answers for its blocks exactly like one that was just translated.
+	 */
+	public record StorageBlock(String name, int binding) {
+	}
+
+	/**
 	 * What the translation did to one file, counted, so a run over a corpus can be read.
 	 *
 	 * @param fragmentOutputs    how many fragment outputs the header declares, counting both the
@@ -106,9 +119,10 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 *                           binding owes each a comparison sampler and the lookup is the
 	 *                           hardware's. The rest are declared ordinary, with the comparison
 	 *                           made in arithmetic where each lookup stood
-	 * @param storageBlocks      the storage blocks this unit declares at file scope. A
-	 *                           {@code bufferObject} that matches one is bound; the rest refuse
-	 *                           the program that carries them
+	 * @param storageBlocks      the storage blocks this unit declares at file scope, each with the
+	 *                           binding it was written at. A {@code bufferObject} that matches one
+	 *                           by name or by binding is bound; the rest refuse the program that
+	 *                           carries them
 	 * @param volumeLookups      lookups on a volume the pack ships, moved onto the flat atlas it was
 	 *                           laid out in
 	 * @param volumesLeftAlone   volumes this unit reaches some way the rewrite does not cover, and
@@ -135,7 +149,7 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames, List<String> comparedSamplers,
-			List<String> hardwareCompared, List<String> storageBlocks,
+			List<String> hardwareCompared, List<StorageBlock> storageBlocks,
 			int volumeLookups, int volumesLeftAlone, int trigCalls, int gameTextureMatrix,
 			int gameModelView) {
 	}

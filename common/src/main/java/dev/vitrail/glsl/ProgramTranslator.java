@@ -3,6 +3,7 @@ package dev.vitrail.glsl;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
+import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
@@ -197,17 +198,38 @@ public final class ProgramTranslator {
 					program, volumes);
 			TranslatedProgram served = TranslationCache.lookup(key, inputs);
 			if (served != null) {
-				return served;
+				return declared(served);
 			}
 
 			TranslatedProgram built =
 					translated(units, inputs, boundElements, alphaTest, coverage, program, volumes);
 			TranslationCache.store(key, built);
 
-			return built;
+			return declared(built);
 		} finally {
 			LoadClock.translation(System.nanoTime() - began);
 		}
+	}
+
+	/**
+	 * Files this program's storage blocks with the bindings they were written at, and hands it back.
+	 * <p>
+	 * Here rather than where the text is read, and that is the whole point: a program served out of
+	 * {@link TranslationCache} never goes near the translator, so a table filled while the tokens
+	 * were walked would hold the blocks of the programs this run happened to translate and not the
+	 * ones the pack declares. What reads it is
+	 * {@link dev.vitrail.pack.texture.CustomStorage#named}, which decides whether a program keeps
+	 * its place in the chain and, for one that does, whether the bind group layout declares its slot
+	 * a storage buffer rather than a uniform one. A draw's descriptor write does not ask it at all,
+	 * taking its buffer from {@code StorageBuffers.bound}, and only a compute dispatch asks the name
+	 * again to type its own write. Answered off a warm cache the question refused Complementary's
+	 * world-space reflection composite and left the targets it writes on their clear.
+	 */
+	private static TranslatedProgram declared(TranslatedProgram program) {
+		program.stages().values().forEach(stage -> stage.notes().storageBlocks()
+				.forEach(block -> CustomStorage.declare(block.name(), block.binding())));
+
+		return program;
 	}
 
 	private static TranslatedProgram translated(Map<ProgramStage, ExpandedUnit> units,

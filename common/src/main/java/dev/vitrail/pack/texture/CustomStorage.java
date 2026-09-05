@@ -18,10 +18,11 @@ public final class CustomStorage {
 	private static volatile BufferObject.Reading declared = BufferObject.Reading.empty();
 
 	/**
-	 * The block names the translator saw, which is the one half of this class that does not replace
-	 * itself. {@link #install} hands the whole of {@link #declared} over at each load, while this is
-	 * filled a name at a time and would otherwise carry every name of every pack read this session.
-	 * Emptied by {@link #clear} at the head of a load, and the answers below say what that buys.
+	 * The block names the pack's own programs declare, which is the one half of this class that does
+	 * not replace itself. {@link #install} hands the whole of {@link #declared} over at each load,
+	 * while this is filled a name at a time and would otherwise carry every name of every pack read
+	 * this session. Emptied by {@link #clear} at the head of a load, and the answers below say what
+	 * that buys.
 	 */
 	private static final Map<String, Integer> bindings = new ConcurrentHashMap<>();
 
@@ -48,8 +49,11 @@ public final class CustomStorage {
 	}
 
 	/**
-	 * Records a storage block the translator just saw, with the {@code layout(..., binding = N)}
-	 * it carried, or {@code -1} when the pack wrote none.
+	 * Records a storage block one of the pack's programs declares, with the
+	 * {@code layout(..., binding = N)} it carried, or {@code -1} when the pack wrote none.
+	 * <p>
+	 * Called for every program handed out and not for every text read, so that a program restored
+	 * from the translation store files its blocks exactly like one that was just translated.
 	 */
 	public static void declare(String name, int binding) {
 		if (name == null || name.isEmpty()) {

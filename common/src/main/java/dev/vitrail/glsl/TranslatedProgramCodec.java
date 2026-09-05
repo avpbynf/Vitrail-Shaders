@@ -33,7 +33,7 @@ import java.util.Map;
 final class TranslatedProgramCodec {
 
 	/** Bumped by hand when the layout changes. It is part of the key, so old blobs go unread. */
-	static final String FORMAT = "vitrail-translation-3";
+	static final String FORMAT = "vitrail-translation-4";
 
 	private TranslatedProgramCodec() {
 	}
@@ -152,7 +152,7 @@ final class TranslatedProgramCodec {
 		names(out, notes.conflictNames());
 		names(out, notes.comparedSamplers());
 		names(out, notes.hardwareCompared());
-		names(out, notes.storageBlocks());
+		storageBlocks(out, notes.storageBlocks());
 		out.writeInt(notes.volumeLookups());
 		out.writeInt(notes.volumesLeftAlone());
 		out.writeInt(notes.trigCalls());
@@ -165,8 +165,27 @@ final class TranslatedProgramCodec {
 				in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt(),
 				in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt(),
 				in.readInt(), in.readInt(),
-				names(in), names(in), names(in), names(in),
+				names(in), names(in), names(in), storageBlocks(in),
 				in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt());
+	}
+
+	private static void storageBlocks(DataOutputStream out,
+			List<TranslatedUnit.StorageBlock> blocks) throws IOException {
+		out.writeInt(blocks.size());
+		for (TranslatedUnit.StorageBlock block : blocks) {
+			text(out, block.name());
+			out.writeInt(block.binding());
+		}
+	}
+
+	private static List<TranslatedUnit.StorageBlock> storageBlocks(DataInputStream in)
+			throws IOException {
+		List<TranslatedUnit.StorageBlock> blocks = new ArrayList<>();
+		for (int left = in.readInt(); left > 0; left--) {
+			blocks.add(new TranslatedUnit.StorageBlock(text(in), in.readInt()));
+		}
+
+		return List.copyOf(blocks);
 	}
 
 	private static void uniforms(DataOutputStream out, List<TranslatedUnit.Uniform> uniforms)
