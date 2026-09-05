@@ -214,6 +214,19 @@ what the next one holds.
   file and the line said once in the log. A pack that writes its conditionals properly is
   untouched.
 
+- **Name plates, signs and every other text in the world are drawn by the pack, as Iris draws
+  them.** They were left to the game's own shader and painted into a layer this engine composes
+  onto the pack's picture at the spot where the pack blends its water; where a pack keeps
+  something other than its picture there the letters landed in it and came back as a
+  half-transparent negative, which under Photon is what a floating name looked like. The pack
+  now draws them itself, with the program it draws a translucent entity with, with the one it
+  draws a translucent block entity with for the text of a sign, and with its shadow entity program
+  from the light. A font that ships as a `.ttf` file, which a resource pack may and the game does
+  not, is baked into a sheet holding a single channel: the pack is handed that channel in all four,
+  as Iris hands it, so such a font draws as text and not as solid colour. A pack shipping none of
+  those programs, and a pack loaded with the entities switched off, keeps the layer and looks as
+  it did.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed

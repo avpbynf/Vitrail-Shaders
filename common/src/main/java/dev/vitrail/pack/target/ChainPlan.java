@@ -129,6 +129,17 @@ public final class ChainPlan {
 					// this table uses for a walk it REFUSED, so the caller cannot tell the two
 					// apart: both make the family draw one output. That is why the entry matters
 					// more than it looks, and it is what the harness gate measures.
+					//
+					// The TEXT walks these same two and adds no entry: Iris sends a glyph to
+					// ProgramId.EntitiesTrans and, under the block entity phase, to BlockTrans
+					// (pipeline/programs/ShaderKey.java:62-65), and both are drawn in the game's
+					// translucent feature window like the mobs. So a name plate and a sign's text
+					// take whatever draw buffers these two answer with, and a place that answers
+					// empty for them draws a glyph with one output as it draws a mob with one.
+					// That one output is the game's target, which inside that window is the layer
+					// render/FeatureLayer composes, so the glyph lands there drawn by the PACK
+					// rather than by the game. Nothing about the text decides that: it is the
+					// family's answer, and FeatureLayer names it beside the other two roads in.
 					new NamedProgram("gbuffers_entities_translucent", true, false,
 							Families::entities),
 					new NamedProgram("gbuffers_block_translucent", true, false, Families::entities),
