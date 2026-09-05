@@ -150,6 +150,19 @@ final class ColorTargets {
 	record PackBinding(GpuTextureView view, FilterMode filter, boolean repeat) {
 	}
 
+	/** The schedule the plan gave these targets, for a pass to settle its own step off. */
+	TargetSchedule schedule() {
+		return this.plan.schedule();
+	}
+
+	/**
+	 * What the pack supplies for a name, settled once: the image, and the filter and addressing
+	 * its directive and its .mcmeta asked for. Only the view behind the image moves after that,
+	 * and {@link #packView} answers it per frame.
+	 */
+	record PackSource(PackImages.Image image, FilterMode filter, boolean repeat) {
+	}
+
 	private final TargetPlan plan;
 	private final Set<Integer> doubled;
 	private final int noiseResolution;
@@ -190,6 +203,9 @@ final class ColorTargets {
 	private final CenterDepth centerDepth = new CenterDepth();
 
 	private final Map<Integer, GpuFormat> formats = new LinkedHashMap<>();
+
+	/** The filter each carried target is sampled with, settled with its format. */
+	private final Map<Integer, FilterMode> filters = new LinkedHashMap<>();
 	private final Map<Integer, Vector4fc> clearColours = new LinkedHashMap<>();
 
 	/**
@@ -214,6 +230,9 @@ final class ColorTargets {
 	 * of them and hand the others an empty level.
 	 */
 	private final Set<Integer> mipmapped;
+
+	/** For each program, the targets it reads at a lod and that carry a chain, in target order. */
+	private final Map<String, Set<Integer>> lodReads;
 
 	private TargetSurface black;
 	private TargetSurface white;
@@ -341,7 +360,9 @@ final class ColorTargets {
 		TargetDirectives directives = plan.directives();
 		for (int index : plan.ordered()) {
 			TargetDirectives.Colour colour = directives.clearColour(index);
-			this.formats.put(index, GpuFormats.of(directives.format(index).used()));
+			TargetFormat format = directives.format(index).used();
+			this.formats.put(index, GpuFormats.of(format));
+			this.filters.put(index, GpuFormats.filterFor(format));
 			this.clearColours.put(index, new Vector4f(colour.r(), colour.g(), colour.b(), colour.a()));
 		}
 
@@ -354,6 +375,11 @@ final class ColorTargets {
 		this.mipmapped = directives.mipmapped().stream()
 				.filter(this.formats::containsKey)
 				.collect(Collectors.toCollection(TreeSet::new));
+		Map<String, Set<Integer>> lodReads = new LinkedHashMap<>();
+		directives.mipmapRequests().forEach((program, asked) -> lodReads.put(program,
+				asked.stream().filter(this.mipmapped::contains)
+						.collect(Collectors.toCollection(TreeSet::new))));
+		this.lodReads = Map.copyOf(lodReads);
 
 		// A flip directive may turn over a target no program of this place writes or samples, and
 		// nothing is allocated for one of those. Said here because the count of doubled targets is
@@ -757,11 +783,12 @@ final class ColorTargets {
 	 * program that reads one after such a write; taking the union here would rebuild every chain
 	 * before every program that happens to sample the target, which is ten render passes apiece
 	 * for a result nothing reads.
+	 * <p>
+	 * Settled with the plan rather than filtered on each ask: a compute asks per colour descriptor
+	 * of every dispatch.
 	 */
 	Set<Integer> lodReads(String program) {
-		return this.plan.directives().mipmapRequests().getOrDefault(program, Set.of()).stream()
-				.filter(this.mipmapped::contains)
-				.collect(Collectors.toCollection(TreeSet::new));
+		return this.lodReads.getOrDefault(program, Set.of());
 	}
 
 	GpuFormat format(int index) {
@@ -785,11 +812,13 @@ final class ColorTargets {
 		return this.screenHeight;
 	}
 
-	/** LINEAR wherever Iris allows it, which is everywhere but an integer format. */
+	/**
+	 * LINEAR wherever Iris allows it, which is everywhere but an integer format, and NEAREST for
+	 * a target the plan does not carry. Read off the table rather than resolved through the
+	 * directives again: asked per colour sampler of every pass of every frame.
+	 */
 	FilterMode filter(int index) {
-		TargetFormat format = this.plan.directives().format(index).used();
-
-		return has(index) ? GpuFormats.filterFor(format) : FilterMode.NEAREST;
+		return this.filters.getOrDefault(index, FilterMode.NEAREST);
 	}
 
 	/**
@@ -1032,17 +1061,34 @@ final class ColorTargets {
 	 * different image, and the gutter would stop being read at all.
 	 */
 	PackBinding packTexture(TextureStage stage, String sampler) {
+		PackSource source = packSource(stage, sampler);
+		GpuTextureView view = source == null ? null : packView(source.image());
+
+		return view == null ? null : new PackBinding(view, source.filter(), source.repeat());
+	}
+
+	/**
+	 * The half of {@link #packTexture} that never moves once the pack is read, for a caller that
+	 * binds the same name every frame: null where the pack supplies nothing for it.
+	 */
+	PackSource packSource(TextureStage stage, String sampler) {
 		PackImages.Image image = this.packImages.find(stage, sampler);
-		TargetSurface surface = image == null ? null : this.packSurfaces.get(image);
-		if (surface == null || surface.view() == null) {
+		if (image == null) {
 			return null;
 		}
 
 		boolean flat = !sampler.equals(SamplerPlan.behind(sampler));
 
-		return new PackBinding(surface.view(),
+		return new PackSource(image,
 				image.texture().blur() ? FilterMode.LINEAR : FilterMode.NEAREST,
 				!flat && !image.texture().clamp());
+	}
+
+	/** The view behind a supplied image, or null while nothing could be put behind it. */
+	GpuTextureView packView(PackImages.Image image) {
+		TargetSurface surface = this.packSurfaces.get(image);
+
+		return surface == null ? null : surface.view();
 	}
 
 	/**

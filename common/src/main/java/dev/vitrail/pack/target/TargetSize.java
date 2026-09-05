@@ -35,8 +35,11 @@ public record TargetSize(boolean relative, float width, float height) {
 	 */
 	public static final int MAX_DIMENSION = 16384;
 
+	/** The one answer for every target the pack sizes on the screen, asked per target per frame. */
+	private static final TargetSize SCREEN = new TargetSize(true, 1.0F, 1.0F);
+
 	public static TargetSize ofScreen() {
-		return new TargetSize(true, 1.0F, 1.0F);
+		return SCREEN;
 	}
 
 	/**

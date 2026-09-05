@@ -2,9 +2,11 @@ package dev.vitrail.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanRenderPass;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
+import dev.vitrail.render.PushedDescriptor;
 import dev.vitrail.render.ShadowCompare;
 import dev.vitrail.render.StorageBuffers;
 import dev.vitrail.render.StorageImages;
@@ -17,6 +19,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Pushes a storage-image descriptor, a 3D sampled view, and a storage-buffer descriptor for
@@ -33,18 +36,22 @@ import java.util.List;
 @Mixin(VulkanRenderPass.class)
 public abstract class VulkanRenderPassMixin {
 
-	@Unique
-	private static final ThreadLocal<VulkanBindGroupLayout.Entry> CURRENT = new ThreadLocal<>();
-
 	@Shadow
 	protected VulkanRenderPipeline pipeline;
+
+	/** The pipeline the set below answers for, so that the set is asked once per pipeline. */
+	@Unique
+	private RenderPipeline vitrail$comparedFor;
+
+	@Unique
+	private Set<String> vitrail$compared = Set.of();
 
 	@WrapOperation(method = "pushDescriptors", require = 1,
 			at = @At(value = "INVOKE", target = "Ljava/util/List;get(I)Ljava/lang/Object;", ordinal = 0))
 	private Object vitrail$entry(List<?> entries, int index, Operation<Object> original) {
 		Object entry = original.call(entries, index);
 		if (entry instanceof VulkanBindGroupLayout.Entry named) {
-			CURRENT.set(named);
+			PushedDescriptor.begin(named);
 		}
 
 		return entry;
@@ -56,7 +63,7 @@ public abstract class VulkanRenderPassMixin {
 							+ "Lorg/lwjgl/vulkan/VkDescriptorImageInfo$Buffer;"))
 	private VkDescriptorImageInfo.Buffer vitrail$view(VkDescriptorImageInfo.Buffer info, long view,
 			Operation<VkDescriptorImageInfo.Buffer> original) {
-		StorageImages.Bound bound = currentBound();
+		StorageImages.Bound bound = PushedDescriptor.current().image();
 		if (bound != null) {
 			view = bound.view();
 		}
@@ -70,16 +77,16 @@ public abstract class VulkanRenderPassMixin {
 							+ "Lorg/lwjgl/vulkan/VkDescriptorImageInfo$Buffer;"))
 	private VkDescriptorImageInfo.Buffer vitrail$sampler(VkDescriptorImageInfo.Buffer info,
 			long sampler, Operation<VkDescriptorImageInfo.Buffer> original) {
-		StorageImages.Bound bound = currentBound();
+		PushedDescriptor pushed = PushedDescriptor.current();
+		StorageImages.Bound bound = pushed.image();
 		if (bound != null && bound.storage()) {
 			sampler = 0L;
 		} else if (ShadowCompare.noted()) {
 			// Behind the one flag: until the first pack that compares is loaded, every pass of the
 			// game's own pays a volatile read here and nothing else. Once one has been, the flag
 			// stays up for the session and the per-name lookup is the price of having the road.
-			VulkanBindGroupLayout.Entry entry = CURRENT.get();
-			if (entry != null && this.pipeline != null
-					&& ShadowCompare.compared(this.pipeline.info(), entry.name())) {
+			VulkanBindGroupLayout.Entry entry = pushed.entry();
+			if (entry != null && this.pipeline != null && vitrail$compared().contains(entry.name())) {
 				sampler = ShadowCompare.sampler(this.pipeline.device());
 			}
 		}
@@ -93,7 +100,7 @@ public abstract class VulkanRenderPassMixin {
 							+ "Lorg/lwjgl/vulkan/VkDescriptorBufferInfo$Buffer;"))
 	private VkDescriptorBufferInfo.Buffer vitrail$buffer(VkDescriptorBufferInfo.Buffer info,
 			long buffer, Operation<VkDescriptorBufferInfo.Buffer> original) {
-		StorageBuffers.Bound bound = currentBuffer();
+		StorageBuffers.Bound bound = PushedDescriptor.current().buffer();
 		if (bound != null) {
 			buffer = bound.buffer();
 		}
@@ -107,7 +114,7 @@ public abstract class VulkanRenderPassMixin {
 							+ "Lorg/lwjgl/vulkan/VkDescriptorBufferInfo$Buffer;"))
 	private VkDescriptorBufferInfo.Buffer vitrail$range(VkDescriptorBufferInfo.Buffer info,
 			long range, Operation<VkDescriptorBufferInfo.Buffer> original) {
-		StorageBuffers.Bound bound = currentBuffer();
+		StorageBuffers.Bound bound = PushedDescriptor.current().buffer();
 		if (bound != null) {
 			range = bound.range();
 		}
@@ -121,12 +128,13 @@ public abstract class VulkanRenderPassMixin {
 							+ "Lorg/lwjgl/vulkan/VkWriteDescriptorSet;"))
 	private VkWriteDescriptorSet vitrail$type(VkWriteDescriptorSet set, int type,
 			Operation<VkWriteDescriptorSet> original) {
-		StorageImages.Bound image = currentBound();
+		PushedDescriptor pushed = PushedDescriptor.current();
+		StorageImages.Bound image = pushed.image();
 		if (type == 1 && image != null && image.storage()) {
 			type = 3;
 		}
 
-		if (type == 6 && currentBuffer() != null) {
+		if (type == 6 && pushed.buffer() != null) {
 			type = 7;
 		}
 
@@ -134,14 +142,13 @@ public abstract class VulkanRenderPassMixin {
 	}
 
 	@Unique
-	private static StorageImages.Bound currentBound() {
-		VulkanBindGroupLayout.Entry entry = CURRENT.get();
-		return entry == null ? null : StorageImages.bound(entry.name());
-	}
+	private Set<String> vitrail$compared() {
+		RenderPipeline info = this.pipeline.info();
+		if (info != this.vitrail$comparedFor) {
+			this.vitrail$comparedFor = info;
+			this.vitrail$compared = ShadowCompare.compared(info);
+		}
 
-	@Unique
-	private static StorageBuffers.Bound currentBuffer() {
-		VulkanBindGroupLayout.Entry entry = CURRENT.get();
-		return entry == null ? null : StorageBuffers.bound(entry.name());
+		return this.vitrail$compared;
 	}
 }

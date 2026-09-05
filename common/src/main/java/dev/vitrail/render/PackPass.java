@@ -38,6 +38,7 @@ import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -124,11 +125,27 @@ final class PackPass {
 	 */
 	private final List<SamplerPlan.Binding> samplerBindings;
 
+	/**
+	 * For each of {@link #samplers}, what the pack supplies under that name, or null for every
+	 * other kind of binding and for a name the pack took over with nothing behind it. Settled
+	 * with the plan for the same reason as {@link #samplerBindings}: the resolution walked the
+	 * pack's texture directives by name per sampler, per pass and per frame, and only the view
+	 * behind the image can move.
+	 */
+	private final List<ColorTargets.PackSource> packSources;
+
 	private final List<String> storage;
 	private final List<LodRead> lodReads;
 
 	/** The targets of {@link #lodReads}, for the binding to answer one name at a time. */
 	private final Set<Integer> lodTargets;
+
+	/**
+	 * The schedule's step for this pass, or null where the schedule names none, for the computes
+	 * hanging off it. Settled here because the schedule answers by walking its steps and
+	 * comparing names, and the answer cannot change once the pack is read.
+	 */
+	private final TargetSchedule.Bound step;
 
 	private final RenderPipeline pipeline;
 	private final ShaderSource source;
@@ -174,17 +191,28 @@ final class PackPass {
 		this.attachments = List.copyOf(pass.attachments());
 		this.offset = offset;
 		this.last = this.attachments.isEmpty();
-		this.label = () -> "Vitrail " + this.path;
+		// Finished once: the encoder asks every pass of the game for its label to tell ours
+		// apart, so a supplier that concatenated on every ask paid a string per pass per frame.
+		String label = "Vitrail " + this.path;
+		this.label = () -> label;
 		this.values = values;
 		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.catalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
 		this.samplerBindings = this.samplers.stream().map(loaded.samplers()::binding).toList();
+		List<ColorTargets.PackSource> sources = new ArrayList<>();
+		for (int at = 0; at < this.samplers.size(); at++) {
+			sources.add(this.samplerBindings.get(at).kind() == SamplerPlan.Kind.PACK_TEXTURE
+					? targets.packSource(this.textureStage, this.samplers.get(at))
+					: null);
+		}
+		this.packSources = Collections.unmodifiableList(sources);
 		this.storage = loaded.storageBlocks().stream()
 				.distinct()
 				.filter(StorageBuffers::named)
 				.toList();
 		this.lodReads = lodReadsOf(program, loaded, targets);
 		this.lodTargets = this.lodReads.stream().map(LodRead::target).collect(Collectors.toSet());
+		this.step = targets.schedule().step(program).orElse(null);
 
 		if (this.attachments.size() > MAX_ATTACHMENTS) {
 			throw new IllegalStateException(this.path + " writes " + this.attachments.size()
@@ -286,6 +314,10 @@ final class PackPass {
 	}
 
 	/** The program name alone, {@code composite3}, which is what the schedule and the computes key on. */
+	TargetSchedule.Bound step() {
+		return this.step;
+	}
+
 	String program() {
 		return this.pass.program();
 	}
@@ -560,12 +592,17 @@ final class PackPass {
 			// A texture the pack ships answers all three questions at once, and they are one
 			// answer: which image, how it is filtered, and how it is addressed outside zero to one
 			// are all the pack's to say, in the same directive and the same .mcmeta beside it.
-			ColorTargets.PackBinding supplied = binding.kind() == SamplerPlan.Kind.PACK_TEXTURE
-					? targets.packTexture(this.textureStage, sampler)
+			ColorTargets.PackSource source = this.packSources.get(at);
+			GpuTextureView supplied = source == null ? null : targets.packView(source.image());
+
+			// Resolved once for the view and the chain below, which used to be two walks of the
+			// same map for one name.
+			TargetSurface surface = binding.kind() == SamplerPlan.Kind.COLORTEX
+					? targets.surface(binding.index(), binding.side())
 					: null;
 
-			GpuTextureView bound = supplied != null ? supplied.view() : switch (binding.kind()) {
-				case COLORTEX -> targets.view(binding.index(), binding.side());
+			GpuTextureView bound = supplied != null ? supplied : switch (binding.kind()) {
+				case COLORTEX -> surface == null ? null : surface.view();
 				// White where no image is there, and white is the far plane rather than a
 				// placeholder: what a depth lookup reads is now an image already in the pack's own
 				// window, where one is the far plane, and the whole world would otherwise be drawn
@@ -635,7 +672,7 @@ final class PackPass {
 			//
 			// A custom image is the image's own answer and not this pass's, which is why it is
 			// asked of one place rather than decided here: see customImageFilter.
-			FilterMode filter = supplied != null ? supplied.filter() : switch (binding.kind()) {
+			FilterMode filter = supplied != null ? source.filter() : switch (binding.kind()) {
 				case COLORTEX -> targets.filter(binding.index());
 				case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
 				case CUSTOM_IMAGE -> customImageFilter(sampler);
@@ -657,9 +694,6 @@ final class PackPass {
 			// driver left there. Deciding this at the binding rather than when the pass was built
 			// is what makes the fall back real instead of announced: a chain nothing has written
 			// is read at level nought, which is the image the pack had before there were chains.
-			TargetSurface surface = binding.kind() == SamplerPlan.Kind.COLORTEX
-					? targets.surface(binding.index(), binding.side())
-					: null;
 			boolean mipmaps = surface != null && surface.chainWritten()
 					&& this.lodTargets.contains(binding.index());
 
@@ -671,7 +705,7 @@ final class PackPass {
 			// itself, in the .mcmeta beside the file.
 			pass.bindTexture(sampler, bound == null ? targets.black() : bound,
 					supplied != null
-							? sampler(supplied.repeat(), filter, false)
+							? sampler(source.repeat(), filter, false)
 							: sampler(binding.kind(), filter, mipmaps));
 		}
 	}
