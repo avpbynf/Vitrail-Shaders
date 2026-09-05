@@ -52,6 +52,9 @@ public final class PackNameIds {
 
 	private static volatile NameIds items = NameIds.empty();
 
+	/** What a cache answers for a key nobody asked about yet, and never a pack's own number. */
+	private static final int UNASKED = Integer.MIN_VALUE;
+
 	/**
 	 * The answer for an entity type, worked out once each. Kept beside the table rather than inside
 	 * it because the key is the game's object and {@link NameIds} names no game class; replaced whole
@@ -113,7 +116,7 @@ public final class PackNameIds {
 	public static int entity(EntityType<?> type) {
 		Object2IntMap<EntityType<?>> cache = byType;
 		int known = cache.getInt(type);
-		if (known != NameIds.NONE || cache.containsKey(type)) {
+		if (known != UNASKED) {
 			return known;
 		}
 
@@ -128,13 +131,13 @@ public final class PackNameIds {
 	 * The pack's number for an item, named by its model identifier or by its registry key, and
 	 * worked out once each.
 	 * <p>
-	 * A name the pack named nowhere is remembered as {@link NameIds#NONE} as well, which is what
-	 * the lookup tells apart from a real one by asking whether the key is there at all.
+	 * A name the pack named nowhere is remembered as {@link NameIds#NONE} as well, which the
+	 * lookup tells apart from a name never asked about by the value the cache answers for those.
 	 */
 	public static int item(Identifier name) {
 		Object2IntMap<Identifier> cache = byName;
 		int known = cache.getInt(name);
-		if (known != NameIds.NONE || cache.containsKey(name)) {
+		if (known != UNASKED) {
 			return known;
 		}
 
@@ -145,13 +148,14 @@ public final class PackNameIds {
 	}
 
 	/**
-	 * A cache with nothing in it, answering {@link NameIds#NONE} for a key it has not been asked
-	 * about, which is what the lookups above tell apart from a real {@code NONE} by asking whether
-	 * the key is there at all.
+	 * A cache with nothing in it, answering {@link #UNASKED} for a key it has not been asked
+	 * about. A real {@code NONE} is stored like any other answer, so the lookups above tell the
+	 * two apart in the one probe: a second one asking whether the key was there paid a hash per
+	 * submission for every kind of entity the pack does not name, which is most of them.
 	 */
 	private static <K> Object2IntMap<K> emptyCache() {
 		Object2IntMap<K> cache = new Object2IntOpenHashMap<>();
-		cache.defaultReturnValue(NameIds.NONE);
+		cache.defaultReturnValue(UNASKED);
 
 		return cache;
 	}
