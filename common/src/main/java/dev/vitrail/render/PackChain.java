@@ -2381,7 +2381,8 @@ public final class PackChain {
 				// what let the pass sample what the compute stored.
 				this.compute.dispatchBefore(pass.program(), encoder, device, this.values,
 						this.targets, this.chain.targets().schedule().step(pass.program())
-								.orElse(null), ready.main().width, ready.main().height);
+								.orElse(null), depth, distant, ready.main().width,
+						ready.main().height);
 				this.currentChains.clear();
 			}
 

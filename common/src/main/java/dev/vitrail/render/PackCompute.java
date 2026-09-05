@@ -255,12 +255,23 @@ final class PackCompute implements AutoCloseable {
 	 * Dispatches the computes hanging off that full screen pass, right before it, as Iris does.
 	 * Nothing happens for a pass with none, which is every pass of most packs.
 	 *
-	 * @param step the halves that pass reads and writes, which is where its computes read a colour
-	 *             target from and write one to: Iris binds both the sampler and the image on the
-	 *             flipped state of that moment ({@code IrisImages.addRenderTargetImages})
+	 * @param step    the halves that pass reads and writes, which is where its computes read a
+	 *                colour target from and write one to: Iris binds both the sampler and the
+	 *                image on the flipped state of that moment
+	 *                ({@code IrisImages.addRenderTargetImages})
+	 * @param depth   what that pass reads as {@code depthtex0}, already in the pack's own window,
+	 *                and so what its computes read under the same name: Iris hands a compute the
+	 *                three depth names of the pass it hangs off through the same
+	 *                {@code IrisSamplers.addCompositeSamplers} call
+	 *                ({@code pipeline/CompositeRenderer.java:458} against {@code :402}), and the
+	 *                far terrain's through the same {@code addRenderTargetSamplers}
+	 *                ({@code :450} against {@code :394})
+	 * @param distant what that pass reads as {@code dhDepthTex0}, on the same split, or null for
+	 *                the far plane on the frames the pack drew no far terrain
 	 */
 	void dispatchBefore(String program, CommandEncoder encoder, GpuDevice device, PackValues values,
-			ColorTargets targets, TargetSchedule.Bound step, int width, int height) {
+			ColorTargets targets, TargetSchedule.Bound step, GpuTextureView depth,
+			GpuTextureView distant, int width, int height) {
 		List<Pass> attached = this.chained.get(program);
 		if (attached == null || attached.isEmpty()) {
 			return;
@@ -283,7 +294,7 @@ final class PackCompute implements AutoCloseable {
 
 		for (Pass pass : attached) {
 			try {
-				pass.dispatch(vulkan, commands, values, targets, width, height, step);
+				pass.dispatch(vulkan, commands, values, targets, width, height, step, depth, distant);
 			} catch (RuntimeException e) {
 				if (pass.failed.add(e.toString())) {
 					Vitrail.logger().warn("compute {} failed: {}", pass.path, e.toString());
@@ -344,7 +355,7 @@ final class PackCompute implements AutoCloseable {
 		int height = main == null ? 0 : main.height;
 		for (Pass pass : this.passes) {
 			try {
-				pass.dispatch(vulkan, commands, values, targets, width, height, null);
+				pass.dispatch(vulkan, commands, values, targets, width, height, null, null, null);
 			} catch (RuntimeException e) {
 				if (pass.failed.add(e.toString())) {
 					Vitrail.logger().warn("shadow compute {} failed: {}", pass.path, e.toString());
@@ -575,11 +586,17 @@ final class PackCompute implements AutoCloseable {
 		}
 
 		/**
-		 * @param step the halves of the pass this compute hangs off, or null for a shadow compute,
-		 *             which reads no colour target
+		 * @param step    the halves of the pass this compute hangs off, or null for a shadow
+		 *                compute, which reads no colour target
+		 * @param depth   the depth the pass this compute hangs off reads, or null for a shadow
+		 *                compute, which is dispatched before the frame has one: {@code depthtex0}
+		 *                then reads the far plane, and the two copies read what they last held,
+		 *                as they do for a pass drawn before the copy is taken
+		 * @param distant the far terrain's depth on the same terms
 		 */
 		private void dispatch(VulkanDevice vulkan, VkCommandBuffer commands, PackValues values,
-				ColorTargets targets, int width, int height, TargetSchedule.Bound step) {
+				ColorTargets targets, int width, int height, TargetSchedule.Bound step,
+				GpuTextureView depth, GpuTextureView distant) {
 			if (!this.compiled) {
 				compile(vulkan);
 			}
@@ -592,7 +609,7 @@ final class PackCompute implements AutoCloseable {
 			try (MemoryStack stack = MemoryStack.stackPush()) {
 				VulkanCommandEncoder.memoryBarrier(commands, stack);
 				VK12.vkCmdBindPipeline(commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, this.pipeline);
-				pushDescriptors(commands, stack, targets, step);
+				pushDescriptors(commands, stack, targets, step, depth, distant);
 				// The screen and not the shadow map: Iris sizes a shadow composite's compute off
 				// the main render target, ShadowCompositeRenderer.java:212, and the resolution of
 				// the shadow map is what it sizes the shadow GEOMETRY computes off instead,
@@ -812,7 +829,8 @@ final class PackCompute implements AutoCloseable {
 		}
 
 		private void pushDescriptors(VkCommandBuffer commands, MemoryStack stack,
-				ColorTargets targets, TargetSchedule.Bound step) {
+				ColorTargets targets, TargetSchedule.Bound step, GpuTextureView depth,
+				GpuTextureView distant) {
 			if (this.entries.isEmpty()) {
 				return;
 			}
@@ -879,6 +897,28 @@ final class PackCompute implements AutoCloseable {
 				}
 
 				if (bound == null) {
+					// The depth of the pass this compute hangs off, under the three names, the far
+					// terrain's and the smoothed centre depth, answered by the methods that answer
+					// the pass itself: Iris gives a compute the depth samplers of its pass
+					// (CompositeRenderer.java:458 and :461), and Reverie's cloud compute reads
+					// depthtex1 to know where the sky ends. Ahead of the engine set below because
+					// that set carries no depth, and a name it did not carry threw on every
+					// dispatch, so the compute never ran and said so once.
+					GpuTextureView read = switch (SamplerPlan.classify(entry.name())) {
+						case DEPTH -> PackPass.depth(entry.name(), targets, depth);
+						case DISTANT_DEPTH -> PackPass.distant(entry.name(), targets, distant);
+						case CENTER_DEPTH -> PackPass.centerDepth(targets);
+						default -> null;
+					};
+					if (read instanceof VulkanGpuTextureView served) {
+						imageInfo.sampler(samplerFor(entry.name()));
+						imageInfo.imageView(served.vkImageView());
+						imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
+						write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+						write.pImageInfo(imageInfo);
+						continue;
+					}
+
 					// The samplers the engine serves every pack program, noisetex and the shadow
 					// set among them: shadowcomp reads them the way a composite does, and only a
 					// name neither the pack's images nor this set carries is a real miss.

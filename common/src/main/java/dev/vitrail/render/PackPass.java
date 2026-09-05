@@ -587,15 +587,13 @@ final class PackPass {
 				// White until the pass behind it has drawn once, which is the far plane in the pack's
 				// own window and so a focus point at the horizon. Black would be a focus point at the
 				// camera, which is the defect this whole path exists to close.
-				case CENTER_DEPTH -> or(targets.centerDepth().view(), targets.white());
+				case CENTER_DEPTH -> centerDepth(targets);
 				// The far terrain's own depth, kept beside the world's as Iris keeps it, and white
 				// for the far plane on the frames the pack drew no far terrain: the pack's Distant
 				// Horizons branches then stay shut, exactly as without the mod. dhDepthTex1 is the
 				// image without the water whichever half asks, which is Iris's copy before the
 				// translucent LODs; the other two names follow the half, like depthtex0.
-				case DISTANT_DEPTH -> SamplerPlan.distantWithoutWater(binding.sampler())
-						? or(targets.depth().distantOpaque(), targets.white())
-						: or(distantView, targets.white());
+				case DISTANT_DEPTH -> distant(binding.sampler(), targets, distantView);
 				// A name this backend cannot bind should have taken its program out of the chain
 				// before a frame was drawn. It is still answered rather than left out, because the
 				// layout carries it either way and the draw throws on the first name it misses.
@@ -694,8 +692,7 @@ final class PackPass {
 	 * also reached when an image was wanted and could not be had, which is not the same thing:
 	 * {@link PackDepth#preHand} carries the cases apart and says which of them reach the log.
 	 */
-	private static GpuTextureView depth(String sampler, ColorTargets targets,
-			GpuTextureView depthView) {
+	static GpuTextureView depth(String sampler, ColorTargets targets, GpuTextureView depthView) {
 		if (SamplerPlan.depthCopy(sampler)) {
 			if (SamplerPlan.preHandCopy(sampler)) {
 				GpuTextureView preHand = targets.depth().preHand();
@@ -711,6 +708,30 @@ final class PackPass {
 		}
 
 		return depthView == null ? targets.white() : depthView;
+	}
+
+	/**
+	 * Which far terrain depth a name reads, and white for the far plane on the frames the pack
+	 * drew no far terrain, so that the pack's Distant Horizons branches stay shut exactly as
+	 * without the mod. {@code dhDepthTex1} is the image without the water whichever half asks,
+	 * which is Iris's copy before the translucent LODs; the other two names follow the half, like
+	 * {@code depthtex0}. Package private for the compute road, so that a compute reads the far
+	 * terrain exactly as the pass it hangs off does.
+	 */
+	static GpuTextureView distant(String sampler, ColorTargets targets, GpuTextureView distantView) {
+		return SamplerPlan.distantWithoutWater(sampler)
+				? or(targets.depth().distantOpaque(), targets.white())
+				: or(distantView, targets.white());
+	}
+
+	/**
+	 * The one texel {@code centerDepthSmooth} is read out of, and white until the pass behind it
+	 * has drawn once: the far plane in the pack's own window, so a focus point at the horizon,
+	 * where black would be one at the camera. Package private for the compute road, which Iris
+	 * hands the same texel ({@code pipeline/CompositeRenderer.java:461}).
+	 */
+	static GpuTextureView centerDepth(ColorTargets targets) {
+		return or(targets.centerDepth().view(), targets.white());
 	}
 
 	/** The first of the two that exists, for a name whose image may not be allocated yet. */
