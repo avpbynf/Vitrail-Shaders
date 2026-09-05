@@ -24,6 +24,7 @@ import dev.vitrail.uniform.expr.kroppeb.stareval.function.TypedFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.V2FFunction;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.V2IFunction;
 import dev.vitrail.uniform.Smoothed;
+import dev.vitrail.uniform.values.FrameSmoothed;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector2i;
@@ -1068,7 +1069,8 @@ public final class ExprFunctions {
 
 		builder.addDynamicFunction("smooth", Type.Float, () ->
 			new AbstractTypedFunction(Type.Float, parameters, withId ? 1 : 0, false) {
-				private final Smoothed smoothed = new Smoothed();
+				// Tracked, so that a world change forgets it with the engine's own smoothed values.
+				private final Smoothed smoothed = FrameSmoothed.tracked();
 
 				@Override
 				public void evaluateTo(Expression[] params, FunctionContext context, FunctionReturn functionReturn) {
