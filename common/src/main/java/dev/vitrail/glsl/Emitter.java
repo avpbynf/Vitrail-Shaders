@@ -1,10 +1,10 @@
 package dev.vitrail.glsl;
 
 import dev.vitrail.glsl.GlslTranslator.Output;
-import dev.vitrail.glsl.GlslTranslator.SplitArray;
-import dev.vitrail.glsl.GlslTranslator.SplitMatrix;
-import dev.vitrail.glsl.GlslTranslator.SplitStruct;
-import dev.vitrail.glsl.GlslTranslator.StructMember;
+import dev.vitrail.glsl.VaryingSplit.SplitArray;
+import dev.vitrail.glsl.VaryingSplit.SplitMatrix;
+import dev.vitrail.glsl.VaryingSplit.SplitStruct;
+import dev.vitrail.glsl.VaryingSplit.StructMember;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.texture.CustomImages;
@@ -34,11 +34,11 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		Map<String, String> engineDefines, Map<String, String> memoryQualifiers, Set<String> used,
 		Set<String> declaredNames, Map<String, String> synthesized,
 		Map<String, VolumeAtlas> readVolumes, Map<Integer, Output> packOutputs,
-		int maxFragmentOutput, Map<String, String> owedOutputs, List<SplitMatrix> splitMatrices,
-		List<SplitStruct> splitStructs, List<SplitArray> splitArrays, int gameTextureMatrix,
-		int gameModelView, int softRewrites, int trigCalls, int hashCalls, boolean mainWrapped,
-		boolean depthEpilogue, boolean terrainPrologue, boolean distantPrologue,
-		boolean entityWrapped, boolean linesWrapped, boolean alphaEpilogue, boolean covers,
+		int maxFragmentOutput, Map<String, String> owedOutputs, VaryingSplit splits,
+		int gameTextureMatrix, int gameModelView, int softRewrites, int trigCalls, int hashCalls,
+		boolean mainWrapped, boolean depthEpilogue, boolean terrainPrologue,
+		boolean distantPrologue, boolean entityWrapped, boolean linesWrapped,
+		boolean alphaEpilogue, boolean covers,
 		boolean wrapsFragment, boolean ordered, boolean namesFragDepth, boolean makesOverlayColour) {
 
 	private static final String VERSION = "#version 460 core";
@@ -266,14 +266,14 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 			}
 		}
 
-		for (SplitMatrix split : this.splitMatrices) {
+		for (SplitMatrix split : this.splits.matrices()) {
 			lines.add(split.matrixType() + " " + split.name() + ";");
 			String storage = split.input() ? "in" : "out";
 			String qualified = split.qualifier().isEmpty()
 					? storage + " " + split.columnType()
 					: split.qualifier() + " " + storage + " " + split.columnType();
 			for (int column = 0; column < split.columns(); column++) {
-				lines.add(qualified + " " + GlslTranslator.matrixColumnName(split.name(), column) + ";");
+				lines.add(qualified + " " + VaryingSplit.matrixColumnName(split.name(), column) + ";");
 			}
 		}
 
@@ -282,7 +282,7 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		// alike. The definition is written from the members read off the body, whose own copy is
 		// blank by now.
 		Set<String> defined = new HashSet<>();
-		for (SplitStruct split : this.splitStructs) {
+		for (SplitStruct split : this.splits.structs()) {
 			if (defined.add(split.structType())) {
 				StringBuilder definition = new StringBuilder("struct ").append(split.structType())
 						.append(" { ");
@@ -308,13 +308,13 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 						? storage + " " + member.type()
 						: qualifier + " " + storage + " " + member.type();
 				lines.add(qualified + " "
-						+ GlslTranslator.structMemberName(split.name(), member.name()) + ";");
+						+ VaryingSplit.structMemberName(split.name(), member.name()) + ";");
 			}
 		}
 
 		// The array as a global of the pack's name, then one varying per element in index order,
 		// flat where the element may not be interpolated.
-		for (SplitArray split : this.splitArrays) {
+		for (SplitArray split : this.splits.arrays()) {
 			lines.add(split.type() + " " + split.name() + "[" + split.size() + "];");
 			String storage = split.input() ? "in" : "out";
 			String qualifier = split.qualifier();
@@ -326,7 +326,7 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 					? storage + " " + split.type()
 					: qualifier + " " + storage + " " + split.type();
 			for (int element = 0; element < split.size(); element++) {
-				lines.add(qualified + " " + GlslTranslator.arrayElementName(split.name(), element) + ";");
+				lines.add(qualified + " " + VaryingSplit.arrayElementName(split.name(), element) + ";");
 			}
 		}
 
@@ -378,8 +378,7 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		// has to be declared before it can be called.
 		if (this.depthEpilogue || this.terrainPrologue || this.distantPrologue || this.entityWrapped
 				|| this.linesWrapped || wrapsFragment() || owesInitialisers()
-				|| !this.splitMatrices.isEmpty() || !this.splitStructs.isEmpty()
-				|| !this.splitArrays.isEmpty()) {
+				|| this.splits.any()) {
 			lines.add("void " + GlslTranslator.PACK_MAIN + "();");
 			// The lines mesh runs the pack's main twice, the far end of the edge first and the
 			// vertex itself second, so that every varying holds the vertex's own value when the
@@ -403,13 +402,13 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 					+ (wrapsFragment() ? GlslTranslator.ORDER_OUTPUTS + "(); " : "")
 					+ coveragePrologue()
 					+ owedPrologue()
-					+ matrixPrologue()
-					+ structPrologue()
-					+ arrayPrologue()
+					+ this.splits.matrixPrologue()
+					+ this.splits.structPrologue()
+					+ this.splits.arrayPrologue()
 					+ body
-					+ matrixEpilogue()
-					+ structEpilogue()
-					+ arrayEpilogue()
+					+ this.splits.matrixEpilogue()
+					+ this.splits.structEpilogue()
+					+ this.splits.arrayEpilogue()
 					+ (this.depthEpilogue ? " gl_Position.z = " + GlslTranslator.DEPTH_CONV
 							+ ".x * gl_Position.z + " + GlslTranslator.DEPTH_CONV
 							+ ".y * gl_Position.w;" : "")
@@ -437,135 +436,6 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		StringBuilder assignments = new StringBuilder();
 		this.owedOutputs.forEach((name, qualified) ->
 				assignments.append(initialiser(name, qualified)).append(' '));
-
-		return assignments.toString();
-	}
-
-	/**
-	 * Rebuilds each input matrix from its columns before the pack body runs, so a read of the
-	 * original name still sees a {@code mat3}.
-	 */
-	private String matrixPrologue() {
-		StringBuilder assignments = new StringBuilder();
-		for (SplitMatrix split : this.splitMatrices) {
-			if (!split.input()) {
-				continue;
-			}
-
-			assignments.append(split.name()).append(" = ").append(split.matrixType()).append('(');
-			for (int column = 0; column < split.columns(); column++) {
-				if (column > 0) {
-					assignments.append(", ");
-				}
-
-				assignments.append(GlslTranslator.matrixColumnName(split.name(), column));
-			}
-
-			assignments.append("); ");
-		}
-
-		return assignments.toString();
-	}
-
-	/**
-	 * Copies each output matrix onto its columns after the pack body ran, so the interface the
-	 * next stage reads is the value the pack wrote.
-	 */
-	private String matrixEpilogue() {
-		StringBuilder assignments = new StringBuilder();
-		for (SplitMatrix split : this.splitMatrices) {
-			if (split.input()) {
-				continue;
-			}
-
-			for (int column = 0; column < split.columns(); column++) {
-				assignments.append(GlslTranslator.matrixColumnName(split.name(), column)).append(" = ")
-						.append(split.name()).append('[').append(column).append("]; ");
-			}
-		}
-
-		return assignments.toString();
-	}
-
-	/**
-	 * Rebuilds each input struct from its members before the pack body runs, so a read of the
-	 * original name still sees the struct. A constructor takes the members in declaration order,
-	 * which is the order they were declared in as varyings.
-	 */
-	private String structPrologue() {
-		StringBuilder assignments = new StringBuilder();
-		for (SplitStruct split : this.splitStructs) {
-			if (!split.input()) {
-				continue;
-			}
-
-			assignments.append(split.name()).append(" = ").append(split.structType()).append('(');
-			for (int member = 0; member < split.members().size(); member++) {
-				if (member > 0) {
-					assignments.append(", ");
-				}
-
-				assignments.append(GlslTranslator.structMemberName(split.name(),
-						split.members().get(member).name()));
-			}
-
-			assignments.append("); ");
-		}
-
-		return assignments.toString();
-	}
-
-	/**
-	 * Copies each output struct onto its members after the pack body ran, so the interface the next
-	 * stage reads is the value the pack wrote.
-	 */
-	private String structEpilogue() {
-		StringBuilder assignments = new StringBuilder();
-		for (SplitStruct split : this.splitStructs) {
-			if (split.input()) {
-				continue;
-			}
-
-			for (StructMember member : split.members()) {
-				assignments.append(GlslTranslator.structMemberName(split.name(), member.name()))
-						.append(" = ")
-						.append(split.name()).append('.').append(member.name()).append("; ");
-			}
-		}
-
-		return assignments.toString();
-	}
-
-	/** Fills each input array from its elements before the pack body runs. */
-	private String arrayPrologue() {
-		StringBuilder assignments = new StringBuilder();
-		for (SplitArray split : this.splitArrays) {
-			if (!split.input()) {
-				continue;
-			}
-
-			for (int element = 0; element < split.size(); element++) {
-				assignments.append(split.name()).append('[').append(element).append("] = ")
-						.append(GlslTranslator.arrayElementName(split.name(), element)).append("; ");
-			}
-		}
-
-		return assignments.toString();
-	}
-
-	/** Copies each output array onto its elements after the pack body ran. */
-	private String arrayEpilogue() {
-		StringBuilder assignments = new StringBuilder();
-		for (SplitArray split : this.splitArrays) {
-			if (split.input()) {
-				continue;
-			}
-
-			for (int element = 0; element < split.size(); element++) {
-				assignments.append(GlslTranslator.arrayElementName(split.name(), element)).append(" = ")
-						.append(split.name()).append('[').append(element).append("]; ");
-			}
-		}
 
 		return assignments.toString();
 	}
