@@ -1,5 +1,6 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.mixin.access.BlockEntityRenderStateAccessor;
 import dev.vitrail.render.BlockEntityGeometry;
 import dev.vitrail.render.BlockStateIds;
 import dev.vitrail.render.EntityIdentifiers;

@@ -1,4 +1,4 @@
-package dev.vitrail.mixin;
+package dev.vitrail.mixin.sodium;
 
 import dev.vitrail.render.EntityMesh;
 import dev.vitrail.sodium.TerrainMesh;

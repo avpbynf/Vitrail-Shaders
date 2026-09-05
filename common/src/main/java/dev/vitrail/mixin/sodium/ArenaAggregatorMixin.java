@@ -1,4 +1,4 @@
-package dev.vitrail.mixin;
+package dev.vitrail.mixin.sodium;
 
 import net.caffeinemc.mods.sodium.client.gpu.arena.ArenaAggregator;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkMeshFormats;

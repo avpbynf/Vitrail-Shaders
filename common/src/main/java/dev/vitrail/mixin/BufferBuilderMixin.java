@@ -1,6 +1,7 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.glsl.EntityVertex;
+import dev.vitrail.mixin.access.ByteBufferBuilderAccessor;
 import dev.vitrail.render.EntityFrame;
 import dev.vitrail.render.EntityIdentifiers;
 

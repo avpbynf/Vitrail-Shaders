@@ -1,7 +1,7 @@
 package dev.vitrail.render;
 
-import dev.vitrail.mixin.LevelRendererOutlineAccessor;
-import dev.vitrail.mixin.RenderTargetAccessor;
+import dev.vitrail.mixin.access.LevelRendererOutlineAccessor;
+import dev.vitrail.mixin.access.RenderTargetAccessor;
 import dev.vitrail.settings.PackFile;
 import dev.vitrail.Vitrail;
 

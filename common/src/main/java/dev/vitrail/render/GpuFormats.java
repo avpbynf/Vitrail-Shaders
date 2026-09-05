@@ -1,6 +1,6 @@
 package dev.vitrail.render;
 
-import dev.vitrail.mixin.GpuDeviceAccessor;
+import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.pack.target.TargetFormat;
 
 import com.mojang.blaze3d.GpuFormat;

@@ -1,5 +1,6 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.mixin.access.BiomeClimateAccessor;
 import dev.vitrail.render.BiomeHumidity;
 
 import net.minecraft.world.attribute.EnvironmentAttributeMap;

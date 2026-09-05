@@ -1,6 +1,6 @@
 package dev.vitrail.render;
 
-import dev.vitrail.mixin.IntermediaryShaderModuleAccessor;
+import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
 
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
