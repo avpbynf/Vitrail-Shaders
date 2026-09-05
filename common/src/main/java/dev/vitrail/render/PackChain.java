@@ -283,6 +283,14 @@ public final class PackChain {
 
 	private final PackProgram.Chain chain;
 	private final PackValues values;
+
+	/**
+	 * What opens the pack again for the six families the load worker reads: the archive, the
+	 * settings chosen for it and the profile they came from. One opening serves all six there.
+	 */
+	private final Path packPath;
+	private final Map<String, OptionValue> chosen;
+	private final String profile;
 	private final String world;
 	private final ColorTargets targets;
 
@@ -408,6 +416,9 @@ public final class PackChain {
 			OpenedPack opened, Path packPath, Map<String, OptionValue> chosen, String profile) {
 		this.chain = chain;
 		this.values = values;
+		this.packPath = packPath;
+		this.chosen = Map.copyOf(chosen);
+		this.profile = profile;
 		this.world = world;
 		this.seedEnabled = seedEnabled;
 		this.load = LOADS.incrementAndGet();
@@ -3121,18 +3132,22 @@ public final class PackChain {
 				fanned.set(device != null);
 
 				List<CompletableFuture<Void>> compiles = new ArrayList<>(FAMILIES);
-				try {
-					prefetchFamily(this.sky::prefetch);
+				// One opening for the six, so the plan of the place, the program tree and every
+				// header they share are worked out once on this worker rather than once per family:
+				// the families used to be five of every six walks a warm load made of the archive.
+				// A family that reads later on its own, at a first draw, still opens for itself.
+				try (OpenedPack shared = OpenedPack.open(this.packPath, this.chosen, this.profile)) {
+					prefetchFamily(() -> this.sky.prefetch(shared));
 					spawnFamilyCompiles(compiles, 0, device);
-					prefetchFamily(this.entities::prefetch);
+					prefetchFamily(() -> this.entities.prefetch(shared));
 					spawnFamilyCompiles(compiles, 1, device);
-					prefetchFamily(this.clouds::prefetch);
+					prefetchFamily(() -> this.clouds.prefetch(shared));
 					spawnFamilyCompiles(compiles, 2, device);
-					prefetchFamily(this.weather::prefetch);
+					prefetchFamily(() -> this.weather.prefetch(shared));
 					spawnFamilyCompiles(compiles, 3, device);
-					prefetchFamily(this.particles::prefetch);
+					prefetchFamily(() -> this.particles.prefetch(shared));
 					spawnFamilyCompiles(compiles, 4, device);
-					prefetchFamily(this.distant::prefetch);
+					prefetchFamily(() -> this.distant.prefetch(shared));
 					spawnFamilyCompiles(compiles, 5, device);
 				} catch (Throwable e) {
 					// prefetchFamily catches the RuntimeException of one translation; anything

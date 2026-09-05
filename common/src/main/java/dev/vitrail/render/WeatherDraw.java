@@ -5,6 +5,7 @@ import dev.vitrail.glsl.VertexInputs;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSize;
@@ -186,8 +187,17 @@ public final class WeatherDraw {
 	 * draw.
 	 */
 	void prefetch() {
+		prefetch(null);
+	}
+
+	/**
+	 * The same through an opening the caller holds, which is how the load worker reads the six
+	 * families: one opening, one plan of the place and one program tree shared between them,
+	 * where each used to open the archive and rebuild all three for itself.
+	 */
+	void prefetch(OpenedPack shared) {
 		if (!this.read && wanted()) {
-			read();
+			read(shared);
 		}
 	}
 
@@ -432,10 +442,12 @@ public final class WeatherDraw {
 	 * pack would be opened, expanded and translated inside that frame, on the render thread and in
 	 * the middle of a storm.
 	 */
-	private void read() {
+	private void read(OpenedPack shared) {
 		try {
-			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(this.packPath, this.place,
-					ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
+			List<PackProgram.GeometryElement> asked = ELEMENTS.values().stream().map(Element::asked).toList();
+			Map<String, PackProgram.Loaded> loaded = shared != null
+					? PackProgram.loadGeometry(shared, this.place, asked)
+					: PackProgram.loadGeometry(this.packPath, this.place, asked, this.chosen, this.profile);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the weather, so the game keeps its "
 						+ "own shader for the rain and the snow", this.packPath.getFileName(),

@@ -167,8 +167,12 @@ public final class TargetPlan {
 	 */
 	public static TargetPlan build(ShaderPackSource source, OptionIndex options, SettingSet settings,
 			ShaderProperties properties, String dimension, ChainFilter filter) throws IOException {
-		DimensionSet dimensions = DimensionSet.discover(source);
-		ProgramSet programs = ProgramSet.enumerate(source, dimensions);
+		// Both walk the archive, and both are the same answer for every place and every family of
+		// one reading of it.
+		DimensionSet dimensions = source.derived(DimensionSet.class,
+				() -> DimensionSet.discover(source));
+		ProgramSet programs = source.derived(ProgramSet.class,
+				() -> ProgramSet.enumerate(source, dimensions));
 
 		// A dimension directory replaces the root rather than being layered over it, and what
 		// decides is that the directory EXISTS, never what it holds. Iris builds a program set for

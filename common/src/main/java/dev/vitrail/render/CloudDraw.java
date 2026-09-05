@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
@@ -125,8 +126,17 @@ public final class CloudDraw {
 	 * draw.
 	 */
 	void prefetch() {
+		prefetch(null);
+	}
+
+	/**
+	 * The same through an opening the caller holds, which is how the load worker reads the six
+	 * families: one opening, one plan of the place and one program tree shared between them,
+	 * where each used to open the archive and rebuild all three for itself.
+	 */
+	void prefetch(OpenedPack shared) {
 		if (!this.read && wanted()) {
-			read();
+			read(shared);
 		}
 	}
 
@@ -263,10 +273,11 @@ public final class CloudDraw {
 	 * until it is about to draw one, and a place with the clouds switched off should not pay for a
 	 * program it never draws.
 	 */
-	private void read() {
+	private void read(OpenedPack shared) {
 		try {
-			Optional<PackProgram.Loaded> loaded =
-					PackProgram.loadClouds(this.packPath, this.place, this.chosen, this.profile);
+			Optional<PackProgram.Loaded> loaded = shared != null
+					? PackProgram.loadClouds(shared, this.place)
+					: PackProgram.loadClouds(this.packPath, this.place, this.chosen, this.profile);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for its clouds, so the game keeps its "
 						+ "own", this.packPath.getFileName(),
