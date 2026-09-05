@@ -661,6 +661,37 @@ public final class PackProgram {
 	}
 
 	/**
+	 * What every family of programs works out of one opening before reading its own files: the
+	 * expander, the plan of the place, the pack's textures and the program tree. Kept on the
+	 * opening for its life, so that the six families a load reads through one opening pay for
+	 * it once rather than each walking the archive again for the same answers.
+	 */
+	private record Reading(IncludeExpander expander, TargetPlan targets, PackTextures textures,
+			ProgramResolver resolver) {
+	}
+
+	/** The settings and the place a reading was taken for; the settings compare by identity. */
+	private record ReadingKey(SettingSet settings, String place) {
+	}
+
+	private static Reading reading(OpenedPack pack, String place) throws IOException {
+		ShaderPackSource source = pack.source();
+		return source.derived(new ReadingKey(pack.settings(), place), () -> {
+			IncludeExpander expander = new IncludeExpander(source, pack.settings());
+			TargetPlan targets = TargetPlan.build(source, pack.options(), pack.settings(),
+					pack.properties(), place);
+			PackTextures textures = textures(source, pack.properties(), pack.options(), pack.settings());
+			DimensionSet dimensions = source.derived(DimensionSet.class,
+					() -> DimensionSet.discover(source));
+			ProgramResolver resolver = ProgramResolver.resolve(
+					source.derived(ProgramSet.class, () -> ProgramSet.enumerate(source, dimensions)),
+					dimensions);
+
+			return new Reading(expander, targets, textures, resolver);
+		});
+	}
+
+	/**
 	 * Reads the three programs the chunk renderer draws a section with, in one opening of the pack.
 	 * <p>
 	 * The three are read together and not one at a time for the reason {@link #loadChain} gives: the
@@ -717,13 +748,11 @@ public final class PackProgram {
 		OptionIndex options = pack.options();
 		ShaderProperties properties = pack.properties();
 		SettingSet settings = pack.settings();
-		IncludeExpander expander = new IncludeExpander(source, settings);
-		TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
-		PackTextures textures = textures(source, properties, options, settings);
-
-		DimensionSet dimensions = DimensionSet.discover(source);
-		ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
-				dimensions);
+		Reading reading = reading(pack, place);
+		IncludeExpander expander = reading.expander();
+		TargetPlan targets = reading.targets();
+		PackTextures textures = reading.textures();
+		ProgramResolver resolver = reading.resolver();
 
 		Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
 		// The pack's own switch comes before its programs: the reference nulls its whole
@@ -834,6 +863,14 @@ public final class PackProgram {
 	 */
 	public static Distant loadDistant(Path packPath, String place, List<GeometryElement> elements,
 			Map<String, OptionValue> chosen, String profile) throws IOException {
+		try (OpenedPack pack = OpenedPack.open(packPath, chosen, profile)) {
+			return loadDistant(pack, place, elements);
+		}
+	}
+
+	/** The same, reading an opening the caller already holds. */
+	public static Distant loadDistant(OpenedPack pack, String place, List<GeometryElement> elements)
+			throws IOException {
 		for (GeometryElement element : elements) {
 			if (element.inputs() != VertexInputs.DISTANT) {
 				throw new IllegalArgumentException("The far terrain is drawn from Distant Horizons' own "
@@ -842,68 +879,61 @@ public final class PackProgram {
 			}
 		}
 
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex options = OptionIndex.build(source);
-			ShaderProperties properties = ShaderProperties.parse(source);
-			Map<String, OptionValue> fromProfile = profile.isEmpty()
-					? Map.of()
-					: properties.expandProfile(profile);
-			SettingSet settings =
-					SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, settings);
-			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
-			PackTextures textures = textures(source, properties, options, settings);
+		ShaderPackSource source = pack.source();
+		OptionIndex options = pack.options();
+		ShaderProperties properties = pack.properties();
+		SettingSet settings = pack.settings();
+		Reading reading = reading(pack, place);
+		IncludeExpander expander = reading.expander();
+		TargetPlan targets = reading.targets();
+		PackTextures textures = reading.textures();
+		ProgramResolver resolver = reading.resolver();
 
-			DimensionSet dimensions = DimensionSet.discover(source);
-			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
-					dimensions);
+		Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
 
-			Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
-
-			record Served(String path, Map<ProgramStage, ExpandedUnit> units, AlphaTest alphaTest,
-					GeometryElement element) {
-			}
-
-			Map<String, Served> served = new LinkedHashMap<>();
-			Set<String> reads = new LinkedHashSet<>();
-			for (GeometryElement element : elements) {
-				Optional<ProgramResolver.Resolution> resolution =
-						resolver.lookup(place, element.program());
-				if (resolution.isEmpty()) {
-					continue;
-				}
-
-				// The file that really serves the half and not the name asked for, which is how Iris
-				// looks it up and how the chunk passes read the same line: a pack shipping one
-				// dh_terrain and no dh_water draws its far water with the first.
-				String servedBy = resolution.get().servedBy();
-				String path = pathOf(place, servedBy);
-				Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
-				if (!units.containsKey(ProgramStage.VERTEX)
-						|| !units.containsKey(ProgramStage.FRAGMENT)) {
-					continue;
-				}
-
-				AlphaTest alphaTest = overrides.getOrDefault(servedBy, element.alphaTest());
-				served.put(element.element(), new Served(path, units, alphaTest, element));
-				reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), element.inputs(),
-						alphaTest, element.coverage(), element.program(), textures.volumes()));
-			}
-
-			if (served.isEmpty()) {
-				return new Distant(Map.of(), List.of());
-			}
-
-			List<String> carried = DistantVertex.carried(reads);
-			Map<String, Loaded> loaded = new LinkedHashMap<>();
-			served.forEach((key, one) -> loaded.put(key, bind(source.packName(), one.path(),
-					ProgramTranslator.translate(one.units(), one.element().inputs(), carried,
-							one.alphaTest(), one.element().coverage(), one.element().program(),
-							textures.volumes()),
-					targets, one.alphaTest(), textures)));
-
-			return new Distant(loaded, carried);
+		record Served(String path, Map<ProgramStage, ExpandedUnit> units, AlphaTest alphaTest,
+				GeometryElement element) {
 		}
+
+		Map<String, Served> served = new LinkedHashMap<>();
+		Set<String> reads = new LinkedHashSet<>();
+		for (GeometryElement element : elements) {
+			Optional<ProgramResolver.Resolution> resolution =
+					resolver.lookup(place, element.program());
+			if (resolution.isEmpty()) {
+				continue;
+			}
+
+			// The file that really serves the half and not the name asked for, which is how Iris
+			// looks it up and how the chunk passes read the same line: a pack shipping one
+			// dh_terrain and no dh_water draws its far water with the first.
+			String servedBy = resolution.get().servedBy();
+			String path = pathOf(place, servedBy);
+			Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
+			if (!units.containsKey(ProgramStage.VERTEX)
+					|| !units.containsKey(ProgramStage.FRAGMENT)) {
+				continue;
+			}
+
+			AlphaTest alphaTest = overrides.getOrDefault(servedBy, element.alphaTest());
+			served.put(element.element(), new Served(path, units, alphaTest, element));
+			reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), element.inputs(),
+					alphaTest, element.coverage(), element.program(), textures.volumes()));
+		}
+
+		if (served.isEmpty()) {
+			return new Distant(Map.of(), List.of());
+		}
+
+		List<String> carried = DistantVertex.carried(reads);
+		Map<String, Loaded> loaded = new LinkedHashMap<>();
+		served.forEach((key, one) -> loaded.put(key, bind(source.packName(), one.path(),
+				ProgramTranslator.translate(one.units(), one.element().inputs(), carried,
+						one.alphaTest(), one.element().coverage(), one.element().program(),
+						textures.volumes()),
+				targets, one.alphaTest(), textures)));
+
+		return new Distant(loaded, carried);
 	}
 
 	/**
@@ -978,54 +1008,56 @@ public final class PackProgram {
 	 */
 	public static Map<String, Loaded> loadSky(Path packPath, String place, List<SkyElement> elements,
 			Map<String, OptionValue> chosen, String profile) throws IOException {
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex options = OptionIndex.build(source);
-			ShaderProperties properties = ShaderProperties.parse(source);
-			Map<String, OptionValue> fromProfile = profile.isEmpty()
-					? Map.of()
-					: properties.expandProfile(profile);
-			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, settings);
-			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
-			PackTextures textures = textures(source, properties, options, settings);
+		try (OpenedPack pack = OpenedPack.open(packPath, chosen, profile)) {
+			return loadSky(pack, place, elements);
+		}
+	}
 
-			DimensionSet dimensions = DimensionSet.discover(source);
-			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
-					dimensions);
+	/** The same, reading an opening the caller already holds. */
+	public static Map<String, Loaded> loadSky(OpenedPack pack, String place,
+			List<SkyElement> elements) throws IOException {
+		ShaderPackSource source = pack.source();
+		OptionIndex options = pack.options();
+		ShaderProperties properties = pack.properties();
+		SettingSet settings = pack.settings();
+		Reading reading = reading(pack, place);
+		IncludeExpander expander = reading.expander();
+		TargetPlan targets = reading.targets();
+		PackTextures textures = reading.textures();
+		ProgramResolver resolver = reading.resolver();
 
-			Map<String, Map<ProgramStage, ExpandedUnit>> expanded = new LinkedHashMap<>();
-			Map<String, Loaded> translated = new LinkedHashMap<>();
-			Map<String, Loaded> loaded = new LinkedHashMap<>();
-			for (SkyElement element : elements) {
-				Optional<ProgramResolver.Resolution> resolution =
-						resolver.lookup(place, element.program());
-				if (resolution.isEmpty()) {
-					continue;
-				}
-
-				String path = pathOf(place, resolution.get().servedBy());
-				if (!expanded.containsKey(path)) {
-					expanded.put(path, read(source, expander, path));
-				}
-
-				Map<ProgramStage, ExpandedUnit> units = expanded.get(path);
-				if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
-					continue;
-				}
-
-				// No alpha test anywhere in the sky: the format has no line for one, and nothing the
-				// game draws there is cut out. The program the engine supplies uniforms for is the one
-				// the piece wanted, not the file that ended up serving it, as everywhere else.
-				translated.computeIfAbsent(element.translation(), _ -> bind(source.packName(), path,
-						ProgramTranslator.translate(units, VertexInputs.SKY, element.bound(),
-								AlphaTest.OFF, element.coverage(), element.program(),
-								textures.volumes()),
-						targets, AlphaTest.OFF, textures));
-				loaded.put(element.element(), translated.get(element.translation()));
+		Map<String, Map<ProgramStage, ExpandedUnit>> expanded = new LinkedHashMap<>();
+		Map<String, Loaded> translated = new LinkedHashMap<>();
+		Map<String, Loaded> loaded = new LinkedHashMap<>();
+		for (SkyElement element : elements) {
+			Optional<ProgramResolver.Resolution> resolution =
+					resolver.lookup(place, element.program());
+			if (resolution.isEmpty()) {
+				continue;
 			}
 
-			return loaded;
+			String path = pathOf(place, resolution.get().servedBy());
+			if (!expanded.containsKey(path)) {
+				expanded.put(path, read(source, expander, path));
+			}
+
+			Map<ProgramStage, ExpandedUnit> units = expanded.get(path);
+			if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+				continue;
+			}
+
+			// No alpha test anywhere in the sky: the format has no line for one, and nothing the
+			// game draws there is cut out. The program the engine supplies uniforms for is the one
+			// the piece wanted, not the file that ended up serving it, as everywhere else.
+			translated.computeIfAbsent(element.translation(), _ -> bind(source.packName(), path,
+					ProgramTranslator.translate(units, VertexInputs.SKY, element.bound(),
+							AlphaTest.OFF, element.coverage(), element.program(),
+							textures.volumes()),
+					targets, AlphaTest.OFF, textures));
+			loaded.put(element.element(), translated.get(element.translation()));
 		}
+
+		return loaded;
 	}
 
 	/**
@@ -1047,43 +1079,44 @@ public final class PackProgram {
 	 */
 	public static Optional<Loaded> loadClouds(Path packPath, String place,
 			Map<String, OptionValue> chosen, String profile) throws IOException {
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex options = OptionIndex.build(source);
-			ShaderProperties properties = ShaderProperties.parse(source);
-			Map<String, OptionValue> fromProfile = profile.isEmpty()
-					? Map.of()
-					: properties.expandProfile(profile);
-			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, settings);
-			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
-			PackTextures textures = textures(source, properties, options, settings);
-
-			DimensionSet dimensions = DimensionSet.discover(source);
-			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
-					dimensions);
-
-			Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, CLOUD_PROGRAM);
-			if (resolution.isEmpty()) {
-				return Optional.empty();
-			}
-
-			String path = pathOf(place, resolution.get().servedBy());
-			Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
-			if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
-				return Optional.empty();
-			}
-
-			// No alpha test, as in the sky: the format has no line for one over this name and nothing
-			// the game draws here is cut out. No coverage mask either, the clouds being drawn long
-			// after the scene seed has run.
-			//
-			// No bound elements, and that is the whole difference from the sky: this pass binds no
-			// vertex format at all, so exactly nothing is declared as an input.
-			return Optional.of(bind(source.packName(), path,
-					ProgramTranslator.translate(units, VertexInputs.CLOUDS, List.of(), AlphaTest.OFF,
-							false, CLOUD_PROGRAM, textures.volumes()),
-					targets, AlphaTest.OFF, textures));
+		try (OpenedPack pack = OpenedPack.open(packPath, chosen, profile)) {
+			return loadClouds(pack, place);
 		}
+	}
+
+	/** The same, reading an opening the caller already holds. */
+	public static Optional<Loaded> loadClouds(OpenedPack pack, String place) throws IOException {
+		ShaderPackSource source = pack.source();
+		OptionIndex options = pack.options();
+		ShaderProperties properties = pack.properties();
+		SettingSet settings = pack.settings();
+		Reading reading = reading(pack, place);
+		IncludeExpander expander = reading.expander();
+		TargetPlan targets = reading.targets();
+		PackTextures textures = reading.textures();
+		ProgramResolver resolver = reading.resolver();
+
+		Optional<ProgramResolver.Resolution> resolution = resolver.lookup(place, CLOUD_PROGRAM);
+		if (resolution.isEmpty()) {
+			return Optional.empty();
+		}
+
+		String path = pathOf(place, resolution.get().servedBy());
+		Map<ProgramStage, ExpandedUnit> units = read(source, expander, path);
+		if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+			return Optional.empty();
+		}
+
+		// No alpha test, as in the sky: the format has no line for one over this name and nothing
+		// the game draws here is cut out. No coverage mask either, the clouds being drawn long
+		// after the scene seed has run.
+		//
+		// No bound elements, and that is the whole difference from the sky: this pass binds no
+		// vertex format at all, so exactly nothing is declared as an input.
+		return Optional.of(bind(source.packName(), path,
+				ProgramTranslator.translate(units, VertexInputs.CLOUDS, List.of(), AlphaTest.OFF,
+						false, CLOUD_PROGRAM, textures.volumes()),
+				targets, AlphaTest.OFF, textures));
 	}
 
 	/**
@@ -1150,99 +1183,101 @@ public final class PackProgram {
 	public static Map<String, Loaded> loadGeometry(Path packPath, String place,
 			List<GeometryElement> elements, Map<String, OptionValue> chosen, String profile)
 			throws IOException {
-		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex options = OptionIndex.build(source);
-			ShaderProperties properties = ShaderProperties.parse(source);
-			Map<String, OptionValue> fromProfile = profile.isEmpty()
-					? Map.of()
-					: properties.expandProfile(profile);
-			SettingSet settings = SettingSet.resolve(fromProfile, chosen, profile.isEmpty() ? "chosen" : profile);
-			IncludeExpander expander = new IncludeExpander(source, settings);
-			TargetPlan targets = TargetPlan.build(source, options, settings, properties, place);
-			PackTextures textures = textures(source, properties, options, settings);
+		try (OpenedPack pack = OpenedPack.open(packPath, chosen, profile)) {
+			return loadGeometry(pack, place, elements);
+		}
+	}
 
-			DimensionSet dimensions = DimensionSet.discover(source);
-			ProgramResolver resolver = ProgramResolver.resolve(ProgramSet.enumerate(source, dimensions),
-					dimensions);
+	/** The same, reading an opening the caller already holds. */
+	public static Map<String, Loaded> loadGeometry(OpenedPack pack, String place,
+			List<GeometryElement> elements) throws IOException {
+		ShaderPackSource source = pack.source();
+		OptionIndex options = pack.options();
+		ShaderProperties properties = pack.properties();
+		SettingSet settings = pack.settings();
+		Reading reading = reading(pack, place);
+		IncludeExpander expander = reading.expander();
+		TargetPlan targets = reading.targets();
+		PackTextures textures = reading.textures();
+		ProgramResolver resolver = reading.resolver();
 
-			Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
+		Map<String, AlphaTest> overrides = properties.alphaTests(settings.globalDefines(options));
 
-			Map<String, Map<ProgramStage, ExpandedUnit>> expanded = new LinkedHashMap<>();
-			Map<String, Loaded> translated = new LinkedHashMap<>();
-			Map<String, Loaded> loaded = new LinkedHashMap<>();
-			for (GeometryElement element : elements) {
-				Optional<ProgramResolver.Resolution> resolution =
-						resolver.lookup(place, element.program());
-				if (resolution.isEmpty()) {
-					continue;
-				}
-
-				// The name the override is written under is the file that really serves the piece and
-				// not the one that was asked for, which is how Iris looks it up and how the chunk
-				// passes read the same line.
-				String servedBy = resolution.get().servedBy();
-				String path = pathOf(place, servedBy);
-				if (!expanded.containsKey(path)) {
-					expanded.put(path, read(source, expander, path));
-				}
-
-				Map<ProgramStage, ExpandedUnit> units = expanded.get(path);
-				if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
-					continue;
-				}
-
-				AlphaTest alphaTest = overrides.getOrDefault(servedBy, element.alphaTest());
-				// What two pieces have to agree on to be one translation, and the element is not part
-				// of it. The threshold is, because it is written into the fragment stage: two pieces of
-				// one program discarding at different alphas are two texts, and sharing one would draw
-				// a mob with the silhouette of whichever piece was translated first.
-				//
-				// The FILE and not the name asked for, which is the whole point of sharing: the two
-				// names of this family walk to one file wherever the fallback tree lands them on the
-				// same program, and keying by name would expand, translate and compile that file
-				// twice there, which is the one thing reading them all at once exists to avoid.
-				//
-				// A program NAME reaches the translation through two answers, and both are in the key
-				// while the name itself is not: LegacyGlsl.drawsEntities decides whether the entity
-				// uniforms are declared, and LegacyGlsl.bindsGameTransforms whether a read of
-				// gl_TextureMatrix[0] goes to the game's own block.
-				//
-				// A third answer, LegacyGlsl.readsDrawModelView, is NOT here and does not need to be:
-				// it differs from the second on the two shadow roots alone, and the shadow chain of
-				// ProgramFallbacks shares no name with the gbuffers one, so no file is ever asked for
-				// both ways and a key on the second already tells those two files apart.
-				//
-				// THE GLINT IS WHAT MAKES THEM TWO ANSWERS RATHER THAN ONE: its mesh carries no entity
-				// and its draw is still one the game prepared, so it is the first name asked for here
-				// that answers the two differently. The shape that would cost something is a pack
-				// shipping no gbuffers_armor_glint: it and gbuffers_entities then walk to one
-				// gbuffers_textured, one file serving both, and a key without this answer would hand
-				// whichever was translated second the other one's uniforms without a word. Both are
-				// written out all the same rather than left to the two lines below to imply, because
-				// what saves that case today is that the glint is also the only element carrying its
-				// format and its threshold, and neither of those is a fact about the uniforms.
-				//
-				// The format is in the key for the same reason and a harder one: it decides which
-				// names the vertex head declares as inputs, and two stages built from one text against
-				// two formats are two different modules.
-				//
-				// The mask is in the key as well, and it is the one answer here that is not a fact
-				// about the text: two pieces of one file are two texts as soon as one of them writes
-				// the mask, because the mask is an output the other one's pipeline carries no state
-				// for, and one module cannot be right for both.
-				VertexInputs inputs = element.inputs();
-				String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program())
-						+ "|" + LegacyGlsl.bindsGameTransforms(element.program()) + "|" + inputs
-						+ "|" + element.coverage();
-				translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
-						ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest,
-								element.coverage(), element.program(), textures.volumes()),
-						targets, alphaTest, textures));
-				loaded.put(element.element(), translated.get(key));
+		Map<String, Map<ProgramStage, ExpandedUnit>> expanded = new LinkedHashMap<>();
+		Map<String, Loaded> translated = new LinkedHashMap<>();
+		Map<String, Loaded> loaded = new LinkedHashMap<>();
+		for (GeometryElement element : elements) {
+			Optional<ProgramResolver.Resolution> resolution =
+					resolver.lookup(place, element.program());
+			if (resolution.isEmpty()) {
+				continue;
 			}
 
-			return loaded;
+			// The name the override is written under is the file that really serves the piece and
+			// not the one that was asked for, which is how Iris looks it up and how the chunk
+			// passes read the same line.
+			String servedBy = resolution.get().servedBy();
+			String path = pathOf(place, servedBy);
+			if (!expanded.containsKey(path)) {
+				expanded.put(path, read(source, expander, path));
+			}
+
+			Map<ProgramStage, ExpandedUnit> units = expanded.get(path);
+			if (!units.containsKey(ProgramStage.VERTEX) || !units.containsKey(ProgramStage.FRAGMENT)) {
+				continue;
+			}
+
+			AlphaTest alphaTest = overrides.getOrDefault(servedBy, element.alphaTest());
+			// What two pieces have to agree on to be one translation, and the element is not part
+			// of it. The threshold is, because it is written into the fragment stage: two pieces of
+			// one program discarding at different alphas are two texts, and sharing one would draw
+			// a mob with the silhouette of whichever piece was translated first.
+			//
+			// The FILE and not the name asked for, which is the whole point of sharing: the two
+			// names of this family walk to one file wherever the fallback tree lands them on the
+			// same program, and keying by name would expand, translate and compile that file
+			// twice there, which is the one thing reading them all at once exists to avoid.
+			//
+			// A program NAME reaches the translation through two answers, and both are in the key
+			// while the name itself is not: LegacyGlsl.drawsEntities decides whether the entity
+			// uniforms are declared, and LegacyGlsl.bindsGameTransforms whether a read of
+			// gl_TextureMatrix[0] goes to the game's own block.
+			//
+			// A third answer, LegacyGlsl.readsDrawModelView, is NOT here and does not need to be:
+			// it differs from the second on the two shadow roots alone, and the shadow chain of
+			// ProgramFallbacks shares no name with the gbuffers one, so no file is ever asked for
+			// both ways and a key on the second already tells those two files apart.
+			//
+			// THE GLINT IS WHAT MAKES THEM TWO ANSWERS RATHER THAN ONE: its mesh carries no entity
+			// and its draw is still one the game prepared, so it is the first name asked for here
+			// that answers the two differently. The shape that would cost something is a pack
+			// shipping no gbuffers_armor_glint: it and gbuffers_entities then walk to one
+			// gbuffers_textured, one file serving both, and a key without this answer would hand
+			// whichever was translated second the other one's uniforms without a word. Both are
+			// written out all the same rather than left to the two lines below to imply, because
+			// what saves that case today is that the glint is also the only element carrying its
+			// format and its threshold, and neither of those is a fact about the uniforms.
+			//
+			// The format is in the key for the same reason and a harder one: it decides which
+			// names the vertex head declares as inputs, and two stages built from one text against
+			// two formats are two different modules.
+			//
+			// The mask is in the key as well, and it is the one answer here that is not a fact
+			// about the text: two pieces of one file are two texts as soon as one of them writes
+			// the mask, because the mask is an output the other one's pipeline carries no state
+			// for, and one module cannot be right for both.
+			VertexInputs inputs = element.inputs();
+			String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program())
+					+ "|" + LegacyGlsl.bindsGameTransforms(element.program()) + "|" + inputs
+					+ "|" + element.coverage();
+			translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
+					ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest,
+							element.coverage(), element.program(), textures.volumes()),
+					targets, alphaTest, textures));
+			loaded.put(element.element(), translated.get(key));
 		}
+
+		return loaded;
 	}
 
 	/**

@@ -7,6 +7,7 @@ import dev.vitrail.glsl.VertexInputs;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSize;
@@ -1053,8 +1054,17 @@ public final class DistantDraw {
 	 * the first draw.
 	 */
 	void prefetch() {
+		prefetch(null);
+	}
+
+	/**
+	 * The same through an opening the caller holds, which is how the load worker reads the six
+	 * families: one opening, one plan of the place and one program tree shared between them,
+	 * where each used to open the archive and rebuild all three for itself.
+	 */
+	void prefetch(OpenedPack shared) {
 		if (!this.read) {
-			read();
+			read(shared);
 		}
 	}
 
@@ -1066,11 +1076,13 @@ public final class DistantDraw {
 	 * the whole pack. It also settles the mesh, which is the union of what they all declare and
 	 * cannot be settled one half at a time.
 	 */
-	private void read() {
+	private void read(OpenedPack shared) {
 		try {
 			List<Element> asked = ELEMENTS.values().stream().filter(this::wanted).toList();
-			PackProgram.Distant distant = PackProgram.loadDistant(this.packPath, this.place,
-					asked.stream().map(Element::asked).toList(), this.chosen, this.profile);
+			List<PackProgram.GeometryElement> names = asked.stream().map(Element::asked).toList();
+			PackProgram.Distant distant = shared != null
+					? PackProgram.loadDistant(shared, this.place, names)
+					: PackProgram.loadDistant(this.packPath, this.place, names, this.chosen, this.profile);
 			if (distant.programs().isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the far terrain, so Distant "
 						+ "Horizons keeps drawing it with its own shader", this.packPath.getFileName(),

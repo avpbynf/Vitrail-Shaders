@@ -105,6 +105,15 @@ public final class ShaderPackSource implements AutoCloseable {
 	 */
 	private final Map<Expansion, IncludeExpander.ExpandedUnit> expandedUnits = new HashMap<>();
 
+	/**
+	 * Whatever else a reader works out of this opening alone and would work out again on the
+	 * next read: the plan of a place, its textures, the program tree. Each family of programs
+	 * used to open the pack for itself and rebuild all of it, so a load walked the archive once
+	 * per family. Keyed by whatever the reader chooses, and like the two memos above it belongs
+	 * to the one thread that reads through this opening.
+	 */
+	private final Map<Object, Object> derived = new HashMap<>();
+
 	private int caseInsensitiveHits;
 
 	private ShaderPackSource(String packName, Path shadersRoot, FileSystem ownedFileSystem) {
@@ -138,6 +147,27 @@ public final class ShaderPackSource implements AutoCloseable {
 	/** How many packs have been opened so far, which a load takes a before and an after of. */
 	public static int openings() {
 		return OPENINGS.get();
+	}
+
+	/** A computation that reads the archive, for {@link #derived}. */
+	public interface Derivation<T> {
+		T read() throws IOException;
+	}
+
+	/**
+	 * The value {@code compute} yields for this opening, worked out on the first ask under that
+	 * key and handed back as it is after. The key says what was asked and with what: two asks
+	 * with equal keys are one question.
+	 */
+	@SuppressWarnings("unchecked")
+	public <T> T derived(Object key, Derivation<T> compute) throws IOException {
+		Object known = this.derived.get(key);
+		if (known == null) {
+			known = compute.read();
+			this.derived.put(key, known);
+		}
+
+		return (T) known;
 	}
 
 	public static ShaderPackSource open(Path packPath) throws IOException {
@@ -520,6 +550,7 @@ public final class ShaderPackSource implements AutoCloseable {
 	public void close() throws IOException {
 		this.linesByFile.clear();
 		this.expandedUnits.clear();
+		this.derived.clear();
 		if (this.ownedFileSystem != null) {
 			this.ownedFileSystem.close();
 		}

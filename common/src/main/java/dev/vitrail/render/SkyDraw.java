@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSize;
@@ -242,8 +243,17 @@ public final class SkyDraw {
 	 * draw.
 	 */
 	void prefetch() {
+		prefetch(null);
+	}
+
+	/**
+	 * The same through an opening the caller holds, which is how the load worker reads the six
+	 * families: one opening, one plan of the place and one program tree shared between them,
+	 * where each used to open the archive and rebuild all three for itself.
+	 */
+	void prefetch(OpenedPack shared) {
 		if (!this.read && wanted()) {
-			read();
+			read(shared);
 		}
 	}
 
@@ -458,7 +468,7 @@ public final class SkyDraw {
 	 * pack of the August 2026 corpus reaches that - all eight answer both sky programs in
 	 * {@code world1}, Body Camera through the fallback tree rather than with a file of its own.
 	 */
-	private void read() {
+	private void read(OpenedPack shared) {
 		try {
 			List<String> off = ELEMENTS.values().stream()
 					.map(Element::directive)
@@ -472,8 +482,11 @@ public final class SkyDraw {
 			}
 
 			try {
-				Map<String, PackProgram.Loaded> loaded = PackProgram.loadSky(this.packPath, this.place,
-						ELEMENTS.values().stream().map(Element::asked).toList(), this.chosen, this.profile);
+				List<PackProgram.SkyElement> asked =
+						ELEMENTS.values().stream().map(Element::asked).toList();
+				Map<String, PackProgram.Loaded> loaded = shared != null
+						? PackProgram.loadSky(shared, this.place, asked)
+						: PackProgram.loadSky(this.packPath, this.place, asked, this.chosen, this.profile);
 
 				// Asked once per PROGRAM and not once per piece: four of the eight are drawn with
 				// gbuffers_skybasic and the other four with gbuffers_skytextured, and the plan would

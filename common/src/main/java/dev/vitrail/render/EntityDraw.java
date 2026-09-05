@@ -9,6 +9,7 @@ import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
@@ -1365,8 +1366,17 @@ public final class EntityDraw {
 	 * asks during its warm-up so shaderc does not land on the first draw.
 	 */
 	void prefetch() {
+		prefetch(null);
+	}
+
+	/**
+	 * The same through an opening the caller holds, which is how the load worker reads the six
+	 * families: one opening, one plan of the place and one program tree shared between them,
+	 * where each used to open the archive and rebuild all three for itself.
+	 */
+	void prefetch(OpenedPack shared) {
 		if (!this.read && (wanted() || HandDraw.wanted())) {
-			read();
+			read(shared);
 		}
 	}
 
@@ -1999,15 +2009,15 @@ public final class EntityDraw {
 	 * a line saying a pack serves nothing for the hand, printed for somebody who never turned the
 	 * hand on, reads as a fault of the pack.
 	 */
-	private void read() {
+	private void read(OpenedPack shared) {
 		try {
-			readPrograms();
+			readPrograms(shared);
 		} finally {
 			this.read = true;
 		}
 	}
 
-	private void readPrograms() {
+	private void readPrograms(OpenedPack shared) {
 		List<Element> served = ELEMENTS.values().stream().filter(EntityDraw::decodable).toList();
 
 		// Asked once for the four pieces that share the glint's one pipeline, and only where a switch
@@ -2096,8 +2106,10 @@ public final class EntityDraw {
 		}
 
 		try {
-			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(this.packPath, this.place,
-					asked.stream().map(Element::asked).toList(), this.chosen, this.profile);
+			List<PackProgram.GeometryElement> names = asked.stream().map(Element::asked).toList();
+			Map<String, PackProgram.Loaded> loaded = shared != null
+					? PackProgram.loadGeometry(shared, this.place, names)
+					: PackProgram.loadGeometry(this.packPath, this.place, names, this.chosen, this.profile);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the entities, the hand or the "
 						+ "glint, so the game keeps its own shader for them",
