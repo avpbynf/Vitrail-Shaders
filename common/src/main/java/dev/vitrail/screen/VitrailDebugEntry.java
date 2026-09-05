@@ -2,6 +2,7 @@ package dev.vitrail.screen;
 
 import dev.vitrail.Vitrail;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.settings.PackSession;
 import dev.vitrail.sodium.ShadowTerrain;
 
 import net.minecraft.client.Minecraft;
@@ -41,6 +42,14 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 
 	private static final String PREFIX = "[" + Vitrail.MOD_NAME + "] ";
 
+	/**
+	 * The session the profile line below was built for, and the line. The sentence is a scan of
+	 * the pack's profiles against the applied settings, and both are fixed for the life of a
+	 * session, so it is built when the session changes rather than on every frame F3 is open.
+	 */
+	private static PackSession profiledSession;
+	private static String profileLine = "";
+
 	@Override
 	public void display(DebugScreenDisplayer displayer, @Nullable Level level,
 			@Nullable LevelChunk clientChunk, @Nullable LevelChunk serverChunk) {
@@ -50,11 +59,20 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 
 		PackChain.session().ifPresentOrElse(session -> {
 			displayer.addToGroup(GROUP, PREFIX + "Shaderpack: " + session.packFileName());
-			displayer.addToGroup(GROUP, PREFIX + session.profileInfo());
+			displayer.addToGroup(GROUP, profileLine(session));
 			if (level != null) {
 				shadowLines(displayer);
 			}
 		}, () -> displayer.addToGroup(GROUP, PREFIX + undrawnLine()));
+	}
+
+	private static String profileLine(PackSession session) {
+		if (session != profiledSession) {
+			profiledSession = session;
+			profileLine = PREFIX + session.profileInfo();
+		}
+
+		return profileLine;
 	}
 
 	/**

@@ -146,17 +146,12 @@ public final class DhDepth {
 	 * unclamped one the class comment carries, and since the clamp only ever pulls that plane in, it
 	 * is always the further out of the two. Its far is out by the ratio of the two formulas.
 	 *
-	 * @param dest filled with the near plane and then the far one. Left alone where {@link #zRow}
-	 *             answered nothing, but carrying that row where this refused it for its shape, so a
-	 *             caller reads the pair only on true
+	 * @param scale  the z term of the row {@link #zRow} read
+	 * @param offset its w term
+	 * @param dest   filled with the near plane and then the far one, and left alone where the
+	 *               row has no perspective in it, so a caller reads the pair only on true
 	 */
-	public static boolean planes(Vector2f dest) {
-		if (!zRow(dest)) {
-			return false;
-		}
-
-		float scale = dest.x;
-		float offset = dest.y;
+	public static boolean planes(float scale, float offset, Vector2f dest) {
 		if (scale <= 0.0F) {
 			return false;
 		}

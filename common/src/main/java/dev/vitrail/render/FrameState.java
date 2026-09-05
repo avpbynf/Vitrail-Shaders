@@ -141,6 +141,8 @@ public final class FrameState implements WorldState {
 	private float ambientLight;
 	private int dimensionOrdinal;
 	private int seaLevel;
+	/** The biome the two values below were classified for, so that they are not classified again. */
+	private Holder<Biome> biomeHolder;
 	private int biomeId;
 	private int biomeCategory;
 	private int biomePrecipitation;
@@ -379,6 +381,7 @@ public final class FrameState implements WorldState {
 		// the session before would be served as this one's.
 		this.lightningTick = Long.MIN_VALUE;
 		this.lightningBoltPosition.zero();
+		this.biomeHolder = null;
 	}
 
 	/**
@@ -472,13 +475,15 @@ public final class FrameState implements WorldState {
 		// this. They are named one by one in ViewMatrices.advanceDistant.
 		int distance = DhDepth.renderDistanceBlocks();
 
-		boolean planes = DhDepth.planes(this.distantPlanes);
-		float near = planes ? this.distantPlanes.x : ViewMatrices.FALLBACK_PLANE;
-		float far = planes ? this.distantPlanes.y : ViewMatrices.FALLBACK_PLANE;
-
+		// One reflective read of the row, and the planes worked out of it, rather than the row
+		// read twice through four field gets a frame.
 		boolean row = DhDepth.zRow(this.distantPlanes);
 		float scale = row ? this.distantPlanes.x : 0.0F;
 		float offset = row ? this.distantPlanes.y : 0.0F;
+
+		boolean planes = row && DhDepth.planes(scale, offset, this.distantPlanes);
+		float near = planes ? this.distantPlanes.x : ViewMatrices.FALLBACK_PLANE;
+		float far = planes ? this.distantPlanes.y : ViewMatrices.FALLBACK_PLANE;
 
 		if (!DhDepth.usable()) {
 			distance = -1;
@@ -921,8 +926,18 @@ public final class FrameState implements WorldState {
 		// different when the camera has backed through a wall.
 		BlockPos position = player.blockPosition();
 		Holder<Biome> holder = level.getBiome(position);
-		this.biomeId = BiomeClassifier.identify(holder);
-		this.biomeCategory = BiomeClassifier.categoryOf(holder);
+		// The number and the category are properties of the biome, and the registry hands the
+		// same holder back for it frame after frame: the sixteen tag tests of the category and
+		// the key lookup of the number run when the player crosses into another biome, which is
+		// how Iris reads them too, off a value it keeps on the biome itself. What neither
+		// follows is a data pack reload rebinding the tags of a biome the player is standing in:
+		// the category catches up when they leave it, where Iris keeps its first answer for the
+		// session.
+		if (holder != this.biomeHolder) {
+			this.biomeHolder = holder;
+			this.biomeId = BiomeClassifier.identify(holder);
+			this.biomeCategory = BiomeClassifier.categoryOf(holder);
+		}
 		this.biomePrecipitation =
 				switch (holder.value().getPrecipitationAt(position, level.getSeaLevel())) {
 					case NONE -> 0;
