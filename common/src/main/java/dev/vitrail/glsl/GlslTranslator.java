@@ -445,13 +445,6 @@ public final class GlslTranslator {
 	 */
 	private final Map<String, String> memoryQualifiers = new LinkedHashMap<>();
 
-	/**
-	 * The sampler this unit reads {@code centerDepthSmooth} out of, or null where nothing was moved.
-	 * The header declares it, because the statement it was taken out of may still declare other
-	 * names and cannot carry a second declaration.
-	 */
-	private String centerDepthTexel;
-
 	/** Storage blocks this unit declares at file scope, each under the binding it was written at. */
 	private final List<TranslatedUnit.StorageBlock> storageBlocks = new ArrayList<>();
 
@@ -555,9 +548,6 @@ public final class GlslTranslator {
 	private int unwrappedShadowCalls;
 	private int volumeLookups;
 	private int volumesLeftAlone;
-
-	/** Lookups on a comparison sampler, whichever of the two roads makes the comparison. */
-	private int shadowCompares;
 
 	/** The lookups of those that were really rewritten onto {@link #SHADOW_COMPARE}, which is what
 	 * says whether the header owes the helper at all. */
@@ -1533,8 +1523,6 @@ public final class GlslTranslator {
 					if (compared && shadow.equals("textureProj")) {
 						this.unwrappedShadowCalls++;
 						compared = false;
-					} else if (compared || hardware) {
-						this.shadowCompares++;
 					}
 
 					if (compared) {
@@ -2142,8 +2130,6 @@ public final class GlslTranslator {
 
 		String argument = this.tokens.get(first).text();
 		if (hardwareComparisonAt(argument, line)) {
-			this.shadowCompares++;
-
 			return true;
 		}
 
@@ -2162,7 +2148,6 @@ public final class GlslTranslator {
 		// takes, so nothing has to be found or balanced. textureLod carries a level this ignores,
 		// which is what a comparison sampler with no mipmaps would have done anyway.
 		replace(index, SHADOW_COMPARE);
-		this.shadowCompares++;
 		this.softRewrites++;
 
 		return true;
@@ -4665,10 +4650,11 @@ public final class GlslTranslator {
 			return;
 		}
 
+		// The header declares the sampler, because the statement the name was taken out of may
+		// still declare other names and cannot carry a second declaration.
 		String texel = SamplerPlan.centerDepth();
 		members.forEach(this::detachMember);
 
-		this.centerDepthTexel = texel;
 		this.samplers.put(texel, SAMPLER_2D + " " + texel);
 		reads.forEach(read -> inject(read, LOOKUP + "(" + texel + ", vec2(0.5)).r"));
 	}
