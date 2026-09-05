@@ -380,6 +380,29 @@ does; [the game's graphics API](internals/game-graphics-api.md) says where the s
 **Defects in the pack itself.** A conditional directive with no name is a pack bug and stays a
 failure.
 
+One class of pack defect is handed a value instead, because under the reference it has one. GLSL
+leaves a variable declared without an initialiser undefined until it is written, and a pack that
+reads one first has a defect that shows nowhere on the platform it was written on: measured against
+Iris at the same spot on the same machine, the pack reads zero there, so the picture is right and
+nobody notices. Compiled through shaderc the variable stays bare, and what came back here changed
+with the face being drawn and with every edit to the shader's text, which is what a register left
+over from the previous work looks like. A hand black on one face and lit on the next, or black
+lines along every far shore, is what that looks like. So after shaderc has compiled a unit and
+before the game's reflection reads it, every `Function` or `Private` variable of the module that
+some path can read before a store reaches it is given a null constant as its initialiser, and an
+undefined value the optimiser left in a module gets the null of its type. Which variables need it
+is worked out rather than assumed: giving every bare variable a zero cost eight percent of the
+frame on one pack, twelve hundred of them in one fragment stage and most of them the compiler's own
+temporaries, since the driver does not fold every such store away. The pass works on the SPIR-V
+rather than on the translated text because the module already knows the type of every variable,
+arrays and structs included, where a textual initialiser would have to find every declaration in
+every scope and spell each type out. The game's own shaders and Sodium's go through the same
+compiler and are left as they are: the zero reproduces what packs were written against, and
+neither of those was written against anything but itself. A file `vitrail/raw-locals` in the game
+directory leaves the variables raw, which is how the cost of the pass is measured in one jar and
+how a black face is told apart from every other cause in one pack reload; the log says at every
+load which state it ran under.
+
 **Missing values rather than missing translation.** A vanilla-style uniform a pack expects is closed
 by supplying the value, not by changing the translator. It shows up in the unanswered list, not in
 a compile error.

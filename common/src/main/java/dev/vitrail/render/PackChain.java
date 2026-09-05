@@ -636,6 +636,9 @@ public final class PackChain {
 		// Here and not lower down: it decides what the translation emits, and every road
 		// below this point that reads a pack translates one.
 		DriverTrig.read(gameDirectory);
+		// Beside it, for the compiles rather than the translations: it decides the bytes every
+		// module of this load is made of, and the key it is stored under.
+		RawLocals.read(gameDirectory);
 		// Beside the trig switch and for the same reason: what follows is what these tallies
 		// are a tally of. The cache empties its own on the same line, so that its counts and the
 		// clock's milliseconds are read off one load.

@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import dev.vitrail.Vitrail;
+import dev.vitrail.glsl.LocalZeroes;
 import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
 
 import org.jspecify.annotations.Nullable;
@@ -160,9 +161,13 @@ public final class ModuleCache {
 	 * sweep is what eventually collects it. Two is where the uniform buffer table first carries the
 	 * storage blocks: every blob before it lists none, a hit skips the reflection that would add
 	 * them, and a pipeline built off such a blob leaves every storage block on the binding its pack
-	 * wrote.
+	 * wrote. Three is where the SPIR-V itself first carries the zeroes of {@link RawLocals}: a
+	 * blob before it holds the compiler's bare variables, and a hit on one would draw the black
+	 * faces the pass exists to take away, with nothing in the log to say why. What the pass emits
+	 * for a module can move without this layout moving, so the pass carries a version of its own
+	 * that {@link #keyOf} hashes beside this.
 	 */
-	private static final String FORMAT = "vitrail-module-2";
+	private static final String FORMAT = "vitrail-module-3";
 
 	private static final String FOLDER = "modules";
 	private static final String SUFFIX = ".mod";
@@ -316,6 +321,10 @@ public final class ModuleCache {
 		feed(digest, Vitrail.platform().loaderName());
 		feed(digest, Vitrail.platform().loaderVersion());
 		feed(digest, Version.getVersion());
+		// The one switch that changes the bytes a compile produces without changing its text: the
+		// two states keep two sets of blobs, and a reading taken under one never draws the other's.
+		feed(digest, RawLocals.cacheWord());
+		feed(digest, LocalZeroes.VERSION);
 		feed(digest, stage);
 		feed(digest, source);
 
@@ -600,6 +609,7 @@ public final class ModuleCache {
 		if (!ENABLED) {
 			Vitrail.logger().info("Module cache off, so all {} units of this load were compiled and "
 					+ "reflected ({} since this launch)", misses, COMPILED_SINCE_LAUNCH.get());
+			RawLocals.say(misses);
 
 			return;
 		}
@@ -609,6 +619,9 @@ public final class ModuleCache {
 						+ "since this launch, {} MB in {}",
 				hits, misses, SERVED_SINCE_LAUNCH.get(), COMPILED_SINCE_LAUNCH.get(),
 				megabytes(BYTES.get()), root == null ? "nowhere" : root);
+		// At the same quiet moment and about the same compiles: what the pass did to the modules
+		// this line counts as built.
+		RawLocals.say(misses);
 	}
 
 	/** The directory, made and measured at the first unit of the run, or null when there is none. */
