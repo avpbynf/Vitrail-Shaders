@@ -312,6 +312,16 @@ final class GeometryProgram {
 		/** The sampler state that goes with it, on the same rule. */
 		private GpuSampler state;
 
+		/**
+		 * The image the last draw brought and what its map answered, held for one pass. A pass
+		 * records hundreds of draws and most of them bring the image the draw before did, so the
+		 * two doors are asked once per image rather than once per draw. Dropped at
+		 * {@link #resolve}, which is the one place a stale answer cannot cross.
+		 */
+		private GpuTextureView servedFor;
+		private GpuTextureView served;
+		private boolean servedKnown;
+
 		Sampled(String name, PbrMap material, boolean albedo, SamplerPlan.Binding binding,
 				ColorTargets.PackSource source) {
 			this.name = name;
@@ -1328,6 +1338,9 @@ final class GeometryProgram {
 			one.interpolates = one.material != null && one.material.interpolates(labPbr);
 			one.view = passView(one);
 			one.state = passSampler(one);
+			one.servedKnown = false;
+			one.servedFor = null;
+			one.served = null;
 		}
 	}
 
@@ -1347,12 +1360,18 @@ final class GeometryProgram {
 			// under its own name. Iris keeps the same pair and picks between them by the class of the
 			// bound texture (pbr/loader/PBRTextureLoaderRegistry.java:15-16); here the atlas door
 			// answers only for an image it was built against, so asking it first picks the same one.
-			GpuTextureView served = PbrAtlases.view(this.atlas, one.material);
-			if (served == null) {
-				served = PbrTextures.view(this.atlas, one.material);
+			if (!one.servedKnown || one.servedFor != this.atlas) {
+				GpuTextureView served = PbrAtlases.view(this.atlas, one.material);
+				if (served == null) {
+					served = PbrTextures.view(this.atlas, one.material);
+				}
+
+				one.servedFor = this.atlas;
+				one.served = served;
+				one.servedKnown = true;
 			}
 
-			return served == null ? one.view : served;
+			return one.served == null ? one.view : one.served;
 		}
 
 		// One pixel where the pass has no atlas of its own, which is every cloud and the sky's own
@@ -1766,6 +1785,9 @@ final class GeometryProgram {
 		for (Sampled one : this.bound) {
 			one.view = null;
 			one.state = null;
+			one.servedFor = null;
+			one.served = null;
+			one.servedKnown = false;
 		}
 
 		// Let go of the pass and the program the same way, and for the same reason as the views

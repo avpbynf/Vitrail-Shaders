@@ -231,6 +231,9 @@ final class ColorTargets {
 	 */
 	private final Set<Integer> mipmapped;
 
+	/** For each program, the targets it reads at a lod and that carry a chain, in target order. */
+	private final Map<String, Set<Integer>> lodReads;
+
 	private TargetSurface black;
 	private TargetSurface white;
 	private TargetSurface grey;
@@ -372,6 +375,11 @@ final class ColorTargets {
 		this.mipmapped = directives.mipmapped().stream()
 				.filter(this.formats::containsKey)
 				.collect(Collectors.toCollection(TreeSet::new));
+		Map<String, Set<Integer>> lodReads = new LinkedHashMap<>();
+		directives.mipmapRequests().forEach((program, asked) -> lodReads.put(program,
+				asked.stream().filter(this.mipmapped::contains)
+						.collect(Collectors.toCollection(TreeSet::new))));
+		this.lodReads = Map.copyOf(lodReads);
 
 		// A flip directive may turn over a target no program of this place writes or samples, and
 		// nothing is allocated for one of those. Said here because the count of doubled targets is
@@ -775,11 +783,12 @@ final class ColorTargets {
 	 * program that reads one after such a write; taking the union here would rebuild every chain
 	 * before every program that happens to sample the target, which is ten render passes apiece
 	 * for a result nothing reads.
+	 * <p>
+	 * Settled with the plan rather than filtered on each ask: a compute asks per colour descriptor
+	 * of every dispatch.
 	 */
 	Set<Integer> lodReads(String program) {
-		return this.plan.directives().mipmapRequests().getOrDefault(program, Set.of()).stream()
-				.filter(this.mipmapped::contains)
-				.collect(Collectors.toCollection(TreeSet::new));
+		return this.lodReads.getOrDefault(program, Set.of());
 	}
 
 	GpuFormat format(int index) {

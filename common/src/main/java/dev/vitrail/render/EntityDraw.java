@@ -1285,6 +1285,14 @@ public final class EntityDraw {
 	 * for a pack this place can serve no entity with at all. */
 	private final Map<String, EntityProgram> programs = new LinkedHashMap<>();
 
+	/**
+	 * The element the last draw was recorded for and the program the map answered, because a
+	 * frame records hundreds of draws and runs of them share one element: the map is asked by
+	 * name once per run rather than once per draw. Dropped with the map.
+	 */
+	private Element recordedElement;
+	private EntityProgram recordedProgram;
+
 	/** Whether the pack has been read for its entities. A reading that served nothing is still one.
 	 * Volatile so the render thread sees it only after {@link #read} has filled the map. */
 	private volatile boolean read;
@@ -1667,7 +1675,15 @@ public final class EntityDraw {
 			return false;
 		}
 
-		EntityProgram program = this.programs.get(element.element());
+		EntityProgram program;
+		if (element == this.recordedElement) {
+			program = this.recordedProgram;
+		} else {
+			program = this.programs.get(element.element());
+			this.recordedElement = element;
+			this.recordedProgram = program;
+		}
+
 		if (program == null) {
 			end();
 
@@ -2090,6 +2106,8 @@ public final class EntityDraw {
 				return;
 			}
 
+			this.recordedElement = null;
+			this.recordedProgram = null;
 			groups.forEach(group -> keep(group, loaded));
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the entity programs of "
@@ -2385,6 +2403,8 @@ public final class EntityDraw {
 		end();
 		this.programs.values().forEach(EntityProgram::release);
 		this.programs.clear();
+		this.recordedElement = null;
+		this.recordedProgram = null;
 		// With the programs, or "once per load" would mean once per session: what is read again after
 		// this can refuse again, for the same reason or for another, and a reader watching a portal
 		// would see the first reading's lines and nothing after them.

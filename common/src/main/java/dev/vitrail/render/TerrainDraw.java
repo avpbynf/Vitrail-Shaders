@@ -124,6 +124,7 @@ public final class TerrainDraw {
 	 * where the pack serves none, and where the reading threw.
 	 */
 	private Map<TerrainPass, PackProgram.Loaded> loaded = Map.of();
+	private boolean shadowVoxelises;
 
 	/** The elements those programs declare, which is what this pack published through {@link #carries}. */
 	private List<String> declares = List.of();
@@ -241,6 +242,10 @@ public final class TerrainDraw {
 			PackProgram.Terrain read = TerrainProgram.read(pack, this.place, this.values);
 			this.loaded = read.programs();
 			this.declares = read.carried();
+			this.shadowVoxelises = this.loaded.entrySet().stream()
+					.filter(entry -> entry.getKey().shadow())
+					.map(Map.Entry::getValue)
+					.anyMatch(PackProgram.Loaded::voxelises);
 		} catch (IOException | RuntimeException e) {
 			wanted = false;
 			Vitrail.logger().error("Could not read the terrain programs of "
@@ -695,13 +700,11 @@ public final class TerrainDraw {
 	 * Whether any shadow terrain program of this pack voxelises, a geometry stage present or an
 	 * image load / store still standing on it. Iris asks the same of
 	 * {@code SHADOW_TERRAIN_CUTOUT}; the three shadow halves share one file on every pack that
-	 * ships one, and any of them answering is enough.
+	 * ships one, and any of them answering is enough. Settled when the programs are read: the
+	 * shadow walk asks once a frame, and the answer is a property of the pack.
 	 */
 	private boolean voxelisesShadow() {
-		return this.loaded.entrySet().stream()
-				.filter(entry -> entry.getKey().shadow())
-				.map(Map.Entry::getValue)
-				.anyMatch(PackProgram.Loaded::voxelises);
+		return this.shadowVoxelises;
 	}
 
 	/**
