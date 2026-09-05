@@ -164,11 +164,15 @@ public final class ShadowCompare {
 		return noted;
 	}
 
-	/** Whether this pipeline reads this name through a comparison, asked while pushing descriptors. */
-	public static boolean compared(RenderPipeline pipeline, String name) {
+	/**
+	 * The names this pipeline reads through a comparison, empty for one that filed none. Asked
+	 * once per pipeline a pass draws with, the map behind it being a weak one under a monitor,
+	 * and the set answers for every descriptor of every draw after that.
+	 */
+	public static Set<String> compared(RenderPipeline pipeline) {
 		Set<String> names = COMPARED.get(pipeline);
 
-		return names != null && names.contains(name);
+		return names == null ? Set.of() : names;
 	}
 
 	/**
