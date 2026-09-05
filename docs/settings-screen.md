@@ -111,8 +111,9 @@ page but the pack's first there is also the way back off it.
 - **Import** and **export** open the platform's own file window and read or write a settings file in
   the shared format. They will not open while the game is full screen, and say so: a native window
   over a full screen game hangs it on more than one platform, which is the reference's own finding.
-  What export writes is the *applied* settings, because what it copies is the file, and the file is
-  the applied settings.
+  What export writes is the *applied* settings, read from the pack's file rather than from the
+  screen, and written in Java's properties form as the reference writes it: the same keys and
+  values, with the store's own header and order rather than the file's bytes.
 - **Reset** empties this pack's settings file and applies, so the pack goes back to what it declares
   itself. It **asks first**, and it is the only control on this screen that does: it is the only one
   that can lose an evening of tuning. The reference guards the same button with shift held instead,
