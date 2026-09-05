@@ -41,6 +41,37 @@ import java.util.TreeMap;
  */
 public final class PackDirectives {
 
+	/** The name a pack declares to be given the eight, in Iris's own spelling. */
+	public static final String HIGHER_SHADOWCOLOR = "HIGHER_SHADOWCOLOR";
+
+	/**
+	 * How many {@code shadowcolor} buffers a pack that declares {@link #HIGHER_SHADOWCOLOR} may
+	 * name ({@code shaderpack/properties/PackShadowDirectives.java:19}).
+	 * <p>
+	 * It is what a name is admitted against and not what is allocated: {@code render/ShadowTargets}
+	 * takes the memory for a buffer some program of the place writes or samples, and for no other.
+	 */
+	public static final int MAX_SHADOW_COLOURS = 8;
+
+	/**
+	 * How many a pack that does not declare it may name, the two of ShadersMod and OptiFine
+	 * ({@code shaderpack/properties/PackShadowDirectives.java:20}).
+	 * <p>
+	 * <strong>The lower number is the one most packs get, and posing the define does not raise
+	 * it.</strong> Iris sizes the array off the pack's own declaration and off nothing else
+	 * ({@code shadows/ShadowRenderTargets.java:46} asking {@code hasFeature}, which is the two
+	 * {@code iris.features} lines and no more, {@code shaderpack/ShaderPack.java:208-213}), so a
+	 * pack that never asked for the eight has to keep reaching the same two: its
+	 * {@code RENDERTARGETS:0,2} is a list past the ceiling, thrown away whole, and what it draws
+	 * into is the pair.
+	 */
+	public static final int SHADOW_COLOURS = 2;
+
+	/** The ceiling one pack is read against, which is one of the two above and nothing between. */
+	public static int shadowColours(boolean declared) {
+		return declared ? MAX_SHADOW_COLOURS : SHADOW_COLOURS;
+	}
+
 	private final float sunPathRotation;
 	private final float ambientOcclusionLevel;
 	private final float wetnessHalflife;

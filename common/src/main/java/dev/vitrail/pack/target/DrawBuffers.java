@@ -4,7 +4,6 @@ import dev.vitrail.pack.source.IncludeExpander;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.IntStream;
 
 /**
  * Which colour attachments a program says it writes.
@@ -35,6 +34,9 @@ import java.util.stream.IntStream;
  * declare sixteen outputs.
  */
 public final class DrawBuffers {
+
+	/** What the light is drawn into when its program's declaration says nothing usable. */
+	private static final List<Integer> PAIR = List.of(0, 1);
 
 	private DrawBuffers() {
 	}
@@ -93,23 +95,31 @@ public final class DrawBuffers {
 	 * pair answers a program that declares nothing, from the other end of the same call
 	 * ({@code pipeline/programs/SodiumPrograms.java:137-139}).
 	 * <p>
-	 * Reverie is the one pack of the corpus this changes anything for, with
-	 * {@code RENDERTARGETS:0,2,1}, and it is refused at load here for a reason of its own. Keeping
-	 * its rank as an empty slot instead was the shape this had first, and it is wrong twice over:
-	 * Iris never produces that mapping, and an empty slot at rank nought is a shadow stage that
-	 * throws in the middle of a frame rather than drawing.
+	 * <strong>The pair is the pair, whatever the ceiling.</strong> Iris writes it out as
+	 * {@code new int[]{0, 1}} at all three of those places and never as "every buffer there is", so
+	 * raising the ceiling to the eight of {@code HIGHER_SHADOWCOLOR} must not widen what a program
+	 * declaring nothing draws into. Reading the pair off the count was the shape this had first,
+	 * and it answered the same list only while the count was two.
+	 * <p>
+	 * Reverie is the one pack of the corpus the ceiling changes anything for, with
+	 * {@code RENDERTARGETS:0,2,1}, and it is also the one pack of it that declares the flag. Keeping
+	 * its rank as an empty slot instead was another shape this had, and it is wrong twice over: Iris
+	 * never produces that mapping, and an empty slot at rank nought is a shadow stage that throws in
+	 * the middle of a frame rather than drawing.
 	 *
-	 * @param existing how many shadow colour targets this engine has at all, which is the ceiling
-	 *                 Iris compares a declared index against ({@code targets.length}, returned by
-	 *                 {@code shadows/ShadowRenderTargets.java:112}) and not how many are in use
+	 * @param existing how many shadow colour targets THIS PACK may reach, which is the ceiling Iris
+	 *                 compares a declared index against ({@code targets.length}, returned by
+	 *                 {@code shadows/ShadowRenderTargets.java:112}) and not how many are in use. It
+	 *                 is the pack's own {@code HIGHER_SHADOWCOLOR} declaration that sizes it, line
+	 *                 46 there and {@link TargetPlan#shadowCeiling} here, so the same declaration
+	 *                 that reaches {@code shadowcolor2} is what stops every other pack reaching it
 	 */
 	public static List<Integer> shadowColours(List<Integer> declared, int existing) {
-		List<Integer> pair = IntStream.range(0, existing).boxed().toList();
 		if (declared.isEmpty()) {
-			return pair;
+			return PAIR;
 		}
 
-		return declared.stream().anyMatch(index -> index >= existing) ? pair : List.copyOf(declared);
+		return declared.stream().anyMatch(index -> index >= existing) ? PAIR : List.copyOf(declared);
 	}
 
 	/**

@@ -10,6 +10,7 @@ import dev.vitrail.pack.program.ProgramNames;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
+import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.texture.CustomImages;
@@ -412,9 +413,26 @@ final class PackCompute implements AutoCloseable {
 					orWhite(targets, shadow == null ? null : shadow.depth());
 			case "shadowtex1", "shadowtex1HW" ->
 					orWhite(targets, shadow == null ? null : shadow.depthWithoutTranslucents());
-			case "shadowcolor0" -> orWhite(targets, shadow == null ? null : shadow.colour(0));
-			case "shadowcolor1" -> orWhite(targets, shadow == null ? null : shadow.colour(1));
-			default -> null;
+			// Every name SamplerPlan reads as a shadow colour, the bare shadowcolor with them, and
+			// the white stand-in for one no program of the place named. That is the rule a full
+			// screen pass follows for the same names (PackPass.java:585), and the ceiling is not
+			// consulted here because it does not have to be: a buffer the pack may not reach was
+			// never allocated, so colour() answers null for it and white is what the compute reads,
+			// exactly as it does for a buffer nothing has written.
+			//
+			// White covers one more case than it should, and that is a divergence rather than a
+			// rule: what gets allocated is read off the FRAGMENT stages of the place alone
+			// (TargetPlan.build walks fragmentsOf), so a shadowcolor that only a COMPUTE of the
+			// place names is never opened, and this hands the compute white for a buffer the pack
+			// does mean to read. Iris opens it from the compute itself, addShadowSamplers calling
+			// createIfEmpty for each shadowcolor the program declares, on the compute path as on
+			// the composite one (CompositeRenderer.java:461, samplers/IrisSamplers.java:156-163).
+			// Closing it means expanding every compute of the pack while the plan is built, which
+			// is a second reading of the archive, and nothing of the corpus asks for it: every
+			// shadowcolor a compute of it names is named by a fragment stage of the same place too.
+			default -> SamplerPlan.isShadowColour(name)
+					? orWhite(targets, shadow == null ? null : shadow.colour(SamplerPlan.shadowColour(name)))
+					: null;
 		};
 	}
 

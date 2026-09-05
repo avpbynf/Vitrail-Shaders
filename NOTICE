@@ -29,7 +29,13 @@ GNU Lesser General Public License version 3
   net.irisshaders.iris.shaderpack.parsing.ConstDirectiveParser and of
   net.irisshaders.iris.shaderpack.parsing.CommentDirectiveParser together with
   net.irisshaders.iris.shaderpack.properties.ProgramDirectives. Both rules are odd enough that
-  reasoning them out would get them wrong, so they are reproduced rather than reinvented.
+  reasoning them out would get them wrong, so they are reproduced rather than reinvented. The
+  second carries one more of Iris's rules, for the geometry drawn from the light: a declaration
+  naming a shadow colour buffer past the ceiling its pack may reach is thrown away whole and
+  answered with buffers nought and one, which is also what a program declaring nothing is given.
+  net.irisshaders.iris.shadows.ShadowRenderTargets.createColorFramebuffer writes that pair out
+  literally, as do net.irisshaders.iris.pipeline.programs.SodiumPrograms and
+  net.irisshaders.iris.pipeline.programs.ShaderCreator, so it stays the pair whatever the ceiling.
 
   common/src/main/java/dev/vitrail/pack/target/TargetDirectives.java and
   common/src/main/java/dev/vitrail/pack/target/TargetSchedule.java carry the semantics of
@@ -149,13 +155,19 @@ GNU Lesser General Public License version 3
   fall, and packs are written against that. SHADOWHPL, which is a comment directive rather than a
   const one, is not implemented.
 
-  common/src/main/java/dev/vitrail/render/ShadowTargets.java sizes the light's colour targets at
-  two, which is the count net.irisshaders.iris.shadows.ShadowRenderTargets gives a pack that does
-  not ask for HIGHER_SHADOWCOLOR, line 46, and keeps the rule that a clear turned off still leaves
-  a buffer starting life at its clear colour. The eight of HIGHER_SHADOWCOLOR are not implemented,
-  the one pack of the corpus asking being refused at load for a reason of its own; and all the
-  targets are made with the map where Iris builds each one the first time a framebuffer names it,
-  lines 127 and 136, which changes when memory is taken and nothing a pack can read.
+  common/src/main/java/dev/vitrail/render/ShadowTargets.java ceilings the light's colour targets
+  the way net.irisshaders.iris.shadows.ShadowRenderTargets sizes its array, line 46: two for a pack
+  that does not declare HIGHER_SHADOWCOLOR and eight for one that does, both numbers from
+  net.irisshaders.iris.shaderpack.properties.PackShadowDirectives lines 19 and 20, and the
+  declaration read off the pack's own iris.features lines as
+  net.irisshaders.iris.shaderpack.ShaderPack does, lines 208 to 213. It keeps the rule that a clear
+  turned off still leaves a buffer starting life at its clear colour, and the rule that a buffer no
+  program of the place names is never allocated, which Iris gets from building each one where a
+  framebuffer or a sampler first asks for it, lines 127 and 136 and
+  net.irisshaders.iris.samplers.IrisSamplers.addShadowSamplers, and buffer nought at construction
+  whatever any program says, lines 73 and 75. What is not reused is when: the named ones are all
+  built with the map rather than each at its first use, because the shadow programs of this engine
+  are not all built before the first frame is drawn.
 
   common/src/main/java/dev/vitrail/render/StorageBuffers.java keeps the rule that a bufferObject
   starts life at zero, which net.irisshaders.iris.gl.buffer.ShaderStorageBuffer applies at line 79

@@ -438,17 +438,24 @@ A short reference, if you are writing a pack or wondering why yours is treated d
 - **A pack can ask for an unusual shadow buffer format.** Mellow asks for a single-channel one,
   which is why the shadow pipeline's colour state is built from the attachment rather than
   hardcoded.
-- **The light draws into two colour buffers, `shadowcolor0` and `shadowcolor1`**, which is what the
-  reference serves a pack that does not ask for more. A shadow program is given the buffers its own
-  draw buffers name, and a directive naming a buffer past those two is thrown away whole and
-  answered with the pair, which is again what the reference does. **Where a program names none, or
-  names more buffers than it writes outputs, it is given only as many as it writes**: a buffer
-  short of the reference. That is deliberate: Vulkan leaves an attachment no fragment writes
-  undefined for the whole draw, where the GL these packs were written against leaves it standing,
-  and what a pack reads out of an untouched shadow buffer is the white a coloured shadow multiplies
-  by. The second buffer is not decoration: one pack of the corpus writes the tint of its light
-  shafts there and reads it back for every ray that reaches through something translucent, so a
-  buffer it could not write filled every body of water with white.
+- **How far a pack may count its shadow colour buffers is the pack's own answer.** Two,
+  `shadowcolor0` and `shadowcolor1`, unless it declares `HIGHER_SHADOWCOLOR` on an `iris.features`
+  line, which takes it to eight: that is where the reference reads it from as well, and it is that
+  declaration which decides, never an `IRIS_FEATURE_HIGHER_SHADOWCOLOR` the GLSL may find defined.
+  A shadow program is given the buffers its own draw buffers name, and a directive naming a buffer
+  past the ceiling is thrown away whole and answered with the pair, which is again what the
+  reference does, the log naming the program it happened to. **Of those, only the ones some program
+  of the place writes or samples are allocated**, so a pack whose light never names `shadowcolor1`
+  is not charged an image at the shadow map's own resolution for it.
+  `shadowcolor0` stands whatever the pack writes, being the attachment the map's depth shares an
+  object with. **Where a program names none, or names more buffers than it writes outputs, it is
+  given only as many as it writes**: a buffer short of the reference. That is deliberate: Vulkan
+  leaves an attachment no fragment writes undefined for the whole draw, where the GL these packs
+  were written against leaves it standing, and what a pack reads out of an untouched shadow buffer
+  is the white a coloured shadow multiplies by. The second buffer is not decoration: one pack of the
+  corpus writes the tint of its light shafts there and reads it back for every ray that reaches
+  through something translucent, so a buffer it could not write filled every body of water with
+  white.
 - **A pack can ask the engine not to draw a piece of the sky** because it draws that piece itself,
   inside one of its own programs. Four such requests are read, and two of them take a piece away:
   the sun and the moon, which is where both references stand. `stars=false` takes nothing, the

@@ -604,7 +604,7 @@ final class GeometryProgram {
 		this.shadowColours = pass.shadow()
 				? DrawBuffers.shadowColours(
 						loaded.program().stages().get(ProgramStage.FRAGMENT).drawBuffers(),
-						ShadowTargets.COLOURS).stream()
+						targets.shadow().colourCeiling()).stream()
 						.limit(Math.clamp(outputs, 1, ColorTargetState.MAX_COLOR_TARGETS))
 						.toList()
 				: List.of();
@@ -1630,11 +1630,13 @@ final class GeometryProgram {
 
 		this.shadowViews.clear();
 		for (int index : this.shadowColours) {
-			// One attachment per state the pipeline carries, and in the same order. The images are
-			// allocated together with the depth, so this is null only where the depth above is, and
-			// the test is kept all the same because the two failures are not equal: a pass short of
-			// an attachment the pipeline names is setPipeline refusing in the middle of the world,
-			// where a null descriptor out of this method is the shadow stage not opening at all.
+			// One attachment per state the pipeline carries, and in the same order. Every index in
+			// the list is one the plan read for this same program through this same rule, so an
+			// image for it was allocated with the depth and this is null only where the depth above
+			// is. The test is kept all the same because the two failures are not equal: a pass short
+			// of an attachment the pipeline names is setPipeline refusing in the middle of the
+			// world, where a null descriptor out of this method is the shadow stage not opening at
+			// all.
 			GpuTextureView colour = this.shadow.colour(index);
 			if (colour == null) {
 				return null;
@@ -2284,14 +2286,16 @@ final class GeometryProgram {
 			}
 
 			// Said apart, because it is a different thing and the count above cannot show it: a
-			// directive naming a target this engine does not allocate is thrown away WHOLE, so the
-			// program draws into the pair instead of into what it asked for.
+			// directive naming a target past the ceiling is thrown away WHOLE, so the program draws
+			// into the pair instead of into what it asked for.
 			List<Integer> declared = fragment.drawBuffers();
-			if (declared.stream().anyMatch(index -> index >= ShadowTargets.COLOURS)) {
-				Vitrail.logger().warn("{} asks for {}, and this engine draws the light into {} colour "
-						+ "targets, so the whole list is set aside and the first {} are drawn into "
-						+ "instead, as the reference does with it", this.path, declared,
-						ShadowTargets.COLOURS, this.shadowColours.size());
+			int ceiling = this.shadow.colourCeiling();
+			if (declared.stream().anyMatch(index -> index >= ceiling)) {
+				Vitrail.logger().warn("{} asks for {}, and this pack may draw the light into {} "
+						+ "colour targets, so the whole list is set aside and the first {} are drawn "
+						+ "into instead, as the reference does with it. A pack reaches the eight by "
+						+ "declaring HIGHER_SHADOWCOLOR", this.path, declared, ceiling,
+						this.shadowColours.size());
 			}
 		} else if (this.ownsFirst) {
 			// Nought included, and the log says the sides because they are the whole fix: a write on

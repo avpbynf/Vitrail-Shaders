@@ -99,8 +99,13 @@ public final class SamplerPlan {
 	 */
 	private static final String CENTER_DEPTH = "ofCenterDepthSmooth";
 
-	/** Iris allows eight, and the corpus stops at three. */
-	private static final int MAX_SHADOW_COLOURS = 8;
+	/**
+	 * The highest a {@code shadowcolor} name goes, and deliberately not the ceiling the pack it
+	 * belongs to may reach: that one is {@link TargetPlan#shadowCeiling} and it decides what is
+	 * ALLOCATED. A name above the pack's own ceiling is still a shadow colour here, and what it
+	 * reads is the white stand-in, which is the answer every buffer nothing filled already gets.
+	 */
+	private static final int MAX_SHADOW_COLOURS = PackDirectives.MAX_SHADOW_COLOURS;
 
 	private final List<Binding> bindings;
 	private final Map<String, Binding> byName;
@@ -506,7 +511,8 @@ public final class SamplerPlan {
 				: name.charAt(SHADOW_COLOUR_PREFIX.length()) - '0';
 	}
 
-	private static boolean isShadowColour(String name) {
+	/** Whether a name reads one of the light's colour targets, the bare {@code shadowcolor} included. */
+	public static boolean isShadowColour(String name) {
 		if (name.equals(SHADOW_COLOUR_PREFIX)) {
 			return true;
 		}
