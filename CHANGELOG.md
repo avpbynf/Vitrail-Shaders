@@ -24,6 +24,14 @@ what the next one holds.
   was never affected: it copies the settings file of the pack that was open when the button was
   pressed, and touches nothing on screen.
 
+- **A damaged file in the translation cache no longer ends the session.** The cache keeps what a
+  pack's programs came to last time, so that loading that pack again costs less. A file in it far
+  larger than any translation is, damaged where it lies or carried in from another machine, was
+  read whole into memory before anything could ask whether it made sense, and running out of
+  memory reading it stopped the game rather than counting as a miss. Such a file is now refused
+  before it is read, the program is translated as it would have been anyway, and the log names
+  what was refused, once.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed
