@@ -151,6 +151,7 @@ public final class ProgramTranslator {
 			boolean coverage, String program, Map<String, VolumeAtlas> volumes) {
 		// Clocked like the whole translations: this half-translation is real translator work a
 		// chunk program pays before its full one, and leaving it out would undercount terrain.
+		// The caller keeps the answer per opening, so the passes a file serves clock it once.
 		long began = System.nanoTime();
 		try {
 			return GlslTranslator.prepare(vertex, ProgramStage.VERTEX, inputs, inputs.elements(),
