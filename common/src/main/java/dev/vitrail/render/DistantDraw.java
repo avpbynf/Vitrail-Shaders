@@ -431,7 +431,7 @@ public final class DistantDraw {
 	 * does not stand in the way.
 	 *
 	 * @param opaque   which half this is, taken from DH's own call rather than worked out here
-	 * @param sections every section of the far terrain, in the order DH sorted them
+	 * @param sections every section of the far terrain, in the order DH listed them
 	 * @return whether the pack really drew it
 	 */
 	public static boolean draw(boolean opaque, List<DhLods.Section> sections) {

@@ -23,6 +23,18 @@ what the next one holds.
   requires a name this engine has not built is still refused, the log listing what it asked for.
   Nothing changes for a pack that never writes the two names.
 
+### Changed
+
+- **Distant Horizons' far terrain is read out again only once it has changed.** Every frame a pack
+  drew turned that mod's whole listing of far sections into this engine's own records twice over,
+  once for the land and once for the water, which for a far view is thousands of sections a frame
+  and the same ones in almost all of them. The listing is now compared against the one the last
+  reading came out of, and the reading is reused where nothing in it has moved, so a camera
+  standing still over settled far terrain does the work once instead of on every frame. Walking,
+  a view distance changed, terrain finishing its generation, anything that really moves the far
+  view reads it again as before. The picture is the same, and none of this has been measured, so
+  it says work removed rather than frames gained.
+
 ### Fixed
 
 - **Importing settings no longer acts on a screen you have already left.** The window that asks

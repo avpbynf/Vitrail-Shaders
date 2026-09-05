@@ -296,8 +296,9 @@ public final class PassTimings {
 	}
 
 	/**
-	 * Puts back the two things every draw used to redo, the uniform slice and the walk for the
-	 * terrain program, so that before and after are read off ONE jar rather than two.
+	 * Puts back the three things a frame used to redo, the uniform slice and the walk for the terrain
+	 * program at every draw and the reading of Distant Horizons' far terrain listing at every half,
+	 * so that before and after are read off ONE jar rather than two.
 	 * <p>
 	 * Two builds compared against each other measure the two builds as much as the change: a
 	 * different compile, a different pack read, a different moment of the day. One jar with a switch
@@ -307,9 +308,6 @@ public final class PassTimings {
 	 * same reason: a JVM flag lives in the launcher, and a session measuring this cannot open the
 	 * launcher. The command line still wins where somebody has one. Off otherwise, so a player never
 	 * carries the old path.
-	 * <p>
-	 * The far terrain is not under it: what changed there is allocation inside a walk that runs twice
-	 * a frame either way, so there is no second path to switch to, only a count to read.
 	 * <p>
 	 * Settled once per pack load, like the census interval, so the file can be written or removed
 	 * without leaving the game.
@@ -413,7 +411,14 @@ public final class PassTimings {
 		}
 	}
 
-	/** Far-terrain sections read back out of Distant Horizons, which happens twice a frame. */
+	/**
+	 * Far-terrain sections read back out of Distant Horizons, which a frame does for a half holding
+	 * no answer of its own: a listing that moved drops the answers of BOTH halves, so the second
+	 * half of that frame lands here as well as the first, and so does either half after the reading
+	 * was let go of. A still camera over a settled far view counts none. Under
+	 * {@link #keepRedoneWork} every half is read again and every half therefore lands here, which is
+	 * what makes the two sides of that switch comparable through this number.
+	 */
 	public static void censusFarSections(int built) {
 		if (censusArmed) {
 			censusFarSections += built;

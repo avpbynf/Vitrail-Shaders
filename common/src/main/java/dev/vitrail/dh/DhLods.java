@@ -7,12 +7,16 @@ import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -30,7 +34,7 @@ import java.util.List;
  * draws its terrain behind {@code IDhTerrainRenderer}, bound into its own singleton injector by
  * {@code core/wrapperInterfaces/render/AbstractDhRenderApiDefinition.java:76} and read out of it
  * once by {@code core/render/renderer/LodRenderer.java:86}. That one method is handed the frame's
- * parameters and the sorted set of buffer containers, which is the whole of the far terrain: on the
+ * parameters and DH's own set of buffer containers, which is the whole of the far terrain: on the
  * Blaze backend each container holds ordinary blaze3d buffers, a {@code GpuBuffer} for its vertices
  * and another for its indices
  * ({@code common/render/blaze/wrappers/buffer/BlazeVertexBufferWrapper.java:42-51}), and the vertex
@@ -56,7 +60,16 @@ public final class DhLods {
 	private static final String BUFFER_CONTAINER = "com.seibel.distanthorizons.core.dataObjects."
 			+ "render.bufferBuilding.LodBufferContainer";
 
-	/** What the containers arrive in: a sorted set of DH's own, which is no {@code Collection}. */
+	/**
+	 * What the containers arrive in: a set of DH's own, which is no {@code Collection}.
+	 * <p>
+	 * Sorted in its name alone, so nothing here may read an order into it. Its {@code add} appends
+	 * and never sorts, and the comparator it is built with is used by one constructor, the one
+	 * taking a {@code Collection}, which is not the one DH calls
+	 * ({@code core/util/objects/SortedArraySet.java:42-61} against
+	 * {@code core/render/RenderBufferHandler.java:105}). What the walk below therefore reads is the
+	 * order the quad tree's own {@code enabledSections} list holds, frustum culling aside.
+	 */
 	private static final String SORTED_SET =
 			"com.seibel.distanthorizons.core.util.objects.SortedArraySet";
 
@@ -69,6 +82,9 @@ public final class DhLods {
 	/** The two DH post passes this engine holds off, and the answer of a config not published yet. */
 	private static final int SWITCHES = 2;
 	private static final int UNREACHED = -1;
+
+	/** What {@link #listed} holds when it holds nothing, shared so that forgetting costs nothing. */
+	private static final Object[] NOTHING = new Object[0];
 
 	private static boolean resolved;
 
@@ -124,9 +140,23 @@ public final class DhLods {
 	private static Field vertexCountField;
 	private static Field uploadedField;
 
-	/** DH's own sorted set is not a collection of the platform's, so it is walked by name. */
+	/** DH's own set is not a collection of the platform's, so it is walked by name. */
 	private static Method setSize;
-	private static Method setGet;
+
+	/**
+	 * The one member of that road asked for a section at a time, and a handle rather than a
+	 * {@link Method} for it alone.
+	 * <p>
+	 * {@code Method.invoke} pays for the ask twice over every time it is made: an {@code Object[]}
+	 * for its variable arity and an {@code Integer} for an index it has no way to pass as an
+	 * {@code int}. {@code invokeExact} against a handle of DH's own signature passes the bare int
+	 * and builds neither. What it does NOT buy is the call: a handle the compiler can fold is a
+	 * {@code static final} one, this is settled into a field on the first pass because the class
+	 * behind it need not exist at all, and DH's method is therefore reached through the handle
+	 * rather than inlined into the walk. That is where {@code invoke} left it too, so this is two
+	 * objects a section a half removed and nothing else moved.
+	 */
+	private static MethodHandle setGet;
 
 	private static Method cornerX;
 	private static Method cornerY;
@@ -137,6 +167,74 @@ public final class DhLods {
 
 	/** Whether DH's own stride has been measured against the format declared over it. */
 	private static boolean strideChecked;
+
+	/**
+	 * DH's containers as its last listing held them, and the two halves read out of that listing.
+	 * <p>
+	 * <strong>The listing is what moves, and a container in it does not.</strong> DH clears and
+	 * refills ONE set out of the sections its quad tree says are enabled and its frustum did not
+	 * cull ({@code core/render/RenderBufferHandler} in {@code buildRenderList}, reached from
+	 * {@code core/render/renderer/LodRenderer.renderTerrain} under its {@code firstPass} alone and
+	 * never from the deferred half), so the set is the same object every frame and only what is in
+	 * it says whether anything changed. What it is filled with is
+	 * {@code LodRenderSection.renderBufferContainer}, and a section only ever holds a container
+	 * whose buffers are already uploaded whole: the assignment takes the container or null on its
+	 * {@code buffersUploaded}, which is set once the futures of all of its wrappers have completed,
+	 * and a section whose data changed gets a NEW container while the old one is closed. So a
+	 * container that is in the listing carries the same buffers, the same counts and the same corner
+	 * for as long as it is in it, and the containers alone answer whether the reading below is still
+	 * the right one.
+	 * <p>
+	 * <strong>What that refill is not is once every frame DH draws, and the one frame it misses is
+	 * where a kept answer can carry a closed buffer.</strong>
+	 * {@code core/api/internal/ClientApi.renderLodLayer} is entered twice a frame and can return
+	 * from the first entry while the second still draws: the recovery from a renderer disabled by an
+	 * exception clears its own flag and returns before {@code LodRenderer.render}, and a
+	 * {@code DhApiBeforeRenderEvent} that cancels returns there too while the deferred half answers
+	 * to an event of its own. On such a frame the set is the one the last drawing frame left, and
+	 * {@code runRenderThreadTasks} has already run at the head of it, that being where a container
+	 * replaced since really frees its buffers ({@code LodBufferContainer.close} queueing the work
+	 * rather than doing it). Nothing moved, so the answer kept for that half is handed back with
+	 * buffers closed under it. What makes that safe is not this class: {@code render/DistantDraw}
+	 * asks {@code isClosed} of both buffers of every piece on both halves
+	 * ({@code render/DistantDraw.java:712} and {@code :875}) and drops the piece, so the memo rests
+	 * on that guard and is not to be read as a promise the buffers are live.
+	 * <p>
+	 * Compared rather than hashed: a hash of a listing this wide would trade a stale far terrain for
+	 * a handful of instructions, and the walk that compares is the walk that would hash.
+	 * <p>
+	 * Worked out here rather than asked of DH because there is nothing to ask: 3.2.1 puts no
+	 * generation on the set, on the handler that fills it or on the frame's own parameters.
+	 */
+	private static Object[] listed = NOTHING;
+
+	private static int listedCount;
+
+	private static List<Section> opaqueSections;
+	private static List<Section> translucentSections;
+
+	/**
+	 * How many times {@link #forget} has let go of all three, which is read across a
+	 * {@link #build} and nowhere else.
+	 * <p>
+	 * The walk that builds an answer can drop the very thing the answer would be kept beside:
+	 * {@link #checkStride} closes the road from inside it and {@link #restore} forgets on its way
+	 * out. An answer written after that would put a far view of containers, and the buffers under
+	 * them, straight back into a class nothing will call again, and hold them for the session.
+	 */
+	private static int drops;
+
+	/**
+	 * Whether DH handed a pass over since the last {@link #install}, which is once a frame.
+	 * <p>
+	 * DH's renderer is a setting of its own and can be turned off mid-session, and it is turned off
+	 * where nothing here can see it: {@code core/api/internal/ClientApi.renderLodLayer} returns on a
+	 * {@code rendererMode} that is not DEFAULT, DISABLED first of all, before either half reaches
+	 * {@code core/render/renderer/LodRenderer}, so this class is not called at all rather than
+	 * called with an empty listing. What is kept would then be the containers of the last frame DH
+	 * drew, and the buffers under them, held for as long as the pack is.
+	 */
+	private static boolean drawn;
 
 	private DhLods() {
 	}
@@ -157,6 +255,15 @@ public final class DhLods {
 		if (!usable) {
 			return;
 		}
+
+		// Nothing of DH's held across a frame DH did not draw, for the reason the drawn field
+		// gives. This line stands between the two halves of a frame rather than after both, that
+		// being where the game calls this engine back, so a DH that goes quiet is let go of on the
+		// second frame after rather than the first; what it cannot do is hold on for the session.
+		if (!drawn) {
+			forget();
+		}
+		drawn = false;
 
 		try {
 			// Thrown BEFORE the substitution and required rather than best effort: without it DH
@@ -432,7 +539,10 @@ public final class DhLods {
 
 		Class<?> set = Class.forName(SORTED_SET);
 		setSize = set.getMethod("size");
-		setGet = set.getMethod("get", int.class);
+		// Widened to the types the walk really holds, an Object and an int, so that invokeExact
+		// there matches without a cast either side of it.
+		setGet = MethodHandles.publicLookup().unreflect(set.getMethod("get", int.class))
+				.asType(MethodType.methodType(Object.class, Object.class, int.class));
 
 		Class<?> wrapper = Class.forName(BUFFER_WRAPPER);
 		vertexBufferField = wrapper.getField("vertexGpuBuffer");
@@ -539,25 +649,143 @@ public final class DhLods {
 						+ "handed back", e);
 			}
 		}
+
+		// And the reading of DH's listing, because DH is free to drop what is in it the moment it has
+		// its own renderer back: a session that stops drawing a pack would otherwise hold a far
+		// view's worth of containers, and the buffers under them, until it draws one again.
+		forget();
 	}
 
-	/** One half of one pass, out of DH's objects and into this engine's. */
+	/**
+	 * Lets go of DH's last listing and of both answers read out of it.
+	 * <p>
+	 * Dropped rather than emptied, because one caller is {@link #restore} and one road to it runs
+	 * through {@link #checkStride}, which closes the road in the middle of a walk of the listing:
+	 * {@link #build} holds the array it walks, so a drop under it leaves that one reading whole, and
+	 * {@link #drops} is what tells the caller above it not to keep the answer afterwards.
+	 */
+	private static void forget() {
+		drops++;
+		listed = NOTHING;
+		listedCount = 0;
+		opaqueSections = null;
+		translucentSections = null;
+	}
+
+	/**
+	 * One half of one pass, out of DH's objects and into this engine's, and only when DH's listing
+	 * is not the one the last answer was read out of.
+	 * <p>
+	 * The two halves keep an answer each because they are not the same reading: one walks a
+	 * container's opaque wrappers and the other its transparent ones, so a listing that did not move
+	 * still owes two lists. The listing itself is asked once per half all the same, and a listing
+	 * that moved drops both: DH refills its set in the frame's first half, so an answer kept for the
+	 * second would otherwise outlive the set it came out of.
+	 */
 	private static List<Section> sections(Object set, boolean opaque)
 			throws ReflectiveOperationException {
+		drawn = true;
+
 		int count = (Integer) setSize.invoke(set);
+		boolean moved = moved(set, count);
+
+		// Under the switch both halves are read again whether the listing moved or not, so that a
+		// frame reading it and a frame reusing what it read come off ONE jar. What the switch cannot
+		// put back is the comparison above, which is what records the listing: the two readings
+		// therefore differ by the reading alone, and the comparison's own price, one member read a
+		// section that allocates nothing against the dozen reads and the five objects the reading
+		// costs, is on both sides.
+		if (moved || PassTimings.keepRedoneWork()) {
+			opaqueSections = null;
+			translucentSections = null;
+		}
+
+		List<Section> kept = opaque ? opaqueSections : translucentSections;
+		if (kept == null) {
+			int dropped = drops;
+			kept = build(count, opaque);
+
+			// Kept only where the walk left the road as it found it, which is what the count is
+			// there for: checkStride closes the road from inside build and forgets on its way out,
+			// and this answer written over that would hold what the forgetting just let go of.
+			if (drops == dropped) {
+				if (opaque) {
+					opaqueSections = kept;
+				} else {
+					translucentSections = kept;
+				}
+			}
+		}
+
+		return kept;
+	}
+
+	/**
+	 * Whether DH's listing holds other containers than the kept answers were read out of, and
+	 * records the ones it holds now either way.
+	 * <p>
+	 * Walked whole rather than left the moment a difference shows, and that is not tidiness: the
+	 * record IS what {@link #build} reads, so a walk that stopped early would build one half out of
+	 * this frame's listing and the rest out of the last one.
+	 */
+	private static boolean moved(Object set, int count) throws ReflectiveOperationException {
+		boolean moved = count != listedCount;
+		if (listed.length < count) {
+			listed = new Object[count];
+			moved = true;
+		}
+
+		try {
+			for (int index = 0; index < count; index++) {
+				Object one = setGet.invokeExact(set, index);
+				if (listed[index] != one) {
+					listed[index] = one;
+					moved = true;
+				}
+			}
+		} catch (RuntimeException | Error e) {
+			throw e;
+		} catch (Throwable e) {
+			// A handle hands back whatever its target threw, which is anything at all, where every
+			// caller up to the proxy is written around the three this class can meet. DH's own
+			// member reader declares none of its own, so this is the road nothing walks.
+			throw new InvocationTargetException(e);
+		}
+
+		if (moved) {
+			// Nothing of DH's held past the listing that named it: a far view walked away from would
+			// otherwise keep its containers, and the buffers under them, for the whole session.
+			Arrays.fill(listed, count, listed.length, null);
+			listedCount = count;
+		}
+
+		return moved;
+	}
+
+	/**
+	 * One half of one listing, out of DH's objects and into this engine's.
+	 * <p>
+	 * Off the record {@link #moved} has just taken rather than out of DH a second time: it is the
+	 * same listing walked one call earlier, and asking for it twice would put back half of what
+	 * comparing it costs. Held here for the length of the walk, so that a {@link #checkStride} that
+	 * closes the road part way through leaves this one reading whole.
+	 */
+	private static List<Section> build(int count, boolean opaque)
+			throws ReflectiveOperationException {
+		Object[] containers = listed;
 
 		// Given the width DH just answered with rather than grown into it. A far view hands out
-		// thousands of sections twice a frame, and a list that starts at ten reaches that by
-		// allocating a longer array and copying the old one into it a dozen times over.
+		// thousands of sections, and a list that starts at ten reaches that by allocating a longer
+		// array and copying the old one into it a dozen times over.
 		List<Section> sections = new ArrayList<>(count);
 
 		// One list refilled section by section rather than one built per section: the record copies
 		// what it is handed, so nothing downstream can be holding this one, and a far view hands out
-		// thousands of sections twice a frame.
+		// thousands of sections.
 		List<Piece> pieces = new ArrayList<>();
 
 		for (int index = 0; index < count; index++) {
-			Object one = setGet.invoke(set, index);
+			Object one = containers[index];
 			Object[] wrappers =
 					(Object[]) (opaque ? opaqueBuffersField : translucentBuffersField).get(one);
 			if (wrappers == null) {
@@ -597,14 +825,15 @@ public final class DhLods {
 			}
 		}
 
-		// Counted where it is really built, so the frame's line says what this walk costs before
-		// anybody argues about whether the reflection under it is worth removing.
+		// Counted where it is really built, which is what makes the count worth reading: a frame that
+		// reused an answer adds nothing here, so a still camera on a settled far view reads nought.
 		PassTimings.censusFarSections(sections.size());
 
 		// Handed over as it stands rather than copied. The copy was one more array as wide as the far
-		// view, twice a frame, and it bought nothing: this list is built here, is not the reused one
-		// above it, and the only thing that holds it afterwards is {@code DistantDraw}, which reads
-		// it and drops it.
+		// view, twice a frame, and it bought nothing: this list is built here and is not the reused
+		// one above it. What holds it afterwards reads it and never writes it, which is what lets the
+		// same list answer several frames: {@code DistantDraw} keeps it for the light's own stage at
+		// the tail of the frame and puts a fresh one in its place.
 		return sections;
 	}
 
