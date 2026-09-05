@@ -150,6 +150,11 @@ final class ColorTargets {
 	record PackBinding(GpuTextureView view, FilterMode filter, boolean repeat) {
 	}
 
+	/** The schedule the plan gave these targets, for a pass to settle its own step off. */
+	TargetSchedule schedule() {
+		return this.plan.schedule();
+	}
+
 	/**
 	 * What the pack supplies for a name, settled once: the image, and the filter and addressing
 	 * its directive and its .mcmeta asked for. Only the view behind the image moves after that,
@@ -198,6 +203,9 @@ final class ColorTargets {
 	private final CenterDepth centerDepth = new CenterDepth();
 
 	private final Map<Integer, GpuFormat> formats = new LinkedHashMap<>();
+
+	/** The filter each carried target is sampled with, settled with its format. */
+	private final Map<Integer, FilterMode> filters = new LinkedHashMap<>();
 	private final Map<Integer, Vector4fc> clearColours = new LinkedHashMap<>();
 
 	/**
@@ -349,7 +357,9 @@ final class ColorTargets {
 		TargetDirectives directives = plan.directives();
 		for (int index : plan.ordered()) {
 			TargetDirectives.Colour colour = directives.clearColour(index);
-			this.formats.put(index, GpuFormats.of(directives.format(index).used()));
+			TargetFormat format = directives.format(index).used();
+			this.formats.put(index, GpuFormats.of(format));
+			this.filters.put(index, GpuFormats.filterFor(format));
 			this.clearColours.put(index, new Vector4f(colour.r(), colour.g(), colour.b(), colour.a()));
 		}
 
@@ -793,11 +803,13 @@ final class ColorTargets {
 		return this.screenHeight;
 	}
 
-	/** LINEAR wherever Iris allows it, which is everywhere but an integer format. */
+	/**
+	 * LINEAR wherever Iris allows it, which is everywhere but an integer format, and NEAREST for
+	 * a target the plan does not carry. Read off the table rather than resolved through the
+	 * directives again: asked per colour sampler of every pass of every frame.
+	 */
 	FilterMode filter(int index) {
-		TargetFormat format = this.plan.directives().format(index).used();
-
-		return has(index) ? GpuFormats.filterFor(format) : FilterMode.NEAREST;
+		return this.filters.getOrDefault(index, FilterMode.NEAREST);
 	}
 
 	/**

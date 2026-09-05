@@ -140,6 +140,13 @@ final class PackPass {
 	/** The targets of {@link #lodReads}, for the binding to answer one name at a time. */
 	private final Set<Integer> lodTargets;
 
+	/**
+	 * The schedule's step for this pass, or null where the schedule names none, for the computes
+	 * hanging off it. Settled here because the schedule answers by walking its steps and
+	 * comparing names, and the answer cannot change once the pack is read.
+	 */
+	private final TargetSchedule.Bound step;
+
 	private final RenderPipeline pipeline;
 	private final ShaderSource source;
 	private final Supplier<String> label;
@@ -184,7 +191,10 @@ final class PackPass {
 		this.attachments = List.copyOf(pass.attachments());
 		this.offset = offset;
 		this.last = this.attachments.isEmpty();
-		this.label = () -> "Vitrail " + this.path;
+		// Finished once: the encoder asks every pass of the game for its label to tell ours
+		// apart, so a supplier that concatenated on every ask paid a string per pass per frame.
+		String label = "Vitrail " + this.path;
+		this.label = () -> label;
 		this.values = values;
 		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.catalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
@@ -202,6 +212,7 @@ final class PackPass {
 				.toList();
 		this.lodReads = lodReadsOf(program, loaded, targets);
 		this.lodTargets = this.lodReads.stream().map(LodRead::target).collect(Collectors.toSet());
+		this.step = targets.schedule().step(program).orElse(null);
 
 		if (this.attachments.size() > MAX_ATTACHMENTS) {
 			throw new IllegalStateException(this.path + " writes " + this.attachments.size()
@@ -303,6 +314,10 @@ final class PackPass {
 	}
 
 	/** The program name alone, {@code composite3}, which is what the schedule and the computes key on. */
+	TargetSchedule.Bound step() {
+		return this.step;
+	}
+
 	String program() {
 		return this.pass.program();
 	}
@@ -580,8 +595,14 @@ final class PackPass {
 			ColorTargets.PackSource source = this.packSources.get(at);
 			GpuTextureView supplied = source == null ? null : targets.packView(source.image());
 
+			// Resolved once for the view and the chain below, which used to be two walks of the
+			// same map for one name.
+			TargetSurface surface = binding.kind() == SamplerPlan.Kind.COLORTEX
+					? targets.surface(binding.index(), binding.side())
+					: null;
+
 			GpuTextureView bound = supplied != null ? supplied : switch (binding.kind()) {
-				case COLORTEX -> targets.view(binding.index(), binding.side());
+				case COLORTEX -> surface == null ? null : surface.view();
 				// White where no image is there, and white is the far plane rather than a
 				// placeholder: what a depth lookup reads is now an image already in the pack's own
 				// window, where one is the far plane, and the whole world would otherwise be drawn
@@ -673,9 +694,6 @@ final class PackPass {
 			// driver left there. Deciding this at the binding rather than when the pass was built
 			// is what makes the fall back real instead of announced: a chain nothing has written
 			// is read at level nought, which is the image the pack had before there were chains.
-			TargetSurface surface = binding.kind() == SamplerPlan.Kind.COLORTEX
-					? targets.surface(binding.index(), binding.side())
-					: null;
 			boolean mipmaps = surface != null && surface.chainWritten()
 					&& this.lodTargets.contains(binding.index());
 
