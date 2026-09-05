@@ -1,7 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
-import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.Vitrail;

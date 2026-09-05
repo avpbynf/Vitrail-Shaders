@@ -1,4 +1,4 @@
-package dev.vitrail.pack.target;
+package dev.vitrail.pack.model;
 
 import java.util.LinkedHashMap;
 import java.util.Locale;

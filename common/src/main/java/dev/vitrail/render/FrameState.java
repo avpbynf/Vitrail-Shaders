@@ -1,7 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.dh.DhDepth;
-import dev.vitrail.pack.program.RenderStage;
+import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.values.FrameSmoothed;

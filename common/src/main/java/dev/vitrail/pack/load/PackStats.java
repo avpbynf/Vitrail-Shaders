@@ -1,8 +1,9 @@
-package dev.vitrail.pack.source;
+package dev.vitrail.pack.load;
 
+import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.PackOption;
-import dev.vitrail.pack.program.ProgramStage;
+import dev.vitrail.pack.source.ShaderPackSource;
 
 import java.io.IOException;
 import java.nio.file.Path;

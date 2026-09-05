@@ -1,6 +1,7 @@
 package dev.vitrail.pack.texture;
 
-import dev.vitrail.pack.target.TargetFormat;
+import dev.vitrail.pack.model.ImageInformation;
+import dev.vitrail.pack.model.TargetFormat;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

@@ -1,6 +1,6 @@
 package dev.vitrail.glsl;
 
-import dev.vitrail.pack.program.ProgramFallbacks;
+import dev.vitrail.pack.model.ProgramFallbacks;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -346,7 +346,7 @@ public final class LegacyGlsl {
 	 * <p>
 	 * The glint is the one name here that is not already under an entity root, and it enters as a
 	 * root rather than through the tree because its parent is {@code gbuffers_textured}
-	 * ({@code pack/program/ProgramFallbacks.java:76}), which a sky pass reaches as well. A pack that
+	 * ({@code pack/model/ProgramFallbacks.java:82}), which a sky pass reaches as well. A pack that
 	 * serves both out of one file is read twice, once per answer, which is what the translation key
 	 * of {@code PackProgram.loadGeometry} carries.
 	 */

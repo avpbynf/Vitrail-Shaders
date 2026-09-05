@@ -3,9 +3,9 @@ package dev.vitrail.render;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.target.SamplerPlan;
-import dev.vitrail.pack.texture.PackTexture;
+import dev.vitrail.pack.model.PackTexture;
 import dev.vitrail.pack.texture.PackTextures;
-import dev.vitrail.pack.texture.TextureStage;
+import dev.vitrail.pack.model.TextureStage;
 import dev.vitrail.pack.texture.VolumeAtlas;
 import dev.vitrail.uniform.NoiseTexture;
 

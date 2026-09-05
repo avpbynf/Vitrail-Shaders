@@ -1,6 +1,6 @@
 package dev.vitrail.glsl;
 
-import dev.vitrail.pack.program.ProgramStage;
+import dev.vitrail.pack.model.ProgramStage;
 
 import java.util.List;
 

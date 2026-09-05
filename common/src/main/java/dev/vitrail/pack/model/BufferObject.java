@@ -1,4 +1,4 @@
-package dev.vitrail.pack.texture;
+package dev.vitrail.pack.model;
 
 import java.util.List;
 import java.util.Optional;
@@ -33,7 +33,7 @@ public record BufferObject(int index, long size, boolean relative, float scaleX,
 			return new Reading(List.of(), List.of());
 		}
 
-		boolean hasIndex(int index) {
+		public boolean hasIndex(int index) {
 			for (BufferObject buffer : this.buffers) {
 				if (buffer.index() == index) {
 					return true;
@@ -43,7 +43,7 @@ public record BufferObject(int index, long size, boolean relative, float scaleX,
 			return false;
 		}
 
-		boolean hasName(String name) {
+		public boolean hasName(String name) {
 			for (BufferObject buffer : this.buffers) {
 				if (buffer.name().filter(name::equals).isPresent()) {
 					return true;

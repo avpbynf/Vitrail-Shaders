@@ -1,5 +1,7 @@
 package dev.vitrail.pack.program;
 
+import dev.vitrail.pack.model.ProgramFallbacks;
+import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.source.DimensionSet;
 
 import java.util.ArrayList;

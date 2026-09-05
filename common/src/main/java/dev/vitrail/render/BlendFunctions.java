@@ -1,6 +1,6 @@
 package dev.vitrail.render;
 
-import dev.vitrail.pack.program.BlendMode;
+import dev.vitrail.pack.model.BlendMode;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.pipeline.BlendFunction;

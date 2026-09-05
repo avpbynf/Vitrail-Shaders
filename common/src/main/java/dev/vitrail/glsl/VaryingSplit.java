@@ -3,7 +3,7 @@ package dev.vitrail.glsl;
 import dev.vitrail.glsl.GlslLexer.Kind;
 import dev.vitrail.glsl.GlslLexer.Token;
 import dev.vitrail.glsl.GlslTranslator.FileScope;
-import dev.vitrail.pack.program.ProgramStage;
+import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 
 import java.util.ArrayList;

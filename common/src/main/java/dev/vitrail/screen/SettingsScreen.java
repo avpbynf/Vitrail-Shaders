@@ -3,7 +3,7 @@ package dev.vitrail.screen;
 import dev.vitrail.Vitrail;
 import dev.vitrail.pack.menu.MenuValues;
 import dev.vitrail.pack.source.PackLang;
-import dev.vitrail.pack.source.PackLoader;
+import dev.vitrail.pack.load.PackLoader;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.settings.PackFile;
 import dev.vitrail.settings.PackSession;

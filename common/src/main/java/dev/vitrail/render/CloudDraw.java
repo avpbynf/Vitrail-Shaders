@@ -6,7 +6,7 @@ import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
-import dev.vitrail.pack.target.TargetSize;
+import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;

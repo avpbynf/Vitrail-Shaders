@@ -1,6 +1,8 @@
 package dev.vitrail.pack.target;
 
-import dev.vitrail.pack.program.ProgramNames;
+import dev.vitrail.pack.model.TargetName;
+import dev.vitrail.pack.model.TargetSize;
+import dev.vitrail.pack.model.ProgramNames;
 import dev.vitrail.pack.program.ProgramResolver;
 import dev.vitrail.pack.program.TerrainPass;
 

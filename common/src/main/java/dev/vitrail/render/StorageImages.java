@@ -3,9 +3,9 @@ package dev.vitrail.render;
 import dev.vitrail.mixin.access.CommandEncoderAccessor;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.mixin.access.VulkanCommandEncoderAccessor;
-import dev.vitrail.pack.target.TargetFormat;
-import dev.vitrail.pack.texture.ImageInformation;
-import dev.vitrail.pack.texture.PackTexture;
+import dev.vitrail.pack.model.TargetFormat;
+import dev.vitrail.pack.model.ImageInformation;
+import dev.vitrail.pack.model.PackTexture;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.systems.CommandEncoder;

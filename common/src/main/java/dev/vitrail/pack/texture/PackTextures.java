@@ -1,9 +1,13 @@
 package dev.vitrail.pack.texture;
 
+import dev.vitrail.pack.model.PackTexture;
+import dev.vitrail.pack.model.PixelFormat;
+import dev.vitrail.pack.model.PixelType;
+import dev.vitrail.pack.model.TargetFormat;
+import dev.vitrail.pack.model.TargetName;
+import dev.vitrail.pack.model.TextureStage;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
-import dev.vitrail.pack.target.TargetFormat;
-import dev.vitrail.pack.target.TargetName;
 
 import java.io.IOException;
 import java.nio.file.Path;

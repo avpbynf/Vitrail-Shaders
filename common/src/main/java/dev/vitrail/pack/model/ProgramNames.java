@@ -1,4 +1,4 @@
-package dev.vitrail.pack.program;
+package dev.vitrail.pack.model;
 
 import java.util.Optional;
 import java.util.Set;

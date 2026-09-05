@@ -1,7 +1,8 @@
 package dev.vitrail.pack.target;
 
+import dev.vitrail.pack.model.TargetFormat;
 import dev.vitrail.pack.option.SettingSet;
-import dev.vitrail.pack.program.ProgramNames;
+import dev.vitrail.pack.model.ProgramNames;
 import dev.vitrail.pack.program.ProgramSet;
 import dev.vitrail.pack.source.DimensionSet;
 import dev.vitrail.pack.source.IncludeExpander;
