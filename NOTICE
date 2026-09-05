@@ -152,6 +152,14 @@ GNU Lesser General Public License version 3
   targets are made with the map where Iris builds each one the first time a framebuffer names it,
   lines 127 and 136, which changes when memory is taken and nothing a pack can read.
 
+  common/src/main/java/dev/vitrail/render/StorageBuffers.java keeps the rule that a bufferObject
+  starts life at zero, which net.irisshaders.iris.gl.buffer.ShaderStorageBuffer applies at line 79
+  for an absolute buffer and at line 64 every time a relative one is rebuilt. Packs are written
+  against it: Complementary tells a face it never voxelised from one it did by the cell reading
+  zero, having no written flag of its own. Line 79 sits in the else of a test on inline content,
+  which Iris uploads in place of the clear when a pack gave any; the clear is unconditional here
+  because the bufferObject grammar this engine reads carries no content.
+
   common/src/main/java/dev/vitrail/render/PackPass.java binds what a full screen pass samples with
   Iris's filters, the packs blurring and interpolating against them: the noise image LINEAR, a
   shadow colour LINEAR outright, net.irisshaders.iris.samplers.IrisSamplers.addShadowSamplers, and

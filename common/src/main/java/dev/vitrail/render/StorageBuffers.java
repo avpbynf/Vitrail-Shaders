@@ -188,10 +188,33 @@ public final class StorageBuffers implements AutoCloseable {
 	}
 
 	/**
-	 * Zeros storage buffers small enough to fill on this command buffer. Complementary Ultra's
-	 * {@code bufferObject.0} is hundreds of megabytes; {@code vkCmdFillBuffer} of that size on
-	 * the frame that also draws the world trips Windows TDR ({@code VK_ERROR_DEVICE_LOST} two
-	 * seconds later). The pack writes the cells it uses.
+	 * Zeros every buffer {@link #ensure} has just made, whole and in one fill.
+	 * <p>
+	 * <strong>A pack reads a cell it never wrote and expects zero.</strong> Complementary indexes
+	 * {@code blockDataSSBO.data[]} by face rather than by voxel, and its reader tests the cell it
+	 * gets rather than a written flag: {@code lib/materials/materialMethods/worldSpaceRef.glsl:69}
+	 * drops the reflection when {@code faceData.textureBounds.z < 1e-6}, and that field is only ever
+	 * zero because nothing wrote the cell. Its writer reads too, at
+	 * {@code lib/voxelization/reflectionVoxelData.glsl:61}, before any store of the frame and at the
+	 * previous camera anchor, then mixes what it read back in at 99 percent. Uninitialised memory
+	 * passes the first test and is fed to the atlas as a texture coordinate, and the second carries
+	 * it forward for a hundred frames. Nothing in the pack clears the buffer at Ultra either: its
+	 * {@code clearSSBOs()} touches {@code playerVerticesSSBO} alone and sits under
+	 * {@code WORLD_SPACE_PLAYER_REF == 1}, which ships at -1.
+	 * <p>
+	 * <strong>What Iris does.</strong> It clears the whole allocation the moment it makes it, both
+	 * for an absolute buffer ({@code gl/buffer/ShaderStorageBuffer.java:79}) and on every rebuild of
+	 * a relative one ({@code :64}), and never again. The same holds here: this runs at the tail of
+	 * {@link #ensure}, which makes the absolute buffers once per pack load and the relative ones
+	 * again on every resize, and the fill goes on the command buffer there, ahead of everything the
+	 * frame that made them goes on to draw.
+	 * <p>
+	 * <strong>It is one fill and not a spread of them.</strong> The pack's shadow vertex stage
+	 * stores into the buffer from the first frame the world is drawn
+	 * ({@code lib/voxelization/reflectionVoxelData.glsl:80} and {@code :83}), and a fill carried
+	 * over to a later frame would erase what those stores put there. Filling 773 MiB is one
+	 * bandwidth-bound write with no per-cell work behind it, and it lands on the frame that
+	 * allocates the buffer rather than on one drawing a world.
 	 */
 	private void zero(GpuDevice device) {
 		CommandEncoder encoder = device.createCommandEncoder();
@@ -207,14 +230,11 @@ public final class StorageBuffers implements AutoCloseable {
 				continue;
 			}
 
-			if (buffer.bytes > 4L * 1024 * 1024) {
-				buffer.zeroed = true;
-				continue;
-			}
-
 			VK12.vkCmdFillBuffer(commands, buffer.buffer, 0L, buffer.bytes, 0);
 			buffer.zeroed = true;
 			filled = true;
+			Vitrail.logger().info("storage buffer {} zeroed whole at {} bytes",
+					buffer.declared.describe(), buffer.bytes);
 		}
 
 		if (filled) {

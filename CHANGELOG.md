@@ -72,6 +72,15 @@ what the next one holds.
   next one as the clear had left them, and the log named the pass as one it would not run. A
   pass whose buffer the pack really never declared is still dropped, and still says so.
 
+- **A buffer a pack asks for starts empty, whatever its size.** Only the small ones were emptied,
+  and anything past four mebibytes was handed over holding whatever the driver had last left in
+  that memory. Complementary reads a cell of one before anything has written it and takes a zero
+  for "no surface here", so at its Ultra profile, which turns World-Space Reflections on and
+  Advanced Color Tracing up to 16 chunks and asks for 773 MiB on that account, the reflections of
+  the first seconds could carry scraps of unrelated blocks, and the pack mixes what it reads back
+  in, which drags them out over several more. Every such buffer is now emptied whole the moment it
+  is allocated, which is before the pack has drawn anything into it.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed
