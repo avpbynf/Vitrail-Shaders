@@ -68,8 +68,7 @@ public final class ShaderProperties {
 	// three of its continuations on a blank line, and its main screen swallowed the commented
 	// block underneath.
 	private static final Pattern CONTINUATION = Pattern.compile("\\\\\\r?\\n[ \\t]*");
-	// Package visible rather than private: DimensionSet walks its own file with the same stack.
-	static final Pattern DIRECTIVE = Pattern.compile("^\\s*#\\s*(if|ifdef|ifndef|else|elif|endif)\\b.*$");
+	private static final Pattern DIRECTIVE = Pattern.compile("^\\s*#\\s*(if|ifdef|ifndef|else|elif|endif)\\b.*$");
 
 	private static final Pattern PROFILE = Pattern.compile("^\\s*profile\\.(\\w+)\\s*=\\s*(.*)$");
 	private static final Pattern PROGRAM_ENABLED = Pattern.compile("^\\s*program\\.(.+?)\\.enabled\\s*=\\s*(.*)$");
@@ -815,26 +814,6 @@ public final class ShaderProperties {
 				this.position++;
 			}
 		}
-	}
-
-	static void applyDirective(String keyword, String line, ConditionStack conditions,
-			Map<String, String> defines) {
-		switch (keyword) {
-			case "ifdef", "ifndef" -> {
-				String name = line.replaceAll("^\\s*#\\s*\\w+\\s+", "").trim().split("\\s+", -1)[0];
-				conditions.ifDirective(keyword.equals("ifdef") == defines.containsKey(name));
-			}
-			case "if" -> conditions.ifDirective(
-					PreprocessorExpression.evaluate(after(line), defines).orElse(true));
-			case "elif" -> conditions.elifDirective(
-					() -> PreprocessorExpression.evaluate(after(line), defines).orElse(true));
-			case "else" -> conditions.elseDirective();
-			default -> conditions.endifDirective();
-		}
-	}
-
-	private static String after(String line) {
-		return line.replaceAll("^\\s*#\\s*\\w+\\s*", "");
 	}
 
 	/**

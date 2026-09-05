@@ -4,11 +4,11 @@ import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.pack.target.TargetPlan;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -67,14 +67,13 @@ public final class DimensionSet {
 		Map<String, String> places = new LinkedHashMap<>();
 		boolean declared = false;
 
-		Optional<java.nio.file.Path> properties = source.file(PROPERTIES);
-		if (properties.isPresent()) {
+		PropertiesFile properties = PropertiesFile.read(source, PROPERTIES);
+		if (properties.present()) {
 			// The engine's table and never the pack's settings: the reference preprocesses this
 			// file before the include graph exists, so a conditional here can only see the
 			// environment defines (ShaderPack.java:125-126). A declaration in a dead branch is
 			// no declaration.
 			Map<String, String> defines = EngineDefines.table(EngineDefines.machine());
-			ConditionStack conditions = new ConditionStack();
 
 			// A folder to the LAST worlds it was assigned, in first-assignment order. The
 			// reference reads this file as ordered properties, so re-assigning dimension.<folder>
@@ -83,17 +82,15 @@ public final class DimensionSet {
 			// claiming one world are settled by whichever entry sits later.
 			Map<String, String> assignments = new LinkedHashMap<>();
 
-			for (String line : source.readLines(properties.get())) {
-				Matcher directive = ShaderProperties.DIRECTIVE.matcher(line);
-				if (directive.matches()) {
-					ShaderProperties.applyDirective(directive.group(1), line, conditions, defines);
-					continue;
-				}
+			// The shared walk, for the continuations as much as for the conditionals: both
+			// Complementary variants list the modded worlds of a dimension one continued line per
+			// mod, and the reference joins them because it loads the preprocessed file as
+			// properties (ShaderPack.java:376-385). Read line by line, every mod but the first is
+			// lost and the backslash is left behind as a world of its own.
+			List<String> live = new ArrayList<>();
+			properties.walk(defines, live::add);
 
-				if (!conditions.active()) {
-					continue;
-				}
-
+			for (String line : live) {
 				Matcher declaration = DECLARATION.matcher(line);
 				if (declaration.matches()) {
 					assignments.put(declaration.group(1), declaration.group(2));
