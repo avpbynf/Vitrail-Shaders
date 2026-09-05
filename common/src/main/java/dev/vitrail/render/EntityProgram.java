@@ -106,15 +106,18 @@ final class EntityProgram implements DumpedProgram {
 	 * in by this same door with a mesh of its own: {@code POSITION_TEX}, two elements, out of which
 	 * {@code GlintVertex} makes every other name with a constant. A set fixed here would have the log
 	 * tell a reader that the glint's mesh carries a tangent, and telling a reader which names are
-	 * real is the whole of what that line is for. The lines rows come in the same way with a mesh
-	 * of their own, and {@code LinesVertex} says which of the names it really carries.
+	 * real is the whole of what that line is for. The lines rows come in the same way with a mesh of
+	 * their own, and {@code LinesVertex} says which of the names it really carries. The text takes
+	 * the glint's answer for the glint's reason: a glyph is four elements of the game's at most, and
+	 * {@code GlyphVertex} makes every name a pack reads beyond them with a constant, where Iris
+	 * fills the mid texture coordinate and the tangent off a wider mesh of its own.
 	 * <p>
-	 * {@code mc_Entity} is in neither answer and is the one worth naming, since the chunk mesh does
-	 * carry it: an entity is not a block state and has no id to travel on, so a pack branching on it
-	 * here is branching on a constant.
+	 * {@code mc_Entity} is in none of the answers and is the one worth naming, since the chunk mesh
+	 * does carry it: an entity is not a block state and has no id to travel on, so a pack branching on
+	 * it here is branching on a constant.
 	 */
 	private static Set<String> answered(EntityDraw.Element element) {
-		if (element.glint()) {
+		if (element.glint() || element.text()) {
 			return Set.of();
 		}
 

@@ -105,7 +105,15 @@ public enum VertexInputs {
 	LINES,
 
 	/**
-	 * The game's own sky meshes. Alone among these, it is not one format: {@code SkyRenderer} binds
+	 * The quads the game's text is drawn from, a name plate and a sign's board first among them: the
+	 * eight text pipelines bind four formats between them, so the elements to declare come from the
+	 * piece rather than from this constant, as they do for {@link #SKY}. {@link GlyphVertex} carries
+	 * the renaming and says what a glyph has not got.
+	 */
+	GLYPH,
+
+	/**
+	 * The game's own sky meshes. Not one format either: {@code SkyRenderer} binds
 	 * four between its eight passes, so the elements to declare come from the pass rather than from
 	 * this constant. {@link SkyVertex} carries the renaming and says what the sky has not got.
 	 */
@@ -178,8 +186,11 @@ public enum VertexInputs {
 	 * carry the overlay, and the row must not be text. The second half is a question about the row's
 	 * own name, {@code ShaderKey.isText} being {@code name().contains("TEXT")} at
 	 * {@code pipeline/programs/ShaderKey.java:157}, carried into the attribute inputs by
-	 * {@code IrisRenderingPipeline.java:675}. There is nothing to exclude here, no text family being
-	 * served; the day one is, this gate has to grow the same second half.
+	 * {@code IrisRenderingPipeline.java:675}. A text family IS served here now and this gate still
+	 * asks the one question, because the two answers coincide: {@link #GLYPH} is its own contract
+	 * over four formats of the game's, none of which carries {@code UV1}, so the row that Iris's
+	 * second half excludes is the row this list has never held. A text row put on the entity mesh
+	 * would be the case that needed it, and no format of the game's text carries that mesh.
 	 * <p>
 	 * What is not asked is the fallback tree, and that matters: {@code gbuffers_spidereyes} falls
 	 * back through {@code gbuffers_textured}, so a rule read off the tree would answer no for a row
@@ -204,11 +215,11 @@ public enum VertexInputs {
 	 * with them. Empty for {@link #WORLD}, whose names are the translator's own and which no pack
 	 * writes.
 	 * <p>
-	 * For {@link #SKY} this is the UNION of the four formats and not any one of them, which is the
-	 * one place a union is the right answer: this list only decides which of the pack's own symbols
-	 * are renamed out of the way, and renaming one the bound format happens not to carry costs
-	 * nothing. What gets DECLARED is the bound format alone, and that is
-	 * {@link SkyVertex#prologue}'s to know.
+	 * For {@link #SKY} and {@link #GLYPH} this is the UNION of the four formats each of them covers
+	 * and not any one of them, which is the one place a union is the right answer: this list only
+	 * decides which of the pack's own symbols are renamed out of the way, and renaming one the bound
+	 * format happens not to carry costs nothing. What gets DECLARED is the bound format alone, and
+	 * that is {@link SkyVertex#prologue}'s and {@link GlyphVertex#prologue}'s to know.
 	 * <p>
 	 * {@link #CLOUDS} names no attribute here because it binds no format, and the two names it does
 	 * give are a uniform block and a texel buffer. Nothing about the renaming cares which: a pack
@@ -222,6 +233,7 @@ public enum VertexInputs {
 			case GLINT -> GlintVertex.ATTRIBUTES;
 			case CRUMBLING -> CrumblingVertex.ATTRIBUTES;
 			case LINES -> LinesVertex.ATTRIBUTES;
+			case GLYPH -> GlyphVertex.ATTRIBUTES;
 			case PARTICLE -> ParticleVertex.ATTRIBUTES;
 			case SKY -> SkyVertex.ATTRIBUTES;
 			case CLOUDS -> CloudVertex.ATTRIBUTES;

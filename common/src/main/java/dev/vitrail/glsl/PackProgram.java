@@ -1089,11 +1089,12 @@ public final class PackProgram {
 	/**
 	 * One piece of geometry the game hands over as a render pipeline, as a pack has to be read for it.
 	 * <p>
-	 * There is no list of bound elements here, unlike {@link SkyElement}, and the difference is that
-	 * the sky's pieces do not part company on the format the way they part company on the program:
-	 * the game's own sky renderer binds several between its passes, so which elements a stage
-	 * declares is settled per pass and there is nowhere else to put it. Here every piece names its
-	 * own format below, so the elements to declare are that constant's.
+	 * The list of bound elements is here for the reason it is on {@link SkyElement}, and only one
+	 * family of this door needs it: most pieces name a {@link VertexInputs} that stands for one
+	 * format, so the elements to declare are that constant's and the short constructor fills them
+	 * in. The text does not. Its eight pipelines bind four formats between them,
+	 * {@code GlyphVertex} listing which, so which elements a stage declares is settled per PIECE
+	 * and there is nowhere else to put it.
 	 * <p>
 	 * <strong>The format belongs to the piece and not to the family asking</strong>, because one door
 	 * serves two: the entity door draws its own rows from the entity mesh and an enchantment's glint
@@ -1114,6 +1115,8 @@ public final class PackProgram {
 	 *                  piece, exactly as the chunk passes read it
 	 * @param inputs    where this piece's vertex stage takes its inputs from, which is the format the
 	 *                  pipeline drawing it binds
+	 * @param bound     the elements of that format, in the format's own order. Exactly these are
+	 *                  declared, and no others
 	 * @param coverage  whether this piece's fragment stage writes the coverage mask on top of what
 	 *                  the pack asked for, which every piece drawn before the scene seed and into
 	 *                  the pack's own targets has to. It is part of what two pieces have to agree on
@@ -1122,7 +1125,17 @@ public final class PackProgram {
 	 *                  its pipeline carries no state for
 	 */
 	public record GeometryElement(String element, String program, AlphaTest alphaTest,
-			VertexInputs inputs, boolean coverage) {
+			VertexInputs inputs, List<String> bound, boolean coverage) {
+
+		public GeometryElement {
+			bound = List.copyOf(bound);
+		}
+
+		/** A piece whose contract stands for one format, which is every family here but the text. */
+		public GeometryElement(String element, String program, AlphaTest alphaTest,
+				VertexInputs inputs, boolean coverage) {
+			this(element, program, alphaTest, inputs, inputs.elements(), coverage);
+		}
 	}
 
 	/**
@@ -1230,12 +1243,17 @@ public final class PackProgram {
 				// about the text: two pieces of one file are two texts as soon as one of them writes
 				// the mask, because the mask is an output the other one's pipeline carries no state
 				// for, and one module cannot be right for both.
+				//
+				// The bound elements are in it BESIDE the format, and the text is why: its eight
+				// pipelines share one VertexInputs and bind four formats, so a key on the contract
+				// alone would hand a name plate's background the module built for a glyph, which
+				// declares a texture coordinate the background's buffer has not got.
 				VertexInputs inputs = element.inputs();
 				String key = path + "|" + alphaTest + "|" + LegacyGlsl.drawsEntities(element.program())
 						+ "|" + LegacyGlsl.bindsGameTransforms(element.program()) + "|" + inputs
-						+ "|" + element.coverage();
+						+ "|" + String.join(",", element.bound()) + "|" + element.coverage();
 				translated.computeIfAbsent(key, _ -> bind(source.packName(), path,
-						ProgramTranslator.translate(units, inputs, inputs.elements(), alphaTest,
+						ProgramTranslator.translate(units, inputs, element.bound(), alphaTest,
 								element.coverage(), element.program(), textures.volumes()),
 						targets, alphaTest, textures));
 				loaded.put(element.element(), translated.get(key));

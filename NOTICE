@@ -232,6 +232,37 @@ GNU Lesser General Public License version 3
   The ORDER in which the two halves are drawn is not Iris's, and that divergence is written out in
   common/src/main/java/dev/vitrail/render/FeatureLayer.java rather than here.
 
+  common/src/main/java/dev/vitrail/glsl/GlyphVertex.java, the text rows of
+  common/src/main/java/dev/vitrail/render/EntityDraw.java and
+  common/src/main/java/dev/vitrail/mixin/TextFeatureRendererMixin.java send the game's text to the
+  same programs on the same table, read in September 2026. What is reproduced is that a glyph is
+  drawn with the entity translucent program and, under the block entity phase, with the block
+  translucent one, net.irisshaders.iris.pipeline.IrisPipelines lines 72 to 78 into
+  net.irisshaders.iris.pipeline.programs.ShaderKey lines 62 to 65; that the two background render
+  types keep the entity translucent program whoever drew them, ShaderKey line 57 reached from a
+  constant assignment at IrisPipelines lines 76 and 77; that all three families go to ShadowEntities
+  from the light, IrisPipelines lines 119
+  to 125 into ShaderKey lines 91 to 93; the alpha test of one tenth those picture keys carry and the
+  non-zero one the hand and shadow keys carry, ShaderKey lines 49 to 51 and 91 to 93; and that a
+  glyph submitted by a block entity renderer is marked at the moment it asks for its render type,
+  net.irisshaders.iris.mixin.entity_render_context.MixinGlyphRenderType line 19, which is done here
+  on the submission instead for want of a render type this engine may subclass. The vertex contract
+  is not Iris's: it widens the glyph format and fills a normal, a tangent, a mid texture coordinate
+  and an entity identifier, net.irisshaders.iris.vertices.IrisVertexFormats lines 62 to 72 and
+  net.irisshaders.iris.vertices.sodium.GlyphExtVertexSerializer, where the four formats 26.2 really
+  binds reach the stage untouched; GlyphVertex writes out what that costs.
+
+  common/src/main/java/dev/vitrail/render/GlyphIntensity.java and
+  common/src/main/java/dev/vitrail/mixin/VulkanGpuTextureViewMixin.java reproduce Iris's answer for
+  a font sheet holding one channel, read in September 2026: the image a pack samples as gtexture is
+  presented with red in all four components, which is what
+  net.irisshaders.iris.pipeline.programs.ExtendedShader lines 198 to 201 set on the albedo texture
+  for the rows ShaderKey.isIntensity names at line 128, and undone at the next program use by
+  net.irisshaders.iris.gl.IrisRenderSystem lines 527 to 533. The mechanism is not Iris's: OpenGL
+  carries the swizzle on the texture object and Vulkan carries it on the image view, so a view of
+  this engine's own is built over the game's image instead of a state being set and unset.
+  GlyphIntensity writes out what that changes and why the rows are read off the pipeline.
+
   common/src/main/java/dev/vitrail/render/EntityMesh.java,
   common/src/main/java/dev/vitrail/glsl/EntityVertex.java,
   common/src/main/java/dev/vitrail/render/EntityIdentifiers.java,

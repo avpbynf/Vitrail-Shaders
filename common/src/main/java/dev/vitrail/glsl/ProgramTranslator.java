@@ -163,8 +163,9 @@ public final class ProgramTranslator {
 	/**
 	 * The same, for a family that binds more than one vertex format.
 	 * <p>
-	 * Only {@link VertexInputs#SKY} is one today: {@code SkyRenderer} binds four formats between its
-	 * eight passes, so which elements a stage declares is the pass's answer and not the family's.
+	 * Two families are: {@code SkyRenderer} binds four formats between its eight passes and the
+	 * game's eight text pipelines bind four between them, so which elements a stage declares is the
+	 * pass's or the piece's answer and not the family's.
 	 *
 	 * @param boundElements the elements of the format this pass binds, in the format's own order
 	 */

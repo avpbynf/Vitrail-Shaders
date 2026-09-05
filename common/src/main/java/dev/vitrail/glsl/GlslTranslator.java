@@ -383,8 +383,9 @@ public final class GlslTranslator {
 
 	/**
 	 * The elements of the vertex format this pass actually binds, which is only ever different from
-	 * {@code inputs.elements()} for {@link VertexInputs#SKY}: the sky binds four formats between its
-	 * passes and a stage has to declare the one it is drawn with, exactly, or the locations shift.
+	 * {@code inputs.elements()} for {@link VertexInputs#SKY} and {@link VertexInputs#GLYPH}: the sky
+	 * binds four formats between its passes and the text binds four between its pipelines, and a
+	 * stage has to declare the one it is drawn with, exactly, or the locations shift.
 	 */
 	private final List<String> bound;
 
@@ -5334,6 +5335,8 @@ public final class GlslTranslator {
 					lines.addAll(LinesVertex.prologue(this.used, this.synthesized));
 					lines.addAll(LinesVertex.widen());
 				}
+				case GLYPH -> lines.addAll(
+						GlyphVertex.prologue(this.bound, this.used, this.synthesized));
 				case PARTICLE -> lines.addAll(ParticleVertex.prologue(this.used, this.synthesized));
 				case SKY -> lines.addAll(SkyVertex.prologue(this.bound, this.used, this.synthesized));
 				case CLOUDS -> lines.addAll(CloudVertex.prologue(this.used, this.synthesized));

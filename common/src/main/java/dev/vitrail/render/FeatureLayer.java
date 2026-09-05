@@ -52,14 +52,14 @@ import java.util.Optional;
  * <p>
  * What Iris does: it replaces the SHADER of a draw and never the target it goes to, keying the
  * replacement on the pipeline ({@code pipeline/IrisPipelines.java:66,67} for the beacon beam,
- * {@code :72} for the text, {@code :63} for the lightning), so the text, the beams, the bolts and
+ * {@code :63} for the lightning), so the beams, the bolts and
  * the served entities are all drawn into the same attachments in the order the game walks its
  * phases, each one depth tested against the last. It composes nothing, so the question cannot arise
  * there.
  * <p>
- * What stops that here: {@link EntityDraw} serves the blending half of the entities and the eyes
- * inside this same bracket and the families nobody serves yet stay the game's, the beacon beam, the
- * text and the lightning, plus the one glint that is addressed away from the main target and handed
+ * What stops that here: {@link EntityDraw} serves the blending half of the entities, the eyes and
+ * the text inside this same bracket and the families nobody serves yet stay the game's, the beacon
+ * beam and the lightning, plus the one glint that is addressed away from the main target and handed
  * back with them. No draw takes both roads, but the ones left here are drawn into a layer of this
  * class's own and that layer is composed ONCE, at {@code PackChain.closeFeatures}, over a full
  * screen quad carrying no depth attachment and therefore no depth test.
@@ -67,9 +67,26 @@ import java.util.Optional;
  * What it costs the image: everything still left to the game is painted in front of everything
  * served, however far behind it stands. The game draws the shadows, then the translucent models,
  * then the see-through name plates, the name plates and the texts, in that order
- * ({@code feature/FeatureRenderDispatcher.java:212-217}), so the shape of it is a name plate or a
- * sign's text reading through the mob that should hide it. It shrinks family by family as those
- * families arrive, and it goes with this class.
+ * ({@code feature/FeatureRenderDispatcher.java:211-215}), and the beams and the bolts are among the
+ * translucent models, so the shape of it is a beacon beam reading through the mob that should hide
+ * it. It shrinks family by family as those families arrive, and it goes with this class.
+ * <p>
+ * <strong>The text left it under some packs and not under others, and that is the pack's answer
+ * rather than this file's.</strong> A draw {@link EntityDraw} records is one the game never makes,
+ * so it never reaches this layer as the game's; a draw it hands back does. With the entity switch
+ * off, or under a place whose {@code gbuffers_entities_translucent} the fallback tree cannot
+ * resolve, every glyph comes through here exactly as it did before and the order above is what it
+ * costs.
+ * <p>
+ * <strong>There is a third road and it lands here too, drawn by the pack rather than by the
+ * game.</strong> A place that holds no attachments at all for a program leaves
+ * {@code GeometryProgram} with the game's own target in draw buffer nought, and inside this window
+ * the game's own target IS this layer, {@code RenderSystem.outputColorTextureOverride} standing.
+ * So the pack's own stage paints the glyph into the layer, flat and composed with the rest, exactly
+ * as it would paint a mob: the road is the family's and not the text's, and
+ * {@code ChainPlan.NAMED_PROGRAMS} says so where the two entity names are listed. It is the empty
+ * answer of a walk this engine REFUSED and not a pack that declared no draw buffer, which is
+ * answered colortex0 as Iris answers it, and no place of the corpus answers empty for any family.
  * <p>
  * <strong>What it costs is worth naming, because it looks like something else entirely.</strong> The
  * redirected draws write the world's depth, and they write it after {@code depthtex1} has been taken
