@@ -83,8 +83,9 @@ public final class PackLoader {
 			}
 
 			return new LoadedPack(source.packName(), source.isZip(), dimensions, properties, options,
-					programs, resolved, stats, expansion, expanded, Set.copyOf(disabled),
-					source.caseInsensitiveHits(), (System.nanoTime() - start) / 1_000_000L);
+					programs, resolved, stats, expansion, expanded, expander.looseConditionals(),
+					Set.copyOf(disabled), source.caseInsensitiveHits(),
+					(System.nanoTime() - start) / 1_000_000L);
 		}
 	}
 

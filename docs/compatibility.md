@@ -21,7 +21,7 @@ quietly stale.
 | Mellow v3.3 | Drawn, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. |
 | Photon v1.3b | Drawn, at default settings. It exercises a clamped volume of half floats as its atmosphere table, reads its volumes through macros standing for the sampler's name, and lays a volume over the name of a colour target that the same stage also reads as a plain `sampler2D`. Not yet compared against the reference shot for shot. |
 | Body Camera v1.6.1 | Drawn. It is one of the packs that branches on the star flag in the sky, so it is worth reading [the sky goes flat](#the-sky-goes-flat) alongside. |
-| Reverie Beta v0.9 | **Loads, and nothing of it is drawn yet.** The four features it declares it cannot be drawn without are all served now, so the load no longer refuses it; its `prepare` program then fails to compile on a conditional written loosely, which the game's compiler refuses where Iris's preprocessor reads past it, and a full-screen program that does not compile takes the whole pack with it. That is a gap here and not a fault of the pack: Iris draws it. See [the pack was refused](#the-pack-was-refused). |
+| Reverie Beta v0.9 | **Loads and compiles whole, and its picture is black.** The four features it declares it cannot be drawn without are all served, its loosely written conditionals are read as the reference reads them, and every one of its full-screen passes and computes runs. What it draws is black: the textures it ships reach its geometry programs as a single pixel, and eight of its own uniforms are handed as zeros, matrices among them. That is a gap here and not a fault of the pack: Iris draws it. |
 
 Start from what you are seeing. Each symptom below names its cause, and says how to confirm it
 rather than guess.
@@ -60,7 +60,7 @@ naming them at load.
 A pack can declare the features it cannot be drawn without, and Reverie declares several. That
 line is read before any of its programs is translated, so a refusal names what the pack asked for
 and did not get, the log listing them, rather than the symptom that would have come later. Every
-name Reverie declares is served now, so it is no longer refused there; what stops it today is
+name Reverie declares is served now, so it is no longer refused there; what it still lacks is
 written in its row of the table above.
 
 **Any name this engine has not built refuses the declaration.** Five names are built and served

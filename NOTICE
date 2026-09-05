@@ -877,6 +877,20 @@ GNU Lesser General Public License version 3
   against glsl-transformer (AGPL-3.0), only the values named above are reproduced: none of that
   code is here, and the translator in dev.vitrail.glsl is this project's own.
 
+Anarres C Preprocessor (jcpp), https://github.com/shevek/jcpp
+Copyright (c) 2007-2015, Shevek
+Apache License, Version 2.0
+
+  common/src/main/java/dev/vitrail/pack/source/IncludeExpander.java reproduces what jcpp does with
+  a conditional directive a pack wrote loosely: a keyword with nothing that names a setting after
+  it leaves the group taken, tokens after a name are dropped and the name alone decides, an empty
+  expression is false, and a directive with no group open is passed over. Iris shades jcpp in as
+  org.anarres:jcpp:1.4.14 and runs it over every pack source, so a pack is written against these
+  answers rather than against Iris's own code. The same reading is given to the properties files a
+  pack ships, in common/src/main/java/dev/vitrail/pack/source/PropertiesFile.java: they carry the
+  same conditionals, and Iris runs the same preprocessor over them too. None of jcpp's code is
+  here.
+
 AMD FidelityFX Super Resolution 1.0, https://github.com/GPUOpen-Effects/FidelityFX-FSR
 Copyright (c) 2021 Advanced Micro Devices, Inc.
 MIT License

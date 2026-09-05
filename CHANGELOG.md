@@ -138,6 +138,18 @@ what the next one holds.
   no light whatever, and every night away from a torch was as dark as a new moon. The moon now
   dims through the cycle with the option on, and is a plain full moon every night with it off.
 
+- **A pack whose conditionals are written loosely draws, as it draws under Iris.** Reverie Beta
+  writes one `#ifdef` with no name after it and one with two names joined by `&&`, and Photon
+  writes an `#endif` with nothing open for it to close: none of the three is a directive GLSL will
+  take. Iris hands the compiler what its own preprocessor produced, so nothing of the sort reaches
+  a compiler there and both packs draw; here the lines went on to the compiler as the pack wrote
+  them, six of Reverie's programs and three of Photon's would not build, and one program that will
+  not build stops the whole pack with nothing of it drawn. The three shapes are now read the way
+  Iris reads them, a nameless one taking the branch it opens, a name followed by anything else
+  deciding on that name alone, and one with nothing to close being left out of the text, with the
+  file and the line said once in the log. A pack that writes its conditionals properly is
+  untouched.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed

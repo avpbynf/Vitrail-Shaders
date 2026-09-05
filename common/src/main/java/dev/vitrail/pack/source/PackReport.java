@@ -119,6 +119,11 @@ public final class PackReport {
 			Vitrail.logger().warn("{}  expansion did not come out clean, see the counters above", PREFIX);
 		}
 
+		// One line per shape and not per program, because the file it is written in is shared: the
+		// pack builds either way, and what is said is which of its own lines this engine read for it.
+		pack.looseConditionals().forEach(loose -> Vitrail.logger().warn(
+				"{}  loosely written conditional, read as the reference reads it: {}", PREFIX, loose));
+
 		logIfAny("  ignored directories", programs.skippedDirectories());
 		logIfAny("  unrecognised program names", programs.skippedNames());
 

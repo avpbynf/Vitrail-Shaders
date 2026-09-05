@@ -110,16 +110,29 @@ public final class PropertiesFile {
 			Map<String, String> defines) {
 		switch (keyword) {
 			case "ifdef", "ifndef" -> {
-				String name = line.replaceAll("^\\s*#\\s*\\w+\\s+", "").trim().split("\\s+", -1)[0];
-				conditions.ifDirective(keyword.equals("ifdef") == defines.containsKey(name));
+				Matcher name = IncludeExpander.DEFINED_NAME
+						.matcher(line.replaceFirst("^\\s*#\\s*\\w+", ""));
+				// Nothing that can name a setting after the keyword leaves the group taken, and
+				// anything written after the name is dropped. These files carry the conditionals
+				// a pack's shaders carry, so they get the same reading: one stack, one decision.
+				conditions.ifDirective(!name.matches()
+						|| keyword.equals("ifdef") == defines.containsKey(name.group(1)));
 			}
-			case "if" -> conditions.ifDirective(
-					PreprocessorExpression.evaluate(after(line), defines).orElse(true));
-			case "elif" -> conditions.elifDirective(
-					() -> PreprocessorExpression.evaluate(after(line), defines).orElse(true));
+			case "if" -> conditions.ifDirective(decide(after(line), defines));
+			case "elif" -> conditions.elifDirective(() -> decide(after(line), defines));
 			case "else" -> conditions.elseDirective();
 			default -> conditions.endifDirective();
 		}
+	}
+
+	/**
+	 * Nothing to evaluate is not the same as an expression that could not be worked out. The
+	 * reference reads the end of the line where it wanted a token and leaves the group off, where
+	 * one it cannot decide is taken so that no code goes missing.
+	 */
+	private static boolean decide(String expression, Map<String, String> defines) {
+		return !expression.isBlank()
+				&& PreprocessorExpression.evaluate(expression, defines).orElse(true);
 	}
 
 	private static String after(String line) {

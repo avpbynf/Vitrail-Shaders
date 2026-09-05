@@ -21,8 +21,22 @@ public final class ConditionStack {
 	private final Deque<Level> levels = new ArrayDeque<>();
 
 	public void ifDirective(boolean condition) {
+		push(condition, false);
+	}
+
+	/**
+	 * A conditional whose directive is written out rewritten, because what the pack wrote is not
+	 * one the compiler will read. Marked apart from the rest so that one the file never closes can
+	 * be closed where the file ends: the text carries its directives to the compiler, and what this
+	 * reader put in the text has to balance in the text.
+	 */
+	public void rewrittenIfDirective(boolean condition) {
+		push(condition, true);
+	}
+
+	private void push(boolean condition, boolean rewritten) {
 		boolean parent = active();
-		this.levels.push(new Level(parent && condition, condition, parent));
+		this.levels.push(new Level(parent && condition, condition, parent, rewritten));
 	}
 
 	/**
@@ -70,16 +84,23 @@ public final class ConditionStack {
 		return this.levels.size();
 	}
 
+	/** How many of the levels still open were opened by {@link #rewrittenIfDirective}. */
+	public int unclosedRewritten() {
+		return (int) this.levels.stream().filter(level -> level.rewritten).count();
+	}
+
 	private static final class Level {
 
 		private boolean active;
 		private boolean taken;
 		private final boolean parentActive;
+		private final boolean rewritten;
 
-		private Level(boolean active, boolean taken, boolean parentActive) {
+		private Level(boolean active, boolean taken, boolean parentActive, boolean rewritten) {
 			this.active = active;
 			this.taken = taken;
 			this.parentActive = parentActive;
+			this.rewritten = rewritten;
 		}
 	}
 }
