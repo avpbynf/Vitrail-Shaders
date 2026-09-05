@@ -1591,10 +1591,12 @@ public final class GlslTranslator {
 		// move a token, so anything a later pass still has to know about a token is carried on the
 		// token, as Token#macroName is. A position kept across here would be read against somebody
 		// else's token, and the reading pass has no way to notice.
-		closings.sort(Comparator.reverseOrder());
+		List<Closing> parentheses = new ArrayList<>(closings.size());
 		for (int at : closings) {
-			this.tokens.add(at, new Token(Kind.RAW, ")", null));
+			parentheses.add(new Closing(at, ")", null));
 		}
+
+		insertClosings(parentheses);
 	}
 
 	/**
@@ -2667,10 +2669,36 @@ public final class GlslTranslator {
 	 * nothing downstream can tell.
 	 */
 	private void insertClosings(List<Closing> closings) {
-		closings.sort(Comparator.comparingInt(Closing::at).reversed());
-		for (Closing closing : closings) {
-			this.tokens.add(closing.at(), new Token(Kind.RAW, closing.text(), closing.directive()));
+		if (closings.isEmpty()) {
+			return;
 		}
+
+		// One walk that copies the list with the closings dropped in, rather than one shift of
+		// every later token per closing: a stage carries hundreds of thousands of tokens and a
+		// few hundred closings, and the shifts were the whole cost of the pass. The order is the
+		// one the shifts produced: closings sharing a position land latest first, because each
+		// shift pushed the one inserted before it along.
+		closings.sort(Comparator.comparingInt(Closing::at));
+		List<Token> rebuilt = new ArrayList<>(this.tokens.size() + closings.size());
+		int next = 0;
+		for (int at = 0; at <= this.tokens.size(); at++) {
+			int first = next;
+			while (next < closings.size() && closings.get(next).at() == at) {
+				next++;
+			}
+
+			for (int closing = next - 1; closing >= first; closing--) {
+				Closing one = closings.get(closing);
+				rebuilt.add(new Token(Kind.RAW, one.text(), one.directive()));
+			}
+
+			if (at < this.tokens.size()) {
+				rebuilt.add(this.tokens.get(at));
+			}
+		}
+
+		this.tokens.clear();
+		this.tokens.addAll(rebuilt);
 	}
 
 	/**
