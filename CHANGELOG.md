@@ -35,6 +35,14 @@ what the next one holds.
   view reads it again as before. The picture is the same, and none of this has been measured, so
   it says work removed rather than frames gained.
 
+- **Picking a pack freezes the game for less time.** Reading a pack walked the same shader files
+  over and over, once to find its directives, once for its chain, once for its chunk programs and
+  once more for each of its compute programs, and every one of those walks read the archive again
+  and pasted the same shared headers together again. A pack is now read once per file and each of
+  its programs assembled once for as long as it stays open, which is the wait before the picture
+  appears when you choose a pack, apply a setting, or step through a portal. Nothing about the
+  picture changes.
+
 ### Added
 
 - **Eight shadow colour buffers for a pack that asks for them.** A pack declaring

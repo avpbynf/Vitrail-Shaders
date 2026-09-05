@@ -973,12 +973,14 @@ public final class PackChain {
 				// the chain's units and not the pack's, which is what parts it from the pack
 				// report's own expansion line: that walk counts every entry point the pack ships
 				// and is made once ever, this one counts what this load built and is made at each.
-				Vitrail.logger().info("Flattening the chain's units cost {} ms over {} of them, "
-						+ "the pack report's own walk not counted; translating cost {} ms over {} "
+				Vitrail.logger().info("Flattening the chain's units cost {} ms over {} of them "
+						+ "with {} more handed back by an opening that had already built them, the "
+						+ "pack report's own walk not counted; translating cost {} ms over {} "
 						+ "translator calls before the chain went live; the modules follow on the "
 						+ "draws and the workers, counted into the report that closes the warmup",
 						LoadClock.expansionMillis(), LoadClock.expanded(),
-						LoadClock.translationMillis(), LoadClock.translated());
+						LoadClock.expansionsServed(), LoadClock.translationMillis(),
+						LoadClock.translated());
 				// Both ways, whichever way it went. A cache that only speaks when it helps leaves
 				// every later reading of a log ambiguous, since a silence would then mean either
 				// that nothing was served or that nothing was asked. It rides the line above rather
@@ -3174,9 +3176,10 @@ public final class PackChain {
 				// so together they can pass the wall clock of the load; they compare with each
 				// other, not with it.
 				Vitrail.logger().info("With the families in, flattening the chain's units cost {} "
-						+ "ms over {} of them, translating cost {} ms over {} translator calls and "
-						+ "making modules cost {} ms over {} modules, shaderc and SPIRV-Cross "
-						+ "together", LoadClock.expansionMillis(), LoadClock.expanded(),
+						+ "ms over {} of them with {} more handed back, translating cost {} ms over "
+						+ "{} translator calls and making modules cost {} ms over {} modules, "
+						+ "shaderc and SPIRV-Cross together", LoadClock.expansionMillis(),
+						LoadClock.expanded(), LoadClock.expansionsServed(),
 						LoadClock.translationMillis(), LoadClock.translated(),
 						LoadClock.moduleMillis(), LoadClock.modules());
 			}

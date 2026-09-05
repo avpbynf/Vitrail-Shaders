@@ -74,7 +74,9 @@ public final class PackLoader {
 			// This walk is a diagnosis of a pack and not a step of a load: it is made the first
 			// time a pack is read and never again for the same one, so what it costs is left out
 			// of the load's clock rather than doubling a figure the log invites the two to be
-			// compared on.
+			// compared on. It leaves nothing in the opening's memo either, which is what keeps
+			// the note above true: a key here is a file of the pack and each of them comes up
+			// once, so there would be nothing to find there and every unit to hold.
 			IncludeExpander expander = IncludeExpander.forTheReport(source, settings);
 			ExpansionStats expansion = ExpansionStats.NONE;
 			int expanded = 0;

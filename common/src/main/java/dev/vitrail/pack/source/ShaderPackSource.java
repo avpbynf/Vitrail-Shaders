@@ -1,5 +1,7 @@
 package dev.vitrail.pack.source;
 
+import dev.vitrail.pack.option.SettingSet;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -72,6 +74,36 @@ public final class ShaderPackSource implements AutoCloseable {
 	// Directory listings, lower-cased, kept for the case-insensitive fallback below. Built on
 	// demand because most packs never need it.
 	private final Map<String, Map<String, Path>> listingsByDirectory = new HashMap<>();
+
+	/**
+	 * Every file this opening has already decoded, by its path under {@code shaders/}.
+	 * <p>
+	 * Held because a pack's includes are read far more often than they are opened: one entry file
+	 * pulls in the same handful of shared headers as the thirty odd others of its place, and the
+	 * place is walked once for the directives, once for the chain, once for the chunk programs and
+	 * once per compute program. Reading, decoding and splitting a header again for each of those was
+	 * the largest single cost of a warm load.
+	 * <p>
+	 * It is bounded by the pack: the widest of the corpus ships a megabyte and a half of source
+	 * across five hundred files, and everything in here dies with {@link #close()}.
+	 */
+	private final Map<String, List<String>> linesByFile = new HashMap<>();
+
+	/**
+	 * Units this opening has already flattened, by the entry file and the settings it was read
+	 * under.
+	 * <p>
+	 * The settings are compared by IDENTITY, which a {@link SettingSet} being immutable is what
+	 * makes safe: one reading of a pack resolves exactly one of them and hands it to every expander
+	 * it builds, so two readings that happened to resolve equal tables would miss this memo and
+	 * expand again, which costs time and cannot cost an answer.
+	 * <p>
+	 * Nearly free to hold beside the map above: most of a unit's lines are the very strings that map
+	 * already keeps, so what is added here is a list of references, the liveness bits, and the few
+	 * lines the expansion wrote itself, which are the settings it rewrote and the markers it leaves
+	 * where an include was not taken or could not be read.
+	 */
+	private final Map<Expansion, IncludeExpander.ExpandedUnit> expandedUnits = new HashMap<>();
 
 	private int caseInsensitiveHits;
 
@@ -271,14 +303,24 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * Decoding never throws. A pack that ships one file in the wrong encoding should lose that
 	 * file's accented comments, not fail to load; the compiler will complain later if the loss
 	 * touched something that mattered.
+	 * <p>
+	 * Read once per opening and kept, which is what {@link #linesByFile} exists for. The list handed
+	 * back is immutable and always was, so callers cannot tell a second reader from the first; a
+	 * file too big to read is not kept, and every caller of it goes on getting the refusal.
 	 */
 	public List<String> readLines(Path file) throws IOException {
+		String relative = rel(file);
+		List<String> known = this.linesByFile.get(relative);
+		if (known != null) {
+			return known;
+		}
+
 		// The largest source file in the corpus is a hundred and sixty kilobytes. Reading without
 		// a ceiling means a zip that unpacks to half a gigabyte is read whole into memory before
 		// anything downstream gets the chance to refuse it.
 		long size = Files.size(file);
 		if (size > MAX_FILE_BYTES) {
-			throw new IOException(rel(file) + " is " + size + " bytes, past the " + MAX_FILE_BYTES
+			throw new IOException(relative + " is " + size + " bytes, past the " + MAX_FILE_BYTES
 					+ " a shader source is allowed");
 		}
 
@@ -294,7 +336,23 @@ public final class ShaderPackSource implements AutoCloseable {
 
 		// Splitting on a lone carriage return as well: some pack files still carry classic Mac
 		// line endings, and treating such a file as one long line loses every directive in it.
-		return List.of(text.split("\r\n|\n|\r", -1));
+		List<String> lines = List.of(text.split("\r\n|\n|\r", -1));
+		this.linesByFile.put(relative, lines);
+
+		return lines;
+	}
+
+	/** A unit this opening has already flattened under those settings, or nothing. */
+	Optional<IncludeExpander.ExpandedUnit> expandedUnit(SettingSet settings, String entry) {
+		return Optional.ofNullable(this.expandedUnits.get(new Expansion(settings, entry)));
+	}
+
+	/** Kept for the next reading of this opening. A unit that threw never reaches here. */
+	void rememberUnit(SettingSet settings, String entry, IncludeExpander.ExpandedUnit unit) {
+		this.expandedUnits.put(new Expansion(settings, entry), unit);
+	}
+
+	private record Expansion(SettingSet settings, String entry) {
 	}
 
 	/** Resolves a path written with a leading slash, which means relative to {@code shaders/}. */
@@ -452,8 +510,16 @@ public final class ShaderPackSource implements AutoCloseable {
 		return Files.readAllBytes(file);
 	}
 
+	/**
+	 * Lets the two memos go as well as the archive, which is what makes an opening the bound on
+	 * what they hold: a directory pack owns no filesystem at all, so without these two lines
+	 * closing one would free nothing, and an opening a caller keeps in a field past its own use
+	 * would carry a pack's worth of text for as long as it lived.
+	 */
 	@Override
 	public void close() throws IOException {
+		this.linesByFile.clear();
+		this.expandedUnits.clear();
 		if (this.ownedFileSystem != null) {
 			this.ownedFileSystem.close();
 		}
