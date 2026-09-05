@@ -404,6 +404,10 @@ public final class GlslTranslator {
 	private final boolean coverage;
 	private final List<Token> tokens;
 
+	/** The parameter list {@link #functionEnd} last answered for, and its answer. */
+	private int functionEndFor = -1;
+	private int functionEndAt;
+
 	/** Names the pack defines as macros. Their uses belong to the preprocessor, not to us. */
 	private final Set<String> packMacros = new HashSet<>();
 
@@ -2672,6 +2676,8 @@ public final class GlslTranslator {
 		if (closings.isEmpty()) {
 			return;
 		}
+
+		this.functionEndFor = -1;
 
 		// One walk that copies the list with the closings dropped in, rather than one shift of
 		// every later token per closing: a stage carries hundreds of thousands of tokens and a
@@ -5166,6 +5172,21 @@ public final class GlslTranslator {
 	 * body, or the parenthesis itself when the function is only declared.
 	 */
 	private int functionEnd(int parameters) {
+		// Asked once per parameter of a list and answered once per list: the walk to the
+		// function's closing brace is the same for every parameter, and every helper that
+		// touches a token forgets this first.
+		if (parameters == this.functionEndFor) {
+			return this.functionEndAt;
+		}
+
+		int end = walkFunctionEnd(parameters);
+		this.functionEndFor = parameters;
+		this.functionEndAt = end;
+
+		return end;
+	}
+
+	private int walkFunctionEnd(int parameters) {
 		int close = matchingBracket(parameters);
 		int brace = close < 0 ? -1 : significantAfter(close);
 		if (brace < 0 || !this.tokens.get(brace).operator("{")) {
@@ -5999,15 +6020,18 @@ public final class GlslTranslator {
 
 
 	private void replace(int index, String text) {
+		this.functionEndFor = -1;
 		this.tokens.set(index, this.tokens.get(index).as(text));
 	}
 
 	/** Replaces a token with text of our own, which no later pass will match again. */
 	private void inject(int index, String text) {
+		this.functionEndFor = -1;
 		this.tokens.set(index, new Token(Kind.RAW, text, this.tokens.get(index).directive()));
 	}
 
 	private void blank(int index) {
+		this.functionEndFor = -1;
 		if (index >= 0) {
 			this.tokens.set(index, Token.BLANK);
 		}
@@ -6015,6 +6039,7 @@ public final class GlslTranslator {
 
 	/** Empties a range but keeps its line breaks, so error messages still point at the right line. */
 	private void blankRange(int start, int end) {
+		this.functionEndFor = -1;
 		for (int index = start; index <= end; index++) {
 			Token token = this.tokens.get(index);
 			if (token.kind() == Kind.NEWLINE) {
@@ -6032,6 +6057,7 @@ public final class GlslTranslator {
 	}
 
 	private void blankDirective(int hash) {
+		this.functionEndFor = -1;
 		for (int index = hash; index < this.tokens.size(); index++) {
 			if (this.tokens.get(index).kind() == Kind.NEWLINE) {
 				return;
