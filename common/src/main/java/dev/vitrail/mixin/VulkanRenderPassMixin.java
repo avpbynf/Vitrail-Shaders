@@ -2,6 +2,7 @@ package dev.vitrail.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanRenderPass;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
@@ -14,9 +15,11 @@ import org.lwjgl.vulkan.VkDescriptorImageInfo;
 import org.lwjgl.vulkan.VkWriteDescriptorSet;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Pushes a storage-image descriptor, a 3D sampled view, and a storage-buffer descriptor for
@@ -35,6 +38,13 @@ public abstract class VulkanRenderPassMixin {
 
 	@Shadow
 	protected VulkanRenderPipeline pipeline;
+
+	/** The pipeline the set below answers for, so that the set is asked once per pipeline. */
+	@Unique
+	private RenderPipeline vitrail$comparedFor;
+
+	@Unique
+	private Set<String> vitrail$compared = Set.of();
 
 	@WrapOperation(method = "pushDescriptors", require = 1,
 			at = @At(value = "INVOKE", target = "Ljava/util/List;get(I)Ljava/lang/Object;", ordinal = 0))
@@ -76,8 +86,7 @@ public abstract class VulkanRenderPassMixin {
 			// game's own pays a volatile read here and nothing else. Once one has been, the flag
 			// stays up for the session and the per-name lookup is the price of having the road.
 			VulkanBindGroupLayout.Entry entry = pushed.entry();
-			if (entry != null && this.pipeline != null
-					&& ShadowCompare.compared(this.pipeline.info(), entry.name())) {
+			if (entry != null && this.pipeline != null && vitrail$compared().contains(entry.name())) {
 				sampler = ShadowCompare.sampler(this.pipeline.device());
 			}
 		}
@@ -130,5 +139,16 @@ public abstract class VulkanRenderPassMixin {
 		}
 
 		return original.call(set, type);
+	}
+
+	@Unique
+	private Set<String> vitrail$compared() {
+		RenderPipeline info = this.pipeline.info();
+		if (info != this.vitrail$comparedFor) {
+			this.vitrail$comparedFor = info;
+			this.vitrail$compared = ShadowCompare.compared(info);
+		}
+
+		return this.vitrail$compared;
 	}
 }
