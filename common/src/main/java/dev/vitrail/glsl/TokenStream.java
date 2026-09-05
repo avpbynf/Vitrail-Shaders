@@ -19,8 +19,9 @@ import java.util.List;
  * through the methods below or not at all, and cannot leave it in a shape they would misread.
  * <p>
  * Two answers are kept between calls instead of being worked out again, where a function ends and
- * which line each token is on, and they belong here for the same reason: what makes either stale is
- * this class's own {@link #insertClosings}, and nothing else in the rewrite moves a token at all.
+ * which line each token is on, and they belong here for the same reason: only an edit made
+ * through this class can make either stale, and every edit goes through {@link #set} or
+ * {@link #insertClosings}, which is where each answer is dropped.
  */
 final class TokenStream implements Iterable<Token> {
 
@@ -68,7 +69,7 @@ final class TokenStream implements Iterable<Token> {
 	 * a token from outside. Everything else the passes leave behind is a rewrite of its text.
 	 */
 	void naming(int index) {
-		this.tokens.set(index, this.tokens.get(index).naming());
+		set(index, this.tokens.get(index).naming());
 	}
 
 	/** One closing the wrap owes, put in once the scan that found it has finished reading. */
@@ -122,51 +123,80 @@ final class TokenStream implements Iterable<Token> {
 	}
 
 	void replace(int index, String text) {
-		this.functionEndFor = -1;
-		this.tokens.set(index, this.tokens.get(index).as(text));
+		set(index, this.tokens.get(index).as(text));
 	}
 
 	/** Replaces a token with text of our own, which no later pass will match again. */
 	void inject(int index, String text) {
-		this.functionEndFor = -1;
-		this.tokens.set(index, new Token(Kind.RAW, text, this.tokens.get(index).directive()));
+		set(index, new Token(Kind.RAW, text, this.tokens.get(index).directive()));
 	}
 
 	void blank(int index) {
-		this.functionEndFor = -1;
 		if (index >= 0) {
-			this.tokens.set(index, Token.BLANK);
+			set(index, Token.BLANK);
 		}
 	}
 
 	/** Empties a range but keeps its line breaks, so error messages still point at the right line. */
 	void blankRange(int start, int end) {
-		this.functionEndFor = -1;
 		for (int index = start; index <= end; index++) {
-			Token token = this.tokens.get(index);
-			if (token.kind() == Kind.NEWLINE) {
-				continue;
+			if (this.tokens.get(index).kind() != Kind.NEWLINE) {
+				set(index, blanked(this.tokens.get(index)));
 			}
-
-			// A comment or a spliced line carries its breaks inside one token, and they are kept
-			// as well: the passes that ask which line a name is on take their numbers once and
-			// read them after blanking, so a break lost here moves every name after it.
-			long breaks = token.text().chars().filter(c -> c == '\n').count();
-			this.tokens.set(index, breaks == 0
-					? Token.BLANK
-					: new Token(Kind.SPACE, "\n".repeat((int) breaks), token.directive()));
 		}
 	}
 
+	/** Empties a directive from its hash to the end of its line, spliced lines kept as breaks. */
 	void blankDirective(int hash) {
-		this.functionEndFor = -1;
 		for (int index = hash; index < this.tokens.size(); index++) {
 			if (this.tokens.get(index).kind() == Kind.NEWLINE) {
 				return;
 			}
 
-			this.tokens.set(index, Token.BLANK);
+			set(index, blanked(this.tokens.get(index)));
 		}
+	}
+
+	/**
+	 * A token emptied of everything but its line breaks. A comment or a spliced line carries its
+	 * breaks inside one token, and they are kept: the passes that ask which line a name is on
+	 * take their numbers once and read them after blanking, so a break lost here would move every
+	 * name after it, and the table {@link #lineNumbers} keeps would be right about a text that no
+	 * longer exists.
+	 */
+	private static Token blanked(Token token) {
+		int breaks = breaks(token.text());
+
+		return breaks == 0
+				? Token.BLANK
+				: new Token(Kind.SPACE, "\n".repeat(breaks), token.directive());
+	}
+
+	/**
+	 * Puts one token in place of another, which is the one way a token changes short of
+	 * {@link #insertClosings}. The function end is forgotten every time, since a brace may have
+	 * gone or come. The line table is kept unless the count of breaks moved: no caller hands in a
+	 * text with a break in it, and none takes a token that had one, but the rule is kept here
+	 * and not by every caller remembering it.
+	 */
+	private void set(int index, Token token) {
+		this.functionEndFor = -1;
+		if (breaks(this.tokens.get(index).text()) != breaks(token.text())) {
+			this.lineTable = null;
+		}
+
+		this.tokens.set(index, token);
+	}
+
+	private static int breaks(String text) {
+		int breaks = 0;
+		for (int at = 0; at < text.length(); at++) {
+			if (text.charAt(at) == '\n') {
+				breaks++;
+			}
+		}
+
+		return breaks;
 	}
 
 	/**
@@ -244,12 +274,13 @@ final class TokenStream implements Iterable<Token> {
 	/**
 	 * Which line of the expanded unit each token sits on.
 	 * <p>
-	 * Kept between calls, which a stage makes twenty three times, and thrown away by
-	 * {@link #insertClosings}, the one pass that moves a token. Nothing else can make it stale:
-	 * every other method here leaves the line breaks where they were, which {@link #blankRange}
-	 * goes out of its way to do. That is not this table's rule either, it is the unit's: a break
-	 * lost anywhere would move every line after it away from the one the expander is asked about,
-	 * and no pass would have a way to notice.
+	 * Kept between calls, which the passes make many times over a stage, some of them once per
+	 * name, and thrown away by {@link #insertClosings}, the one pass that moves a token, and by
+	 * any edit that changes how many breaks a token holds, which none does today. Every other
+	 * edit leaves the line breaks where they were, which the blanking goes out of its way to do.
+	 * That is not this table's rule either, it is the unit's: a break lost anywhere would move
+	 * every line after it away from the one the expander is asked about, and no pass would have
+	 * a way to notice.
 	 */
 	int[] lineNumbers() {
 		if (this.lineTable != null) {
@@ -261,12 +292,7 @@ final class TokenStream implements Iterable<Token> {
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			lines[index] = line;
-			String text = this.tokens.get(index).text();
-			for (int at = 0; at < text.length(); at++) {
-				if (text.charAt(at) == '\n') {
-					line++;
-				}
-			}
+			line += breaks(this.tokens.get(index).text());
 		}
 
 		this.lineTable = lines;
@@ -319,8 +345,8 @@ final class TokenStream implements Iterable<Token> {
 	 */
 	int functionEnd(int parameters) {
 		// Asked once per parameter of a list and answered once per list: the walk to the
-		// function's closing brace is the same for every parameter, and every helper that
-		// touches a token forgets this first.
+		// function's closing brace is the same for every parameter, and every edit of a token
+		// forgets this first.
 		if (parameters == this.functionEndFor) {
 			return this.functionEndAt;
 		}
