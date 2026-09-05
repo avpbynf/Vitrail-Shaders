@@ -966,11 +966,18 @@ public final class PackChain {
 						ShaderPackSource.openings() - openings);
 				// Once per installed chain, whatever else this load does or fails to do later:
 				// the second report, with the families in, only exists when a warmup fans out.
-				// Translation only, because this method does no device work by design: the
-				// modules follow on the first draws and the workers, and land in the next report.
-				Vitrail.logger().info("Translating cost {} ms over {} translator calls before "
-						+ "the chain went live; the modules follow on the draws and the workers, "
-						+ "counted into the report that closes the warmup",
+				// Flattening and translating only, because this method does no device work by
+				// design: the modules follow on the first draws and the workers, and land in the
+				// next report. The flattening is said first because it is paid first, and because
+				// it is what a load whose translations all come off disk is left with. It names
+				// the chain's units and not the pack's, which is what parts it from the pack
+				// report's own expansion line: that walk counts every entry point the pack ships
+				// and is made once ever, this one counts what this load built and is made at each.
+				Vitrail.logger().info("Flattening the chain's units cost {} ms over {} of them, "
+						+ "the pack report's own walk not counted; translating cost {} ms over {} "
+						+ "translator calls before the chain went live; the modules follow on the "
+						+ "draws and the workers, counted into the report that closes the warmup",
+						LoadClock.expansionMillis(), LoadClock.expanded(),
 						LoadClock.translationMillis(), LoadClock.translated());
 				// Both ways, whichever way it went. A cache that only speaks when it helps leaves
 				// every later reading of a log ambiguous, since a silence would then mean either
@@ -3166,10 +3173,12 @@ public final class PackChain {
 				// Beside the total it explains. The spans are summed per program across workers,
 				// so together they can pass the wall clock of the load; they compare with each
 				// other, not with it.
-				Vitrail.logger().info("With the families in, translating cost {} ms over {} "
-						+ "translator calls and making modules cost {} ms over {} modules, "
-						+ "shaderc and SPIRV-Cross together", LoadClock.translationMillis(),
-						LoadClock.translated(), LoadClock.moduleMillis(), LoadClock.modules());
+				Vitrail.logger().info("With the families in, flattening the chain's units cost {} "
+						+ "ms over {} of them, translating cost {} ms over {} translator calls and "
+						+ "making modules cost {} ms over {} modules, shaderc and SPIRV-Cross "
+						+ "together", LoadClock.expansionMillis(), LoadClock.expanded(),
+						LoadClock.translationMillis(), LoadClock.translated(),
+						LoadClock.moduleMillis(), LoadClock.modules());
 			}
 
 			return (Void) null;
