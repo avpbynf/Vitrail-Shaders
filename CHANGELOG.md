@@ -49,6 +49,14 @@ what the next one holds.
   they are, in the terrain and in the shadow map alike, as they do under Iris, and they say it even
   where the pack gave the fluid no number of its own.
 
+- **A pack is told what convention a resource pack draws its material maps in**, as Iris tells it.
+  `MC_TEXTURE_FORMAT_LAB_PBR`, and the revision beside it, are what a pack written against them
+  branches its labPBR decode on, and neither was ever posed here: such a pack read every install as
+  one where nothing had been declared. Both are posed now, from what `optifine/texture.properties`
+  names, and only where a resource pack really declares the format. Changing the resource packs
+  reads the shader pack again when that changes what is declared, since the symbols decide which
+  branch was compiled.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed

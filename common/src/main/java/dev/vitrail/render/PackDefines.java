@@ -38,9 +38,10 @@ import java.util.Objects;
  * at {@code :249}). At startup there are none, so the first read of a session still has to be
  * made again when a world arrives, and {@link #stale()}'s registry stamp is what notices that.
  * <p>
- * Distant Horizons is the one thing here a player can change without leaving the world, from that
- * mod's own screen, so {@link #stale()} watches it beside the registry rather than trusting what
- * was true when the pack was read.
+ * Two of these move without the world moving, so {@link #stale()} watches them beside the registry
+ * rather than trusting what was true when the pack was read: Distant Horizons, which the player
+ * switches from that mod's own screen, and the material convention a resource pack declares, which
+ * a resource reload replaces.
  */
 public final class PackDefines {
 
@@ -49,6 +50,9 @@ public final class PackDefines {
 
 	/** And whether the far terrain was there, which the player can change without leaving. */
 	private static volatile boolean distant;
+
+	/** And what the resource packs declared their material maps in, which a reload replaces. */
+	private static volatile EngineDefines.TextureFormat format;
 
 	private PackDefines() {
 	}
@@ -74,6 +78,7 @@ public final class PackDefines {
 	public static void settle() {
 		installed = stamp();
 		distant = DhDepth.present();
+		format = PbrAtlases.format();
 	}
 
 	/**
@@ -81,7 +86,26 @@ public final class PackDefines {
 	 * the one reload nobody can ask for.
 	 */
 	public static boolean stale() {
-		return stamp() != installed || distantHorizonsMoved();
+		return stamp() != installed || distantHorizonsMoved() || textureFormatMoved();
+	}
+
+	/**
+	 * Whether the resource packs now declare a different material convention from the one the pack
+	 * was read against, which is what {@code MC_TEXTURE_FORMAT_LAB_PBR} and its version are posed
+	 * from. Iris asks the same question and answers it the same way, reloading the whole pipeline
+	 * on the difference ({@code pbr/format/TextureFormatLoader.java:28-32}).
+	 * <p>
+	 * It earns its keep at the first read of a NeoForge session as much as at a reload the player
+	 * asks for: client setup runs on a mod loading worker there, before the initial resource reload
+	 * exists, so no atlas has been stitched and the answer is nothing whatever the resource packs
+	 * hold. The stitch that follows is what makes it right.
+	 * <p>
+	 * The value is the one the last stitch read rather than the file, and the stitch keeps the
+	 * record it already holds where the declaration has not changed, so this costs a reference
+	 * comparison per frame and no lookup.
+	 */
+	public static boolean textureFormatMoved() {
+		return !Objects.equals(PbrAtlases.format(), format);
 	}
 
 	/**
@@ -127,8 +151,11 @@ public final class PackDefines {
 		// of the loader's mod list. An installed Distant Horizons this engine cannot get a depth
 		// image or a projection out, or whose own rendering is switched off, leaves the far terrain
 		// flat, and a pack told otherwise would light a picture that has none.
+		// The material convention comes from the last stitch rather than from the file, which is the
+		// same answer the reduction and the sampler already run on: a pack told one thing and a
+		// specular map reduced under another would be two conventions in one picture.
 		return new EngineDefines.Environment(EngineDefines.DEFAULT_MC_VERSION, os(), vendor,
-				renderer, mipmap, DhDepth.present(), biomeIds(), categories());
+				renderer, mipmap, DhDepth.present(), biomeIds(), categories(), PbrAtlases.format());
 	}
 
 	private static Map<String, Integer> biomeIds() {
