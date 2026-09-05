@@ -2380,8 +2380,7 @@ public final class PackChain {
 				// render pass: a dispatch is a command of its own, and the barriers around it are
 				// what let the pass sample what the compute stored.
 				this.compute.dispatchBefore(pass.program(), encoder, device, this.values,
-						this.targets, this.chain.targets().schedule().step(pass.program())
-								.orElse(null), depth, distant, ready.main().width,
+						this.targets, pass.step(), depth, distant, ready.main().width,
 						ready.main().height);
 				this.currentChains.clear();
 			}
