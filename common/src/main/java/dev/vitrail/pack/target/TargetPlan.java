@@ -305,19 +305,25 @@ public final class TargetPlan {
 			List<Integer> writes = writesOf(name, ProgramNames.shadowGeometry(family), draft);
 			draft.effective.put(name, writes);
 
+			// The key is the path the pack wrote and only that. BSL conditions world0/composite1
+			// and world-1/composite1 on two different expressions, so falling back to the bare
+			// name would run in the Nether a pass the pack switched off there.
+			//
+			// Read before the geometry leaves the walk, and it used to be read after: a pack
+			// switches off a shadow or a gbuffers program the same way it switches off a
+			// composite, and this walk answered the switch for one family and not the other. What
+			// draws instead is settled where the programs are resolved, which reads the same
+			// answer and lets the fallback tree carry on past the name.
+			String path = draft.place.isEmpty() ? name : draft.place + "/" + name;
+			if (Boolean.FALSE.equals(toggles.get(path))) {
+				draft.disabled.put(name, conditions.getOrDefault(path, "shaders.properties"));
+				continue;
+			}
+
 			// A geometry pass writes the half it reads and flips nothing, so keeping it in the walk
 			// costs nothing and holds the side the gbuffers programs read, six families of which run.
 			if (!fullscreen) {
 				steps.add(new TargetSchedule.Step(name, writes, false));
-				continue;
-			}
-
-			// The key is the path the pack wrote and only that. BSL conditions world0/composite1
-			// and world-1/composite1 on two different expressions, so falling back to the bare
-			// name would run in the Nether a pass the pack switched off there.
-			String path = draft.place.isEmpty() ? name : draft.place + "/" + name;
-			if (Boolean.FALSE.equals(toggles.get(path))) {
-				draft.disabled.put(name, conditions.getOrDefault(path, "shaders.properties"));
 				continue;
 			}
 
@@ -589,10 +595,15 @@ public final class TargetPlan {
 	}
 
 	/**
-	 * Full screen programs this place ships and does not run, by bare name, with the reason. The
-	 * reason is the pack's own expression when the pack switched it off, {@code MOTION_BLUR} or
-	 * {@code false}, and {@link #LEFT_OUT} when {@code passes=} did, so a log can tell the two
-	 * apart by printing {@code name (reason)}.
+	 * Programs this place ships and does not run, by bare name, with the reason. The reason is the
+	 * pack's own expression when the pack switched it off, {@code MOTION_BLUR} or {@code false},
+	 * and {@link #LEFT_OUT} when {@code passes=} did, so a log can tell the two apart by printing
+	 * {@code name (reason)}.
+	 * <p>
+	 * Geometry is in here as well as the full screen passes, and what that means for the two is
+	 * not the same thing. A full screen pass switched off does not run at all. A geometry program
+	 * switched off is not drawn under its own name, and what draws instead is whatever the
+	 * fallback tree offers next, which is settled where the programs are resolved and not here.
 	 */
 	public Map<String, String> disabled() {
 		return this.disabled;
@@ -782,7 +793,7 @@ public final class TargetPlan {
 		// In frame order rather than sorted, so that the line reads the way the chain runs, and
 		// each one carries what switched it off: the pack's own expression, or the filter.
 		if (!draft.disabled.isEmpty()) {
-			notes.add("full screen programs this place ships and does not run: "
+			notes.add("programs this place ships and does not run: "
 					+ draft.disabled.entrySet().stream()
 							.map(entry -> entry.getKey() + " (" + entry.getValue() + ")")
 							.collect(Collectors.joining(", ")));
