@@ -182,7 +182,7 @@ public final class EngineDefines {
 
 		// The block emission attribute is served: the chunk element carries the block's own light
 		// in the fourth component of at_midBlock, on the terrain and in the shadow map alike
-		// (SodiumVertex.MID_BLOCK). Iris poses the flag whatever the hardware
+		// (SodiumVertex.MID_BLOCK). Iris holds the flag usable whatever the hardware
 		// (features/FeatureFlags.java:20), and packs decide more than a vertex read on it:
 		// Complementary sizes its two reflection targets under it, Bliss writes its voxel
 		// emission under it.
@@ -193,9 +193,31 @@ public final class EngineDefines {
 		// whatever the hardware, features/FeatureFlags.java:12.
 		defines.put("IRIS_FEATURE_SEPARATE_HARDWARE_SAMPLERS", "");
 
-		// The rest of IRIS_FEATURE_ stays unposted until each capability is served. See
-		// ShaderProperties.optionalFeatures for the other half of the answer, and PackChain for
-		// what a pack requiring one is told.
+		// The eight shadow colour buffers are served: a pack that declares HIGHER_SHADOWCOLOR may
+		// name shadowcolor0 to shadowcolor7, and render/ShadowTargets allocates the ones some
+		// program of the place writes or samples. Iris holds the flag usable whatever the hardware
+		// (features/FeatureFlags.java:13) and reads it in one place only, the size of its shadow
+		// colour array (shadows/ShadowRenderTargets.java:46). This define does not raise that
+		// ceiling and must not be read as though it did: what sizes it is the pack's own
+		// iris.features line, TargetPlan.shadowCeiling here.
+		defines.put("IRIS_FEATURE_HIGHER_SHADOWCOLOR", "");
+
+		// Storage blocks are served: a bufferObject directive is read and its buffer allocated
+		// (render/StorageBuffers), and a block a program declares is bound as a storage descriptor
+		// rather than a uniform one (mixin/VulkanBindGroupLayoutMixin). Iris holds the flag usable
+		// only where the driver has them (features/FeatureFlags.java:22,
+		// IrisRenderSystem.supportsSSBO). Vulkan has them everywhere, so the condition has nothing
+		// left to test.
+		defines.put("IRIS_FEATURE_SSBO", "");
+
+		// The rest of IRIS_FEATURE_ stays unposted until each capability is served, and each of the
+		// five above is posed for every pack. That is a divergence: Iris poses IRIS_FEATURE_X only
+		// where the pack itself listed X under iris.features.optional
+		// (shaderpack/ShaderPack.java:247-251), its all-usable list serving the evaluation of
+		// shaders.properties and nothing in the GLSL (lines 171-175). The two differ only for a
+		// pack that reads a symbol it never declared, and closing it is a lot of its own. See
+		// ShaderProperties.declares for the declaration itself, and PackChain for what a pack
+		// requiring one of these names is told.
 
 		// Straight off the enum the engine sets, so that the number a pack compares against and the
 		// number the block carries cannot part company. The value IS the ordinal.

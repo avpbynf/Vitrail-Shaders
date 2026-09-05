@@ -21,7 +21,7 @@ quietly stale.
 | Mellow v3.3 | Drawn, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. |
 | Photon v1.3b | Drawn, at default settings. It exercises a clamped volume of half floats as its atmosphere table, reads its volumes through macros standing for the sampler's name, and lays a volume over the name of a colour target that the same stage also reads as a plain `sampler2D`. Not yet compared against the reference shot for shot. |
 | Body Camera v1.6.1 | Drawn. It is one of the packs that branches on the star flag in the sky, so it is worth reading [the sky goes flat](#the-sky-goes-flat) alongside. |
-| Reverie Beta v0.9 | **Refused at load, and the log names what it asked for.** It declares four features it cannot be drawn without, and this engine has built one of them, so it refuses the pack on the other three rather than half drawing it. That is a gap here and not a fault of the pack: Iris draws it. See [the pack was refused](#the-pack-was-refused). |
+| Reverie Beta v0.9 | **Loads, and nothing of it is drawn yet.** The four features it declares it cannot be drawn without are all served now, so the load no longer refuses it; its `prepare` program then fails to compile on a conditional written loosely, which the game's compiler refuses where Iris's preprocessor reads past it, and a full-screen program that does not compile takes the whole pack with it. That is a gap here and not a fault of the pack: Iris draws it. See [the pack was refused](#the-pack-was-refused). |
 
 Start from what you are seeing. Each symptom below names its cause, and says how to confirm it
 rather than guess.
@@ -53,24 +53,26 @@ The engine refuses a pack rather than drawing something wrong with it, and it na
 compiler closes several of them by name, not by missing effort here, and
 [translation](translation.md) carries which. Storage images, storage buffers and a pack's shadow
 compute are no longer on that list: they are served beside that compiler rather than through it,
-which is what `IRIS_FEATURE_CUSTOM_IMAGES` announces and why voxel lighting draws. The full-screen
-shadow composites are a different family and are still skipped, the log naming them at load.
+which is what `IRIS_FEATURE_CUSTOM_IMAGES` and `IRIS_FEATURE_SSBO` announce and why voxel lighting
+draws. The full-screen shadow composites are a different family and are still skipped, the log
+naming them at load.
 
-Of the packs used for testing, Reverie is the one in that position, and it says so itself. A pack
-can declare the features it cannot be drawn without, and Reverie declares several. That line is read
-before any of its programs is translated, so the refusal names what the pack asked for and did not
-get, the log listing them, rather than the symptom that would have come later.
+A pack can declare the features it cannot be drawn without, and Reverie declares several. That
+line is read before any of its programs is translated, so a refusal names what the pack asked for
+and did not get, the log listing them, rather than the symptom that would have come later. Every
+name Reverie declares is served now, so it is no longer refused there; what stops it today is
+written in its row of the table above.
 
-**Any name this engine has not built refuses the declaration.** Three names are built and served
-today, `BLOCK_EMISSION_ATTRIBUTE`, `CUSTOM_IMAGES` and `SEPARATE_HARDWARE_SAMPLERS`, so a pack
-that requires those alone loads; every other name still refuses the pack, with the list in the
-log. The served flags are also the only `IRIS_FEATURE_` defines a pack finds: a capability define
-is a promise, so each appears the day its feature is served and not before, and the optional
-declarations keep reading the truth.
+**Any name this engine has not built refuses the declaration.** Five names are built and served
+today, `BLOCK_EMISSION_ATTRIBUTE`, `CUSTOM_IMAGES`, `HIGHER_SHADOWCOLOR`,
+`SEPARATE_HARDWARE_SAMPLERS` and `SSBO`, so a pack that requires those alone loads, and every
+other name still refuses the pack, with the list in the log. The served flags are also the only
+`IRIS_FEATURE_` defines a pack finds: a capability define is a promise, so each appears the day
+its feature is served and not before, and the optional declarations keep reading the truth.
 
-Iris draws Reverie. It refuses a required flag only when the name is unknown to it or the hardware
-cannot serve it, and it has built every one of the ones Reverie asks for: some outright, some
-wherever the driver supports them.
+Iris refuses a required flag only when the name is unknown to it or the hardware cannot serve
+it, and it has built every one of the ones Reverie asks for: some outright, some wherever the
+driver supports them.
 
 **A full-screen pass that fails to compile takes the whole pack with it**, and the log names the
 program. One shape of that was a `const` whose initialiser Vulkan will not take as a constant,
@@ -99,14 +101,14 @@ The image dims and a red message of the pack's own says the feature you turned o
 and asks you to switch to Iris. This is not the engine refusing anything: the pack is running, the
 message is one of its passes, and it is drawn because a capability test in its code came out false.
 
-The test reads capability defines. This engine announces itself the way Iris does, but a
-capability define is a promise, so it defines only what the backend actually serves, which today
-is `IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE`, `IRIS_FEATURE_CUSTOM_IMAGES` and
-`IRIS_FEATURE_SEPARATE_HARDWARE_SAMPLERS` and nothing else; the section above says why the
-features behind the other names are closed. A pack that finds the announcement without the
-capability it wants concludes it is running on OptiFine, the only renderer in that position when
-the pack was written, and words its message for it. Read "OptiFine" as "not Iris" and the message
-is accurate.
+The test reads capability defines. This engine announces itself the way Iris does, but a capability
+define is a promise, so it defines only what the backend actually serves, which today is
+`IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE`, `IRIS_FEATURE_CUSTOM_IMAGES`,
+`IRIS_FEATURE_HIGHER_SHADOWCOLOR`, `IRIS_FEATURE_SEPARATE_HARDWARE_SAMPLERS` and
+`IRIS_FEATURE_SSBO` and nothing else. The section above says why the features behind the other
+names are closed. A pack that finds the announcement without the capability it wants concludes it
+is running on OptiFine, the only renderer in that position when the pack was written, and words
+its message for it. Read "OptiFine" as "not Iris" and the message is accurate.
 
 Complementary was the pack of the test set that did this, and it is why the define exists. Its
 colored lighting, which its two top profiles Very High and Ultra turn on, is voxel lighting:
