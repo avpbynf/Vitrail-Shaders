@@ -1,7 +1,6 @@
 package dev.vitrail.pack.source;
 
 import dev.vitrail.pack.option.EngineDefines;
-import dev.vitrail.pack.target.TargetPlan;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -156,8 +155,8 @@ public final class DimensionSet {
 	 * The root is the answer for a world the pack says nothing about and has no catch-all for. A
 	 * folder named here answers for itself when it is on disk, whatever it holds, an empty one
 	 * drawing nothing rather than falling back; named and absent, the root answers instead. Which
-	 * of the two it is, {@link TargetPlan} decides off the directory's existence and never off its
-	 * contents: a name here is where to look, not what is there.
+	 * of the two it is, {@link dev.vitrail.pack.target.TargetPlan} decides off the directory's
+	 * existence and never off its contents: a name here is where to look, not what is there.
 	 *
 	 * @param world the dimension's identifier, {@code minecraft:the_nether}
 	 */
