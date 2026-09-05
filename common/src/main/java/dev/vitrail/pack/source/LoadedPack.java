@@ -4,6 +4,7 @@ import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.program.ProgramResolver;
 import dev.vitrail.pack.program.ProgramSet;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -16,5 +17,6 @@ import java.util.Set;
 public record LoadedPack(String packName, boolean fromZip, DimensionSet dimensions,
 		ShaderProperties properties, OptionIndex options, ProgramSet programs,
 		ProgramResolver resolved, PackStats stats, ExpansionStats expansion, int expandedUnits,
-		Set<String> disabledPrograms, int caseInsensitiveHits, long loadMillis) {
+		List<String> looseConditionals, Set<String> disabledPrograms, int caseInsensitiveHits,
+		long loadMillis) {
 }
