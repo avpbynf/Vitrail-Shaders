@@ -31,6 +31,7 @@ import dev.vitrail.screen.ScreenText;
 import dev.vitrail.HostReport;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -1562,7 +1563,38 @@ public final class PackChain {
 		disabled = false;
 
 		if (previous != null) {
-			previous.release();
+			// Guarded like the same call in leaveWorld, and the three lines below are why this road
+			// needs it more than that one: the load and both settle() calls stand after it, and a
+			// throw leaving here skips all three, which leaves a session drawing no pack at all with
+			// the reload still asked for. Where the throw goes then depends on which caller asked.
+			// The world moving under the pack reaches this from the first line of draw(), which
+			// stands outside its try; the settings screen, the pack key and the shadow map scale
+			// reach it from their own event, outside any frame. None of the four is under a catch.
+			//
+			// Nothing is disabled here, where leaveWorld's catch disables: that one keeps the chain
+			// it failed to free and has to stop it being drawn, while this one has already dropped
+			// its chain and is about to read a pack the failure says nothing about.
+			try {
+				previous.release();
+			} catch (GpuDeviceLossException e) {
+				// The one thing a failed free can raise that is not about the free. The game's
+				// Vulkan backend raises it wherever a call comes back VK_ERROR_DEVICE_LOST
+				// (VulkanUtils.crashIfFailure) and catches it in no place at all, which is what
+				// makes it the end of the session rather than the end of a release: the load below
+				// would allocate its targets against a device that is gone. Rethrown as it stands,
+				// so the report names the driver rather than a line about video memory.
+				throw e;
+			} catch (RuntimeException e) {
+				// Said here rather than left to whatever comes next, and said once: the chain is
+				// unreachable by the time this is caught, so nothing frees the rest of it later and
+				// no other line would ever name what it still holds. What it holds is buffers and
+				// images; the pipelines and shader modules of that load are not part of it, since
+				// the next resource reload empties the device cache whether a release reached them
+				// or not.
+				Vitrail.logger().error("Vitrail could not hand back everything the pack being "
+						+ "replaced held, so the buffers and images its release had not reached "
+						+ "stay allocated until the game is closed", e);
+			}
 		}
 		load(gameDirectory);
 		// Taken whatever the load did with them. A pack that cannot be read at all settled nothing,
