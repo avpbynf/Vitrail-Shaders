@@ -130,9 +130,11 @@ import java.util.stream.Stream;
  * moves it off the game's late call and submits it twice, and both submissions are
  * drawn by feature renderers with the pipelines of the table below, so a hand draw is indexed here
  * like a mob's. What tells it apart is the moment and not the draw, exactly as it is for a block
- * entity, and {@link #element} asks about it FIRST for the reason Iris does
- * ({@code pipeline/IrisPipelines.java:191-218}): a pipeline that would answer with the block or the
- * entity program answers with a hand program while a hand pass is up, whatever else is true of it.
+ * entity, and {@link #element} asks about it AHEAD of the block entity mark for the reason Iris
+ * does ({@code pipeline/IrisPipelines.java:191-218}): a pipeline that would answer with the block
+ * or the entity program answers with a hand program while a hand pass is up, whatever else is
+ * true of it. Only the shadow table and the fixed rows come before it, and {@link #element} says
+ * why each of those two does.
  * <p>
  * <strong>The block entities are not one of those and come in by this same door</strong>, because
  * that is where the game brings them: a chest and a mob are submitted into one phase and drawn with
