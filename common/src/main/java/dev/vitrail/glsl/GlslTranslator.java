@@ -17,10 +17,12 @@ import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -477,7 +479,7 @@ public final class GlslTranslator {
 	 * Those of {@link #samplerParameters} whose type has no level to pin, a rectangle, a buffer or
 	 * a multisample sampler, so that {@link #pinLookupLevels} leaves a lookup through one alone.
 	 */
-	private final List<Scoped> unlevelledParameters = new ArrayList<>();
+	private final Set<Scoped> unlevelledParameters = new LinkedHashSet<>();
 
 	/**
 	 * The same parameters again, each with the function that takes it and its place in that
@@ -2253,7 +2255,7 @@ public final class GlslTranslator {
 			}
 		}
 
-		List<Scoped> proven = provenParameters(pinned, fullScreen && chained.isEmpty());
+		Set<Scoped> proven = provenParameters(pinned, fullScreen && chained.isEmpty());
 		int[] lines = lineNumbers();
 		List<Closing> levels = new ArrayList<>();
 
@@ -2308,8 +2310,8 @@ public final class GlslTranslator {
 	 * @param all whether every parameter of a levelled type is proven outright, call sites unread,
 	 *            which is the case of a program drawn over the screen asking for no chain
 	 */
-	private List<Scoped> provenParameters(Set<String> pinned, boolean all) {
-		List<Scoped> proven = new ArrayList<>();
+	private Set<Scoped> provenParameters(Set<String> pinned, boolean all) {
+		Set<Scoped> proven = new LinkedHashSet<>();
 		if (all) {
 			for (Scoped parameter : this.samplerParameters) {
 				if (!this.unlevelledParameters.contains(parameter)) {
@@ -2320,23 +2322,56 @@ public final class GlslTranslator {
 			return proven;
 		}
 
+		// One walk that records where each of these functions is named, rather than a walk of the
+		// whole token list per parameter and per round. The rounds are bounded by the number of
+		// parameters, each one proving at least one or ending the loop, so a stage taking a
+		// hundred samplers as parameters walked its few hundred thousand tokens a hundred times.
+		List<SamplerParameter> waiting = new ArrayList<>();
+		Set<String> functions = new HashSet<>();
+		for (SamplerParameter parameter : this.typedParameters) {
+			if (!this.unlevelledParameters.contains(parameter.scope())) {
+				waiting.add(parameter);
+				functions.add(parameter.function());
+			}
+		}
+
+		Map<String, List<Integer>> sites = sitesOf(functions);
 		int[] lines = lineNumbers();
 		boolean grew = true;
 		while (grew) {
 			grew = false;
-			for (SamplerParameter parameter : this.typedParameters) {
-				if (proven.contains(parameter.scope())
-						|| this.unlevelledParameters.contains(parameter.scope())
-						|| !callsHandOver(parameter, pinned, proven, lines)) {
+			for (Iterator<SamplerParameter> pending = waiting.iterator(); pending.hasNext(); ) {
+				SamplerParameter parameter = pending.next();
+				if (proven.contains(parameter.scope())) {
+					pending.remove();
+					continue;
+				}
+
+				if (!callsHandOver(parameter, pinned, proven, lines,
+						sites.getOrDefault(parameter.function(), List.of()))) {
 					continue;
 				}
 
 				proven.add(parameter.scope());
+				pending.remove();
 				grew = true;
 			}
 		}
 
 		return proven;
+	}
+
+	/** Where each of these names is written, in the order the tokens run. */
+	private Map<String, List<Integer>> sitesOf(Set<String> names) {
+		Map<String, List<Integer>> found = new HashMap<>();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() == Kind.IDENTIFIER && names.contains(token.text())) {
+				found.computeIfAbsent(token.text(), _ -> new ArrayList<>()).add(index);
+			}
+		}
+
+		return found;
 	}
 
 	/**
@@ -2347,16 +2382,15 @@ public final class GlslTranslator {
 	 * parameter, its declaration being no sampler's name. A function named on a preprocessor line
 	 * is called from wherever that macro is used, which no scan of the tokens can see, so such a
 	 * function proves nothing.
+	 *
+	 * @param sites every place the function is named, in the order the tokens run, which is what
+	 *              this used to walk the whole list for
 	 */
 	private boolean callsHandOver(SamplerParameter parameter, Set<String> pinned,
-			List<Scoped> proven, int[] lines) {
+			Set<Scoped> proven, int[] lines, List<Integer> sites) {
 		boolean called = false;
-		for (int index = 0; index < this.tokens.size(); index++) {
+		for (int index : sites) {
 			Token token = this.tokens.get(index);
-			if (!token.identifier(parameter.function())) {
-				continue;
-			}
-
 			if (token.directive() != null) {
 				return false;
 			}
@@ -5214,7 +5248,7 @@ public final class GlslTranslator {
 	}
 
 	/** Whether one of these names means what the list says it does on this line. */
-	private static boolean scoped(List<Scoped> names, String name, int line) {
+	private static boolean scoped(Collection<Scoped> names, String name, int line) {
 		for (Scoped scoped : names) {
 			if (scoped.name().equals(name) && line >= scoped.from() && line <= scoped.to()) {
 				return true;
