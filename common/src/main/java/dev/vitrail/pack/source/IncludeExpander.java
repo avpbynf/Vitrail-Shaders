@@ -1,5 +1,6 @@
 package dev.vitrail.pack.source;
 
+import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.pack.option.OptionRewriter;
 import dev.vitrail.pack.option.SettingSet;
 
@@ -75,6 +76,7 @@ public final class IncludeExpander {
 
 	private final ShaderPackSource source;
 	private final SettingSet settings;
+	private final boolean partOfALoad;
 
 	/**
 	 * The conditionals this pack writes loosely, each said once, in the order they were met. Held
@@ -84,17 +86,45 @@ public final class IncludeExpander {
 	private final Set<String> loose = new LinkedHashSet<>();
 
 	public IncludeExpander(ShaderPackSource source, SettingSet settings) {
-		this.source = source;
-		this.settings = settings;
+		this(source, settings, true);
 	}
 
+	private IncludeExpander(ShaderPackSource source, SettingSet settings, boolean partOfALoad) {
+		this.source = source;
+		this.settings = settings;
+		this.partOfALoad = partOfALoad;
+	}
+
+	/**
+	 * For the pack report's walk, whose flattening is left out of the load's clock.
+	 * <p>
+	 * That walk expands every entry point the pack ships, once each, and it is made on the first
+	 * load of a given pack and on none of the reloads of it. Counted in, it would leave the figure
+	 * several times larger on one load than on the next with nothing on the line saying which of
+	 * the two had just been read, where what the line is for is what a load pays every time.
+	 */
+	public static IncludeExpander forTheReport(ShaderPackSource source, SettingSet settings) {
+		return new IncludeExpander(source, settings, false);
+	}
+
+	/**
+	 * One entry file flattened, and the span it took posted to the load's clock. A load reads a
+	 * place of the pack several times over and this is paid before either compiled store can be
+	 * asked, so it is where a warm load's wait really goes.
+	 */
 	public ExpandedUnit expand(Path entry) throws IOException {
+		long began = System.nanoTime();
 		State state = new State(this.settings.unitDefines(), this.loose);
 
 		expandFile(entry, 0, state);
 
-		return new ExpandedUnit(this.source.rel(entry), List.copyOf(state.output), state.version,
-				state.toStats(), state.live);
+		ExpandedUnit unit = new ExpandedUnit(this.source.rel(entry), List.copyOf(state.output),
+				state.version, state.toStats(), state.live);
+		if (this.partOfALoad) {
+			LoadClock.expansion(System.nanoTime() - began);
+		}
+
+		return unit;
 	}
 
 	/** What this reader read for the pack across every unit expanded so far, ready for the log. */

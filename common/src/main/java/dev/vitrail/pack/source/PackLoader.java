@@ -71,7 +71,11 @@ public final class PackLoader {
 				}
 			});
 
-			IncludeExpander expander = new IncludeExpander(source, settings);
+			// This walk is a diagnosis of a pack and not a step of a load: it is made the first
+			// time a pack is read and never again for the same one, so what it costs is left out
+			// of the load's clock rather than doubling a figure the log invites the two to be
+			// compared on.
+			IncludeExpander expander = IncludeExpander.forTheReport(source, settings);
 			ExpansionStats expansion = ExpansionStats.NONE;
 			int expanded = 0;
 			for (ProgramSet.ProgramKey key : programs.keys()) {
