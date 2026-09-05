@@ -402,7 +402,7 @@ public final class TranslationCache {
 			feed(digest, stage.name());
 			feed(digest, unit.entry());
 			feed(digest, unit.version());
-			feed(digest, unit.text());
+			feedLines(digest, unit.lines());
 			// The lines the preprocessor left live, which the translator reads on nearly every walk
 			// it makes: two texts that differ only in which of their lines are dead translate
 			// differently and would otherwise share a key.
@@ -458,6 +458,51 @@ public final class TranslationCache {
 		byte[] raw = text.getBytes(StandardCharsets.UTF_8);
 		digest.update(intBytes(raw.length));
 		digest.update(raw);
+	}
+
+	/**
+	 * The same bytes {@link #feed} would take for the lines joined by newlines, fed a line at a
+	 * time: the joined text of a unit runs to megabytes and was built, and copied again into
+	 * bytes, for every stage of every program of a load, cache hits included. The length prefix
+	 * is counted first, so the key does not move.
+	 */
+	private static void feedLines(MessageDigest digest, List<String> lines) {
+		int length = Math.max(0, lines.size() - 1);
+		for (String line : lines) {
+			length += utf8Length(line);
+		}
+
+		digest.update(intBytes(length));
+		for (int at = 0; at < lines.size(); at++) {
+			if (at > 0) {
+				digest.update((byte) '\n');
+			}
+
+			digest.update(lines.get(at).getBytes(StandardCharsets.UTF_8));
+		}
+	}
+
+	/** How many bytes {@code getBytes(UTF_8)} yields, a lone surrogate counting as its replacement. */
+	private static int utf8Length(String text) {
+		int length = 0;
+		for (int at = 0; at < text.length(); at++) {
+			char c = text.charAt(at);
+			if (c < 0x80) {
+				length += 1;
+			} else if (c < 0x800) {
+				length += 2;
+			} else if (Character.isHighSurrogate(c) && at + 1 < text.length()
+					&& Character.isLowSurrogate(text.charAt(at + 1))) {
+				length += 4;
+				at++;
+			} else if (Character.isSurrogate(c)) {
+				length += 1;
+			} else {
+				length += 3;
+			}
+		}
+
+		return length;
 	}
 
 	private static byte[] intBytes(int value) {
