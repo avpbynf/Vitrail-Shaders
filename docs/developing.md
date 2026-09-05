@@ -262,6 +262,18 @@ game's full memory barrier and sends the mip chain back to a pass per level. It 
 cannot be the cause of a wrong image, so it is the first thing to ask of a machine that draws one
 this one does not.
 
+**What the compute and copy waits cost can be measured.** Every pass of ours closes on a wait
+naming the stages the pass after it reads and writes in, and compute and every transfer are two of
+them: the first is there for a pack's own dispatch, the second for the copies that fill a target's
+mip chain. An empty file `vitrail/narrow-pass-barrier` in the instance, or
+`-Dvitrail.narrowPassBarrier=true` among the JVM arguments, drops those two from the destination, so
+what they cost a frame can be read as two measurements in one world rather than across two builds.
+The state is written to the log in both directions at the first close of a pass, so a reading always
+names the state it belongs to. It is an instrument and not a setting to keep: armed, a pack's
+compute can read a target before the colour write is visible, and the mip blit and the depth copies
+become write-after-write with nothing ordering them, which a driver is free to run in either order.
+Off is the default and is the wait this engine ships. The wide file above still wins over it.
+
 **The block atlas filter can be put back the way it was.** An empty file
 `vitrail/legacy-terrain-filter` in the instance, or `-Dvitrail.legacyTerrainFilter=true`, sends a
 pack's terrain and its shadow back through the game's filtered sampler, which is what this engine

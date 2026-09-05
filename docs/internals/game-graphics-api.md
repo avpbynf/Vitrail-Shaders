@@ -126,7 +126,10 @@ accident looks exactly like a correct one until somebody else's machine draws it
 `vitrail/full-pass-barrier` in the instance, or `-Dvitrail.fullPassBarrier=true`, puts the game's own
 wait back at the close of our passes and sends the mip chain back to a pass per level. It is slower
 and it cannot be the cause of anything, which is the whole point: an image that comes right with it
-has named the synchronisation rather than the pass that shows it.
+has named the synchronisation rather than the pass that shows it. A second file,
+`vitrail/narrow-pass-barrier`, goes the other way and drops compute and transfer from that
+destination, to measure what waiting for them costs; armed, the image may race, off is the default,
+and the wide file still wins.
 
 The practical consequence is that reading in pass N+1 what pass N wrote still requires no
 synchronisation code of our own: close, open, bind. But the barrier exists only if the pass is
