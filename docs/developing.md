@@ -5,9 +5,9 @@ Most of it is the consequence of a single property, so that comes first.
 
 ## Most of the engine runs without the game
 
-Reading a pack, translating its GLSL, and evaluating the uniforms it expects name no Minecraft
-class. Those three source trees compile and run on their own, against a directory of real shader
-packs, with no game process, no window and no GPU.
+Reading a pack, translating its GLSL, evaluating the uniforms it expects and reading its
+settings files name no Minecraft class. Those four source trees compile and run on their own,
+against a directory of real shader packs, with no game process, no window and no GPU.
 
 That is a deliberate constraint, not an accident, and it is worth understanding what it buys:
 
@@ -19,8 +19,10 @@ The cost of breaking it is larger than it looks. Importing a Minecraft class int
 trees does not merely add a dependency, it removes a whole class of checks from everything that
 transitively touches it. Treat such an import as a design decision to be argued, not a convenience.
 
-There is one deliberate exception: a single file refers to the mod's own entry class and is
-excluded from the standalone build. One file is a maintainable seam. A growing list is a leak.
+There are two deliberate exceptions, both excluded from the standalone build: the report a pack
+gets at its first load, which writes through the mod's own logger, and the choice of graphics
+backend, which is a session's and reads the game's options. Two files are a maintainable seam.
+A growing list is a leak.
 
 ## What a contributor can run, and what they cannot
 
@@ -35,10 +37,10 @@ separate reason: it lives outside the versioned tree, so a hosted job could neit
 compile it, and wiring it in as a source set would break a fresh clone that has none of it. There is
 no hosted job that can run it either. It is local by construction, not by neglect.
 
-The practical consequence: a change under the pack, translation or uniform trees can be argued
-from the build and from reading, but the measurement that would settle it is one only a maintainer
-with a pack corpus can take. Say which of the two your change rests on rather than leaving it
-implied.
+The practical consequence: a change under the pack, translation, uniform or settings trees can be
+argued from the build and from reading, but the measurement that would settle it is one only a
+maintainer with a pack corpus can take. Say which of the two your change rests on rather than
+leaving it implied.
 
 ## What the out-of-game checks cover
 
