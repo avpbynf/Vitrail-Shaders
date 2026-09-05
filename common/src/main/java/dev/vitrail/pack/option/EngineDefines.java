@@ -188,6 +188,11 @@ public final class EngineDefines {
 		// emission under it.
 		defines.put("IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE", "");
 
+		// shadowtex0HW and shadowtex1HW are bound, the same two depth images as the plain pair and
+		// compared where the pack declares them so (SamplerPlan.SHADOW_DEPTH). Iris poses this one
+		// whatever the hardware, features/FeatureFlags.java:12.
+		defines.put("IRIS_FEATURE_SEPARATE_HARDWARE_SAMPLERS", "");
+
 		// The rest of IRIS_FEATURE_ stays unposted until each capability is served. See
 		// ShaderProperties.optionalFeatures for the other half of the answer, and PackChain for
 		// what a pack requiring one is told.

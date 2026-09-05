@@ -61,12 +61,12 @@ can declare the features it cannot be drawn without, and Reverie declares severa
 before any of its programs is translated, so the refusal names what the pack asked for and did not
 get, the log listing them, rather than the symptom that would have come later.
 
-**Any name this engine has not built refuses the declaration.** Two names are built and served
-today, `BLOCK_EMISSION_ATTRIBUTE` and `CUSTOM_IMAGES`, so a pack that requires those alone
-loads; every other name still refuses the pack, with the list in the log. The served flags are
-also the only `IRIS_FEATURE_` defines a pack finds: a capability define is a promise, so each
-appears the day its feature is served and not before, and the optional declarations keep
-reading the truth.
+**Any name this engine has not built refuses the declaration.** Three names are built and served
+today, `BLOCK_EMISSION_ATTRIBUTE`, `CUSTOM_IMAGES` and `SEPARATE_HARDWARE_SAMPLERS`, so a pack
+that requires those alone loads; every other name still refuses the pack, with the list in the
+log. The served flags are also the only `IRIS_FEATURE_` defines a pack finds: a capability define
+is a promise, so each appears the day its feature is served and not before, and the optional
+declarations keep reading the truth.
 
 Iris draws Reverie. It refuses a required flag only when the name is unknown to it or the hardware
 cannot serve it, and it has built every one of the ones Reverie asks for: some outright, some
@@ -101,10 +101,12 @@ message is one of its passes, and it is drawn because a capability test in its c
 
 The test reads capability defines. This engine announces itself the way Iris does, but a
 capability define is a promise, so it defines only what the backend actually serves, which today
-is `IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE` and `IRIS_FEATURE_CUSTOM_IMAGES` and nothing else; the
-section above says why the features behind the other names are closed. A pack that finds the announcement without the capability it wants
-concludes it is running on OptiFine, the only renderer in that position when the pack was
-written, and words its message for it. Read "OptiFine" as "not Iris" and the message is accurate.
+is `IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE`, `IRIS_FEATURE_CUSTOM_IMAGES` and
+`IRIS_FEATURE_SEPARATE_HARDWARE_SAMPLERS` and nothing else; the section above says why the
+features behind the other names are closed. A pack that finds the announcement without the
+capability it wants concludes it is running on OptiFine, the only renderer in that position when
+the pack was written, and words its message for it. Read "OptiFine" as "not Iris" and the message
+is accurate.
 
 Complementary was the pack of the test set that did this, and it is why the define exists. Its
 colored lighting, which its two top profiles Very High and Ultra turn on, is voxel lighting:

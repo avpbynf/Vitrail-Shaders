@@ -32,8 +32,31 @@ import java.util.Set;
 public final class SamplerPlan {
 
 	private static final Set<String> DEPTH = Set.of("depthtex0", "depthtex1", "depthtex2", "gdepthtex");
-	private static final Set<String> SHADOW_DEPTH =
-			Set.of("shadowtex0", "shadowtex1", "shadow", "watershadow");
+
+	/**
+	 * The names that read the light's own depth. The two spelled {@code HW} are the same two images
+	 * as {@code shadowtex0} and {@code shadowtex1}, under a second name, and that is the whole of
+	 * what SEPARATE_HARDWARE_SAMPLERS is: Iris hands the plain names the texture's own state and the
+	 * {@code HW} names a sampler carrying GL_COMPARE_REF_TO_TEXTURE
+	 * ({@code samplers/IrisSamplers.java:147-152} and {@code :179-183}), so a pack can read one map
+	 * both compared and plain in the one program, which one name never could.
+	 * <p>
+	 * Which of the two roads a name takes is settled here by the pack's own declaration and not by a
+	 * flag, because that is already this engine's rule: the comparison rides the binding wherever the
+	 * pack spelled the type {@code sampler2DShadow} over a name of the shadow map's, which is what
+	 * {@code GlslTranslator.collectComparisonSamplers} decides and {@code render/ShadowCompare} then
+	 * carries. A pack posing the flag declares the plain pair {@code sampler2D} and the {@code HW}
+	 * pair {@code sampler2DShadow}, so it gets Iris's arrangement out of its own text, with nothing
+	 * to switch.
+	 * <p>
+	 * The divergence that leaves is which packs see the names at all. Iris binds an {@code HW} name
+	 * only where the pack both poses the flag and asks for hardware filtering on that index; here
+	 * both are served to anyone who spells them. What that costs is a pack reading a real shadow map
+	 * where Iris would have left the sampler unbound, and nothing else: the plain pair is untouched,
+	 * and a pack that never writes the names cannot tell the difference.
+	 */
+	private static final Set<String> SHADOW_DEPTH = Set.of("shadowtex0", "shadowtex1", "shadow",
+			"watershadow", "shadowtex0HW", "shadowtex1HW");
 
 	/**
 	 * The depth Distant Horizons keeps apart from the game's, kept apart here as well, which is
@@ -452,7 +475,8 @@ public final class SamplerPlan {
 	/**
 	 * Whether a shadow depth name reads the map as it stood before the translucents.
 	 * <p>
-	 * {@code shadowtex1} is always that one and {@code shadowtex0} is never it. The pair is the whole
+	 * {@code shadowtex1} is always that one and {@code shadowtex0} is never it, and the {@code HW}
+	 * spelling of each reads the image its plain twin reads. The pair is the whole
 	 * of what a coloured shadow rests on: a point occluded in nought and clear in one has something
 	 * translucent between it and the light, and the tint comes from {@code shadowcolor}.
 	 * <p>
@@ -468,7 +492,8 @@ public final class SamplerPlan {
 	 * would move {@code shadow} here and not there. No pack of the corpus writes the name at all.
 	 */
 	public boolean withoutTranslucents(String name) {
-		return name.equals("shadowtex1") || (this.waterShadow && name.equals("shadow"));
+		return name.equals("shadowtex1") || name.equals("shadowtex1HW")
+				|| (this.waterShadow && name.equals("shadow"));
 	}
 
 	/**

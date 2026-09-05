@@ -1658,10 +1658,10 @@ public final class ShaderProperties {
 
 	/**
 	 * What the pack would use if it were there, and takes another path without. It is the list Iris
-	 * turns into {@code IRIS_FEATURE_} defines for the GLSL. This engine poses
-	 * {@code IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE}, and {@code IRIS_FEATURE_CUSTOM_IMAGES} when
-	 * the storage-image pipe is served, and none of the others, which is what tells a pack to
-	 * take the other path for those.
+	 * turns into {@code IRIS_FEATURE_} defines for the GLSL. A flag is posed the day the capability
+	 * behind it is served and not before, a define being a promise, and every other name stays
+	 * unposed, which is what tells a pack to take the other path for it. Which names those are
+	 * today is written where they are posed, {@code EngineDefines.table}.
 	 * <p>
 	 * Nothing in the engine reads this list, and that is deliberate rather than an oversight: there
 	 * is nothing here to decide from it. What taking the line out of the ignored keys buys is
