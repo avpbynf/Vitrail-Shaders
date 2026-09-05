@@ -91,6 +91,14 @@ what the next one holds.
   in, which drags them out over several more. Every such buffer is now emptied whole the moment it
   is allocated, which is before the pack has drawn anything into it.
 
+- **A modded dimension is drawn from the folder its pack sends it to.** Both Complementary
+  variants with Euphoria Patches list the worlds that belong to the Nether and to the End one
+  continued line per mod in `dimension.properties`, and only the first of those lines was read.
+  Everything the rest name, which is Ad Astra's planets and orbits, Prominent's dimensions, The
+  Bumblezone and half a dozen more, fell through to the pack's catch-all: those worlds were drawn
+  with the overworld sky, the overworld fog and the overworld full-screen passes instead of the
+  ones the pack wrote for them. They now get the folder the pack names, as they do under Iris.
+
 - **A value a pack spreads over several lines stops at the end of its own branch.** A
   `shaders.properties` value continued with a backslash was joined before the conditionals around
   it were read, so a value whose last line carried a backslash too swallowed the `#else` or
