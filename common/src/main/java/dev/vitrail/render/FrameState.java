@@ -944,8 +944,16 @@ public final class FrameState implements WorldState {
 			case ANISOTROPIC -> 2;
 		};
 
+		// Divided without a guard, because Chunk Fade set to none is a normal setting and not the
+		// accident a guard would suggest, and because infinity is what Iris hands there
+		// (uniforms/IrisExclusiveUniforms.java:46). A section weighted by
+		// min(1.0, age * chunkFadeTimeInv) then reads as already faded in for every age but nought,
+		// where a zero would hold every section at the start of a fade that never advances. At an
+		// age of nought the product is a NaN and the min is what the driver makes of it, which is
+		// the same hole Iris has: the value is handed as Iris hands it rather than corrected here,
+		// so a pack tuned against one engine reads the same from the other.
 		double fadeMillis = minecraft.options.chunkSectionFadeInTime().get() * 1000.0;
-		this.chunkFadeTimeInv = fadeMillis == 0.0 ? 0.0F : (float) (1.0 / fadeMillis);
+		this.chunkFadeTimeInv = (float) (1.0 / fadeMillis);
 
 		readAtlas(minecraft);
 	}
