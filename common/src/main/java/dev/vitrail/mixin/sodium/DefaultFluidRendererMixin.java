@@ -96,8 +96,11 @@ public abstract class DefaultFluidRendererMixin {
 		// exists to tell apart: the id below is computed and then goes nowhere, and printing it
 		// beside a startup line saying the mesh carries no block id would be the engine
 		// contradicting itself inside one log.
+		// A plain read first: the exchange is a locked instruction on one word every builder
+		// thread shares, and it only has anything to do once per table.
 		int table = BlockStateIds.generation();
-		if (TerrainDraw.asked() && vitrail$said.getAndSet(table) != table) {
+		if (TerrainDraw.asked() && vitrail$said.get() != table
+				&& vitrail$said.getAndSet(table) != table) {
 			// The table is named, because this line is not the only one of the run: two loads
 			// of the same pack print it twice, word for word, and nothing else would say which
 			// reading belongs to which table.
