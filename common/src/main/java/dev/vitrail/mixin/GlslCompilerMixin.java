@@ -8,14 +8,17 @@ import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.render.ModuleCache;
+import dev.vitrail.render.RawLocals;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
 
+import java.nio.ByteBuffer;
+
 /**
- * Lets a sampled or stored 3D image through the bind-group walk, and puts {@link ModuleCache}
- * around the one call that turns a pack's GLSL into a module, which is also where
- * {@link LoadClock} counts what that costs.
+ * Lets a sampled or stored 3D image through the bind-group walk, gives the compiler's output its
+ * zeroes before the reflection reads it, and puts {@link ModuleCache} around the one call that
+ * turns a pack's GLSL into a module, which is also where {@link LoadClock} counts what that costs.
  * <p>
  * {@code addToBindGroup} refuses anything whose SPIR-V dimension is not 2D or Cube. SpvDim3D is 2.
  * Pretending it is 2D is enough for the check; the view that is actually bound is the 3D one
@@ -50,6 +53,23 @@ public abstract class GlslCompilerMixin {
 	}
 
 	/**
+	 * Between shaderc and SPIRV-Cross, on the copy the game made of the compiler's output: every
+	 * variable the pack can read before writing gets the zero it reads under Iris.
+	 * {@link RawLocals} carries the switch and the why. Inside the wrapped method below, so a
+	 * module served from the cache was zeroed the day it was built and is not walked again, and
+	 * under the state that method took at its head, so the key and the bytes agree.
+	 */
+	@WrapOperation(method = "createIntermediary", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lcom/mojang/blaze3d/vulkan/glsl/IntermediaryShaderModule;createFromSpirv("
+							+ "Ljava/lang/String;Ljava/nio/ByteBuffer;)"
+							+ "Lcom/mojang/blaze3d/vulkan/glsl/IntermediaryShaderModule;"))
+	private IntermediaryShaderModule vitrail$zeroLocals(String filename, ByteBuffer spirv,
+			Operation<IntermediaryShaderModule> original) {
+		return original.call(filename, RawLocals.patch(filename, spirv));
+	}
+
+	/**
 	 * The text keyed on is the one this method is handed, which is two lines short of the one
 	 * shaderc sees: the method splices the compiler's own two global defines in behind the
 	 * version directive. They are built once in its constructor out of literals and nothing can
@@ -62,6 +82,10 @@ public abstract class GlslCompilerMixin {
 	private IntermediaryShaderModule vitrail$module(String filename, String source, ShaderType type,
 			Operation<IntermediaryShaderModule> original) {
 		long began = System.nanoTime();
+		// The state the key is hashed under is the state the bytes are patched under, taken once
+		// here: a load flipping the switch while this thread is between the two would otherwise
+		// store one state's module under the other's key.
+		RawLocals.begin();
 		try {
 			String key = ModuleCache.keyOf(source, type.name());
 			IntermediaryShaderModule served = ModuleCache.lookup(key, filename);
@@ -78,6 +102,7 @@ public abstract class GlslCompilerMixin {
 
 			return built;
 		} finally {
+			RawLocals.end();
 			LoadClock.module(System.nanoTime() - began);
 		}
 	}

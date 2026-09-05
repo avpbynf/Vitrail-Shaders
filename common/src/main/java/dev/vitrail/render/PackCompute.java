@@ -682,6 +682,8 @@ final class PackCompute implements AutoCloseable {
 			// cannot serve this blob.
 			long began = System.nanoTime();
 			IntermediaryShaderModule module = null;
+			// One state for the key and the patch, as the game's compiler road takes it.
+			RawLocals.begin();
 			try {
 				String source = unit.text();
 				String key = ModuleCache.keyOf(source, MODULE_CACHE_STAGE);
@@ -699,7 +701,14 @@ final class PackCompute implements AutoCloseable {
 
 				try {
 					if (module == null) {
-						module = IntermediaryShaderModule.createFromSpirv(this.label, spirv);
+						// The same zeroes the game's compiler road gets in GlslCompilerMixin: this
+						// road has its own shaderc call, so it has to ask for them itself, and
+						// before the reflection and the store, so a served blob carries them too.
+						// Compiled at the performance level, this module has mostly values where
+						// that road has variables, and its undefined reads are what the pass turns
+						// into zeroes here.
+						module = IntermediaryShaderModule.createFromSpirv(this.label,
+								RawLocals.patch(this.label, spirv));
 						ModuleCache.store(key, module);
 					}
 
@@ -721,6 +730,7 @@ final class PackCompute implements AutoCloseable {
 					return;
 				}
 			} finally {
+				RawLocals.end();
 				if (module != null) {
 					module.close();
 				}
