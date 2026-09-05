@@ -380,6 +380,27 @@ does; [the game's graphics API](internals/game-graphics-api.md) says where the s
 **Defects in the pack itself.** A conditional directive with no name is a pack bug and stays a
 failure.
 
+One class of pack defect is handed a value instead, because the reference hands it one. GLSL
+leaves a variable declared without an initialiser undefined until it is written, and a pack that
+reads one first has a defect that shows nowhere on the platform it was written on: the OpenGL
+compiler of the vendor nearly every pack author runs starts such a variable at zero, so under
+Iris the picture is right and nobody notices. The same text compiled through shaderc keeps the
+variable bare, and the Vulkan driver leaves the register holding whatever the previous work left
+in it, which changes with the face being drawn and with every edit to the shader's text, since
+each edit reallocates the registers. A hand black on one face and lit on the next, or black
+lines along every far shore, is what that looks like. So after shaderc has compiled a unit and
+before the game's reflection reads it, every bare `Function` and `Private` variable of the module
+is given a null constant as its initialiser. The pass works on the SPIR-V rather than on the
+translated text because the module already knows the type of every variable, arrays and structs
+included, where a textual initialiser would have to find every declaration in every scope and
+spell each type out. A store the shader overwrites before reading is dead and the driver's
+optimiser removes it, so a unit that already initialised everything compiles to the same code. The
+game's own shaders and Sodium's go through the same compiler and are left as they are: the zero
+reproduces what packs were written against, and nothing else compiled here was written against
+anything but itself. A file `vitrail/raw-locals` in the game directory leaves the variables raw,
+which is how the cost of the pass is measured in one jar and how a black face is told apart from
+every other cause in one pack reload; the log says which state a load ran under.
+
 **Missing values rather than missing translation.** A vanilla-style uniform a pack expects is closed
 by supplying the value, not by changing the translator. It shows up in the unanswered list, not in
 a compile error.

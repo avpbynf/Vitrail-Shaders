@@ -60,6 +60,18 @@ what the next one holds.
 
 ### Fixed
 
+- **A variable a pack reads before writing it reads zero, as it does under Iris.** A shader that
+  declares a variable without a value and adds to it before ever setting it is wrong, but the
+  OpenGL driver most packs are written on starts such a variable at zero, so the picture is right
+  there and nobody notices. Here the variable held whatever the previous work left behind, and
+  that depended on the face being drawn: on Complementary Unbound at its High and Ultra
+  profiles, one face of the held hand was black at every angle while the others were lit, and the
+  water along far shores carried black lines that came and went. Every variable a pack leaves
+  uninitialised now starts at zero, in every program of every pack, and both defects are gone.
+  A file `raw-locals` in the `vitrail` folder of the game directory turns the zeroing off, for
+  measuring what it costs. The store of compiled shader modules is rebuilt once on the first
+  launch, as every module compiled before this carried the bare variables.
+
 - **A pack's storage buffers are read and written where the pack put them.** A pack that keeps
   its own data in a shader storage buffer, declared with `bufferObject` lines, had that buffer
   allocated and filled but never handed to the programs that name it: every such program kept the

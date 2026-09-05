@@ -665,7 +665,11 @@ final class PackCompute implements AutoCloseable {
 
 				try {
 					if (module == null) {
-						module = IntermediaryShaderModule.createFromSpirv(this.label, spirv);
+						// The same zeroes the game's compiler road gets in GlslCompilerMixin: this
+						// road has its own shaderc call, so it has to ask for them itself, and
+						// before the reflection and the store, so a served blob carries them too.
+						module = IntermediaryShaderModule.createFromSpirv(this.label,
+								RawLocals.patch(this.label, spirv));
 						ModuleCache.store(key, module);
 					}
 

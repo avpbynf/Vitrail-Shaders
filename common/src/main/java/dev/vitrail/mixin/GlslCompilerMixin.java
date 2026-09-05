@@ -8,14 +8,17 @@ import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.render.ModuleCache;
+import dev.vitrail.render.RawLocals;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
 
+import java.nio.ByteBuffer;
+
 /**
- * Lets a sampled or stored 3D image through the bind-group walk, and puts {@link ModuleCache}
- * around the one call that turns a pack's GLSL into a module, which is also where
- * {@link LoadClock} counts what that costs.
+ * Lets a sampled or stored 3D image through the bind-group walk, gives the compiler's output its
+ * zeroes before the reflection reads it, and puts {@link ModuleCache} around the one call that
+ * turns a pack's GLSL into a module, which is also where {@link LoadClock} counts what that costs.
  * <p>
  * {@code addToBindGroup} refuses anything whose SPIR-V dimension is not 2D or Cube. SpvDim3D is 2.
  * Pretending it is 2D is enough for the check; the view that is actually bound is the 3D one
@@ -47,6 +50,22 @@ public abstract class GlslCompilerMixin {
 	private static int vitrail$allow3d(@Coerce Object sampler, Operation<Integer> original) {
 		int dimension = original.call(sampler);
 		return dimension == 2 ? 1 : dimension;
+	}
+
+	/**
+	 * Between shaderc and SPIRV-Cross, on the copy the game made of the compiler's output: every
+	 * variable the pack left uninitialised gets the zero the OpenGL driver gives it under Iris.
+	 * {@link RawLocals} carries the switch and the why. Inside the wrapped method below, so a
+	 * module served from the cache was zeroed the day it was built and is not walked again.
+	 */
+	@WrapOperation(method = "createIntermediary", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lcom/mojang/blaze3d/vulkan/glsl/IntermediaryShaderModule;createFromSpirv("
+							+ "Ljava/lang/String;Ljava/nio/ByteBuffer;)"
+							+ "Lcom/mojang/blaze3d/vulkan/glsl/IntermediaryShaderModule;"))
+	private IntermediaryShaderModule vitrail$zeroLocals(String filename, ByteBuffer spirv,
+			Operation<IntermediaryShaderModule> original) {
+		return original.call(filename, RawLocals.patch(filename, spirv));
 	}
 
 	/**
