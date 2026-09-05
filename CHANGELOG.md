@@ -347,6 +347,32 @@ what the next one holds.
   world, so a far hill still casting into the view dropped out of the map. The light's walk is
   no longer shortened by the camera's fog.
 
+- **A colour target read at a lod carries the whole chain OpenGL would have built.** On a
+  screen wider than it is tall the chain stopped one level short, at two texels by one, and a
+  pack reading past that level was clamped to it where Iris had one more. The chain runs to one
+  texel on the longer side now, on every screen.
+
+- **A compute program that reads `centerDepthSmooth` reads the smoothed centre depth.** When
+  no fullscreen pass of the pack read the name and a compute did, the compute was handed the far
+  plane on every frame. A compute hanging off a pass now arms the fold as the pass would.
+
+- **A pack's own `smooth()` accumulators restart with a dimension.** They went on from the
+  previous world for the seconds their half-life takes while the wetness and the eye brightness
+  beside them restarted; a world change forgets them with the rest.
+
+- **A storage image the graphics card will not give stops the pack instead of drawing it wrong.**
+  The image was skipped and every program naming it drew on, with the wrong kind of resource
+  bound under the name, which no driver has to survive. The pack is refused at that screen size
+  now, and refused for the session with the reason on the settings screen when the image is of a
+  size the pack chose, since no window size changes that.
+
+- **Opening the settings of a pack from the list, then moving on to another pack, no longer
+  aims the next Apply at the first one.** The bottom line and its count of forced settings also
+  described the pack previewed rather than the one chosen until the options view was opened
+  again. And the settings file shared with Iris now reads back whole when an editor left a byte
+  order mark or old Mac line endings in it: either used to turn the first line into a setting no
+  pack declares, or the whole file into one.
+
 ## 0.9.0-beta
 
 ### Added
