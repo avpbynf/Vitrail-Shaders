@@ -34,7 +34,6 @@
 		"DefaultFluidRendererMixin",
 		"EntityRenderDispatcherMixin",
 		"FlameFeatureRendererMixin",
-		"FlameSubmitMixin",
 		"GameRendererBlurMixin",
 		"GameRendererHandMixin",
 		"GameRendererMixin",

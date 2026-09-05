@@ -32,6 +32,14 @@ what the next one holds.
   before it is read, the program is translated as it would have been anyway, and the log names
   what was refused, once.
 
+- **The fire on a burning mob is drawn as fire.** A pack that gives `minecraft:entity_flame` a
+  number of its own was never handed it: the flames carried the number of the mob they wrap, so
+  everything the pack does to that kind of mob was done to its fire as well, and the fire was lit
+  and fogged like the body under it instead of glowing. Both Complementary builds and Bliss name
+  that number, and the flames now read it, as they do under Iris. A pack that names no flame now
+  sees the fire as an entity it never named, as it is under Iris, where before the fire read as
+  the mob it wraps.
+
 - **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
   Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
   read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed
