@@ -342,7 +342,11 @@ final class PackCompute implements AutoCloseable {
 	}
 
 	void dispatch(PackValues values, ColorTargets targets) {
-		if (this.passes.isEmpty()) {
+		// A frame the targets refused is one no pass of the chain draws, and this dispatch runs
+		// ahead of the call that would refuse it again, and of the first call of all after a
+		// load: a compute pushed here would be handed names nothing stands behind, each thrown
+		// and said once, over a frame nothing reads.
+		if (this.passes.isEmpty() || !targets.usable()) {
 			return;
 		}
 

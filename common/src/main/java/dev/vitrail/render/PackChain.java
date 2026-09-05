@@ -1338,13 +1338,18 @@ public final class PackChain {
 	 * half a world is worse than a pack drawing none of it: the game's own picture and the pack's own
 	 * are both credible on their own, and an image made of the two is credible and wrong. The one this
 	 * exists for puts the sky in front of the trees, and it is read as a broken sky rather than as a
-	 * family that never drew.
+	 * family that never drew. The other reason to reach it is a storage image of a size the pack
+	 * chose that the device would not give, which no screen size changes and which the frame would
+	 * otherwise ask for again at every size the window passes through.
 	 * <p>
 	 * <strong>What this does NOT do is hand the colour targets back</strong>, where the two other
-	 * places that stop a pack mid-session do. It cannot: it runs inside the chunk pass the renderer
-	 * opened, and releasing a target there tears down what that pass is drawing into. So whatever was
-	 * allocated stays held until the next load, and how much that is has not been measured, because
-	 * whether the chain had warmed by then depends on how many frames drew no section at all.
+	 * places that stop a pack mid-session do. The first reason cannot: it runs inside the chunk pass
+	 * the renderer opened, and releasing a target there tears down what that pass is drawing into.
+	 * The second reaches this outside any pass and could, and does not, so that a pack put away is
+	 * one thing and not two; what it would hand back is what stood allocated when the device
+	 * refused, which at the first frame is nothing. So whatever was allocated stays held until the
+	 * next load, and how much that is has not been measured, because whether the chain had warmed
+	 * by then depends on how many frames drew no section at all.
 	 *
 	 * @param why said in the words a player reads on the settings screen, since that is where it goes
 	 */
@@ -2131,7 +2136,7 @@ public final class PackChain {
 
 		Minecraft minecraft = Minecraft.getInstance();
 		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
-		if (main == null || !this.targets.ensure(main.width, main.height)) {
+		if (main == null || !ensureTargets(main)) {
 			return false;
 		}
 
@@ -3489,7 +3494,26 @@ public final class PackChain {
 		// Compared against the window every frame rather than driven by an event: the resize event
 		// fires too early, fires again when only the interface scale moved, and the panorama
 		// capture takes the main target to 4096 without going through the game's resize at all.
-		return this.targets.ensure(main.width, main.height);
+		return ensureTargets(main);
+	}
+
+	/**
+	 * The targets at the size of the game's own, and the pack put away when they refuse for a
+	 * reason no screen size lifts: an image of a size the pack chose that the device would not
+	 * give. A refusal about the screen is left to the next size, which is another question.
+	 *
+	 * @return false when nothing may be drawn this frame
+	 */
+	private boolean ensureTargets(RenderTarget main) {
+		if (this.targets.ensure(main.width, main.height)) {
+			return true;
+		}
+
+		if (this.targets.refusedForGood()) {
+			putAway("the device would not allocate an image it declares, see the log");
+		}
+
+		return false;
 	}
 
 	/**

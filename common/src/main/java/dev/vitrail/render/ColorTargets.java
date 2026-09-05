@@ -326,6 +326,13 @@ final class ColorTargets {
 	private int brokenHeight;
 
 	/**
+	 * Whether the refusal is about the pack after all: a storage image of a size the pack chose
+	 * and no screen can change, which another screen size would only fail at again. The latch
+	 * above never lifts on it, and the chain puts the pack away rather than asking every frame.
+	 */
+	private boolean brokenForGood;
+
+	/**
 	 * The plan describes the programs that run and no others, so what its schedule turns over is
 	 * exactly what needs a second texture. Nothing is filtered here: a set of doubled targets
 	 * worked out from anything but the schedule the samplers were bound against is a parity that
@@ -412,7 +419,8 @@ final class ColorTargets {
 		// A screen of another size is another question, so it is asked again rather than answered by
 		// the last refusal. Nothing is retried at the size that failed: a screen that stays where it
 		// is would otherwise pay a full allocation and a full log line every frame.
-		if (this.broken && (screenWidth != this.brokenWidth || screenHeight != this.brokenHeight)) {
+		if (this.broken && !this.brokenForGood
+				&& (screenWidth != this.brokenWidth || screenHeight != this.brokenHeight)) {
 			this.broken = false;
 		}
 
@@ -451,6 +459,7 @@ final class ColorTargets {
 			this.broken = true;
 			this.brokenWidth = screenWidth;
 			this.brokenHeight = screenHeight;
+			this.brokenForGood = this.storageImages.refusedForGood();
 			// The notes are printed on their own, one line each and with nothing in front of them,
 			// so this one carries its subject: the error below is written where it happened and this
 			// is read again much later, beside the notes of the plan. The size stays out of it on
@@ -458,8 +467,8 @@ final class ColorTargets {
 			// allocation keeps failing would otherwise add one line per size it passed through.
 			note(this.plan.packName() + " could not allocate its colour targets: " + e.getMessage());
 			Vitrail.logger().error("Vitrail could not allocate the colour targets of {} at {}x{}, so "
-					+ "nothing is drawn until the screen is another size", this.plan.packName(),
-					screenWidth, screenHeight, e);
+					+ "nothing is drawn {}", this.plan.packName(), screenWidth, screenHeight,
+					this.brokenForGood ? "at any size" : "until the screen is another size", e);
 
 			return false;
 		}
@@ -473,6 +482,24 @@ final class ColorTargets {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Whether {@link #ensure} has prepared this set at a real screen size and not refused it since,
+	 * at this size or at any. Read at the head of the frame, before that call is made for it, by
+	 * the one dispatch that runs there: a compute pushed over a set never prepared, or refused,
+	 * would be handed names nothing stands behind.
+	 */
+	boolean usable() {
+		return !this.broken && this.screenWidth > 0 && this.screenHeight > 0;
+	}
+
+	/**
+	 * Whether the refusal is one no screen size lifts, in which case the pack is not drawn again
+	 * this session and the reason is the one the notes carry.
+	 */
+	boolean refusedForGood() {
+		return this.brokenForGood;
 	}
 
 	/**

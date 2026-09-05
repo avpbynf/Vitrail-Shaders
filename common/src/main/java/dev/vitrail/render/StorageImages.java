@@ -62,6 +62,14 @@ public final class StorageImages implements AutoCloseable {
 	private int lastHeight;
 	private boolean laidOut;
 
+	/**
+	 * Whether an image whose size does not follow the screen was refused. Another screen size is
+	 * another question for the images that follow it and for the colour targets, and not for
+	 * this one: asked again at every size the window passes through, it would fail at each with a
+	 * full allocation and a full stack trace behind it.
+	 */
+	private boolean refusedForGood;
+
 	StorageImages(ImageInformation.Reading declared) {
 		this.declared = declared;
 	}
@@ -115,9 +123,14 @@ public final class StorageImages implements AutoCloseable {
 	public record Bound(long view, boolean storage, boolean integer) {
 	}
 
+	/** Whether the last refusal was of an image no screen size can change, see {@link #ensure}. */
+	boolean refusedForGood() {
+		return this.refusedForGood;
+	}
+
 	/**
 	 * Allocates every absolute image once, and rebuilds the relative ones when the screen moves.
-	 * Failures are named and skipped: one volume is not worth taking the pack down.
+	 * A failure is the whole set given back and the frame refused, see {@link #refused}.
 	 */
 	void ensure(int screenWidth, int screenHeight) {
 		install();
@@ -136,6 +149,27 @@ public final class StorageImages implements AutoCloseable {
 			return;
 		}
 
+		// Everything or nothing: a refusal halfway through gives back what was allocated, so the
+		// next screen size the colour targets try again at starts from the first image rather
+		// than skipping the one that failed as already dealt with.
+		try {
+			allocate(vulkan, first, resized, screenWidth, screenHeight);
+		} catch (RuntimeException e) {
+			this.allocated.forEach(image -> image.destroy(vulkan));
+			this.allocated.clear();
+			this.laidOut = false;
+			rebind();
+			throw e;
+		}
+
+		this.lastWidth = screenWidth;
+		this.lastHeight = screenHeight;
+		rebind();
+		layoutIfNeeded();
+	}
+
+	private void allocate(VulkanDevice vulkan, boolean first, boolean resized, int screenWidth,
+			int screenHeight) {
 		if (first) {
 			for (ImageInformation image : this.declared.images()) {
 				if (image.relative()) {
@@ -157,8 +191,8 @@ public final class StorageImages implements AutoCloseable {
 									? ", left on the frame that filled it"
 									: "");
 				} catch (RuntimeException e) {
-					Vitrail.logger().warn("storage image {} could not be allocated: {}",
-							image.describe(), e.toString());
+					this.refusedForGood = true;
+					throw refused(image, e);
 				}
 			}
 		}
@@ -190,16 +224,26 @@ public final class StorageImages implements AutoCloseable {
 					Vitrail.logger().info("storage image {} at {}x{}", image.describe(), width,
 							height);
 				} catch (RuntimeException e) {
-					Vitrail.logger().warn("storage image {} could not be allocated: {}",
-							image.describe(), e.toString());
+					throw refused(image, e);
 				}
 			}
 		}
+	}
 
-		this.lastWidth = screenWidth;
-		this.lastHeight = screenHeight;
-		rebind();
-		layoutIfNeeded();
+	/**
+	 * An image the device would not give is the whole frame refused, and not a name skipped.
+	 * <p>
+	 * The bind group layout of every program naming the image was built off the pack's
+	 * declaration, as a storage image, before anything was allocated; the descriptor write
+	 * answers off the allocation. A name declared and not allocated would therefore be written
+	 * as a sampled image under a layout that says storage, two types under one binding, which
+	 * no driver has to survive and none reports. Thrown to the colour targets, which refuse the
+	 * frame at this size the way they do for a colour target that could not be allocated.
+	 */
+	private static IllegalStateException refused(ImageInformation image, RuntimeException cause) {
+		return new IllegalStateException("storage image " + image.describe()
+				+ " could not be allocated, and a program declaring it cannot be drawn without it",
+				cause);
 	}
 
 	/**
