@@ -1,6 +1,6 @@
 package dev.vitrail.render;
 
-import dev.vitrail.mixin.TextureManagerAccessor;
+import dev.vitrail.mixin.access.TextureManagerAccessor;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;

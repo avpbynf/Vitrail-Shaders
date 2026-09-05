@@ -4,7 +4,7 @@ import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslationCache;
-import dev.vitrail.mixin.GpuDeviceAccessor;
+import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;

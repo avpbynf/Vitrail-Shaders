@@ -3,7 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.LegacyGlsl;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
-import dev.vitrail.mixin.GpuDeviceAccessor;
+import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.pack.program.AlphaTest;
 import dev.vitrail.pack.program.ProgramStage;
 import dev.vitrail.pack.program.RenderStage;

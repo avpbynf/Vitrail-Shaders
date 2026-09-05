@@ -1,7 +1,7 @@
 package dev.vitrail.sodium;
 
-import dev.vitrail.mixin.MixinSodiumWorldRenderer;
-import dev.vitrail.mixin.RenderSectionManagerAccessor;
+import dev.vitrail.mixin.access.MixinSodiumWorldRenderer;
+import dev.vitrail.mixin.access.RenderSectionManagerAccessor;
 import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.render.BlockStateIds;
 import dev.vitrail.render.DistantDraw;

@@ -2,7 +2,7 @@ package dev.vitrail.render;
 
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import dev.vitrail.Vitrail;
-import dev.vitrail.mixin.IntermediaryShaderModuleAccessor;
+import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
 
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.Version;
