@@ -1,7 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.EntityVertex;
-import dev.vitrail.mixin.GpuDeviceAccessor;
+import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;

@@ -1,4 +1,4 @@
-package dev.vitrail.mixin;
+package dev.vitrail.mixin.access;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.VertexFormat;

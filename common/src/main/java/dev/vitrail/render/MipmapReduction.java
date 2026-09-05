@@ -1,6 +1,6 @@
 package dev.vitrail.render;
 
-import dev.vitrail.mixin.CommandEncoderAccessor;
+import dev.vitrail.mixin.access.CommandEncoderAccessor;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;

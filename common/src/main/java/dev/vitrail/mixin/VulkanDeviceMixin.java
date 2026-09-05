@@ -1,5 +1,6 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.mixin.access.RenderPipelineAccessor;
 import dev.vitrail.render.StalePipelines;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;

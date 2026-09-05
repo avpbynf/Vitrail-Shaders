@@ -1,4 +1,4 @@
-package dev.vitrail.mixin;
+package dev.vitrail.mixin.access;
 
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
 import org.spongepowered.asm.mixin.Mixin;
