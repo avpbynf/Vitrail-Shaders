@@ -14,6 +14,18 @@ import java.util.List;
  */
 public final class GlslLexer {
 
+	/**
+	 * The spelling of every operator character below the first non-ASCII one, made once: about a
+	 * third of the tokens of a unit are operators, and each was a fresh one-character string.
+	 */
+	private static final String[] OPERATORS = new String[128];
+
+	static {
+		for (char c = 0; c < OPERATORS.length; c++) {
+			OPERATORS[c] = String.valueOf(c);
+		}
+	}
+
 	private GlslLexer() {
 	}
 
@@ -158,7 +170,8 @@ public final class GlslLexer {
 
 			// One character per operator token. The translator only ever asks about brackets,
 			// commas and semicolons, and single characters make joining the stream back exact.
-			tokens.add(new Token(Kind.OPERATOR, String.valueOf(c), null));
+			tokens.add(new Token(Kind.OPERATOR, c < OPERATORS.length ? OPERATORS[c] : String.valueOf(c),
+					null));
 			index++;
 		}
 
