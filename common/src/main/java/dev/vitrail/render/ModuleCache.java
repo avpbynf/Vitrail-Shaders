@@ -155,10 +155,14 @@ public final class ModuleCache {
 	private static final long SWEEP_BACKOFF_NANOS = 60_000_000_000L;
 
 	/**
-	 * Bumped by hand when the layout of a file changes rather than its content. Every blob written
-	 * under an older one is then unreachable, and the sweep is what eventually collects it.
+	 * Bumped by hand when the layout of a file changes rather than its content, or when what the
+	 * tables in it hold does. Every blob written under an older one is then unreachable, and the
+	 * sweep is what eventually collects it. Two is where the uniform buffer table first carries the
+	 * storage blocks: every blob before it lists none, a hit skips the reflection that would add
+	 * them, and a pipeline built off such a blob leaves every storage block on the binding its pack
+	 * wrote.
 	 */
-	private static final String FORMAT = "vitrail-module-1";
+	private static final String FORMAT = "vitrail-module-2";
 
 	private static final String FOLDER = "modules";
 	private static final String SUFFIX = ".mod";

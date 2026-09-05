@@ -21,7 +21,7 @@ quietly stale.
 | Mellow v3.3 | Drawn, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. |
 | Photon v1.3b | Drawn, at default settings. It exercises a clamped volume of half floats as its atmosphere table, reads its volumes through macros standing for the sampler's name, and lays a volume over the name of a colour target that the same stage also reads as a plain `sampler2D`. Not yet compared against the reference shot for shot. |
 | Body Camera v1.6.1 | Drawn. It is one of the packs that branches on the star flag in the sky, so it is worth reading [the sky goes flat](#the-sky-goes-flat) alongside. |
-| Reverie Beta v0.9 | **Loads and compiles whole, and its picture is black.** The four features it declares it cannot be drawn without are all served, its loosely written conditionals are read as the reference reads them, and every one of its full-screen passes and computes runs. What it draws is black: the textures it ships reach its geometry programs as a single pixel, and eight of its own uniforms are handed as zeros, matrices among them. That is a gap here and not a fault of the pack: Iris draws it. |
+| Reverie Beta v0.9 | Drawn, at its shipped profile. It is the pack that exercises the storage buffers hardest: its exposure is an average brightness that a compute writes into one and every later pass reads back, and a compute of its cloud pass reads the depth. It declares the uniforms of the Voxy mod beside those of Distant Horizons and reads them only under a `VOXY` define that mod sets and nothing here does, so the seven `vx` names the log reports as zeros are handed as zeros by Iris too without that mod, and the misspelt `previouscameraPositionFract` beside them is read by no program of the pack. Not yet compared against the reference shot for shot. |
 
 Start from what you are seeing. Each symptom below names its cause, and says how to confirm it
 rather than guess.
@@ -60,8 +60,7 @@ naming them at load.
 A pack can declare the features it cannot be drawn without, and Reverie declares several. That
 line is read before any of its programs is translated, so a refusal names what the pack asked for
 and did not get, the log listing them, rather than the symptom that would have come later. Every
-name Reverie declares is served now, so it is no longer refused there; what it still lacks is
-written in its row of the table above.
+name Reverie declares is served now, so it is no longer refused there.
 
 **Any name this engine has not built refuses the declaration.** Five names are built and served
 today, `BLOCK_EMISSION_ATTRIBUTE`, `CUSTOM_IMAGES`, `HIGHER_SHADOWCOLOR`,

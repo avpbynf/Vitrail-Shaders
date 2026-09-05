@@ -16,8 +16,8 @@ import java.nio.ByteBuffer;
  * Lists SPIR-V storage images and storage buffers beside the resources the game asks SPIRV-Cross
  * for, and lets a 3D image through {@code rebind}.
  * <p>
- * Type 6 is a storage image. Type 5 is a storage buffer. Type 7 is a sampled image.
- * {@code createFromSpirv} walks 1 and 7 and leaves 5 and 6 on the bindings shaderc assigned.
+ * Type 6 is a storage image. Type 2 is a storage buffer. Type 7 is a sampled image.
+ * {@code createFromSpirv} walks 1 and 7 and leaves 2 and 6 on the bindings shaderc assigned.
  * Complementary's {@code uimage3D voxel_img} and {@code blockDataBuffer} are those resources.
  * Construction of the package-private records is {@link ComputeShader}, by reflection.
  */
