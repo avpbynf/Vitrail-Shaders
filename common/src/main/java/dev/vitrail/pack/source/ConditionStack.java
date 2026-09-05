@@ -25,6 +25,17 @@ public final class ConditionStack {
 	}
 
 	/**
+	 * The same, with the condition evaluated only under a live parent: inside a group that is
+	 * not taken, nothing about a nested condition can matter, and the preprocessor does not
+	 * read it either. An expression that fails there would otherwise count as undecidable.
+	 * The group counts as taken then, so that its {@code #elif} and {@code #else} are not read
+	 * either, which is what a true condition would have bought.
+	 */
+	public void ifDirective(BooleanSupplier condition) {
+		push(!active() || condition.getAsBoolean(), false);
+	}
+
+	/**
 	 * A conditional whose directive is written out rewritten, because what the pack wrote is not
 	 * one the compiler will read. Marked apart from the rest so that one the file never closes can
 	 * be closed where the file ends: the text carries its directives to the compiler, and what this

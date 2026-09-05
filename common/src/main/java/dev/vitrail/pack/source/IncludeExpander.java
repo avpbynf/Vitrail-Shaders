@@ -74,6 +74,10 @@ public final class IncludeExpander {
 	private static final Pattern UNDEF = Pattern.compile("^\\s*#\\s*undef\\s+([A-Za-z_]\\w*).*$");
 	private static final Pattern VERSION = Pattern.compile("^\\s*#\\s*version\\s+(.*)$");
 
+	/** The two comment shapes a directive's tail is stripped of, compiled once for every line. */
+	private static final Pattern LINE_COMMENT = Pattern.compile("//.*");
+	private static final Pattern BLOCK_COMMENT = Pattern.compile("/\\*.*?\\*/");
+
 	private final ShaderPackSource source;
 	private final SettingSet settings;
 	private final boolean partOfALoad;
@@ -190,7 +194,7 @@ public final class IncludeExpander {
 
 		ConditionStack conditions = new ConditionStack();
 
-		for (Logical logical : logicalLines(this.source.readLines(file))) {
+		for (Logical logical : logicalLines(file)) {
 			// Checked here and not only on the way in. One file is enough on its own: a pack that
 			// ships a single shader of a million lines never expands anything, so a budget read
 			// once per file would never be read at all.
@@ -235,7 +239,7 @@ public final class IncludeExpander {
 				// A unit has exactly one version directive and it is the entry file's. Later
 				// ones come from includes and would be an error where they land.
 				if (state.version == null) {
-					state.version = version.group(1).replaceAll("//.*", "").trim();
+					state.version = LINE_COMMENT.matcher(version.group(1)).replaceAll("").trim();
 					state.emit(logical.physical(), true);
 				}
 
@@ -289,6 +293,24 @@ public final class IncludeExpander {
 	private record Logical(String text, int number, List<String> physical) {
 	}
 
+	/** The file's lines as the compiler joins them, kept on the opening with the raw lines. */
+	private record LogicalLinesOf(Path file) {
+	}
+
+	/**
+	 * Once per file of an opening rather than once per inclusion of it: a header a unit pulls in
+	 * twenty times was wrapped twenty times over lines the opening already kept. The report's
+	 * walk keeps nothing on its opening, as its other memo does not either.
+	 */
+	private List<Logical> logicalLines(Path file) throws IOException {
+		if (!this.partOfALoad) {
+			return logicalLines(this.source.readLines(file));
+		}
+
+		return this.source.derived(new LogicalLinesOf(file),
+				() -> logicalLines(this.source.readLines(file)));
+	}
+
 	private static List<Logical> logicalLines(List<String> lines) {
 		List<Logical> logical = new ArrayList<>(lines.size());
 		StringBuilder joined = new StringBuilder();
@@ -338,7 +360,7 @@ public final class IncludeExpander {
 			state.conditionals++;
 			state.openInOutput++;
 			if (!beyondComments(iff.group(2)).isEmpty()) {
-				conditions.ifDirective(decide(iff.group(2), state));
+				conditions.ifDirective(() -> decide(iff.group(2), state));
 				return line;
 			}
 
@@ -476,7 +498,7 @@ public final class IncludeExpander {
 
 	/** What the compiler still has to read once the comments are taken out of a directive's tail. */
 	private static String beyondComments(String tail) {
-		String code = tail.replaceAll("/\\*.*?\\*/", " ");
+		String code = BLOCK_COMMENT.matcher(tail).replaceAll(" ");
 		int line = code.indexOf("//");
 		int unterminated = code.indexOf("/*");
 		if (line >= 0) {
@@ -538,7 +560,8 @@ public final class IncludeExpander {
 		Matcher applied = DEFINE.matcher(rewritten);
 
 		if (applied.matches()) {
-			state.defines.put(applied.group(1), applied.group(2).replaceAll("//.*", "").trim());
+			state.defines.put(applied.group(1),
+					LINE_COMMENT.matcher(applied.group(2)).replaceAll("").trim());
 		} else if (original.matches()) {
 			// The line declared something and no longer does: a switch that was turned off.
 			state.defines.remove(original.group(1));
