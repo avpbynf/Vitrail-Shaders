@@ -513,9 +513,14 @@ public final class PackValues {
 	 * What the pack asks of each {@code shadowcolor} the light may draw into: its format, and what
 	 * emptying it means. One entry a buffer, in order, and a buffer the pack said nothing about
 	 * carries Iris's own defaults rather than being left out.
+	 * <p>
+	 * As many entries as a name can go high, and not as many as this pack may reach nor as many as
+	 * are allocated. It is a table of directives and costs no memory. Cutting it at the ceiling
+	 * would make its length a second answer to a question {@code TargetPlan} already answers, and
+	 * two answers to one question is the shape of divergence that shows as a plausible picture.
 	 */
 	public List<PackDirectives.ShadowColour> shadowColours() {
-		return IntStream.range(0, ShadowTargets.COLOURS)
+		return IntStream.range(0, ShadowTargets.MAX_COLOURS)
 				.mapToObj(index -> this.state.directives().shadowColour(index))
 				.toList();
 	}

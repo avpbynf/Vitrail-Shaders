@@ -35,6 +35,16 @@ what the next one holds.
   view reads it again as before. The picture is the same, and none of this has been measured, so
   it says work removed rather than frames gained.
 
+### Added
+
+- **Eight shadow colour buffers for a pack that asks for them.** A pack declaring
+  `HIGHER_SHADOWCOLOR` may now draw the light into `shadowcolor0` through `shadowcolor7` and read
+  them back, which is what Iris gives it. Before, a shadow program naming anything above
+  `shadowcolor1` had its whole target list thrown away and drew into the first two instead, which
+  is still what a pack that does not declare the flag gets, exactly as under Iris. And only the
+  buffers some program of the pack names are allocated now, so a pack writing `shadowcolor0` alone
+  pays for that one image where it used to pay for two.
+
 ### Fixed
 
 - **Importing settings no longer acts on a screen you have already left.** The window that asks

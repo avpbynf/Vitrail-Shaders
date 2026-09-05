@@ -326,7 +326,12 @@ final class ColorTargets {
 		// The image wins over the directive when the pack ships both: the directive sizes the
 		// generated field, and the image is uploaded as it stands, which is Iris's rule.
 		this.noiseImage = noiseImage;
-		this.shadowMap = new ShadowTargets(shadowResolution, shadowColours);
+		// Which of the light's colour buffers are worth the memory is the plan's answer and not a
+		// count, on the rule the colour targets themselves follow: a pack naming shadowcolor2 gets
+		// the image, a pack writing nought alone pays for nought alone. The ceiling those names were
+		// read against comes from the same place, being the pack's own declaration and not ours.
+		this.shadowMap = new ShadowTargets(shadowResolution, shadowColours, plan.shadowAllocated(),
+				plan.shadowCeiling());
 		this.doubled = Set.copyOf(plan.schedule().doubled());
 
 		// The format and the starting colour are read once and kept. Neither moves while a pack

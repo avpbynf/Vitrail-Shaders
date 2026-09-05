@@ -19,16 +19,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * The shadow map: one depth image the world is drawn into from the light, and the colour targets
  * beside it.
  * <p>
- * <strong>More than one colour target, which is Iris's own count.</strong> It sizes the shadow
- * colour targets at two, eight where a pack asks for {@code HIGHER_SHADOWCOLOR}
- * ({@code shadows/ShadowRenderTargets.java:46}, from
- * {@code shaderpack/properties/PackShadowDirectives.java:19-20}), and opens {@code {0, 1}} for a
- * shadow program whose draw buffers it cannot read
+ * <strong>Two colour targets, or eight where the pack asked for them.</strong> The ceiling is
+ * Iris's and it is read off the PACK: two where {@code HIGHER_SHADOWCOLOR} is not declared, eight
+ * where it is ({@code shadows/ShadowRenderTargets.java:46}, from
+ * {@code shaderpack/properties/PackShadowDirectives.java:19-20}). Posing the define for every pack
+ * does not raise it, a define being what a pack READS and a declaration what it ASKS FOR, so the
+ * number here is {@code TargetPlan.shadowCeiling} and every index is admitted against that. Iris
+ * opens {@code {0, 1}} for a shadow program whose draw buffers it cannot read
  * ({@code pipeline/programs/SodiumPrograms.java:137-139}). When each of them is built differs here,
  * and the field they live in says why.
  * <p>
@@ -71,12 +76,11 @@ final class ShadowTargets {
 	private static final int MAX_RESOLUTION = 16384;
 
 	/**
-	 * How many colour targets the light may draw into. Iris's number for a pack that does not ask
-	 * for {@code HIGHER_SHADOWCOLOR}, and the only pack of the corpus that does ask
-	 * ({@code Reverie Beta v0.9}, {@code shaders/shaders.properties:10}) is refused at load here for
-	 * a reason of its own, so eight would be memory no program of this place could name.
+	 * The highest a {@code shadowcolor} name can go, which is what the arrays below are sized at and
+	 * NOT what any one pack may reach: that is {@link #ceiling}, and a pack which never declared the
+	 * flag stops at two of these eight slots.
 	 */
-	static final int COLOURS = 2;
+	static final int MAX_COLOURS = PackDirectives.MAX_SHADOW_COLOURS;
 
 	/**
 	 * Its own, and not the one {@link ColorTargets} empties under: the census groups a frame's passes
@@ -92,12 +96,32 @@ final class ShadowTargets {
 	private final List<Vector4fc> clearColours;
 
 	/**
+	 * How many of them this pack may reach, its own declaration deciding. Clamped to what the arrays
+	 * below hold, because the number is worked out in another class and an index past their length
+	 * would be an out of bounds in the middle of an allocation rather than a buffer left out.
+	 */
+	private final int ceiling;
+
+	/**
+	 * Which of them are allocated, sorted, holes and all. Every loop of this class runs over this
+	 * and never over the ceiling: a pack naming {@code shadowcolor2} alone gets three images and not
+	 * eight, which is the same rule {@link ColorTargets} follows for the colour targets.
+	 * <p>
+	 * Nought is in it whatever the pack names, and that is Iris rather than a floor of our own: it
+	 * builds the buffer at construction, for the framebuffer its depth copy is taken through
+	 * ({@code shadows/ShadowRenderTargets.java:73,75}), so the image exists before a program has
+	 * asked for anything. Here it is the colour attachment the depth shares a {@link TextureTarget}
+	 * with, so it exists for the same reason and cannot be left out of the clear.
+	 */
+	private final List<Integer> live;
+
+	/**
 	 * Whether each colour has yet to be emptied once. A pack that turns its own clear off is asking
 	 * to keep what the shadow stage wrote from one frame to the next, not to read whatever the
 	 * allocation left in the image, and Iris says the same on the directive: the clear colour is
 	 * still what the buffer starts life holding.
 	 */
-	private final boolean[] unstarted = new boolean[COLOURS];
+	private final boolean[] unstarted = new boolean[MAX_COLOURS];
 
 	private TextureTarget target;
 
@@ -106,20 +130,20 @@ final class ShadowTargets {
 	 * carries one colour attachment and one depth, so the rest are images of their own, attached
 	 * beside it by whoever opens the pass.
 	 * <p>
-	 * <strong>All of them are made with the map, where Iris builds each one the first time a
-	 * framebuffer names it</strong> ({@code shadows/ShadowRenderTargets.java:127,136}). That is a
-	 * difference in when memory is taken and in nothing a pack can read: a buffer no program writes
-	 * holds its clear colour either way, and a sampler for one reads exactly that.
+	 * <strong>The live ones are all made with the map, where Iris builds each one the first time a
+	 * framebuffer or a sampler names it</strong> ({@code shadows/ShadowRenderTargets.java:127,136}).
+	 * That is a difference in when memory is taken and in nothing a pack can read: a buffer no
+	 * program writes holds its clear colour either way, and a sampler for one reads exactly that.
 	 * <p>
-	 * What it costs is one image at the map's own resolution for a pack that writes only nought,
-	 * which on this corpus is Mellow, and Mellow asks for 512 texels: one mebibyte. What it buys is
-	 * that nothing has to keep an order between an image and the program that names it, and the
-	 * shadow programs are NOT all built before the first frame is drawn - the terrain's are read
-	 * inside a frame ({@code TerrainDraw:625-634}) and the entities' from inside the light's own
-	 * walk ({@code EntityDraw:1069-1070}), so a set filled from the programs would have to be
-	 * answered by a pass already recording, where nothing may allocate.
+	 * What it costs is nothing, and what it buys is that no order has to be kept between an image
+	 * and the program that names it. The shadow programs are NOT all built before the first frame
+	 * is drawn: the terrain's are read inside a frame ({@code TerrainDraw:625-634}) and the
+	 * entities' from inside the light's own walk ({@code EntityDraw:1069-1070}), so a set filled
+	 * from the programs would have to be answered by a pass already recording, where nothing may
+	 * allocate. The plan is read instead, and it read every fragment stage of the place before the
+	 * chain was built, which is why a pack that writes only nought pays for only nought.
 	 */
-	private final TargetSurface[] rest = new TargetSurface[COLOURS - 1];
+	private final TargetSurface[] rest = new TargetSurface[MAX_COLOURS - 1];
 
 	/**
 	 * The map as it stood before anything translucent was drawn into it, which the OptiFine model
@@ -145,10 +169,18 @@ final class ShadowTargets {
 	private boolean broken;
 
 	/** Load-ops waiting for the first shadow pass of the frame, or a standalone encode if none opens. */
-	private final Vector4fc[] pendingColour = new Vector4fc[COLOURS];
+	private final Vector4fc[] pendingColour = new Vector4fc[MAX_COLOURS];
 	private boolean pendingDepth;
 
-	ShadowTargets(int resolution, List<PackDirectives.ShadowColour> asked) {
+	/**
+	 * @param named   which buffers a program of the place draws into or samples, from
+	 *                {@code TargetPlan.shadowAllocated}, already read against the ceiling. A shadow
+	 *                program declaring nothing is {@code {0, 1}} in there, which is the one way the
+	 *                pair reaches this class
+	 * @param ceiling how many the pack may reach, from {@code TargetPlan.shadowCeiling}
+	 */
+	ShadowTargets(int resolution, List<PackDirectives.ShadowColour> asked, Set<Integer> named,
+			int ceiling) {
 		// Clamped rather than refused: a directive that survived a setting nobody expanded can be
 		// any number at all, and a shadow map is not worth taking the pack down for.
 		this.resolution = Math.clamp(resolution, 1, MAX_RESOLUTION);
@@ -171,6 +203,11 @@ final class ShadowTargets {
 			return (Vector4fc) new Vector4f(colour.r(), colour.g(), colour.b(),
 					one.format().alphaAdded() && !one.declaresClearColour() ? 1.0F : colour.a());
 		}).toList();
+
+		this.ceiling = Math.clamp(ceiling, 1, MAX_COLOURS);
+		SortedSet<Integer> live = new TreeSet<>(Set.of(0));
+		named.stream().filter(index -> index > 0 && index < this.ceiling).forEach(live::add);
+		this.live = List.copyOf(live);
 	}
 
 	/**
@@ -202,7 +239,11 @@ final class ShadowTargets {
 			this.target = new TextureTarget("Vitrail shadow", this.resolution, this.resolution, true,
 					this.formats.get(0));
 			this.unstarted[0] = true;
-			for (int index = 1; index < COLOURS; index++) {
+			for (int index : this.live) {
+				if (index == 0) {
+					continue;
+				}
+
 				this.rest[index - 1] = new TargetSurface("Vitrail shadowcolor" + index,
 						this.formats.get(index), false, this.resolution, this.resolution);
 				this.unstarted[index] = true;
@@ -283,9 +324,9 @@ final class ShadowTargets {
 			return;
 		}
 
-		List<GpuTextureView> colours = new ArrayList<>(COLOURS);
-		List<Vector4fc> colourValues = new ArrayList<>(COLOURS);
-		for (int index = 0; index < COLOURS; index++) {
+		List<GpuTextureView> colours = new ArrayList<>(this.live.size());
+		List<Vector4fc> colourValues = new ArrayList<>(this.live.size());
+		for (int index : this.live) {
 			if (this.pendingColour[index] == null) {
 				continue;
 			}
@@ -327,7 +368,7 @@ final class ShadowTargets {
 	private void stash() {
 		this.copied = false;
 		this.pendingDepth = false;
-		for (int index = 0; index < COLOURS; index++) {
+		for (int index : this.live) {
 			this.pendingColour[index] = null;
 		}
 
@@ -340,7 +381,11 @@ final class ShadowTargets {
 			this.pendingColour[0] = this.clearColours.get(0);
 		}
 
-		for (int index = 1; index < COLOURS; index++) {
+		for (int index : this.live) {
+			if (index == 0) {
+				continue;
+			}
+
 			TargetSurface surface = this.rest[index - 1];
 			if (surface != null && wanted(index)) {
 				this.pendingColour[index] = this.clearColours.get(index);
@@ -366,8 +411,8 @@ final class ShadowTargets {
 	/** Each colour target's format and whether the pack keeps it, for the allocation's own line. */
 	private String describe() {
 		StringBuilder text = new StringBuilder();
-		for (int index = 0; index < COLOURS; index++) {
-			text.append(index == 0 ? "" : " and ")
+		for (int index : this.live) {
+			text.append(text.isEmpty() ? "" : " and ")
 					.append("shadowcolor").append(index)
 					.append(" as ").append(this.formats.get(index))
 					.append(this.asked.get(index).clear() ? "" : ", which the pack keeps between frames");
@@ -420,13 +465,13 @@ final class ShadowTargets {
 	}
 
 	/**
-	 * A shadow colour target, or null past the pair this engine allocates. Never nought's image under
+	 * A shadow colour target, or null for one nothing of this place named. Never nought's image under
 	 * another name: a pack reading a buffer nothing filled has to read the clear colour, which is
 	 * white and which it multiplies by, where nought's image would be a picture that is plausible and
 	 * wrong.
 	 */
 	GpuTextureView colour(int index) {
-		if (index < 0 || index >= COLOURS) {
+		if (index < 0 || index >= MAX_COLOURS) {
 			return null;
 		}
 
@@ -441,6 +486,14 @@ final class ShadowTargets {
 
 	int resolution() {
 		return this.resolution;
+	}
+
+	/**
+	 * How many colour buffers this pack may name, which is what a declared list is admitted against
+	 * and never how many exist. See the class comment for where the number comes from.
+	 */
+	int colourCeiling() {
+		return this.ceiling;
 	}
 
 	/**
@@ -461,7 +514,7 @@ final class ShadowTargets {
 			this.target = null;
 		}
 
-		for (int index = 1; index < COLOURS; index++) {
+		for (int index = 1; index < MAX_COLOURS; index++) {
 			if (this.rest[index - 1] != null) {
 				this.rest[index - 1].close();
 				this.rest[index - 1] = null;

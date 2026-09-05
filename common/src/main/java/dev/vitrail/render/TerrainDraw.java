@@ -528,8 +528,9 @@ public final class TerrainDraw {
 			//
 			// What the pack reads then is the DEPTH emptied to the far plane, both names of it,
 			// because the clear below empties the depth whichever way the pack's own keep directive
-			// reads (ShadowTargets.java:236-241). A shadowcolor the pack asked to KEEP is a
-			// different matter and is NOT emptied (:243-248 through :256-264): it holds the last
+			// reads (ShadowTargets.stash raises it for every frame the map exists). A shadowcolor
+			// the pack asked to KEEP is a different matter and is NOT emptied (the same method,
+			// through ShadowTargets.wanted, which is what reads the directive): it holds the last
 			// frame the stage drew, for as long as the setting stays at nought. Iris returns before
 			// touching any of its targets, so there both halves keep the last frame.
 			//

@@ -90,6 +90,8 @@ public final class TargetPlan {
 	private final Set<Integer> written;
 	private final Set<Integer> sampled;
 	private final Set<Integer> allocated;
+	private final int shadowCeiling;
+	private final Set<Integer> shadowAllocated;
 	private final List<Integer> ordered;
 	private final Set<Integer> persistent;
 	private final List<String> running;
@@ -133,6 +135,8 @@ public final class TargetPlan {
 		allocated.addAll(draft.sampled);
 		this.allocated = Collections.unmodifiableSet(allocated);
 		this.ordered = List.copyOf(allocated);
+		this.shadowCeiling = draft.shadowCeiling;
+		this.shadowAllocated = Collections.unmodifiableSet(new TreeSet<>(draft.shadowNamed));
 
 		TreeSet<Integer> persistent = new TreeSet<>();
 		allocated.stream().filter(index -> !draft.directives.clears(index)).forEach(persistent::add);
@@ -180,6 +184,8 @@ public final class TargetPlan {
 		draft.dimension = dimension;
 		draft.place = present ? dimension : ProgramSet.ROOT;
 		draft.properties = properties;
+		draft.shadowCeiling =
+				PackDirectives.shadowColours(properties.declares(PackDirectives.HIGHER_SHADOWCOLOR));
 
 		List<ProgramSet.ProgramKey> entries = programs.fragmentsOf(draft.place);
 
@@ -473,12 +479,26 @@ public final class TargetPlan {
 			draft.writes.put(key.name().baseName(), writes);
 			if (fromTheLight) {
 				draft.fromTheLight.add(key.name().baseName());
+				// Through the same rule the light's own pass will be attached by, so that what is
+				// allocated cannot come out short of what a shadow program draws into: a declaration
+				// naming a buffer past the ceiling is the pair, and so is no declaration at all.
+				draft.shadowNamed.addAll(DrawBuffers.shadowColours(writes, draft.shadowCeiling));
 			} else {
 				draft.written.addAll(writes);
 			}
 
 			Set<Integer> indices = new TreeSet<>();
 			for (String sampler : samplers(unit)) {
+				// Under the same ceiling, which is what stops a name from allocating an image Iris
+				// would not have. Iris binds a shadow colour sampler by walking the array it sized
+				// off the declaration and building each one it finds a name for
+				// (samplers/IrisSamplers.java:159-163), so shadowcolor2 in a pack that never asked
+				// for the eight is a name nothing answers rather than an image.
+				if (SamplerPlan.isShadowColour(sampler)
+						&& SamplerPlan.shadowColour(sampler) < draft.shadowCeiling) {
+					draft.shadowNamed.add(SamplerPlan.shadowColour(sampler));
+				}
+
 				TargetName.index(sampler).ifPresent(index -> {
 					draft.sampled.add(index);
 					indices.add(index);
@@ -548,6 +568,36 @@ public final class TargetPlan {
 	/** Written or sampled by some program of the place. Nothing else is allocated. */
 	public Set<Integer> allocated() {
 		return this.allocated;
+	}
+
+	/**
+	 * How many {@code shadowcolor} buffers this pack may reach, which is the pack's own answer and
+	 * not the engine's: the eight where it declares {@link PackDirectives#HIGHER_SHADOWCOLOR} and
+	 * the two of OptiFine where it does not, exactly as Iris sizes its array
+	 * ({@code shadows/ShadowRenderTargets.java:46}). Every reading of a declared index goes through
+	 * it, here and in {@code render/GeometryProgram}, so a list naming a buffer above it is thrown
+	 * away whole and answered with the pair.
+	 */
+	public int shadowCeiling() {
+		return this.shadowCeiling;
+	}
+
+	/**
+	 * The same question for the light's own colour buffers: which {@code shadowcolor} a program of
+	 * the place draws into or samples, and therefore which of them are worth the memory.
+	 * <p>
+	 * Read off the fragment stages, which is where the writes live: {@code RENDERTARGETS} is a
+	 * fragment directive, and the sampler scan runs over the same units. A name declared in a
+	 * vertex stage alone is not in here, and neither is one only a COMPUTE of the place reads,
+	 * which is a divergence {@code render/PackCompute.engineView} sets out whole. What either
+	 * reads is the white stand-in, the same answer it gets for a buffer the light never draws into.
+	 * <p>
+	 * A place with no shadow geometry at all leaves it empty, and then nothing but the map's own
+	 * first colour is taken: the pair is what a shadow PROGRAM declaring nothing is answered with,
+	 * not what a pack with no such program is charged for.
+	 */
+	public Set<Integer> shadowAllocated() {
+		return this.shadowAllocated;
 	}
 
 	/** Sorted, holes and all: a pack declaring 0 to 9 and 16 has eleven entries. */
@@ -892,6 +942,13 @@ public final class TargetPlan {
 		private final Set<String> shadowComposites = new TreeSet<>();
 		private final Set<Integer> written = new TreeSet<>();
 		private final Set<Integer> sampled = new TreeSet<>();
+
+		/** Shadow colour buffers a program of the place draws into or reads. */
+		private final Set<Integer> shadowNamed = new TreeSet<>();
+
+		/** How many of them the pack's own declaration lets it reach. */
+		private int shadowCeiling = PackDirectives.SHADOW_COLOURS;
+
 		private final List<String> unreadable = new ArrayList<>();
 
 		private int geometryAt = -1;

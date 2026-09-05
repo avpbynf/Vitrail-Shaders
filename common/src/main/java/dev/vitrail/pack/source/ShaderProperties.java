@@ -1615,19 +1615,32 @@ public final class ShaderProperties {
 
 	/**
 	 * What the pack would use if it were there, and takes another path without. It is the list Iris
-	 * turns into {@code IRIS_FEATURE_} defines for the GLSL. A flag is posed the day the capability
+	 * turns into the {@code IRIS_FEATURE_} defines a pack's GLSL finds
+	 * ({@code shaderpack/ShaderPack.java:247-251}). A flag is posed here the day the capability
 	 * behind it is served and not before, a define being a promise, and every other name stays
-	 * unposed, which is what tells a pack to take the other path for it. Which names those are
-	 * today is written where they are posed, {@code EngineDefines.table}.
+	 * unposed, which is what tells a pack to take the other path for it. Iris poses a define only
+	 * where the pack lists the flag here; this engine poses the ones it serves for every pack, and
+	 * {@code EngineDefines.table} owns that difference and the list of names.
 	 * <p>
-	 * Nothing in the engine reads this list, and that is deliberate rather than an oversight: there
-	 * is nothing here to decide from it. What taking the line out of the ignored keys buys is
-	 * already bought by reading it at all, since that is what stops it being counted; what the list
-	 * itself is for is the measurement made out of the game, which is where the corpus is counted,
-	 * exactly as {@link #malformedAlphaTests} is.
+	 * Kept whole and unfiltered, because it is also what the measurement made out of the game
+	 * counts, exactly as {@link #malformedAlphaTests} is.
 	 */
 	public List<String> optionalFeatures() {
 		return this.optionalFeatures;
+	}
+
+	/**
+	 * Whether the pack names a capability at all, required or optional, which is the question that
+	 * decides what a name buys it. Iris folds the two lists into one set and asks it exactly this
+	 * ({@code shaderpack/ShaderPack.java:208-213}, read at line 620 by {@code hasFeature}), and its
+	 * own lookup is case-insensitive ({@code features/FeatureFlags.java:65-73}), so this one is too.
+	 */
+	public boolean declares(String feature) {
+		return names(this.requiredFeatures, feature) || names(this.optionalFeatures, feature);
+	}
+
+	private static boolean names(List<String> declared, String feature) {
+		return declared.stream().anyMatch(name -> name.equalsIgnoreCase(feature));
 	}
 
 	/**
