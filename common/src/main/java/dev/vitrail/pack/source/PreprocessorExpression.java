@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.regex.Pattern;
 
 /**
  * Evaluates the expression of an {@code #if} or {@code #elif} well enough to decide which
@@ -38,13 +39,24 @@ public final class PreprocessorExpression {
 	 */
 	private static final int MAX_NESTING_DEPTH = 64;
 
+	/** Compiled once: an expression is evaluated for every conditional of every unit of a load. */
+	private static final Pattern BLOCK_COMMENT = Pattern.compile("/\\*.*?\\*/");
+	private static final Pattern LINE_COMMENT = Pattern.compile("//.*");
+
 	private final List<String> tokens;
 	private final Map<String, String> defines;
 	private final int depth;
 
 	private int position;
 	private int nesting;
+	/**
+	 * Whether a value could not be worked out: a division by nought, a shift by an absurd amount.
+	 * Forgiven where it happened in an operand the preprocessor never evaluates.
+	 */
 	private boolean failed;
+
+	/** Whether the text is not an expression at all, which no operator forgives. */
+	private boolean malformed;
 
 	private PreprocessorExpression(List<String> tokens, Map<String, String> defines, int depth) {
 		this.tokens = tokens;
@@ -71,7 +83,7 @@ public final class PreprocessorExpression {
 
 		PreprocessorExpression parser = new PreprocessorExpression(tokens, defines, depth);
 		long result = parser.logicalOr();
-		if (parser.failed || parser.position < tokens.size()) {
+		if (parser.failed || parser.malformed || parser.position < tokens.size()) {
 			return OptionalLong.empty();
 		}
 
@@ -79,7 +91,7 @@ public final class PreprocessorExpression {
 	}
 
 	private static String stripComments(String expression) {
-		return expression.replaceAll("/\\*.*?\\*/", " ").replaceAll("//.*", "");
+		return LINE_COMMENT.matcher(BLOCK_COMMENT.matcher(expression).replaceAll(" ")).replaceAll("");
 	}
 
 	private static List<String> tokenise(String text) {
@@ -143,10 +155,22 @@ public final class PreprocessorExpression {
 		return false;
 	}
 
+	/**
+	 * The two short-circuit operators. The right operand is always walked, so that its tokens are
+	 * consumed and its syntax still has to hold, but where the left side already decides, what
+	 * the right side failed to work out is forgotten: the preprocessor never evaluates that
+	 * operand, so {@code X != 0 && 100 / X > 5} is false at zero rather than undecidable, and an
+	 * undecidable answer would have put the whole branch back in.
+	 */
 	private long logicalOr() {
 		long left = logicalAnd();
 		while (accept("||")) {
+			boolean decided = this.failed;
 			long right = logicalAnd();
+			if (left != 0) {
+				this.failed = decided;
+			}
+
 			left = left != 0 || right != 0 ? 1 : 0;
 		}
 
@@ -156,7 +180,12 @@ public final class PreprocessorExpression {
 	private long logicalAnd() {
 		long left = bitwiseOr();
 		while (accept("&&")) {
+			boolean decided = this.failed;
 			long right = bitwiseOr();
+			if (left == 0) {
+				this.failed = decided;
+			}
+
 			left = left != 0 && right != 0 ? 1 : 0;
 		}
 
@@ -294,7 +323,7 @@ public final class PreprocessorExpression {
 
 		this.position++;
 		if (++this.nesting > MAX_NESTING_DEPTH) {
-			this.failed = true;
+			this.malformed = true;
 			return 0;
 		}
 
@@ -319,20 +348,20 @@ public final class PreprocessorExpression {
 	private long primary() {
 		String token = peek();
 		if (token == null) {
-			this.failed = true;
+			this.malformed = true;
 			return 0;
 		}
 
 		if (accept("(")) {
 			if (++this.nesting > MAX_NESTING_DEPTH) {
-				this.failed = true;
+				this.malformed = true;
 				return 0;
 			}
 
 			long value = logicalOr();
 			this.nesting--;
 			if (!accept(")")) {
-				this.failed = true;
+				this.malformed = true;
 			}
 
 			return value;
@@ -350,7 +379,7 @@ public final class PreprocessorExpression {
 
 		OptionalLong number = parseNumber(token);
 		if (number.isEmpty()) {
-			this.failed = true;
+			this.malformed = true;
 			return 0;
 		}
 
@@ -361,13 +390,13 @@ public final class PreprocessorExpression {
 		boolean parenthesised = accept("(");
 		String name = peek();
 		if (name == null || !isIdentifier(name)) {
-			this.failed = true;
+			this.malformed = true;
 			return 0;
 		}
 
 		this.position++;
 		if (parenthesised && !accept(")")) {
-			this.failed = true;
+			this.malformed = true;
 			return 0;
 		}
 
