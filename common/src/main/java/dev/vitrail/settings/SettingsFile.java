@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,6 +67,9 @@ public final class SettingsFile {
 			"# Written by Vitrail's settings screen and by Iris, one NAME=value per line.",
 			"# Only what differs from the pack's own defaults.",
 			"# vitrail/options.txt is a different file, it is never written here, and it wins.");
+
+	/** The three bytes an editor may put in front of a UTF-8 file, which Latin-1 reads as letters. */
+	private static final byte[] BYTE_ORDER_MARK = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
 
 	private SettingsFile() {
 	}
@@ -253,14 +257,31 @@ public final class SettingsFile {
 	 * A file the player edited in another editor must not be able to take a pack down, and neither
 	 * must one this engine wrote in another encoding years ago: what is unreadable is one value, and
 	 * a lost value is what pressing Apply fixes.
+	 * <p>
+	 * A byte order mark is taken off, and the lines are cut by {@code lines()} rather than by a
+	 * split on {@code \r?\n}, for the reasons {@code SettingsLayers.text} gives: left on, the
+	 * mark rides on the first key and matches no setting, and a file saved with lone carriage
+	 * returns would come back as one line with the first key swallowing every value after it.
+	 * This is the one file shared with Iris and edited by hand, so both happen to it. The mark
+	 * is taken off the bytes and not off the text, because the format's own charset has no
+	 * notion of it: decoded as Latin-1 the three bytes come out as three letters, and a test on
+	 * the character would pass them through onto the first key.
 	 */
 	private static Map<String, String> lines(Path file, Charset charset) throws IOException {
 		if (!Files.isRegularFile(file)) {
 			return Map.of();
 		}
 
+		byte[] bytes = Files.readAllBytes(file);
+		int start = bytes.length >= BYTE_ORDER_MARK.length
+				&& Arrays.equals(bytes, 0, BYTE_ORDER_MARK.length, BYTE_ORDER_MARK, 0,
+						BYTE_ORDER_MARK.length)
+				? BYTE_ORDER_MARK.length
+				: 0;
+		String text = new String(bytes, start, bytes.length - start, charset);
+
 		Map<String, String> values = new LinkedHashMap<>();
-		for (String line : new String(Files.readAllBytes(file), charset).split("\r?\n", -1)) {
+		for (String line : text.lines().toList()) {
 			String trimmed = line.trim();
 			int equals = trimmed.indexOf('=');
 			if (trimmed.isEmpty() || trimmed.startsWith("#") || equals < 1) {

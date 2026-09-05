@@ -715,6 +715,17 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	@Override
 	public void packChosen() {
 		setFocused(this.folderButton);
+		// A preview is of one pack, and the selection has left it: what was set on it would be
+		// written into that pack's file by an Apply aimed at another, and the bottom line and its
+		// forced count would go on describing a pack that is neither drawing nor chosen. Dropped
+		// here, at the click, rather than repaired on the way back to the options view.
+		PackList list = this.packList;
+		PackSession shown = this.session;
+		if (this.previewing && list != null && shown != null
+				&& !list.chosenName().equals(shown.packFileName())) {
+			giveUp(PackChain.session().orElse(null));
+		}
+
 		// The switch is live for what the list has selected, so it has to hear that the selection
 		// moved. Nothing else rebuilds this screen when a row is clicked, and without this the very
 		// first pack picked on a fresh install left the button dead until something else did.
