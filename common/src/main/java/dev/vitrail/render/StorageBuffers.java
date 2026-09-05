@@ -27,7 +27,9 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 
 import java.nio.LongBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The shader storage buffers a pack declared with {@code bufferObject.N}, allocated on the Vulkan
@@ -45,6 +47,9 @@ public final class StorageBuffers implements AutoCloseable {
 
 	private final BufferObject.Reading declared;
 	private final List<Allocated> allocated = new ArrayList<>();
+
+	/** Each allocation under the index the pack declared it at, rebuilt with {@link #allocated}. */
+	private Map<Integer, Bound> bindings = Map.of();
 	private GpuBuffer dummy;
 	private int lastWidth;
 	private int lastHeight;
@@ -71,18 +76,21 @@ public final class StorageBuffers implements AutoCloseable {
 	}
 
 	private Bound lookup(String name) {
-		int index = CustomStorage.indexOf(name);
-		if (index < 0) {
+		if (this.bindings.isEmpty()) {
 			return null;
 		}
 
+		int index = CustomStorage.indexOf(name);
+		return index < 0 ? null : this.bindings.get(index);
+	}
+
+	private void rebind() {
+		Map<Integer, Bound> bound = new HashMap<>();
 		for (Allocated buffer : this.allocated) {
-			if (buffer.declared.index() == index) {
-				return new Bound(buffer.buffer, buffer.bytes);
-			}
+			bound.putIfAbsent(buffer.declared.index(), new Bound(buffer.buffer, buffer.bytes));
 		}
 
-		return null;
+		this.bindings = Map.copyOf(bound);
 	}
 
 	/**
@@ -120,6 +128,22 @@ public final class StorageBuffers implements AutoCloseable {
 		}
 
 		ensurePlaceholder(device);
+		// The map follows the list whatever happens below: an allocation that throws halfway
+		// through a resize has already destroyed the relative buffers and dropped them from the
+		// list, and a map left standing would hand a destroyed handle to the next descriptor push.
+		try {
+			allocate(vulkan, first, resized, screenWidth, screenHeight);
+		} finally {
+			rebind();
+		}
+
+		this.lastWidth = screenWidth;
+		this.lastHeight = screenHeight;
+		zero(device);
+	}
+
+	private void allocate(VulkanDevice vulkan, boolean first, boolean resized, int screenWidth,
+			int screenHeight) {
 		if (first) {
 			for (BufferObject buffer : this.declared.buffers()) {
 				if (buffer.relative()) {
@@ -155,10 +179,6 @@ public final class StorageBuffers implements AutoCloseable {
 				Vitrail.logger().info("storage buffer {} at {} bytes", buffer.describe(), bytes);
 			}
 		}
-
-		this.lastWidth = screenWidth;
-		this.lastHeight = screenHeight;
-		zero(device);
 	}
 
 	private void ensurePlaceholder(GpuDevice device) {
@@ -173,6 +193,10 @@ public final class StorageBuffers implements AutoCloseable {
 	 * Mixins replace the {@code VkBuffer} and the range while the descriptors are pushed.
 	 */
 	public static void bind(RenderPass pass, List<String> names) {
+		if (names.isEmpty()) {
+			return;
+		}
+
 		GpuBufferSlice slice = current.placeholder();
 		if (slice == null) {
 			return;
@@ -266,6 +290,7 @@ public final class StorageBuffers implements AutoCloseable {
 		}
 
 		this.allocated.clear();
+		this.bindings = Map.of();
 		if (this.dummy != null) {
 			this.dummy.close();
 			this.dummy = null;
