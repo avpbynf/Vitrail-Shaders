@@ -13,7 +13,6 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.SamplerTypes;
 import dev.vitrail.pack.target.TargetName;
 import dev.vitrail.pack.texture.CustomImages;
-import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
@@ -453,8 +452,8 @@ public final class GlslTranslator {
 	 */
 	private String centerDepthTexel;
 
-	/** Storage blocks this unit declares at file scope, by the name the block is written under. */
-	private final List<String> storageBlocks = new ArrayList<>();
+	/** Storage blocks this unit declares at file scope, each under the binding it was written at. */
+	private final List<TranslatedUnit.StorageBlock> storageBlocks = new ArrayList<>();
 
 	/** The volumes this unit reads, and so the helpers its header owes, by the pack's own name. */
 	private final Map<String, VolumeAtlas> readVolumes = new LinkedHashMap<>();
@@ -5083,23 +5082,29 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			String block = this.tokens.get(name).text();
 			int binding = layoutBinding(index);
-			if (!this.storageBlocks.contains(block)) {
-				this.storageBlocks.add(block);
-			}
-
-			CustomStorage.declare(block, binding);
+			note(this.tokens.get(name).text(), binding);
 			int close = matchingBracket(brace);
 			int instance = close < 0 ? -1 : significantAfter(close);
 			if (instance >= 0 && this.tokens.get(instance).kind() == Kind.IDENTIFIER) {
-				String instanceName = this.tokens.get(instance).text();
-				if (!this.storageBlocks.contains(instanceName)) {
-					this.storageBlocks.add(instanceName);
-				}
-
-				CustomStorage.declare(instanceName, binding);
+				note(this.tokens.get(instance).text(), binding);
 			}
+		}
+	}
+
+	/**
+	 * Both spellings of one block, the block name and the instance name, share its binding, and the
+	 * first spelling filed keeps it.
+	 * <p>
+	 * Which of two would win is a question no pack that compiles can ask: two live declarations of
+	 * one block name at file scope are a redeclaration, so the only name that can reach here twice
+	 * is one block's instance name standing as another block's name, and neither of the two bindings
+	 * is then the right one. Iris never has the choice to make at all, binding a buffer by the index
+	 * in its layout qualifier and never by the name.
+	 */
+	private void note(String name, int binding) {
+		if (this.storageBlocks.stream().noneMatch(block -> block.name().equals(name))) {
+			this.storageBlocks.add(new TranslatedUnit.StorageBlock(name, binding));
 		}
 	}
 
