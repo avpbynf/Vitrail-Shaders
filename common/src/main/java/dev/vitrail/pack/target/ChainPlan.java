@@ -255,6 +255,7 @@ public final class ChainPlan {
 	}
 
 	private final List<Pass> passes;
+	private final int deferredEnd;
 	private final Pass last;
 	private final Seed seed;
 
@@ -317,6 +318,7 @@ public final class ChainPlan {
 			List<String> history) {
 		this.place = place;
 		this.passes = List.copyOf(passes);
+		this.deferredEnd = pastDeferred(this.passes);
 		this.last = last;
 		this.seed = seed;
 		this.attachments = Map.copyOf(attachments);
@@ -1127,10 +1129,11 @@ public final class ChainPlan {
 	 * Answered here and not counted again by the renderer, for the reason this whole class exists:
 	 * the same number already decides where {@link #notes()} puts the translucent chunk pass, and
 	 * two walks of one list in two files are two chances of cutting the frame at different points
-	 * without a word.
+	 * without a word. Counted once, the plan never changing after it is built: the renderer asks
+	 * twice a frame.
 	 */
 	public int deferredEnd() {
-		return pastDeferred(this.passes);
+		return this.deferredEnd;
 	}
 
 	/** The final. Its attachments are always empty: it writes the game's own target. */
