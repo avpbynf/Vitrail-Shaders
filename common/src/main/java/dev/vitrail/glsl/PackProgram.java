@@ -674,6 +674,28 @@ public final class PackProgram {
 	private record ReadingKey(SettingSet settings, String place) {
 	}
 
+	/**
+	 * What decides which elements a vertex stage reads: the unit, the mesh contract, the program
+	 * name and the volumes behind its samplers. The alpha test and the coverage mask are left out
+	 * because both act on the fragment stage alone, so two passes served by one file share the
+	 * answer whatever they discard at.
+	 */
+	private record ReadsKey(ExpandedUnit vertex, VertexInputs inputs, String program,
+			Map<String, VolumeAtlas> volumes) {
+	}
+
+	/**
+	 * {@link ProgramTranslator#reads}, once per opening for each vertex unit and contract. The
+	 * answer is a whole translation of the stage thrown away but for a set of names, and the
+	 * chunk passes asked it up to six times per place for three distinct answers.
+	 */
+	private static Set<String> reads(ShaderPackSource source, ExpandedUnit vertex,
+			VertexInputs inputs, AlphaTest alphaTest, boolean coverage, String program,
+			Map<String, VolumeAtlas> volumes) throws IOException {
+		return source.derived(new ReadsKey(vertex, inputs, program, volumes),
+				() -> ProgramTranslator.reads(vertex, inputs, alphaTest, coverage, program, volumes));
+	}
+
 	private static Reading reading(OpenedPack pack, String place) throws IOException {
 		ShaderPackSource source = pack.source();
 		return source.derived(new ReadingKey(pack.settings(), place), () -> {
@@ -792,8 +814,8 @@ public final class PackProgram {
 
 			AlphaTest alphaTest = pass.alphaTest(overrides, servedBy);
 			served.put(pass, new Served(path, units, alphaTest));
-			reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), inputs,
-					alphaTest, pass.covers(), pass.program(), textures.volumes()));
+			reads.addAll(reads(source, units.get(ProgramStage.VERTEX), inputs, alphaTest,
+					pass.covers(), pass.program(), textures.volumes()));
 		}
 
 		// Nothing to draw and therefore nothing to carry, which is not the same answer as a mesh
@@ -917,8 +939,8 @@ public final class PackProgram {
 
 			AlphaTest alphaTest = overrides.getOrDefault(servedBy, element.alphaTest());
 			served.put(element.element(), new Served(path, units, alphaTest, element));
-			reads.addAll(ProgramTranslator.reads(units.get(ProgramStage.VERTEX), element.inputs(),
-					alphaTest, element.coverage(), element.program(), textures.volumes()));
+			reads.addAll(reads(source, units.get(ProgramStage.VERTEX), element.inputs(), alphaTest,
+					element.coverage(), element.program(), textures.volumes()));
 		}
 
 		if (served.isEmpty()) {
