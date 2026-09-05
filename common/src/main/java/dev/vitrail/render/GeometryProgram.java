@@ -58,6 +58,7 @@ import org.joml.Vector4fc;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -287,6 +288,17 @@ final class GeometryProgram {
 		/** Whether this name is the albedo of whatever this pass is drawing. */
 		private final boolean albedo;
 
+		/** The plan's answer for the name, which never moves once the pack is read. */
+		private final SamplerPlan.Binding binding;
+
+		/**
+		 * What the pack supplies under the name, or null for every kind but a pack texture and
+		 * for a name the pack took over with nothing behind it. Settled here for the reason the
+		 * class carries: resolving it walked the pack's texture directives by name at every pass
+		 * open, three times over for one name.
+		 */
+		private final ColorTargets.PackSource source;
+
 		/**
 		 * Whether this map is read through the albedo's own sampler, which is every one of them but
 		 * the specular under labPBR. Settled at the pass open: the format is the resource pack's, and
@@ -300,10 +312,13 @@ final class GeometryProgram {
 		/** The sampler state that goes with it, on the same rule. */
 		private GpuSampler state;
 
-		Sampled(String name, PbrMap material, boolean albedo) {
+		Sampled(String name, PbrMap material, boolean albedo, SamplerPlan.Binding binding,
+				ColorTargets.PackSource source) {
 			this.name = name;
 			this.material = material;
 			this.albedo = albedo;
+			this.binding = binding;
+			this.source = source;
 		}
 
 		/** Whether the answer follows the DRAW's own image rather than the pass's. */
@@ -396,6 +411,14 @@ final class GeometryProgram {
 	 * pass open resolved for it. Read by the bind and by nothing else.
 	 */
 	private final Sampled[] bound;
+
+	/**
+	 * The two halves of {@link #bound}, split once: the names whose answer follows the draw's own
+	 * image, bound at every draw, and every other name, bound once per pass open. A bind used to
+	 * walk all of them at every draw to find the two to four that could move.
+	 */
+	private final Sampled[] following;
+	private final Sampled[] settledOnce;
 	private final RenderPipeline pipeline;
 	private final ShaderSource source;
 
@@ -652,7 +675,17 @@ final class GeometryProgram {
 		// Which map a name asks for, and whether it is the albedo, are questions about the NAME and
 		// about the plan the load built, so they are asked here once for the life of the program.
 		this.bound = this.samplers.stream()
-				.map(name -> new Sampled(name, material(name), ATLAS.contains(name)))
+				.map(name -> {
+					SamplerPlan.Binding binding = loaded.samplers().binding(name);
+					return new Sampled(name, material(name), ATLAS.contains(name), binding,
+							binding.kind() == SamplerPlan.Kind.PACK_TEXTURE
+									? targets.packSource(TextureStage.GBUFFERS, name)
+									: null);
+				})
+				.toArray(Sampled[]::new);
+		this.following = Arrays.stream(this.bound).filter(Sampled::followsTheImage)
+				.toArray(Sampled[]::new);
+		this.settledOnce = Arrays.stream(this.bound).filter(one -> !one.followsTheImage())
 				.toArray(Sampled[]::new);
 
 		String vertex = loaded.program().stages().get(ProgramStage.VERTEX).text();
@@ -1253,10 +1286,12 @@ final class GeometryProgram {
 		settledIn = pass;
 		settled = this;
 
-		for (Sampled one : this.bound) {
-			if (one.followsTheImage()) {
-				pass.bindTexture(one.name, imageView(one), imageSampler(one));
-			} else if (settle) {
+		for (Sampled one : this.following) {
+			pass.bindTexture(one.name, imageView(one), imageSampler(one));
+		}
+
+		if (settle) {
+			for (Sampled one : this.settledOnce) {
 				pass.bindTexture(one.name, one.view, one.state);
 			}
 		}
@@ -1413,14 +1448,11 @@ final class GeometryProgram {
 		// Bliss on gaux1 the loudest, and none of those programs ever reads the target at a lod. So
 		// the directive is theirs to declare and dead on their side, and the cost of honouring it
 		// here would be a risk taken for nobody.
-		SamplerPlan.Kind kind = this.loaded.samplers().binding(name).kind();
-		if (kind == SamplerPlan.Kind.PACK_TEXTURE) {
+		SamplerPlan.Kind kind = one.binding.kind();
+		if (one.source != null && this.targets.packView(one.source.image()) != null) {
 			// A file of the pack's own is filtered and addressed as the pack asked, in the .mcmeta
 			// beside it, and the name it took over has nothing to say about either.
-			ColorTargets.PackBinding supplied = this.targets.packTexture(TextureStage.GBUFFERS, name);
-			if (supplied != null) {
-				return PackPass.sampler(supplied.repeat(), supplied.filter(), false);
-			}
+			return PackPass.sampler(one.source.repeat(), one.source.filter(), false);
 		}
 
 		return PackPass.sampler(kind, filter(name), false);
@@ -1893,7 +1925,7 @@ final class GeometryProgram {
 			return lightmap == null ? this.constants.white() : lightmap;
 		}
 
-		SamplerPlan.Binding binding = this.loaded.samplers().binding(sampler);
+		SamplerPlan.Binding binding = one.binding;
 
 		// White and not black for a depth that stays a constant, and the reason is the image rather
 		// than a taste: what a depth lookup reads is already in the pack's own window, where one is
@@ -1908,17 +1940,17 @@ final class GeometryProgram {
 			// Every geometry program is drawn in the gbuffers stage, the shadow passes included,
 			// which is the one thing a texture.STAGE.NAME override needs to know. Mellow moves
 			// noisetex there and nowhere else, so this is not a case the chain also covers.
-			case PACK_TEXTURE -> packTexture(sampler);
+			case PACK_TEXTURE -> packTexture(one);
 			case DISTANT_DEPTH -> distantDepth();
 			default -> this.constants.black();
 		};
 	}
 
 	/** The pack's own file behind a name, or black when it took the name over and nothing was read. */
-	private GpuTextureView packTexture(String sampler) {
-		ColorTargets.PackBinding supplied = this.targets.packTexture(TextureStage.GBUFFERS, sampler);
+	private GpuTextureView packTexture(Sampled one) {
+		GpuTextureView supplied = one.source == null ? null : this.targets.packView(one.source.image());
 
-		return supplied == null ? this.constants.black() : supplied.view();
+		return supplied == null ? this.constants.black() : supplied;
 	}
 
 	/**

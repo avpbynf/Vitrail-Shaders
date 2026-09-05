@@ -150,6 +150,14 @@ final class ColorTargets {
 	record PackBinding(GpuTextureView view, FilterMode filter, boolean repeat) {
 	}
 
+	/**
+	 * What the pack supplies for a name, settled once: the image, and the filter and addressing
+	 * its directive and its .mcmeta asked for. Only the view behind the image moves after that,
+	 * and {@link #packView} answers it per frame.
+	 */
+	record PackSource(PackImages.Image image, FilterMode filter, boolean repeat) {
+	}
+
 	private final TargetPlan plan;
 	private final Set<Integer> doubled;
 	private final int noiseResolution;
@@ -1032,17 +1040,34 @@ final class ColorTargets {
 	 * different image, and the gutter would stop being read at all.
 	 */
 	PackBinding packTexture(TextureStage stage, String sampler) {
+		PackSource source = packSource(stage, sampler);
+		GpuTextureView view = source == null ? null : packView(source.image());
+
+		return view == null ? null : new PackBinding(view, source.filter(), source.repeat());
+	}
+
+	/**
+	 * The half of {@link #packTexture} that never moves once the pack is read, for a caller that
+	 * binds the same name every frame: null where the pack supplies nothing for it.
+	 */
+	PackSource packSource(TextureStage stage, String sampler) {
 		PackImages.Image image = this.packImages.find(stage, sampler);
-		TargetSurface surface = image == null ? null : this.packSurfaces.get(image);
-		if (surface == null || surface.view() == null) {
+		if (image == null) {
 			return null;
 		}
 
 		boolean flat = !sampler.equals(SamplerPlan.behind(sampler));
 
-		return new PackBinding(surface.view(),
+		return new PackSource(image,
 				image.texture().blur() ? FilterMode.LINEAR : FilterMode.NEAREST,
 				!flat && !image.texture().clamp());
+	}
+
+	/** The view behind a supplied image, or null while nothing could be put behind it. */
+	GpuTextureView packView(PackImages.Image image) {
+		TargetSurface surface = this.packSurfaces.get(image);
+
+		return surface == null ? null : surface.view();
 	}
 
 	/**
