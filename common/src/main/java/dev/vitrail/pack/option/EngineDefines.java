@@ -80,6 +80,19 @@ public final class EngineDefines {
 	}
 
 	/**
+	 * The convention a resource pack says its material maps are drawn in, named in
+	 * {@code optifine/texture.properties}, with the version of it where the file carries one.
+	 * <p>
+	 * What is carried is the text the resource pack wrote rather than what this engine makes of it:
+	 * the version changes what the channels mean to the PACK and nothing on this side reduces or
+	 * filters differently for it, but a pack branches on the symbol built from it.
+	 *
+	 * @param version null where the file names the convention without one
+	 */
+	public record TextureFormat(String name, String version) {
+	}
+
+	/**
 	 * What the pack is being read for.
 	 *
 	 * @param vendorName      the device's vendor as the driver reports it, classified here
@@ -92,10 +105,21 @@ public final class EngineDefines {
 	 *                        have to come from the same place
 	 * @param biomeCategories the category names, in ordinal order, which is what makes
 	 *                        {@code CAT_DESERT} the number the biome value carries
+	 * @param textureFormat   what the resource pack declares its material maps are drawn in, null
+	 *                        where it declares nothing or names a convention this engine has no
+	 *                        symbol for
 	 */
 	public record Environment(int mcVersion, Os os, String vendorName, String rendererName,
 			int mipmapLevel, boolean distantHorizons, Map<String, Integer> biomes,
-			List<String> biomeCategories) {
+			List<String> biomeCategories, TextureFormat textureFormat) {
+
+		/** What a caller with no resource pack to ask hands over: {@link #of}, and the harness. */
+		public Environment(int mcVersion, Os os, String vendorName, String rendererName,
+				int mipmapLevel, boolean distantHorizons, Map<String, Integer> biomes,
+				List<String> biomeCategories) {
+			this(mcVersion, os, vendorName, rendererName, mipmapLevel, distantHorizons, biomes,
+					biomeCategories, null);
+		}
 
 		public static Environment of(int mcVersion) {
 			return new Environment(mcVersion, Os.WINDOWS, "", "", DEFAULT_MIPMAP_LEVEL, false,
@@ -125,6 +149,23 @@ public final class EngineDefines {
 		defines.put("MC_MIPMAP_LEVEL", Integer.toString(environment.mipmapLevel()));
 		defines.put("MC_NORMAL_MAP", "");
 		defines.put("MC_SPECULAR_MAP", "");
+
+		// What the resource pack says its material maps mean, beside the two names above and where
+		// Iris poses it (gl/shader/StandardMacros.java:107-112, built at
+		// pbr/format/TextureFormat.java:18-33). A pack written against the symbol guards its labPBR
+		// decode on it, and the version symbol tells such a pack which revision of the convention
+		// it is reading. Posed only where a resource pack names a convention in
+		// optifine/texture.properties, so an install where nothing names one sees neither symbol.
+		TextureFormat format = environment.textureFormat();
+		if (format != null) {
+			String symbol = "MC_TEXTURE_FORMAT_"
+					+ format.name().toUpperCase(Locale.ROOT).replace('-', '_');
+			defines.put(symbol, "");
+			if (format.version() != null) {
+				defines.put(symbol + "_" + format.version().replace('.', '_').replace('-', '_'), "");
+			}
+		}
+
 		defines.put("MAX_COLOR_BUFFERS", Integer.toString(MAX_COLOR_BUFFERS));
 
 		// Packs gate their modern paths on this rather than on a feature test. Claiming it is

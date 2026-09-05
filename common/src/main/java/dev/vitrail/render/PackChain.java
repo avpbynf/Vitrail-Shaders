@@ -5,6 +5,7 @@ import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslationCache;
 import dev.vitrail.mixin.GpuDeviceAccessor;
+import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.program.RenderStage;
 import dev.vitrail.pack.program.TerrainPass;
@@ -1482,6 +1483,11 @@ public final class PackChain {
 			Vitrail.logger().info("Distant Horizons is drawing a far terrain now, or has stopped, so "
 					+ "the pack is read again against DISTANT_HORIZONS: the symbol is what a pack "
 					+ "branches its distant land on, and it cannot be right for both");
+		} else if (PackDefines.textureFormatMoved()) {
+			Vitrail.logger().info("The resource packs {}, so the pack is read again against "
+					+ "MC_TEXTURE_FORMAT_LAB_PBR and the revision beside it: those are what a "
+					+ "pack branches its material decode on, and they cannot be right for both",
+					textureFormatDeclared());
 		} else {
 			Vitrail.logger().info("The world's own registries are here now, reloading the pack so "
 					+ "what names a tag resolves against them");
@@ -1495,6 +1501,21 @@ public final class PackChain {
 		// old one, until somebody asks for a reload. Comparing content rather than a path would cost
 		// more than the report it saves.
 		readAgain(gameDirectory);
+	}
+
+	/**
+	 * How the line above names what the resource packs declare, and it has to name both directions:
+	 * removing the pack that declared it moves the symbols exactly as installing one does.
+	 */
+	private static String textureFormatDeclared() {
+		EngineDefines.TextureFormat format = PbrAtlases.format();
+		if (format == null) {
+			return "declare no texture format any more";
+		}
+
+		String version = format.version() == null ? "" : " " + format.version();
+
+		return "declare " + format.name() + version + " now";
 	}
 
 	/**

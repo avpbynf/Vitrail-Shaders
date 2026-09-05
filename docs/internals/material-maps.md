@@ -58,6 +58,15 @@ across one of those boundaries invents a material that is in neither class: a ha
 stone that bleeds light. So those channels are averaged only among the texels of the class that wins
 the quad. With no declaration, both maps take the plain average.
 
+The declaration is told to the shader pack as well, and not only to the reduction. Iris poses
+`MC_TEXTURE_FORMAT_LAB_PBR`, and `MC_TEXTURE_FORMAT_LAB_PBR_1_3` beside it where the file names a
+revision, and a pack written against them guards its labPBR decode on them. Both are posed here for
+such a pack. What decides them is `optifine/texture.properties` and nothing else: a resource pack
+that ships `_n` and `_s` maps without that file declares no format, and a pack reading the symbols
+then takes its undeclared path over maps drawn in the convention after all. The symbols are settled
+when the shader pack is read, which is why a resource reload that changes what is declared reads it
+again: a symbol that decided which branch was compiled cannot be corrected any other way.
+
 The same reasoning should decide how the map is **filtered**, and here it only gets half way. A
 sampler that blends two texels of it does at draw time exactly what the reduction refuses to do at
 load, so the specular map is read with nearest filtering under labPBR. Nearest *inside* a mip level

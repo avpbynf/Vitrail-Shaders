@@ -30,9 +30,8 @@ import java.util.function.IntUnaryOperator;
  * subsurface amount above it. Averaging across that boundary invents a material that is in neither
  * class, so those channels are averaged only among the texels of the class that wins the quad
  * ({@code pbr/format/LabPBRTextureFormat.java:13-18}). That only applies where the resource pack
- * declares the format, which is what {@code labPbr} carries down from
- * {@link PbrAtlases#labPbr(net.minecraft.server.packs.resources.ResourceManager)}: with no
- * declaration Iris falls back to the plain average for both maps
+ * declares the format, which is what {@code labPbr} carries down from {@link PbrAtlases#labPbr()}:
+ * with no declaration Iris falls back to the plain average for both maps
  * ({@code pbr/loader/AtlasPBRLoader.java:188-198}).
  * <p>
  * <strong>Those three thresholds sit on the channels labPBR puts them on, and that is a divergence

@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
+import dev.vitrail.pack.option.EngineDefines;
 
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -14,6 +15,7 @@ import java.io.InputStream;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 
@@ -60,7 +62,10 @@ public final class PbrAtlases {
 	 */
 	private static final Map<Identifier, PbrAtlas> ATLASES = new HashMap<>();
 
-	private static boolean labPbr;
+	/** The one convention this engine knows a symbol and a reduction for. */
+	private static final String LAB_PBR = "lab-pbr";
+
+	private static EngineDefines.TextureFormat format;
 
 	private PbrAtlases() {
 	}
@@ -93,7 +98,16 @@ public final class PbrAtlases {
 		}
 
 		ResourceManager resources = minecraft.getResourceManager();
-		labPbr = labPbr(resources);
+
+		// The record already held is kept where the file still names the same thing, rather than
+		// replaced by an equal one. What asks whether this moved is
+		// PackDefines#textureFormatMoved(), which runs once a frame: given the same object it stops
+		// at the reference, where a fresh record each stitch would have it compare two strings for
+		// the whole session.
+		EngineDefines.TextureFormat declared = format(resources);
+		if (!Objects.equals(declared, format)) {
+			format = declared;
+		}
 
 		PbrAtlas previous = ATLASES.remove(atlas);
 		if (previous != null) {
@@ -101,7 +115,7 @@ public final class PbrAtlases {
 		}
 
 		try {
-			PbrAtlas read = PbrAtlas.read(atlas, texture, sprites, resources, labPbr);
+			PbrAtlas read = PbrAtlas.read(atlas, texture, sprites, resources, labPbr());
 			if (read != null) {
 				ATLASES.put(atlas, read);
 			}
@@ -157,9 +171,27 @@ public final class PbrAtlases {
 	/**
 	 * Whether the resource pack declares the labPBR convention, which decides how the specular map is
 	 * reduced and how it is filtered. Read once per stitch and answered from there.
+	 * <p>
+	 * A declaration at all is a labPBR declaration: {@link #format} keeps nothing else, because
+	 * {@code lab-pbr} is the only convention Iris registers a factory for either
+	 * ({@code pbr/format/TextureFormatRegistry.java:12}).
 	 */
 	static boolean labPbr() {
-		return labPbr;
+		return format != null;
+	}
+
+	/**
+	 * What the resource pack declares, for the symbols the pack branches on. Null where it declares
+	 * nothing.
+	 * <p>
+	 * Answered from the last stitch rather than from the file, which is Iris's moment translated:
+	 * it refreshes the same answer at the tail of the texture manager's own reload
+	 * ({@code mixin/texture/MixinTextureManager.java:32}) and reloads the whole pipeline when it
+	 * comes back different ({@code pbr/format/TextureFormatLoader.java:28-32}). Here the stitch is
+	 * the reload, and {@link PackDefines#textureFormatMoved()} is the reload that follows.
+	 */
+	static EngineDefines.TextureFormat format() {
+		return format;
 	}
 
 	/**
@@ -172,20 +204,21 @@ public final class PbrAtlases {
 	}
 
 	/**
-	 * Whether {@code optifine/texture.properties} names labPBR.
+	 * What {@code optifine/texture.properties} names, or null where the resource pack ships no such
+	 * file, names no convention in it, or names one this engine has nothing to say about.
 	 * <p>
-	 * Only the name of the format is read and the version after the slash is not: the two versions
-	 * differ in what the channels mean to the PACK, which is the pack's business, and not in
-	 * anything this engine does with them. Iris keeps the version and asks one thing of it, which
-	 * this engine has no use for: {@code LabPBRTextureFormat.equals} compares it
-	 * ({@code pbr/format/LabPBRTextureFormat.java:34-44}) and
-	 * {@code pbr/format/TextureFormatLoader.java:28-32} reloads the whole pack when it changes,
-	 * where here a resource reload restitches the atlases and rebuilds these anyway.
+	 * The version after the slash is kept although nothing here reduces or filters differently for
+	 * it: the two versions differ in what the channels mean to the PACK, which is the pack's
+	 * business, and the pack reaches that business through {@code MC_TEXTURE_FORMAT_LAB_PBR_1_3},
+	 * built from this string ({@code pbr/format/TextureFormat.java:25-30}). Iris keeps it for the
+	 * same reason and for one more, which is comparing it to decide a reload
+	 * ({@code pbr/format/LabPBRTextureFormat.java:34-44}); {@link PackDefines#textureFormatMoved()}
+	 * is where that comparison lands here.
 	 */
-	static boolean labPbr(ResourceManager resources) {
+	static EngineDefines.TextureFormat format(ResourceManager resources) {
 		Optional<Resource> resource = resources.getResource(FORMAT);
 		if (resource.isEmpty()) {
-			return false;
+			return null;
 		}
 
 		Properties properties = new Properties();
@@ -195,12 +228,27 @@ public final class PbrAtlases {
 			Vitrail.logger().warn("{} could not be read, so the material maps are reduced and "
 					+ "filtered as if it named no format", FORMAT, e);
 
-			return false;
+			return null;
 		}
 
-		String format = properties.getProperty("format", "").trim();
-		int slash = format.indexOf('/');
+		String declared = properties.getProperty("format", "").trim();
+		int slash = declared.indexOf('/');
+		if (!LAB_PBR.equals(slash < 0 ? declared : declared.substring(0, slash))) {
+			return null;
+		}
 
-		return "lab-pbr".equals(slash < 0 ? format : format.substring(0, slash));
+		return new EngineDefines.TextureFormat(LAB_PBR, version(declared, slash));
+	}
+
+	/** The field between the first slash and the next, or null where there is nothing between. */
+	private static String version(String declared, int slash) {
+		if (slash < 0) {
+			return null;
+		}
+
+		int next = declared.indexOf('/', slash + 1);
+		String version = declared.substring(slash + 1, next < 0 ? declared.length() : next);
+
+		return version.isEmpty() ? null : version;
 	}
 }
