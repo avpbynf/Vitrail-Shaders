@@ -60,6 +60,16 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack's storage buffers are read and written where the pack put them.** A pack that keeps
+  its own data in a shader storage buffer, declared with `bufferObject` lines, had that buffer
+  allocated and filled but never handed to the programs that name it: every such program kept the
+  slot number the pack wrote and read whatever the game had there, which is a buffer of its own.
+  Reverie keeps the frame's average brightness in one such buffer to set its exposure, read
+  nothing, and scaled the whole picture to black. Complementary's world-space reflections read
+  their block data out of another. Both now reach the pack's own bytes. The store of compiled
+  shader modules is rebuilt once on the first launch, as every module compiled before this
+  carried the old slot.
+
 - **A compute pass that reads the depth runs.** A compute a pack hangs off a full screen pass
   could read every name that pass reads except `depthtex0`, `depthtex1`, `depthtex2`, the far
   terrain's depth and `centerDepthSmooth`: those threw on every frame, so the compute never ran,

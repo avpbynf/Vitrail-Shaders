@@ -28,10 +28,15 @@ import java.util.List;
 public final class ComputeShader {
 
 	/** {@code SPVC_RESOURCE_TYPE_STORAGE_IMAGE}. */
-	private static final int STORAGE_IMAGE = 6;
+	private static final int STORAGE_IMAGE = Spvc.SPVC_RESOURCE_TYPE_STORAGE_IMAGE;
 
-	/** {@code SPVC_RESOURCE_TYPE_STORAGE_BUFFER}. */
-	private static final int STORAGE_BUFFER = 5;
+	/**
+	 * {@code SPVC_RESOURCE_TYPE_STORAGE_BUFFER}, taken from the binding rather than typed: SPIRV-Cross
+	 * numbers it 2, and the 5 this held was {@code SUBPASS_INPUT}. Asked for that, the listing was
+	 * always empty, so no storage block of any pack was ever remapped: each kept the
+	 * {@code binding = N} its pack wrote and read whatever the layout held at that slot.
+	 */
+	private static final int STORAGE_BUFFER = Spvc.SPVC_RESOURCE_TYPE_STORAGE_BUFFER;
 
 	private static final Constructor<?> SAMPLER;
 	private static final Constructor<?> UNIFORM;
@@ -79,8 +84,9 @@ public final class ComputeShader {
 	}
 
 	/**
-	 * SPIRV-Cross type 5, which the game never asks for. Complementary's {@code blockDataBuffer}
-	 * is that resource; without it the binding shaderc assigned is never remapped.
+	 * SPIRV-Cross type 2, which the game never asks for. Complementary's {@code blockDataBuffer}
+	 * and Reverie's two blocks are that resource; without it the binding the pack wrote is never
+	 * remapped.
 	 */
 	@SuppressWarnings({"rawtypes", "unchecked"})
 	public static void appendStorageBuffers(IntermediaryShaderModule module) {
