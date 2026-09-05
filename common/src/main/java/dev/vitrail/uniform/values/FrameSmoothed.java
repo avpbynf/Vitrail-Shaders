@@ -4,7 +4,10 @@ import dev.vitrail.uniform.Smoothed;
 import dev.vitrail.uniform.WorldState;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * A smoothed value that steps once per frame however many passes read it.
@@ -33,6 +36,16 @@ public final class FrameSmoothed {
 	 */
 	private static final List<FrameSmoothed> ALL = new ArrayList<>();
 
+	/**
+	 * The accumulators a pack's own {@code smooth()} calls own, made when its expressions are
+	 * parsed and dropped with them. Held weakly, so that a pack that is gone takes its
+	 * accumulators with it, and forgotten with the three above: a dimension change that keeps
+	 * the pack's directory would otherwise serve the previous world's number for the seconds
+	 * its half-life takes, while wetness and the eye's brightness restart beside it.
+	 */
+	private static final Set<Smoothed> TRACKED =
+			Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+
 	private final Smoothed smoothed = new Smoothed();
 
 	private int lastFrame = -1;
@@ -42,12 +55,24 @@ public final class FrameSmoothed {
 		ALL.add(this);
 	}
 
+	/** An accumulator for a pack's own {@code smooth()}, forgotten with the engine's. */
+	public static Smoothed tracked() {
+		Smoothed smoothed = new Smoothed();
+		TRACKED.add(smoothed);
+
+		return smoothed;
+	}
+
 	/** Drops every accumulator. For a world change and for a pack load, and for nothing else. */
 	public static void forgetAll() {
 		for (FrameSmoothed smoothed : ALL) {
 			smoothed.smoothed.reset();
 			smoothed.lastFrame = -1;
 			smoothed.value = 0.0F;
+		}
+
+		synchronized (TRACKED) {
+			TRACKED.forEach(Smoothed::reset);
 		}
 	}
 
