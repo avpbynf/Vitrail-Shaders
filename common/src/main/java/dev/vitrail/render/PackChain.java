@@ -3015,7 +3015,9 @@ public final class PackChain {
 
 		this.programs = List.copyOf(built);
 		this.last = built.isEmpty() ? null : built.get(built.size() - 1);
-		this.centerDepthRead = built.stream().anyMatch(PackPass::readsCenterDepth);
+		// Or a compute hanging off a pass: it is handed the same texel, so it arms the same fold.
+		this.centerDepthRead = built.stream().anyMatch(PackPass::readsCenterDepth)
+				|| this.compute.readsCenterDepth();
 		this.blockBytes = Math.max(alignment, offset);
 	}
 
