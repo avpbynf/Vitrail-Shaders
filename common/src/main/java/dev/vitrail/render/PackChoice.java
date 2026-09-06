@@ -392,18 +392,8 @@ public final class PackChoice {
 				TerrainSampler.breaksAnisotropy(values.breaksAnisotropy());
 
 				long began = System.nanoTime();
-				Optional<PackProgram.Chain> read =
+				PackProgram.Chain chain =
 						PackProgram.loadChain(opened, place, engine.passes(), engine.families());
-				if (read.isEmpty()) {
-					String where = place.isEmpty() ? "at its root" : "in " + place + " or at its root";
-					String named = ShaderPackSource.nameOf(pack);
-					lastError = named + " serves no final with both stages " + where;
-					Vitrail.logger().warn("{} serves no final with both stages {}, nothing to draw",
-							named, where);
-					return;
-				}
-
-				PackProgram.Chain chain = read.get();
 				Vitrail.logger().info("Read {} programs of {} in {} ms", chain.programs().size(),
 						chain.packName(), (System.nanoTime() - began) / 1_000_000L);
 
