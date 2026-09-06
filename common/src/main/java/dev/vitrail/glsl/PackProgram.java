@@ -1373,10 +1373,21 @@ public final class PackProgram {
 		TargetPlan targets = TargetPlan.build(source, options, settings, properties, dimension, filter);
 		String place = targets.place();
 
-		// Asked before anything is expanded. A place that serves no final draws nothing at all,
-		// and finding that out after nine programs have been read is nine wasted seconds.
-		if (!targets.running().contains(FINAL) || !serves(source, pathOf(place, FINAL))) {
-			return Optional.empty();
+		// Asked before anything is expanded, as the refusal it used to be was: a place with no
+		// final is settled here rather than nine programs later.
+		//
+		// It is no longer a refusal. A pack that ships no final still draws: what its chain left in
+		// colortex0 is brought to the screen as it stands, which is what Iris does with the same
+		// case (pipeline/FinalPassRenderer.java:113 makes the pass optional, :268-277 copies the
+		// target into the game's own), and ChainPlan.present carries the half. I Like Vanilla ends
+		// on composite99 and Pegasus on composite11, and both were refused whole for it.
+		//
+		// The name is taken OUT of the plan rather than left in it, because the loop below throws
+		// on a program that is meant to run and does not serve both of its stages.
+		if (targets.running().contains(FINAL) && !serves(source, pathOf(place, FINAL))) {
+			targets = TargetPlan.build(source, options, settings, properties, dimension,
+					filter.without(Set.of(FINAL)));
+			place = targets.place();
 		}
 
 		PackTextures textures = textures(source, properties, options, settings);
