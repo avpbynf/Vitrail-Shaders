@@ -233,17 +233,6 @@ what the next one holds.
   under any other spelling that one compute did nothing at all, leaving a line in the log while
   the pass it belongs to drew on without whatever the compute was there to prepare.
 
-- **A compute pass that reads the depth runs.** A compute a pack hangs off a full screen pass
-  could read every name that pass reads except `depthtex0`, `depthtex1`, `depthtex2`, the far
-  terrain's depth and `centerDepthSmooth`: those threw on every frame, so the compute never ran,
-  with one line in the log. Reverie's cloud compute reads `depthtex1`, and without it the images
-  its sky and clouds are built from stayed empty. The compute now reads the same depth as the pass
-  after it, which is what Iris gives it.
-
-- **A compute program that reads `centerDepthSmooth` reads the smoothed centre depth.** When
-  no fullscreen pass of the pack read the name and a compute did, the compute was handed the far
-  plane on every frame. A compute hanging off a pass now arms the fold as the pass would.
-
 - **A pack's depth of field focuses past the item in your hand.** The depth the focus is taken
   from was read after the held item had been drawn into it, so whenever the item covered the
   middle of the screen the focus jumped onto it and everything behind went soft, sharpening again
@@ -256,14 +245,14 @@ what the next one holds.
   that stage read off the wrong slots. An array is now taken apart and put back together the way
   a matrix and a struct are.
 
-- **Photon's distant water is no longer red, and no longer striped.** A pack may hand a stage a
-  struct of values in one go, and Photon hands its water program its fog coefficients that way.
+- **A struct handed between a pack's stages arrives whole.** A pack may hand a stage a struct of
+  values in one go, and Photon hands its water program its fog coefficients that way.
   That struct reached the other stage wrong, so the fog Photon's reflections computed with it
   saturated on every lake past a hundred blocks. A struct handed between stages is now taken
   apart and put back together the way a matrix already was.
 
-- **Photon's shadows are lit again.** The compute programs a pack attaches to its full screen
-  passes were named in the log and skipped, so whatever they prepared for the pass after them was
+- **The compute programs a pack attaches to its full-screen passes run.** They were named in the
+  log and skipped, so whatever they prepared for the pass after them was
   never there: Photon computes its sky lighting in one, and everything in shadow, the hand first,
   was black for the lack of it. Those programs now run, right before the pass they belong to. A
   compute whose pass the pack ships no fragment program for, and one attached to a setup program,
