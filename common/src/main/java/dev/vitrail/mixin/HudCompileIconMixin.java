@@ -1,6 +1,6 @@
 package dev.vitrail.mixin;
 
-import dev.vitrail.render.PackChain;
+import dev.vitrail.screen.CompileCard;
 
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Hands the HUD's extraction to {@link PackChain#extractCompileIcon}, which pulses the mod's mark
+ * Hands the HUD's extraction to {@link CompileCard#extract}, which pulses the mod's mark
  * in a corner while the pack-load workers still compile the leftover families.
  * <p>
  * At the tail of the whole extraction rather than as a layer of the HUD's own manager: the layers
@@ -27,6 +27,6 @@ public abstract class HudCompileIconMixin {
 	@Inject(method = "extractRenderState", at = @At("TAIL"), require = 1)
 	private void vitrail$compileIcon(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker,
 			CallbackInfo callback) {
-		PackChain.extractCompileIcon(graphics);
+		CompileCard.extract(graphics);
 	}
 }
