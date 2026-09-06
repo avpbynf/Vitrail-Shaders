@@ -51,6 +51,15 @@ public final class ConditionStack {
 	}
 
 	/**
+	 * The same for a branch whose condition this reader wrote out itself, which is already decided
+	 * and must not be asked again: what goes into the text is the answer, so what is recorded here
+	 * has to be the same answer. An earlier branch already taken still wins, as it does below.
+	 */
+	public void rewrittenElifDirective(boolean condition) {
+		elifDirective(() -> condition);
+	}
+
+	/**
 	 * The condition is only evaluated when it can still matter, which is not an optimisation:
 	 * a later branch may well be nonsense once an earlier one has been taken.
 	 */
