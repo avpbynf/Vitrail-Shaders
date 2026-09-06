@@ -101,11 +101,12 @@ public final class PackProgram {
 		 * Whether this program voxelises, in Iris's sense: a geometry stage is present, or an image
 		 * load / store uniform survived translation.
 		 * <p>
-		 * Iris reads the geometry file at {@code shadows/ShadowRenderer.java:163-165} and then ORs
-		 * in {@code setUsesImages} when the compiled shadow program has image bindings
-		 * ({@code :224-225}, {@code ExtendedShader.hasActiveImages}). A {@code .gsh} is enough even
-		 * when this engine never binds it; an image uniform that the preprocessor left standing is
-		 * enough without one. A name gated off, Complementary LOW's {@code voxel_img} behind
+		 * Iris reads the geometry file at {@code shadows/ShadowRenderer.java:163-165}. It has a
+		 * {@code setUsesImages} for the image half ({@code :224-225}) and calls it from nowhere: the
+		 * flag is computed at {@code pipeline/IrisRenderingPipeline.java:453-456} and never read, so
+		 * an image alone decides nothing there. Here it does count, which is this engine's own
+		 * answer and not the reference's. A {@code .gsh} is enough even when this engine never
+		 * binds it; an image uniform that the preprocessor left standing is enough without one. A name gated off, Complementary LOW's {@code voxel_img} behind
 		 * {@code COLORED_LIGHTING_INTERNAL}, does not count.
 		 */
 		public boolean voxelises() {

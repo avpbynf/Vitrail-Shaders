@@ -10,8 +10,9 @@ import java.util.Set;
  * Where every texel of a volume ends up once the volume is laid out flat, decided once and read
  * by both sides.
  * <p>
- * This backend binds nothing but 2D and cube samplers, so a pack's {@code sampler3D} is served by
- * a 2D atlas of slices and a helper that reads two of them and mixes. Two readers therefore have
+ * A pack's {@code sampler3D} over a blob it ships is served by a 2D atlas of slices and a helper
+ * that reads two of them and mixes: the blob is uploaded flat and nothing builds a 3D view over
+ * it, the one volume the backend binds as such being the kind an {@code image} directive fills. Two readers therefore have
  * to agree texel for texel: the one that fills the atlas out of the pack's blob, and the one that
  * prints the arithmetic into the shader. They agree because they both come here. A layout written
  * twice would come out as noise on the screen, and a noise texture that is wrong looks exactly
