@@ -1,4 +1,4 @@
-package dev.vitrail.screen;
+package dev.vitrail;
 
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;

@@ -1,7 +1,8 @@
 package dev.vitrail.screen;
 
-import dev.vitrail.Vitrail;
 import dev.vitrail.pack.load.PackLoader;
+import dev.vitrail.ScreenText;
+import dev.vitrail.Vitrail;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;

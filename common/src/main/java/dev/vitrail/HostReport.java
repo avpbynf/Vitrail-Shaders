@@ -1,6 +1,5 @@
 package dev.vitrail;
 
-import dev.vitrail.screen.ScreenText;
 
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;

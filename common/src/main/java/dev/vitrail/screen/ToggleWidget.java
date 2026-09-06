@@ -1,6 +1,7 @@
 package dev.vitrail.screen;
 
 import dev.vitrail.pack.menu.MenuOption;
+import dev.vitrail.ScreenText;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
