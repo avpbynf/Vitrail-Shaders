@@ -1,10 +1,11 @@
 package dev.vitrail.screen;
 
-import dev.vitrail.Vitrail;
 import dev.vitrail.pack.menu.MenuOption;
 import dev.vitrail.pack.menu.MenuPage;
 import dev.vitrail.pack.menu.MenuSlot;
 import dev.vitrail.pack.menu.PackMenu;
+import dev.vitrail.ScreenText;
+import dev.vitrail.Vitrail;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;

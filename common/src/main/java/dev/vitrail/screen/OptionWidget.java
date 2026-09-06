@@ -1,5 +1,7 @@
 package dev.vitrail.screen;
 
+import dev.vitrail.ScreenText;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
