@@ -558,6 +558,33 @@ public final class ShaderPackSource implements AutoCloseable {
 	}
 
 	/**
+	 * Empties what a READER worked out of this opening, and nothing else, so that an opening handed
+	 * to a second load carries the archive forward and no conclusion drawn from it.
+	 * <p>
+	 * The line between the two is what makes {@link KeptPack} safe. The listings, the file lines and
+	 * the flattened units are functions of the archive's bytes and the settings, and that pair is
+	 * what its key compares. What lands in {@link #derived} need not be: a plan carries the size of
+	 * the window, a texture set carries what the resource packs hold, and either of them served
+	 * across a load would be a picture that is credible and wrong. So the whole map goes, including
+	 * the entries that WOULD have been safe to keep, {@code IncludeExpander}'s logical lines among
+	 * them: the rule is about where an answer is filed rather than about what it happens to depend
+	 * on, and a rule with an exception in it is the one that costs a picture.
+	 */
+	void forgetDerived() {
+		this.derived.clear();
+	}
+
+	/** How many files this opening has read, for the line that says what a kept opening saved. */
+	int filesRead() {
+		return this.linesByFile.size();
+	}
+
+	/** And how many units it has flattened, which is the post that stands before every lookup. */
+	int unitsFlattened() {
+		return this.expandedUnits.size();
+	}
+
+	/**
 	 * Lets the two memos go as well as the archive, which is what makes an opening the bound on
 	 * what they hold: a directory pack owns no filesystem at all, so without these two lines
 	 * closing one would free nothing, and an opening a caller keeps in a field past its own use

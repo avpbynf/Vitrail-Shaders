@@ -218,6 +218,12 @@ public final class PackChoice {
 				// unanswered, and the folder being empty is why.
 				if (namedAPack()) {
 					packIsMissing(gameDirectory);
+					// And the opening a previous load left standing goes with it, here and on every
+					// other road out of this method that draws no pack: none of them reaches
+					// OpenedPack.openKept, so nothing would ever replace what is held, and a player
+					// who picks None would leave a mounted archive and a pack's worth of source
+					// strings standing for the rest of the session.
+					OpenedPack.forgetKept();
 
 					return;
 				}
@@ -225,6 +231,8 @@ public final class PackChoice {
 				lastError = "No shader pack in " + PackLoader.directory(gameDirectory);
 				Vitrail.logger().info("No shader pack in {}, nothing to draw",
 						PackLoader.directory(gameDirectory));
+				OpenedPack.forgetKept();
+
 				return;
 			}
 
@@ -238,6 +246,7 @@ public final class PackChoice {
 				HandDraw.wanted(false);
 				if (namedAPack()) {
 					packIsMissing(gameDirectory);
+					OpenedPack.forgetKept();
 
 					return;
 				}
@@ -248,6 +257,7 @@ public final class PackChoice {
 				Vitrail.logger().info("No pack asked for, so none of the {} in {} is read and the game "
 						+ "draws its own image. Pick one in the settings screen, or name it in {}",
 						packs.size(), PackLoader.directory(gameDirectory), packFile(gameDirectory));
+				OpenedPack.forgetKept();
 				return;
 			}
 
@@ -277,6 +287,7 @@ public final class PackChoice {
 				lastError = ShaderPackSource.nameOf(pack) + " is not drawn on the "
 						+ HostReport.backend() + " backend: set Graphics API to \"Prefer Vulkan "
 						+ "(Experimental)\" under Options, Video Settings, and restart";
+				OpenedPack.forgetKept();
 				return;
 			}
 
@@ -345,6 +356,7 @@ public final class PackChoice {
 						+ ", which this engine does not serve";
 				Vitrail.logger().error("{} requires {}, which this engine does not serve, so "
 						+ "nothing is drawn", named, names);
+				OpenedPack.forgetKept();
 				return;
 			}
 
@@ -377,7 +389,10 @@ public final class PackChoice {
 			PackDefines.install();
 			report(pack);
 
-			try (OpenedPack opened = OpenedPack.open(pack, chosen, settings.profile())) {
+			// The kept variant, and this reading is the only one in the engine entitled to it: it runs
+			// on the render thread and two of them never overlap, which is what an opening's memos
+			// require. Every other reader opens one of its own.
+			try (OpenedPack opened = OpenedPack.openKept(pack, chosen, settings.profile())) {
 				// The world decides the directory, and the pack decides which world that is: a folder
 				// may be named anything and mapped in dimension.properties, so the name is read from
 				// the pack rather than composed from the dimension.

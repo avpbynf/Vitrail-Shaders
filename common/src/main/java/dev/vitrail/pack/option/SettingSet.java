@@ -73,6 +73,15 @@ public final class SettingSet {
 		shadowMapScale = percent;
 	}
 
+	/**
+	 * The percentage the NEXT reading will resolve at, which is not always the one a reading in hand
+	 * resolved at: {@link #scale()} answers for that reading, and this answers for the engine.
+	 * Comparing the two is how a caller holding a reading finds out that it has gone out of date.
+	 */
+	public static int askedShadowMapScale() {
+		return shadowMapScale;
+	}
+
 	public static SettingSet resolve(Map<String, OptionValue> profile, Map<String, OptionValue> user,
 			String variantName) {
 		Map<String, OptionValue> chosen = new LinkedHashMap<>(profile);
