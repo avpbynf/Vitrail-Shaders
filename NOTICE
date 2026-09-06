@@ -13,14 +13,14 @@ Iris, https://github.com/IrisShaders/Iris
 Copyright the Iris contributors
 GNU Lesser General Public License version 3
 
-  common/src/main/java/dev/vitrail/pack/program/ProgramFallbacks.java contains the gbuffers, shadow and
-  Distant Horizons fallback table, adapted in 2026 from the enum
+  common/src/main/java/dev/vitrail/pack/model/ProgramFallbacks.java contains the gbuffers, shadow
+  and Distant Horizons fallback table, adapted in 2026 from the enum
   net.irisshaders.iris.shaderpack.loading.ProgramId. The table was reorganised into a name to
   parent map. The blend mode overrides and the IrisProgram API mapping carried by the original
   enum were not reused.
 
-  common/src/main/java/dev/vitrail/pack/target/TargetFormat.java transcribes the colour format table of
-  net.irisshaders.iris.gl.texture.InternalTextureFormat, so that a pack is read against the names
+  common/src/main/java/dev/vitrail/pack/model/TargetFormat.java transcribes the colour format table
+  of net.irisshaders.iris.gl.texture.InternalTextureFormat, so that a pack is read against the names
   it was written for. The promotion of the three component formats and the replacement of the
   fixed function relics are this project's own, and are needed because Vulkan attaches neither.
 
@@ -118,7 +118,7 @@ GNU Lesser General Public License version 3
   index buffer Iris draws it through, lines 95 to 106, is not reused either: the ten vertices are
   drawn unindexed, as SkyRenderer.renderSkyDisc draws its own ten.
 
-  common/src/main/java/dev/vitrail/pack/target/TargetSize.java reimplements
+  common/src/main/java/dev/vitrail/pack/model/TargetSize.java reimplements
   net.irisshaders.iris.gl.texture.TextureScaleOverride, down to the dot in the value being what
   tells a fraction of the screen from a count of pixels, together with the rule of
   net.irisshaders.iris.shaderpack.properties.PackDirectives.getTextureScaleOverride that looks the
@@ -126,7 +126,7 @@ GNU Lesser General Public License version 3
   flag here where Iris carries one each.
 
   common/src/main/java/dev/vitrail/pack/texture/PackTextures.java and
-  common/src/main/java/dev/vitrail/pack/texture/PackTexture.java read the custom texture
+  common/src/main/java/dev/vitrail/pack/model/PackTexture.java read the custom texture
   directives with the rules of net.irisshaders.iris.shaderpack.ShaderPack.readTexture and of the
   properties parsing beside it, because none of them can be reasoned out: a location is truncated
   at its first dot, an override is looked up under every name of the unit, a word carrying a colon
@@ -136,7 +136,7 @@ GNU Lesser General Public License version 3
   blob shorter than the size it announces keeps its name here where Iris throws while reading it,
   and the stage a directive names is not consulted.
 
-  common/src/main/java/dev/vitrail/pack/texture/TextureStage.java carries the seven stages of
+  common/src/main/java/dev/vitrail/pack/model/TextureStage.java carries the seven stages of
   net.irisshaders.iris.shaderpack.texture.TextureStage and what each of them covers, gbuffers
   answering for the shadow passes and composite for the final, the set being closed in Iris and in
   OptiFine both.
@@ -169,13 +169,13 @@ GNU Lesser General Public License version 3
   built with the map rather than each at its first use, because the shadow programs of this engine
   are not all built before the first frame is drawn.
 
-  common/src/main/java/dev/vitrail/render/StorageBuffers.java keeps the rule that a bufferObject
-  starts life at zero, which net.irisshaders.iris.gl.buffer.ShaderStorageBuffer applies at line 79
-  for an absolute buffer and at line 64 every time a relative one is rebuilt. Packs are written
-  against it: Complementary tells a face it never voxelised from one it did by the cell reading
-  zero, having no written flag of its own. Line 79 sits in the else of a test on inline content,
-  which Iris uploads in place of the clear when a pack gave any; the clear is unconditional here
-  because the bufferObject grammar this engine reads carries no content.
+  common/src/main/java/dev/vitrail/render/storage/StorageBuffers.java keeps the rule that a
+  bufferObject starts life at zero, which net.irisshaders.iris.gl.buffer.ShaderStorageBuffer
+  applies at line 79 for an absolute buffer and at line 64 every time a relative one is rebuilt.
+  Packs are written against it: Complementary tells a face it never voxelised from one it did by
+  the cell reading zero, having no written flag of its own. Line 79 sits in the else of a test on
+  inline content, which Iris uploads in place of the clear when a pack gave any; the clear is
+  unconditional here because the bufferObject grammar this engine reads carries no content.
 
   common/src/main/java/dev/vitrail/render/PackPass.java binds what a full screen pass samples with
   Iris's filters, the packs blurring and interpolating against them: the noise image LINEAR, a
@@ -192,7 +192,7 @@ GNU Lesser General Public License version 3
   The lists are arguments here rather than calls into a device, so that the table can be built
   without one.
 
-  common/src/main/java/dev/vitrail/pack/program/RenderStage.java is
+  common/src/main/java/dev/vitrail/pack/model/RenderStage.java is
   net.irisshaders.iris.pipeline.WorldRenderingPhase, reproduced in its order because the value a
   pack reads is the ordinal and nothing else: a constant inserted in the middle would silently
   renumber every branch every pack of the corpus takes.
@@ -203,7 +203,7 @@ GNU Lesser General Public License version 3
   packs are written against Iris and against nothing else. The shadow halves of the enum and
   everything the passes drive are this project's own.
 
-  common/src/main/java/dev/vitrail/pack/program/AlphaTest.java emits the comparison in the negated
+  common/src/main/java/dev/vitrail/pack/model/AlphaTest.java emits the comparison in the negated
   form Iris emits, if (!(a > r)) discard, with Iris's translucent threshold of one ten
   thousandth, and looks an alphaTest override up under the name of the file that really serves
   the pass, which is Iris's lookup too.
@@ -700,10 +700,10 @@ GNU Lesser General Public License version 3
   normal rather than the quad's own, which is what keeps the encoder and the generated decoder in
   one basis.
 
-  common/src/main/java/dev/vitrail/render/PbrMap.java,
-  common/src/main/java/dev/vitrail/render/PbrAtlas.java,
-  common/src/main/java/dev/vitrail/render/PbrAtlases.java and
-  common/src/main/java/dev/vitrail/render/PbrTextures.java build the normal and specular maps a
+  common/src/main/java/dev/vitrail/render/pbr/PbrMap.java,
+  common/src/main/java/dev/vitrail/render/pbr/PbrAtlas.java,
+  common/src/main/java/dev/vitrail/render/pbr/PbrAtlases.java and
+  common/src/main/java/dev/vitrail/render/pbr/PbrTextures.java build the normal and specular maps a
   resource pack ships, and the following answers are Iris's, read in August 2026. The layout, one
   companion image per atlas with each map at the base sprite's own x and y, is that of
   net.irisshaders.iris.pbr.loader.AtlasPBRLoader, lines 55 to 74, with the suffixes and the two
@@ -859,7 +859,7 @@ GNU Lesser General Public License version 3
   binds it, with both of the lines Iris says in the chat afterwards, Iris.java:184 and Iris.java:191. The key that opens
   the settings screen is on I and is NOT Iris's, which binds that screen to O, Iris.java:787; the two
   it binds that have no counterpart here are toggleShaders on K and an unbound wireframe.
-  common/src/main/java/dev/vitrail/screen/ScreenText.java keeps the English of these screens word
+  common/src/main/java/dev/vitrail/ScreenText.java keeps the English of these screens word
   for word wherever Iris has a string for the same thing, so that a player who has configured a
   pack before reads the words they already know; what Iris has no string for is this project's
   own.
@@ -886,8 +886,8 @@ GNU Lesser General Public License version 3
   element draws its arrow with seven hex digits rather than eight, LinkElementWidget line 64, so the
   arrow comes out at six per cent alpha; it is drawn opaque here.
 
-  common/src/main/java/dev/vitrail/pack/texture/BufferObject.java and
-  common/src/main/java/dev/vitrail/pack/texture/ImageInformation.java read the bufferObject and
+  common/src/main/java/dev/vitrail/pack/model/BufferObject.java and
+  common/src/main/java/dev/vitrail/pack/model/ImageInformation.java read the bufferObject and
   image directives with the grammars of net.irisshaders.iris.shaderpack.properties.ShaderProperties,
   the two-word and four-word forms of a buffer and the sampler, formats, clear and size words of an
   image, together with the two ceilings that file enforces: no buffer index past twelve, lines 407
