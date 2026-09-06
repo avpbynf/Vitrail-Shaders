@@ -1,7 +1,6 @@
 package dev.vitrail.pack.option;
 
 import dev.vitrail.pack.model.RenderStage;
-import dev.vitrail.pack.texture.CustomImages;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -173,12 +172,11 @@ public final class EngineDefines {
 		// it is also a promise, and every one of those has to work before it can stay.
 		defines.put("IS_IRIS", "");
 
-		// Posed only for a flag this engine serves. Custom images are the voxel volumes
-		// Complementary writes from shadow geometry and floods in shadowcomp; claiming the
-		// symbol without that pipe sends the pack down a road that refuses gbuffers.
-		if (CustomImages.served()) {
-			defines.put("IRIS_FEATURE_CUSTOM_IMAGES", "");
-		}
+		// Custom images are the voxel volumes Complementary writes from shadow geometry and floods
+		// in shadowcomp, and the symbol is a promise of that pipe: the allocation, the 3D bind and
+		// the compute dispatch are all there, and a pack that reads it goes down the road that
+		// uses them.
+		defines.put("IRIS_FEATURE_CUSTOM_IMAGES", "");
 
 		// The block emission attribute is served: the chunk element carries the block's own light
 		// in the fourth component of at_midBlock, on the terrain and in the shadow map alike

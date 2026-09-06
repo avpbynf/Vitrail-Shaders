@@ -326,11 +326,8 @@ public final class PackChoice {
 			// that wrote what that message told it to would be refused here on a name this engine
 			// serves. ShaderProperties.declares already reads the same lists that way.
 			Set<String> served = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-			served.addAll(List.of("BLOCK_EMISSION_ATTRIBUTE", PackDirectives.HIGHER_SHADOWCOLOR,
-					"SSBO", "SEPARATE_HARDWARE_SAMPLERS"));
-			if (CustomImages.served()) {
-				served.add("CUSTOM_IMAGES");
-			}
+			served.addAll(List.of("BLOCK_EMISSION_ATTRIBUTE", "CUSTOM_IMAGES",
+					PackDirectives.HIGHER_SHADOWCOLOR, "SSBO", "SEPARATE_HARDWARE_SAMPLERS"));
 
 			required.removeIf(served::contains);
 
