@@ -97,12 +97,14 @@ clock, so it stops while the game is paused, which is what a pack driving noise 
 A handful of values are properties of the **pass** rather than of the frame: the depth convention of
 the target being drawn into, the model view the pass draws with and the projection it draws under,
 the colour it modulates by, and which stage of the frame it is. Those are set beside each block
-write and dropped rather than carried over, though not in the same place: the frame boundary drops
-the model view, the projection and the colour, and the chain drops the render stage before it
-writes its own blocks, being the only reader left that could hold a stale one. Left
-standing from the pass before, the render stage would tell every full-screen pass of the frame that
-it was drawing the moon, because that value sits in the same table a full-screen pass shares with a
-geometry one.
+write and dropped rather than carried over, in two places that are not one guard written twice. The
+frame boundary drops the model view, the projection and the colour at the head of the frame, which
+covers whatever reads before the first geometry pass. The chain drops those three again and the
+render stage with them, and says its own depth convention rather than inheriting the one the shadow
+programs flipped, before it writes its own blocks: every geometry family has run by then, so what
+would otherwise stand is whatever the last of them set. Left standing from the pass before, the
+render stage would tell every full-screen pass of the frame that it was drawing the moon, because
+that value sits in the same table a full-screen pass shares with a geometry one.
 
 Changing world drops all of it, the clock included. Nothing carried from the previous frame means
 anything once the camera has jumped a dimension's worth of coordinates, and a frame duration

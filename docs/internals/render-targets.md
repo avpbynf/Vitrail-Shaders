@@ -55,11 +55,14 @@ this is a rename either.
 filtering is not defined. Getting this wrong is invisible on a target that is only ever sampled at
 texel centres and obvious on one that is not.
 
-Two questions the game gives no way to ask: whether the driver accepts the packed eleven-eleven-ten
-float format as a colour attachment, and whether it can filter a thirty-two bit float format
-linearly. Neither `GpuDevice` nor `DeviceInfo` exposes a format capability query, so there is no
-graceful path. The only defence is ordering: the format is named in the log **before** the
-allocation is attempted, so that when a driver dies the last line written names the culprit.
+Two questions neither `GpuDevice` nor `DeviceInfo` gives a way to ask: whether the driver accepts
+the packed eleven-eleven-ten float format as a colour attachment, and whether it can filter a
+thirty-two bit float format linearly. The backend behind them answers that kind of question, and the
+engine asks it in one place already: whether this device makes a storage image of a format, which a
+compute writing a colour target needs, is read off the physical device's format properties rather
+than off a table of our own. These two are not asked that way, and their defence is ordering: the
+format is named in the log **before** the allocation is attempted, so that when a driver dies the
+last line written names the culprit.
 
 ## Where the format directives live, and why a naive reader finds none
 
