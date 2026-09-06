@@ -85,6 +85,21 @@ public final class ScreenText {
 	public static final String MODULE_CACHE_CEILING_TOOLTIP =
 			"options.vitrail.module_cache_ceiling_tooltip";
 
+	/**
+	 * How many frames the shadow map is kept for. No counterpart in Iris either, which draws it
+	 * every frame. The tooltip has to say what the frames cost, since the gain is free and the
+	 * price is on casters that move.
+	 */
+	public static final String SHADOW_AMORTISATION = "options.vitrail.shadow_amortisation";
+	public static final String SHADOW_AMORTISATION_TOOLTIP =
+			"options.vitrail.shadow_amortisation_tooltip";
+	public static final String SHADOW_AMORTISATION_OFF = "options.vitrail.shadow_amortisation_off";
+	/** Two keys and not one format: no language of ours pluralises from a number on its own. */
+	public static final String SHADOW_AMORTISATION_FRAME =
+			"options.vitrail.shadow_amortisation_frame";
+	public static final String SHADOW_AMORTISATION_FRAMES =
+			"options.vitrail.shadow_amortisation_frames";
+
 	/** The grey line under the title, one per view. */
 	public static final String SELECT_TITLE = "pack.vitrail.select_title";
 	public static final String CONFIGURE_TITLE = "pack.vitrail.configure_title";

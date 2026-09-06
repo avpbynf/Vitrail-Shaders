@@ -15,6 +15,17 @@ what the next one holds.
 
 ### Added
 
+- **Shadow Reuse, a new setting on the engine page, and it is the largest frame rate gain this
+  engine has shipped.** Filling the shadow map means walking the whole world a second time, for the
+  sun, and it is the most expensive thing the frame does: two thirds of it on Complementary Unbound,
+  a third on Photon. Between two frames of a player standing still nothing in that map moves, so it
+  is now kept and reused instead of drawn again, and the passes that sample it are handed the
+  matrices of the map they actually have. Measured at eye level in open terrain: 143 to 194 frames a
+  second on Complementary Unbound, 157 to 190 on Photon. The price is on shadows of things that
+  MOVE, a mob, a boat, your own shadow, which are as many frames late as the setting keeps. One
+  frame is what it ships at and is not visible in play; the slider goes to two and stops there.
+  Turning it off restores the previous behaviour exactly.
+
 - **A pack that ships no `final` program now draws.** Some packs end their chain on their last
   composite and expect what it wrote to be the picture; they were refused outright, with nothing on
   screen. What the chain leaves in `colortex0` is now brought to the screen, which is what Iris

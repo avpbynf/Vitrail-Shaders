@@ -49,16 +49,17 @@ import java.nio.file.Path;
  * shadow programs writing a volume the rest of the frame reads rather than only a depth. That
  * refusal is made by the caller, which is the one place that knows.
  *
- * <h2>How it is armed</h2>
+ * <h2>How it is set</h2>
  *
- * A file {@code vitrail/amortise-shadow} in the instance, holding the number of frames a map may be
- * kept for, empty meaning {@link #DEFAULT_FRAMES}. Absent means off, and off has to be exactly the
- * engine as it was: the anchor then moves every frame, which is what the published pair already
- * did before any of this existed.
+ * A slider on the engine page, from nought to {@link #MAX_FRAMES}, stored in
+ * {@code vitrail/amortise-shadow} beside the pack. Nought has to be exactly the engine as it was:
+ * the anchor then moves every frame, which is what the published pair already did before any of
+ * this existed.
  * <p>
- * A file rather than a system property, for the same reason the pass census is one: a launcher is a
- * place a session cannot reach, and a file beside the pack is a place it can, so the same jar
- * measures both states in one launch.
+ * A file of its own rather than a line in the game's options, like the module cache ceiling: it is
+ * read at the head of a frame, written by the screen, and belongs to the install rather than to a
+ * pack or a world. It also means a session can flip it without a keyboard, which is how both sides
+ * of it were measured in one jar.
  */
 public final class ShadowAmortisation {
 
@@ -74,14 +75,16 @@ public final class ShadowAmortisation {
 	 * put the difference BELOW the noise two relaunches make on their own and would have signed off
 	 * on three.
 	 */
-	private static final int DEFAULT_FRAMES = 1;
+	public static final int DEFAULT_FRAMES = 1;
+
+	/** Nought is the engine as it was: the map drawn every frame, and every caster exact. */
+	public static final int MIN_FRAMES = 0;
 
 	/**
-	 * The most frames a map may be kept for, whatever the file says. Past this the frozen casters
-	 * stop reading as a cheap shadow and start reading as a bug, and an arming file left behind by
-	 * a session that has gone is a road nobody chose: a ceiling is what keeps that road short.
+	 * The most frames a map may be kept for, whatever the file says. Three is where a walk finds it,
+	 * so the selector stops one short of the value that reads as a bug rather than offering it.
 	 */
-	private static final int MAX_FRAMES = 16;
+	public static final int MAX_FRAMES = 2;
 
 	/**
 	 * How far the camera may walk from where the map was drawn before it is drawn again, in blocks.
@@ -100,9 +103,14 @@ public final class ShadowAmortisation {
 	 */
 	private static final float ANGLE_TURNS = 0.0003F;
 
-	private static final String ARM_FILE = "amortise-shadow";
+	/**
+	 * Where the value lives, beside the pack rather than in the game's options: it is read at the
+	 * head of a frame by the engine and written by the settings screen, and it belongs to the
+	 * install rather than to any pack or world.
+	 */
+	private static final String SETTING_FILE = "amortise-shadow";
 
-	/** Read once per pack load rather than once per frame, like every other arming file. */
+	/** Read from the file the first time it is asked for, and authoritative from then on. */
 	private static int frames = -1;
 
 	private static final Vector3d anchorCamera = new Vector3d();
@@ -156,7 +164,7 @@ public final class ShadowAmortisation {
 		pendingCamera.set(camera);
 		pendingAngle = shadowAngle;
 
-		int asked = armed();
+		int asked = frames();
 		drawThisFrame = !seeded || asked <= 0 || !amortisable
 				|| sinceDraw >= asked
 				|| anchorCamera.distance(camera) >= MOVE_BLOCKS
@@ -188,8 +196,13 @@ public final class ShadowAmortisation {
 	}
 
 	/**
-	 * Forgets the map, at a pack load and wherever else the chain is torn down. The next frame draws
-	 * whatever the file says: a map from another pack is not a map.
+	 * Forgets the MAP, at a pack load and wherever else the chain is torn down: one pack's shadow
+	 * map is not another's, and the next frame draws before anything samples it.
+	 * <p>
+	 * The interval is not forgotten with it. It is a setting of the install, not of the pack, and
+	 * re-reading it here is what an earlier version did: {@code beginFrame} runs once per FRAME
+	 * despite its name, so the value was read off the disk sixty times a second and the map was
+	 * dropped just as often, which is the amortisation doing nothing while announcing itself.
 	 */
 	public static void forget() {
 		seeded = false;
@@ -197,42 +210,67 @@ public final class ShadowAmortisation {
 		drawThisFrame = true;
 		drewLastFrame = true;
 		drewSinceBegin = false;
-		frames = -1;
 	}
 
-	/** The interval asked for, in frames, or nought when the file is not there. */
-	private static int armed() {
-		if (frames >= 0) {
-			return frames;
-		}
-
-		frames = 0;
-		try {
-			Path file = Vitrail.platform().gameDirectory().resolve("vitrail").resolve(ARM_FILE);
-			if (!Files.isRegularFile(file)) {
-				return frames;
+	/**
+	 * How many frames a map may be kept for after the one that drew it. Nought is the engine as it
+	 * was. Read from the file the first time, and from memory after that.
+	 */
+	public static int frames() {
+		if (frames < 0) {
+			frames = clamp(read());
+			// Said once, and only when it is on: a shadow one frame late is the first thing to
+			// suspect for a shadow artefact, and a session reading a log has no other way to know
+			// the map it is looking at is not this frame's.
+			if (frames > 0) {
+				Vitrail.logger().info("Shadow map kept for {} frame(s) after the one that draws it, "
+						+ "so a caster that moves is that many frames late in it", frames);
 			}
-
-			String asked = Files.readString(file).trim();
-			// A file that is there and holds a typo still arms, at the default: it was put there on
-			// purpose, and answering it with silence is how a measurement gets waited for and never
-			// comes. The same reading the pass census makes of its own file.
-			frames = asked.isEmpty() ? DEFAULT_FRAMES : parse(asked);
-			frames = Math.min(Math.max(frames, 0), MAX_FRAMES);
-			Vitrail.logger().info("Shadow map amortised: kept for {} frame(s) after the one that "
-					+ "draws it, so casters that move are that many frames late in it", frames);
-		} catch (IOException | RuntimeException ignored) {
-			frames = 0;
 		}
 
 		return frames;
 	}
 
-	private static int parse(String asked) {
+	/**
+	 * Takes the value the settings screen chose, writes it beside the pack and keeps the live
+	 * answer. It applies at the next frame: no pack reload and no restart.
+	 */
+	public static void setFrames(int asked) {
+		frames = clamp(asked);
 		try {
-			return Integer.parseInt(asked);
-		} catch (NumberFormatException ignored) {
+			Path file = file();
+			Files.createDirectories(file.getParent());
+			Files.writeString(file, frames + "\n");
+		} catch (IOException | RuntimeException e) {
+			// Kept live anyway: a value that cannot be stored is still the one the player asked for
+			// this session, and a selector that springs back to its old place says nothing at all.
+			Vitrail.logger().warn("Could not store the shadow amortisation, it holds for this "
+					+ "session only", e);
+		}
+	}
+
+	private static int read() {
+		try {
+			Path file = file();
+			if (!Files.isRegularFile(file)) {
+				return DEFAULT_FRAMES;
+			}
+
+			String asked = Files.readString(file).trim();
+			// A file that is there and holds a typo reads as the default rather than as nought: it
+			// was written on purpose, and answering it with the engine switched off is a gain that
+			// disappears without a word.
+			return asked.isEmpty() ? DEFAULT_FRAMES : Integer.parseInt(asked);
+		} catch (IOException | RuntimeException ignored) {
 			return DEFAULT_FRAMES;
 		}
+	}
+
+	private static Path file() {
+		return Vitrail.platform().gameDirectory().resolve("vitrail").resolve(SETTING_FILE);
+	}
+
+	private static int clamp(int asked) {
+		return Math.min(Math.max(asked, MIN_FRAMES), MAX_FRAMES);
 	}
 }
