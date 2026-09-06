@@ -493,8 +493,10 @@ public final class PackChain {
 	 * once - it went on naming the weather after the weather had landed, and it never named the
 	 * particles at all.
 	 * <p>
-	 * The entities are the one family that is here in both states, their blending half never having
-	 * landed at all. Every other switch names its family only when it is off.
+	 * The entities are the one family that is here in both states: off, the whole family is the
+	 * game's; on, the two pieces nobody serves yet still are, the beacon beam and the lightning,
+	 * which the feature layer carries across. Every other switch names its family only when it is
+	 * off.
 	 * <p>
 	 * <strong>Every family the seed carries that has no line of its own, and the sky is one of
 	 * them.</strong> It was left out of the first version of this method, which is the same fault as
@@ -540,10 +542,10 @@ public final class PackChain {
 		}
 
 		if (EntityDraw.wanted()) {
-			// Named apart, because a reader who has just turned the entities on and still sees a flat
-			// player would otherwise have nothing to go on: the opaque ones go through the pack and
-			// the ones that blend do not.
-			carried.add("the entities that blend, the player's own body among them,");
+			// Named apart, because a reader who has just turned the entities on and still sees a
+			// beam or a bolt of the game's would otherwise have nothing to go on: both halves of the
+			// entities go through the pack, and these two pieces are what FeatureLayer still carries.
+			carried.add("the beacon beam and the lightning");
 		}
 
 		// The conjunction the hand-written sentence carried, kept: this is a line of prose in the log
