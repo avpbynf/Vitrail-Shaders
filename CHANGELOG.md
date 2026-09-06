@@ -61,6 +61,13 @@ what the next one holds.
 
 ### Fixed
 
+- **A setting compared against a number with a decimal point no longer switches a pass off.** Some
+  packs write conditions like "if the motion blur is above 0.0" or "if the falloff equals 1", with
+  the setting itself holding 0.5 or 1.0. Those were read as whole numbers, so a half became nought
+  and the branch was decided the wrong way, and the line was then refused outright besides. Pegasus
+  was losing its terrain, its water, its entities and its particles to one of them, and Clarity two
+  of its passes.
+
 - **The extensions a pack asks for are no longer dropped.** A pack using half precision types
   guarded them on the extension being available and shipped a fallback for when it is not; the line
   that enables the extension was thrown away while everything around it stayed, so neither road
