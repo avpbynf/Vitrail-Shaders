@@ -26,6 +26,13 @@ what the next one holds.
 
 ### Changed
 
+- **Reloading resources no longer rebuilds the pack.** Pressing F3 and T, or anything else that
+  reloads the game's resources, threw away every program the pack had compiled and built them all
+  again, with the world held back for about a second while it happened. A pack's programs come out
+  of its own archive, which a resource reload does not touch, so the ones being drawn with are kept
+  across it now and the reload costs the pack nothing. Programs left over from a pack that has been
+  replaced are still freed there, which is the one thing that ever frees them.
+
 - **Joining a world builds the pack once instead of twice.** The pack is read while the client
   starts up, before any world has arrived, and joining one makes it read again against what that
   world brings. That second reading used to come after the first had already built the whole

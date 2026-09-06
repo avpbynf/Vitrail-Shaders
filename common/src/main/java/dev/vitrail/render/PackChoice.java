@@ -1091,8 +1091,9 @@ public final class PackChoice {
 				// unreachable by the time this is caught, so nothing frees the rest of it later and
 				// no other line would ever name what it still holds. What it holds is buffers and
 				// images; the pipelines and shader modules of that load are not part of it, since
-				// the next resource reload empties the device cache whether a release reached them
-				// or not.
+				// the next device purge frees them whether a release reached them or not. That
+				// purge carries the LIVE load over itself now (VulkanDeviceMixin), and the load
+				// being replaced here is not the live one by the time it runs.
 				Vitrail.logger().error("Vitrail could not hand back everything the pack being "
 						+ "replaced held, so the buffers and images its release had not reached "
 						+ "stay allocated until the game is closed", e);

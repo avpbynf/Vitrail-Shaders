@@ -803,6 +803,23 @@ public final class PackChain {
 	}
 
 	/**
+	 * The number of the load that will still draw, nought when none will, which is a narrower
+	 * question than {@link #loadNumber} and the only one worth asking about what to KEEP.
+	 * <p>
+	 * The two part company wherever the engine stops drawing a chain without replacing it: every
+	 * road that sets {@code disabled} leaves the chain standing so that the settings screen has one
+	 * to name and the frame has one to close, and {@code loadNumber} goes on answering for it.
+	 * Whatever that chain still holds in the device is owed a purge, not a carry, and this is what
+	 * says so. Leaving a world is NOT one of those roads: the chain there is released and will draw
+	 * again when a world is joined.
+	 */
+	public static int liveLoad() {
+		PackChain chain = active;
+
+		return disabled || chain == null ? 0 : chain.load;
+	}
+
+	/**
 	 * Compiles as many programs as a short budget on this frame will take, then returns. One
 	 * program a frame was the wait the player sat through at two frames per second; several a
 	 * frame, with the world not drawn, is the same work without that picture.
@@ -1113,7 +1130,11 @@ public final class PackChain {
 
 	/** Called when the client shuts down, while the device is still alive. */
 	public static void close() {
-		PackChain chain = active;
+		// Taken down before it is released, and not merely released: after this nothing draws again,
+		// so a chain still answering as the live one would have the release announce that the next
+		// device purge carries its pipelines, when the next purge is the one inside the device's own
+		// close and that one carries nothing at all.
+		PackChain chain = takeDown();
 		if (chain != null) {
 			chain.release();
 		}
@@ -2500,12 +2521,20 @@ public final class PackChain {
 		// waits for the queue to go idle and destroys the game's own pipelines with ours. Doing
 		// that from here would do it in the middle of a frame whose commands are already recorded
 		// against them. The reload's cost is therefore named and left: it is a few hundred
-		// kilobytes of SPIR-V a reload, against the hundred megabytes of targets freed above, and
-		// the next resource reload clears it.
+		// kilobytes of SPIR-V a reload, against the hundred megabytes of targets freed above.
+		//
+		// What frees them afterwards is not one answer any more, and the line says which it is. A
+		// release on the way out of a world leaves this chain live, because it draws again the
+		// moment one is joined, and the next device purge carries its pipelines over itself
+		// (VulkanDeviceMixin). A release because the chain is being replaced or has been stopped
+		// leaves it neither, and there the purge frees them as it always did.
 		if (this.programs != null && !this.programs.isEmpty()) {
+			boolean stillLive = active == this && !disabled;
 			Vitrail.logger().info("{} pipelines and {} shader modules of load {} stay in the device "
-					+ "cache until the next resource reload", this.programs.size(),
-					2 * this.programs.size(), this.load);
+					+ "cache, and the next purge {}", this.programs.size(),
+					2 * this.programs.size(), this.load,
+					stillLive ? "carries them, this chain being the one that draws again"
+							: "frees them");
 		}
 	}
 }
