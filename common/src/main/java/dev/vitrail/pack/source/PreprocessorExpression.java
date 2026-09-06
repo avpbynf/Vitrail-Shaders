@@ -4,16 +4,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.regex.Pattern;
 
 /**
  * Evaluates the expression of an {@code #if} or {@code #elif} well enough to decide which
  * branch of a pack is live.
  * <p>
- * Arithmetic is in integers, as the preprocessor defines it, not in floating point: a pack
- * writing {@code #if QUALITY / 2} expects the C answer, and the compiler that sees the same
- * line later will give the C answer whatever is decided here.
+ * <strong>Arithmetic follows C's rules and not the preprocessor's, which is a deliberate
+ * divergence from the language and the only one here.</strong> The preprocessor of GLSL works in
+ * integers and refuses a fractional number outright; a GL driver takes one and reduces it, so packs
+ * ship conditions the language forbids. Clarity writes {@code #if MOTION_BLUR > 0.0} with that
+ * setting at 0.5 and Pegasus writes {@code #if SKY_LIGHT_FALLOFF == 1} with the macro at 1.0.
+ * Answering those in integers alone truncates 0.5 to nought and switches an effect off in the
+ * picture, silently, which is worse than refusing the line.
+ * <p>
+ * So a value carries whether it is whole, and the promotion is C's: {@code /} and {@code %} divide
+ * in integers when both sides are whole and in floating point otherwise, so {@code 7 / 2 == 3}
+ * still holds; the shifts and the bitwise operators take whole numbers only and yield no answer on
+ * anything else, as C forbids them there; everything else widens as soon as one side is
+ * fractional. What a comparison or a logical operator hands back is whole, being nought or one.
  * <p>
  * A name stands for a value, and that value may itself be an expression naming other settings,
  * so evaluating one expression can start another. The budget for that is shared across the
@@ -58,6 +67,48 @@ public final class PreprocessorExpression {
 	/** Whether the text is not an expression at all, which no operator forgives. */
 	private boolean malformed;
 
+	/**
+	 * Whether anything the expression read was fractional, which is what the compiler refuses the
+	 * whole line for. Set wherever a value that is not whole is produced or resolved, including in
+	 * an operand a short circuit spares, because the compiler reads the text either way.
+	 */
+	private boolean fractional;
+
+	/**
+	 * One value of an expression: what it is worth, and whether it is a whole number.
+	 * <p>
+	 * The flag is not the same question as {@code number == Math.rint(number)}. What decides
+	 * whether a division is C's integer division is how the two operands were WRITTEN, so
+	 * {@code 4.0 / 2} divides in floating point and answers 2.0 while {@code 4 / 2} answers the
+	 * same 2 as a whole number, and only the second may then be shifted.
+	 * <p>
+	 * <strong>A whole number is carried as a {@code long} beside its double and read from there
+	 * whenever both sides are whole</strong>, which is the arithmetic this class did before it
+	 * learned about fractions and which a double cannot do: past two to the fifty-third a double
+	 * has no room for consecutive integers, so {@code 9007199254740993 == 9007199254740992} would
+	 * answer true and {@code 9007199254740993 & 1} would answer nought. Neither reaches a pack, and
+	 * both would be a right answer replaced by a wrong one, which is the shape this repository pays
+	 * for twice over.
+	 */
+	private record Scalar(double number, long whole, boolean integral) {
+
+		static Scalar of(long value) {
+			return new Scalar(value, value, true);
+		}
+
+		static Scalar of(boolean truth) {
+			return of(truth ? 1 : 0);
+		}
+
+		static Scalar fraction(double value) {
+			return new Scalar(value, (long) value, false);
+		}
+
+		boolean truth() {
+			return this.integral ? this.whole != 0 : this.number != 0;
+		}
+	}
+
 	private PreprocessorExpression(List<String> tokens, Map<String, String> defines, int depth) {
 		this.tokens = tokens;
 		this.defines = defines;
@@ -65,29 +116,49 @@ public final class PreprocessorExpression {
 	}
 
 	public static Optional<Boolean> evaluate(String expression, Map<String, String> defines) {
-		OptionalLong value = value(expression, defines, 0);
+		return decide(expression, defines).taken();
+	}
 
-		return value.isPresent() ? Optional.of(value.getAsLong() != 0) : Optional.empty();
+	/**
+	 * What one condition decides, and whether the compiler will take the line at all.
+	 *
+	 * @param taken      the branch this expression opens, or empty where nothing could be worked out
+	 * @param fractional whether the expression read a value that is not a whole number. The
+	 *                   preprocessor of the language refuses such a line outright, so a caller that
+	 *                   writes the text back out has to answer it here instead of passing it on
+	 */
+	public record Verdict(Optional<Boolean> taken, boolean fractional) {
+	}
+
+	/** The same as {@link #evaluate}, with what the caller needs to know about the text itself. */
+	public static Verdict decide(String expression, Map<String, String> defines) {
+		Reading read = read(expression, defines, 0);
+
+		return new Verdict(read.value().map(Scalar::truth), read.fractional());
+	}
+
+	/** One evaluation: what it came to, and whether anything fractional was read on the way. */
+	private record Reading(Optional<Scalar> value, boolean fractional) {
 	}
 
 	/** The numeric answer, which is what a name resolving to an expression needs. */
-	private static OptionalLong value(String expression, Map<String, String> defines, int depth) {
+	private static Reading read(String expression, Map<String, String> defines, int depth) {
 		if (depth > MAX_RESOLUTION_DEPTH) {
-			return OptionalLong.empty();
+			return new Reading(Optional.empty(), false);
 		}
 
 		List<String> tokens = tokenise(stripComments(expression));
 		if (tokens.isEmpty()) {
-			return OptionalLong.empty();
+			return new Reading(Optional.empty(), false);
 		}
 
 		PreprocessorExpression parser = new PreprocessorExpression(tokens, defines, depth);
-		long result = parser.logicalOr();
+		Scalar result = parser.logicalOr();
 		if (parser.failed || parser.malformed || parser.position < tokens.size()) {
-			return OptionalLong.empty();
+			return new Reading(Optional.empty(), parser.fractional);
 		}
 
-		return OptionalLong.of(result);
+		return new Reading(Optional.of(result), parser.fractional);
 	}
 
 	private static String stripComments(String expression) {
@@ -162,97 +233,128 @@ public final class PreprocessorExpression {
 	 * operand, so {@code X != 0 && 100 / X > 5} is false at zero rather than undecidable, and an
 	 * undecidable answer would have put the whole branch back in.
 	 */
-	private long logicalOr() {
-		long left = logicalAnd();
+	private Scalar logicalOr() {
+		Scalar left = logicalAnd();
 		while (accept("||")) {
 			boolean decided = this.failed;
-			long right = logicalAnd();
-			if (left != 0) {
+			Scalar right = logicalAnd();
+			if (left.truth()) {
 				this.failed = decided;
 			}
 
-			left = left != 0 || right != 0 ? 1 : 0;
+			left = Scalar.of(left.truth() || right.truth());
 		}
 
 		return left;
 	}
 
-	private long logicalAnd() {
-		long left = bitwiseOr();
+	private Scalar logicalAnd() {
+		Scalar left = bitwiseOr();
 		while (accept("&&")) {
 			boolean decided = this.failed;
-			long right = bitwiseOr();
-			if (left == 0) {
+			Scalar right = bitwiseOr();
+			if (!left.truth()) {
 				this.failed = decided;
 			}
 
-			left = left != 0 && right != 0 ? 1 : 0;
+			left = Scalar.of(left.truth() && right.truth());
 		}
 
 		return left;
 	}
 
-	private long bitwiseOr() {
-		long left = bitwiseXor();
+	private Scalar bitwiseOr() {
+		Scalar left = bitwiseXor();
 		while ("|".equals(peek())) {
 			this.position++;
-			left |= bitwiseXor();
+			left = bits(left, bitwiseXor(), "|");
 		}
 
 		return left;
 	}
 
-	private long bitwiseXor() {
-		long left = bitwiseAnd();
+	private Scalar bitwiseXor() {
+		Scalar left = bitwiseAnd();
 		while (accept("^")) {
-			left ^= bitwiseAnd();
+			left = bits(left, bitwiseAnd(), "^");
 		}
 
 		return left;
 	}
 
-	private long bitwiseAnd() {
-		long left = equality();
+	private Scalar bitwiseAnd() {
+		Scalar left = equality();
 		while ("&".equals(peek())) {
 			this.position++;
-			left &= equality();
+			left = bits(left, equality(), "&");
 		}
 
 		return left;
 	}
 
-	private long equality() {
-		long left = relational();
+	/**
+	 * The bitwise operators, which C gives whole numbers only. A fractional operand is not rounded
+	 * into one: that would answer a question the language refuses to ask, so it yields no answer.
+	 */
+	private Scalar bits(Scalar left, Scalar right, String operator) {
+		if (!left.integral() || !right.integral()) {
+			this.failed = true;
+
+			return Scalar.of(0);
+		}
+
+		long a = left.whole();
+		long b = right.whole();
+
+		return Scalar.of(switch (operator) {
+			case "|" -> a | b;
+			case "^" -> a ^ b;
+			default -> a & b;
+		});
+	}
+
+	private Scalar equality() {
+		Scalar left = relational();
 		while (true) {
 			if (accept("==")) {
-				left = left == relational() ? 1 : 0;
+				left = Scalar.of(compare(left, relational()) == 0);
 			} else if (accept("!=")) {
-				left = left != relational() ? 1 : 0;
+				left = Scalar.of(compare(left, relational()) != 0);
 			} else {
 				return left;
 			}
 		}
 	}
 
-	private long relational() {
-		long left = shift();
+	private Scalar relational() {
+		Scalar left = shift();
 		while (true) {
 			if (accept("<=")) {
-				left = left <= shift() ? 1 : 0;
+				left = Scalar.of(compare(left, shift()) <= 0);
 			} else if (accept(">=")) {
-				left = left >= shift() ? 1 : 0;
+				left = Scalar.of(compare(left, shift()) >= 0);
 			} else if (accept("<")) {
-				left = left < shift() ? 1 : 0;
+				left = Scalar.of(compare(left, shift()) < 0);
 			} else if (accept(">")) {
-				left = left > shift() ? 1 : 0;
+				left = Scalar.of(compare(left, shift()) > 0);
 			} else {
 				return left;
 			}
 		}
 	}
 
-	private long shift() {
-		long left = additive();
+	/**
+	 * Two values ordered, in whole numbers where both are whole. Comparing them as doubles instead
+	 * would call two consecutive integers equal above two to the fifty-third, where C does not.
+	 */
+	private static int compare(Scalar left, Scalar right) {
+		return left.integral() && right.integral()
+				? Long.compare(left.whole(), right.whole())
+				: Double.compare(left.number(), right.number());
+	}
+
+	private Scalar shift() {
+		Scalar left = additive();
 		while (true) {
 			if (accept("<<")) {
 				left = shiftBy(left, additive(), true);
@@ -264,34 +366,48 @@ public final class PreprocessorExpression {
 		}
 	}
 
-	/** A shift by a negative or absurd amount is undefined in C, so it is not an answer here. */
-	private long shiftBy(long left, long places, boolean up) {
-		if (places < 0 || places > 63) {
+	/**
+	 * A shift by a negative or absurd amount is undefined in C, so it is not an answer here, and
+	 * neither is a shift of or by anything that is not a whole number.
+	 */
+	private Scalar shiftBy(Scalar left, Scalar places, boolean up) {
+		if (!left.integral() || !places.integral()
+				|| places.whole() < 0 || places.whole() > 63) {
 			this.failed = true;
-			return 0;
+
+			return Scalar.of(0);
 		}
 
-		return up ? left << places : left >> places;
+		return Scalar.of(up ? left.whole() << places.whole() : left.whole() >> places.whole());
 	}
 
-	private long additive() {
-		long left = multiplicative();
+	private Scalar additive() {
+		Scalar left = multiplicative();
 		while (true) {
 			if (accept("+")) {
-				left += multiplicative();
+				Scalar right = multiplicative();
+				left = left.integral() && right.integral()
+						? Scalar.of(left.whole() + right.whole())
+						: Scalar.fraction(left.number() + right.number());
 			} else if (accept("-")) {
-				left -= multiplicative();
+				Scalar right = multiplicative();
+				left = left.integral() && right.integral()
+						? Scalar.of(left.whole() - right.whole())
+						: Scalar.fraction(left.number() - right.number());
 			} else {
 				return left;
 			}
 		}
 	}
 
-	private long multiplicative() {
-		long left = unary();
+	private Scalar multiplicative() {
+		Scalar left = unary();
 		while (true) {
 			if (accept("*")) {
-				left *= unary();
+				Scalar right = unary();
+				left = left.integral() && right.integral()
+						? Scalar.of(left.whole() * right.whole())
+						: Scalar.fraction(left.number() * right.number());
 			} else if (accept("/")) {
 				left = divide(left, unary(), false);
 			} else if (accept("%")) {
@@ -305,17 +421,40 @@ public final class PreprocessorExpression {
 	/**
 	 * Zero and the one overflowing case are treated as no answer rather than as an exception:
 	 * a pack whose condition cannot be worked out is not a reason to abandon the load.
+	 * <p>
+	 * <strong>Whole against whole divides in whole numbers</strong>, which is C's rule and what
+	 * keeps {@code 7 / 2 == 3} true. As soon as one side is fractional the division is a floating
+	 * one, and the remainder is not defined on those at all.
 	 */
-	private long divide(long left, long right, boolean remainder) {
-		if (right == 0 || (left == Long.MIN_VALUE && right == -1)) {
+	private Scalar divide(Scalar left, Scalar right, boolean remainder) {
+		if (!right.truth()) {
 			this.failed = true;
-			return 0;
+
+			return Scalar.of(0);
 		}
 
-		return remainder ? left % right : left / right;
+		if (!left.integral() || !right.integral()) {
+			if (remainder) {
+				this.failed = true;
+
+				return Scalar.of(0);
+			}
+
+			return Scalar.fraction(left.number() / right.number());
+		}
+
+		long a = left.whole();
+		long b = right.whole();
+		if (a == Long.MIN_VALUE && b == -1) {
+			this.failed = true;
+
+			return Scalar.of(0);
+		}
+
+		return Scalar.of(remainder ? a % b : a / b);
 	}
 
-	private long unary() {
+	private Scalar unary() {
 		String token = peek();
 		if (token == null || !isPrefix(token)) {
 			return primary();
@@ -324,18 +463,29 @@ public final class PreprocessorExpression {
 		this.position++;
 		if (++this.nesting > MAX_NESTING_DEPTH) {
 			this.malformed = true;
-			return 0;
+			return Scalar.of(0);
 		}
 
-		long value = unary();
+		Scalar value = unary();
 		this.nesting--;
 
-		return switch (token) {
-			case "!" -> value == 0 ? 1 : 0;
-			case "-" -> -value;
-			case "~" -> ~value;
-			default -> value;
-		};
+		switch (token) {
+			case "!":
+				return Scalar.of(!value.truth());
+			case "-":
+				return value.integral() ? Scalar.of(-value.whole())
+						: Scalar.fraction(-value.number());
+			case "~":
+				if (!value.integral()) {
+					this.failed = true;
+
+					return Scalar.of(0);
+				}
+
+				return Scalar.of(~value.whole());
+			default:
+				return value;
+		}
 	}
 
 	private static boolean isPrefix(String token) {
@@ -345,20 +495,20 @@ public final class PreprocessorExpression {
 		};
 	}
 
-	private long primary() {
+	private Scalar primary() {
 		String token = peek();
 		if (token == null) {
 			this.malformed = true;
-			return 0;
+			return Scalar.of(0);
 		}
 
 		if (accept("(")) {
 			if (++this.nesting > MAX_NESTING_DEPTH) {
 				this.malformed = true;
-				return 0;
+				return Scalar.of(0);
 			}
 
-			long value = logicalOr();
+			Scalar value = logicalOr();
 			this.nesting--;
 			if (!accept(")")) {
 				this.malformed = true;
@@ -374,33 +524,38 @@ public final class PreprocessorExpression {
 		}
 
 		if (isIdentifier(token)) {
-			return resolve(token, this.defines, this.depth + 1);
+			Reading read = resolve(token, this.defines, this.depth + 1);
+			this.fractional |= read.fractional();
+
+			return read.value().orElse(Scalar.of(0));
 		}
 
-		OptionalLong number = parseNumber(token);
+		Optional<Scalar> number = parseNumber(token);
 		if (number.isEmpty()) {
 			this.malformed = true;
-			return 0;
+			return Scalar.of(0);
 		}
 
-		return number.getAsLong();
+		this.fractional |= !number.get().integral();
+
+		return number.get();
 	}
 
-	private long definedOperator() {
+	private Scalar definedOperator() {
 		boolean parenthesised = accept("(");
 		String name = peek();
 		if (name == null || !isIdentifier(name)) {
 			this.malformed = true;
-			return 0;
+			return Scalar.of(0);
 		}
 
 		this.position++;
 		if (parenthesised && !accept(")")) {
 			this.malformed = true;
-			return 0;
+			return Scalar.of(0);
 		}
 
-		return this.defines.containsKey(name) ? 1 : 0;
+		return Scalar.of(this.defines.containsKey(name));
 	}
 
 	/**
@@ -408,21 +563,21 @@ public final class PreprocessorExpression {
 	 * identifier or a whole expression. A name nothing defines is zero, which is what the
 	 * preprocessor does and what lets a pack test a setting it never declared.
 	 */
-	public static long resolve(String name, Map<String, String> defines, int depth) {
+	private static Reading resolve(String name, Map<String, String> defines, int depth) {
 		if (depth > MAX_RESOLUTION_DEPTH) {
-			return 0;
+			return new Reading(Optional.of(Scalar.of(0)), false);
 		}
 
 		String value = defines.get(name);
 		if (value == null || value.isBlank()) {
 			// Defined but empty is the usual shape of a switch that is on.
-			return defines.containsKey(name) ? 1 : 0;
+			return new Reading(Optional.of(Scalar.of(defines.containsKey(name))), false);
 		}
 
 		String trimmed = value.trim();
-		OptionalLong number = parseNumber(trimmed);
+		Optional<Scalar> number = parseNumber(trimmed);
 		if (number.isPresent()) {
-			return number.getAsLong();
+			return new Reading(number, !number.get().integral());
 		}
 
 		if (isIdentifier(trimmed)) {
@@ -432,7 +587,9 @@ public final class PreprocessorExpression {
 		// An expression keeps its value rather than collapsing to one or zero. A pack that
 		// writes SHADOW_RES as QUALITY * 512 and then compares it against 256 is comparing
 		// sizes, and reducing that to a truth value quietly gives the wrong branch.
-		return value(trimmed, defines, depth + 1).orElse(1L);
+		Reading read = read(trimmed, defines, depth + 1);
+
+		return new Reading(Optional.of(read.value().orElse(Scalar.of(1))), read.fractional());
 	}
 
 	private static boolean isIdentifier(String token) {
@@ -443,7 +600,7 @@ public final class PreprocessorExpression {
 		return token.chars().allMatch(c -> Character.isLetterOrDigit(c) || c == '_');
 	}
 
-	private static OptionalLong parseNumber(String token) {
+	private static Optional<Scalar> parseNumber(String token) {
 		boolean hexadecimal = token.length() > 2 && (token.startsWith("0x") || token.startsWith("0X"));
 
 		// The base has to be known before a suffix can be stripped: in hexadecimal, f and F are
@@ -455,23 +612,26 @@ public final class PreprocessorExpression {
 		}
 
 		if (text.isEmpty()) {
-			return OptionalLong.empty();
+			return Optional.empty();
 		}
 
 		try {
 			if (hexadecimal) {
-				return OptionalLong.of(Long.parseLong(text.substring(2), 16));
+				return Optional.of(Scalar.of(Long.parseLong(text.substring(2), 16)));
 			}
 
-			// A pack may well write 1.0 in a condition. Truncating matches what the compiler
-			// does with the same line, which is the only thing that has to agree.
-			if (text.indexOf('.') >= 0) {
-				return OptionalLong.of((long) Double.parseDouble(text));
+			// Kept as it was written and not rounded here, which is the whole of the divergence
+			// this class carries: 0.5 is a half all the way to the comparison that reads it, and
+			// the caller is told the line held one so that it can answer for a compiler that will
+			// not. An exponent makes a number fractional as surely as a point does, 1e3 being a
+			// float in every language that has both.
+			if (text.indexOf('.') >= 0 || text.indexOf('e') >= 0 || text.indexOf('E') >= 0) {
+				return Optional.of(Scalar.fraction(Double.parseDouble(text)));
 			}
 
-			return OptionalLong.of(Long.parseLong(text));
+			return Optional.of(Scalar.of(Long.parseLong(text)));
 		} catch (NumberFormatException e) {
-			return OptionalLong.empty();
+			return Optional.empty();
 		}
 	}
 }

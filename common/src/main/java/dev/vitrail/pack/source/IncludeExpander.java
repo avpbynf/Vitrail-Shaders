@@ -360,6 +360,13 @@ public final class IncludeExpander {
 			state.conditionals++;
 			state.openInOutput++;
 			if (!beyondComments(iff.group(2)).isEmpty()) {
+				String written = rewritten(iff.group(2), state);
+				if (written != null) {
+					conditions.rewrittenIfDirective(written.equals("1"));
+
+					return iff.group(1) + "#if " + written;
+				}
+
 				conditions.ifDirective(() -> decide(iff.group(2), state));
 				return line;
 			}
@@ -379,6 +386,13 @@ public final class IncludeExpander {
 			}
 
 			if (!beyondComments(elif.group(2)).isEmpty()) {
+				String written = rewritten(elif.group(2), state);
+				if (written != null) {
+					conditions.rewrittenElifDirective(written.equals("1"));
+
+					return elif.group(1) + "#elif " + written;
+				}
+
 				conditions.elifDirective(() -> decide(elif.group(2), state));
 				return line;
 			}
@@ -525,6 +539,41 @@ public final class IncludeExpander {
 		}
 
 		return value.get();
+	}
+
+	/**
+	 * The verdict written out as the condition itself, on the one kind of condition the compiler
+	 * will not read, or null on every other, which keeps its own text.
+	 * <p>
+	 * The preprocessor of the language works in whole numbers and refuses a line carrying anything
+	 * else; a GL driver reduces it and answers, so packs ship them. Clarity writes
+	 * {@code #if MOTION_BLUR > 0.0} with that setting at 0.5 and Pegasus writes
+	 * {@code #if SKY_LIGHT_FALLOFF == 1} with the macro at 1.0, and the second is what its terrain,
+	 * water, entity and particle passes were refused for.
+	 * <p>
+	 * <strong>What goes out is this expander's own answer, and that is only safe because the
+	 * evaluator computes it the way a driver does.</strong> It reads a fractional value as the
+	 * number it is rather than truncating, so {@code 0.5 > 0.0} is true here as it is there. The
+	 * shape written before that was true was the same rewrite over an evaluator that truncated, and
+	 * it read Clarity's motion blur as switched off: the picture would have lost the effect with
+	 * nothing said. The two halves only work together.
+	 * <p>
+	 * An expression neither this nor a driver can settle is written as taken, which is what
+	 * {@link #decide} answers everywhere else and for the reason given there.
+	 */
+	private String rewritten(String expression, State state) {
+		PreprocessorExpression.Verdict verdict =
+				PreprocessorExpression.decide(expression, state.defines);
+		if (!verdict.fractional()) {
+			return null;
+		}
+
+		// Not counted as undecidable, unlike decide's own road, and the difference is the point:
+		// that counter says how many conditions this reader handed to the compiler without an
+		// answer, and these it answers. An `#elif` is also asked here before the stack has said
+		// whether the branch can still matter, so counting would drift by every branch an earlier
+		// one had already won.
+		return verdict.taken().orElse(true) ? "1" : "0";
 	}
 
 	private void follow(Path from, String spec, int depth, State state) throws IOException {
