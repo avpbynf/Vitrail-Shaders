@@ -132,6 +132,116 @@ final class VaryingSplit {
 	}
 
 	/**
+	 * The names one side of this stage's splits really puts in the interface, which is what the
+	 * stage before it has to write or the stage after it has to declare.
+	 * <p>
+	 * A split takes the pack's declaration out of the body and the header writes the columns in its
+	 * place, so a walk of the text finds neither. Both sides of one program splitting the same
+	 * varying agree without anybody asking, which is why nothing needed this until a pack declared
+	 * a matrix on one side alone: Sildur's declares {@code varying mat3 tbnMatrix} in its
+	 * {@code gbuffers_textured} fragment stage with no condition, and in its vertex stage under
+	 * {@code #if nMap >= 1} with {@code nMap} off by default. The fragment then asked for three
+	 * columns nothing wrote and the game refused the pipeline by their names.
+	 *
+	 * @param input true for the names this stage reads, false for the ones it hands on
+	 */
+	List<String> interfaceNames(boolean input) {
+		List<String> names = new ArrayList<>();
+		for (SplitMatrix split : this.matrices) {
+			if (split.input() == input) {
+				for (int column = 0; column < split.columns(); column++) {
+					names.add(matrixColumnName(split.name(), column));
+				}
+			}
+		}
+
+		for (SplitStruct split : this.structs) {
+			if (split.input() == input) {
+				split.members().forEach(member ->
+						names.add(structMemberName(split.name(), member.name())));
+			}
+		}
+
+		for (SplitArray split : this.arrays) {
+			if (split.input() == input) {
+				for (int element = 0; element < split.size(); element++) {
+					names.add(arrayElementName(split.name(), element));
+				}
+			}
+		}
+
+		return List.copyOf(names);
+	}
+
+	/** The interface names one split of this stage stands for, by the name the pack gave it. */
+	List<String> interfaceNamesOf(String name) {
+		List<String> names = new ArrayList<>();
+		for (SplitMatrix split : this.matrices) {
+			if (split.name().equals(name)) {
+				for (int column = 0; column < split.columns(); column++) {
+					names.add(matrixColumnName(name, column));
+				}
+			}
+		}
+
+		for (SplitStruct split : this.structs) {
+			if (split.name().equals(name)) {
+				split.members().forEach(member ->
+						names.add(structMemberName(name, member.name())));
+			}
+		}
+
+		for (SplitArray split : this.arrays) {
+			if (split.name().equals(name)) {
+				for (int element = 0; element < split.size(); element++) {
+					names.add(arrayElementName(name, element));
+				}
+			}
+		}
+
+		return List.copyOf(names);
+	}
+
+	/** Every varying this stage reads through a split, by the name the pack gave it. */
+	List<String> splitInputs() {
+		List<String> names = new ArrayList<>();
+		this.matrices.forEach(split -> {
+			if (split.input()) {
+				names.add(split.name());
+			}
+		});
+		this.structs.forEach(split -> {
+			if (split.input()) {
+				names.add(split.name());
+			}
+		});
+		this.arrays.forEach(split -> {
+			if (split.input()) {
+				names.add(split.name());
+			}
+		});
+
+		return List.copyOf(names);
+	}
+
+	/**
+	 * Forgets one split this stage reads, which takes its columns out of the interface and its
+	 * rebuild out of the wrapper, so that nothing of it is declared at all.
+	 * <p>
+	 * Only ever called for a name the body no longer mentions, which is what makes it safe: the
+	 * rebuild the wrapper owed was to a local nobody reads.
+	 *
+	 * @return whether anything was forgotten
+	 */
+	boolean forgetInput(String name) {
+		boolean any = this.matrices.removeIf(split -> split.input() && split.name().equals(name));
+		any |= this.structs.removeIf(split -> split.input() && split.name().equals(name));
+		any |= this.arrays.removeIf(split -> split.input() && split.name().equals(name));
+
+		return any;
+	}
+
+	/**
 	 * One matrix varying rewritten as one vector per column.
 	 *
 	 * @param input true when this stage reads the matrix ({@code in}), false when it writes it

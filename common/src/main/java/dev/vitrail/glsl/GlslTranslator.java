@@ -933,7 +933,13 @@ public final class GlslTranslator {
 
 		/** The varyings this stage hands on, which is what says whether the next one is provided. */
 		public Set<String> provides() {
-			return Set.copyOf(this.translator.declaredOutputs);
+			Set<String> names = new LinkedHashSet<>(this.translator.declaredOutputs);
+			// The columns of a split are handed on as surely as a plain out, and a walk of the text
+			// finds none of them: the declaration left the body when it was split and the header
+			// writes the columns. VaryingSplit.interfaceNames says what that hid.
+			names.addAll(this.translator.splits.interfaceNames(false));
+
+			return Set.copyOf(names);
 		}
 
 		/**
@@ -946,6 +952,8 @@ public final class GlslTranslator {
 		public Set<String> requires() {
 			Set<String> names = new LinkedHashSet<>();
 			this.translator.declaredInputs.forEach(declared -> names.addAll(declared.names()));
+			// The other half of what provides() adds, and for the same reason.
+			names.addAll(this.translator.splits.interfaceNames(true));
 			names.removeAll(this.translator.droppedInputs);
 
 			return Set.copyOf(names);
@@ -3633,6 +3641,11 @@ public final class GlslTranslator {
 	 * @param provided every name a stage before this one declares as an output
 	 */
 	private void dropUnprovidedInputs(Set<String> provided) {
+		// First, and above the return below rather than under it: a stage whose plain inputs are all
+		// provided still has splits to answer for, and Sildur's gbuffers_textured is exactly that
+		// stage. Under the return it ran on the stages that did not need it and on none that did.
+		dropUnprovidedSplits(provided);
+
 		List<FileScope> unprovided = this.declaredInputs.stream()
 				.filter(declared -> declared.names().stream().noneMatch(provided::contains))
 				.toList();
@@ -3683,6 +3696,35 @@ public final class GlslTranslator {
 		if (dropped) {
 			this.used = usedNames();
 			this.declaredAfter = declaredUnderAType();
+		}
+	}
+
+	/**
+	 * The same for a varying this stage reads through a split, which the walk above cannot see.
+	 * <p>
+	 * A split takes the pack's declaration out of the body, so it is in none of the lists that walk
+	 * offers, and a matrix the stage before never wrote would stay declared through its columns
+	 * with nobody able to take it back out. Sildur's {@code gbuffers_textured} is that shape: the
+	 * fragment stage declares {@code varying mat3 tbnMatrix} outside any condition and reads it
+	 * only under {@code #if nMap >= 1}, which is off by default, while the vertex stage declares
+	 * AND writes it inside that same condition. Three columns nothing writes, and the game refuses
+	 * the pipeline by their names, which cost the pack its solid, cutout, particle and hand passes.
+	 * <p>
+	 * The condition is the walk's own and it earns its place the same way: the columns have to be
+	 * unwritten by the stage before, and the pack's own name has to be read nowhere in the body. A
+	 * split whose name the body still reads stays, and the stage keeps the refusal it has, because
+	 * taking it out would turn that into an undeclared identifier.
+	 */
+	private void dropUnprovidedSplits(Set<String> provided) {
+		for (String name : this.splits.splitInputs()) {
+			if (this.splits.interfaceNamesOf(name).stream().anyMatch(provided::contains)
+					|| !readNames(Set.of(name)).isEmpty()) {
+				continue;
+			}
+
+			if (this.splits.forgetInput(name)) {
+				this.droppedInputs.add(name);
+			}
 		}
 	}
 

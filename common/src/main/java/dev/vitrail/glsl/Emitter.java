@@ -393,9 +393,13 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		// writes back. It has to be the ascending function that gets there first, so this goes last.
 		// The pack's body is concatenated after the header, so its own main is only a name here and
 		// has to be declared before it can be called.
-		if (this.depthEpilogue || this.terrainPrologue || this.distantPrologue || this.entityWrapped
-				|| this.linesWrapped || wrapsFragment() || owesInitialisers()
-				|| this.splits.any()) {
+		// Asked of the one thing that decides it, which is whether the pack's own main was renamed.
+		// Every reason to wrap sets that flag as it renames, so this is the list of reasons said
+		// once instead of twice, and it cannot fall out of step with them. It used to be the list
+		// itself, and a split taken back out by dropUnprovidedSplits after the rename then left a
+		// stage whose main was called ofPackMain and whose wrapper nobody wrote: no entry point,
+		// which is the fragment stage of Sildur's gbuffers_textured.
+		if (this.mainWrapped) {
 			lines.add("void " + GlslTranslator.PACK_MAIN + "();");
 			// The lines mesh runs the pack's main twice, the far end of the edge first and the
 			// vertex itself second, so that every varying holds the vertex's own value when the
