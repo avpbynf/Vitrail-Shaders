@@ -311,7 +311,8 @@ final class PackDepth {
 
 	/**
 	 * Converts the depth of the world as it stood before the player's own hand was drawn, which the
-	 * pack reads as {@code depthtex2}. Must run on the render thread and outside any render pass.
+	 * pack reads as {@code depthtex2} and the smoothed centre depth is folded from. Must run on the
+	 * render thread and outside any render pass.
 	 * <p>
 	 * The caller has to take it before the hand's solid pass and may only take it on the frames that
 	 * pass really draws something, which is {@code HandDraw.draws} and not the load's own answer: an
@@ -411,8 +412,9 @@ final class PackDepth {
 	 * <p>
 	 * The rest are failures. A refused allocation of this image alone leaves the pair standing, so
 	 * {@code depthtex2} falls exactly where {@code depthtex1} falls: the world WITH the hand wherever
-	 * the opaque image answers, and the far plane wherever it does not. {@link #ensurePreHand} logs
-	 * that. A refused pair ({@link #ensure}) leaves nothing allocated at all, and a refused
+	 * the opaque image answers, and the far plane wherever it does not, and the centre depth is
+	 * folded from that same image, the held item back in front of a pack's focus.
+	 * {@link #ensurePreHand} logs that. A refused pair ({@link #ensure}) leaves nothing allocated at all, and a refused
 	 * conversion ({@link #pipeline(GpuDevice)}) leaves all three allocated and none of them written,
 	 * which comes to the same thing for a reader: every depth lookup of the pack reads the far plane.
 	 * Each of those two says so on its own line, once.
@@ -591,7 +593,8 @@ final class PackDepth {
 	 * @return false when there is nothing to draw into, in which case {@code depthtex2} falls back
 	 *         to whatever the reading pass answers a depth copy with: the opaque world's image after
 	 *         the deferred stage, which carries the one thing the name excludes, and the far plane
-	 *         on the hand's own solid pass, which carries nothing
+	 *         on the hand's own solid pass, which carries nothing; the centre depth fold falls back
+	 *         to that opaque image as well
 	 */
 	private boolean ensurePreHand(int width, int height) {
 		if (this.preHandBroken) {
@@ -613,7 +616,9 @@ final class PackDepth {
 			Vitrail.logger().error("Vitrail could not allocate the depth image the pack reads past the "
 					+ "hand with at {}x{}, so until the screen is another size depthtex2 answers "
 					+ "exactly as depthtex1 does: the world with the hand in it where that one is "
-					+ "served, and the far plane elsewhere, the hand's own pass included",
+					+ "served, and the far plane elsewhere, the hand's own pass included; the centre "
+					+ "depth is folded from that same image, so a depth of field focuses on the held "
+					+ "item again",
 					width, height, e);
 
 			return false;
