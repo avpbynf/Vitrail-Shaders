@@ -159,6 +159,26 @@ final class ShadowTargets {
 	private GpuTextureView noTranslucentsView;
 
 	/**
+	 * The map as it stood once the OPAQUE world had been drawn into it and before anything that
+	 * moves was, kept so that a later frame can start from it instead of walking the world again.
+	 * <p>
+	 * That moment is the one worth keeping and the only one: measured 6 September 2026, the opaque
+	 * half of the shadow terrain costs 3.83 ms of the 4.03 ms both halves cost together, so the
+	 * water and the glass are five per cent of it and are redrawn every frame for nothing. Casters
+	 * that move are redrawn every frame too, on top of what is restored, which is what makes this
+	 * different from keeping the finished map: nothing in the picture is late.
+	 * <p>
+	 * The colours go with the depth. A pack whose shadow programs write {@code shadowcolor} would
+	 * otherwise read this frame's movers over the last frame's terrain colour, which is a picture
+	 * nobody drew.
+	 */
+	private GpuTexture keptDepth;
+	private final GpuTexture[] keptColour = new GpuTexture[MAX_COLOURS];
+	private boolean kept;
+	private boolean warnedCopy;
+	private boolean saidRestored;
+
+	/**
 	 * Whether that copy still stands for the map as it is now. Lowered by every clear, because a copy
 	 * is a moment of the map and emptying the map is the moment it stops being one: the same rule
 	 * {@link PackDepth} follows for the two depths it converts, where an image nothing has filled is
@@ -446,6 +466,127 @@ final class ShadowTargets {
 		this.copied = true;
 	}
 
+	/**
+	 * Keeps the map as it stands, which the caller invokes once the opaque world is drawn and before
+	 * anything that moves is. Must run on the render thread and outside any render pass.
+	 * <p>
+	 * Every image the stage writes goes into the store, the depth and each colour the place named,
+	 * because a frame that restores half of them draws this frame's movers over last frame's colour.
+	 */
+	void keep(CommandEncoder encoder) {
+		GpuTexture depth = this.target == null ? null : this.target.getDepthTexture();
+		if (depth == null || this.broken || !copyable(depth)) {
+			return;
+		}
+
+		if (this.keptDepth == null) {
+			this.keptDepth = store("Vitrail kept shadow depth", depth.getFormat());
+		}
+
+		encoder.copyTextureToTexture(depth, this.keptDepth, 0, 0, 0, 0, 0, this.resolution,
+				this.resolution);
+		for (int index : this.live) {
+			GpuTexture colour = colourTexture(index);
+			if (colour == null) {
+				continue;
+			}
+
+			if (this.keptColour[index] == null) {
+				this.keptColour[index] = store("Vitrail kept shadowcolor" + index,
+						colour.getFormat());
+			}
+
+			encoder.copyTextureToTexture(colour, this.keptColour[index], 0, 0, 0, 0, 0,
+					this.resolution, this.resolution);
+		}
+
+		if (!this.kept) {
+			Vitrail.logger().info("Shadow map store taken, so a later frame may put the opaque world "
+					+ "back instead of walking for it");
+		}
+
+		this.kept = true;
+	}
+
+	/**
+	 * Puts the kept map back, which a frame does instead of walking the world for the opaque half.
+	 * <p>
+	 * The copy beside it goes down with the restore: {@code shadowtex1} is a moment of this frame's
+	 * map, and the moment it names has not happened yet when this runs.
+	 *
+	 * @return whether there was anything to put back
+	 */
+	boolean restore(CommandEncoder encoder) {
+		GpuTexture depth = this.target == null ? null : this.target.getDepthTexture();
+		if (!this.kept || depth == null || this.broken || this.keptDepth == null) {
+			return false;
+		}
+
+		encoder.copyTextureToTexture(this.keptDepth, depth, 0, 0, 0, 0, 0, this.resolution,
+				this.resolution);
+		for (int index : this.live) {
+			GpuTexture colour = colourTexture(index);
+			if (colour != null && this.keptColour[index] != null) {
+				encoder.copyTextureToTexture(this.keptColour[index], colour, 0, 0, 0, 0, 0,
+						this.resolution, this.resolution);
+			}
+		}
+
+		this.copied = false;
+		if (!this.saidRestored) {
+			this.saidRestored = true;
+			Vitrail.logger().info("Shadow map put back from the store, so this frame draws only "
+					+ "what moves and the water");
+		}
+
+		return true;
+	}
+
+	/** Whether a map is in the store at all, which is what says a frame may restore rather than draw. */
+	boolean hasKept() {
+		return this.kept && !this.broken;
+	}
+
+	/** Drops the store, at a resize and wherever the images behind it stop being the map's. */
+	void forgetKept() {
+		this.kept = false;
+	}
+
+	private GpuTexture store(String name, GpuFormat format) {
+		return RenderSystem.getDevice().createTexture(() -> name,
+				GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_COPY_SRC, format,
+				this.resolution, this.resolution, 1, 1);
+	}
+
+	private GpuTexture colourTexture(int index) {
+		if (index == 0) {
+			return this.target == null ? null : this.target.getColorTexture();
+		}
+
+		TargetSurface surface = this.rest[index - 1];
+
+		return surface == null ? null : surface.texture();
+	}
+
+	/**
+	 * Whether the live image may be copied INTO, which is what a restore does and what nothing else
+	 * in this engine has ever asked of the map. Said once and not per frame: a device that refuses
+	 * it makes the whole road unavailable rather than throwing inside a frame.
+	 */
+	private boolean copyable(GpuTexture depth) {
+		if ((depth.usage() & GpuTexture.USAGE_COPY_DST) != 0) {
+			return true;
+		}
+
+		if (!this.warnedCopy) {
+			this.warnedCopy = true;
+			Vitrail.logger().warn("The shadow map cannot be copied into on this device, so it is "
+					+ "drawn every frame and the reuse setting does nothing");
+		}
+
+		return false;
+	}
+
 	/** The depth with everything in it, which the pack reads as {@code shadowtex0}. */
 	GpuTextureView depth() {
 		return this.target == null ? null : this.target.getDepthTextureView();
@@ -529,6 +670,21 @@ final class ShadowTargets {
 		if (this.noTranslucents != null) {
 			this.noTranslucents.close();
 			this.noTranslucents = null;
+		}
+
+		// The store goes with the images it was taken from: a map kept at one size is not a map at
+		// another, and the restore would be refused for a size mismatch rather than for the reason.
+		this.kept = false;
+		if (this.keptDepth != null) {
+			this.keptDepth.close();
+			this.keptDepth = null;
+		}
+
+		for (int index = 0; index < MAX_COLOURS; index++) {
+			if (this.keptColour[index] != null) {
+				this.keptColour[index].close();
+				this.keptColour[index] = null;
+			}
 		}
 	}
 }

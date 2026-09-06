@@ -172,15 +172,10 @@ public final class ShadowTerrain {
 			return;
 		}
 
-		// The map on hand is still the right one, so the whole of this stage is skipped: no walk,
-		// no entities gathered, no pass opened, and above all nothing cleared. The frame's sampling
-		// passes have already been handed the matrices this map was drawn with, that decision being
-		// made at the head of the frame by the same object. Off unless armed, where this answers
-		// true every frame and the stage runs as it always did.
-		if (!ShadowAmortisation.drawThisFrame()) {
-			ShadowAmortisation.kept();
-			return;
-		}
+		// The stage itself is never skipped any more. What a kept map buys is the OPAQUE world, and
+		// that is decided inside draw below: the walk still runs, because it is what hands Sodium
+		// the light's own occlusion tree, and everything that moves is still drawn, because a
+		// caster one frame late is the only thing anybody could see.
 
 		// Ordered so that a stage that cannot open leaves the render lists untouched: the walk
 		// below hands them to the light, and from that point on the camera has to be given them
@@ -298,11 +293,11 @@ public final class ShadowTerrain {
 						walkCulling, walkKept, seen, walkDrawn, measured);
 			}
 
+			// The anchor is NOT taken here. It moves where the opaque world is really drawn, inside
+			// the call below, and a copy of that line left standing at this level is what made the
+			// whole thing do nothing: it reset the interval on every frame, so the count never
+			// elapsed and the map was filled again every time.
 			draw(renderer, minecraft, camera);
-			// Only here, past every road that leaves without a map: the anchor has to follow what
-			// was drawn and never what was planned, or the next frames would sample a map nobody
-			// wrote with the matrices of the frame that meant to write it.
-			ShadowAmortisation.drawn();
 		} finally {
 			// The flag finalizeRenderLists just lowered, back up whatever happened above: the
 			// camera's walk at the top of the next frame has to rebuild, or the world would be
@@ -343,8 +338,14 @@ public final class ShadowTerrain {
 		// shadow stage. Complementary's voxel volume is marked clear; the floodfill is not.
 		PackChain.clearCustomImages();
 
+		// The opaque world, and the one thing a kept map spares. Restored rather than drawn when the
+		// setting says so and a map is in the store, the restore itself having already been encoded
+		// where the clear would have been: the pack's own refusal still comes first, since a pack
+		// that keeps the opaque world out of its map has nothing to keep.
+		boolean drawTerrain = ShadowAmortisation.drawTerrainThisFrame() || !TerrainDraw.shadowMapKept();
+
 		// Refused by the pack rather than skipped for cheapness.
-		if (casters.terrain()) {
+		if (casters.terrain() && drawTerrain) {
 			// Distant Horizons' far terrain goes first and INSIDE this word, both of which are
 			// Iris's. DH hangs its LOD draws off the HEAD of ChunkSectionsToRender.renderGroup
 			// (neoforge/mixins/client/MixinChunkSectionsToRender.java:67-74), and the only call to
@@ -355,6 +356,14 @@ public final class ShadowTerrain {
 			DistantDraw.shadow(false, camera);
 			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.OPAQUE,
 					matrices, camera.x, camera.y, camera.z, sampler));
+		}
+
+		// The store is taken HERE and nowhere else: with the opaque world in the map and before the
+		// first thing that moves goes into it. A store taken later would carry a mob, and every
+		// frame restoring it would paint that mob's old place back under the new one.
+		if (drawTerrain && casters.terrain()) {
+			TerrainDraw.keepShadowMap();
+			ShadowAmortisation.drawn();
 		}
 
 		// Everything that moves, between the opaque world and the copy, which is where Iris puts it
@@ -370,7 +379,7 @@ public final class ShadowTerrain {
 		// walk above closes its last one, so a copy here is outside one.
 		TerrainDraw.copyShadowDepth();
 
-		if (casters.translucent()) {
+		if (casters.translucent() && !Boolean.getBoolean("vitrail.probeNoShadowTranslucent")) {
 			// And its water half here, after the copy and inside the word that governs the world's
 			// own translucent group, for the two reasons the opaque half is where it is: DH's hook
 			// is the head of this very call, and Iris makes it inside its own shadowTranslucent test

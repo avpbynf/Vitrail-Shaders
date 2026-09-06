@@ -718,24 +718,44 @@ public final class ViewMatrices implements ViewSource {
 		return this.mapShadowProjectionInverse;
 	}
 
+	/**
+	 * The pair the stage DRAWS with, which is the fresh one on a frame that fills the map and the
+	 * published one on a frame that keeps it.
+	 * <p>
+	 * <strong>That swap is what lets a kept map take this frame's movers.</strong> The terrain in a
+	 * kept map was drawn around the camera of the frame that drew it; the published pair is exactly
+	 * that matrix moved onto this frame's camera, so a mob submitted in this frame's player space
+	 * and drawn through it lands in the same texels as the ground under it. Drawn through the fresh
+	 * pair instead, the mob would sit in a space the terrain beneath it is not in, and it would slide
+	 * across the map by the camera's motion since the last fill.
+	 * <p>
+	 * On a frame that fills the map the two answers are one: {@link ShadowAmortisation#drawn} moves
+	 * the anchor to this frame, so the published pair is this frame's pair with a nought
+	 * translation. Nothing changes for a reader who never keeps a map.
+	 */
 	@Override
 	public Matrix4fc drawnShadowModelView() {
-		return this.shadowModelView;
+		return keeping() ? this.mapShadowModelView : this.shadowModelView;
 	}
 
 	@Override
 	public Matrix4fc drawnShadowModelViewInverse() {
-		return this.shadowModelViewInverse;
+		return keeping() ? this.mapShadowModelViewInverse : this.shadowModelViewInverse;
 	}
 
 	@Override
 	public Matrix4fc drawnShadowProjection() {
-		return this.shadowProjection;
+		return keeping() ? this.mapShadowProjection : this.shadowProjection;
 	}
 
 	@Override
 	public Matrix4fc drawnShadowProjectionInverse() {
-		return this.shadowProjectionInverse;
+		return keeping() ? this.mapShadowProjectionInverse : this.shadowProjectionInverse;
+	}
+
+	/** Whether this frame draws into a map it kept rather than into one it is about to fill. */
+	private boolean keeping() {
+		return this.shadowSeeded && !ShadowAmortisation.drawTerrainThisFrame();
 	}
 
 	/**
