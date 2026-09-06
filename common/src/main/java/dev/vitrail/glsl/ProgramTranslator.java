@@ -5,6 +5,7 @@ import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.pack.texture.VolumeAtlas;
+import dev.vitrail.render.storage.StorageBuffers;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

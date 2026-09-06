@@ -1,4 +1,4 @@
-package dev.vitrail.render;
+package dev.vitrail.render.pbr;
 
 import dev.vitrail.mixin.access.TextureManagerAccessor;
 import dev.vitrail.Vitrail;
@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
  * {@code TextureAtlas} and {@code pbr/loader/SimplePBRLoader.java:19-31} against
  * {@code SimpleTexture}, and resolves between them from the albedo the draw has bound
  * ({@code pbr/texture/PBRTextureManager.java:126-141}). The resolution on this side is the same
- * question asked of the same thing, and it lands in the same place: {@link GeometryProgram} tries
+ * question asked of the same thing, and it lands in the same place: {@code GeometryProgram} tries
  * the atlas door first and this one behind it.
  * <p>
  * <strong>A map cannot be read at the moment it is wanted, and that decides the whole shape of this
@@ -108,7 +108,7 @@ public final class PbrTextures {
 	 * @param bound the image the pass draws with, which is null for every family that has none
 	 * @param map   which of the two names is being answered
 	 */
-	static GpuTextureView view(GpuTextureView bound, PbrMap map) {
+	public static GpuTextureView view(GpuTextureView bound, PbrMap map) {
 		if (bound == null) {
 			return null;
 		}

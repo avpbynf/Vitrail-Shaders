@@ -1,6 +1,6 @@
 package dev.vitrail.sodium;
 
-import dev.vitrail.render.ModuleCache;
+import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.render.PackChoice;
 import dev.vitrail.render.StartupGuard;
 import dev.vitrail.render.TerrainDraw;

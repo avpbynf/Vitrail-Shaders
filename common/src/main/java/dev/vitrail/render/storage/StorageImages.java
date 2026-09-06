@@ -1,11 +1,12 @@
-package dev.vitrail.render;
+package dev.vitrail.render.storage;
 
 import dev.vitrail.mixin.access.CommandEncoderAccessor;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.mixin.access.VulkanCommandEncoderAccessor;
-import dev.vitrail.pack.model.TargetFormat;
 import dev.vitrail.pack.model.ImageInformation;
 import dev.vitrail.pack.model.PackTexture;
+import dev.vitrail.pack.model.TargetFormat;
+import dev.vitrail.render.StalePipelines;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.systems.CommandEncoder;
@@ -70,7 +71,7 @@ public final class StorageImages implements AutoCloseable {
 	 */
 	private boolean refusedForGood;
 
-	StorageImages(ImageInformation.Reading declared) {
+	public StorageImages(ImageInformation.Reading declared) {
 		this.declared = declared;
 	}
 
@@ -124,7 +125,7 @@ public final class StorageImages implements AutoCloseable {
 	}
 
 	/** Whether the last refusal was of an image no screen size can change, see {@link #ensure}. */
-	boolean refusedForGood() {
+	public boolean refusedForGood() {
 		return this.refusedForGood;
 	}
 
@@ -132,7 +133,7 @@ public final class StorageImages implements AutoCloseable {
 	 * Allocates every absolute image once, and rebuilds the relative ones when the screen moves.
 	 * A failure is the whole set given back and the frame refused, see {@link #refused}.
 	 */
-	void ensure(int screenWidth, int screenHeight) {
+	public void ensure(int screenWidth, int screenHeight) {
 		install();
 		if (this.declared.images().isEmpty()) {
 			return;
@@ -251,7 +252,7 @@ public final class StorageImages implements AutoCloseable {
 	 * at the top of the shadow stage, before geometry writes, matching Iris clearing custom images
 	 * before the shadow map is drawn.
 	 */
-	void clearMarked(CommandEncoder encoder) {
+	public void clearMarked(CommandEncoder encoder) {
 		GpuRecording.endPass(encoder);
 		VkCommandBuffer commands = commands(encoder);
 		if (commands == null) {
@@ -365,7 +366,7 @@ public final class StorageImages implements AutoCloseable {
 	 * sit at the far edge of the volume, they are rewritten by the shadow stage at the end of this
 	 * same frame, and a stale identity there blocks light where an emptied one would leak it.
 	 */
-	void reanchor(CommandEncoder encoder, int dx, int dy, int dz) {
+	public void reanchor(CommandEncoder encoder, int dx, int dy, int dz) {
 		if (dx == 0 && dy == 0 && dz == 0) {
 			return;
 		}

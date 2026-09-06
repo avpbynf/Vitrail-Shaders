@@ -1,6 +1,7 @@
 package dev.vitrail.pack.texture;
 
 import dev.vitrail.pack.model.BufferObject;
+import dev.vitrail.render.storage.StorageBuffers;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Complementary Ultra plus world-space reflections sizes {@code bufferObject.0} at hundreds of
  * megabytes and writes {@code layout(std430, binding = 0) buffer blockDataBuffer}. The Java bind
  * group has no storage-buffer arm, so the name is recorded here and the Vulkan mixins swap the
- * descriptor type once {@link dev.vitrail.render.StorageBuffers} has allocated the bytes.
+ * descriptor type once {@link dev.vitrail.render.storage.StorageBuffers} has allocated the bytes.
  *
  * @see <a href="https://github.com/IrisShaders/Iris">Iris ShaderStorageBuffer, LGPL-3.0</a>
  */

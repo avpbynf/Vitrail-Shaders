@@ -1,10 +1,10 @@
 package dev.vitrail.mixin.sodium;
 
-import dev.vitrail.sodium.SodiumPasses;
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.render.GeometryHold;
-import dev.vitrail.render.RingTimings;
 import dev.vitrail.render.TerrainDraw;
+import dev.vitrail.render.timing.RingTimings;
+import dev.vitrail.sodium.SodiumPasses;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;

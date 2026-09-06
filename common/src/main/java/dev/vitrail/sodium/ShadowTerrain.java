@@ -5,11 +5,11 @@ import dev.vitrail.mixin.access.RenderSectionManagerAccessor;
 import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.render.BlockStateIds;
 import dev.vitrail.render.DistantDraw;
-import dev.vitrail.render.RingTimings;
+import dev.vitrail.render.PackChain;
 import dev.vitrail.render.ShadowCullPlan;
 import dev.vitrail.render.ShadowGeometry;
-import dev.vitrail.render.PackChain;
 import dev.vitrail.render.TerrainDraw;
+import dev.vitrail.render.timing.RingTimings;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.systems.RenderSystem;

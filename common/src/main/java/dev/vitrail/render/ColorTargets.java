@@ -1,17 +1,19 @@
 package dev.vitrail.render;
 
 import dev.vitrail.pack.model.BlendMode;
+import dev.vitrail.pack.model.ImageInformation;
+import dev.vitrail.pack.model.TargetFormat;
+import dev.vitrail.pack.model.TargetName;
+import dev.vitrail.pack.model.TargetSize;
+import dev.vitrail.pack.model.TextureStage;
 import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetDirectives;
-import dev.vitrail.pack.model.TargetFormat;
-import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.target.TargetSchedule;
-import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.pack.texture.CustomStorage;
-import dev.vitrail.pack.model.ImageInformation;
-import dev.vitrail.pack.model.TextureStage;
+import dev.vitrail.render.storage.StorageBuffers;
+import dev.vitrail.render.storage.StorageImages;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.NoiseTexture;
 import dev.vitrail.Vitrail;

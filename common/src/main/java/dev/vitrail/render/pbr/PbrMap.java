@@ -1,4 +1,4 @@
-package dev.vitrail.render;
+package dev.vitrail.render.pbr;
 
 import net.minecraft.util.ARGB;
 
@@ -50,7 +50,7 @@ import java.util.function.IntUnaryOperator;
  * is smoother or rougher here than under Iris. Nothing at the base level moves, which is every
  * surface close enough to look at.
  */
-enum PbrMap {
+public enum PbrMap {
 
 	/**
 	 * The surface: two components of a tangent space normal, an ambient occlusion and a height. Its
@@ -87,12 +87,12 @@ enum PbrMap {
 	}
 
 	/** The name a pack declares this map under, which is the same word in every pack of the corpus. */
-	String sampler() {
+	public String sampler() {
 		return this.sampler;
 	}
 
 	/** Which map a sampler name asks for, on the name alone, or null for every other name. */
-	static PbrMap named(String sampler) {
+	public static PbrMap named(String sampler) {
 		for (PbrMap map : values()) {
 			if (map.sampler.equals(sampler)) {
 				return map;
@@ -108,7 +108,7 @@ enum PbrMap {
 	}
 
 	/** What a sprite the pack ships no map for reads, as a colour a clear can be given. */
-	Vector4fc missing() {
+	public Vector4fc missing() {
 		return new Vector4f(ARGB.red(this.missing) / 255.0F, ARGB.green(this.missing) / 255.0F,
 				ARGB.blue(this.missing) / 255.0F, ARGB.alpha(this.missing) / 255.0F);
 	}
@@ -124,7 +124,7 @@ enum PbrMap {
 	 *
 	 * @param labPbr whether the resource pack declares the labPBR format
 	 */
-	boolean interpolates(boolean labPbr) {
+	public boolean interpolates(boolean labPbr) {
 		return this != SPECULAR || !labPbr;
 	}
 

@@ -1,7 +1,8 @@
-package dev.vitrail.render;
+package dev.vitrail.render.pbr;
 
-import dev.vitrail.Vitrail;
 import dev.vitrail.pack.option.EngineDefines;
+import dev.vitrail.render.PackDefines;
+import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -35,7 +36,7 @@ import java.util.Properties;
  * {@code pbr/loader/SimplePBRLoader.java:19-31}), resolved per bound albedo at
  * {@code pbr/texture/PBRTextureManager.java:126-141}, so an entity skin and an armour layer read
  * their own {@code _n} and {@code _s} there. {@link PbrTextures} is that second door, and
- * {@link GeometryProgram} asks this one first and it second. What decides between them here is not
+ * {@code GeometryProgram} asks this one first and it second. What decides between them here is not
  * the class of the texture but the answer: these maps are built against one image and follow it
  * alone, so an atlas the pack ships nothing for and a texture that is no atlas at all both fall
  * through to the same place.
@@ -134,7 +135,7 @@ public final class PbrAtlases {
 	 *
 	 * @param atlas the image the pass draws with, which is null for every family that has none
 	 */
-	static GpuTextureView view(GpuTextureView atlas, PbrMap map) {
+	public static GpuTextureView view(GpuTextureView atlas, PbrMap map) {
 		if (atlas == null) {
 			return null;
 		}
@@ -158,7 +159,7 @@ public final class PbrAtlases {
 	 * say without lying is whether anything fills the name this session; which atlases really answer
 	 * is said exactly, once each, by {@link PbrAtlas} as they are built.
 	 */
-	static boolean supplies(PbrMap map) {
+	public static boolean supplies(PbrMap map) {
 		for (PbrAtlas built : ATLASES.values()) {
 			if (built.view(map) != null) {
 				return true;
@@ -176,7 +177,7 @@ public final class PbrAtlases {
 	 * {@code lab-pbr} is the only convention Iris registers a factory for either
 	 * ({@code pbr/format/TextureFormatRegistry.java:12}).
 	 */
-	static boolean labPbr() {
+	public static boolean labPbr() {
 		return format != null;
 	}
 
@@ -190,7 +191,7 @@ public final class PbrAtlases {
 	 * comes back different ({@code pbr/format/TextureFormatLoader.java:28-32}). Here the stitch is
 	 * the reload, and {@link PackDefines#textureFormatMoved()} is the reload that follows.
 	 */
-	static EngineDefines.TextureFormat format() {
+	public static EngineDefines.TextureFormat format() {
 		return format;
 	}
 

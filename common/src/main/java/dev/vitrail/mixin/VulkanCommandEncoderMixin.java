@@ -1,7 +1,7 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.render.MipmapCommands;
-import dev.vitrail.render.PassBarrier;
+import dev.vitrail.render.timing.PassBarrier;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.textures.GpuTexture;
