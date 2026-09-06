@@ -520,6 +520,12 @@ public final class GlslTranslator {
 	private int gameModelView;
 
 	private int strippedExtensions;
+
+	/**
+	 * The extensions this unit named, in the order it named them, to be re-emitted by the header.
+	 * See {@link #dropVersionAndExtensions} for why they cannot stay where the pack wrote them.
+	 */
+	private final Set<String> extensions = new LinkedHashSet<>();
 	private boolean depthEpilogue;
 	private boolean terrainPrologue;
 
@@ -1346,11 +1352,33 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Both directives go. The version is replaced by ours, and every extension the corpus uses is
-	 * core in 4.60, so keeping them would at best say nothing. It would also often be an error:
-	 * once includes are spliced in, an {@code #extension} line can land well past the first real
-	 * token, and there it is rejected. They are counted so that an unexpected one shows up in the
-	 * totals rather than vanishing.
+	 * Takes both directives out of the body, and remembers which extensions the unit named.
+	 * <p>
+	 * The version is replaced by ours and never comes back. The extensions cannot stay WHERE they
+	 * are, which is the half of the old reason that still holds: once includes are spliced in an
+	 * {@code #extension} line lands well past the first real token, and the language allows none
+	 * there. The other half, that every extension the corpus used was core in 4.60, is what the
+	 * wider corpus refuted. RenderPearl asks for the explicit arithmetic types, and the shape of
+	 * what it costs is worth writing down because nothing about it looks like an extension
+	 * problem: the pack guards its use on
+	 * {@code defined GL_EXT_shader_explicit_arithmetic_types_float16} and ships a fallback that
+	 * redefines {@code float16_t} to {@code float} when the macro is absent. The compiler defines
+	 * that macro for every extension it KNOWS, enabled or not, so the guarded branch is taken, the
+	 * fallback is skipped, and the {@code #extension} line that would have made the type real is
+	 * the one thing missing. Every one of the pack's 302 units died on {@code float16_t}, reported
+	 * as a syntax error hundreds of lines away from anything to do with extensions.
+	 * <p>
+	 * So they are hoisted instead: the header re-emits them straight after the version, where the
+	 * language wants them, and {@link #extensions} is what carries them there.
+	 * <p>
+	 * <strong>All of them, and as {@code enable} rather than as the {@code require} the pack
+	 * wrote.</strong> Both halves are deliberate. A pack gates its extensions on macros this
+	 * engine's own {@code #if} evaluation cannot answer, since what defines them is the compiler
+	 * further down the road, so keeping only the live ones would keep none of the ones that
+	 * matter; and a name the compiler does not know is a warning under {@code enable} where
+	 * {@code require} is an error, which turns a pack asking for a vendor extension it will not
+	 * get into a pack that still compiles. What decides whether the pack's code USES an extension
+	 * is unchanged either way: its own macro test, answered by the compiler and not by us.
 	 */
 	private void dropVersionAndExtensions() {
 		for (int index = 0; index < this.tokens.size(); index++) {
@@ -1361,12 +1389,38 @@ public final class GlslTranslator {
 
 			if (token.directive().equals("extension")) {
 				this.strippedExtensions++;
+				String named = extensionNamed(index);
+				if (named != null) {
+					this.extensions.add(named);
+				}
 			} else if (!token.directive().equals("version")) {
 				continue;
 			}
 
 			this.tokens.blankDirective(index);
 		}
+	}
+
+	/**
+	 * The extension one {@code #extension} directive names, or null for {@code all}, which is the
+	 * one name that is a state and not an extension: hoisting it would turn every extension the
+	 * compiler knows on at once.
+	 */
+	private String extensionNamed(int directive) {
+		for (int index = directive + 1; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() == Kind.NEWLINE) {
+				return null;
+			}
+
+			// The directive's own keyword is a token of the line like any other, so the name is the
+			// first identifier that is not it.
+			if (token.kind() == Kind.IDENTIFIER && !token.text().equals("extension")) {
+				return token.text().equals("all") ? null : token.text();
+			}
+		}
+
+		return null;
 	}
 
 	private void rewriteIdentifiers() {
@@ -4523,7 +4577,8 @@ public final class GlslTranslator {
 	 * written back, which is why {@link Emitter} is handed these rather than this object.
 	 */
 	private Emitter emitter() {
-		return new Emitter(this.stage, this.inputs, this.bound, this.alphaTest, this.engineDefines,
+		return new Emitter(this.stage, this.inputs, this.bound, this.alphaTest, this.extensions,
+				this.engineDefines,
 				this.memoryQualifiers, this.used, this.declaredNames, this.synthesized,
 				this.volumes.read(), this.packOutputs, this.maxFragmentOutput, this.owedOutputs,
 				this.splits, this.gameTextureMatrix,
