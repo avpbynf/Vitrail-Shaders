@@ -698,10 +698,11 @@ public final class TerrainDraw {
 	}
 
 	/**
-	 * Whether any shadow terrain program of this pack voxelises, a geometry stage present or an
-	 * image load / store still standing on it. Iris asks the same of
-	 * {@code SHADOW_TERRAIN_CUTOUT}; the three shadow halves share one file on every pack that
-	 * ships one, and any of them answering is enough. Settled when the programs are read: the
+	 * Whether any shadow terrain program of this pack voxelises, a geometry stage present, which
+	 * is what Iris asks of {@code SHADOW_TERRAIN_CUTOUT}, or an image load / store still standing
+	 * on it, which this engine counts as well where Iris computes it and reads it nowhere. The
+	 * three shadow halves share one file on every pack that ships one, and any of them answering
+	 * is enough. Settled when the programs are read: the
 	 * shadow walk asks once a frame, and the answer is a property of the pack.
 	 */
 	private boolean voxelisesShadow() {

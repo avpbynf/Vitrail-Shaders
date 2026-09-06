@@ -187,8 +187,9 @@ public final class ShadowCullFrustum implements Frustum {
 	 * {@link dev.vitrail.pack.source.ShadowCullState#DEFAULT} where the shadow program voxelises,
 	 * keep a box around the player and no planes, which is Iris's
 	 * {@code BoxCullingFrustum} ({@code :302-323}). Voxelisation is a geometry stage present
-	 * <em>or</em> an image load / store still standing on that program ({@code :163-165},
-	 * {@code setUsesImages}), not a {@code .gsh} this engine binds. A bound wider than the loaded
+	 * ({@code :163-165}) <em>or</em>, here alone, an image load / store still standing on that
+	 * program: Iris computes that half and reads it nowhere, its {@code setUsesImages} having no
+	 * caller. Not a {@code .gsh} this engine binds. A bound wider than the loaded
 	 * world, or not positive, drops the box too and keeps everything, which is Iris's
 	 * {@code NonCullingFrustum} ({@code :317-318}), not the light's own volume.
 	 * {@link dev.vitrail.pack.source.ShadowCullState#SAFE_ZONE} still sweeps along the light.
