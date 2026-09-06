@@ -107,12 +107,14 @@ accident to debug.
 
 The one copy left on a target is between the two halves of the shadow depth pair, where the format
 is the same on both sides by construction. The doubled colour targets are not copied at all: the two
-surfaces swap names at the end of the frame, which is the same fact for nothing. Copying between two
-*different* formats passes every check and hands back nonsense: the texture copy reinterprets bits
-rather than converting them, and the only thing checked on the way in is that both formats carry a
-colour aspect. The game's colour target is
-eight-bit RGBA and a typical pack target is a packed float triple; both are thirty-two bits per
-pixel and hold completely different things.
+surfaces swap names at the end of the frame, and only for those still flipped when the last pass has
+run and kept between frames, which is the same fact for nothing. Copying between two *different*
+formats passes every check and hands back nonsense: the texture copy reinterprets bits rather than
+converting them, and what checks it on the way in depends on the loader. The bare game checks no
+format at all; the NeoForge build checks that the two agree on whether they carry a colour aspect,
+and that they are the same format where the source carries depth or stencil. Two colour formats pass
+either way. The game's colour target is eight-bit RGBA and a typical pack target is a packed float
+triple; both are thirty-two bits per pixel and hold completely different things.
 
 This is why the game's image is brought into a pack target by a **full-screen draw** and never by a
 texture copy.
@@ -178,8 +180,8 @@ program takes a different one, with a fault of its own described in
 [pack compatibility](compatibility.md).
 
 **A pixel the pack's own geometry has covered must not be seeded over.** That is what the coverage
-mask is for, and it carries a **depth** rather than a flag: every program of the pack drawn before
-the seed writes into it the value it handed the depth attachment, and the seed compares that with
+mask is for, and it carries a **depth** rather than a flag: a program of the pack drawn before the
+seed writes into it the value it handed the depth attachment, and the seed compares that with
 the world's depth as it stands. A pixel nothing has been drawn over since compares equal and is the
 pack's; a pixel the game has drawn a feature onto compares closer and is the seed's. Where the pack
 wrote nothing at all the mask holds a value outside zero to one, which every real depth is in front
@@ -209,32 +211,32 @@ not reach: the log names the reason at the moment it happens. Neither case is th
 `gbuffers_block` rather than `gbuffers_entities`, the hand rides its own switch, and a mob's glowing
 eyes are asked for `gbuffers_spidereyes`, and an enchantment's shine for `gbuffers_armor_glint`.
 
-The eyes answer two things differently from every other piece here, and both come from the game
-drawing them as a light rather than as a surface. They are **blended additively**, which is what
-makes an eye add to the skin under it instead of replacing it. A pack displaces that with a `blend`
-directive like any other, with one catch worth knowing: that directive is read under the name of the
-file that really serves the piece, so a pack shipping no `gbuffers_spidereyes` of its own has to
-write the line under whatever the fallback tree lands its eyes on. And they are drawn at
-**full light**: the light map
-coordinate the pack reads is the brightest one whatever the mob is standing in, and the light map
-image itself is one white texel, so a pack that multiplies by it is left where it started. Given
-only one of those two, an eye comes out darker than the game would have drawn it, and the additive
-blend then adds that darkness.
+The eyes answer two things differently, and both come from the game drawing them as a light rather
+than as a surface. They are **blended additively**, which is theirs alone here and is what makes an
+eye add to the skin under it instead of replacing it. A pack displaces that with a `blend` directive
+like any other, with one catch worth knowing: that directive is read under the name of the file that
+really serves the piece, so a pack shipping no `gbuffers_spidereyes` of its own has to write the
+line under whatever the fallback tree lands its eyes on. And they are drawn at **full light**, which
+the cracks over a mined block are as well: the light map coordinate the pack reads is the brightest
+one whatever the mob is standing in, and the light map image itself is one white texel, so a pack
+that multiplies by it is left where it started. Given only one of those two, an eye comes out darker
+than the game would have drawn it, and the additive blend then adds that darkness.
 
 What decides whether a family can come in at all is **the mesh the game binds for it**, not how
-interesting the family is. The door reads one vertex layout, the game's entity format, and names the
-attributes a pack expects out of its elements. A pipeline binding anything else would have every
-attribute read from the wrong offset, which is a picture and a wrong one with nothing to say so, so
-it is refused and named in the log instead. The glint is the one exception and it is a narrow one:
-it is drawn from a two-element quad the door decodes as well.
+interesting the family is. The door reads eight vertex layouts and names the attributes a pack
+expects out of the elements of each: the game's entity format, the glint's two, the block format the
+cracks over a mined block are drawn from, the lines format the block outline is drawn from, and the
+four the text is. A pipeline binding anything else would have every attribute read from the wrong
+offset, which is a picture and a wrong one with nothing to say so, so it is refused and named in the
+log instead.
 
-That layout is the game's own with **three elements appended**: the numbers a pack tells one kind of
-mob, block entity or held item apart by, then the middle of the sprite a face is mapped to and the
-direction the texture runs in over that face. The last two belong to a POLYGON rather than to a
-corner, so the four corners of a quad carry one pair and one direction between them, and they are
-what a normal map on a mob is read through. It is a format of the engine's rather than the game's
-own object lengthened, and the difference is not cosmetic: Sodium writes every cuboid of a mob at
-the game's stride and copies the run over untouched whenever the two are the same object, so
+The entity format is the game's own with **three elements appended**: the numbers a pack tells one
+kind of mob, block entity or held item apart by, then the middle of the sprite a face is mapped to
+and the direction the texture runs in over that face. The last two belong to a POLYGON rather than
+to a corner, so the four corners of a quad carry one pair and one direction between them, and they
+are what a normal map on a mob is read through. It is a format of the engine's rather than the
+game's own object lengthened, and the difference is not cosmetic: Sodium writes every cuboid of a
+mob at the game's stride and copies the run over untouched whenever the two are the same object, so
 widening the game's own leaves that copy reading twenty bytes a vertex past what was written and no
 mob is drawn at all. The engine registers the conversion between the two formats with Sodium
 instead, which is where those cuboids get their three. What the game writes vertex by vertex rather
@@ -250,12 +252,14 @@ them. The mesh only carries them while the pack is drawing the entities or the h
 switch asks the game to rebuild the world, the same door F3+A uses, and it does not ask for a
 restart.
 
-That is the whole reason the lightning bolt and the text of a sign or a name plate still come from
-the game's own shader: they bind the position-colour and glyph layouts, which nothing here reads.
-The beacon beam is with them for another reason, the block layout it binds being read since the
-cracks of a mined block are drawn through the pack: what the beam still wants is a pass of its own.
-All three reach the pack's image through the layer described below, which means they are visible but
-flat, and drawn in front of what should hide them.
+The lightning bolt and the beacon beam are what still come from the game's own shader, and the mesh
+is not the reason for either: the beam binds the block layout, which the cracks over a mined block
+are decoded through, and the bolt binds the position-colour one, which a text display's background
+is decoded through. What each still wants is a **row** of its own, with the alpha test, the fog and
+the lighting that belong to it, and neither is another family's under a new name. The text of a sign
+or a name plate was with them until the eight text pipelines took rows in the table. Both reach the
+pack's image through the layer described below, along with the one glint that is addressed away from
+the main target, which means they are visible but flat, and drawn in front of what should hide them.
 
 Which target is seeded is the first draw buffer of the pass that draws the terrain, resolved through
 the fallback tree, and it is not always target zero: one pack of the corpus serves its terrain

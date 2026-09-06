@@ -1,6 +1,6 @@
 # The render scale, and what it covers
 
-**FSR Render Scale**, under Video Settings on Vitrail's own page, draws the world at a fraction of
+**Render Scale**, under Video Settings on Vitrail's own page, draws the world at a fraction of
 the window and brings the finished picture back to full size before the interface. It is the
 setting to reach for when a pack runs but runs slowly, and it is worth knowing exactly how far it
 reaches, because a lot of a frame is not measured in pixels at all.
@@ -77,10 +77,10 @@ to 50 makes the world cheaper and leaves the upscale exactly where it was.
 ## Per-pass costs do not shrink either
 
 The scale buys fragment work and nothing else. A frame also pays for things counted per pass, per
-draw or per object, and none of them know the picture got smaller:
+draw or per object, and a smaller picture makes none of them cheaper:
 
 - the number of passes the pack runs, and the pipeline binds and barriers between them;
-- the uniforms written for each program, which are the same values whatever the viewport;
+- the uniforms written for each program, one block filled per program however few pixels it covers;
 - the geometry submitted. The world is walked, culled and drawn from the same sections at the same
   render distance, into fewer pixels.
 
@@ -92,12 +92,12 @@ most.
 
 In the order of how much they change what is drawn rather than how it is drawn:
 
-- **Max Shadow Distance** changes what is drawn at all: terrain and entities past it are not
+- **Shadow Distance** changes what is drawn at all: terrain and entities past it are not
   submitted to the light. That is geometry not walked, not culled and not rasterised.
 - **Shadow Map Scale** keeps the same geometry and rasterises it into a smaller map, and tells
   the pack that is what it got. It costs less defined shadow edges, softer or coarser depending
   on whether the pack smooths them, and a pack reload each time it moves.
-- **FSR Render Scale** keeps the whole frame and rasterises it into fewer pixels, then buys the
+- **Render Scale** keeps the whole frame and rasterises it into fewer pixels, then buys the
   sharpness back with a fixed pass at full size.
 - **The pack's own settings** are the last and often the largest: a pack's own shadow, volumetric
   and reflection quality settings are what decide how many passes there are to pay for.
