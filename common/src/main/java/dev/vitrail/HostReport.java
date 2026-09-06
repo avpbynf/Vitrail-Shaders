@@ -196,7 +196,7 @@ public final class HostReport {
 
 	/**
 	 * Said as an error rather than a warning because the pack a player asks for is not drawn at all,
-	 * and that is the engine's doing: {@code PackChain.load} reads whichever one is named, publishes
+	 * and that is the engine's doing: {@code PackChoice.load} reads whichever one is named, publishes
 	 * it to the settings screen and stops there. It stops because of what the passes drew when they were let run on the
 	 * other backend, the symptom this repository has seen there: a picture both credible and wrong,
 	 * the programs having been translated against Vulkan's depth and clip conventions. Credible and

@@ -3,7 +3,7 @@ package dev.vitrail.screen;
 import dev.vitrail.pack.load.PackLoader;
 import dev.vitrail.pack.menu.MenuValues;
 import dev.vitrail.pack.source.PackLang;
-import dev.vitrail.render.PackChain;
+import dev.vitrail.render.PackChoice;
 import dev.vitrail.ScreenText;
 import dev.vitrail.settings.PackFile;
 import dev.vitrail.settings.PackSession;
@@ -12,13 +12,13 @@ import dev.vitrail.uniform.Smoothed;
 import dev.vitrail.Vitrail;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
@@ -26,8 +26,8 @@ import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-import java.io.IOException;
 import java.io.InputStream;
+import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -176,10 +176,10 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	public SettingsScreen(@Nullable Screen parent) {
 		super(Component.translatable(ScreenText.PACKS_TITLE));
 		this.parent = parent;
-		adopt(PackChain.session().orElse(null));
+		adopt(PackChoice.session().orElse(null));
 		// Whatever the file says when there is no pack: the other view would be an empty page, and the
 		// list is where one is picked.
-		this.optionsOpen = !PackChain.opensOnPacks() && this.session != null;
+		this.optionsOpen = !PackChoice.opensOnPacks() && this.session != null;
 	}
 
 	@Override
@@ -192,10 +192,10 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 		// Rebuilt rather than resized, which is what Iris does, with the pack the list had kept
 		// selected carried across: a resize that lost it would drop a pack chosen and not yet applied.
 		String chosen = this.packList == null
-				? PackChain.askedFor().name()
+				? PackChoice.askedFor().name()
 				: this.packList.chosenName();
 		boolean enabled = this.packList == null
-				? PackChain.askedFor().enabled()
+				? PackChoice.askedFor().enabled()
 				: this.packList.shadersEnabled();
 
 		// Let go of the old folder watcher first. Iris does not, and leaks a watch key per resize.
@@ -409,7 +409,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	 * outside, then what could not be built.
 	 */
 	private Component engineNote() {
-		String failed = this.error == null ? PackChain.lastError().orElse(null) : this.error;
+		String failed = this.error == null ? PackChoice.lastError().orElse(null) : this.error;
 		if (failed != null) {
 			return Component.translatable(ScreenText.ERROR, failed)
 					.withStyle(ChatFormatting.RED);
@@ -417,7 +417,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 
 		if (this.session == null) {
 			return Component
-					.translatable(PackChain.noPackWanted() ? ScreenText.PACK_OFF : ScreenText.NO_PACK)
+					.translatable(PackChoice.noPackWanted() ? ScreenText.PACK_OFF : ScreenText.NO_PACK)
 					.withStyle(ChatFormatting.GRAY);
 		}
 
@@ -428,7 +428,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 					.withStyle(ChatFormatting.GOLD);
 		}
 
-		List<String> gone = PackChain.removedPasses();
+		List<String> gone = PackChoice.removedPasses();
 
 		return gone.isEmpty()
 				? Component.empty()
@@ -567,7 +567,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 		}
 
 		String chosen = list.chosenName();
-		PackSession loaded = PackChain.session().orElse(null);
+		PackSession loaded = PackChoice.session().orElse(null);
 		if (chosen.isEmpty() || (loaded != null && chosen.equals(loaded.packFileName()))) {
 			this.previewing = false;
 			if (loaded != null) {
@@ -678,12 +678,12 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	 * saying {@code none} means and the opposite of what a mistyped or renamed pack did.
 	 */
 	private static Component noPackReason() {
-		if (PackChain.packMissing()) {
-			return Component.translatable(ScreenText.PACK_MISSING, PackChain.askedFor().name());
+		if (PackChoice.packMissing()) {
+			return Component.translatable(ScreenText.PACK_MISSING, PackChoice.askedFor().name());
 		}
 
 		return Component.translatable(
-				PackChain.noPackWanted() ? ScreenText.PACK_OFF : ScreenText.NO_PACK);
+				PackChoice.noPackWanted() ? ScreenText.PACK_OFF : ScreenText.NO_PACK);
 	}
 
 	@Override
@@ -724,7 +724,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 		PackSession shown = this.session;
 		if (this.previewing && list != null && shown != null
 				&& !list.chosenName().equals(shown.packFileName())) {
-			giveUp(PackChain.session().orElse(null));
+			giveUp(PackChoice.session().orElse(null));
 		}
 
 		// The switch is live for what the list has selected, so it has to hear that the selection
@@ -1063,7 +1063,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 			return;
 		}
 
-		PackFile asked = PackChain.askedFor();
+		PackFile asked = PackChoice.askedFor();
 		String chosen = list.chosenName().isEmpty() ? asked.name() : list.chosenName();
 		boolean enabled = list.shadersEnabled();
 		boolean samePack = chosen.equals(asked.name());
@@ -1136,7 +1136,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	 * record this screen assembled would put it back to its default every time a pack is picked.
 	 */
 	private boolean writePackFile(String chosen, boolean enabled) {
-		Path file = PackChain.packFile(gameDirectory());
+		Path file = PackChoice.packFile(gameDirectory());
 		try {
 			PackFile.write(file, PackFile.read(file).withChoice(chosen, enabled));
 			this.error = null;
@@ -1159,7 +1159,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	 * focus with it and the next Enter would press a button that is no longer on screen.
 	 */
 	private void reloadPack() {
-		PackChain.reload(gameDirectory());
+		PackChoice.reload(gameDirectory());
 	}
 
 	private void dropChangesAndClose() {
@@ -1229,7 +1229,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	// it read before.
 	@SuppressWarnings("ReferenceEquality")
 	private void syncWithLoadedPack() {
-		PackSession loaded = PackChain.session().orElse(null);
+		PackSession loaded = PackChoice.session().orElse(null);
 		PackSession held = this.session;
 		if (loaded == held) {
 			return;

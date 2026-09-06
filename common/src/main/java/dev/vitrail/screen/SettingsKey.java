@@ -1,6 +1,6 @@
 package dev.vitrail.screen;
 
-import dev.vitrail.render.PackChain;
+import dev.vitrail.render.PackChoice;
 import dev.vitrail.ScreenText;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.Vitrail;
@@ -11,7 +11,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
-
 import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Path;
@@ -100,17 +99,17 @@ public final class SettingsKey {
 	 * about and then treated as no pack having been asked for, it would put "Shaders Reloaded!" over
 	 * a reading that opened nothing, and the screen's own bottom line would go further and say the
 	 * game was drawing its own image on purpose. Asking for no pack at all is still no failure and
-	 * still says the first line, which is the whole distinction: {@code PackChain.packMissing} holds
+	 * still says the first line, which is the whole distinction: {@code PackChoice.packMissing} holds
 	 * it.
 	 */
 	private static void reload() {
-		Path directory = PackChain.session()
+		Path directory = PackChoice.session()
 				.map(PackSession::gameDirectory)
 				.orElseGet(() -> Vitrail.platform().gameDirectory());
 
-		PackChain.reload(directory);
+		PackChoice.reload(directory);
 
-		MutableComponent said = PackChain.lastError()
+		MutableComponent said = PackChoice.lastError()
 				.map(reason -> Component.translatable(ScreenText.RELOAD_FAILED, reason)
 						.withStyle(ChatFormatting.RED))
 				.orElseGet(() -> Component.translatable(ScreenText.PACK_RELOADED));

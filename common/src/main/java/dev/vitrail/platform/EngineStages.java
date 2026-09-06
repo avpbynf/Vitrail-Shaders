@@ -5,6 +5,7 @@ import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.HandDraw;
 import dev.vitrail.render.ModuleCache;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.render.PackChoice;
 import dev.vitrail.render.PbrAtlases;
 import dev.vitrail.render.PbrTextures;
 import dev.vitrail.render.RenderScale;
@@ -72,7 +73,7 @@ public final class EngineStages {
 
 		// The report of the pack goes with the reading of it, in PackChain, where which pack is
 		// being drawn is known.
-		PackChain.load(Vitrail.platform().gameDirectory());
+		PackChoice.load(Vitrail.platform().gameDirectory());
 	}
 
 	/**
@@ -239,7 +240,7 @@ public final class EngineStages {
 
 		// Nothing is drawn when no pack can be: the game's own image is a better answer than
 		// anything this mod could put over it, and the reason is already said, once in the log
-		// and again on the settings screen through PackChain.lastError.
+		// and again on the settings screen through PackChoice.lastError.
 		PackChain.draw(Vitrail.platform().gameDirectory());
 
 		// After the chain and not before: the composites above read the map the previous frame

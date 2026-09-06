@@ -3775,7 +3775,7 @@ public final class GlslTranslator {
 			// Iris registers them as such (CommonUniforms.java:184-186, MatrixUniforms.java:41-45)
 			// and OpenGL accepts the loose form. They enter OfGlobals only when that branch is
 			// live. If the expander never saw the symbol and the header still defines it, they
-			// stay in the body and Vulkan refuses the unit; PackChain.load installs the table
+			// stay in the body and Vulkan refuses the unit; PackChoice.load installs the table
 			// before SettingSet.resolve so the two readers agree.
 			if (this.unit.isLive(lines[index])) {
 				liftOne(index);

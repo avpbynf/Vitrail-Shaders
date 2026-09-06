@@ -2,6 +2,7 @@ package dev.vitrail.screen;
 
 import dev.vitrail.Vitrail;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.render.PackChoice;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.sodium.ShadowTerrain;
 
@@ -57,7 +58,7 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 		PackChain.compilingWords().ifPresent(words ->
 				displayer.addToGroup(GROUP, PREFIX + words.getString()));
 
-		PackChain.session().ifPresentOrElse(session -> {
+		PackChoice.session().ifPresentOrElse(session -> {
 			displayer.addToGroup(GROUP, PREFIX + "Shaderpack: " + session.packFileName());
 			displayer.addToGroup(GROUP, profileLine(session));
 			if (level != null) {
@@ -98,13 +99,13 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 	 * The one line said when no pack is being drawn, naming which of the three reasons it is.
 	 */
 	private static String undrawnLine() {
-		if (PackChain.noPackWanted()) {
+		if (PackChoice.noPackWanted()) {
 			return "Shaders are disabled";
 		}
-		if (PackChain.packMissing()) {
-			return "Shaderpack: " + PackChain.askedFor().name() + " (missing from the folder)";
+		if (PackChoice.packMissing()) {
+			return "Shaderpack: " + PackChoice.askedFor().name() + " (missing from the folder)";
 		}
-		return PackChain.lastError()
+		return PackChoice.lastError()
 				.map(error -> "Shaderpack refused: " + error)
 				.orElse("Shaderpack: none");
 	}
