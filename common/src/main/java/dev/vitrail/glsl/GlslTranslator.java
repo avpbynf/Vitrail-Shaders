@@ -96,6 +96,25 @@ public final class GlslTranslator {
 	static final String FOG_COORD = "of_FogFragCoord";
 
 	/**
+	 * The fixed function front colour, kept as a name to write into and read by nothing.
+	 * <p>
+	 * A vertex stage of GLSL 1.20 wrote its colour there and the fragment stage read it back as
+	 * {@code gl_Color}. Neither survived the core profile, and a pack that still writes the one
+	 * without reading the other only needs somewhere for the value to land: RedHat's three shadow
+	 * vertex stages are the whole of it on this corpus, and the pass was lost outright for a name
+	 * the body never reads again. Iris answers it the same way and says as much,
+	 * {@code pipeline/transform/transformer/CommonTransformer.java:172-180} declaring
+	 * {@code vec4 iris_FrontColor;} and renaming onto it, its own comment calling that the bare
+	 * minimum and resting on the packs not reading it back.
+	 * <p>
+	 * A plain global and not an {@code out}, which is what makes it cost nothing: an output would
+	 * take a location the fragment stage never declares, and the two sides would part company over
+	 * a value neither of them uses. VERTEX only, for the same reason Iris stops there, a fragment
+	 * stage naming it having nowhere to have read it from.
+	 */
+	static final String FRONT_COLOUR = "of_FrontColor";
+
+	/**
 	 * The hit flash and the damage tint, which is a varying wherever the mesh carries the overlay and
 	 * a uniform everywhere else.
 	 * <p>
@@ -1390,6 +1409,13 @@ public final class GlslTranslator {
 			}
 
 			if (LegacyGlsl.readsDrawModelView(this.program) && rewriteGameModelView(index, name)) {
+				continue;
+			}
+
+			// Before the table, which carries no entry for it: the name is not a member of the block
+			// and not a varying either, and what it becomes is a global the header declares.
+			if (name.equals("gl_FrontColor") && this.stage == ProgramStage.VERTEX) {
+				this.tokens.replace(index, FRONT_COLOUR);
 				continue;
 			}
 

@@ -250,6 +250,13 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 					+ GlslTranslator.FOG_COORD + ";");
 		}
 
+		// A global and not a varying, which is why it is asked of this stage's own names rather than
+		// of the union: the fragment stage never sees it, so there is no other side to agree with.
+		// GlslTranslator.FRONT_COLOUR says what it is and why writing it is enough.
+		if (this.stage == ProgramStage.VERTEX && this.used.contains(GlslTranslator.FRONT_COLOUR)) {
+			lines.add("vec4 " + GlslTranslator.FRONT_COLOUR + ";");
+		}
+
 		// The same rule for the overlay colour, and it arrives here by the same road: the union says
 		// yes, so both sides declare it whichever of them reads it. No interpolation qualifier, which
 		// is Iris's answer too: every vertex of one model part carries the same overlay coordinate,
