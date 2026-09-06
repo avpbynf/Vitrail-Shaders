@@ -746,6 +746,7 @@ public final class GlslTranslator {
 		synthesizeAttributes();
 		dropVersionAndExtensions();
 		settleRedefinedMacros();
+		dropRedeclaredVertexBlock();
 		rewriteIdentifiers();
 		// After the identifiers, because the goldberg idiom's sine has become ofReducedSin by then
 		// and that is one of the two names the site is recognised under, the other being the plain
@@ -1479,6 +1480,57 @@ public final class GlslTranslator {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Takes out a vertex stage's own redeclaration of {@code gl_PerVertex}.
+	 * <p>
+	 * A core profile pack narrows the built-in block to the members it writes, which is legal and
+	 * which the language allows in ONE place only: before any use of the block. Splicing the
+	 * includes in moves it, exactly as it moves an {@code #extension} line, and there it is
+	 * refused. RenderPearl writes {@code out gl_PerVertex { vec4 gl_Position; };} in its shared
+	 * vertex prelude and loses every vertex stage to it, ninety nine of them.
+	 * <p>
+	 * Dropping it rather than hoisting it, and the two are not the same trade here. What the
+	 * declaration DOES is take members away, so the block left standing is the predeclared one,
+	 * which holds the narrowed one and everything else the pack did not ask for. Nothing the pack
+	 * writes can miss, where a member it writes and did not declare would have been an error under
+	 * its own narrowing; the cost is a shader interface one member wider than the pack asked for,
+	 * which no stage of this corpus reads.
+	 */
+	private void dropRedeclaredVertexBlock() {
+		if (this.stage != ProgramStage.VERTEX) {
+			return;
+		}
+
+		int[] lines = this.tokens.lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() != null || !token.identifier("gl_PerVertex")
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int keyword = this.tokens.significantBefore(index);
+			if (keyword < 0 || !this.tokens.get(keyword).identifier("out")) {
+				continue;
+			}
+
+			int brace = this.tokens.significantAfter(index);
+			if (brace < 0 || !this.tokens.get(brace).operator("{")) {
+				continue;
+			}
+
+			int close = this.tokens.matchingBracket(brace);
+			int end = close < 0 ? -1 : this.tokens.significantAfter(close);
+			while (end >= 0 && !this.tokens.get(end).operator(";")) {
+				end = this.tokens.significantAfter(end);
+			}
+
+			if (end >= 0) {
+				this.tokens.blankRange(keyword, end);
+			}
+		}
 	}
 
 	/**
