@@ -858,8 +858,11 @@ final class GeometryProgram {
 
 	/**
 	 * What the pack asked to blend with, falling back to what the pass wants when it asked nothing,
-	 * on every attachment alike. The per buffer form, {@code blend.<program>.<buffer>}, is still
-	 * not read: one pipeline carries one blend function for every target it writes.
+	 * on every attachment alike. The per buffer form, {@code blend.<program>.<buffer>}, reaches
+	 * here folded into that one answer by the plan, where every attachment of the program comes
+	 * out with the same function; where two would come out apart the plan keeps the whole program
+	 * function and says so in its notes, one pipeline carrying one blend function for every target
+	 * it writes.
 	 * <p>
 	 * Four packs of the corpus name the translucent chunk pass here. Reverie asks for no blending
 	 * at all on its water, which is the opposite of what the pass would have chosen, and Bliss and

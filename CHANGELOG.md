@@ -68,6 +68,19 @@ what the next one holds.
 
 ### Fixed
 
+- **A blend override a pack writes for one target is honoured wherever the program's targets
+  agree on it.** A `blend.<program>.<target>` line was thrown away whole, one pipeline carrying
+  one blend function for every target it writes, and the log said so. Most such lines are
+  written for a program that writes that one target and nothing else: the seven programs
+  Photon draws its translucent layer with, rain, held water, textured pieces, translucent mobs,
+  blocks and particles, each ask to be laid over that layer premultiplied, its armour glint
+  asks to add to it, and Complementary's rain writes a droplet's data and asks for it
+  unblended. Those lines are read now, as Iris reads them: on the target's
+  rank among the program's draw buffers, for the geometry programs only, a line naming a
+  target the program does not write dropped as the reference drops it. A program whose
+  targets would end up blending two ways, which one pipeline cannot carry here, keeps its whole
+  program function as before, and the log names it at load.
+
 - **A `#if` decides like the compiler where one side of an `&&` or `||` cannot be worked out.**
   A condition such as `X != 0 && 100 / X > 5` with `X` at zero was left undecided, because the
   right side was worked out whatever the left one said, and an undecided condition kept its
