@@ -42,6 +42,10 @@ what the next one holds.
   twice, each of which cost the passes that read them: the picture kept the game's own shader there
   and the pack's effect was missing on those surfaces alone.
 
+## 0.10.0-beta
+
+### Added
+
 - **Eight shadow colour buffers for a pack that asks for them.** A pack declaring
   `HIGHER_SHADOWCOLOR` may now draw the light into `shadowcolor0` through `shadowcolor7` and read
   them back, which is what Iris gives it. Before, a shadow program naming anything above
