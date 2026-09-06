@@ -16,9 +16,11 @@ import java.util.Optional;
  * {@code off} for a program that must not blend at all. Two factors are accepted as well and mean
  * what {@code glBlendFunc} means: the same pair for colour and for alpha.
  * <p>
- * The per buffer form, {@code blend.<program>.<buffer>}, is NOT this: one pipeline carries one
- * blend function for every target it writes, so a pack that asks for different blending per draw
- * buffer is named in the plan's notes instead of being half honoured.
+ * The per buffer form, {@code blend.<program>.<buffer>}, reads into this same record, one per
+ * directive, and the plan folds it into the program's one function where every target the
+ * program writes agrees on it. One pipeline carries one blend function for every target it
+ * writes, so a pack that asks two targets of one program for two functions is named in the
+ * plan's notes instead of being half honoured.
  */
 public record BlendMode(boolean off, String srcRgb, String dstRgb, String srcAlpha, String dstAlpha) {
 
