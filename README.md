@@ -9,9 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders"><img src="https://img.shields.io/badge/download-CurseForge-F16436?style=flat-square&logo=curseforge&logoColor=white" alt="Vitrail on CurseForge"></a>
-  <img src="https://img.shields.io/badge/minecraft-26.2-4C8C4A?style=flat-square" alt="Minecraft 26.2">
-  <img src="https://img.shields.io/badge/loaders-Fabric%20%2F%20NeoForge-5B6472?style=flat-square" alt="Fabric and NeoForge">
+  <a href="https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders"><img src="https://img.shields.io/curseforge/dt/1649385?style=flat-square&logo=curseforge&logoColor=white&label=CurseForge&color=F16436" alt="Vitrail on CurseForge, with its download count"></a>
+  <a href="https://modrinth.com/mod/vitrail-shaders"><img src="https://img.shields.io/modrinth/dt/oSIKhgz3?style=flat-square&logo=modrinth&logoColor=white&label=Modrinth&color=00AF5C" alt="Vitrail on Modrinth, with its download count"></a>
   <a href="https://ko-fi.com/B1H225VJC4"><img src="https://img.shields.io/badge/support-Ko--fi-FF5E5B?style=flat-square&logo=kofi&logoColor=white" alt="Support Vitrail on Ko-fi"></a>
 </p>
 
@@ -54,14 +53,25 @@ shader pack that exists was written for OpenGL, and none of them run on it.
 of `shaderpacks/`, translates its GLSL once when the pack loads, and hands it to
 the compiler the game already embeds. Nothing translates while a frame is drawn.
 
-One person's side project, and an early one: the backend it runs on is marked
-experimental by the game itself.
+It started as a question, whether packs written for OpenGL over more than a
+decade could run untouched on the renderer that now ships with the game. It is
+one person's side project, worked on every day since July, and an early one:
+the backend it runs on is marked experimental by the game itself.
+
+It is built the way a lot of software gets built now: AI tools do a real share
+of the typing and the debugging, and a human decides, tests against real packs
+and against Iris, reviews every line and carries the blame for every bug. What
+was taken from Iris and from Kroppeb's stareval is credited file by file in
+[NOTICE](NOTICE), under the same licence. If any of that matters to you, now you
+know. If the mod is useful, there is a coffee link below, and the issues here
+are where I answer.
 
 ## Quick start
 
-- One jar, both loaders. On
-  [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders) and
-  on every [release](https://github.com/avpbynf/Vitrail-Shaders/releases) here.
+- One jar for Fabric and NeoForge, on Minecraft 26.2. On
+  [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders), on
+  [Modrinth](https://modrinth.com/mod/vitrail-shaders) and on every
+  [release](https://github.com/avpbynf/Vitrail-Shaders/releases) here.
 - Put it in `mods/` next to Sodium. Client only.
 - Switch the game to Vulkan, in Options then Video Settings, and restart it.
 - Packs go in `shaderpacks/` as they always have, and are picked from Vitrail's
