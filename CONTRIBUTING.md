@@ -222,10 +222,11 @@ records the fast-forward.
 | `pack compatibility` | a pack does not draw as it should |
 | `upstream` | the cause is in another project or in the backend, and nothing here closes it |
 
-beside GitHub's own `bug`, `enhancement` and `question`, which the issue forms set themselves. The
-two sets do not overlap: a type says what a change does, and these say what a report is about. A
-known limitation is open as an issue rather than living in a file for that reason, so that a branch
-can point at one.
+beside GitHub's own `bug` and `enhancement`. The three issue forms set one label each and set it
+themselves, `bug`, `enhancement` and `pack compatibility`, and a blank issue cannot be opened, so
+every report arrives with one. The two sets do not overlap: a type says what a change does, and
+these say what a report is about. A known limitation is open as an issue rather than living in a
+file for that reason, so that a branch can point at one.
 
 ## Changelog
 
@@ -378,8 +379,9 @@ javadoc lint and the two promotions.
 
 The vendored stareval sources under `uniform/expr/kroppeb/` are left out of the javadoc lint and out
 of the static analyser, promotions included, so that borrowed code stays as its author wrote it. The
-analyser is pointed away from `vitrail/mixin/` as well. Nothing guards either package, so a change
-made in one is worth reading twice.
+analyser is pointed away from `vitrail/mixin/` as well, and only the analyser: the compiler warnings
+and the javadoc lint still apply to a mixin and still fail the build. The vendored package is the
+one left with the compiler warnings alone, so a change made in it is worth reading twice.
 
 Why each of those gates exists, what the two promotions are really about and what none of them
 covers is in [developing](docs/developing.md). Run the build before pushing rather than after:
