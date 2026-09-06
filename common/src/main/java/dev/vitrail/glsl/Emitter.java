@@ -33,6 +33,7 @@ import java.util.Set;
  * moment any of them is written, and it is read in the one expression that builds it.
  */
 record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, AlphaTest alphaTest,
+		Set<String> extensions,
 		Map<String, String> engineDefines, Map<String, String> memoryQualifiers, Set<String> used,
 		Set<String> declaredNames, Map<String, String> synthesized,
 		Map<String, VolumeAtlas> readVolumes, Map<Integer, Output> packOutputs,
@@ -79,6 +80,11 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 			Set<String> varyings, Set<String> shadowed) {
 		List<String> lines = new ArrayList<>();
 		lines.add(VERSION);
+
+		// Straight after the version, which is the only place the language takes them, and as
+		// enable rather than require. GlslTranslator.dropVersionAndExtensions carries why they are
+		// hoisted here instead of staying where the pack wrote them, and what a lost one costs.
+		this.extensions.forEach(extension -> lines.add("#extension " + extension + " : enable"));
 
 		for (Map.Entry<String, String> define : this.engineDefines.entrySet()) {
 			lines.add(define.getValue().isEmpty()
