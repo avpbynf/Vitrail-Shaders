@@ -230,33 +230,27 @@ public final class PackProgram {
 	}
 
 	/**
-	 * Why no pipeline can be built for one program, which is one word over three different
+	 * Why no pipeline can be built for one program, which is one word over two different
 	 * failures. They are kept apart because what a reader is meant to do about them differs:
-	 * the first is a texture this engine could serve one day, the second waits on machinery
-	 * nothing here runs, and the third cannot be served at all under this API.
+	 * the first is a texture this engine could serve one day, the second cannot be served at all
+	 * under this API.
 	 *
 	 * @param unbindable samplers declared under a shape the backend refuses, and that nothing this
 	 *                   engine can serve stands behind. A directive may well name one: what it
 	 *                   named was refused in its turn, with its own line and its own reason
-	 * @param volumes    the same shapes, for names an {@code image} directive hangs a volume on.
-	 *                   Nothing is missing there but the compute pass that would fill it, and this
-	 *                   engine runs none; every one of them in the corpus sits under a setting that
-	 *                   is off by default
 	 * @param storage    storage blocks this engine has no {@code bufferObject} for. A served one
 	 *                   is left out of this list and enters the bind group as a uniform name the
 	 *                   mixins turn into a storage buffer
 	 */
-	public record Refusal(List<TranslatedUnit.Uniform> unbindable,
-			List<TranslatedUnit.Uniform> volumes, List<String> storage) {
+	public record Refusal(List<TranslatedUnit.Uniform> unbindable, List<String> storage) {
 
 		public Refusal {
 			unbindable = List.copyOf(unbindable);
-			volumes = List.copyOf(volumes);
 			storage = List.copyOf(storage);
 		}
 
 		public boolean any() {
-			return !this.unbindable.isEmpty() || !this.volumes.isEmpty() || !this.storage.isEmpty();
+			return !this.unbindable.isEmpty() || !this.storage.isEmpty();
 		}
 
 		/** What is wrong, in as many clauses as there are kinds of it, each naming its own names. */
@@ -265,11 +259,6 @@ public final class PackProgram {
 			if (!this.unbindable.isEmpty()) {
 				said.add("declares " + describe(this.unbindable) + ", a shape this backend cannot bind, "
 						+ "with nothing behind that name this engine knows how to serve");
-			}
-
-			if (!this.volumes.isEmpty()) {
-				said.add("declares " + describe(this.volumes) + ", a volume an image directive asks a "
-						+ "compute pass to fill and this engine runs no compute pass");
 			}
 
 			if (!this.storage.isEmpty()) {
@@ -1456,17 +1445,14 @@ public final class PackProgram {
 						.forEach(storage::add);
 			});
 
-			List<TranslatedUnit.Uniform> volumes = CustomImages.served()
-					? List.of()
-					: found.values().stream()
-							.filter(sampler -> filled.contains(sampler.name()))
-							.toList();
+			// A volume an image directive fills is served, so a sampler3D that names one is bound
+			// and never refused; only a shape nothing stands behind is.
 			List<TranslatedUnit.Uniform> plain = found.values().stream()
 					.filter(sampler -> !filled.contains(sampler.name())
 							&& !CustomImages.named(sampler.name()))
 					.toList();
 
-			Refusal refusal = new Refusal(plain, volumes, storage);
+			Refusal refusal = new Refusal(plain, storage);
 			if (refusal.any()) {
 				refused.put(name, refusal);
 			}

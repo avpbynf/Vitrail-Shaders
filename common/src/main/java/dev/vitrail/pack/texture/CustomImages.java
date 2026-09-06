@@ -9,11 +9,11 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * The storage images the loaded pack declared, and whether this engine serves the pipe they need.
+ * The storage images the loaded pack declared.
  * <p>
- * Complementary gates voxel lighting on {@code IRIS_FEATURE_CUSTOM_IMAGES}. That define is posed
- * only while {@link #served()} is true, which is this engine having the allocation, the 3D bind
- * and the shadow compute dispatch, not a promise of a pass still to be built.
+ * Complementary gates voxel lighting on {@code IRIS_FEATURE_CUSTOM_IMAGES}, and the define is
+ * posed because the pipe behind it is there: the allocation, the 3D bind and the shadow compute
+ * dispatch, which is what a pack reading the symbol goes on to use.
  */
 public final class CustomImages {
 
@@ -21,15 +21,6 @@ public final class CustomImages {
 	private static volatile Set<String> names = Set.of();
 
 	private CustomImages() {
-	}
-
-	/**
-	 * Whether geometry {@code imageStore} and the shadow compute pass are wired. False would send
-	 * Complementary down its fallback and show the Iris banner; true without a bind would refuse
-	 * the programs that declare {@code usampler3D}.
-	 */
-	public static boolean served() {
-		return true;
 	}
 
 	/** Records the live {@code image.NAME} lines of the pack about to be translated. */
