@@ -24,6 +24,18 @@ what the next one holds.
   that says it cannot draw without them was being refused for something it would have got. Clarity
   and Noble now load.
 
+### Changed
+
+- **Joining a world builds the pack once instead of twice.** The pack is read while the client
+  starts up, before any world has arrived, and joining one makes it read again against what that
+  world brings. That second reading used to come after the first had already built the whole
+  chain, so everything was compiled and then thrown away; the question of whether the world moved
+  is asked before the building starts now. Leaving a world and joining another paid the same bill
+  in a different order, reallocating everything for the first frame and then again for the
+  reading, and it does not any more. Nothing about the picture changes, and no wait came out
+  measurably shorter on the machine this was taken on, so it says work removed rather than time
+  gained.
+
 ### Fixed
 
 - **The extensions a pack asks for are no longer dropped.** A pack using half precision types

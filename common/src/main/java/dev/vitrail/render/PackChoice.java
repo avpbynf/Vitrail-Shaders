@@ -146,10 +146,11 @@ public final class PackChoice {
 		// that cache, so emptying this between the two makes the write go in as a uniform buffer
 		// against a slot the layout already declared storage. The image half cannot do that: the
 		// write side reads StorageImages.bound, which walks an allocation of its own and never asks
-		// CustomImages, so an empty table there costs a filter mode for a frame and no more. And the
-		// road that would reach it is real: leaving a world releases the chain and does NOT replace
-		// it, so the first frame of the next world is drawn by that same chain before draw() gets to
-		// reloadIfTheWorldMoved.
+		// CustomImages, so an empty table there costs a filter mode for a frame and no more. The road
+		// that used to reach it was leaving a world, which releases the chain and does NOT replace
+		// it, so the first frame of the next world was drawn by that same chain before the question
+		// of whether the world had moved was reached at all; PackChain.beforeLevel asks it at the
+		// head of that frame now, so the reload stands in front of the drawing rather than behind it.
 		//
 		// What emptying here buys is bounded, not absolute. The pack-load worker of the chain that
 		// has just gone translates on a background thread and every program it reads reinstalls what
@@ -967,11 +968,11 @@ public final class PackChoice {
 	 * for is a second of hitch nobody asked for. The screen's pack list watches its own folder, which
 	 * is a different question: it notices a pack arriving and reads none of them.
 	 */
-	static void reloadIfTheWorldMoved(Path gameDirectory) {
+	static boolean reloadIfTheWorldMoved(Path gameDirectory) {
 		boolean stale = PackDefines.stale();
 		boolean moved = PackPlace.moved();
 		if (!stale && !moved) {
-			return;
+			return false;
 		}
 
 		if (moved) {
@@ -1000,6 +1001,8 @@ public final class PackChoice {
 		// old one, until somebody asks for a reload. Comparing content rather than a path would cost
 		// more than the report it saves.
 		readAgain(gameDirectory);
+
+		return true;
 	}
 
 	/**
@@ -1064,9 +1067,11 @@ public final class PackChoice {
 			// needs it more than that one: the load and both settle() calls stand after it, and a
 			// throw leaving here skips all three, which leaves a session drawing no pack at all with
 			// the reload still asked for. Where the throw goes then depends on which caller asked.
-			// The world moving under the pack reaches this from the first line of draw(), which
-			// stands outside its try; the settings screen, the pack key and the shadow map scale
-			// reach it from their own event, outside any frame. None of the four is under a catch.
+			// The world moving under the pack reaches this from PackChain.beforeLevel, which stands
+			// in front of the level and outside draw()'s try, and from the head of draw() on the one
+			// road that skips the level render's wrap; the settings screen, the pack key and the
+			// shadow map scale reach it from their own event, outside any frame. None is under a
+			// catch.
 			//
 			// Nothing is disabled here, where leaveWorld's catch disables: that one keeps the chain
 			// it failed to free and has to stop it being drawn, while this one has already dropped
