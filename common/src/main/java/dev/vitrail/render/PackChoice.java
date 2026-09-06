@@ -317,8 +317,9 @@ public final class PackChoice {
 			// Only the names this engine has not built refuse the pack: the block emission
 			// attribute rides in the chunk element, a pack declaring HIGHER_SHADOWCOLOR draws the
 			// light into the eight it asked for, a storage block is bound off the pack's own
-			// bufferObject, and custom images are served now, so a pack that cannot draw without one
-			// of those is simply right about what it needs. The list is the one EngineDefines poses
+			// bufferObject, compute passes are dispatched at the head of the frame and before the
+			// pass they hang off, and custom images are served now, so a pack that cannot draw
+			// without one of those is simply right about what it needs. The list is the one EngineDefines poses
 			// IRIS_FEATURE_ for, and the two have to move together: a define is a promise, and a
 			// refusal is the same promise refused.
 			//
@@ -330,7 +331,7 @@ public final class PackChoice {
 			// that wrote what that message told it to would be refused here on a name this engine
 			// serves. ShaderProperties.declares already reads the same lists that way.
 			Set<String> served = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-			served.addAll(List.of("BLOCK_EMISSION_ATTRIBUTE", "CUSTOM_IMAGES",
+			served.addAll(List.of("BLOCK_EMISSION_ATTRIBUTE", "COMPUTE_SHADERS", "CUSTOM_IMAGES",
 					PackDirectives.HIGHER_SHADOWCOLOR, "SSBO", "SEPARATE_HARDWARE_SAMPLERS"));
 
 			required.removeIf(served::contains);

@@ -208,6 +208,15 @@ public final class EngineDefines {
 		// left to test.
 		defines.put("IRIS_FEATURE_SSBO", "");
 
+		// Compute passes are served: a shadow compute is dispatched at the head of the frame and a
+		// compute hanging off a full screen pass right before that pass, both reading and storing
+		// the colour targets on the halves the pass reads (render/PackCompute). Complementary's
+		// floodfill and Photon's sky lighting are both that road and both run. Iris holds the flag
+		// usable where the driver has compute (features/FeatureFlags.java:14,
+		// IrisRenderSystem.supportsCompute); Vulkan has it everywhere, so the condition has nothing
+		// left to test, as with the storage blocks above.
+		defines.put("IRIS_FEATURE_COMPUTE_SHADERS", "");
+
 		// The rest of IRIS_FEATURE_ stays unposted until each capability is served, and each of the
 		// five above is posed for every pack. That is a divergence: Iris poses IRIS_FEATURE_X only
 		// where the pack itself listed X under iris.features.optional
