@@ -45,7 +45,7 @@ import java.util.Properties;
  * {@code specular} are added by {@code IrisSamplers.addLevelSamplers} and by nothing else
  * ({@code samplers/IrisSamplers.java:215-216}). What a composite declaring one of the names reads
  * is NOT the same on both sides and this file does not claim it is: here the full screen binding
- * resolves such a name to one black pixel ({@code render/PackPass.java:610}), where Iris leaves the
+ * resolves such a name to one black pixel ({@code render/PackPass.java:646}), where Iris leaves the
  * sampler unassigned and it falls to whatever texture unit nought holds. The flat texel this class
  * falls back on answers a different question, which is a GEOMETRY program reading a sprite the
  * resource pack ships no map for.
