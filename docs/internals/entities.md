@@ -297,13 +297,15 @@ drawn by the game in the middle of geometry the pack drew.
   chest is lit as the block it is even on a pack that ships no such file. The threshold follows the
   program and not the phase. A skull is where the program and the phase really part company, and it
   is not a corner case: it is a block entity, it draws with an entity pipeline the reference pins to
-  the entity program, so it takes the entity program and the block entity phase at once. Three rows
-  are pinned that way, and the test for them is a **list** rather than the blend, because one of the
-  three blends and still asks for the writing half's name.
+  the entity program, so it takes the entity program and the block entity phase at once. Five rows
+  are pinned that way, the three entity ones and the two boxes a text display draws behind its
+  lines, and the test for them is a **list** rather than the blend, because one of the three entity
+  rows blends and still asks for the writing half's name.
 - **The hand, twice.** Nothing about a pipeline decides which of the two hand programs answers; the
   pass does, and what separates the passes is which items go into them, settled a step earlier at the
-  submission. Every hand row discards at a tenth, the solid ones included, which is the reference's
-  answer and not an inheritance from the pipeline.
+  submission. Every hand row made from an entity row discards at a tenth, the solid ones included,
+  which is the reference's answer and not an inheritance from the pipeline; a text row's hand twin
+  discards at any alpha at all instead, which is what the reference's own glyph keys carry.
 - **The shadow map**, which the next section is about. It takes the eye tables' rows as well, and
   the one row derived nowhere is the ground oval's twin, for the reason given there.
 
@@ -312,20 +314,22 @@ exactly what would destroy that.
 
 **The eyes.** The reference reaches them by a constant that consults nothing, so an eye is an eye on
 a mob, in a chest's draw and in the hand alike, and derived into the other tables they would ask for
-the block or the water program where it asks for neither. They are also the one family drawn at
-**full light**: the light map names are answered with a constant and the sampler behind them with one
-white texel. Without it a pack whose eye program multiplies by the light map draws an enderman's eyes
-as dark as the block it stands on, and the additive blend the reference hangs on that program name is
-what would make that darkness the thing being added. The element is still declared and still bound
-either way, because the head has to declare the whole format; what changes is one line of it.
+the block or the water program where it asks for neither. They are drawn at **full light**, which
+they share with the cracks over a mined block and no other row: the light map names are answered
+with a constant and the sampler behind them with one white texel. Without it a pack whose eye program
+multiplies by the light map draws an enderman's eyes as dark as the block it stands on, and the
+additive blend the reference hangs on that program name is what would make that darkness the thing
+being added. The element is still declared and still bound either way, because the head has to
+declare the whole format; what changes is one line of it.
 
-**The glint.** It is one of the two pieces served here that are not drawn from an entity mesh, and
-the only one whose pipeline carries more than one render type's worth of answers. It is four compiled pieces
-of one program name, one per moment, because the side of the deferred stage is baked into a piece and
-the glint arrives on both: which carrier goes where is the game's sort, an enchanted book being
-submitted among the solid features foil and all, an enchanted armour piece and a trident and a shield
-among the translucent ones. It is in the opaque half's coverage mask and could not be left out: it
-blends onto the pixels the piece under it just wrote, and those pixels are the pack's target now.
+**The glint.** It is one of the four families served here that are not drawn from an entity mesh,
+and the only one whose pipeline carries more than one render type's worth of answers. It is four
+compiled pieces of one program name, one per moment, because the side of the deferred stage is baked
+into a piece and the glint arrives on both: which carrier goes where is the game's sort, an enchanted
+book being submitted among the solid features foil and all, an enchanted armour piece and a trident
+and a shield among the translucent ones. It is in the opaque half's coverage mask and could not be
+left out: it blends onto the pixels the piece under it just wrote, and those pixels are the pack's
+target now.
 
 Because those tables are keyed by pipeline and a texture is all that separates two rows, **two
 origins must not land in one draw**. There are two ways they could. The obvious one is the equality
@@ -337,16 +341,16 @@ really alternates pays each time it comes back; geometry that does not alternate
 pair in the game is known to reach it, which is not a reason to leave it open: the cost of being
 wrong is silent and the cost of the guard is one draw.
 
-**The cracks over a block being mined** are the other piece drawn from a mesh of the game's, the
-block format, and they are here rather than with the terrain because the game submits them through
-these same feature renderers. Leaving them to the game is not the neutral answer it looks like: the
-game draws them among the translucent features, which is the stretch the full-screen layer catches,
-and that layer is cleared to transparent black and composed as though every draw in it blended by
-alpha. The crumbling multiplies instead, so left there it multiplies against the clear and the
-cracks come out opaque black rather than darkening the face they lie on. Served, the multiply lands
-on the picture, which is where the game meant to put it.
+**The cracks over a block being mined** are the second of those four, drawn from a mesh of the
+game's, the block format, and they are here rather than with the terrain because the game submits
+them through these same feature renderers. Leaving them to the game is not the neutral answer it
+looks like: the game draws them among the translucent features, which is the stretch the full-screen
+layer catches, and that layer is cleared to transparent black and composed as though every draw in it
+blended by alpha. The crumbling multiplies instead, so left there it multiplies against the clear
+and the cracks come out opaque black rather than darkening the face they lie on. Served, the multiply
+lands on the picture, which is where the game meant to put it.
 
-**The block outline** is the third piece drawn from a mesh of the game's, the lines format, and it
+**The block outline** is the third of those four, drawn from the lines format of the game's, and it
 is the one the full-screen layer could not carry at all rather than carry flat. The layer is composed
 onto the first target the pack's translucent pass writes, which is the scene colour for most packs
 and, for a pack that forward-shades its translucents into a target of their own, something else
@@ -365,11 +369,16 @@ runs one position and is left alone, where Iris would normalise nought. The widt
 the game's own, carried on the vertex, and the screen size comes from the two uniforms every pack may
 read, supplied where the pack did not declare them.
 
-Three families in this window stay the game's, and are carried in flat by the full-screen layer: the
-beacon beam, the lightning, and the text of a name plate or a sign. The lightning and the text bind
-a mesh this door cannot decode. The beam binds the block format, which the door now reads, and what
-it still wants is a row of its own: the reference gives it another program, no alpha test and its
-fog per fragment, so it is not the cracks' row under another name.
+**The text** of a name plate or a sign is the fourth, and the one family here whose rows do not
+share a format: its eight pipelines bind four of the game's between them, a glyph in the world
+carrying a light map, a glyph read through a wall carrying none, and a text display's box carrying no
+texture coordinate at all.
+
+Two families in this window stay the game's, and are carried in flat by the full-screen layer: the
+beacon beam and the lightning. The lightning binds a mesh this door cannot decode. The beam binds
+the block format, which the door now reads, and what it still wants is a row of its own: the
+reference gives it another program, no alpha test and its fog per fragment, so it is not the cracks'
+row under another name.
 
 That is not taken on trust either. Every piece states the format it claims, and the
 claim is compared against what the pipeline really binds before the pack is read for it, because the
@@ -429,7 +438,7 @@ the world and nothing alive in it is the worse of the two to leave standing.
 Two culling details differ from the reference and are gaps rather than workarounds. Where a pack asks
 for a shorter reach for the casters that move, the reference rebuilds a whole second shadow frustum
 at that distance and tests a caster's bounding box against it; here the light's own frustum is kept
-and the reach alone is cut, as a box about the camera measured on the caster's position. The two
+and the reach alone is cut, as a cube about the camera asked of the caster's culling box. The two
 keep-sets are not nested, so the difference runs both ways. And the player flag is read as the
 reference reads it, which is not as a flag: where the pack allows the entities they are all extracted
 and the player is one of them, and the player directive is what is left when it refuses them. Read
