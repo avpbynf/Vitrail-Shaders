@@ -50,11 +50,12 @@ into SPIR-V. No frame is ever spent translating something that is already on scr
 a program has drawn once there is no legacy GLSL behind it.
 
 Where the pauses come from is worth knowing, because "once" is not the same as "at selection". The
-chain is translated when the pack is chosen. The programs that draw the world and the sky are
-translated on demand, at the first frame that needs them, so the first frame of a place does wait
-on one. And **changing dimension is a full reload**, because a dimension directory replaces the root
-rather than layering over it: the whole pack is read, translated and its colour targets allocated
-again. That is the hitch at the portal, and the log names it as it happens.
+chain and the programs that draw the world are translated at the load. The sky, the entities and
+the other families are translated and compiled on a background worker while you play, so a first
+frame waits on one of those only where it outruns that work. And **changing dimension is a full
+reload**, because a dimension directory replaces the root rather than layering over it: the whole
+pack is read, translated and its colour targets allocated again. That is the hitch at the portal,
+and the log names it as it happens.
 
 That choice has consequences worth knowing about, because they explain most of what you will
 observe:
@@ -76,15 +77,15 @@ observe:
 
 Not every family of geometry goes through the pack yet. Rather than repeat a list here that
 would quietly go stale, the engine states it itself: when a place first draws, it logs which
-families still come from the game, already tone mapped, and are carried across by the full-screen
-layer. **That line is the authority.** Anything a page here says about scope is written to agree
-with it, never to replace it.
+families still come from the game, already tone mapped, and are carried across by the scene seed.
+**That line is the authority.** Anything a page here says about scope is written to agree with it,
+never to replace it.
 
 Two things about that line rather than one, since a reader who does not find it should know why.
 It names what still comes from the *game*, so the families that do go through the pack are the ones
-it does not name. And it does not always appear: a place whose plan has no layer in it, or a run
-with the layer switched off, says something else instead, because there the targets simply keep
-their clear colour.
+it does not name. And it does not always appear: a place whose plan has no seed in it, or a run
+with `seed=off` in `vitrail/options.txt`, says something else instead, because there the targets
+simply keep their clear colour.
 
 The visible consequence of a family not going through the pack is always the same, and it is
 worth recognising: that geometry is composited in flat, carrying the game's own lighting,

@@ -14,8 +14,8 @@ quietly stale.
 | Pack | What I have seen |
 | --- | --- |
 | BSL v10.1.3 | Drawn whole, and the one watched most closely. Terrain, water, shadow map, sky, clouds, weather, particles, mobs, block entities and the held hand all go through it. |
-| Complementary Unbound r5.8.1 | Drawn whole, and watched as closely. Its colour targets, its deferred chain and its shadow map all come up; the log prints how many targets it allocated and at what size. Its two top profiles are the exception, and the pack announces it itself: see [the pack asks for Iris](#the-pack-asks-for-iris). |
-| Complementary Reimagined r5.8.1 | Drawn whole, seen beside Unbound, and visually as close to it as the two packs are to each other. Same top-profile exception as Unbound. |
+| Complementary Unbound r5.8.1 | Drawn whole, and watched as closely. Its colour targets, its deferred chain and its shadow map all come up; the log prints how many targets it allocated and at what size. Its two top profiles, Very High and Ultra, draw with their colored lighting on: the voxel pipe they ask for is served, and [the pack asks for Iris](#the-pack-asks-for-iris) says how to read a pack that asks for something else. |
+| Complementary Reimagined r5.8.1 | Drawn whole, seen beside Unbound, and visually as close to it as the two packs are to each other. Its two top profiles draw the same way. |
 | Bliss v2.1.2 | Drawn, water included. The flat wrong colours its mobs and its held arm used to come out in are gone: that was this engine sending their first output through a target of the game's, eight bits to a channel where the pack stacks two values in sixteen, and both now write the pack's own. It is the pack that reads the light map raw where BSL and Complementary multiply the matrix in, which is why the far terrain's pair is served normalised. |
 | Sildur's Vibrant Extreme v2.01 | Drawn, except for its water, which is an open case here. It is the pack that exercises the paths least travelled: it keeps the overworld's programs at the root of `shaders/` and gives the other two dimensions folders of their own, several families reach its textured program through the fallback tree rather than shipping one, and the target its terrain writes first is not target zero. |
 | Mellow v3.3 | Drawn, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. |
@@ -467,7 +467,7 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   the user's own cloud setting so that the pack's cloud program is handed the geometry it was
   written for. It is honoured only where this engine really draws the clouds, because with the
   game's own shader behind it `off` would take the clouds away and put nothing in their place.
-- **Most packs write `clouds=off`**, six of the eight measured, and it is not a refusal of clouds
+- **Most packs write `clouds=off`**, six of the nine measured, and it is not a refusal of clouds
   but a redirection: they draw their own, volumetric, inside a composite. Complementary goes further
   and ships a `gbuffers_clouds` that discards outright unless its own cloud style is set to the
   vanilla one. So a pack whose clouds visibly change when the engine starts drawing them is the
