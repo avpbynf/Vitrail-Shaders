@@ -15,6 +15,19 @@ what the next one holds.
 
 ### Added
 
+- **Eight shadow colour buffers for a pack that asks for them.** A pack declaring
+  `HIGHER_SHADOWCOLOR` may now draw the light into `shadowcolor0` through `shadowcolor7` and read
+  them back, which is what Iris gives it. Before, a shadow program naming anything above
+  `shadowcolor1` had its whole target list thrown away and drew into the first two instead, which
+  is still what a pack that does not declare the flag gets, exactly as under Iris. And only the
+  buffers some program of the pack names are allocated now, so a pack writing `shadowcolor0` alone
+  pays for that one image where it used to pay for two.
+
+- **Two more capability flags are announced and no longer refuse a pack**, `HIGHER_SHADOWCOLOR`
+  and `SSBO`. The storage buffers behind the second were already built and filled from a pack's
+  own `bufferObject` lines, and the name was simply never claimed, so a pack that declared it could
+  not be drawn at all. A pack requiring either, or both, now loads.
+
 - **A pack can read the shadow map under a second, hardware-compared name.** `shadowtex0HW` and
   `shadowtex1HW` are bound now, to the same two depth images as `shadowtex0` and `shadowtex1`,
   and each is compared by the hardware where the pack declares it that way. Both names read back
@@ -51,22 +64,108 @@ what the next one holds.
   instead. On Complementary Unbound the families take under a second of background work where
   they took four. Nothing about the picture changes.
 
-### Added
-
-- **Eight shadow colour buffers for a pack that asks for them.** A pack declaring
-  `HIGHER_SHADOWCOLOR` may now draw the light into `shadowcolor0` through `shadowcolor7` and read
-  them back, which is what Iris gives it. Before, a shadow program naming anything above
-  `shadowcolor1` had its whole target list thrown away and drew into the first two instead, which
-  is still what a pack that does not declare the flag gets, exactly as under Iris. And only the
-  buffers some program of the pack names are allocated now, so a pack writing `shadowcolor0` alone
-  pays for that one image where it used to pay for two.
-
-- **Two more capability flags are announced and no longer refuse a pack**, `HIGHER_SHADOWCOLOR`
-  and `SSBO`. The storage buffers behind the second were already built and filled from a pack's
-  own `bufferObject` lines, and the name was simply never claimed, so a pack that declared it could
-  not be drawn at all. A pack requiring either, or both, now loads.
-
 ### Fixed
+
+- **A `#if` decides like the compiler where one side of an `&&` or `||` cannot be worked out.**
+  A condition such as `X != 0 && 100 / X > 5` with `X` at zero was left undecided, because the
+  right side was worked out whatever the left one said, and an undecided condition kept its
+  branch in. The right side is now skipped where the left one has already decided, as the
+  preprocessor does, so such a branch is left out exactly as the pack meant it to be.
+
+- **A pack whose conditionals are written loosely draws, as it draws under Iris.** Reverie Beta
+  writes one `#ifdef` with no name after it and one with two names joined by `&&`, and Photon
+  writes an `#endif` with nothing open for it to close: none of the three is a directive GLSL will
+  take. Iris hands the compiler what its own preprocessor produced, so nothing of the sort reaches
+  a compiler there and both packs draw; here the lines went on to the compiler as the pack wrote
+  them, six of Reverie's programs and three of Photon's would not build, and one program that will
+  not build stops the whole pack with nothing of it drawn. The three shapes are now read the way
+  Iris reads them, a nameless one taking the branch it opens, a name followed by anything else
+  deciding on that name alone, and one with nothing to close being left out of the text, with the
+  file and the line said once in the log. A pack that writes its conditionals properly is
+  untouched.
+
+- **A value a pack spreads over several lines stops at the end of its own branch.** A
+  `shaders.properties` value continued with a backslash was joined before the conditionals around
+  it were read, so a value whose last line carried a backslash too swallowed the `#else` or
+  `#endif` that closed its branch, and the conditional around it went dark with them. Photon
+  writes its moon brightness that way, one line per phase, and both sides of Moon Phase Affects
+  Brightness were wrong. Switched on, the table never parsed and the constant from the branch
+  meant to replace it was read instead, so the moon lit the ground the same on every night of the
+  cycle. Switched off, that constant sat inside the branch the swallowed `#else` had left open,
+  no brightness was declared at all, and the shaders read the missing one as zero: the moon gave
+  no light whatever, and every night away from a torch was as dark as a new moon. The moon now
+  dims through the cycle with the option on, and is a plain full moon every night with it off.
+
+- **A condition continued over several lines with a backslash is read whole.** The pack's
+  conditionals decide which includes are followed, and one continued past its first line was
+  decided on that fragment alone, which stood for true. Photon undefines its waving switches
+  under one of those, so the include the switches guard was skipped and its terrain and shadow
+  programs compiled against a function that was not there.
+
+- **A pack that writes a constant through a macro is no longer refused whole for it.** A
+  `const` whose initialiser the Vulkan compiler would not take loses the keyword at load, and
+  whether it would was judged on the names written on the line: a macro's name passed whatever
+  it stood for, so a macro over a value this engine had already had to demote left a constant
+  the compiler then refused, and one pass refusing takes the whole pack down. The macro is now
+  read through. Photon writes its fog colours that way, and was refused at load on its blending
+  pass.
+
+- **Blend overrides, target sizes, flips and `endFlashShadows` follow the pack's own settings.**
+  Those four families of `shaders.properties` lines were read whether or not the `#if` around
+  them held, so a line the pack had switched off still applied. Photon's two low-resolution
+  cloud targets took the size of the last of its four choices whichever was picked, and
+  Complementary's water blend and its weather target's `off` held whatever the define or the
+  setting around them said.
+
+- **A pack switching off one of its own programs is obeyed for the world, not only for its
+  full-screen passes.** A pack turns individual programs on and off from its settings, and the ones
+  that draw the world went on being drawn whatever the setting said. Where the pack offers a
+  plainer program behind the one it switched off, that plainer one now draws instead, which is what
+  the pack is asking for: Bliss draws its translucent entities and blocks through its ordinary
+  entity and block programs until you turn its translucent entities setting on. Where it offers
+  none, nothing is drawn: Bliss and BSL stop building a shadow map in the Nether, and Bliss in the
+  End as well, which is what both of them ask for there.
+
+- **A modded dimension is drawn from the folder its pack sends it to.** Both Complementary
+  variants with Euphoria Patches list the worlds that belong to the Nether and to the End one
+  continued line per mod in `dimension.properties`, and only the first of those lines was read.
+  Everything the rest name, which is Ad Astra's planets and orbits, Prominent's dimensions, The
+  Bumblezone and half a dozen more, fell through to the pack's catch-all: those worlds were drawn
+  with the overworld sky, the overworld fog and the overworld full-screen passes instead of the
+  ones the pack wrote for them. They now get the folder the pack names, as they do under Iris.
+
+- **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
+  Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
+  read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed
+  a strip of the neighbouring sprite along a block edge seen from low down, where the same packs
+  under Iris do not. Their terrain and their shadow map now read the block atlas without
+  anisotropy whatever the setting says, as Iris reads them. Everything the pack does not draw
+  keeps the player's value, and so does the number the pack itself reads for the setting.
+
+- **A pack is told what convention a resource pack draws its material maps in**, as Iris tells it.
+  `MC_TEXTURE_FORMAT_LAB_PBR`, and the revision beside it, are what a pack written against them
+  branches its labPBR decode on, and neither was ever posed here: such a pack read every install as
+  one where nothing had been declared. Both are posed now, from what `optifine/texture.properties`
+  names, and only where a resource pack really declares the format. Changing the resource packs
+  reads the shader pack again when that changes what is declared, since the symbols decide which
+  branch was compiled.
+
+- **Packs are told the block emission attribute is there**, as Iris tells them. The chunk
+  mesh already carried a block's own light beside its mid-block offset, but the flag a pack
+  tests for it was never posed: Bliss took its path without voxel emission, and Complementary
+  only kept its two reflection targets at half resolution by the flat read above.
+
+- **`chunkFadeTimeInv` reads infinity with Chunk Fade set to none, as it does under Iris.** It read
+  zero in that setting, so a pack weighting a section by `min(1.0, age * chunkFadeTimeInv)` was held
+  at the start of a fade that never advanced, where under Iris the same expression reads as faded
+  in. Nothing in the packs that fade chunks changes with it: those read the `mc_chunkFade` attribute
+  rather than this uniform, and it is a pack written against the uniform that gets the Iris answer
+  now.
+
+- **`alphaTestRef` carries the alpha reference of the program being drawn**, the pack's own
+  `alphaTest` line or the default of the pass, as it does under Iris. It read nought in every
+  pass, so a program fading against it did so at the wrong threshold; a discard against it
+  was already made at the right one, by the test the translation adds.
 
 - **A blend override a pack writes for one target is honoured wherever the program's targets
   agree on it.** A `blend.<program>.<target>` line was thrown away whole, one pipeline carrying
@@ -81,11 +180,112 @@ what the next one holds.
   targets would end up blending two ways, which one pipeline cannot carry here, keeps its whole
   program function as before, and the log names it at load.
 
-- **A `#if` decides like the compiler where one side of an `&&` or `||` cannot be worked out.**
-  A condition such as `X != 0 && 100 / X > 5` with `X` at zero was left undecided, because the
-  right side was worked out whatever the left one said, and an undecided condition kept its
-  branch in. The right side is now skipped where the left one has already decided, as the
-  preprocessor does, so such a branch is left out exactly as the pack meant it to be.
+- **A buffer a pack asks for starts empty, whatever its size.** Only the small ones were emptied,
+  and anything past four mebibytes was handed over holding whatever the driver had last left in
+  that memory. Complementary reads a cell of one before anything has written it and takes a zero
+  for "no surface here", so at its Ultra profile, which turns World-Space Reflections on and
+  Advanced Color Tracing up to 16 chunks and asks for 773 MiB on that account, the reflections of
+  the first seconds could carry scraps of unrelated blocks, and the pack mixes what it reads back
+  in, which drags them out over several more. Every such buffer is now emptied whole the moment it
+  is allocated, which is before the pack has drawn anything into it.
+
+- **A pack's storage buffers are read and written where the pack put them.** A pack that keeps
+  its own data in a shader storage buffer, declared with `bufferObject` lines, had that buffer
+  allocated and filled but never handed to the programs that name it: every such program kept the
+  slot number the pack wrote and read whatever the game had there, which is a buffer of its own.
+  Reverie keeps the frame's average brightness in one such buffer to set its exposure, read
+  nothing, and scaled the whole picture to black. Complementary's world-space reflections read
+  their block data out of another. Both now reach the pack's own bytes. The store of compiled
+  shader modules is rebuilt once on the first launch, as every module compiled before this
+  carried the old slot.
+
+- **A storage image the graphics card will not give stops the pack instead of drawing it wrong.**
+  The image was skipped and every program naming it drew on, with the wrong kind of resource
+  bound under the name, which no driver has to survive. The pack is refused at that screen size
+  now, and refused for the session with the reason on the settings screen when the image is of a
+  size the pack chose, since no window size changes that.
+
+- **Every target starts from its clear colour when a pack loads or the window resizes**, both
+  halves of it and whether or not the pack asks for a clear every frame. A half nothing drew into
+  while the shaders were still compiling could keep whatever the driver had left in it, and a
+  pack that keeps a target from one frame to the next then read that as its history. The
+  reference clears everything once at that moment, and so does this.
+
+- **A colour target read at a lod carries the whole chain OpenGL would have built.** On a
+  screen wider than it is tall the chain stopped one level short, at two texels by one, and a
+  pack reading past that level was clamped to it where Iris had one more. The chain runs to one
+  texel on the longer side now, on every screen.
+
+- **A volume a pack fills for itself is read the same way from every pass.** An image declared
+  with an `image.` line is filtered by its format, smoothly unless it holds whole numbers, which
+  is the one thing Iris settles on the image and every reader then inherits. Here the answer was
+  decided in three places and only the geometry programs had it right: a full-screen pass and a
+  compute pass read every such image unfiltered. So the geometry half of a pack's lighting was
+  smooth and the full-screen half was not, whatever the settings. Photon's deferred shading and
+  Bliss's composites interpolate their light volumes, and showed the light in bricks the size of
+  a voxel with a hard edge; a pack that reads its volume texel by texel never saw it, no filter
+  reaching that kind of read.
+
+- **A texture a pack ships is read by a compute pass as the pack asked for it**, the blurring and
+  the wrapping written in the `.mcmeta` beside the file included, which is how a full-screen pass
+  already read it. A compute naming such a texture found no image behind the name at all: one
+  spelled like a colour target was answered with the target instead of the pack's own file, and
+  under any other spelling that one compute did nothing at all, leaving a line in the log while
+  the pass it belongs to drew on without whatever the compute was there to prepare.
+
+- **A compute pass that reads the depth runs.** A compute a pack hangs off a full screen pass
+  could read every name that pass reads except `depthtex0`, `depthtex1`, `depthtex2`, the far
+  terrain's depth and `centerDepthSmooth`: those threw on every frame, so the compute never ran,
+  with one line in the log. Reverie's cloud compute reads `depthtex1`, and without it the images
+  its sky and clouds are built from stayed empty. The compute now reads the same depth as the pass
+  after it, which is what Iris gives it.
+
+- **A compute program that reads `centerDepthSmooth` reads the smoothed centre depth.** When
+  no fullscreen pass of the pack read the name and a compute did, the compute was handed the far
+  plane on every frame. A compute hanging off a pass now arms the fold as the pass would.
+
+- **An array handed between a pack's stages arrives whole.** Photon hands its sky harmonics to
+  its deferred shading as an array of nine values, and the two values declared after it reached
+  that stage read off the wrong slots. An array is now taken apart and put back together the way
+  a matrix and a struct are.
+
+- **Photon's distant water is no longer red, and no longer striped.** A pack may hand a stage a
+  struct of values in one go, and Photon hands its water program its fog coefficients that way.
+  That struct reached the other stage wrong, so the fog Photon's reflections computed with it
+  saturated on every lake past a hundred blocks. A struct handed between stages is now taken
+  apart and put back together the way a matrix already was.
+
+- **Photon's shadows are lit again.** The compute programs a pack attaches to its full screen
+  passes were named in the log and skipped, so whatever they prepared for the pass after them was
+  never there: Photon computes its sky lighting in one, and everything in shadow, the hand first,
+  was black for the lack of it. Those programs now run, right before the pass they belong to. A
+  compute whose pass the pack ships no fragment program for, and one attached to a setup program,
+  are still skipped, and the log still names them.
+
+- **Photon draws.** Three things stood between its files and its picture. Its atmosphere table
+  is a three-dimensional volume of half floats asked to clamp, and the flat atlas that stands in
+  for a volume took one byte a texel and a repeating volume only, so the three deferred passes
+  reading the table, the sky map, the clouds and the shading itself, were dropped; the atlas now
+  keeps a blob's channel type and lays a clamped volume out with its edges repeated. Its volumes
+  are read through macros standing for the sampler's name, which the rewrite of those reads did
+  not follow; it does. And a volume laid over the name of a colour target for one stage took the
+  plain `sampler2D` reads of that name in the same stage with it, where the reference renames
+  only a `sampler3D` of that name: Photon's composites read its cloud noise where the scene should
+  have been, and every pixel came out red.
+
+- **AstraLex's window panes no longer bloom blue over their walls.** Its glass reflections march
+  a ray across the depth of the world, and on some steps the depth read back was not the image's,
+  so the ray landed on a pixel it never reached and the pane lit up with it, on some frames and
+  not others. A lookup through a sampler that carries no mipmap chain is now asked for the base
+  level of its image outright, which is what the reference's filtering always answered.
+
+- **World-space reflections come back after the first launch.** Complementary Unbound on Ultra
+  gives its reflection pass a buffer the pack declares for itself. On the launch that read the
+  pack for the first time that pass ran; on every launch after it, the translation being reused
+  from the store on disk, the engine stopped recognising the buffer behind the name and dropped
+  the pass. The reflections went with it, two of the targets the pass writes were read by the
+  next one as the clear had left them, and the log named the pass as one it would not run. A
+  pass whose buffer the pack really never declared is still dropped, and still says so.
 
 - **A variable a pack reads before writing it reads zero, as it does under Iris.** A shader that
   declares a variable without a value and adds to it before ever setting it is wrong, but under
@@ -99,177 +299,9 @@ what the next one holds.
   shader modules is rebuilt once on the first launch, as every module compiled before this carried
   the bare variables.
 
-- **A pack's storage buffers are read and written where the pack put them.** A pack that keeps
-  its own data in a shader storage buffer, declared with `bufferObject` lines, had that buffer
-  allocated and filled but never handed to the programs that name it: every such program kept the
-  slot number the pack wrote and read whatever the game had there, which is a buffer of its own.
-  Reverie keeps the frame's average brightness in one such buffer to set its exposure, read
-  nothing, and scaled the whole picture to black. Complementary's world-space reflections read
-  their block data out of another. Both now reach the pack's own bytes. The store of compiled
-  shader modules is rebuilt once on the first launch, as every module compiled before this
-  carried the old slot.
-
-- **A compute pass that reads the depth runs.** A compute a pack hangs off a full screen pass
-  could read every name that pass reads except `depthtex0`, `depthtex1`, `depthtex2`, the far
-  terrain's depth and `centerDepthSmooth`: those threw on every frame, so the compute never ran,
-  with one line in the log. Reverie's cloud compute reads `depthtex1`, and without it the images
-  its sky and clouds are built from stayed empty. The compute now reads the same depth as the pass
-  after it, which is what Iris gives it.
-
-- **A pack switching off one of its own programs is obeyed for the world, not only for its
-  full-screen passes.** A pack turns individual programs on and off from its settings, and the ones
-  that draw the world went on being drawn whatever the setting said. Where the pack offers a
-  plainer program behind the one it switched off, that plainer one now draws instead, which is what
-  the pack is asking for: Bliss draws its translucent entities and blocks through its ordinary
-  entity and block programs until you turn its translucent entities setting on. Where it offers
-  none, nothing is drawn: Bliss and BSL stop building a shadow map in the Nether, and Bliss in the
-  End as well, which is what both of them ask for there.
-
-- **Importing settings no longer acts on a screen you have already left.** The window that asks
-  which file to read is the system's own and does not hold the game, so the settings screen can be
-  closed while it is still up. Picking a file at that point queued its values anyway, into a page
-  nobody was looking at and from the picker's thread rather than the game's, so a pack ended up
-  carrying settings the player had walked away from. A file picked after leaving the screen is now
-  dropped, and one picked while the screen is still up is read on the game's own thread. Exporting
-  was never affected: it copies the settings file of the pack that was open when the button was
-  pressed, and touches nothing on screen.
-
-- **A damaged file in the translation cache no longer ends the session.** The cache keeps what a
-  pack's programs came to last time, so that loading that pack again costs less. A file in it far
-  larger than any translation is, damaged where it lies or carried in from another machine, was
-  read whole into memory before anything could ask whether it made sense, and running out of
-  memory reading it stopped the game rather than counting as a miss. Such a file is now refused
-  before it is read, the program is translated as it would have been anyway, and the log names
-  what was refused, once.
-
-- **The fire on a burning mob is drawn as fire.** A pack that gives `minecraft:entity_flame` a
-  number of its own was never handed it: the flames carried the number of the mob they wrap, so
-  everything the pack does to that kind of mob was done to its fire as well, and the fire was lit
-  and fogged like the body under it instead of glowing. Both Complementary builds and Bliss name
-  that number, and the flames now read it, as they do under Iris. A pack that names no flame now
-  sees the fire as an entity it never named, as it is under Iris, where before the fire read as
-  the mob it wraps.
-
-- **A pack can tell water and lava from the blocks around them.** Half of the number a chunk quad
-  carries says whether the quad is a fluid, and it said no on every quad in the world, so a pack
-  that draws fluid surfaces apart drew them like stone. Both Complementary variants read it to hold
-  the mip level down on flowing lava, which their own comment says comes out broken without it, and
-  that guard is compiled in only with Anisotropic Filtering on 8 or 16, not on the 0 they ship nor
-  on 4: there the guard never fired and the lava kept the broken level. Fluid quads now say what
-  they are, in the terrain and in the shadow map alike, as they do under Iris, and they say it even
-  where the pack gave the fluid no number of its own.
-
-- **A pack is told what convention a resource pack draws its material maps in**, as Iris tells it.
-  `MC_TEXTURE_FORMAT_LAB_PBR`, and the revision beside it, are what a pack written against them
-  branches its labPBR decode on, and neither was ever posed here: such a pack read every install as
-  one where nothing had been declared. Both are posed now, from what `optifine/texture.properties`
-  names, and only where a resource pack really declares the format. Changing the resource packs
-  reads the shader pack again when that changes what is declared, since the symbols decide which
-  branch was compiled.
-
-- **`chunkFadeTimeInv` reads infinity with Chunk Fade set to none, as it does under Iris.** It read
-  zero in that setting, so a pack weighting a section by `min(1.0, age * chunkFadeTimeInv)` was held
-  at the start of a fade that never advanced, where under Iris the same expression reads as faded
-  in. Nothing in the packs that fade chunks changes with it: those read the `mc_chunkFade` attribute
-  rather than this uniform, and it is a pack written against the uniform that gets the Iris answer
-  now.
-
-- **World-space reflections come back after the first launch.** Complementary Unbound on Ultra
-  gives its reflection pass a buffer the pack declares for itself. On the launch that read the
-  pack for the first time that pass ran; on every launch after it, the translation being reused
-  from the store on disk, the engine stopped recognising the buffer behind the name and dropped
-  the pass. The reflections went with it, two of the targets the pass writes were read by the
-  next one as the clear had left them, and the log named the pass as one it would not run. A
-  pass whose buffer the pack really never declared is still dropped, and still says so.
-
-- **A buffer a pack asks for starts empty, whatever its size.** Only the small ones were emptied,
-  and anything past four mebibytes was handed over holding whatever the driver had last left in
-  that memory. Complementary reads a cell of one before anything has written it and takes a zero
-  for "no surface here", so at its Ultra profile, which turns World-Space Reflections on and
-  Advanced Color Tracing up to 16 chunks and asks for 773 MiB on that account, the reflections of
-  the first seconds could carry scraps of unrelated blocks, and the pack mixes what it reads back
-  in, which drags them out over several more. Every such buffer is now emptied whole the moment it
-  is allocated, which is before the pack has drawn anything into it.
-
-- **A modded dimension is drawn from the folder its pack sends it to.** Both Complementary
-  variants with Euphoria Patches list the worlds that belong to the Nether and to the End one
-  continued line per mod in `dimension.properties`, and only the first of those lines was read.
-  Everything the rest name, which is Ad Astra's planets and orbits, Prominent's dimensions, The
-  Bumblezone and half a dozen more, fell through to the pack's catch-all: those worlds were drawn
-  with the overworld sky, the overworld fog and the overworld full-screen passes instead of the
-  ones the pack wrote for them. They now get the folder the pack names, as they do under Iris.
-
-- **A value a pack spreads over several lines stops at the end of its own branch.** A
-  `shaders.properties` value continued with a backslash was joined before the conditionals around
-  it were read, so a value whose last line carried a backslash too swallowed the `#else` or
-  `#endif` that closed its branch, and the conditional around it went dark with them. Photon
-  writes its moon brightness that way, one line per phase, and both sides of Moon Phase Affects
-  Brightness were wrong. Switched on, the table never parsed and the constant from the branch
-  meant to replace it was read instead, so the moon lit the ground the same on every night of the
-  cycle. Switched off, that constant sat inside the branch the swallowed `#else` had left open,
-  no brightness was declared at all, and the shaders read the missing one as zero: the moon gave
-  no light whatever, and every night away from a torch was as dark as a new moon. The moon now
-  dims through the cycle with the option on, and is a plain full moon every night with it off.
-
-- **A pack whose conditionals are written loosely draws, as it draws under Iris.** Reverie Beta
-  writes one `#ifdef` with no name after it and one with two names joined by `&&`, and Photon
-  writes an `#endif` with nothing open for it to close: none of the three is a directive GLSL will
-  take. Iris hands the compiler what its own preprocessor produced, so nothing of the sort reaches
-  a compiler there and both packs draw; here the lines went on to the compiler as the pack wrote
-  them, six of Reverie's programs and three of Photon's would not build, and one program that will
-  not build stops the whole pack with nothing of it drawn. The three shapes are now read the way
-  Iris reads them, a nameless one taking the branch it opens, a name followed by anything else
-  deciding on that name alone, and one with nothing to close being left out of the text, with the
-  file and the line said once in the log. A pack that writes its conditionals properly is
-  untouched.
-
-- **Name plates, signs and every other text in the world are drawn by the pack, as Iris draws
-  them.** They were left to the game's own shader and painted into a layer this engine composes
-  onto the pack's picture at the spot where the pack blends its water; where a pack keeps
-  something other than its picture there the letters landed in it and came back as a
-  half-transparent negative, which under Photon is what a floating name looked like. The pack
-  now draws them itself, with the program it draws a translucent entity with, with the one it
-  draws a translucent block entity with for the text of a sign, and with its shadow entity program
-  from the light. A font that ships as a `.ttf` file, which a resource pack may and the game does
-  not, is baked into a sheet holding a single channel: the pack is handed that channel in all four,
-  as Iris hands it, so such a font draws as text and not as solid colour. A pack shipping none of
-  those programs, and a pack loaded with the entities switched off, keeps the layer and looks as
-  it did.
-
-- **A pack that says it cannot bear anisotropic filtering is believed.** BSL and both
-  Complementary variants write `breaksAnisotropy` in their `shaders.properties`, and the line was
-  read nowhere: with Texture Filtering set to Anisotropic in Video Settings, their terrain showed
-  a strip of the neighbouring sprite along a block edge seen from low down, where the same packs
-  under Iris do not. Their terrain and their shadow map now read the block atlas without
-  anisotropy whatever the setting says, as Iris reads them. Everything the pack does not draw
-  keeps the player's value, and so does the number the pack itself reads for the setting.
-
-- **A texture a pack ships is read by a compute pass as the pack asked for it**, the blurring and
-  the wrapping written in the `.mcmeta` beside the file included, which is how a full-screen pass
-  already read it. A compute naming such a texture found no image behind the name at all: one
-  spelled like a colour target was answered with the target instead of the pack's own file, and
-  under any other spelling that one compute did nothing at all, leaving a line in the log while
-  the pass it belongs to drew on without whatever the compute was there to prepare.
-
-- **A volume a pack fills for itself is read the same way from every pass.** An image declared
-  with an `image.` line is filtered by its format, smoothly unless it holds whole numbers, which
-  is the one thing Iris settles on the image and every reader then inherits. Here the answer was
-  decided in three places and only the geometry programs had it right: a full-screen pass and a
-  compute pass read every such image unfiltered. So the geometry half of a pack's lighting was
-  smooth and the full-screen half was not, whatever the settings. Photon's deferred shading and
-  Bliss's composites interpolate their light volumes, and showed the light in bricks the size of
-  a voxel with a hard edge; a pack that reads its volume texel by texel never saw it, no filter
-  reaching that kind of read.
-
-- **The block outline is drawn by the pack, as Iris draws it.** The thin box around the block
-  aimed at was left to the game's own shader and painted into a layer this engine composes onto
-  the pack's picture at the spot where the pack blends its water; where a pack keeps something
-  other than its picture there, the box landed in it and came back as a faint ghost, a bright
-  refraction of the block behind under Photon. The pack now
-  draws the lines itself with its `gbuffers_line` program, or `gbuffers_basic` where it ships
-  none, under the outline render stage, so a pack's own selection box comes through: the
-  colour or rainbow Complementary offers for it, the box mode of Photon, the plain dark
-  outline of the rest.
+- **A pack's own `smooth()` accumulators restart with a dimension.** They went on from the
+  previous world for the seconds their half-life takes while the wetness and the eye brightness
+  beside them restarted; a world change forgets them with the rest.
 
 - **Leaves keep the same self-shadow wherever the camera stands.** The shadow map is drawn
   with Sodium's chunk renderer, which keeps one filled batch of draw commands per region and
@@ -303,78 +335,6 @@ what the next one holds.
   pack again and leaves the state as it was. The log names the state once per pack load, at the
   first terrain the pack draws.
 
-- **Blend overrides, target sizes, flips and `endFlashShadows` follow the pack's own settings.**
-  Those four families of `shaders.properties` lines were read whether or not the `#if` around
-  them held, so a line the pack had switched off still applied. Photon's two low-resolution
-  cloud targets took the size of the last of its four choices whichever was picked, and
-  Complementary's water blend and its weather target's `off` held whatever the define or the
-  setting around them said.
-
-- **Packs are told the block emission attribute is there**, as Iris tells them. The chunk
-  mesh already carried a block's own light beside its mid-block offset, but the flag a pack
-  tests for it was never posed: Bliss took its path without voxel emission, and Complementary
-  only kept its two reflection targets at half resolution by the flat read above.
-
-- **`alphaTestRef` carries the alpha reference of the program being drawn**, the pack's own
-  `alphaTest` line or the default of the pass, as it does under Iris. It read nought in every
-  pass, so a program fading against it did so at the wrong threshold; a discard against it
-  was already made at the right one, by the test the translation adds.
-
-- **Photon draws.** Three things stood between its files and its picture. Its atmosphere table
-  is a three-dimensional volume of half floats asked to clamp, and the flat atlas that stands in
-  for a volume took one byte a texel and a repeating volume only, so the three deferred passes
-  reading the table, the sky map, the clouds and the shading itself, were dropped; the atlas now
-  keeps a blob's channel type and lays a clamped volume out with its edges repeated. Its volumes
-  are read through macros standing for the sampler's name, which the rewrite of those reads did
-  not follow; it does. And a volume laid over the name of a colour target for one stage took the
-  plain `sampler2D` reads of that name in the same stage with it, where the reference renames
-  only a `sampler3D` of that name: Photon's composites read its cloud noise where the scene should
-  have been, and every pixel came out red.
-
-- **Every target starts from its clear colour when a pack loads or the window resizes**, both
-  halves of it and whether or not the pack asks for a clear every frame. A half nothing drew into
-  while the shaders were still compiling could keep whatever the driver had left in it, and a
-  pack that keeps a target from one frame to the next then read that as its history. The
-  reference clears everything once at that moment, and so does this.
-
-- **A pack that writes a constant through a macro is no longer refused whole for it.** A
-  `const` whose initialiser the Vulkan compiler would not take loses the keyword at load, and
-  whether it would was judged on the names written on the line: a macro's name passed whatever
-  it stood for, so a macro over a value this engine had already had to demote left a constant
-  the compiler then refused, and one pass refusing takes the whole pack down. The macro is now
-  read through. Photon writes its fog colours that way, and was refused at load on its blending
-  pass.
-
-- **A condition continued over several lines with a backslash is read whole.** The pack's
-  conditionals decide which includes are followed, and one continued past its first line was
-  decided on that fragment alone, which stood for true. Photon undefines its waving switches
-  under one of those, so the include the switches guard was skipped and its terrain and shadow
-  programs compiled against a function that was not there.
-
-- **Photon's shadows are lit again.** The compute programs a pack attaches to its full screen
-  passes were named in the log and skipped, so whatever they prepared for the pass after them was
-  never there: Photon computes its sky lighting in one, and everything in shadow, the hand first,
-  was black for the lack of it. Those programs now run, right before the pass they belong to. A
-  compute whose pass the pack ships no fragment program for, and one attached to a setup program,
-  are still skipped, and the log still names them.
-
-- **Photon's distant water is no longer red, and no longer striped.** A pack may hand a stage a
-  struct of values in one go, and Photon hands its water program its fog coefficients that way.
-  That struct reached the other stage wrong, so the fog Photon's reflections computed with it
-  saturated on every lake past a hundred blocks. A struct handed between stages is now taken
-  apart and put back together the way a matrix already was.
-
-- **An array handed between a pack's stages arrives whole.** Photon hands its sky harmonics to
-  its deferred shading as an array of nine values, and the two values declared after it reached
-  that stage read off the wrong slots. An array is now taken apart and put back together the way
-  a matrix and a struct are.
-
-- **AstraLex's window panes no longer bloom blue over their walls.** Its glass reflections march
-  a ray across the depth of the world, and on some steps the depth read back was not the image's,
-  so the ray landed on a pixel it never reached and the pane lit up with it, on some frames and
-  not others. A lookup through a sampler that carries no mipmap chain is now asked for the base
-  level of its image outright, which is what the reference's filtering always answered.
-
 - **A mob standing just past the pack's shadow reach for entities keeps its shadow while any
   of it still reaches inside.** A pack that stops its moving casters short of the terrain
   (Complementary does, at an eighth of its shadow distance) had that reach measured on the
@@ -394,24 +354,62 @@ what the next one holds.
   world, so a far hill still casting into the view dropped out of the map. The light's walk is
   no longer shortened by the camera's fog.
 
-- **A colour target read at a lod carries the whole chain OpenGL would have built.** On a
-  screen wider than it is tall the chain stopped one level short, at two texels by one, and a
-  pack reading past that level was clamped to it where Iris had one more. The chain runs to one
-  texel on the longer side now, on every screen.
+- **A pack can tell water and lava from the blocks around them.** Half of the number a chunk quad
+  carries says whether the quad is a fluid, and it said no on every quad in the world, so a pack
+  that draws fluid surfaces apart drew them like stone. Both Complementary variants read it to hold
+  the mip level down on flowing lava, which their own comment says comes out broken without it, and
+  that guard is compiled in only with Anisotropic Filtering on 8 or 16, not on the 0 they ship nor
+  on 4: there the guard never fired and the lava kept the broken level. Fluid quads now say what
+  they are, in the terrain and in the shadow map alike, as they do under Iris, and they say it even
+  where the pack gave the fluid no number of its own.
 
-- **A compute program that reads `centerDepthSmooth` reads the smoothed centre depth.** When
-  no fullscreen pass of the pack read the name and a compute did, the compute was handed the far
-  plane on every frame. A compute hanging off a pass now arms the fold as the pass would.
+- **The fire on a burning mob is drawn as fire.** A pack that gives `minecraft:entity_flame` a
+  number of its own was never handed it: the flames carried the number of the mob they wrap, so
+  everything the pack does to that kind of mob was done to its fire as well, and the fire was lit
+  and fogged like the body under it instead of glowing. Both Complementary builds and Bliss name
+  that number, and the flames now read it, as they do under Iris. A pack that names no flame now
+  sees the fire as an entity it never named, as it is under Iris, where before the fire read as
+  the mob it wraps.
 
-- **A pack's own `smooth()` accumulators restart with a dimension.** They went on from the
-  previous world for the seconds their half-life takes while the wetness and the eye brightness
-  beside them restarted; a world change forgets them with the rest.
+- **Name plates, signs and every other text in the world are drawn by the pack, as Iris draws
+  them.** They were left to the game's own shader and painted into a layer this engine composes
+  onto the pack's picture at the spot where the pack blends its water; where a pack keeps
+  something other than its picture there the letters landed in it and came back as a
+  half-transparent negative, which under Photon is what a floating name looked like. The pack
+  now draws them itself, with the program it draws a translucent entity with, with the one it
+  draws a translucent block entity with for the text of a sign, and with its shadow entity program
+  from the light. A font that ships as a `.ttf` file, which a resource pack may and the game does
+  not, is baked into a sheet holding a single channel: the pack is handed that channel in all four,
+  as Iris hands it, so such a font draws as text and not as solid colour. A pack shipping none of
+  those programs, and a pack loaded with the entities switched off, keeps the layer and looks as
+  it did.
 
-- **A storage image the graphics card will not give stops the pack instead of drawing it wrong.**
-  The image was skipped and every program naming it drew on, with the wrong kind of resource
-  bound under the name, which no driver has to survive. The pack is refused at that screen size
-  now, and refused for the session with the reason on the settings screen when the image is of a
-  size the pack chose, since no window size changes that.
+- **The block outline is drawn by the pack, as Iris draws it.** The thin box around the block
+  aimed at was left to the game's own shader and painted into a layer this engine composes onto
+  the pack's picture at the spot where the pack blends its water; where a pack keeps something
+  other than its picture there, the box landed in it and came back as a faint ghost, a bright
+  refraction of the block behind under Photon. The pack now
+  draws the lines itself with its `gbuffers_line` program, or `gbuffers_basic` where it ships
+  none, under the outline render stage, so a pack's own selection box comes through: the
+  colour or rainbow Complementary offers for it, the box mode of Photon, the plain dark
+  outline of the rest.
+
+- **A damaged file in the translation cache no longer ends the session.** The cache keeps what a
+  pack's programs came to last time, so that loading that pack again costs less. A file in it far
+  larger than any translation is, damaged where it lies or carried in from another machine, was
+  read whole into memory before anything could ask whether it made sense, and running out of
+  memory reading it stopped the game rather than counting as a miss. Such a file is now refused
+  before it is read, the program is translated as it would have been anyway, and the log names
+  what was refused, once.
+
+- **Importing settings no longer acts on a screen you have already left.** The window that asks
+  which file to read is the system's own and does not hold the game, so the settings screen can be
+  closed while it is still up. Picking a file at that point queued its values anyway, into a page
+  nobody was looking at and from the picker's thread rather than the game's, so a pack ended up
+  carrying settings the player had walked away from. A file picked after leaving the screen is now
+  dropped, and one picked while the screen is still up is read on the game's own thread. Exporting
+  was never affected: it copies the settings file of the pack that was open when the button was
+  pressed, and touches nothing on screen.
 
 - **Opening the settings of a pack from the list, then moving on to another pack, no longer
   aims the next Apply at the first one.** The bottom line and its count of forced settings also
@@ -419,7 +417,6 @@ what the next one holds.
   again. And the settings file shared with Iris now reads back whole when an editor left a byte
   order mark or old Mac line endings in it: either used to turn the first line into a setting no
   pack declares, or the whole file into one.
-
 ## 0.9.0-beta
 
 ### Added
