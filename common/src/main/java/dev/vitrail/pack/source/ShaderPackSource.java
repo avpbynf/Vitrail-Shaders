@@ -1,5 +1,6 @@
 package dev.vitrail.pack.source;
 
+import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.SettingSet;
 
 import java.io.IOException;
@@ -168,6 +169,22 @@ public final class ShaderPackSource implements AutoCloseable {
 		}
 
 		return (T) known;
+	}
+
+	/**
+	 * Every setting this pack declares, read once per opening off {@link #sourceFiles()} in that
+	 * order and kept: the same files answer the same index, and a load asks for it from the
+	 * session, the report, the opened pack and the programs alike.
+	 */
+	public OptionIndex options() throws IOException {
+		return derived(OptionIndex.class, () -> {
+			OptionIndex.Reader reader = new OptionIndex.Reader();
+			for (Path file : sourceFiles()) {
+				reader.read(rel(file), readLines(file));
+			}
+
+			return reader.index();
+		});
 	}
 
 	public static ShaderPackSource open(Path packPath) throws IOException {

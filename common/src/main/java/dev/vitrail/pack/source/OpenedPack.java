@@ -41,7 +41,7 @@ public record OpenedPack(Path packPath, ShaderPackSource source, OptionIndex opt
 			throws IOException {
 		ShaderPackSource source = ShaderPackSource.open(packPath);
 		try {
-			OptionIndex options = OptionIndex.build(source);
+			OptionIndex options = source.options();
 			ShaderProperties properties = ShaderProperties.parse(source);
 			Map<String, OptionValue> fromProfile =
 					profile.isEmpty() ? Map.of() : properties.expandProfile(profile);

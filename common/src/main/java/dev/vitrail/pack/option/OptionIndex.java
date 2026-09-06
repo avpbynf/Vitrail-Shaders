@@ -1,9 +1,5 @@
 package dev.vitrail.pack.option;
 
-import dev.vitrail.pack.source.ShaderPackSource;
-
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -26,8 +22,9 @@ import java.util.regex.Pattern;
  * changes the totals and there is then nothing left to compare against.
  * <p>
  * The first declaration of a name wins, which makes the order files are read in part of the
- * answer rather than an implementation detail. That order is fixed by
- * {@link ShaderPackSource#sourceFiles()}.
+ * answer rather than an implementation detail. That order is the source's,
+ * {@link dev.vitrail.pack.source.ShaderPackSource#sourceFiles()}, which feeds a
+ * {@link Reader} one file after another and keeps the index it answers for the opening.
  */
 public final class OptionIndex {
 
@@ -56,28 +53,34 @@ public final class OptionIndex {
 		this.conditionalReferences = Set.copyOf(conditionalReferences);
 	}
 
-	public static OptionIndex build(ShaderPackSource source) throws IOException {
-		Map<String, PackOption> found = new LinkedHashMap<>();
-		Set<String> referenced = new HashSet<>();
+	/**
+	 * Gathers the declarations of one file after another, in the order they are handed in, and
+	 * answers the index once every file has been read. It reads lines and never a file, so that
+	 * this package knows nothing of where a pack is kept.
+	 */
+	public static final class Reader {
 
-		for (Path file : source.sourceFiles()) {
-			String where = source.rel(file);
-			List<String> lines = source.readLines(file);
+		private final Map<String, PackOption> found = new LinkedHashMap<>();
+		private final Set<String> referenced = new HashSet<>();
 
+		/** Reads one file's lines, {@code where} being the name a declaration is reported under. */
+		public void read(String where, List<String> lines) {
 			for (int i = 0; i < lines.size(); i++) {
 				PackOption option = parse(lines.get(i), where, i + 1);
 				if (option != null) {
-					found.putIfAbsent(option.name(), option);
+					this.found.putIfAbsent(option.name(), option);
 				}
 
 				Matcher conditional = CONDITIONAL.matcher(lines.get(i));
 				if (conditional.matches()) {
-					referenced.add(conditional.group(1));
+					this.referenced.add(conditional.group(1));
 				}
 			}
 		}
 
-		return new OptionIndex(found, referenced);
+		public OptionIndex index() {
+			return new OptionIndex(this.found, this.referenced);
+		}
 	}
 
 	private static PackOption parse(String line, String where, int lineNumber) {

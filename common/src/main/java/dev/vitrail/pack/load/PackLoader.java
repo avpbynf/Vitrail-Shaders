@@ -57,7 +57,7 @@ public final class PackLoader {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
 			DimensionSet dimensions = DimensionSet.discover(source);
 			ShaderProperties properties = ShaderProperties.parse(source);
-			OptionIndex options = OptionIndex.build(source);
+			OptionIndex options = source.options();
 			ProgramSet programs = ProgramSet.enumerate(source, dimensions);
 			ProgramResolver resolved = ProgramResolver.resolve(programs, dimensions);
 			PackStats stats = PackStats.measure(source, options);
