@@ -368,6 +368,12 @@ public final class GlslTranslator {
 	private final Set<String> packMacros = new HashSet<>();
 
 	/**
+	 * Tokens of a {@code #define} that name a parameter of it, by index. See
+	 * {@link #markMacroParameters} for what renaming one would cost.
+	 */
+	private final Set<Integer> macroParameterTokens = new HashSet<>();
+
+	/**
 	 * What the replacement text of each macro names, its own parameters left out. Read where a
 	 * name has to be judged as the compiler will see it, once the macro is gone.
 	 */
@@ -1166,6 +1172,7 @@ public final class GlslTranslator {
 
 			this.tokens.naming(name);
 			if (token.directive().equals("define")) {
+				markMacroParameters(name);
 				String macro = this.tokens.get(name).text();
 				this.packMacros.add(macro);
 				this.macroBodies.computeIfAbsent(macro, _ -> new HashSet<>()).addAll(bodyNames(name));
@@ -1215,19 +1222,7 @@ public final class GlslTranslator {
 	 */
 	private Set<String> bodyNames(int name) {
 		Set<String> parameters = new HashSet<>();
-		int scan = name + 1;
-		if (scan < this.tokens.size() && this.tokens.get(scan).operator("(")) {
-			for (scan++; scan < this.tokens.size(); scan++) {
-				Token token = this.tokens.get(scan);
-				if (token.kind() == Kind.NEWLINE || token.operator(")")) {
-					break;
-				}
-
-				if (token.kind() == Kind.IDENTIFIER) {
-					parameters.add(token.text());
-				}
-			}
-		}
+		int scan = macroParameters(name, parameters);
 
 		Set<String> names = new HashSet<>();
 		for (; scan < this.tokens.size(); scan++) {
@@ -1242,6 +1237,71 @@ public final class GlslTranslator {
 		}
 
 		return names;
+	}
+
+	/**
+	 * The names in a function-like macro's parameter list, and where its replacement text begins.
+	 * <p>
+	 * A parameter is a binding local to the macro: it stands for the argument written at the call
+	 * and shadows anything of the same name outside. That is why {@link #bodyNames} leaves them out
+	 * of what a macro reads, and it is why nothing may rename one either.
+	 *
+	 * @param parameters filled with the names, left alone for an object-like macro
+	 * @return the index the replacement text starts at
+	 */
+	private int macroParameters(int name, Set<String> parameters) {
+		int scan = name + 1;
+		if (scan >= this.tokens.size() || !this.tokens.get(scan).operator("(")) {
+			return scan;
+		}
+
+		for (scan++; scan < this.tokens.size(); scan++) {
+			Token token = this.tokens.get(scan);
+			if (token.kind() == Kind.NEWLINE || token.operator(")")) {
+				break;
+			}
+
+			if (token.kind() == Kind.IDENTIFIER) {
+				parameters.add(token.text());
+			}
+		}
+
+		return scan;
+	}
+
+	/**
+	 * Marks every token of one {@code #define} that names a parameter of it, in the list and in the
+	 * replacement text alike, so that no later pass renames one.
+	 * <p>
+	 * A parameter shadows the name outside it, so renaming it says something the pack did not.
+	 * <strong>And a rename that reached only half of them would be worse than either.</strong>
+	 * {@code #define CALL(texture, uv) texture(uv)} is the shape: the parameter in the list is
+	 * followed by a comma and the same name in the body is followed by a parenthesis, so a rewrite
+	 * that spares a call and renames everything else takes the declaration and leaves the use. The
+	 * preprocessor then binds nothing at that use, and what comes out is the very undeclared name
+	 * the rewrite exists to prevent.
+	 */
+	private void markMacroParameters(int name) {
+		Set<String> parameters = new HashSet<>();
+		int scan = macroParameters(name, parameters);
+		if (parameters.isEmpty()) {
+			return;
+		}
+
+		for (int index = name + 1; index < scan; index++) {
+			this.macroParameterTokens.add(index);
+		}
+
+		for (; scan < this.tokens.size(); scan++) {
+			Token token = this.tokens.get(scan);
+			if (token.kind() == Kind.NEWLINE) {
+				return;
+			}
+
+			if (token.kind() == Kind.IDENTIFIER && parameters.contains(token.text())) {
+				this.macroParameterTokens.add(scan);
+			}
+		}
 	}
 
 	/**
@@ -1720,6 +1780,26 @@ public final class GlslTranslator {
 					this.trigCalls++;
 					continue;
 				}
+			}
+
+			// Above the guard below, and it is the one rewrite that belongs there. The body of a
+			// #define is code: it is substituted into the program, so a reserved name inside it has
+			// to be renamed with the declaration or the two part company. Pegasus builds its whole
+			// albedo read out of macros, {@code #define ALBEDO_TEXTURE_CALL_PREFIX textureGrad(texture, }
+			// among fourteen of them, and its own {@code uniform sampler2D texture} was renamed
+			// while those bodies were not: every terrain, water, entity and particle pass of the
+			// pack was refused on an undeclared {@code texture}, 760 times in one load.
+			//
+			// {@code define} alone, and never the conditionals. A name in {@code #ifdef} or
+			// {@code #if defined} is a question about a macro rather than code, and renaming it
+			// would ask about a name nobody defines. The macro's OWN name is already out, being a
+			// naming directive's first identifier.
+			String named = LegacyGlsl.RESERVED_NAMES.get(name);
+			if (named != null && "define".equals(directive)
+					&& !this.macroParameterTokens.contains(index)
+					&& this.tokens.callOpener(index) < 0) {
+				this.tokens.replace(index, named);
+				continue;
 			}
 
 			if (directive != null) {
