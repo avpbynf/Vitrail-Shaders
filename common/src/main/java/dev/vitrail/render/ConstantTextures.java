@@ -1,5 +1,7 @@
 package dev.vitrail.render;
 
+import dev.vitrail.render.pbr.PbrMap;
+
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;

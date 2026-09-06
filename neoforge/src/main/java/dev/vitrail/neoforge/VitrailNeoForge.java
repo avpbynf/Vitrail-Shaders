@@ -1,7 +1,7 @@
 package dev.vitrail.neoforge;
 
 import dev.vitrail.platform.EngineStages;
-import dev.vitrail.render.PbrAtlases;
+import dev.vitrail.render.pbr.PbrAtlases;
 import dev.vitrail.screen.SettingsScreen;
 import dev.vitrail.Vitrail;
 

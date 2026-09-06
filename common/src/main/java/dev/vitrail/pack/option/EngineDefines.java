@@ -1,6 +1,7 @@
 package dev.vitrail.pack.option;
 
 import dev.vitrail.pack.model.RenderStage;
+import dev.vitrail.render.storage.StorageBuffers;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -201,7 +202,7 @@ public final class EngineDefines {
 		defines.put("IRIS_FEATURE_HIGHER_SHADOWCOLOR", "");
 
 		// Storage blocks are served: a bufferObject directive is read and its buffer allocated
-		// (render/StorageBuffers), and a block a program declares is bound as a storage descriptor
+		// (render/storage/StorageBuffers), and a block a program declares is bound as a storage descriptor
 		// rather than a uniform one (mixin/VulkanBindGroupLayoutMixin). Iris holds the flag usable
 		// only where the driver has them (features/FeatureFlags.java:22,
 		// IrisRenderSystem.supportsSSBO). Vulkan has them everywhere, so the condition has nothing

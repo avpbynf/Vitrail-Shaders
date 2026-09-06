@@ -1,4 +1,4 @@
-package dev.vitrail.render;
+package dev.vitrail.render.pbr;
 
 import dev.vitrail.Vitrail;
 

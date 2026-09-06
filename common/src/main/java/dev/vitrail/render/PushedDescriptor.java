@@ -1,5 +1,8 @@
 package dev.vitrail.render;
 
+import dev.vitrail.render.storage.StorageBuffers;
+import dev.vitrail.render.storage.StorageImages;
+
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 
 /**

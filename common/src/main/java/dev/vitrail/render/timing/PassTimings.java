@@ -1,5 +1,6 @@
-package dev.vitrail.render;
+package dev.vitrail.render.timing;
 
+import dev.vitrail.render.GeometryHold;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.systems.CommandEncoder;

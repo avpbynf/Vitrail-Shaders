@@ -2,7 +2,7 @@ package dev.vitrail.dh;
 
 import dev.vitrail.render.DistantDraw;
 import dev.vitrail.render.DistantMesh;
-import dev.vitrail.render.PassTimings;
+import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;

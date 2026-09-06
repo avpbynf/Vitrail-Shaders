@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
 
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;

@@ -1,7 +1,7 @@
 package dev.vitrail.mixin;
 
-import dev.vitrail.render.PassTimings;
-import dev.vitrail.render.RingTimings;
+import dev.vitrail.render.timing.PassTimings;
+import dev.vitrail.render.timing.RingTimings;
 
 import net.minecraft.client.renderer.LevelRenderer;
 import org.spongepowered.asm.mixin.Mixin;

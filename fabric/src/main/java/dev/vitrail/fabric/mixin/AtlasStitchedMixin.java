@@ -1,6 +1,6 @@
 package dev.vitrail.fabric.mixin;
 
-import dev.vitrail.render.PbrAtlases;
+import dev.vitrail.render.pbr.PbrAtlases;
 
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlas;

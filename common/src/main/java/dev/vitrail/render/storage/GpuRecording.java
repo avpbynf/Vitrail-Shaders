@@ -1,4 +1,4 @@
-package dev.vitrail.render;
+package dev.vitrail.render.storage;
 
 import dev.vitrail.mixin.access.CommandEncoderAccessor;
 import dev.vitrail.mixin.access.VulkanCommandEncoderAccessor;
@@ -19,13 +19,13 @@ import org.lwjgl.vulkan.VkMemoryBarrier2;
 /**
  * Recording helpers for storage work that cannot legally sit inside a dynamic render pass.
  */
-final class GpuRecording {
+public final class GpuRecording {
 
 	private GpuRecording() {
 	}
 
 	/** Ends the encoder's open pass, if any, so a clear, fill or dispatch can be recorded. */
-	static void endPass(CommandEncoder encoder) {
+	public static void endPass(CommandEncoder encoder) {
 		CommandEncoderBackend backend = ((CommandEncoderAccessor) encoder).vitrail$backend();
 		if (!(backend instanceof VulkanCommandEncoder vulkan)) {
 			return;
@@ -44,7 +44,7 @@ final class GpuRecording {
 	 * Vulkan encoder is there to queue on, the device is gone and took every handle with it, so
 	 * the destruction is dropped rather than run against a device that no longer exists.
 	 */
-	static void destroyLater(Runnable destruction) {
+	public static void destroyLater(Runnable destruction) {
 		GpuDevice device = RenderSystem.tryGetDevice();
 		CommandEncoderBackend backend = device == null
 				? null

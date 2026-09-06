@@ -1,21 +1,21 @@
 package dev.vitrail.platform;
 
+import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.TranslationCache;
+import dev.vitrail.HostReport;
 import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.HandDraw;
-import dev.vitrail.render.ModuleCache;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.PackChoice;
-import dev.vitrail.render.PbrAtlases;
-import dev.vitrail.render.PbrTextures;
+import dev.vitrail.render.pbr.PbrAtlases;
+import dev.vitrail.render.pbr.PbrTextures;
 import dev.vitrail.render.RenderScale;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.render.TerrainSampler;
-import dev.vitrail.sodium.EntityMeshSerializer;
 import dev.vitrail.screen.SettingsKey;
+import dev.vitrail.sodium.EntityMeshSerializer;
 import dev.vitrail.sodium.ShadowTerrain;
-import dev.vitrail.HostReport;
 import dev.vitrail.Vitrail;
 
 import org.joml.Matrix4fc;

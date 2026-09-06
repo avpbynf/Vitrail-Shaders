@@ -1,9 +1,11 @@
-package dev.vitrail.render;
+package dev.vitrail.cache;
 
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
-import dev.vitrail.Vitrail;
 import dev.vitrail.glsl.LocalZeroes;
 import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
+import dev.vitrail.render.PackChain;
+import dev.vitrail.render.RawLocals;
+import dev.vitrail.Vitrail;
 
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.Version;

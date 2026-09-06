@@ -1,4 +1,4 @@
-package dev.vitrail.render;
+package dev.vitrail.render.storage;
 
 import dev.vitrail.mixin.access.CommandEncoderAccessor;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
@@ -54,7 +54,7 @@ public final class StorageBuffers implements AutoCloseable {
 	private int lastWidth;
 	private int lastHeight;
 
-	StorageBuffers(BufferObject.Reading declared) {
+	public StorageBuffers(BufferObject.Reading declared) {
 		this.declared = declared;
 	}
 
@@ -109,7 +109,7 @@ public final class StorageBuffers implements AutoCloseable {
 	 * A failure is thrown rather than skipped: a tiny stand-in would let the pack compile and then
 	 * hang the GPU on the first out-of-range write.
 	 */
-	void ensure(int screenWidth, int screenHeight) {
+	public void ensure(int screenWidth, int screenHeight) {
 		install();
 		if (this.declared.buffers().isEmpty()) {
 			return;

@@ -1,5 +1,7 @@
 package dev.vitrail.render;
 
+import dev.vitrail.render.timing.PassTimings;
+
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;

@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.dh.DhDepth;
 import dev.vitrail.pack.option.EngineDefines;
+import dev.vitrail.render.pbr.PbrAtlases;
 import dev.vitrail.uniform.BiomeCategory;
 
 import com.mojang.blaze3d.systems.GpuDevice;
