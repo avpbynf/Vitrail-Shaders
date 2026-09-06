@@ -1,7 +1,5 @@
 package dev.vitrail.pack.model;
 
-import dev.vitrail.pack.model.TargetFormat;
-
 import java.util.Locale;
 import java.util.Optional;
 

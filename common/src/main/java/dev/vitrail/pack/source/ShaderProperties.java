@@ -4,13 +4,9 @@ import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.option.PackOption;
 import dev.vitrail.pack.model.AlphaTest;
-import dev.vitrail.pack.model.TargetFormat;
 import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.pack.model.BufferObject;
 import dev.vitrail.pack.model.ImageInformation;
-import dev.vitrail.pack.model.PackTexture;
-import dev.vitrail.pack.model.PixelFormat;
-import dev.vitrail.pack.model.PixelType;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -1068,7 +1064,7 @@ public final class ShaderProperties {
 				return;
 			}
 
-			String reason = readImage(name, value, defines, images);
+			String reason = ImageInformation.parse(name, value, defines, images);
 			if (reason != null) {
 				dropped.add("image." + name + " = " + value + ": " + reason);
 			}
@@ -1096,7 +1092,7 @@ public final class ShaderProperties {
 				return;
 			}
 
-			String reason = readBufferObject(buffer.group(1), buffer.group(2).trim(), buffers);
+			String reason = BufferObject.parse(buffer.group(1), buffer.group(2).trim(), buffers);
 			if (reason != null) {
 				dropped.add("bufferObject." + buffer.group(1) + " = " + buffer.group(2).trim()
 						+ ": " + reason);
@@ -1104,178 +1100,6 @@ public final class ShaderProperties {
 		});
 
 		return new BufferObject.Reading(List.copyOf(buffers.values()), dropped);
-	}
-
-	/**
-	 * One {@code bufferObject.N} value, Iris's word counts, or a reason this line cannot be kept.
-	 * <p>
-	 * Returns null when the buffer was added. Two words or fewer are an absolute size and an
-	 * optional name; four or more are the relative form.
-	 */
-	private static String readBufferObject(String indexText, String value,
-			Map<Integer, BufferObject> buffers) {
-		int index;
-		try {
-			index = Integer.parseInt(indexText);
-		} catch (NumberFormatException e) {
-			return "index is not a number";
-		}
-
-		if (index > BufferObject.LIMIT) {
-			return "only indices 0 to " + BufferObject.LIMIT + " are allowed";
-		}
-
-		String[] parts = value.split(" ", -1);
-		if (parts.length == 0 || parts[0].isEmpty()) {
-			return "expected a size";
-		}
-
-		long size;
-		try {
-			size = Long.parseLong(parts[0]);
-		} catch (NumberFormatException e) {
-			return "size is not a number";
-		}
-
-		if (size < 1L) {
-			return "size below one disables the buffer";
-		}
-
-		if (parts.length <= 2) {
-			Optional<String> name = parts.length > 1 && !parts[1].isEmpty()
-					? Optional.of(parts[1])
-					: Optional.empty();
-			buffers.put(index, new BufferObject(index, size, false, 0.0F, 0.0F, name));
-			return null;
-		}
-
-		if (parts.length < 4) {
-			return "a relative buffer takes four words";
-		}
-
-		boolean relative = Boolean.parseBoolean(parts[1]);
-		float scaleX;
-		float scaleY;
-		try {
-			scaleX = Float.parseFloat(parts[2]);
-			scaleY = Float.parseFloat(parts[3]);
-		} catch (NumberFormatException e) {
-			return "relative scale is not a number";
-		}
-
-		buffers.put(index, new BufferObject(index, size, relative, scaleX, scaleY, Optional.empty()));
-		return null;
-	}
-
-	/**
-	 * One {@code image.NAME} value, Iris's word counts, or a reason this line cannot be kept.
-	 * <p>
-	 * Returns null when the image was added. A size that is not a number is looked up in
-	 * {@code defines}, which is the substitute for Iris running the preprocessor over the file
-	 * before this parser sees a token.
-	 */
-	private static String readImage(String name, String value, Map<String, String> defines,
-			List<ImageInformation> images) {
-		String[] parts = value.split(" ", -1);
-		if (parts.length < 6) {
-			return "expected at least six words";
-		}
-
-		Optional<String> sampler = parts[0].isEmpty() || parts[0].equalsIgnoreCase("none")
-				? Optional.empty()
-				: Optional.of(parts[0]);
-		Optional<PixelFormat> format = PixelFormat.parse(parts[1]);
-		TargetFormat.Resolution internal = TargetFormat.resolve(parts[2]);
-		Optional<PixelType> pixelType = PixelType.parse(parts[3]);
-		if (format.isEmpty() || pixelType.isEmpty()
-				|| internal.reason() == TargetFormat.Reason.UNKNOWN) {
-			return "format " + parts[1] + " internal " + parts[2] + " pixel type " + parts[3];
-		}
-
-		boolean clear = Boolean.parseBoolean(parts[4]);
-		boolean relative = Boolean.parseBoolean(parts[5]);
-		PackTexture.Shape shape;
-		int width;
-		int height;
-		int depth;
-		float relativeWidth = 0;
-		float relativeHeight = 0;
-		if (relative) {
-			if (parts.length != 8) {
-				return "a relative image takes two size words";
-			}
-
-			try {
-				relativeWidth = Float.parseFloat(parts[6]);
-				relativeHeight = Float.parseFloat(parts[7]);
-			} catch (NumberFormatException e) {
-				return "relative size is not a number";
-			}
-
-			shape = PackTexture.Shape.TEXTURE_2D;
-			width = 0;
-			height = 0;
-			depth = 0;
-		} else if (parts.length == 7) {
-			OptionalInt size = dimension(parts[6], defines);
-			if (size.isEmpty()) {
-				return "size is not a number";
-			}
-
-			shape = PackTexture.Shape.TEXTURE_1D;
-			width = size.getAsInt();
-			height = 0;
-			depth = 0;
-		} else if (parts.length == 8) {
-			OptionalInt sizeX = dimension(parts[6], defines);
-			OptionalInt sizeY = dimension(parts[7], defines);
-			if (sizeX.isEmpty() || sizeY.isEmpty()) {
-				return "size is not a number";
-			}
-
-			shape = PackTexture.Shape.TEXTURE_2D;
-			width = sizeX.getAsInt();
-			height = sizeY.getAsInt();
-			depth = 0;
-		} else if (parts.length == 9) {
-			OptionalInt sizeX = dimension(parts[6], defines);
-			OptionalInt sizeY = dimension(parts[7], defines);
-			OptionalInt sizeZ = dimension(parts[8], defines);
-			if (sizeX.isEmpty() || sizeY.isEmpty() || sizeZ.isEmpty()) {
-				return "size is not a number";
-			}
-
-			shape = PackTexture.Shape.TEXTURE_3D;
-			width = sizeX.getAsInt();
-			height = sizeY.getAsInt();
-			depth = sizeZ.getAsInt();
-		} else {
-			return "unknown image type";
-		}
-
-		images.add(new ImageInformation(name, sampler, shape, format.get(), internal,
-				pixelType.get(), width, height, depth, clear, relative, relativeWidth,
-				relativeHeight));
-
-		return null;
-	}
-
-	/** A size token, or the same name looked up in the pack's settings when it is not a number. */
-	private static OptionalInt dimension(String token, Map<String, String> defines) {
-		try {
-			return OptionalInt.of(Integer.parseInt(token));
-		} catch (NumberFormatException e) {
-			String value = defines.get(token);
-			if (value == null) {
-				return OptionalInt.empty();
-			}
-
-			try {
-				return OptionalInt.of(Integer.parseInt(value.trim()));
-			} catch (NumberFormatException ignored) {
-				return OptionalInt.empty();
-			}
-		}
 	}
 
 	/**
