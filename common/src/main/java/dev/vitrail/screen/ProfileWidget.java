@@ -23,8 +23,9 @@ import java.util.Optional;
  * value of its own, and every setting it moved is already marked amber by its own cell, so a
  * selector that went amber as well would be saying the same thing a second time.
  * <p>
- * Shift and a click do nothing here, a profile being a whole set of values rather than one of them.
- * Iris's own note gives the way back: reset the settings.
+ * Nothing to hand back, a profile being a whole set of values rather than one of them, so
+ * {@link #originalValue()} answers no and shift and a click walk the profile on like an unmodified
+ * click. Iris's own note gives the way back: reset the settings.
  * <p>
  * A pack declaring no profile never reaches this class, {@link dev.vitrail.pack.menu.PackMenu}
  * dropping the token rather than leaving a blank where the selector would have been.

@@ -33,13 +33,12 @@ import java.nio.file.Files;
  * twelve to twenty-eight percent depending on what stands around, and never nothing.</li>
  * </ul>
  * <p>
- * <strong>What the box was hiding is a defect of ours, and it has its own cause now.</strong> The
- * light's walk reuses the visibility lists the camera's walk filled
- * ({@link dev.vitrail.sodium.ShadowTerrain}), so
- * anything that narrows the camera's visible set takes casters out of the shadow map with it. A
- * third-party zoom mod's smart occlusion does that, which is what the popping was; the workshop
- * dossier carries the negative control taken both ways. The answer is a separate traversal for
- * the light, not a wider walk, and it is not this file.
+ * <strong>What the box was hiding is a defect of ours, and the shape is not it.</strong> A
+ * third-party zoom mod's smart occlusion is what the popping came with, and the workshop dossier
+ * carries the negative control taken both ways. The shape cannot be the cause: the light walks the
+ * world for itself ({@link dev.vitrail.sodium.ShadowTerrain}), Sodium's synchronous traversal of
+ * every renderable section under the light's own volume, so nothing the camera's walk kept or
+ * dropped decides which sections that walk visits. Wherever the answer is, it is not this file.
  * <p>
  * A file {@code vitrail/box-shadow-cull} in the game directory, or
  * {@code -Dvitrail.boxShadowCull=true}, puts the box back for a machine that needs to name the

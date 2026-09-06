@@ -316,10 +316,12 @@ public final class PackValues {
 	 * of it: it reaches for {@code DHCompat.getProjection()} only under
 	 * {@code shouldRenderDH && DHCompat.hasRenderingEnabled()}
 	 * ({@code shadows/ShadowRenderer.java:366}), and its left half is the pack asking for the far
-	 * terrain in its SHADOW map ({@code :150}, the {@code dhShadow} directive). Nothing puts the far
-	 * terrain into this engine's shadow map at all, so that half can only be answered false here and
-	 * the branch Iris takes is the frame's own projection. Widening the volume to Distant Horizons'
-	 * would walk further out for casters that have nowhere to be drawn.
+	 * terrain in its SHADOW map ({@code :150}, the {@code dhShadow} directive). The far terrain does
+	 * reach this engine's map, {@code dh_shadow} drawing it at both of the moments the world's own
+	 * chunk groups are drawn there ({@link DistantDraw#shadow}), but it does not come through the
+	 * walk this volume bounds: that mod hands its geometry over once a frame, from the camera, so
+	 * what this volume decides is the world's own sections and nothing else. Widening it to Distant
+	 * Horizons' would walk further out for casters that have nowhere to be drawn.
 	 *
 	 * <strong>The two distances are settled here and not at the frustum</strong>, because two of the
 	 * four states step outside the arbitration {@link #shadowRenderDistance} performs and the

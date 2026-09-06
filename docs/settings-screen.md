@@ -96,8 +96,10 @@ Two things on a page do not answer to that.
   and not twenty. The handle snaps to the value that will be written rather than staying under the
   mouse. From the keyboard, Return picks the handle up and puts it down again, and the arrows move it
   one value while it is up.
-- The **profile selector** ignores shift and a click, on purpose: a profile is a whole set of values
-  rather than one of them, so there is no single value to hand back. The way back is to reset.
+- The **profile selector** has nothing to hand back, a profile being a whole set of values rather
+  than one of them, so the gesture that asks for the pack's own value is the one thing it does not
+  answer: shift and a click step the profile like an unmodified click, and control and Return leave
+  it where it is. The way back is to reset.
 
 **A pack's own words about a setting appear in a panel at the bottom** after the mouse has rested on
 it for a moment, one line per sentence. A setting whose name was too long for its cell offers the
@@ -223,10 +225,10 @@ pack to come back to. A file holding one bare word is still read the way it alwa
 holding `none` still reads as shaders off.
 
 Three more lines of that same file are not this screen's at all, and all three are written by the
-video settings: `shadowdistance=` is how far the shadow map reaches, in chunks, from the Max Shadow
+video settings: `shadowdistance=` is how far the shadow map reaches, in chunks, from the Shadow
 Distance slider, `shadowmapscale=` is how much of the map the pack asked for is actually drawn,
 from the Shadow Map Scale slider, and `renderscale=` is what fraction of the window the world
-renders at before being upscaled, from the FSR Render Scale slider. They sit there because they are
+renders at before being upscaled, from the Render Scale slider. They sit there because they are
 the same kind of thing as the other two, one number a player sets once that outlives whichever pack
 is loaded, which is where the reference keeps its own distance. Every writer reads the file before
 writing it, so none drops another's line. What each of the last two costs, and what neither of them

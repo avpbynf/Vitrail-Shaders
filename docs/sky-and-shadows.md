@@ -156,8 +156,9 @@ camera, and what belongs in a shadow map is mostly what the camera cannot see.
 Those pieces are drawn with one program for the lot, `shadow_entities`, whatever the camera would
 have used for them. A chest and a mob are submitted through the same pipelines, so the mark that
 buys a block entity its own program against the camera buys nothing against the light. Every row
-discards at a tenth and none of them blends: what a map wants of a translucent surface is the depth
-that surface stands at, not that depth mixed with the one behind it.
+discards at a tenth, bar the text rows at a ten thousandth, and none of them blends: what a map
+wants of a translucent surface is the depth that surface stands at, not that depth mixed with the
+one behind it.
 
 **A piece this engine has no shadow row for is dropped rather than handed back**, and that is a
 divergence. Iris binds its shadow framebuffer for the whole of its stage, so a pipeline its table
@@ -326,12 +327,16 @@ picture is where that shows.
 
 What remains open is the shape beside the cube, and it is a gap and not a workaround. Iris measures
 the movers against the same swept camera volume as the terrain, rebuilt at the shorter distance
-(`shadows/ShadowRenderer.java:536-541`); here they measure against the light's frustum. A caster
-inside the cube and the light's box but outside the sweep is kept here and dropped there, which
-costs a draw and never a pixel, the sweep being built so that nothing outside it can shadow what the
-camera sees. The other way round is empty: Iris never asks the light's box of a mover, so one outside
-it is kept there and dropped here, but outside the light's box is outside the map, and what Iris
-keeps of it draws nothing. Nothing makes Iris's shape impossible here; it has not been written yet.
+(`shadows/ShadowRenderer.java:536-541`); the planes here are the light's own frustum. But the sweep
+reaches the caster all the same, by Sodium's road: the frustum test of `shouldRender` is Sodium's
+entity culling, which answers off the occlusion tree the last walk left, and after the light's walk
+that tree holds the sections the sweep kept. So a caster inside the cube and the light's box but
+outside the sweep is dropped here and kept there. Sodium spares a box that touches a section with no
+geometry in it, and either way the difference costs a draw and never a pixel, the sweep being built
+so that nothing outside it can shadow what the camera sees. The other way round is empty: Iris never
+asks the light's box of a mover, so one outside it is kept there and dropped here, but outside the
+light's box is outside the map, and what Iris keeps of it draws nothing. Nothing makes Iris's shape
+impossible here; it has not been written yet.
 
 ### The experiment that separates the two failure modes
 
@@ -545,13 +550,16 @@ Vitrail does the same, in `render/HorizonCone.java`: an octagonal cone between t
 drawn with the pack's basic sky program inside the pass the game opens for its disc, so it inherits
 that pass's pipeline state, topology and depth convention.
 
-Two conditions come with it, and neither is optional. The cone rides in the disc's pass, so it is
-drawn only where the disc is: a pack that refuses the disc has drawn its own, and the Nether and
-the End draw no disc at all. And it is drawn only where the world's opaque geometry marks the
-pixels it wrote: the cone stands over the whole of the ground rather than over the sky, and marking
-a pixel cuts the full-screen layer there, so a cone drawn while the world still reaches the pack's
-target through that layer would cut the ground out of the picture. On the first frame of a world
-nobody has answered that question yet, and the frame goes without its cone.
+Three conditions come with it, and none is optional. The cone rides in the disc's pass, so it is
+drawn only where the game draws a disc, which the Nether and the End do not; no directive refuses
+the disc itself, a pack that draws its own sky still getting one, served by its own program. It is
+withheld where the pack wrote `sky=false`, which is the one thing that word decides in either
+engine: a pack saying it draws the sky itself is not handed geometry the game has none of. And it
+is drawn only where the world's opaque geometry marks the pixels it wrote: the cone stands over the
+whole of the ground rather than over the sky, and marking a pixel cuts the full-screen layer there,
+so a cone drawn while the world still reaches the pack's target through that layer would cut the
+ground out of the picture. On the first frame of a world nobody has answered that question yet, and
+the frame goes without its cone.
 
 ### The method lesson
 

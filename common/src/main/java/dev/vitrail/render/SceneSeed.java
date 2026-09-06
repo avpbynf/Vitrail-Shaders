@@ -89,9 +89,11 @@ import java.util.Optional;
  * format, which a {@code vec4} output does not write at all.
  * <p>
  * A draw and not a copy. {@code copyTextureToTexture} ends up on {@code vkCmdCopyImage}, which
- * reinterprets bits instead of converting them, and the Java side only checks that both formats
- * carry a colour aspect. The main target is RGBA8_UNORM and colortex0 is RG11B10_FLOAT on most
- * packs; both are thirty two bits wide, so a copy passes every check and hands back nonsense.
+ * reinterprets bits instead of converting them, and the Java side lets two colour formats through
+ * whatever they hold: the bare game checks no format at all, and the NeoForge build checks only
+ * that the two agree on whether they carry a colour aspect, plus an identical format where the
+ * source carries depth or stencil. The main target is RGBA8_UNORM and colortex0 is RG11B10_FLOAT on
+ * most packs; both are thirty two bits wide, so a copy passes every check and hands back nonsense.
  * <p>
  * What the seed cannot repair has to be said out loud rather than assumed: the scene it carries
  * is already tone mapped, already gamma corrected, and already has vanilla fog. A pack that
