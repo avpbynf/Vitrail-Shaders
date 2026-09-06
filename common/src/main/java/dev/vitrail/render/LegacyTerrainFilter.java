@@ -17,8 +17,9 @@ import java.nio.file.Path;
  * <p>
  * A file {@code vitrail/legacy-terrain-filter} in the game directory, or
  * {@code -Dvitrail.legacyTerrainFilter=true}. Read again at every pack load, so the Reload Shaders
- * key is the whole gesture. F3 and T is not one: a resource reload rebuilds the pipelines and does
- * not read the pack again, so it leaves the state where it was. The state is written to the log
+ * key is the whole gesture. F3 and T is not one: a resource reload does not read the pack again, so
+ * it leaves the state where it was, whether or not it rebuilds the pipelines the pack draws with.
+ * The state is written to the log
  * BOTH WAYS, once per pack load at the first terrain the pack draws, so a reading taken afterwards
  * can always say which of the two it belongs to.
  * <p>

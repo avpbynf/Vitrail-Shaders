@@ -264,16 +264,26 @@ exactly what a reload that changes a target's format needs. The price is that th
 stay resident until the cache is cleared, so each reload leaves pipelines behind.
 
 Clearing that cache waits for the queue to drain, destroys the pipelines and empties the module
-cache with them. That gives the one usable signal there is: after a clear, asking for a pipeline
-returns a **new instance**, so comparing the instance handed back for the frame's first program
-against the previous frame's is how the engine notices that a resource reload happened, without
-re-requesting every pipeline every frame.
+cache with them. That gives the one usable signal there is: asking for a pipeline that has been
+destroyed returns a **new instance**, so comparing the instance handed back for the frame's first
+program against the previous frame's is how the engine notices that its pipelines are gone, without
+re-requesting every one of them every frame.
+
+**The pack being drawn is carried over that clear**, because its programs come from a shader archive
+that no resource reload touches, and rebuilding them there means the world held back for a second or
+three at every F3+T. Its pipelines leave the map before the clear walks it and go back once the clear
+is done, so the signal above correctly does not fire: nothing of the pack was destroyed. What is
+carried is the live load and nothing else. Every load numbers its own programs in the identifier they
+are built under, so a load that has been replaced, or one the engine stopped drawing, fails that test
+and is destroyed by the clear exactly as before. The clear that stands inside the device's own
+`close` carries nothing at all.
 
 The corollary is unpleasant and worth knowing before designing around it: **the pipelines of a pack
 being unloaded cannot be handed back.** The cache is indexed by object and the only way to remove
 one entry is to empty the whole cache, which would destroy the game's own pipelines while the
 current frame's command buffer still references them. Targets, buffers and geometry are released;
-pipelines and modules wait for the next resource reload.
+pipelines and modules wait for the next clear, which is the resource reload after the pack stopped
+being the live one.
 
 ## See also
 
