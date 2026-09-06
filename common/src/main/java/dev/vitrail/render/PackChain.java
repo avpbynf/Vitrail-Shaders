@@ -30,15 +30,9 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.screens.LevelLoadingScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
-import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
 import org.joml.Vector3dc;
@@ -350,9 +344,9 @@ public final class PackChain {
 
 	/**
 	 * Whether this chain's pack-load workers are done, whatever they managed: what moves
-	 * {@link #extractCompileIcon} from its pulse to its closing words. Raised on every road out
-	 * of the workers, the refused and the stopped included, because a mark that can never go
-	 * out is worse than one that goes out early.
+	 * {@link dev.vitrail.screen.CompileCard} from its pulse to its closing words. Raised on every
+	 * road out of the workers, the refused and the stopped included, because a mark that can never
+	 * go out is worse than one that goes out early.
 	 */
 	private volatile boolean familiesWarmed;
 
@@ -694,7 +688,7 @@ public final class PackChain {
 	/**
 	 * A pack is loaded and still compiling, so the world must not be drawn. Skipping it is what
 	 * keeps this wait from being a two-frame-per-second picture of the same vanilla terrain. The
-	 * HUD stays up, and {@link #extractCompileIcon}'s mark and its words say why.
+	 * HUD stays up, and the compile card's mark and its words say why.
 	 */
 	public static boolean warming() {
 		PackChain chain = active;
@@ -756,6 +750,31 @@ public final class PackChain {
 	}
 
 	/**
+	 * How long ago the last family finished compiling, in milliseconds, or -1 while the families
+	 * still compile, the chain cannot draw, has been stopped or does not run, or there is none: the
+	 * moment the compile card times its closing show from.
+	 */
+	public static long warmedForMillis() {
+		PackChain chain = active;
+		if (disabled || !chainWanted || chain == null || !chain.familiesWarmed
+				|| !chain.drawable()) {
+			return -1L;
+		}
+
+		return Util.getMillis() - chain.warmedAt;
+	}
+
+	/**
+	 * The number of the load the chain up now came from, nought with none up, which is what tells
+	 * one chain apart from the next for a reader that keeps state of its own per chain.
+	 */
+	public static int loadNumber() {
+		PackChain chain = active;
+
+		return chain == null ? 0 : chain.load;
+	}
+
+	/**
 	 * Compiles as many programs as a short budget on this frame will take, then returns. One
 	 * program a frame was the wait the player sat through at two frames per second; several a
 	 * frame, with the world not drawn, is the same work without that picture.
@@ -797,134 +816,6 @@ public final class PackChain {
 
 			return;
 		} while (System.nanoTime() < deadline);
-	}
-
-	/** The mod's own mark, pulsing in a corner while the pack compiles. */
-	private static final Identifier COMPILE_ICON =
-			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "textures/gui/compiling.png");
-
-	/** One pulse per second: full, down to half opacity, and back. */
-	private static final long PULSE_MILLIS = 1000L;
-
-	private static final int ICON_EDGE = 16;
-	private static final int ICON_TEXTURE = 32;
-	private static final int ICON_MARGIN = 3;
-
-	/** How long the closing sentence stands beside the mark, then the fade that erases both. */
-	private static final long DONE_MILLIS = 2500L;
-	private static final long FADE_MILLIS = 800L;
-
-	/** Every appearance eases in over this, the way the whole corner eases out at the end. */
-	private static final long RAMP_MILLIS = 300L;
-
-	/**
-	 * The floor under which nothing is drawn at all: the font renderer keeps the old convention
-	 * of reading a near-nought alpha as fully opaque, so a fade has to end by not drawing
-	 * rather than by popping back to full.
-	 */
-	private static final float FAINT = 0.05F;
-
-	/**
-	 * When this chain's mark first showed, the fade-in's zero. Render thread only, nought until
-	 * then, and per chain, so a reload eases in afresh.
-	 */
-	private long iconShownAt;
-
-	/**
-	 * Draws the mod's mark in the top-left corner for as long as the pack compiles, the way the
-	 * old autosave floppy used to blink, with the words of the moment beside it: the mark
-	 * pulses next to "Compiling shaders..." through the held world and the background compiles
-	 * alike, the walked-out-of-total count riding along once the compile tasks have a plate,
-	 * then stands still next to "Shaders compiled!" once the workers finish, and the whole
-	 * corner fades away. The mark's first appearance eases in and the end eases out, a corner
-	 * re-shown after F3 or F1 coming back plain; the closing show is timed from
-	 * {@link #familiesWarmed} rising, so a corner hidden long enough behind those misses the
-	 * show rather than replaying it stale.
-	 * <p>
-	 * Reached from the HUD's own extraction, after every vanilla layer, and quiet everywhere
-	 * else: no chain, a chain that can never draw, the show over, the terrain loading screen
-	 * (where vanilla extracts no HUD at all and the tail of the extraction still runs), and the
-	 * F3 screen, whose first lines sit exactly where the mark does. Under F3 the compiling
-	 * sentence rides {@link dev.vitrail.screen.VitrailDebugEntry} instead, so the corner does
-	 * not fight vanilla's debug block. F3 closed, this overlay is unchanged.
-	 */
-	public static void extractCompileIcon(GuiGraphicsExtractor graphics) {
-		Minecraft minecraft = Minecraft.getInstance();
-		PackChain chain = active;
-		if (disabled || !chainWanted || chain == null || minecraft.gui.hud.isHidden()
-				|| minecraft.gui.screen() instanceof LevelLoadingScreen) {
-			return;
-		}
-
-		// Under F3 the mark always bows out: the corner is vanilla's debug block, and the
-		// compiling words live on the Vitrail F3 line. Keeping the overlay up while the
-		// world is held back used to fight that block for the same pixels.
-		if (minecraft.gui.hud.getDebugOverlay().showDebugScreen()) {
-			return;
-		}
-
-		// In flight covers both moments of a load, the held world and the background compiles;
-		// a chain that is neither in flight nor drawable was refused and shows nothing.
-		boolean inFlight = compiling();
-		if (!inFlight && !(chain.familiesWarmed && chain.drawable())) {
-			return;
-		}
-
-		long now = Util.getMillis();
-		if (chain.iconShownAt == 0L) {
-			chain.iconShownAt = now;
-		}
-
-		float ease = ramp(now - chain.iconShownAt);
-		Font font = minecraft.font;
-		int textX = ICON_MARGIN + ICON_EDGE + 4;
-		int textY = ICON_MARGIN + (ICON_EDGE - font.lineHeight) / 2 + 1;
-
-		if (inFlight) {
-			float phase = (now % PULSE_MILLIS) / (float) PULSE_MILLIS;
-			float pulse = 0.75F + 0.25F * (float) Math.cos(2.0 * Math.PI * phase);
-			icon(graphics, ease * pulse);
-			word(graphics, font, compilingLabel(chain), textX, textY, ease);
-
-			return;
-		}
-
-		long since = now - chain.warmedAt;
-		if (since >= DONE_MILLIS + FADE_MILLIS) {
-			return;
-		}
-
-		// The workers just finished: the mark stands still and the sentence lands with it on
-		// the spot, no transition, then the whole corner eases out together. The one place the
-		// ramp deliberately does not apply: the switch of words IS the news.
-		float out = since <= DONE_MILLIS ? 1.0F
-				: 1.0F - (since - DONE_MILLIS) / (float) FADE_MILLIS;
-		icon(graphics, ease * out);
-		word(graphics, font, Component.translatable(ScreenText.COMPILED), textX, textY, out);
-	}
-
-	/** How far into an appearance a thing is, nought to one over {@link #RAMP_MILLIS}. */
-	private static float ramp(long sinceMillis) {
-		return Math.min(1.0F, sinceMillis / (float) RAMP_MILLIS);
-	}
-
-	private static void icon(GuiGraphicsExtractor graphics, float alpha) {
-		if (alpha < FAINT) {
-			return;
-		}
-
-		graphics.blit(RenderPipelines.GUI_TEXTURED, COMPILE_ICON, ICON_MARGIN, ICON_MARGIN,
-				0.0F, 0.0F, ICON_EDGE, ICON_EDGE, ICON_TEXTURE, ICON_TEXTURE, ICON_TEXTURE,
-				ICON_TEXTURE, ARGB.colorFromFloat(alpha, 1.0F, 1.0F, 1.0F));
-	}
-
-	private static void word(GuiGraphicsExtractor graphics, Font font, Component words, int x,
-			int y, float alpha) {
-		if (alpha < FAINT) {
-			return;
-		}
-
-		graphics.text(font, words, x, y, ARGB.colorFromFloat(alpha, 1.0F, 1.0F, 1.0F), true);
 	}
 
 	/**
