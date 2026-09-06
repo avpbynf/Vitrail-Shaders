@@ -9,6 +9,7 @@ import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.render.RawLocals;
+import dev.vitrail.render.ShaderDebugInfo;
 import dev.vitrail.render.storage.StorageImages;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,6 +21,10 @@ import java.nio.ByteBuffer;
  * Lets a sampled or stored 3D image through the bind-group walk, gives the compiler's output its
  * zeroes before the reflection reads it, and puts {@link ModuleCache} around the one call that
  * turns a pack's GLSL into a module, which is also where {@link LoadClock} counts what that costs.
+ * <p>
+ * It also decides, at the compiler's own constructor, whether shaderc writes debug information
+ * into every module of the session: {@link ShaderDebugInfo} says what that costs and why the
+ * constructor is the only place the question can be answered.
  * <p>
  * {@code addToBindGroup} refuses anything whose SPIR-V dimension is not 2D or Cube. SpvDim3D is 2.
  * Pretending it is 2D is enough for the check; the view that is actually bound is the 3D one
@@ -44,6 +49,24 @@ import java.nio.ByteBuffer;
  */
 @Mixin(GlslCompiler.class)
 public abstract class GlslCompilerMixin {
+
+	/**
+	 * Skips the one call that asks shaderc for debug information, unless somebody asked for it
+	 * back. {@link ShaderDebugInfo} carries the switch, what it costs and why the decision can only
+	 * be taken here: shaderc turns the option on and has no call that turns it off, so the
+	 * constructor is the only place, and the compiler it builds is the one every unit of the
+	 * session goes through.
+	 */
+	@WrapOperation(method = "<init>", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lorg/lwjgl/util/shaderc/Shaderc;"
+							+ "shaderc_compile_options_set_generate_debug_info(J)V"))
+	private void vitrail$skipDebugInfo(long options, Operation<Void> original) {
+		ShaderDebugInfo.announce();
+		if (ShaderDebugInfo.asked()) {
+			original.call(options);
+		}
+	}
 
 	@WrapOperation(method = "addToBindGroup", require = 1,
 			at = @At(value = "INVOKE",

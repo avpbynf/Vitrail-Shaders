@@ -26,6 +26,14 @@ what the next one holds.
 
 ### Changed
 
+- **The compiled shaders kept on disk are three times smaller.** Every one of them carried a copy
+  of the whole shader text and a marker in front of nearly every instruction, which is what a
+  driver would need to name a line inside a shader and which nothing else reads. Measured on
+  Complementary Unbound, one pack's compiled programs came to eighteen megabytes and now come to
+  six. What is stored is what is read back at every load, so there is less of everything to read,
+  check and hand to the driver, though no load came out measurably shorter on the machine this was
+  taken on. A compile error still names its line exactly as before.
+
 - **A pack read twice in one session is opened once.** Reading a pack means mounting its archive,
   walking it for the settings it offers, parsing what it declares and pasting every shared header
   into every file that includes one, and all of that was done again from nothing each time: at a

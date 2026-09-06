@@ -5,6 +5,7 @@ import dev.vitrail.glsl.LocalZeroes;
 import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.RawLocals;
+import dev.vitrail.render.ShaderDebugInfo;
 import dev.vitrail.Vitrail;
 
 import org.jspecify.annotations.Nullable;
@@ -329,10 +330,11 @@ public final class ModuleCache {
 		feed(digest, Vitrail.platform().loaderName());
 		feed(digest, Vitrail.platform().loaderVersion());
 		feed(digest, Version.getVersion());
-		// The one switch that changes the bytes a compile produces without changing its text: the
-		// two states keep two sets of blobs, and a reading taken under one never draws the other's.
+		// The two switches that change the bytes a compile produces without changing its text: each
+		// state keeps its own set of blobs, and a reading taken under one never draws another's.
 		feed(digest, RawLocals.cacheWord());
 		feed(digest, LocalZeroes.VERSION);
+		feed(digest, ShaderDebugInfo.cacheWord());
 		feed(digest, stage);
 		feed(digest, source);
 
