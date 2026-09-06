@@ -142,7 +142,7 @@ import java.util.stream.Stream;
  * {@link BlockEntityGeometry} saying how, and what it buys is the program name, {@code gbuffers_block}
  * instead of {@code gbuffers_entities}, on every piece whose row Iris sends there.
  */
-public final class EntityDraw {
+public final class EntityDraw extends FamilyDraw {
 
 	/** Off unless {@code options.txt} asks otherwise, and read again at every load. */
 	private static volatile boolean wanted;
@@ -1376,6 +1376,7 @@ public final class EntityDraw {
 	 * families: one opening, one plan of the place and one program tree shared between them,
 	 * where each used to open the archive and rebuild all three for itself.
 	 */
+	@Override
 	void prefetch(OpenedPack shared) {
 		if (!this.read && (wanted() || HandDraw.wanted())) {
 			read(shared);
@@ -2394,6 +2395,7 @@ public final class EntityDraw {
 	}
 
 	/** The programs once the entities have been read, for the decoded dump. Empty until then. */
+	@Override
 	Collection<EntityProgram> programs() {
 		return this.programs.values();
 	}
@@ -2402,6 +2404,7 @@ public final class EntityDraw {
 	 * Rotates the ring buffers, and closes a pass no group closed. Called once the frame's draws have
 	 * been recorded.
 	 */
+	@Override
 	void rotate() {
 		end();
 		opaqueFeatures(false);
@@ -2413,6 +2416,7 @@ public final class EntityDraw {
 		this.programs.values().forEach(EntityProgram::rotate);
 	}
 
+	@Override
 	void release() {
 		end();
 		this.programs.values().forEach(EntityProgram::release);

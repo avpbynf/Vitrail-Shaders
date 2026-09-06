@@ -72,7 +72,7 @@ import java.util.Set;
  * pack this place serves at least one half for, and {@code particles=off} not written, which is the
  * same condition every other line of this family answers under.
  */
-public final class ParticleDraw {
+public final class ParticleDraw extends FamilyDraw {
 
 	/** Off unless {@code options.txt} asks otherwise, and read again at every load. */
 	private static volatile boolean wanted;
@@ -237,6 +237,7 @@ public final class ParticleDraw {
 	 * families: one opening, one plan of the place and one program tree shared between them,
 	 * where each used to open the archive and rebuild all three for itself.
 	 */
+	@Override
 	void prefetch(OpenedPack shared) {
 		if (!this.read && wanted()) {
 			read(shared);
@@ -679,11 +680,13 @@ public final class ParticleDraw {
 	}
 
 	/** The programs once the particles have been read, for the decoded dump. Empty until then. */
+	@Override
 	Collection<ParticleProgram> programs() {
 		return this.programs.values();
 	}
 
 	/** Rotates the ring buffers. Called once the frame's particle draws have been recorded. */
+	@Override
 	void rotate() {
 		forget();
 		if (!this.read) {
@@ -693,6 +696,7 @@ public final class ParticleDraw {
 		this.programs.values().forEach(ParticleProgram::rotate);
 	}
 
+	@Override
 	void release() {
 		forget();
 		this.programs.values().forEach(ParticleProgram::release);

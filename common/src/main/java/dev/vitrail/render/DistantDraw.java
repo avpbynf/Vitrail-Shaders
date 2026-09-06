@@ -100,7 +100,7 @@ import java.util.Set;
  * ({@code compat/dh/IrisLodRenderProgram.java:252-253}) because a GL uniform is per program rather
  * than per draw.
  */
-public final class DistantDraw {
+public final class DistantDraw extends FamilyDraw {
 
 	/**
 	 * One draw of the far terrain: which half of DH's geometry it is, which of the two images it
@@ -1062,6 +1062,7 @@ public final class DistantDraw {
 	 * families: one opening, one plan of the place and one program tree shared between them,
 	 * where each used to open the archive and rebuild all three for itself.
 	 */
+	@Override
 	void prefetch(OpenedPack shared) {
 		if (!this.read) {
 			read(shared);
@@ -1253,6 +1254,7 @@ public final class DistantDraw {
 	}
 
 	/** The programs once the far terrain has been read, for the decoded dump. Empty until then. */
+	@Override
 	Collection<DistantProgram> programs() {
 		return this.programs.values();
 	}
@@ -1266,6 +1268,7 @@ public final class DistantDraw {
 	 * with nothing rather than with the last far terrain it saw, which is what the two empty lists
 	 * below buy.
 	 */
+	@Override
 	void rotate() {
 		this.drew = false;
 		// Dropped here and not where the seed is written, for the reason every per frame flag of
@@ -1284,6 +1287,7 @@ public final class DistantDraw {
 		}
 	}
 
+	@Override
 	void release() {
 		this.programs.values().forEach(DistantProgram::release);
 		this.programs.clear();

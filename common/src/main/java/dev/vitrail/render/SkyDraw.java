@@ -58,7 +58,7 @@ import java.util.Optional;
  * pack's colour target left to a piece that stayed on the game's, so a place where the disc marks
  * the sky and the sun is still on the game's target is a place with no sun in it.
  */
-public final class SkyDraw {
+public final class SkyDraw extends FamilyDraw {
 
 	/** Off unless {@code options.txt} asks otherwise, and read again at every load. */
 	private static volatile boolean wanted;
@@ -251,6 +251,7 @@ public final class SkyDraw {
 	 * families: one opening, one plan of the place and one program tree shared between them,
 	 * where each used to open the archive and rebuild all three for itself.
 	 */
+	@Override
 	void prefetch(OpenedPack shared) {
 		if (!this.read && wanted()) {
 			read(shared);
@@ -639,11 +640,13 @@ public final class SkyDraw {
 	}
 
 	/** The programs once the sky has been read, for the decoded dump. Empty until then. */
+	@Override
 	Collection<SkyProgram> programs() {
 		return this.programs.values();
 	}
 
 	/** Rotates the ring buffers. Called once the frame's sky draws have been recorded. */
+	@Override
 	void rotate() {
 		this.drawing = null;
 		if (!this.read) {
@@ -653,6 +656,7 @@ public final class SkyDraw {
 		this.programs.values().forEach(SkyProgram::rotate);
 	}
 
+	@Override
 	void release() {
 		this.programs.values().forEach(SkyProgram::release);
 		this.programs.clear();
