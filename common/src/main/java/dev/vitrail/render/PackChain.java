@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.glsl.TranslationCache;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.model.TargetName;
@@ -2068,10 +2069,12 @@ public final class PackChain {
 				// other, not with it.
 				Vitrail.logger().info("With the families in, flattening the chain's units cost {} "
 						+ "ms over {} of them with {} more handed back, translating cost {} ms over "
-						+ "{} translator calls and making modules cost {} ms over {} modules, "
+						+ "{} translator calls with {} programs served from the translation cache "
+						+ "and {} translated, and making modules cost {} ms over {} modules, "
 						+ "shaderc and SPIRV-Cross together", LoadClock.expansionMillis(),
 						LoadClock.expanded(), LoadClock.expansionsServed(),
 						LoadClock.translationMillis(), LoadClock.translated(),
+						TranslationCache.served(), TranslationCache.translated(),
 						LoadClock.moduleMillis(), LoadClock.modules());
 			}
 

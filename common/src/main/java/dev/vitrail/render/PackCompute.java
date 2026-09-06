@@ -696,11 +696,11 @@ final class PackCompute implements AutoCloseable {
 				if (module == null) {
 					spirv = compileSpirv(source);
 					if (spirv == null) {
-						ModuleCache.building();
+						ModuleCache.building(this.label);
 						return;
 					}
 
-					ModuleCache.building();
+					ModuleCache.building(this.label);
 				}
 
 				try {

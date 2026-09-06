@@ -172,6 +172,12 @@ public final class ModuleCache {
 	private static final String FORMAT = "vitrail-module-3";
 
 	private static final String FOLDER = "modules";
+
+	/** How many of a load's rebuilt units are named on the line that counts them. */
+	private static final int NAMED_MISSES = 12;
+
+	/** The debug names of the units this load built, the first {@link #NAMED_MISSES} of them. */
+	private static final List<String> BUILT_NAMES = new ArrayList<>();
 	private static final String SUFFIX = ".mod";
 	private static final String PART_SUFFIX = ".part";
 
@@ -477,16 +483,25 @@ public final class ModuleCache {
 	}
 
 	/**
-	 * Counts a unit the compiler is about to build, said BEFORE it builds it.
+	 * Counts a unit the compiler is about to build, said BEFORE it builds it, and keeps its name
+	 * while there is room for one more: the line at the end of the load names the first few, so
+	 * that a warm load rebuilding sixty modules says which sixty rather than how many.
 	 * <p>
 	 * Before and not after, because a unit a pack broke throws out of the compile and would
 	 * otherwise be counted by neither side, which is exactly the silence the line at the end of a
 	 * load exists to remove.
+	 *
+	 * @param filename the debug name the compile was given, which says whose unit it is
 	 */
-	public static void building() {
+	public static void building(String filename) {
 		COMPILED.incrementAndGet();
 		COMPILED_SINCE_LAUNCH.incrementAndGet();
 		lastUnitNanos = System.nanoTime();
+		synchronized (BUILT_NAMES) {
+			if (BUILT_NAMES.size() < NAMED_MISSES) {
+				BUILT_NAMES.add(filename);
+			}
+		}
 	}
 
 	/**
@@ -607,6 +622,11 @@ public final class ModuleCache {
 
 		long hits = SERVED.getAndSet(0L);
 		long misses = COMPILED.getAndSet(0L);
+		List<String> named;
+		synchronized (BUILT_NAMES) {
+			named = List.copyOf(BUILT_NAMES);
+			BUILT_NAMES.clear();
+		}
 
 		if (!ENABLED) {
 			Vitrail.logger().info("Module cache off, so all {} units of this load were compiled and "
@@ -621,6 +641,14 @@ public final class ModuleCache {
 						+ "since this launch, {} MB in {}",
 				hits, misses, SERVED_SINCE_LAUNCH.get(), COMPILED_SINCE_LAUNCH.get(),
 				megabytes(BYTES.get()), root == null ? "nowhere" : root);
+		// Said only where a load rebuilt something a store already held units of: a cold first
+		// load builds everything for a reason nobody needs told, a warm one rebuilding a handful
+		// has a reason worth finding, and the names are where the search starts.
+		if (misses > 0L && hits > 0L) {
+			Vitrail.logger().info("The {} built this load {}: {}", misses,
+					misses > named.size() ? "begin with" : "are", String.join(", ", named));
+		}
+
 		// At the same quiet moment and about the same compiles: what the pass did to the modules
 		// this line counts as built.
 		RawLocals.say(misses);

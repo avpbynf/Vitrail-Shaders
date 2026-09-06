@@ -97,7 +97,7 @@ public abstract class GlslCompilerMixin {
 			// Counted before the call and not after it: a unit a pack broke throws out of the
 			// compile, and counting on the way back would leave that load short by exactly the
 			// units somebody is reading the log to find.
-			ModuleCache.building();
+			ModuleCache.building(filename);
 			IntermediaryShaderModule built = original.call(filename, source, type);
 			ModuleCache.store(key, built);
 
