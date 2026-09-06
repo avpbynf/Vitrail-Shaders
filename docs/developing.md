@@ -21,8 +21,9 @@ transitively touches it. Treat such an import as a design decision to be argued,
 
 There are two deliberate exceptions, both excluded from the standalone build: the report a pack
 gets at its first load, which writes through the mod's own logger, and the choice of graphics
-backend, which is a session's and reads the game's options. Two files are a maintainable seam.
-A growing list is a leak.
+backend, which reads a file of its own under the game's directory and names `Minecraft` for nothing
+but finding that directory. Putting the answer back into the game's options is done outside these
+four trees, where it costs nothing. Two files are a maintainable seam. A growing list is a leak.
 
 ## What a contributor can run, and what they cannot
 
@@ -64,8 +65,9 @@ By family, so you can tell whether a change is in scope:
   checked the same way, then run over the declarations the corpus really contains, which does.
 - **Path confinement.** What a path written by a pack can reach.
 
-Two of those run on a bare clone: the uniform block invariants and path confinement. Everything else
-wants the corpus.
+Two of those need no corpus: the uniform block invariants and path confinement. Everything else
+wants one. None of them run on a bare clone even so, since the harness that drives them is the one
+absent above, and what `check` adds to a compile is the text rule and nothing else.
 
 ## What makes a measurement trustworthy
 
@@ -289,15 +291,16 @@ replacement a pack feeding whole world coordinates to a sine gets whatever the d
 them.
 
 **Where a pack load's time goes is in the log at every load that installs a chain.** A first
-report prints beside the pack-opened line and carries the translation alone, that being all the
-load itself runs; the modules follow on the first draws and the compile workers, counted at the
-game's own compiler so that every road lands in the tally, and the report that closes the
-background warmup reads both figures with the families in. What a first draw pays after that
-report stays in the tally rather than in any line. The spans are summed per program across the
-compile workers, so the two figures compare with each other rather than with the wall clock,
-and the driver's own pipeline build is in neither. The split is what says whether a faster load
-needs a translation cache or a reflection cache, which are different designs keyed on different
-things.
+report prints beside the pack-opened line and carries flattening and translation, those two being
+all the load itself runs; the modules follow on the first draws and the compile workers, counted at
+the game's own compiler so that every road lands in the tally, and the report that closes the
+background warmup reads all three with the families in. How much of the translating a cache on disk
+took off is said at both points, on a line of its own beside the first and inside the second. What a
+first draw pays after that report stays in the tally rather than in any line. The spans are summed
+per program across the compile workers, so the figures compare with each other rather than with the
+wall clock, and the driver's own pipeline build is in none of them. The split is what says whether a
+faster load needs a translation cache or a reflection cache, which are different designs keyed on
+different things.
 
 **The card's time per pass is in the log on request.** Started with `-Dvitrail.passTimings=N`
 among the JVM arguments, the game prints every N seconds a table of GPU time per render pass
