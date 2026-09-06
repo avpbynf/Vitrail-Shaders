@@ -259,9 +259,9 @@ public final class GeometryHold {
 	}
 
 	/**
-	 * Sodium scissors each region inside the pass. Keeping the hold without clearing that scissor
-	 * leaves the next family's draws clipped to the last region's rectangle: half the screen of
-	 * stale colour, which is the band that comes and goes as chunks stream.
+	 * A scissor belongs to the draw that set it and the pass outlives it. Keeping the hold without
+	 * clearing that scissor leaves the next family's draws clipped to the last rectangle: half the
+	 * screen of stale colour, which is the band that copies the top onto the bottom.
 	 */
 	private static void resetArea(RenderPass pass) {
 		pass.disableScissor();
