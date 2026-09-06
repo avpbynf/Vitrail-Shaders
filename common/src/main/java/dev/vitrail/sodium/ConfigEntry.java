@@ -1,7 +1,7 @@
 package dev.vitrail.sodium;
 
 import dev.vitrail.render.ModuleCache;
-import dev.vitrail.render.PackChain;
+import dev.vitrail.render.PackChoice;
 import dev.vitrail.render.StartupGuard;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
@@ -164,9 +164,9 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				.setTooltip(_ -> Component.translatable(ScreenText.RENDER_SCALE_TOOLTIP))
 				.setDefaultValue(PackFile.DEFAULT_RENDER_SCALE)
 				.setRange(new Range(PackFile.MIN_RENDER_SCALE, PackFile.MAX_RENDER_SCALE, 5))
-				.setBinding(percent -> PackChain.renderScale(Vitrail.platform().gameDirectory(),
+				.setBinding(percent -> PackChoice.renderScale(Vitrail.platform().gameDirectory(),
 								percent),
-						PackChain::renderScale)
+						PackChoice::renderScale)
 				.setValueFormatter(percent -> Component.literal(percent + "%"))
 				// Sodium refuses to build an option without one, at the loading screen and not at
 				// compile time. The binding above has already written pack.txt.
@@ -196,9 +196,9 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				.setTooltip(_ -> Component.translatable(ScreenText.SHADOW_MAP_SCALE_TOOLTIP))
 				.setDefaultValue(PackFile.DEFAULT_SHADOW_MAP_SCALE)
 				.setRange(new Range(PackFile.MIN_SHADOW_MAP_SCALE, PackFile.MAX_SHADOW_MAP_SCALE, 5))
-				.setBinding(percent -> PackChain.shadowMapScale(Vitrail.platform().gameDirectory(),
+				.setBinding(percent -> PackChoice.shadowMapScale(Vitrail.platform().gameDirectory(),
 								percent),
-						PackChain::shadowMapScale)
+						PackChoice::shadowMapScale)
 				.setValueFormatter(percent -> Component.literal(percent + "%"))
 				.setStorageHandler(() -> {})
 				.setImpact(OptionImpact.HIGH);
@@ -289,7 +289,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 								: ScreenText.SHADOW_DISTANCE_TOOLTIP))
 				.setDefaultValue(PackFile.DEFAULT_SHADOW_DISTANCE)
 				.setRange(new Range(PackFile.MIN_SHADOW_DISTANCE, PackFile.MAX_SHADOW_DISTANCE, 1))
-				.setBinding(chunks -> PackChain.shadowDistance(Vitrail.platform().gameDirectory(),
+				.setBinding(chunks -> PackChoice.shadowDistance(Vitrail.platform().gameDirectory(),
 								chunks),
 						() -> Math.clamp(TerrainDraw.shadowDistanceChunks(),
 								PackFile.MIN_SHADOW_DISTANCE, PackFile.MAX_SHADOW_DISTANCE))

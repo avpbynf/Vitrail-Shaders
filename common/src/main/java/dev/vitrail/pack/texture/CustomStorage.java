@@ -43,7 +43,7 @@ public final class CustomStorage {
 	 * on either side of one descriptor type decision, the bind group layout and the descriptor
 	 * write, and a layout outlives a release in the pipeline cache. A road that releases a chain
 	 * without replacing it would then draw a frame with the two disagreeing, and
-	 * {@code PackChain.load} carries the whole of why.
+	 * {@code PackChoice.load} carries the whole of why.
 	 */
 	public static void clear() {
 		declared = BufferObject.Reading.empty();

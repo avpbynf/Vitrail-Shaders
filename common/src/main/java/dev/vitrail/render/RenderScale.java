@@ -385,7 +385,7 @@ public final class RenderScale {
 
 	/**
 	 * What the player asked for, as a percentage of the window; {@link #WHOLE} disengages.
-	 * Volatile because {@link #wanted} is reached from {@code PackChain.load}, which the loaders
+	 * Volatile because {@link #wanted} is reached from {@code PackChoice.load}, which the loaders
 	 * may run on a loading worker, while every reader is the render thread: the cross-thread
 	 * statics of that class carry the same word for the same reason.
 	 */

@@ -212,7 +212,7 @@ public final class TerrainDraw {
 	 * That method reads what this publishes and decides the layout out of it, at the head of Sodium's
 	 * {@code initRenderer}; it cannot check that this has run, and nothing between the two makes them
 	 * agree by construction. What keeps them in order is where each is reached from and not a test:
-	 * this runs from {@code PackChain.load}, at client setup before any level exists and afterwards
+	 * this runs from {@code PackChoice.load}, at client setup before any level exists and afterwards
 	 * on the render thread, and Sodium reaches {@code initRenderer} only with a level and only on
 	 * that same thread. Reversed with a pack in force, the mesh answers with Sodium's own twenty
 	 * bytes for a pack that declares more, and what the player is left with is a pack put away a
@@ -376,7 +376,7 @@ public final class TerrainDraw {
 		TerrainDraw self = PackChain.terrain();
 
 		return self == null ? -1.0F
-				: self.values.entityShadowDistance(PackChain.shadowDistance(), renderDistanceChunks());
+				: self.values.entityShadowDistance(PackChoice.shadowDistance(), renderDistanceChunks());
 	}
 
 	/**
@@ -392,7 +392,7 @@ public final class TerrainDraw {
 		TerrainDraw self = PackChain.terrain();
 
 		return self == null ? -1.0F
-				: self.values.shadowRenderDistance(PackChain.shadowDistance(), renderDistanceChunks());
+				: self.values.shadowRenderDistance(PackChoice.shadowDistance(), renderDistanceChunks());
 	}
 
 	/**
@@ -403,7 +403,7 @@ public final class TerrainDraw {
 	 * and whether the shadow stage runs at all.
 	 */
 	public static int shadowDistanceChunks() {
-		return forcedShadowDistanceChunks().orElseGet(PackChain::shadowDistance);
+		return forcedShadowDistanceChunks().orElseGet(PackChoice::shadowDistance);
 	}
 
 	/**
@@ -692,7 +692,7 @@ public final class TerrainDraw {
 	public static ShadowCullPlan shadowCullPlan(Vector3f light, Matrix4f camera) {
 		TerrainDraw self = PackChain.terrain();
 
-		return self == null ? null : self.values.shadowCullPlan(PackChain.shadowDistance(),
+		return self == null ? null : self.values.shadowCullPlan(PackChoice.shadowDistance(),
 				renderDistanceChunks(), light, camera, self.voxelisesShadow());
 	}
 

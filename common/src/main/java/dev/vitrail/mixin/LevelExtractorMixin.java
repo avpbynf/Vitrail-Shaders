@@ -1,6 +1,6 @@
 package dev.vitrail.mixin;
 
-import dev.vitrail.render.PackChain;
+import dev.vitrail.render.PackChoice;
 
 import net.minecraft.client.renderer.extract.LevelExtractor;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,6 +24,6 @@ public abstract class LevelExtractorMixin {
 
 	@Inject(method = "allChanged", at = @At("HEAD"), require = 1)
 	private void vitrail$fabulous(CallbackInfo ci) {
-		PackChain.turnOffImprovedTransparency();
+		PackChoice.turnOffImprovedTransparency();
 	}
 }
