@@ -1,7 +1,6 @@
 package dev.vitrail.pack.texture;
 
 import dev.vitrail.pack.model.BufferObject;
-import dev.vitrail.render.storage.StorageBuffers;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

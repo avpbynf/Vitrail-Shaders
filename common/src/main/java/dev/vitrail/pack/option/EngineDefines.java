@@ -1,7 +1,6 @@
 package dev.vitrail.pack.option;
 
 import dev.vitrail.pack.model.RenderStage;
-import dev.vitrail.render.storage.StorageBuffers;
 
 import java.util.LinkedHashMap;
 import java.util.List;
