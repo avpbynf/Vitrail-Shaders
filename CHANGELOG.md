@@ -11,9 +11,36 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
-## 0.10.0-beta
+## Unreleased
 
 ### Added
+
+- **A pack that ships no `final` program now draws.** Some packs end their chain on their last
+  composite and expect what it wrote to be the picture; they were refused outright, with nothing on
+  screen. What the chain leaves in `colortex0` is now brought to the screen, which is what Iris
+  does with the same packs. I Like Vanilla and Pegasus were both refused for this alone.
+
+- **Compute passes are announced as a capability.** They have been running for a while, so a pack
+  that says it cannot draw without them was being refused for something it would have got. Clarity
+  and Noble now load.
+
+### Fixed
+
+- **The extensions a pack asks for are no longer dropped.** A pack using half precision types
+  guarded them on the extension being available and shipped a fallback for when it is not; the line
+  that enables the extension was thrown away while everything around it stayed, so neither road
+  worked and every one of that pack's programs failed on a type the compiler had never been told
+  about. RenderPearl went from nothing at all to most of its programs.
+
+- **A pack defining the same setting twice no longer loses every program.** Drivers take the later
+  definition and warn; this refused the whole file. Where the two cannot be told apart the later one
+  now stands, and where a use sits between them the pack is left exactly as it wrote it. Pegasus was
+  losing all of its programs to one duplicated line.
+
+- **RedHat's shadows, E-LITE's entities and hand, and the vertex stages of core-profile packs.**
+  Three separate names a pack may write that this engine either had no answer for or answered
+  twice, each of which cost the passes that read them: the picture kept the game's own shader there
+  and the pack's effect was missing on those surfaces alone.
 
 - **Eight shadow colour buffers for a pack that asks for them.** A pack declaring
   `HIGHER_SHADOWCOLOR` may now draw the light into `shadowcolor0` through `shadowcolor7` and read
