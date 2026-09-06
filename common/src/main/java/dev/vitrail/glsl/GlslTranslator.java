@@ -3345,8 +3345,27 @@ public final class GlslTranslator {
 			return;
 		}
 
-		declared.names().forEach(name -> this.synthesized.putIfAbsent(name, declared.type()));
+		// The declaration goes whatever happens; what it leaves behind does not. Where the mesh
+		// carries the overlay, the header already declares the overlay colour and the three
+		// identifiers as varyings, so a global of the same name is that name declared twice and the
+		// stage is refused for a redefinition. E-LITE writes attribute int blockEntityId in a
+		// shared vertex body and lost its entities, its hand and its blocks in three places, twenty
+		// four stages, to exactly that. Leaving the name out here is what hands its reads to the
+		// varying, which carries the value the mesh really has rather than the zero a synthesised
+		// global would hold. Iris arrives at the same place from the other side, deleting the
+		// declaration and putting iris_entityInfo in the place of every read
+		// (pipeline/transform/transformer/EntityPatcher.java:129-152).
+		declared.names().forEach(name -> {
+			if (!headerDeclares(name)) {
+				this.synthesized.putIfAbsent(name, declared.type());
+			}
+		});
 		this.tokens.blankRange(declared.start(), declared.end());
+	}
+
+	/** Whether the header names this itself on this mesh, so that a global of it would redeclare it. */
+	private boolean headerDeclares(String name) {
+		return this.inputs.overlay() && (ENTITY_COLOR.equals(name) || ENTITY_IDS.contains(name));
 	}
 
 	/**
