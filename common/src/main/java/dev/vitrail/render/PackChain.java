@@ -347,6 +347,12 @@ public final class PackChain {
 
 	PackChain(PackProgram.Chain chain, PackValues values, String world, boolean seedEnabled,
 			OpenedPack opened, Path packPath, Map<String, OptionValue> chosen, String profile) {
+		// One pack's shadow map is not another's, and the arming file is read again here so a
+		// session can turn it on and off without leaving the game. Here rather than in beginFrame,
+		// which despite its name runs once per FRAME: forgetting there dropped the map on every
+		// frame, which is a draw on every frame, which is the amortisation doing nothing at all
+		// while announcing itself in the log sixty times a second. Measured 6 September 2026.
+		ShadowAmortisation.forget();
 		this.chain = chain;
 		this.values = values;
 		this.packPath = packPath;

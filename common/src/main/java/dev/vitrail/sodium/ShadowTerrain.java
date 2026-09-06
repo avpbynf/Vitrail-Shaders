@@ -6,6 +6,7 @@ import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.render.BlockStateIds;
 import dev.vitrail.render.DistantDraw;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.render.ShadowAmortisation;
 import dev.vitrail.render.ShadowCullPlan;
 import dev.vitrail.render.ShadowGeometry;
 import dev.vitrail.render.TerrainDraw;
@@ -171,6 +172,16 @@ public final class ShadowTerrain {
 			return;
 		}
 
+		// The map on hand is still the right one, so the whole of this stage is skipped: no walk,
+		// no entities gathered, no pass opened, and above all nothing cleared. The frame's sampling
+		// passes have already been handed the matrices this map was drawn with, that decision being
+		// made at the head of the frame by the same object. Off unless armed, where this answers
+		// true every frame and the stage runs as it always did.
+		if (!ShadowAmortisation.drawThisFrame()) {
+			ShadowAmortisation.kept();
+			return;
+		}
+
 		// Ordered so that a stage that cannot open leaves the render lists untouched: the walk
 		// below hands them to the light, and from that point on the camera has to be given them
 		// back whatever else happens.
@@ -288,6 +299,10 @@ public final class ShadowTerrain {
 			}
 
 			draw(renderer, minecraft, camera);
+			// Only here, past every road that leaves without a map: the anchor has to follow what
+			// was drawn and never what was planned, or the next frames would sample a map nobody
+			// wrote with the matrices of the frame that meant to write it.
+			ShadowAmortisation.drawn();
 		} finally {
 			// The flag finalizeRenderLists just lowered, back up whatever happened above: the
 			// camera's walk at the top of the next frame has to rebuild, or the world would be

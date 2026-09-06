@@ -88,6 +88,26 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f mapShadowProjection = new Matrix4f();
 	private final Matrix4f mapShadowProjectionInverse = new Matrix4f();
 
+	/**
+	 * The pair the map on hand was really drawn with, and the camera it was drawn around. The pair
+	 * above is this one moved onto the current camera.
+	 * <p>
+	 * It exists because the map is not always one frame old. It is one frame old whenever it is
+	 * drawn every frame, which is what the paragraph above describes and what happens unless
+	 * {@link ShadowAmortisation} is armed; under amortisation the same map is sampled for several
+	 * frames, and the anchor is what keeps the published pair pointing at the frame that drew it
+	 * rather than at the frame before this one. Shifting on every frame there would hand the pack a
+	 * matrix for a map nobody drew, and the shadows would slide across the ground by the camera's
+	 * motion once per frame kept.
+	 * <p>
+	 * With the amortisation off the anchor moves every frame, so it holds exactly the previous
+	 * frame's pair and the published pair is what it always was, matrix for matrix.
+	 */
+	private final Matrix4f anchorShadowModelView = new Matrix4f();
+	private final Matrix4f anchorShadowProjection = new Matrix4f();
+	private final Matrix4f anchorShadowProjectionInverse = new Matrix4f();
+	private final Vector3d anchorShadowCamera = new Vector3d();
+
 	/** Where the camera stood when the pair above was built, so the re-origin has a distance. */
 	private final Vector3d shadowCamera = new Vector3d();
 
@@ -404,21 +424,31 @@ public final class ViewMatrices implements ViewSource {
 	 */
 	void advanceShadow(float shadowAngle, float sunPathRotation, float intervalSize,
 			Vector3dc camera, float distance, float nearPlane, float farPlane, boolean endFlash,
-			float flashXAngle, float flashYAngle) {
+			float flashXAngle, float flashYAngle, boolean drewLastFrame) {
 		// Shifted down before the fresh pair is built, the same move advance makes for previous:
 		// what was drawn with last frame is what the map on hand holds.
 		if (this.shadowSeeded) {
+			// The anchor follows the map and not the frame. It moves on the frames that really drew
+			// one, so with the amortisation off it moves every frame and holds the previous frame's
+			// pair, which is what this block published before the anchor existed.
+			if (drewLastFrame) {
+				this.anchorShadowModelView.set(this.shadowModelView);
+				this.anchorShadowProjection.set(this.shadowProjection);
+				this.anchorShadowProjectionInverse.set(this.shadowProjectionInverse);
+				this.anchorShadowCamera.set(this.shadowCamera);
+			}
+
 			// On the right, where the grid snap already stands, so that the motion is added to the
 			// point before the light turns it rather than after: both offsets are distances in
 			// player space, and one applied on the far side of the rotation would be a different
 			// place on the ground.
-			this.mapShadowModelView.set(this.shadowModelView)
-					.translate((float) (camera.x() - this.shadowCamera.x),
-							(float) (camera.y() - this.shadowCamera.y),
-							(float) (camera.z() - this.shadowCamera.z));
+			this.mapShadowModelView.set(this.anchorShadowModelView)
+					.translate((float) (camera.x() - this.anchorShadowCamera.x),
+							(float) (camera.y() - this.anchorShadowCamera.y),
+							(float) (camera.z() - this.anchorShadowCamera.z));
 			this.mapShadowModelView.invert(this.mapShadowModelViewInverse);
-			this.mapShadowProjection.set(this.shadowProjection);
-			this.mapShadowProjectionInverse.set(this.shadowProjectionInverse);
+			this.mapShadowProjection.set(this.anchorShadowProjection);
+			this.mapShadowProjectionInverse.set(this.anchorShadowProjectionInverse);
 		}
 
 		this.shadowCamera.set(camera);
@@ -469,6 +499,10 @@ public final class ViewMatrices implements ViewSource {
 			this.mapShadowModelViewInverse.set(this.shadowModelViewInverse);
 			this.mapShadowProjection.set(this.shadowProjection);
 			this.mapShadowProjectionInverse.set(this.shadowProjectionInverse);
+			this.anchorShadowModelView.set(this.shadowModelView);
+			this.anchorShadowProjection.set(this.shadowProjection);
+			this.anchorShadowProjectionInverse.set(this.shadowProjectionInverse);
+			this.anchorShadowCamera.set(camera);
 			this.shadowSeeded = true;
 		}
 	}
@@ -562,6 +596,9 @@ public final class ViewMatrices implements ViewSource {
 		this.seeded = false;
 		this.shadowSeeded = false;
 		this.distantSeeded = false;
+		// The map goes with the history: one drawn in the overworld is not a map of the nether, and
+		// keeping it for three frames there would show the old world through the new one.
+		ShadowAmortisation.forget();
 	}
 
 	private static float plane(float declared, float fallback) {
