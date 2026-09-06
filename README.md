@@ -17,32 +17,23 @@
 ---
 
 <p align="center">
-  <img src="docs/images/screenshot-ocean-ruins.jpg" alt="Sunken ruins in deep water, light shafts through the murk and drowned standing in it, rendered by Complementary Shaders on the Vulkan backend" width="830">
+  <img src="docs/images/screenshot-mountains.jpg" alt="Snow-capped mountains over a cherry grove and a savanna, a mushroom island out at sea, under volumetric clouds, rendered on the Vulkan backend" width="830">
 </p>
 <p align="center">
-  <sub>Complementary Shaders, running unmodified on the Vulkan backend.</sub>
+  <sub>An OptiFine-format pack, running unmodified on the Vulkan backend.</sub>
 </p>
 
 <details>
 <summary>More screenshots</summary>
 <br>
 <p align="center">
-  <img src="docs/images/screenshot-end.jpg" alt="A chorus forest across the end stone, endermen standing among it, rendered by Complementary Shaders on the Vulkan backend" width="830">
+  <img src="docs/images/screenshot-savanna-sunset.jpg" alt="The sun setting over a savanna and a lake, fog lying on the water, rendered on the Vulkan backend" width="830">
 </p>
 <p align="center">
-  <sub>Complementary Shaders.</sub>
+  <img src="docs/images/screenshot-ocean-ruins.jpg" alt="Sunken ruins on the sea floor, drowned walking through the light shafts, a school of tropical fish beside them, rendered on the Vulkan backend" width="830">
 </p>
 <p align="center">
-  <img src="docs/images/screenshot-cherry.jpg" alt="A cherry grove over a valley with waterfalls, rendered by BSL Shaders on the Vulkan backend" width="830">
-</p>
-<p align="center">
-  <sub>BSL Shaders.</sub>
-</p>
-<p align="center">
-  <img src="docs/images/screenshot-underwater.jpg" alt="Looking up at the sun from under the sea, shafts of light spreading from the surface, rendered by Bliss Shaders on the Vulkan backend" width="830">
-</p>
-<p align="center">
-  <sub>Bliss Shaders.</sub>
+  <img src="docs/images/screenshot-lush-cave.jpg" alt="A lush cave under a cliff, a shaft of sunlight falling through the opening onto glow berries and dripstone, rendered on the Vulkan backend" width="830">
 </p>
 </details>
 
