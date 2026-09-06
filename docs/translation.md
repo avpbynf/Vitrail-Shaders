@@ -7,10 +7,11 @@ about how the first becomes the second, and what does not survive the trip.
 
 Every GLSL unit a pack ships is rewritten before it can draw, then handed to the compiler the game
 already embeds, which produces SPIR-V and performs reflection and binding remapping itself. The
-chain's own units go at selection; the programs that draw the world and the sky are translated on
-demand, at the first frame of a place that needs them. What is translated is never *patched*
-afterwards: a setting that moves rebuilds its units from the pack's source, and so does a change of
-dimension, which rebuilds the lot.
+chain's own units go at selection, and the six families that draw the world and the sky follow on a
+worker as soon as the pack is loaded, read one after another on that one worker and compiled by a
+task each. A first draw that outruns it reads its own family, which is the fallback rather than the
+road it normally takes. What is translated is never *patched* afterwards: a setting that moves
+rebuilds its units from the pack's source, and so does a change of dimension, which rebuilds the lot.
 
 Two properties follow, and both are load-bearing:
 
@@ -54,8 +55,8 @@ each other overflow the stack.
 **Why bounding rather than catching.** Stack overflow and out-of-memory are errors, not runtime
 exceptions, so a catch around pack reading does not see them. The fix is to make sure the error is
 never reached, not to widen the catch. Otherwise a single malformed pack dropped in the folder can
-stop the client from starting, including a pack that was never selected, since reporting reads
-them all.
+stop the client from starting. It has to be the selected one: the report reads the pack about to be
+drawn and not the folder, which is what took the ones nobody chose out of every startup.
 
 Two smaller rules in the same family. A macro whose value is an expression is folded to its
 **value**, not to a truth value, or conditions built on derived settings evaluate wrongly. And
@@ -103,23 +104,23 @@ depth textures nearest and never mipmapped, the noise linear, and a colour targe
 target's own sampler, mipmapped once a program's `colortexNMipmapEnabled` turned its chain on; under
 OpenGL a filter without a mipmap in its name never selects a level, whatever level of detail the
 lookup computed or carried. Vulkan has no such filter. Every sampler selects a level, the one bound
-where no chain exists is told to stay at the base, and measured on one driver that is not what a
-lookup got: AstraLex marches a reflection ray across the opaque depth in its translucent pass,
-thirty steps with an early exit, reading the depth with `texture` at a coordinate each step
-computes, and on some steps the depth that came back was not the image's, so the ray landed where it
-never reached and every glass pane bloomed a saturated blue over its wall, on some frames and not
-others. The same read at an explicit level of nought was right on every frame. So the level is
-written into the text, which is what the reference's filter amounted to. The rewrite is by the name
-of the sampler, and a sampler a function takes as a parameter, the blind spot the depth conversion
-below describes, is read through its call sites instead: the parameter is pinned when every call
-hands it a sampler already pinned or a parameter already proven, outright in a full screen program
-that asks for no chain at all, and its lookups are counted and left otherwise, a function some macro
-calls included. The shadow map's samplers are pinned with the rest, since nothing here fills a chain
-on the map whatever mipmap directive the pack wrote, which is an older gap of the shadow bindings
-and not of this rewrite. The engine gives a chain to the program that asked for it
-and to that program alone, where the reference keeps the mipmap filter on the target for the rest
-of the frame; that is an older divergence of the bindings, and the rewrite does not change what
-those later programs read.
+where no chain exists is capped a quarter of a level above the base, which ought to come to the same
+thing, and measured on one driver it did not: AstraLex marches a reflection ray across the opaque
+depth in its translucent pass, thirty steps with an early exit, reading the depth with `texture` at
+a coordinate each step computes, and on some steps the depth that came back was not the image's, so
+the ray landed where it never reached and every glass pane bloomed a saturated blue over its wall,
+on some frames and not others. The same read at an explicit level of nought was right on every
+frame. So the level is written into the text, which is what the reference's filter amounted to. The
+rewrite is by the name of the sampler, and a sampler a function takes as a parameter, the blind spot
+the depth conversion below describes, is read through its call sites instead: the parameter is
+pinned when every call hands it a sampler already pinned or a parameter already proven, outright in
+a full screen program that asks for no chain at all, and its lookups are counted and left otherwise,
+a function some macro calls included. The shadow map's samplers are pinned with the rest, since
+nothing here fills a chain on the map whatever mipmap directive the pack wrote, which is an older
+gap of the shadow bindings and not of this rewrite. The engine gives a chain to the program that
+asked for it and to that program alone, where the reference keeps the mipmap filter on the target
+for the rest of the frame; that is an older divergence of the bindings, and the rewrite does not
+change what those later programs read.
 
 **One uniform becomes a sampler, because its value never comes back from the card.**
 `centerDepthSmooth` is the depth at the middle of the screen, faded by the pack's own half-life,
@@ -183,11 +184,12 @@ the fragment declares without the vertex emitting it is refused loudly, while th
 and shifts the locations of everything after it.
 
 The two sides are reconciled in two different ways, and it is worth not confusing them. A varying
-the *engine* names (there are two, the fog coordinate and the colour a hurt mob flashes) has to be
-declared by both stages or by neither, so it is decided once at program assembly and written into
-both headers from the one answer. The pack's own varyings are not unified that way. They are
-brought into agreement by three passes over the pair, in this order, and the order matters because
-each one changes what the next one sees:
+the *engine* names (there are five, the fog coordinate, the colour a hurt mob flashes and the three
+entity identifiers) has to be declared by both stages or by neither, so it is decided once at
+program assembly and written into both headers from the one answer. The four that ride on the
+overlay are asked of the mesh as well, so a family drawn without one declares none of them. The
+pack's own varyings are not unified that way. They are brought into agreement by three passes over
+the pair, in this order, and the order matters because each one changes what the next one sees:
 
 1. An input the later stage declares that nothing upstream writes is **struck out**, where its body
    never reads it. That is the cheapest answer, because it changes nothing else.
@@ -326,12 +328,14 @@ exists, its value is defined, and the shortfall is announced rather than left to
 memory.
 
 The announcement is split into separate buckets rather than counted, because a program can be short
-in several different ways at once and each line says which. Two of them are names the block could
-not be given: one this engine owes, and one the pack declared for itself and none of whose
-declarations survived. Underneath those sits the dangerous one, which is not a gap at all: a name
-the table answers with a **stand-in**, which counts as supplied everywhere else. A zero that
-arrived through a registered source looks exactly like a measured value, and no screenshot will
-ever show it.
+in several different ways at once and each line says which. Three of them are names the block could
+not be given: one this engine owes, one the pack declared for itself and none of whose declarations
+survived, and one no engine answers at all, which is there so that the log stops reading as a debt
+where there is none, a reader having once been sent through the whole Distant Horizons path of two
+packs by a single line about `farPlane`. Underneath those sits the dangerous one, which is not a
+gap at all: a name the table answers with a **stand-in**, which counts as supplied everywhere else.
+A zero that arrived through a registered source looks exactly like a measured value, and no
+screenshot will ever show it.
 
 Packs can also define their own uniforms as expressions over others. Those form a dependency graph
 that is validated: a cycle is refused by naming the uniforms involved, a broken uniform withdraws
@@ -348,7 +352,11 @@ for that path, three different mechanisms, and it is worth knowing which:
 
 - **Samplers are refused by name.** The compiler takes one as two-dimensional or as a cube, or as a
   texel buffer where the pipeline declared that name as a uniform rather than as a sampler, and
-  rejects every other dimensionality.
+  rejects every other dimensionality. Three dimensions are the one exception, and it is this
+  engine's doing: a mixin makes that walk read the dimension as two, so a `sampler3D` naming a
+  volume an `image` directive fills, or the image itself, is bound and never refused. What stays
+  refused is a three-dimensional shape with nothing behind it, and a volume the pack ships as a
+  file escapes by being flattened onto a flat atlas long before it reaches here.
 - **Compute has nowhere to go through the Java facade.** The game's shader-type enumeration carries
   a vertex stage and a fragment stage and nothing else, and the device exposes no way to precompile
   anything but a render pipeline. The Vulkan backend behind that facade already has a compute-capable
@@ -377,10 +385,13 @@ No amount of translation work makes a pack compute unit or a pack storage image 
 facade. Vulkan itself supports all of them. The layer above does not, and the backend below it
 does; [the game's graphics API](internals/game-graphics-api.md) says where the split sits.
 
-**Defects in the pack itself.** A conditional directive with no name is a pack bug and stays a
-failure.
+**Defects in the pack itself.** A conditional directive the pack wrote loosely no longer costs it
+the program. The group an `#ifdef` with no name opens is taken and the line goes out as `#if 1`,
+which is what the reference's preprocessor decides on it, and the log names the file and what was
+read there. It is still a pack bug, said as one rather than left to a compile error nobody can
+trace back.
 
-One class of pack defect is handed a value instead, because under the reference it has one. GLSL
+Another class of pack defect is handed a value, because under the reference it has one. GLSL
 leaves a variable declared without an initialiser undefined until it is written, and a pack that
 reads one first has a defect that shows nowhere on the platform it was written on: measured against
 Iris at the same spot on the same machine, the pack reads zero there, so the picture is right and

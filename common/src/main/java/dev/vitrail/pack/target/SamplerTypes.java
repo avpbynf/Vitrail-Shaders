@@ -5,11 +5,15 @@ import java.util.Set;
 /**
  * Which sampler declarations this backend can build a pipeline for, decided on the type alone.
  * <p>
- * The rule belongs to the game and is not ours to bend. {@code GlslCompiler.addToBindGroup} walks
- * every sampler the SPIR-V reflection hands back and throws
+ * The rule belongs to the game. {@code GlslCompiler.addToBindGroup} walks every sampler the SPIR-V
+ * reflection hands back and throws
  * {@code Sampled texture (X) must have type of SpvDim2D or SpvDimCube} for anything whose
  * dimensionality is neither of those two, so one {@code sampler3D} anywhere in a program stops that
- * program's whole pipeline from being built.
+ * program's whole pipeline from being built. It is bent in one place and for one shape:
+ * {@code GlslCompilerMixin} makes that walk read {@code SpvDim3D} as {@code SpvDim2D}, so the
+ * volumes an {@code image} directive fills reach a pipeline. Every other dimensionality is refused
+ * as it always was, and so is a {@code sampler3D} with nothing behind it, which
+ * {@code PackProgram.unbindable} decides off this list.
  * <p>
  * Two things measured in 26.2 make the declaration alone enough, and both are worth knowing before
  * anyone tries to be cleverer about it. {@code IntermediaryShaderModule.createFromSpirv} asks for
