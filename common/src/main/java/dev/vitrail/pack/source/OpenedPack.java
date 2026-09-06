@@ -33,6 +33,28 @@ public record OpenedPack(Path packPath, ShaderPackSource source, OptionIndex opt
 		ShaderProperties properties, SettingSet settings) implements AutoCloseable {
 
 	/**
+	 * The reading that runs on the thread that draws, which is the chain's, and the one reading
+	 * offered the opening a previous load left standing. {@link KeptPack} says what has to answer
+	 * the same before that offer is made, and what it empties before making it.
+	 * <p>
+	 * <strong>Nothing else may ask for it.</strong> The memos inside a {@link ShaderPackSource}
+	 * belong to one thread, and this is the only reading whose thread is known and whose readings
+	 * cannot overlap.
+	 */
+	public static OpenedPack openKept(Path packPath, Map<String, OptionValue> chosen, String profile)
+			throws IOException {
+		return KeptPack.open(packPath, chosen, profile);
+	}
+
+	/**
+	 * Lets go of whatever {@link #openKept} left standing, which a load that has decided to draw no
+	 * pack at all owes: those roads never reach the opening, so nothing else would ever replace it.
+	 */
+	public static void forgetKept() {
+		KeptPack.forget();
+	}
+
+	/**
 	 * @param chosen  settings to override, by the name the pack declares them under
 	 * @param profile a profile the pack declares, applied underneath {@code chosen} so that a single
 	 *                setting can still be overridden on top of it, or the empty string
@@ -57,8 +79,24 @@ public record OpenedPack(Path packPath, ShaderPackSource source, OptionIndex opt
 		}
 	}
 
+	/**
+	 * Gives the archive back, unless this is the opening {@link KeptPack} is holding for the next
+	 * load, in which case what a reader worked out of it goes and the archive stays.
+	 * <p>
+	 * Emptied HERE and not when the next load takes the opening: a load's conclusions have no
+	 * business outliving the load, and dropping them at the next hit would leave them alive for as
+	 * long as no hit came, which is for the rest of the session when none does. The rule above
+	 * stands as it was, and is what makes this safe: nothing taken from an opening may be used
+	 * after its {@code close}, whether or not that close reached the archive.
+	 */
 	@Override
 	public void close() throws IOException {
+		if (KeptPack.holds(this)) {
+			this.source.forgetDerived();
+
+			return;
+		}
+
 		this.source.close();
 	}
 }

@@ -26,6 +26,14 @@ what the next one holds.
 
 ### Changed
 
+- **A pack read twice in one session is opened once.** Reading a pack means mounting its archive,
+  walking it for the settings it offers, parsing what it declares and pasting every shared header
+  into every file that includes one, and all of that was done again from nothing each time: at a
+  world join, at a portal, and every time you apply a setting. The engine now keeps the archive it
+  opened and reuses that reading wherever nothing it depends on has moved, which halves the work
+  the second reading of a session does. It is opened afresh the moment anything could have changed
+  it, a file edited on disk included, so a pack you are editing is still read as you left it.
+
 - **Reloading resources no longer rebuilds the pack.** Pressing F3 and T, or anything else that
   reloads the game's resources, threw away every program the pack had compiled and built them all
   again, with the world held back for about a second while it happened. A pack's programs come out
