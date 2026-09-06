@@ -454,6 +454,21 @@ public final class TerrainDraw {
 	}
 
 	/**
+	 * Whether the map of the pack now loaded may be kept for more than the frame that drew it.
+	 * <p>
+	 * False for a pack that voxelises into its shadow pass: those programs write a volume the rest
+	 * of the frame reads, so a frame that skips the pass reads a volume nobody wrote this frame,
+	 * and what that costs is not a shadow one frame late but a light that flickers. False as well
+	 * with no pack drawing, where the question has no meaning and the answer that draws is the safe
+	 * one. See {@link ShadowAmortisation}, which is where the rest of the arbitration lives.
+	 */
+	public static boolean shadowAmortisable() {
+		TerrainDraw self = PackChain.terrain();
+
+		return self != null && !self.shadowVoxelises;
+	}
+
+	/**
 	 * Whether the shadow map is being drawn: the stage is on and every shadow pass has a program
 	 * that can still be served.
 	 * <p>
