@@ -276,6 +276,13 @@ jobs:
           curseforge-token: ${{ steps.mirror.outputs.curseforge == 'true' && secrets.CURSEFORGE_TOKEN || '' }}
           modrinth-id: ${{ secrets.MODRINTH_ID || vars.MODRINTH_ID }}
           modrinth-token: ${{ steps.mirror.outputs.modrinth == 'true' && secrets.MODRINTH_TOKEN || '' }}
+          # Older versions stay featured. The action's default unfeatures whichever of them the new
+          # upload covers, and that is an edit of each old version, which Modrinth now routes through
+          # its v3 API and answers with a 401 unless the token carries the VERSION_WRITE scope on top of
+          # the one the upload needs. The run then ends red after GitHub, CurseForge and Modrinth have
+          # all been written to, and the red says the opposite of what happened. Nothing is given up
+          # by not asking: every version stayed featured through the runs that passed, too.
+          modrinth-unfeature-mode: none
           files: ${{ steps.jars.outputs.merged }}
           # The two loaders are named in the row's own title because the file no longer names
           # them: what ships is one merged jar, where the pair it replaced said neoforge or
