@@ -137,9 +137,12 @@ The rewrite rules are asymmetric on purpose:
   undeclared where it is used, and skipping it would drop the player's choice silently.
 
 **Those last two reach a closed list of names and no others.** A `const` the reference does not
-configure is a plain constant, whatever its type, and no choice ever rewrites it. So is one the
-index refuses for a reason of its own: a `uint`, a number shipped without a list of values to
-cycle through, or a boolean nothing tests.
+configure is a plain constant, whatever its type, and no choice ever rewrites it. The list is the
+whole of the gate, though, and that matters for a listed name the option index refuses for a reason
+of its own: a `uint`, a number shipped without a list of values to cycle through, a boolean nothing
+tests. The rewriter reads one line at a time and holds no index, so a value chosen for such a name
+is applied here where the reference drops it. No screen offers the name, so a value for it can only
+have been written by hand, in the pack's own settings file or in a profile.
 
 A name the pack declares **nowhere** is not applied at all, and nothing is emitted for it in the
 unit's header. There is nowhere to apply it: the section below carries why that is the answer rather
@@ -206,11 +209,11 @@ scalars, the render stage
 constants taken straight off the engine's own enumeration so the number a pack compares against and
 the number a draw carries cannot part company, the block kinds and precipitation kinds packs read
 without declaring, and the biome and biome-category symbols, which stay empty until a caller has a
-registry to walk. Two more are posted only while they hold: the far terrain symbol while that mod
-is drawing, and the custom images capability while it is served. **A missing symbol does not fail
-loudly.** It quietly sends the pack down a
-fallback path written for a renderer from a decade ago, which is why classifying a vendor string into
-the wrong bucket is worse than not classifying it.
+registry to walk. The capability symbols of the `IRIS_FEATURE_` family are posted for every pack,
+custom images among them, each of them a promise the engine has to keep; the far terrain symbol is
+posted only while that mod is drawing. **A missing symbol does not fail loudly.** It quietly sends
+the pack down a fallback path written for a renderer from a decade ago, which is why classifying a
+vendor string into the wrong bucket is worse than not classifying it.
 
 ## The condition stack, shared on purpose
 
@@ -227,18 +230,17 @@ The same stack serves the GLSL sources and the properties files. Two implementat
 disagree about what is live, and the disagreement would appear as a program that exists in one place
 and not in the other: a defect with no visible cause.
 
-The two files that carry conditionals do not order their passes the same way, and the difference is
-deliberate rather than an oversight.
+Every reader handed a define table walks its file the same way, whichever of the four it is: **the
+conditionals first and the continuations after.** Folding first lets a value continued past the
+directive that closes a conditional swallow that directive into the middle of a value, where nothing
+recognises it; the conditional above is then never closed and the rest of the file goes dark. Packs
+write exactly that, in `block.properties` and in `shaders.properties` alike.
 
-The block, item and entity property files **read the conditionals first and join the continuations
-after.** Folding first lets a value continued past the directive that closes a conditional swallow
-that directive into the middle of a value, where nothing recognises it; the conditional above is
-then never closed and the rest of the file goes dark. Packs write exactly that.
-
-The shader properties file does the opposite: continuations are joined over the whole text before
-it is split into lines at all, and the conditionals are then evaluated on the joined lines. What
-makes that safe there is the join rule itself, which swallows only the indentation of the following
-line and never crosses a blank one, so a continued key cannot absorb the block beneath it.
+The shader properties file carries a second road, and only for what has to be read before any
+setting exists at all: the profiles, the screens and the sliders. That pass folds the continuations
+over the whole text and steps over the directives without evaluating one, since the profiles it is
+reading are themselves what a conditional would be evaluated against. Everything a setting can
+decide is left to the walk above.
 
 The expression evaluator itself is a recursive descent over C precedence, in integers rather than
 floating point, because the compiler that sees the same line later will give the C answer whatever is

@@ -182,18 +182,21 @@ looks exactly like a noise lookup that is right: there is no observation on scre
 them.
 
 **The gutter is the part easy to leave out and impossible to see afterwards.** Each slice is laid
-out with one texel of margin on all four sides, holding the wrapped copy of the opposite edge.
-Without it, the hardware's bilinear tap at the edge of a tile reaches into the neighbouring tile,
-which is a different depth entirely, and the result still looks like noise. With it, that tap reads
-exactly what repeat addressing would have read on a real volume. Depth needs no gutter of its own:
-nothing interpolates between tiles in hardware, and the helper does that half itself.
+out with one texel of margin on all four sides, holding what the hardware would have read one texel
+past the edge of a real volume: the opposite edge for a volume that repeats, the edge itself again
+for one that clamps. Without it, the hardware's bilinear tap at the edge of a tile reaches into the
+neighbouring tile, which is a different depth entirely, and the result still looks like noise. With
+it, that tap reads exactly what the addressing the pack asked for would have read. Depth needs no
+gutter of its own: nothing interpolates between tiles in hardware, and the helper does that half
+itself, repeating or clamping the slice index as the pack asked.
 
 **The atlas needs a bound that the blob's does not give.** The blob is held under the ceiling on a
 pack file and checked against the length its declaration announces, but the atlas is what those
 texels are laid out *as*: a declared shape with one long axis and a thin one lays its slices out in
 a line, so a modest file spreads to a width no device will allocate and that nothing in the file
-said. The layout is therefore checked against a limit per side and on total texels before the volume
-is served, and one that does not fit refuses the directive by name like any other refusal.
+said. The layout is therefore checked against a limit per side and against a ceiling on the memory
+it would take, counted in bytes because a texel is four to eight of them, before the volume is
+served; one that does not fit refuses the directive by name like any other refusal.
 
 **Nothing moves unless everything can.** A name reached in any way other than the plain lookup the
 helper replaces (taken as a function parameter, reached through a macro, sampled with an extra
@@ -212,22 +215,27 @@ is answered without consulting the stage at all. Iris remains the authority on w
 means; see [the note on sources](../README.md#a-note-on-sources) for how that authority is used and
 credited.
 
-## Why a volume asked to be clamped is not laid out flat
+## Why a volume the atlas cannot lay out takes every program with it
 
-The wrapping lives in two places that cannot be undone at the sampler: the gutter holds wrapped
-copies of the far edge, and the printed helper wraps. Serving a volume the pack asked to clamp with
-those would be right everywhere except within half a texel of its border, which is the exact shape
-of a plausible wrong picture.
+The addressing a pack asked for is decided once and honoured in three places at the same time. A
+volume that clamps is laid out flat like any other: the gutter carries the edge itself rather than
+the far one, the printed helper clamps its coordinates and its slice index instead of wrapping them,
+and the atlas is bound clamped whatever the pack wrote, since its wrapping has already been done on
+coordinates that never leave the tile. Letting the sampler repeat as well would wrap the atlas,
+which is a different image, and the gutter would stop being read at all.
 
-The trap is that a raw blob is filtered and clamped by default, unless the metadata beside it says
-otherwise. That default is the format's rule rather than a taste, and a defensible one: a blob
-carries a lookup table as often as an image, and a table read past its edge or between its entries
-answers with a value that was never in it. A volume shipped without that metadata therefore lands in
-the clamped case, its declaration stays three-dimensional, and every program carrying that
+Clamping is also the common case rather than an exotic one. A raw blob is filtered and clamped
+unless the metadata beside it says otherwise, which is the format's rule rather than a taste, and a
+defensible one: a blob carries a lookup table as often as an image, and a table read past its edge
+or between its entries answers with a value that was never in it.
+
+What cannot be laid out flat is a blob of a channel type or a channel order the atlas does not
+carry, or one declaring an extent of nought. Its declaration then stays three-dimensional, and this
+backend binds nothing but two-dimensional and cube samplers, so every program carrying that
 declaration fails to build.
 
 Which is why the log says so in as many words at the moment the volume is read. The refusal that
 follows cannot say it: "this program declares a sampler the backend will not take" does not point
-at a missing metadata file, and a symptom that does not name its cause is the kind that costs
-someone a day. [Pack compatibility](../compatibility.md) collects those symptoms from the other
-end, starting from what is on screen.
+at the channel type of a blob read long before it, and a symptom that does not name its cause is the
+kind that costs someone a day. [Pack compatibility](../compatibility.md) collects those symptoms
+from the other end, starting from what is on screen.
