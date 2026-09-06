@@ -137,6 +137,11 @@ public final class ShadowAmortisation {
 
 	private static boolean drewSinceBegin;
 
+	private static boolean saidRefused;
+
+	private static int countedFrames;
+	private static int countedDraws;
+
 	private ShadowAmortisation() {
 	}
 
@@ -160,11 +165,34 @@ public final class ShadowAmortisation {
 		// that was never drawn.
 		drewLastFrame = drewSinceBegin;
 		drewSinceBegin = false;
+		// Counted here rather than by the stage: what the interval counts is frames since the map
+		// was last FILLED, and this is the one place that sees every frame whatever the stage did.
+		if (!drewLastFrame) {
+			sinceDraw++;
+		}
 
 		pendingCamera.set(camera);
 		pendingAngle = shadowAngle;
 
 		int asked = frames();
+		// Said once per pack, because a setting that does nothing and says nothing is worse than a
+		// setting that is not there: this pack refuses the reuse on its own account, and the player
+		// moving the slider would otherwise watch the frame rate not move.
+		if (asked > 0 && !amortisable && !saidRefused) {
+			saidRefused = true;
+			Vitrail.logger().info("This pack voxelises into its shadow pass, so the map is drawn "
+					+ "every frame whatever the reuse setting says");
+		}
+
+		// A rate and not a one-shot line: what has to be proved is how OFTEN the world is walked for
+		// the light, and a message saying it happened once says nothing about the frame after it.
+		if (asked > 0 && ++countedFrames >= 600) {
+			Vitrail.logger().info("Shadow map: the opaque world was drawn into it {} times in the "
+					+ "last {} frames", countedDraws, countedFrames);
+			countedFrames = 0;
+			countedDraws = 0;
+		}
+
 		drawThisFrame = !seeded || asked <= 0 || !amortisable
 				|| sinceDraw >= asked
 				|| anchorCamera.distance(camera) >= MOVE_BLOCKS
@@ -173,8 +201,14 @@ public final class ShadowAmortisation {
 		return drewLastFrame;
 	}
 
-	/** Whether the stage should walk the world and draw, as settled at the head of this frame. */
-	public static boolean drawThisFrame() {
+	/**
+	 * Whether the OPAQUE world is drawn into the map this frame, settled at the head of it.
+	 * <p>
+	 * Everything else in the stage runs whatever this answers: the walk, so Sodium keeps answering
+	 * visibility from the light's tree, the casters that move, and the translucent world, which
+	 * costs five per cent of what the opaque one does.
+	 */
+	public static boolean drawTerrainThisFrame() {
 		return drawThisFrame;
 	}
 
@@ -183,16 +217,12 @@ public final class ShadowAmortisation {
 	 * was set up with, not what the world looks like now: see {@link #pendingCamera}.
 	 */
 	public static void drawn() {
+		countedDraws++;
 		anchorCamera.set(pendingCamera);
 		anchorAngle = pendingAngle;
 		sinceDraw = 0;
 		seeded = true;
 		drewSinceBegin = true;
-	}
-
-	/** Counted at the close of a frame that kept the map, which is what the interval counts. */
-	public static void kept() {
-		sinceDraw++;
 	}
 
 	/**
@@ -210,6 +240,7 @@ public final class ShadowAmortisation {
 		drawThisFrame = true;
 		drewLastFrame = true;
 		drewSinceBegin = false;
+		saidRefused = false;
 	}
 
 	/**

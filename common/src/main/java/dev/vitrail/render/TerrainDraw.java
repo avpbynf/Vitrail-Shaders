@@ -490,6 +490,25 @@ public final class TerrainDraw {
 	}
 
 	/**
+	 * Keeps the map as it stands, which the stage invokes once the opaque world is in it and before
+	 * anything that moves is. Outside any render pass, which that seam is.
+	 */
+	public static void keepShadowMap() {
+		TerrainDraw self = PackChain.terrain();
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (self != null && device != null) {
+			self.targets.shadow().keep(device.createCommandEncoder());
+		}
+	}
+
+	/** Whether a map is in the store, so the stage may put it back instead of walking the world. */
+	public static boolean shadowMapKept() {
+		TerrainDraw self = PackChain.terrain();
+
+		return self != null && self.targets.shadow().hasKept();
+	}
+
+	/**
 	 * Takes the copy the pack reads as {@code shadowtex1}. The caller invokes it between the opaque
 	 * halves of the shadow map and the translucent one, which is the only moment the two names mean
 	 * different things, and outside any render pass: the renderer closes its own before returning.
@@ -576,7 +595,14 @@ public final class TerrainDraw {
 			return false;
 		}
 
-		shadow.defer();
+		// A frame that puts the kept map back must not empty it first, and the emptying is deferred
+		// rather than encoded, so refusing it here is the whole of the refusal: the load-op the
+		// first pass would carry is what would wipe the restore, and it is armed by this line.
+		if (ShadowAmortisation.drawTerrainThisFrame() || !shadow.hasKept()) {
+			shadow.defer();
+		} else {
+			shadow.restore(device.createCommandEncoder());
+		}
 
 		// After the defer, so that a refusal below still empties the map, and before the stage is
 		// declared open, which is the whole point of the step.
