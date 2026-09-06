@@ -85,12 +85,15 @@ final class VolumeFlattening {
 	 * Moves every volume the pack ships onto a flat atlas: the declaration to a {@code sampler2D}
 	 * under a forged name, and each lookup to a helper that reads two slices and mixes them.
 	 * <p>
-	 * <strong>The declaration is what has to go, not the lookup.</strong>
-	 * {@code GlslCompiler.addToBindGroup} refuses anything the reflection reports as neither
-	 * {@code SpvDim2D} nor {@code SpvDimCube}, and the reflection lists a module's whole resource
-	 * list at optimisation level zero, so a {@code sampler3D} declared in a shared include and never
-	 * read costs the program its pipeline exactly as one sampled on every pixel does. Supplying a
-	 * real volume would not help either: the type is the refusal.
+	 * <strong>The declaration is what has to go, not the lookup.</strong> A name is judged on its
+	 * declared type: {@link dev.vitrail.pack.target.SamplerTypes} refuses a program for a
+	 * {@code sampler3D} nothing stands behind, and the reflection lists a module's whole resource
+	 * list at optimisation level zero, so one declared in a shared include and never read costs the
+	 * program its pipeline exactly as one sampled on every pixel does. Supplying a real volume is
+	 * not the way out here either: a texture a pack ships is uploaded flat and there is no 3D view
+	 * to put behind the name. The game's own walk no longer refuses the type,
+	 * {@code GlslCompilerMixin} making {@code GlslCompiler.addToBindGroup} read {@code SpvDim3D} as
+	 * {@code SpvDim2D} for the volumes an {@code image} directive fills.
 	 * <p>
 	 * <strong>Every program carrying the declaration is rewritten, and Iris rewrites only the stage
 	 * the directive names.</strong> Its {@code TextureTransformer} runs per stage, so under it

@@ -41,7 +41,8 @@ reference: a folder called `lib` is not special, its contents are simply not ent
 What is left is then filtered twice: the directory has to be a dimension directory, and the base
 name has to be a program name. Both catch real cases: shared bodies parked in a subfolder carry
 perfectly valid program names, and shared bodies parked inside a dimension folder carry names
-outside the list. Whatever is rejected is named in the log rather than dropped silently.
+outside the list. What is rejected is counted in the log rather than dropped silently: each of the
+two lists is printed with its total and the first eight distinct names it holds, the rest elided.
 
 A program name is one of a closed list of geometry names, a numbered family where the unnumbered
 spelling means slot zero, or one of a small set of unnumbered names. One detail bites implementers:
@@ -69,12 +70,15 @@ A pack that ships a dimension folder holding two programs has **exactly two prog
 dimension. Everything else there resolves through the fallback tree *inside that folder*, not
 through the root. The reference implementation states this in as many words.
 
-Two corollaries follow. The condition is the **existence** of the directory, not its contents, so an
-empty dimension directory yields an empty program set rather than falling back to the root, because
-emptying a folder is the only way a pack has of saying "nothing here", and reading the base set
-instead would overrule it. A directory that is named and *absent* does fall back. And the base set
-is not necessarily the root: it is the directory bound to the catch-all entry of the dimension
-mapping, and in practice most packs keep no programs at the root at all.
+Two corollaries follow, and the first is this engine's own rather than the reference's. The
+condition is the **existence** of the directory, not its contents, so an empty dimension directory
+yields an empty program set rather than falling back to the root, because emptying a folder is the
+only way a pack has of saying "nothing here", and reading the base set instead would overrule it.
+The reference draws that line elsewhere: it registers a dimension only where the folder holds an
+entry point, so an empty one overrides nothing there and the base set answers for it. A directory
+that is named and *absent* does fall back under both. And the base set is not necessarily the root:
+it is the directory bound to the catch-all entry of the dimension mapping, and in practice most
+packs keep no programs at the root at all.
 
 ### The fallback tree
 
@@ -168,9 +172,10 @@ what makes a pack's misspelled key visible: correct to ignore, wrong to lose.
 and an explicit `false` is the only value that moves anything: a pack that says nothing leaves the
 stage standing on whichever shadow programs it ships, which is how the reference reads it. Written
 false, nothing is ever drawn from the light, and the six directives below decide nothing because
-there is no map for them to decide about. Like them it takes a literal boolean and nothing else, a
-value that is not one being honoured nowhere, and like them it is read through the pack's own
-conditionals, so the line may sit inside a branch of the pack's own settings.
+there is no map for them to decide about. Like them it takes a boolean written out or as `1` and
+`0`, which is the reference's own pair of spellings and one more than OptiFine's; a word that is
+neither is honoured nowhere. And like them it is read through the pack's own conditionals, so the
+line may sit inside a branch of the pack's own settings.
 
 `shadowTerrain`, `shadowTranslucent`, `shadowEntities`, `shadowPlayer`, `shadowBlockEntities` and
 `shadowLightBlockEntities` say which families a pack wants drawn into its shadow map. Four of them
@@ -259,8 +264,9 @@ throughout.
 
 The same first line also drops the sweep when the shadow program voxelises. A geometry stage on
 that program is enough, even when this engine never binds it, and so is an image load / store that
-the preprocessor left standing, which is the reference's `setUsesImages`. A name gated off does
-not count.
+the preprocessor left standing. That second half is this engine's alone: the reference has a
+`setUsesImages` for it and calls it from nowhere, so an image load / store decides nothing there.
+A name gated off does not count.
 
 ## Settings, and how a user changes them
 
@@ -309,14 +315,21 @@ right-hand side, when that constant's name is on the closed list at all. A
 boolean lands on a constant in one of two ways: on a `const bool` it is written out as `true` or
 `false`, since a constant is read as an expression rather than tested for existence and commenting
 the line out would leave the name undeclared; on a constant holding a number it is ignored and the
-line is left exactly as it was, a switch having nothing to say about a number. Indentation and the
-trailing value-list comment are preserved.
+line is left exactly as it was, a switch having nothing to say about a number. Indentation is
+preserved, and so is the trailing comment, whole on a constant where everything past the semicolon
+is copied over. On a define it survives only where the bracket follows the slashes directly, and the
+index that offered the setting is wider than that, taking the first bracket anywhere in the comment,
+so a define whose list sits behind a sentence of prose loses the sentence and the list together the
+first time a value is written into it.
 
 ### Two define tables, deliberately different
 
 The table used to preprocess `shaders.properties` carries the engine's defines, the default of
-every non-constant uncommented setting, and the variant overrides. The per-unit table carries the
-engine's defines alone: the pack's own defaults and the overrides applied to them enter as
+every non-constant uncommented declaration, and the variant overrides. Declaration and not offered
+setting: the gate deciding what a screen may offer is applied to the constants alone, so a bare
+define nothing tests and a define carrying a value with no list beside it are both in this table
+under their default, neither of them being a setting anyone can reach. The per-unit table carries
+the engine's defines alone: the pack's own defaults and the overrides applied to them enter as
 expansion walks over its define lines, like a real preprocessor.
 
 Unifying them is a mistake, and the asymmetry is the whole point: the properties table has to be
@@ -375,9 +388,16 @@ a global set.
 
 **Dead branches are not eliminated.** Conditional evaluation only decides which files to open;
 inactive lines are re-emitted as they stand, because the compiler will re-evaluate the same
-conditions on the final text anyway. One line is the exception and it has to be: an `#include` on a
-branch that is off becomes a comment naming what was not pulled in, since leaving it would open the
-file after all. The line count is preserved either way, which is what the numbering below rests on.
+conditions on the final text anyway. What is rewritten is what no compiler would take. An `#include`
+on a branch that is off becomes a comment naming what was not pulled in, since leaving it would open
+the file after all. A conditional the pack wrote loosely goes out as the decision the reference's
+preprocessor reached on it: an `#if` or an `#elif` carrying no expression becomes `#if 0` and
+`#elif 0`, an `#ifdef` carrying nothing that can name a setting becomes `#if 1`, and an `#else` or
+an `#endif` with nothing open for it becomes a comment. Each of those is named in the log. One line
+still comes out for one line, which is what the numbering below rests on, and the only thing added
+is an `#endif` at the end of the file for each rewritten group the file never closed. Only for
+those: a group the PACK left open is one the compiler may never have opened, a conditional written
+inside a block comment being a directive to this reader and nothing at all to the compiler.
 
 **A non-evaluable condition is taken as true**, and counted. The asymmetry is deliberate: including
 too much is recoverable, while a skipped include produces an avalanche of undeclared identifiers
@@ -398,11 +418,14 @@ that re-evaluates the same conditions on the emitted text.
 An include directive is replaced by the lines of the file it names, so the unit that reaches the
 compiler is one flat text and errors are numbered against that.
 
-Version and extension directives are **blanked in place rather than deleted**, which looks fussy
-and is not: later passes carry per-line information about which lines a branch actually took, and
-that information is indexed by line number. Remove a line and every index after it is wrong. The
-unit takes its version from the header the engine writes, and the directives that were blanked are
-counted, so an unexpected one shows up in the totals instead of vanishing.
+The `#version` of the entry file is kept and every later one is dropped with nothing written in its
+place, a version directive arriving from an include being an error where it lands. Both directives
+go for good later, in the translator, and there they are **blanked in place rather than deleted**,
+which looks fussy and is not: the passes that follow carry per-line information about which lines a
+branch actually took, and that information is indexed by line number. Remove a line and every index
+after it is wrong. So the version and every `#extension` are emptied where they stand, the unit
+taking its version from the header the engine writes, and it is the extensions that are counted, so
+an unexpected one shows up in the totals instead of vanishing.
 
 ## Textures a pack supplies itself
 
@@ -430,7 +453,10 @@ meaning what it meant.
 
 **A three-dimensional volume is flattened onto a two-dimensional atlas**, its declaration rewritten
 under a forged name, and each read replaced by a helper that reads two slices and interpolates.
-This works because the backend refuses the declared type, not what actually sits behind the sampler.
+What forces that is the data rather than the type: the blob is uploaded as one flat atlas of slices
+and nothing builds a three-dimensional view over a texture a pack ships. The declared type stopped
+being the obstacle the day a mixin made the bind group's walk read `SpvDim3D` as 2D, which is what a
+volume an `image` directive fills is bound through.
 The atlas keeps the blob's own channel type, an unsigned byte, an unsigned short or a half float
 a channel, and the addressing the pack asked for is baked into it: a repeating volume carries the far edge in the
 gutter of each slice and the helper wraps, a clamped one carries the edge again and the helper
