@@ -1315,7 +1315,7 @@ public final class PackProgram {
 	 * The same chain for a caller with no {@code options.txt} to read, which is the harness and the
 	 * corpus measurements. See {@link ChainPlan.Families#DEFAULT}.
 	 */
-	public static Optional<Chain> loadChain(Path packPath, String dimension,
+	public static Chain loadChain(Path packPath, String dimension,
 			Map<String, OptionValue> chosen, String profile, ChainFilter filter) throws IOException {
 		return loadChain(packPath, dimension, chosen, profile, filter, ChainPlan.Families.DEFAULT);
 	}
@@ -1347,9 +1347,8 @@ public final class PackProgram {
 	 * @param families  which of the families the plan's verdicts may count are really drawn, which
 	 *                  is what keeps those lines from claiming a target is filled by a family
 	 *                  somebody switched off
-	 * @return empty when the pack serves no final with both stages in that place
 	 */
-	public static Optional<Chain> loadChain(Path packPath, String dimension,
+	public static Chain loadChain(Path packPath, String dimension,
 			Map<String, OptionValue> chosen, String profile, ChainFilter filter,
 			ChainPlan.Families families) throws IOException {
 		try (OpenedPack pack = OpenedPack.open(packPath, chosen, profile)) {
@@ -1362,7 +1361,7 @@ public final class PackProgram {
 	 * the chain, the chunk programs and the shadow computes are all read at the load and share one
 	 * reading of the archive between them.
 	 */
-	public static Optional<Chain> loadChain(OpenedPack pack, String dimension, ChainFilter filter,
+	public static Chain loadChain(OpenedPack pack, String dimension, ChainFilter filter,
 			ChainPlan.Families families) throws IOException {
 		ShaderPackSource source = pack.source();
 		OptionIndex options = pack.options();
@@ -1443,8 +1442,7 @@ public final class PackProgram {
 					AlphaTest.OFF, textures));
 		}
 
-		return Optional.of(
-				new Chain(source.packName(), place, targets, chain, loaded, refused, mentions));
+		return new Chain(source.packName(), place, targets, chain, loaded, refused, mentions);
 	}
 
 	/**
