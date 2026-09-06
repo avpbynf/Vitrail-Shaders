@@ -615,14 +615,67 @@ public final class PackChain {
 	}
 
 	/**
-	 * Called from the loader module once the world has been rendered.
+	 * Asks whether the world moved under the pack, on the one road into the level and before a
+	 * single thing of the frame is drawn.
+	 * <p>
+	 * <strong>Both halves of a world join were paying for that question being asked late.</strong>
+	 * The pack is read while the client starts up, against registries no world has brought yet, so
+	 * the first world of a launch is always read against a machine that has moved. The FIRST join
+	 * compiled the whole of the title's chain here, the world held back, before {@code draw} reached
+	 * the question at the end of the frame and threw that chain away. A join after
+	 * {@link #leaveWorld} pays a different half of the same bill: the chain is still drawable there,
+	 * so the world IS drawn, and the sky, the terrain and the entities allocate everything back
+	 * before the question is reached, which then reloads and allocates it again.
+	 * <p>
+	 * Asked here, both are read once.
+	 * <p>
+	 * <strong>The frame that reloads does not draw the level, and that is the whole of what makes
+	 * this instant safe.</strong> The chunk vertex format is settled from the pack in force by
+	 * {@code TerrainMesh.settle}, which runs inside {@code GameRenderer.extract}, and that stands
+	 * BEFORE {@code GameRenderer.render} in the tick. So a frame that read a new pack here would go
+	 * on to draw a world whose format was settled from the old one, and the mesh a pipeline is
+	 * compiled for would not be the mesh it is handed. On the road where a chain is drawn that
+	 * closes itself, the reloaded chain has nothing compiled yet and {@link #warming} holds the
+	 * level back anyway; on the road where the chain is not drawn at all it does not, and the answer
+	 * is the same either way rather than one of them by luck. The caller reads what this returns and
+	 * skips the level on it.
+	 * <p>
+	 * <strong>And only where a pack is in force, which is not the same question as whether one was
+	 * read.</strong> Every road that ends a load with nothing to draw still goes through the read,
+	 * so a player who has picked None, or whose pack was refused, would have the level skipped at
+	 * every join and every portal for a reload that changed nothing they can see: the game clears
+	 * the main target at the head of the frame and only the level fills it, so what they would get
+	 * is a black world under the interface. The hazard the skip exists for cannot reach them either,
+	 * the chunk format being the game's own wherever no pack binds it.
+	 * <p>
+	 * It is NOT the only place the question is asked. The one road into a level that skips this wrap
+	 * is the panorama screenshot, which calls {@code renderLevel} itself, and the head of
+	 * {@link #draw} covers it.
 	 *
-	 * @return whether a pack was drawn, so that the caller knows to fall back to its own chain.
-	 *         The world check runs first and before the refusal below, or a pack that failed to
-	 *         compile would never be read again against the registries joining a world gives it.
+	 * @return whether the pack was read again AND one is in force, in which case the level owes this
+	 *         frame nothing
 	 */
-	public static boolean draw(Path gameDirectory) {
-		PackChoice.reloadIfTheWorldMoved(gameDirectory);
+	public static boolean beforeLevel() {
+		sayBeforeLevelRoad();
+
+		return RELOAD_BEFORE_LEVEL
+				&& PackChoice.reloadIfTheWorldMoved(Vitrail.platform().gameDirectory())
+				&& drawingPack();
+	}
+
+	/**
+	 * Called from the loader module once the world has been rendered.
+	 * <p>
+	 * The world check still stands on this line, and it also stands in {@link #beforeLevel} on the
+	 * frame's other side. Two askings of one idempotent question, and the second is not decoration:
+	 * the panorama screenshot calls {@code renderLevel} itself, six frames in a row, without going
+	 * through the wrap {@code beforeLevel} rides on, and this is the only line those frames reach.
+	 * Whichever of the two fires first, the other finds nothing moved.
+	 *
+	 * @return whether a pack was drawn, so that the caller knows to fall back to its own chain
+	 */
+	public static boolean draw() {
+		PackChoice.reloadIfTheWorldMoved(Vitrail.platform().gameDirectory());
 
 		PackChain chain = active;
 		if (disabled || chain == null) {
@@ -757,6 +810,9 @@ public final class PackChain {
 	 * Complementary Unbound is still not compiled all at once. Its families translate on a worker
 	 * while this thread compiles the composites and the terrain, and each family's pipelines then
 	 * compile on a small pool of the engine's own; nothing of the leftovers holds the world back.
+	 * <p>
+	 * {@link #beforeLevel} has already asked whether the world moved by the time this runs, which is
+	 * what keeps a join from compiling the pack twice.
 	 */
 	public static void pumpWarmup() {
 		PackChain chain = active;
@@ -1082,14 +1138,17 @@ public final class PackChain {
 	 * exactly what a reload frees, and everything of it is made again by the first frame of the next
 	 * world; nothing about which pack is loaded moves, so the settings screen still has one to show.
 	 * <p>
-	 * The first frame of that next world pays for it twice, and it is worth knowing where. The sky,
-	 * the terrain and the entities all open the frame while the world is being drawn, whichever of
-	 * the three comes first, so they allocate everything back
-	 * before {@code draw} reaches {@link PackChoice#reloadIfTheWorldMoved} at the end of it; a
-	 * world joined with registries this engine has not seen then reloads and makes the same work
-	 * again. One extra
-	 * allocation and one extra translation, on the frame the world appears, which is the frame
-	 * already carrying every other first cost there is.
+	 * The first frame of that next world used to pay for it twice, and where is worth knowing. The
+	 * sky, the terrain and the entities all open the frame while the world is being drawn,
+	 * whichever of the three comes first, so they allocated everything back before the end of that
+	 * frame, which is where the question of whether the world had moved was asked; a world joined
+	 * with registries this engine had not seen then reloaded and made the same work again. One
+	 * extra allocation and one extra translation, on the frame the world appears, which is the
+	 * frame already carrying every other first cost there is.
+	 * <p>
+	 * {@link #beforeLevel} asks that question at the head of the frame instead, so the reload a
+	 * join owes stands before the first allocation rather than after it, and the frame the world
+	 * appears on pays once.
 	 */
 	public static void leaveWorld() {
 		PackChain chain = active;
@@ -1985,6 +2044,34 @@ public final class PackChain {
 
 	/** Long enough for several compiles, short enough that the HUD still ticks. */
 	private static final long WARM_BUDGET_NANOS = 80_000_000L;
+
+	/**
+	 * Whether the world moving under the pack is noticed before the level rather than after it.
+	 * Turned off by {@code -Dvitrail.reloadBeforeLevel=false} rather than by a rebuild, so the join
+	 * that pays once and the join that pays twice come out of one jar. On is the default, and the
+	 * log names the road either way.
+	 */
+	private static final boolean RELOAD_BEFORE_LEVEL = Boolean.parseBoolean(
+			System.getProperty("vitrail.reloadBeforeLevel", "true"));
+
+	/** Whether the line below has been said, since it is said once a launch and not once a frame. */
+	private static boolean beforeLevelRoadSaid;
+
+	/**
+	 * Names the road at the first frame that would draw a level, and names it BOTH WAYS: a line that
+	 * only appeared on one side would leave every reading taken on the other unable to say which
+	 * road it came from, and both roads come out of the same jar here.
+	 */
+	private static void sayBeforeLevelRoad() {
+		if (beforeLevelRoadSaid) {
+			return;
+		}
+
+		beforeLevelRoadSaid = true;
+		Vitrail.logger().info("The world is asked about {} the level is drawn, "
+						+ "property=vitrail.reloadBeforeLevel",
+				RELOAD_BEFORE_LEVEL ? "before" : "after");
+	}
 
 	/**
 	 * Starts this chain's pack-load workers, once and once only: the leftover families read

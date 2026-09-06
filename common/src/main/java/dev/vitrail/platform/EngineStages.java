@@ -241,7 +241,7 @@ public final class EngineStages {
 		// Nothing is drawn when no pack can be: the game's own image is a better answer than
 		// anything this mod could put over it, and the reason is already said, once in the log
 		// and again on the settings screen through PackChoice.lastError.
-		PackChain.draw(Vitrail.platform().gameDirectory());
+		PackChain.draw();
 
 		// After the chain and not before: the composites above read the map the previous frame
 		// drew, and this draws the next frame's over it. The end of the frame is the whole

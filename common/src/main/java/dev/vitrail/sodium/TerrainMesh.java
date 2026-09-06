@@ -248,11 +248,14 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * rebuild.</strong> {@code Minecraft.setLevel} reaches {@code LevelExtractor.setLevel}, which
 	 * calls {@code allChanged} itself, so the next {@code extract} invalidates the compiled geometry
 	 * and this settles before that frame's level is drawn; the pack of the new dimension is not read
-	 * until {@code PackChain.draw} reaches {@code reloadIfTheWorldMoved}, at the end of that same
-	 * frame. Nothing is bound wrongly in between, and the reason is that the reversal is complete:
-	 * the pack in force is still the previous dimension's, and its programs declare exactly the list
-	 * this settled from. When the new reading moves the list, {@code carries} asks for a rebuild of
-	 * its own and this runs again on the frame after, which is the hitch at the portal.
+	 * until {@code PackChain.beforeLevel}, which stands in {@code GameRenderer.render} and therefore
+	 * AFTER {@code GameRenderer.extract} in the same tick. Nothing is bound wrongly in between, and
+	 * the reason is that the reversal is complete: the pack in force while this settles is still the
+	 * previous dimension's, and its programs declare exactly the list this settled from. What keeps
+	 * the frame after the read out of the same question is that the frame which reads a pack again
+	 * does not draw the level at all: {@code beforeLevel} says so and the wrap it rides on obeys it.
+	 * When the new reading moves the list, {@code carries} asks for a rebuild of its own and this
+	 * runs again on the frame after, which is the hitch at the portal.
 	 * <p>
 	 * Built here rather than in a static field so that a mesh this cannot extend leaves the game
 	 * running on Sodium's own instead of failing to load a class in the middle of a world.
