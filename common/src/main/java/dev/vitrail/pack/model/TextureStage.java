@@ -1,7 +1,5 @@
 package dev.vitrail.pack.model;
 
-import dev.vitrail.pack.model.ProgramNames;
-
 import java.util.Optional;
 
 /**
