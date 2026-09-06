@@ -251,6 +251,17 @@ restore.
 The price is a one-frame lag on shadows. That is a deliberate divergence from the reference
 implementation, and it is the first thing to suspect for any shadow artefact.
 
+**Shadow Reuse makes that lag settable, and the walk stops being one per frame.** The map holds a
+world that does not move between two frames of a player standing still, so it is kept for as many
+further frames as the setting says and the walk is skipped on those. The lag on anything that MOVES
+becomes one plus that number, which is the first thing to suspect before the paragraph above once
+the setting is off nought, and it is what the setting's small ceiling is for. What keeps the reuse
+honest is that the published shadow pair is anchored on the frame that really drew rather than
+shifted every frame: a pass sampling the map transforms with the matrix that map was built with,
+whatever its age, so nothing slides. At nought the anchor moves every frame and this whole
+paragraph describes nothing. A pack that voxelises into its shadow pass never gets the reuse, its
+programs writing a volume the rest of the frame reads.
+
 Two more things fall out of drawing at the end of the frame. The chain has already closed the
 frame, so the shadow programs' preparation must not re-open it: otherwise previous-frame uniform
 values advance twice and the colour targets are cleared over what the chain just wrote. And the

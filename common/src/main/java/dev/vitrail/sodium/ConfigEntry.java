@@ -2,6 +2,7 @@ package dev.vitrail.sodium;
 
 import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.render.PackChoice;
+import dev.vitrail.render.ShadowAmortisation;
 import dev.vitrail.render.StartupGuard;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
@@ -88,6 +89,10 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	private static final Identifier MODULE_CACHE_CEILING =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "module_cache_ceiling");
 
+	/** How many frames the shadow map is kept for, on the engine page beside the two scales. */
+	private static final Identifier SHADOW_AMORTISATION =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "shadow_amortisation");
+
 	/** What the selector offers while the pack draws the world, and what it offers otherwise. */
 	private static final Set<TextureFilteringMethod> WITHOUT_RGSS =
 			Set.of(TextureFilteringMethod.NONE, TextureFilteringMethod.ANISOTROPIC);
@@ -111,6 +116,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 								.addOption(shadowDistance(builder))
 								.addOption(shadowMapScale(builder))
 								.addOption(renderScale(builder))
+								.addOption(shadowAmortisation(builder))
 								.addOption(graphicsApi(builder))
 								.addOption(moduleCacheCeiling(builder))))
 				// RGSS is shader code, written into the game's own terrain shader and into Sodium's,
@@ -244,6 +250,35 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				// LATER launch starts on and costs the running frame nothing at all. Sodium's own
 				// impact labels are about the frame being drawn.
 				.setStorageHandler(() -> {});
+	}
+
+	/**
+	 * How many frames the shadow map is kept for after the one that drew it.
+	 * <p>
+	 * The pass that fills that map is the most expensive thing the engine does, and between two
+	 * frames of a player standing still nothing in it moves. What the frames cost is on casters that
+	 * MOVE: a mob, a boat, the player's own shadow keep the place they had when the map was drawn.
+	 * The slider stops at {@link ShadowAmortisation#MAX_FRAMES} because a walk finds the lag at
+	 * three, and a value nobody should choose is better left out of the selector than explained in
+	 * a tooltip.
+	 * <p>
+	 * HIGH impact and not medium: on the corpus it moves the frame rate by a fifth to a third, which
+	 * is more than either scale above it does at its usual settings.
+	 */
+	private static OptionBuilder shadowAmortisation(ConfigBuilder builder) {
+		return builder.createIntegerOption(SHADOW_AMORTISATION)
+				.setName(Component.translatable(ScreenText.SHADOW_AMORTISATION))
+				.setTooltip(_ -> Component.translatable(ScreenText.SHADOW_AMORTISATION_TOOLTIP))
+				.setDefaultValue(ShadowAmortisation.DEFAULT_FRAMES)
+				.setRange(new Range(ShadowAmortisation.MIN_FRAMES, ShadowAmortisation.MAX_FRAMES, 1))
+				.setBinding(ShadowAmortisation::setFrames, ShadowAmortisation::frames)
+				.setValueFormatter(frames -> switch (frames) {
+					case 0 -> Component.translatable(ScreenText.SHADOW_AMORTISATION_OFF);
+					case 1 -> Component.translatable(ScreenText.SHADOW_AMORTISATION_FRAME, frames);
+					default -> Component.translatable(ScreenText.SHADOW_AMORTISATION_FRAMES, frames);
+				})
+				.setStorageHandler(() -> {})
+				.setImpact(OptionImpact.HIGH);
 	}
 
 	/**
