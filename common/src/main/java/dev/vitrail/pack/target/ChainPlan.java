@@ -270,6 +270,10 @@ public final class ChainPlan {
 	private final List<Pass> passes;
 	private final int deferredEnd;
 	private final Pass last;
+
+	/** What reaches the screen where {@link #last} is null. See {@link #present()}. */
+	private final Attachment present;
+
 	private final Seed seed;
 
 	/**
@@ -325,7 +329,7 @@ public final class ChainPlan {
 	private final List<String> notes;
 	private final List<String> history;
 
-	private ChainPlan(String place, List<Pass> passes, Pass last, Seed seed,
+	private ChainPlan(String place, List<Pass> passes, Pass last, Attachment present, Seed seed,
 			Map<Key, Pass> attachments, Map<TerrainPass, Key> terrainKeys, Map<String, Key> skyKeys,
 			List<Integer> swapBack, List<String> refusals, List<String> notes,
 			List<String> history) {
@@ -333,6 +337,7 @@ public final class ChainPlan {
 		this.passes = List.copyOf(passes);
 		this.deferredEnd = pastDeferred(this.passes);
 		this.last = last;
+		this.present = present;
 		this.seed = seed;
 		this.attachments = Map.copyOf(attachments);
 		this.terrainKeys = Map.copyOf(terrainKeys);
@@ -502,10 +507,15 @@ public final class ChainPlan {
 			}
 		}
 
-		if (last == null) {
-			// Not a refusal: whoever loaded the chain has already decided whether a place without
-			// a final is worth drawing, and every pass here still writes what it says it writes.
-			notes.add("this place runs no final, so nothing the chain writes reaches the screen");
+		// colortex0 on the half the frame ends on, which is what stands in for the final where the
+		// pack ships none. present() carries what Iris does with the same case and where.
+		Attachment present = last != null ? null : new Attachment(0,
+				plan.schedule().flippedAtEnd().contains(0)
+						? TargetSchedule.Side.ALT
+						: TargetSchedule.Side.MAIN);
+		if (present != null) {
+			notes.add("this place runs no final, so " + TargetName.canonical(present.target())
+					+ " is brought to the screen as it stands, which is what Iris does");
 		}
 
 		// Worked out before the verdicts rather than in the return, so that they are handed the
@@ -652,7 +662,7 @@ public final class ChainPlan {
 			}
 		});
 
-		return new ChainPlan(plan.place(), passes, last, seed, answered, terrainKeys, skyKeys,
+		return new ChainPlan(plan.place(), passes, last, present, seed, answered, terrainKeys, skyKeys,
 				List.copyOf(back), refusals, notes, history);
 	}
 
@@ -1152,6 +1162,25 @@ public final class ChainPlan {
 	/** The final. Its attachments are always empty: it writes the game's own target. */
 	public Optional<Pass> last() {
 		return Optional.ofNullable(this.last);
+	}
+
+	/**
+	 * What has to be brought to the screen when the place runs no {@code final}, which is
+	 * {@code colortex0} on the half the chain leaves it, and empty on every place that runs one.
+	 * <p>
+	 * A pack shipping no final is not a pack that draws nothing: Iris copies {@code colortex0}
+	 * into the game's own target and says so in as many words, {@code pipeline/FinalPassRenderer.java:113}
+	 * making the pass optional and {@code :268-277} doing the copy under a comment naming the
+	 * transfer. Two packs of this corpus ship none, I Like Vanilla ending its chain on
+	 * {@code composite99} and Pegasus on {@code composite11}.
+	 * <p>
+	 * The half is the one the schedule ends the frame on, which is the same question Iris asks its
+	 * flip state when it builds that copy's framebuffer ({@code :131}). A chain whose last write
+	 * landed on the far half and which was read from the near one would otherwise show the frame
+	 * before this one.
+	 */
+	public Optional<Attachment> present() {
+		return Optional.ofNullable(this.present);
 	}
 
 	/**

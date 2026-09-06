@@ -270,6 +270,12 @@ public final class PackChain {
 	private final Vector4f fogClear = new Vector4f(0.0F, 0.0F, 0.0F, 1.0F);
 
 	private final SceneSeed seed;
+
+	/**
+	 * What brings the chain's colour to the screen on a pack that ships no {@code final}, or null
+	 * where the pack ships one and its own program does it. See {@link ChainPresent}.
+	 */
+	private final ChainPresent present;
 	private final boolean seedEnabled;
 
 	/** The game's translucent features, caught and composed onto the pack's image. Null when the
@@ -359,6 +365,13 @@ public final class PackChain {
 				.filter(where -> this.targets.has(where.target()))
 				.map(where -> new SceneSeed(where, this.targets.format(where.target()),
 						seedExtras(chain, where)))
+				.orElse(null);
+		// Null on every pack that ships a final, which is every pack but two of this corpus. The
+		// target has to exist for the same reason the seed's does: a plan naming one the targets do
+		// not hold is a frame drawn from a texture nobody allocated.
+		this.present = chain.chain().present()
+				.filter(where -> this.targets.has(where.target()))
+				.map(ChainPresent::new)
 				.orElse(null);
 		// Composed where the world's own translucents are about to blend, so it needs that pass to
 		// exist: a pack serving no translucent geometry gets no layer, and the game's features stay
@@ -1757,6 +1770,13 @@ public final class PackChain {
 		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene(),
 				this.targets.depth().distantScene());
 
+		// After the whole chain and before the halves swap back, which is where a final would have
+		// drawn. Only on a pack that ships none; ChainPresent says what it stands in for.
+		if (this.present != null && this.present.prepare(device)) {
+			this.present.draw(device.createCommandEncoder(), this.quad, ready.mainView(),
+					this.targets);
+		}
+
 		// Outside any pass, and after the last one. Only the targets the pack keeps between frames
 		// and that the chain left on the far half swap names: the next frame walks from an empty
 		// flipped set and would otherwise be handed what was written two frames ago.
@@ -1866,7 +1886,11 @@ public final class PackChain {
 		}
 
 		this.programs = List.copyOf(built);
-		this.last = built.isEmpty() ? null : built.get(built.size() - 1);
+		// Asked of the plan and not of the list: ordered() puts the final at the end when there is
+		// one, and where there is none the last of the list is an ordinary composite that writes
+		// its own targets. Drawing that one onto the game's target would be the chain's middle
+		// painted over the screen.
+		this.last = plan.last().isEmpty() || built.isEmpty() ? null : built.get(built.size() - 1);
 		// Or a compute hanging off a pass: it is handed the same texel, so it arms the same fold.
 		this.centerDepthRead = built.stream().anyMatch(PackPass::readsCenterDepth)
 				|| this.compute.readsCenterDepth();
