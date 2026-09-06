@@ -244,6 +244,13 @@ what the next one holds.
   no fullscreen pass of the pack read the name and a compute did, the compute was handed the far
   plane on every frame. A compute hanging off a pass now arms the fold as the pass would.
 
+- **A pack's depth of field focuses past the item in your hand.** The depth the focus is taken
+  from was read after the held item had been drawn into it, so whenever the item covered the
+  middle of the screen the focus jumped onto it and everything behind went soft, sharpening again
+  as the hand swung away. It is now read from the depth kept a step earlier, before the hand is
+  drawn, which is where Iris takes it, so the focus stays on what you are holding the item in
+  front of.
+
 - **An array handed between a pack's stages arrives whole.** Photon hands its sky harmonics to
   its deferred shading as an array of nine values, and the two values declared after it reached
   that stage read off the wrong slots. An array is now taken apart and put back together the way

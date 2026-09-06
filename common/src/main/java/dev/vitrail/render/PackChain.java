@@ -1431,8 +1431,22 @@ public final class PackChain {
 	}
 
 	/** The same question for the depth taken before the hand, which a pack reads as depthtex2. */
-	boolean mayReadPreHandDepth() {
+	private boolean mayReadPreHandDepth() {
 		return this.chain.mentions().maybe("depthtex2");
+	}
+
+	/**
+	 * Whether that image is worth keeping at all, which is the pack's own read of it and the centre
+	 * depth fold together.
+	 * <p>
+	 * The fold is a reader that reaches the image by no name of the pack's, and
+	 * {@link #sampleCenterDepth} says why the depth the hand is in cannot be what it folds. Its half
+	 * of the question is answered off the built chain rather than off the pack's text, which is
+	 * early enough: the declarations are read while the pipelines are still compiling and the chain
+	 * draws nothing at all until they are done.
+	 */
+	private boolean wantsPreHandDepth() {
+		return mayReadPreHandDepth() || this.centerDepthRead;
 	}
 
 	/**
@@ -1447,6 +1461,12 @@ public final class PackChain {
 	 * {@code depthtex2} is the only depth of the pair the hand is missing from. A pack reads it to
 	 * see what the hand it is holding stands in front of, and served the image with the hand in it
 	 * that read finds the hand.
+	 * <p>
+	 * <strong>The centre depth is folded from it too</strong>, by no name of the pack's:
+	 * {@link #sampleCenterDepth} runs after the hand where Iris folds before it, so the image is
+	 * kept for a pack that reads {@code centerDepthSmooth} and never names {@code depthtex2}.
+	 * {@link #wantsPreHandDepth} is the pair of questions, and what the second one costs such a pack
+	 * is the third image and one conversion on the frames a hand is really drawn.
 	 * <p>
 	 * <strong>Only on the frames this engine really draws a hand</strong>, which is
 	 * {@link HandDraw#draws} and not {@link HandDraw#diverted}: the hand's solid pass is the one
@@ -1473,7 +1493,7 @@ public final class PackChain {
 		GpuDevice device = RenderSystem.tryGetDevice();
 		Minecraft minecraft = Minecraft.getInstance();
 		if (disabled || chain == null || device == null || minecraft == null || !chainWanted
-				|| !HandDraw.draws() || !chain.mayReadPreHandDepth()) {
+				|| !HandDraw.draws() || !chain.wantsPreHandDepth()) {
 			return;
 		}
 
@@ -1702,9 +1722,10 @@ public final class PackChain {
 		// Here and not after the deferreds, because here is Iris's beginHand: it is called at the
 		// head of iris$beginTranslucents, MixinLevelRenderer.java:277-279, which is before the solid
 		// hand, before the world's translucents and before beginTranslucents runs the deferred
-		// stage. So the depth it folds is the opaque world's, the image this line has just taken,
-		// and the deferreds below read the value of THIS frame rather than of the one before.
-		// Outside any render pass, since it opens one.
+		// stage. So the deferreds below read the value of THIS frame rather than of the one before.
+		// What is NOT the same is that the hand has already been drawn by the time this line is
+		// reached, which is why the fold reads the copy kept before it rather than the image the
+		// line above has just taken. Outside any render pass, since it opens one.
 		//
 		// The begins and the prepares are in the range below too, so they read this frame's texel
 		// where under Iris they would read the previous frame's: it runs both before beginHand,
@@ -1795,11 +1816,20 @@ public final class PackChain {
 	 * Folds this frame's centre depth into the texel the pack reads it out of, on the packs that read
 	 * it at all.
 	 * <p>
-	 * The opaque world's depth, and Iris reads the same image: what it hands
-	 * {@code CenterDepthSampler} is the live depth attachment, sampled at a moment when nothing
-	 * translucent and no hand has been drawn into it yet. The scene's depth would put the surface of
-	 * water and glass under the focus point, so a pack looking through either would focus on the
-	 * pane rather than on what is behind it.
+	 * <strong>The opaque world's depth from before the hand</strong>, which is the copy
+	 * {@link #markPreHandDepth} keeps and not the image {@link #drawEarly} has just taken. Iris folds
+	 * the live depth attachment inside {@code beginHand}
+	 * ({@code pipeline/IrisRenderingPipeline.java:1051-1052}), which its level renderer mixin calls
+	 * on the line before the solid hand is drawn ({@code mixin/MixinLevelRenderer.java:279-280}), so
+	 * what it folds has no hand in it. This chain runs a step later, and folded from the image the
+	 * hand is in, one texel wide, the focus lands on the item being held whenever it covers the
+	 * middle of the screen and the whole scene behind it goes soft. The image with the hand is the
+	 * fall back, and it is exact on the frames no hand of this engine's was drawn, the two moments
+	 * holding one depth there; {@link PackDepth#preHand} carries the failures that reach it as well.
+	 * <p>
+	 * Neither of the two is the whole scene's depth, which would put the surface of water and glass
+	 * under the focus point, so a pack looking through either would focus on the pane rather than on
+	 * what is behind it.
 	 * <p>
 	 * Skipped where nothing reads the name, which is Iris's own rule rather than a saving of ours:
 	 * {@code CenterDepthSampler.sampleCenterDepth} returns without drawing once it has seen that no
@@ -1812,9 +1842,11 @@ public final class PackChain {
 			return;
 		}
 
+		GpuTextureView preHand = this.targets.depth().preHand();
 		WorldState world = this.values.world();
 		this.targets.centerDepth().sample(device.createCommandEncoder(), device, this.quad,
-				this.targets.depth().opaque(), world.centerDepthHalfLife(), world.frameTime());
+				preHand != null ? preHand : this.targets.depth().opaque(),
+				world.centerDepthHalfLife(), world.frameTime());
 	}
 
 	/**
@@ -2588,17 +2620,19 @@ public final class PackChain {
 
 		// Said whichever way it went, because what is worth reading here is the work NOT done and
 		// a silence would look the same as a guard that never fired. Off the whole pack's text
-		// rather than off this chain's programs: that is the reading the two guards go by, and a
-		// line quoting a narrower one would send whoever chases a missing shadow to the wrong
-		// place.
+		// rather than off this chain's programs: that is the reading the guards go by, and a line
+		// quoting a narrower one would send whoever chases a missing shadow to the wrong place. The
+		// depth from before the hand has the centre depth fold beside that text, since the fold
+		// reaches the image by no name a pack could be searched for, so its line names both.
 		if (!mayReadShadowWithoutTranslucents()) {
 			Vitrail.logger().info("No source of this pack names shadowtex1 or watershadow, so the "
 					+ "copy of the shadow map taken before its translucents is not taken at all");
 		}
 
-		if (!mayReadPreHandDepth()) {
-			Vitrail.logger().info("No source of this pack names depthtex2, so the depth of the "
-					+ "world from before the hand is neither converted nor kept");
+		if (!wantsPreHandDepth()) {
+			Vitrail.logger().info("No source of this pack names depthtex2 and nothing in this chain "
+					+ "folds the centre depth, so the depth of the world from before the hand is "
+					+ "neither converted nor kept");
 		}
 	}
 

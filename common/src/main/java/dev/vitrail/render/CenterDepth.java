@@ -194,8 +194,8 @@ final class CenterDepth {
 	 * of Iris's frame that is. A frame that draws nothing here leaves the accumulator where it
 	 * stands, so the pack reads what it read before rather than a nought.
 	 *
-	 * @param opaque   the depth of the opaque world, already converted into the pack's own window.
-	 *                 Null on a frame that kept none
+	 * @param opaque   the depth of the opaque world as it stood before the hand was drawn, already
+	 *                 converted into the pack's own window. Null on a frame that kept none
 	 * @param halfLife the pack's {@code centerDepthHalflife}, in deciseconds
 	 * @param seconds  the previous frame's duration
 	 */
