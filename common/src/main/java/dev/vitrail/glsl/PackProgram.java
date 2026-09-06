@@ -377,7 +377,7 @@ public final class PackProgram {
 			List<String> boundElements, Map<String, OptionValue> chosen, String profile)
 			throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex options = OptionIndex.build(source);
+			OptionIndex options = source.options();
 			ShaderProperties properties = ShaderProperties.parse(source);
 			Map<String, OptionValue> fromProfile = profile.isEmpty()
 					? Map.of()

@@ -55,7 +55,7 @@ public record PackSession(Path gameDirectory, Path packPath, String packFileName
 		// than left to the loader further down because the layers are resolved before a program is
 		// translated, and a value dropped has to be named at the moment it is dropped.
 		try (ShaderPackSource source = ShaderPackSource.open(packPath)) {
-			OptionIndex index = OptionIndex.build(source);
+			OptionIndex index = source.options();
 			declared = index.names();
 			menu = PackMenu.build(source.packName(), index, ShaderProperties.parse(source),
 					PackLang.read(source, languageCode));
