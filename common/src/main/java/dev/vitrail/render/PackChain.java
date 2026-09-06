@@ -298,6 +298,12 @@ public final class PackChain {
 	/** Distant Horizons' far terrain, drawn with the pack's own programs where DH is there at all. */
 	private final DistantDraw distant;
 
+	/**
+	 * The six above in the one order that holds everywhere: the worker reads them in it, a ring
+	 * is rotated for the first {@link #familiesReady} of them, the dump names them in it.
+	 */
+	private final List<FamilyDraw> families;
+
 	/** Shadow compute, dispatched after the shadow map, Complementary's floodfill among them. */
 	private final PackCompute compute;
 
@@ -461,6 +467,8 @@ public final class PackChain {
 		// on the frames DH really draws a far terrain.
 		this.distant = new DistantDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
+		this.families = List.of(this.sky, this.entities, this.clouds, this.weather,
+				this.particles, this.distant);
 		// The passes the chain will draw, read off the plan: the pass objects themselves are only
 		// built on the render thread, after this constructor.
 		this.compute = PackCompute.load(opened, chain.place(), chain.targets().computes(), this.load,
@@ -983,9 +991,7 @@ public final class PackChain {
 			this.values.advance();
 			PackDump.take(this.chain.place(), this.load,
 					this.programs == null ? List.of() : this.programs, this.values.world(),
-					this.terrain.programs(), this.sky.programs(), this.entities.programs(),
-					this.clouds.programs(), this.weather.programs(), this.particles.programs(),
-					this.distant.programs());
+					this.terrain.programs(), this.families);
 		}
 	}
 
@@ -1076,29 +1082,9 @@ public final class PackChain {
 		// composites and the terrain are compiled, which is earlier than leftover families
 		// have been read, and walking those maps while the worker still fills them is the
 		// crash at world join.
-		int ready = this.familiesReady;
-		if (ready > 0) {
-			this.sky.rotate();
-		}
-
-		if (ready > 1) {
-			this.entities.rotate();
-		}
-
-		if (ready > 2) {
-			this.clouds.rotate();
-		}
-
-		if (ready > 3) {
-			this.weather.rotate();
-		}
-
-		if (ready > 4) {
-			this.particles.rotate();
-		}
-
-		if (ready > 5) {
-			this.distant.rotate();
+		int ready = Math.min(this.familiesReady, this.families.size());
+		for (int family = 0; family < ready; family++) {
+			this.families.get(family).rotate();
 		}
 	}
 
@@ -1132,8 +1118,9 @@ public final class PackChain {
 	 * The first frame of that next world pays for it twice, and it is worth knowing where. The sky,
 	 * the terrain and the entities all open the frame while the world is being drawn, whichever of
 	 * the three comes first, so they allocate everything back
-	 * before {@code draw} reaches {@link PackChoice#reloadIfTheWorldMoved} at the end of it; a world joined
-	 * with registries this engine has not seen then reloads and makes the same work again. One extra
+	 * before {@code draw} reaches {@link PackChoice#reloadIfTheWorldMoved} at the end of it; a
+	 * world joined with registries this engine has not seen then reloads and makes the same work
+	 * again. One extra
 	 * allocation and one extra translation, on the frame the world appears, which is the frame
 	 * already carrying every other first cost there is.
 	 */
@@ -1986,8 +1973,6 @@ public final class PackChain {
 		return true;
 	}
 
-	private static final int FAMILIES = 6;
-
 	/** Long enough for several compiles, short enough that the HUD still ticks. */
 	private static final long WARM_BUDGET_NANOS = 80_000_000L;
 
@@ -2027,24 +2012,17 @@ public final class PackChain {
 				VulkanDevice device = compileDevice(keepOld);
 				fanned.set(device != null);
 
-				List<CompletableFuture<Void>> compiles = new ArrayList<>(FAMILIES);
+				List<CompletableFuture<Void>> compiles = new ArrayList<>(this.families.size());
 				// One opening for the six, so the plan of the place, the program tree and every
 				// header they share are worked out once on this worker rather than once per family:
 				// the families used to be five of every six walks a warm load made of the archive.
 				// A family that reads later on its own, at a first draw, still opens for itself.
 				try (OpenedPack shared = OpenedPack.open(this.packPath, this.chosen, this.profile)) {
-					prefetchFamily(() -> this.sky.prefetch(shared));
-					spawnFamilyCompiles(compiles, 0, device);
-					prefetchFamily(() -> this.entities.prefetch(shared));
-					spawnFamilyCompiles(compiles, 1, device);
-					prefetchFamily(() -> this.clouds.prefetch(shared));
-					spawnFamilyCompiles(compiles, 2, device);
-					prefetchFamily(() -> this.weather.prefetch(shared));
-					spawnFamilyCompiles(compiles, 3, device);
-					prefetchFamily(() -> this.particles.prefetch(shared));
-					spawnFamilyCompiles(compiles, 4, device);
-					prefetchFamily(() -> this.distant.prefetch(shared));
-					spawnFamilyCompiles(compiles, 5, device);
+					for (int family = 0; family < this.families.size(); family++) {
+						FamilyDraw read = this.families.get(family);
+						prefetchFamily(() -> read.prefetch(shared));
+						spawnFamilyCompiles(compiles, family, device);
+					}
 				} catch (Throwable e) {
 					// prefetchFamily catches the RuntimeException of one translation; anything
 					// harder would otherwise take this stage down EXCEPTIONALLY, and the whole
@@ -2256,15 +2234,9 @@ public final class PackChain {
 	}
 
 	private Collection<? extends DumpedProgram> familyPrograms(int index) {
-		return switch (index) {
-			case 0 -> this.sky.programs();
-			case 1 -> this.entities.programs();
-			case 2 -> this.clouds.programs();
-			case 3 -> this.weather.programs();
-			case 4 -> this.particles.programs();
-			case 5 -> this.distant.programs();
-			default -> List.of();
-		};
+		return index >= 0 && index < this.families.size()
+				? this.families.get(index).programs()
+				: List.of();
 	}
 
 	private static boolean compileNext(GpuDevice device,
@@ -2283,9 +2255,9 @@ public final class PackChain {
 	private void forgetGeometry() {
 		this.geometryReady = false;
 		forgetCompiled(this.terrain.programs());
-		int ready = this.familiesReady;
-		for (int i = 0; i < ready && i < FAMILIES; i++) {
-			forgetCompiled(familyPrograms(i));
+		int ready = Math.min(this.familiesReady, this.families.size());
+		for (int family = 0; family < ready; family++) {
+			forgetCompiled(familyPrograms(family));
 		}
 	}
 
@@ -2643,8 +2615,8 @@ public final class PackChain {
 		// walk below, which is safe for objects nothing ever bound. Only families the worker
 		// finished translating are walked, for the reason rotate() gives.
 		this.released = true;
-		int ready = this.familiesReady;
-		for (int family = 0; family < ready && family < FAMILIES; family++) {
+		int ready = Math.min(this.familiesReady, this.families.size());
+		for (int family = 0; family < ready; family++) {
 			familyPrograms(family).forEach(DumpedProgram::discardAhead);
 		}
 
@@ -2665,12 +2637,7 @@ public final class PackChain {
 
 		this.terrain.release();
 		synchronized (this.familyMaps) {
-			this.sky.release();
-			this.entities.release();
-			this.clouds.release();
-			this.weather.release();
-			this.particles.release();
-			this.distant.release();
+			this.families.forEach(FamilyDraw::release);
 		}
 
 		if (this.block != null) {

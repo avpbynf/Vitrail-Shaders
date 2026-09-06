@@ -74,8 +74,10 @@ final class PackDump {
 	 * named program's own.
 	 *
 	 * @param passes   the chain's own passes, empty for the frame or two before they are built
-	 * @param families the pack's geometry programs, one collection per family and each empty until
-	 *                 that family is read. <strong>The order is the order a line resolves in</strong>,
+	 * @param terrain  the terrain's programs, empty until it is read
+	 * @param families the six other families in the chain's own order, each answering its programs
+	 *                 and each empty until it is read. <strong>The order is the order a line
+	 *                 resolves in</strong>,
 	 *                 and the terrain goes first on purpose: it is answered from a different
 	 *                 catalogue, its {@code of_ModelViewMatrix} being the world's where a composite's
 	 *                 is the identity, which is exactly the pair a reading has to tell apart. Every
@@ -84,9 +86,8 @@ final class PackDump {
 	 *                 files, four apiece, the two halves of the entities sometimes out of one, and
 	 *                 the clouds answer their two settings, {@code fancy} and {@code flat}, out of one
 	 */
-	@SafeVarargs
 	static void take(String place, int load, List<PackPass> passes, WorldState world,
-			Collection<? extends DumpedProgram>... families) {
+			Collection<? extends DumpedProgram> terrain, List<? extends FamilyDraw> families) {
 		if (wanted.isEmpty() || file == null) {
 			return;
 		}
@@ -105,7 +106,13 @@ final class PackDump {
 		// file, and a line that said gbuffers_terrain twice would not say which of the two was read.
 		// The label is matched as well as the path, so dump=cutout names the pass and
 		// dump=gbuffers_terrain still names the file, taking the first pass drawn with it.
-		for (Collection<? extends DumpedProgram> family : families) {
+		List<Collection<? extends DumpedProgram>> drawn = new ArrayList<>(1 + families.size());
+		drawn.add(terrain);
+		for (FamilyDraw family : families) {
+			drawn.add(family.programs());
+		}
+
+		for (Collection<? extends DumpedProgram> family : drawn) {
 			for (DumpedProgram program : family) {
 				running.add(program.label());
 				if (decoded == null && (names(program.path()) || names(program.label()))) {

@@ -54,7 +54,7 @@ import java.util.Optional;
  * without this class, is the plan having no answer for the program at all, which
  * {@link ChainPlan#geometry} lists the causes of.
  */
-public final class CloudDraw {
+public final class CloudDraw extends FamilyDraw {
 
 	/** Off unless {@code options.txt} asks otherwise, and read again at every load. */
 	private static volatile boolean wanted;
@@ -134,6 +134,7 @@ public final class CloudDraw {
 	 * families: one opening, one plan of the place and one program tree shared between them,
 	 * where each used to open the archive and rebuild all three for itself.
 	 */
+	@Override
 	void prefetch(OpenedPack shared) {
 		if (!this.read && wanted()) {
 			read(shared);
@@ -359,11 +360,13 @@ public final class CloudDraw {
 	}
 
 	/** The programs once the clouds have been read, for the decoded dump. Empty until then. */
+	@Override
 	Collection<CloudProgram> programs() {
 		return this.programs.values();
 	}
 
 	/** Rotates the ring buffers. Called once the frame's cloud draw has been recorded. */
+	@Override
 	void rotate() {
 		this.drawing = null;
 		if (!this.read) {
@@ -373,6 +376,7 @@ public final class CloudDraw {
 		this.programs.values().forEach(CloudProgram::rotate);
 	}
 
+	@Override
 	void release() {
 		this.programs.values().forEach(CloudProgram::release);
 		this.programs.clear();

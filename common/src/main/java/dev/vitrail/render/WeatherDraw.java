@@ -68,7 +68,7 @@ import java.util.Set;
  * a pack that asks; what leaving it out would cost is that pack silently getting the other one's
  * depth state.
  */
-public final class WeatherDraw {
+public final class WeatherDraw extends FamilyDraw {
 
 	/** Off unless {@code options.txt} asks otherwise, and read again at every load. */
 	private static volatile boolean wanted;
@@ -195,6 +195,7 @@ public final class WeatherDraw {
 	 * families: one opening, one plan of the place and one program tree shared between them,
 	 * where each used to open the archive and rebuild all three for itself.
 	 */
+	@Override
 	void prefetch(OpenedPack shared) {
 		if (!this.read && wanted()) {
 			read(shared);
@@ -517,11 +518,13 @@ public final class WeatherDraw {
 	}
 
 	/** The programs once the weather has been read, for the decoded dump. Empty until then. */
+	@Override
 	Collection<WeatherProgram> programs() {
 		return this.programs.values();
 	}
 
 	/** Rotates the ring buffers. Called once the frame's weather draws have been recorded. */
+	@Override
 	void rotate() {
 		this.drawing = null;
 		this.descriptor = null;
@@ -532,6 +535,7 @@ public final class WeatherDraw {
 		this.programs.values().forEach(WeatherProgram::rotate);
 	}
 
+	@Override
 	void release() {
 		this.programs.values().forEach(WeatherProgram::release);
 		this.programs.clear();
