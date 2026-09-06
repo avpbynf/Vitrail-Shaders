@@ -745,6 +745,7 @@ public final class GlslTranslator {
 		collectDrawBuffers();
 		synthesizeAttributes();
 		dropVersionAndExtensions();
+		settleRedefinedMacros();
 		rewriteIdentifiers();
 		// After the identifiers, because the goldberg idiom's sine has become ofReducedSin by then
 		// and that is one of the two names the site is recognised under, the other being the plain
@@ -1399,6 +1400,105 @@ public final class GlslTranslator {
 
 			this.tokens.blankDirective(index);
 		}
+	}
+
+	/**
+	 * Leaves one definition standing where a unit defines the same macro twice under two different
+	 * bodies, which is the last of them.
+	 * <p>
+	 * The language calls that an error and the compiler here holds it to that. A GL driver does
+	 * not: it warns and takes the newer definition from that point on, which is why packs ship it
+	 * and why it reaches nobody's bug tracker. Pegasus declares {@code ROUGH_FRESNEL} twice in
+	 * {@code settings.glsl}, at 0.7 and again at 0.2 six hundred lines further down, and every one
+	 * of its 178 compilable units died on the pair.
+	 * <p>
+	 * <strong>The last and not the first, and it is only done where the two cannot be told
+	 * apart.</strong> A driver answers a use standing BETWEEN two definitions with the first body,
+	 * and this would answer it with the last, which is a wrong number rather than a lost pass. So a
+	 * name used anywhere between its first definition and its last is left exactly as the pack
+	 * wrote it, and the unit keeps the refusal it has today. That guard is not theory: I Like
+	 * Vanilla redefines four of its own settings around uses of them and Pegasus redefines
+	 * {@code texture} around a hundred, and taking the earlier definition out cost those two packs
+	 * a hundred and thirty units and fifty five between them, measured. What is left is the shape
+	 * the guard is for, a settings file declaring the same option twice with nothing between the
+	 * two but more declarations.
+	 * <p>
+	 * Only bodies that DIFFER. Repeating a definition word for word is legal, several packs do it
+	 * through an include reached twice, and taking one of those out would say something where the
+	 * language says nothing. Only live lines, for the same reason the rest of this class reads
+	 * liveness: two definitions in two branches of one conditional are one definition.
+	 */
+	private void settleRedefinedMacros() {
+		Map<String, List<Integer>> sites = new LinkedHashMap<>();
+		Map<String, List<String>> bodies = new LinkedHashMap<>();
+
+		int[] lines = this.tokens.lineNumbers();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.HASH || !"define".equals(token.directive())
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int name = this.tokens.macroNameAfter(index);
+			if (name < 0) {
+				continue;
+			}
+
+			String named = this.tokens.get(name).text();
+			sites.computeIfAbsent(named, ignored -> new ArrayList<>()).add(index);
+			bodies.computeIfAbsent(named, ignored -> new ArrayList<>()).add(macroBody(name));
+		}
+
+		sites.forEach((named, at) -> {
+			List<String> written = bodies.get(named);
+			if (at.size() < 2 || written.stream().allMatch(written.get(0)::equals)
+					|| usedBetween(named, at.get(0), at.get(at.size() - 1))) {
+				return;
+			}
+
+			for (int which = 0; which < at.size() - 1; which++) {
+				this.tokens.blankDirective(at.get(which));
+			}
+		});
+	}
+
+	/**
+	 * Whether anything between two definitions of a macro reads it, which is what decides whether
+	 * the two can be settled into one. The name a {@code #define} gives is not a read of it, and
+	 * neither is a line nobody takes.
+	 */
+	private boolean usedBetween(String named, int first, int last) {
+		int[] lines = this.tokens.lineNumbers();
+		for (int index = first + 1; index < last; index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() == Kind.IDENTIFIER && !token.macroName() && named.equals(token.text())
+					&& this.unit.isLive(lines[index])) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * What one {@code #define} substitutes, as the compiler compares it: the tokens after the name
+	 * with the spacing and the comments left out, since neither is part of a substitution.
+	 */
+	private String macroBody(int name) {
+		StringBuilder body = new StringBuilder();
+		for (int index = name + 1; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() == Kind.NEWLINE) {
+				break;
+			}
+
+			if (!token.trivia()) {
+				body.append(token.text());
+			}
+		}
+
+		return body.toString();
 	}
 
 	/**
