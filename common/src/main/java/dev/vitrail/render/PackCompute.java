@@ -84,12 +84,12 @@ import java.util.regex.Pattern;
  * The shadow computes run in the parity of the gbuffers that read what they propagate; the
  * volumes they read are the previous frame's shadow-geometry writes, one frame late like the
  * shadow map itself. Complementary's floodfill lives in {@code shadowcomp.csh}. Iris runs it
- * inside its shadow render ({@code ShadowRenderer.java:631-632}, the debug group and the
+ * inside its shadow render ({@code ShadowRenderer.java:632-633}, the debug group and the
  * {@code compositeRenderer.renderAll()} under it), before its gbuffers in the SAME frame. Under
  * this engine's deferred shadow stage, the head of the frame is that moment's translation.
  * <p>
  * The chained computes, {@code deferred4_a.csh} for {@code deferred4}, run where Iris runs them:
- * in a loop right before their pass, with a memory barrier after ({@code CompositeRenderer.java:287-297}),
+ * in a loop right before their pass, with a memory barrier after ({@code CompositeRenderer.java:289-300}),
  * reading and storing the colour targets on the halves that pass reads. Photon builds its sky
  * lighting in one, and without it everything in shadow was black.
  * <p>
@@ -128,10 +128,21 @@ final class PackCompute implements AutoCloseable {
 
 	/**
 	 * The computes hanging off a full screen pass, by that pass, each list in letter order. Iris
-	 * dispatches them right before the pass ({@code CompositeRenderer.java:287-297}, the loop over
+	 * dispatches them right before the pass ({@code CompositeRenderer.java:289-300}, the loop over
 	 * {@code compositePass.computes} with a memory barrier after), and so does the chain here.
 	 */
 	private final Map<String, List<Pass>> chained;
+
+	/**
+	 * The same, by the program they hang off, for the programs this place draws no pass for: the
+	 * pack ships less than both halves of the program, or it switched the program off itself.
+	 * Nothing draws them, so there is no pass to run these before and they are dispatched at that
+	 * program's own moment in the frame, which is where Iris runs them: a stage entry with computes
+	 * and no valid source becomes a pass of computes alone, at its own index of the stage
+	 * ({@code CompositeRenderer.java:137-145}), dispatched and barriered like any other and then
+	 * skipped before the draw ({@code :304-307}).
+	 */
+	private final Map<String, List<Pass>> alone;
 
 	/** The targets some compute writes as {@code colorimgN}, which are created writable for it. */
 	private final Set<Integer> storageTargets;
@@ -142,14 +153,15 @@ final class PackCompute implements AutoCloseable {
 	private final Set<String> announcedChains = new LinkedHashSet<>();
 
 	private PackCompute(List<Pass> passes, Map<String, List<Pass>> chained,
-			Set<Integer> storageTargets) {
+			Map<String, List<Pass>> alone, Set<Integer> storageTargets) {
 		this.passes = List.copyOf(passes);
 		this.chained = Map.copyOf(chained);
+		this.alone = Map.copyOf(alone);
 		this.storageTargets = Set.copyOf(storageTargets);
 	}
 
 	static PackCompute none() {
-		return new PackCompute(List.of(), Map.of(), Set.of());
+		return new PackCompute(List.of(), Map.of(), Map.of(), Set.of());
 	}
 
 	/** The targets to create writable from a compute, read before the first allocation. */
@@ -179,7 +191,11 @@ final class PackCompute implements AutoCloseable {
 	 * than a fold of its own would be.
 	 */
 	boolean readsCenterDepth() {
-		for (List<Pass> passes : this.chained.values()) {
+		return readsCenterDepth(this.chained) || readsCenterDepth(this.alone);
+	}
+
+	private static boolean readsCenterDepth(Map<String, List<Pass>> computes) {
+		for (List<Pass> passes : computes.values()) {
 			for (Pass pass : passes) {
 				for (TranslatedUnit.Uniform sampler : pass.compute.loaded().program().samplers()) {
 					if (sampler.name().equals(SamplerPlan.centerDepth())) {
@@ -202,15 +218,21 @@ final class PackCompute implements AutoCloseable {
 	 * of it to rebuild the same index of the same settings, so a pack with four computes paid for
 	 * four whole readings of itself to translate four files.
 	 *
-	 * @param running the programs the chain draws, which is where a chained compute can hang. A
-	 *                compute whose pass is not among them is read by Iris and dispatched with no
-	 *                fragment stage at all ({@code CompositeRenderer.java:135-141}); here it is
-	 *                named and left, since the chain has no step to hang it off yet
+	 * @param running the programs the chain draws, which is where a chained compute can hang
+	 * @param passing the programs this place draws no pass for, the pack having shipped less than
+	 *                both halves of them or switched them off itself. They draw nothing and so have
+	 *                no pass to hang a compute off; their computes are kept all the same and
+	 *                dispatched at that program's own moment in the frame, as Iris runs them
+	 *                ({@code CompositeRenderer.java:137-145}). Asked before {@code running}, since a
+	 *                program shipped with one half only is in both. A program in neither set has its
+	 *                computes left where they were, and the plan's notes carry the reason
 	 */
 	static PackCompute load(OpenedPack pack, String place, List<String> computes, int load,
-			UniformCatalog shadowCatalog, UniformCatalog chainCatalog, Set<String> running) {
+			UniformCatalog shadowCatalog, UniformCatalog chainCatalog, Set<String> running,
+			Set<String> passing) {
 		List<Pass> passes = new ArrayList<>();
 		Map<String, List<Pass>> chained = new LinkedHashMap<>();
+		Map<String, List<Pass>> alone = new LinkedHashMap<>();
 		Set<Integer> storageTargets = new LinkedHashSet<>();
 		for (String name : computes) {
 			boolean shadow = ProgramNames.shadowComposite(ProgramNames.familyOf(name));
@@ -220,10 +242,16 @@ final class PackCompute implements AutoCloseable {
 				continue;
 			}
 
-			if (!shadow && !running.contains(base.get())) {
-				Vitrail.logger().warn("compute {} hangs off {}, which this chain does not draw, so "
-						+ "it is not dispatched: the reference runs it as a pass of its own",
-						name, base.get());
+			// A program the place merely draws no pass for was never asked about: it is the
+			// reference's own invalid source, and its computes run there, so they run here. What is
+			// left over is a program taken out of the frame on purpose, by the pass filter at the
+			// user's ask or by this engine refusing a sampler it cannot bind, and a final nothing
+			// draws, whose computes the reference builds with the final and never without it. The
+			// plan tells the three apart in its notes; here they take the same road.
+			boolean standalone = !shadow && passing.contains(base.get());
+			if (!shadow && !standalone && !running.contains(base.get())) {
+				Vitrail.logger().warn("compute {} is not dispatched: nothing of this chain runs {}, "
+						+ "and the plan's notes say what took it out", name, base.get());
 				continue;
 			}
 
@@ -252,6 +280,11 @@ final class PackCompute implements AutoCloseable {
 				if (shadow) {
 					passes.add(pass);
 					Vitrail.logger().info("Loaded shadow compute {} ({})", path, sizing(compute.get()));
+				} else if (standalone) {
+					alone.computeIfAbsent(base.get(), _ -> new ArrayList<>()).add(pass);
+					storageTargets.addAll(colourImagesOf(compute.get()));
+					Vitrail.logger().info("Loaded compute {} at the moment of {}, which draws "
+							+ "nothing here ({})", path, base.get(), sizing(compute.get()));
 				} else {
 					chained.computeIfAbsent(base.get(), _ -> new ArrayList<>()).add(pass);
 					storageTargets.addAll(colourImagesOf(compute.get()));
@@ -265,8 +298,10 @@ final class PackCompute implements AutoCloseable {
 
 		chained.values().forEach(list -> list.sort(
 				Comparator.comparing(pass -> ProgramNames.computeLetter(pass.name))));
+		alone.values().forEach(list -> list.sort(
+				Comparator.comparing(pass -> ProgramNames.computeLetter(pass.name))));
 
-		return new PackCompute(passes, chained, storageTargets);
+		return new PackCompute(passes, chained, alone, storageTargets);
 	}
 
 	/** The colour targets a compute names as an image, read off its translated text. */
@@ -306,7 +341,37 @@ final class PackCompute implements AutoCloseable {
 	void dispatchBefore(String program, CommandEncoder encoder, GpuDevice device, PackValues values,
 			ColorTargets targets, TargetSchedule.Bound step, GpuTextureView depth,
 			GpuTextureView distant, int width, int height) {
-		List<Pass> attached = this.chained.get(program);
+		dispatchChain(this.chained.get(program), program, encoder, device, values, targets, step,
+				depth, distant, width, height);
+	}
+
+	/**
+	 * Dispatches the computes hanging off a program this place draws no pass for, at the moment
+	 * that program would have run, which is what Iris does with them. Nothing happens for a name
+	 * with none, which is every name of nearly every pack.
+	 * <p>
+	 * The same road as a chained dispatch and deliberately so: Iris builds one kind of compute for
+	 * both and runs them in the same loop, the only difference being that the pass around them
+	 * draws nothing and is left where the others set their state up
+	 * ({@code CompositeRenderer.java:304-307}). What is not the same is where the halves come from,
+	 * and the caller answers that: {@link TargetSchedule#passing} rather than the step of a pass,
+	 * since there is no pass.
+	 */
+	void dispatchAlone(String program, CommandEncoder encoder, GpuDevice device, PackValues values,
+			ColorTargets targets, TargetSchedule.Bound step, GpuTextureView depth,
+			GpuTextureView distant, int width, int height) {
+		dispatchChain(this.alone.get(program), program, encoder, device, values, targets, step,
+				depth, distant, width, height);
+	}
+
+	/** The programs {@link #dispatchAlone} answers for, which the chain has to find a moment for. */
+	Set<String> standingAlone() {
+		return this.alone.keySet();
+	}
+
+	private void dispatchChain(List<Pass> attached, String program, CommandEncoder encoder,
+			GpuDevice device, PackValues values, ColorTargets targets, TargetSchedule.Bound step,
+			GpuTextureView depth, GpuTextureView distant, int width, int height) {
 		if (attached == null || attached.isEmpty()) {
 			return;
 		}
@@ -314,7 +379,7 @@ final class PackCompute implements AutoCloseable {
 		// The hold first, as the head-of-frame dispatch does: the first pass of a chain half can
 		// still have the geometry's render pass object open over it, and ending the pass
 		// underneath would leave that object to close a pass the encoder no longer has.
-		GeometryHold.flush(() -> "the compute dispatch before " + program);
+		GeometryHold.flush(() -> "the compute dispatch at " + program);
 		GpuRecording.endPass(encoder);
 		VkCommandBuffer commands = commands(encoder);
 		VulkanDevice vulkan = vulkan(device);
@@ -341,7 +406,7 @@ final class PackCompute implements AutoCloseable {
 		}
 
 		if (this.announcedChains.add(program)) {
-			Vitrail.logger().info("Dispatched {} compute pass(es) before {}", attached.size(), program);
+			Vitrail.logger().info("Dispatched {} compute pass(es) at {}", attached.size(), program);
 		}
 	}
 
@@ -415,6 +480,7 @@ final class PackCompute implements AutoCloseable {
 	@Override
 	public void close() {
 		this.passes.forEach(Pass::close);
+		this.alone.values().forEach(list -> list.forEach(Pass::close));
 	}
 
 	private static VkCommandBuffer commands(CommandEncoder encoder) {

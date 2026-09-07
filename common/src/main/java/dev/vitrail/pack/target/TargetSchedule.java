@@ -6,6 +6,7 @@ import dev.vitrail.pack.source.ShaderProperties;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -53,9 +54,11 @@ public final class TargetSchedule {
 	private final Set<Integer> flippedAtEnd;
 	private final Set<Integer> afterDeferred;
 	private final Map<String, Map<Integer, Boolean>> forced;
+	private final Map<String, Set<Integer>> passingHalves;
 
 	private TargetSchedule(List<Bound> steps, Set<Integer> doubled, Set<Integer> flippedAtEnd,
-			Set<Integer> afterDeferred, Map<String, Map<Integer, Boolean>> forced) {
+			Set<Integer> afterDeferred, Map<String, Map<Integer, Boolean>> forced,
+			Map<String, Set<Integer>> passingHalves) {
 		this.steps = List.copyOf(steps);
 		// Sorted rather than Set.copyOf: these end up in a log, and an index that moves about
 		// between two runs of the same pack reads as a difference that is not one.
@@ -66,6 +69,10 @@ public final class TargetSchedule {
 		Map<String, Map<Integer, Boolean>> copied = new LinkedHashMap<>();
 		forced.forEach((program, indices) -> copied.put(program, Map.copyOf(indices)));
 		this.forced = Map.copyOf(copied);
+
+		Map<String, Set<Integer>> halves = new LinkedHashMap<>();
+		passingHalves.forEach((program, indices) -> halves.put(program, sortedCopy(indices)));
+		this.passingHalves = Map.copyOf(halves);
 	}
 
 	public enum Side { MAIN, ALT }
@@ -97,17 +104,36 @@ public final class TargetSchedule {
 	 * @param steps in render order, not in directive order
 	 */
 	public static TargetSchedule of(List<Step> steps, List<ShaderProperties.FlipDirective> explicit) {
+		return of(steps, explicit, List.of());
+	}
+
+	/**
+	 * The same walk, also answering for the programs of {@code passing}, which the place draws no
+	 * pass for and which the walk therefore stops at without binding anything.
+	 *
+	 * @param steps   in render order, not in directive order
+	 * @param passing the programs a compute hangs off that this place draws no pass for, in the
+	 *                same order. They enter no step: nothing of them is drawn, they write no target
+	 *                and they turn none over, so every count taken off {@link #steps()} is the same
+	 *                with them and without. What the walk owes them is the one thing Iris gives its
+	 *                own compute-only pass and nothing else, the halves standing at that point of
+	 *                the frame ({@code pipeline/CompositeRenderer.java:134} takes the snapshot,
+	 *                {@code :137-145} builds the pass and flips nothing after it)
+	 */
+	public static TargetSchedule of(List<Step> steps, List<ShaderProperties.FlipDirective> explicit,
+			List<String> passing) {
 		Map<String, Map<Integer, Boolean>> forced = byProgram(explicit);
 		Set<Integer> flipped = new LinkedHashSet<>();
 		Set<Integer> doubled = new TreeSet<>();
 		List<Bound> bound = new ArrayList<>();
+		Map<String, Set<Integer>> halves = new LinkedHashMap<>();
 		Set<Integer> afterDeferred = null;
 		int deferredRank = ProgramNames.frameRank("deferred");
 		int opened = 0;
 
-		for (Step step : steps) {
+		for (Item item : merge(steps, passing)) {
 			int reached =
-					ProgramNames.frameRank(ProgramNames.familyOf(TargetName.bareName(step.program())));
+					ProgramNames.frameRank(ProgramNames.familyOf(TargetName.bareName(item.program())));
 
 			// The snapshot is taken between the last deferred and the first thing after it, with
 			// the deferred stage opened and the composite one not. That is the moment Iris takes
@@ -120,6 +146,15 @@ public final class TargetSchedule {
 
 			opened = openStages(opened, reached, forced, flipped, doubled);
 
+			// Its stage is open and no pass of it has run, which is where Iris takes the snapshot
+			// it hands a compute whose program has no valid source. Recorded and not bound: a step
+			// here would say a pass runs, and none does.
+			if (item.step() == null) {
+				halves.put(TargetName.bareName(item.program()), sortedCopy(flipped));
+				continue;
+			}
+
+			Step step = item.step();
 			Set<Integer> readsAlt = sortedCopy(flipped);
 			Set<Integer> writesAlt = new TreeSet<>();
 
@@ -170,7 +205,49 @@ public final class TargetSchedule {
 
 		openStages(opened, Integer.MAX_VALUE, forced, flipped, doubled);
 
-		return new TargetSchedule(bound, doubled, flipped, afterDeferred, forced);
+		return new TargetSchedule(bound, doubled, flipped, afterDeferred, forced, halves);
+	}
+
+	/** One thing the walk stops at: a pass the place draws, or a program it only ships a compute for. */
+	private record Item(String program, Step step) {
+	}
+
+	/**
+	 * The two lists laid end to end in frame order, each program of {@code passing} put where its
+	 * own name would have put a pass of it.
+	 * <p>
+	 * Both lists arrive in {@link ProgramNames#frameOrder}, which is the order the steps were built
+	 * in and the order Iris fills the array a stage walks, so this is a merge and not a sort.
+	 * <p>
+	 * They meet on one name and one only, a program shipped with its fragment half and not its
+	 * vertex one: the plan's walk reads the fragments, so it made a step of it, and the plan calls
+	 * it passing all the same because half a source draws nothing. Such a place is refused whole
+	 * before a frame is drawn from it, so the compute landing after that step rather than in its
+	 * place is a plan nobody reads.
+	 */
+	private static List<Item> merge(List<Step> steps, List<String> passing) {
+		if (passing.isEmpty()) {
+			return steps.stream().map(step -> new Item(step.program(), step)).toList();
+		}
+
+		Comparator<String> order = ProgramNames.frameOrder();
+		List<Item> items = new ArrayList<>();
+		int next = 0;
+		for (Step step : steps) {
+			String against = TargetName.bareName(step.program());
+			while (next < passing.size()
+					&& order.compare(TargetName.bareName(passing.get(next)), against) < 0) {
+				items.add(new Item(passing.get(next++), null));
+			}
+
+			items.add(new Item(step.program(), step));
+		}
+
+		while (next < passing.size()) {
+			items.add(new Item(passing.get(next++), null));
+		}
+
+		return List.copyOf(items);
 	}
 
 	/**
@@ -215,6 +292,25 @@ public final class TargetSchedule {
 
 		return this.steps.stream().filter(step -> TargetName.bareName(step.program()).equals(wanted))
 				.findFirst();
+	}
+
+	/**
+	 * The halves a program this place draws no pass for stands on, for the computes that hang off
+	 * it and that run whether it is there or not.
+	 * <p>
+	 * It writes nothing and turns nothing over, so only the read side of the answer means anything:
+	 * a compute of it samples {@code colortexN} and stores into {@code colorimgN} on the one half
+	 * Iris binds for both ({@code pipeline/CompositeRenderer.java:454} hands the samplers that
+	 * snapshot and {@code :458} hands the images the same one), which is the half the next pass of
+	 * the chain reads.
+	 * <p>
+	 * Empty for every program that is not one of these, which is every program that draws: ask
+	 * {@link #step} for those. Both answers are filled for one name only, the name the merge above
+	 * describes, and no frame is drawn off a plan holding it.
+	 */
+	public Optional<Bound> passing(String program) {
+		return Optional.ofNullable(this.passingHalves.get(TargetName.bareName(program)))
+				.map(readsAlt -> new Bound(program, List.of(), true, readsAlt, Set.of()));
 	}
 
 	/**

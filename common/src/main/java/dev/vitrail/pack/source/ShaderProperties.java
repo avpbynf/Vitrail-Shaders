@@ -609,7 +609,7 @@ public final class ShaderProperties {
 	 * what serves the name is whatever the fallback tree offers next, and only a name whose whole
 	 * chain is switched off or absent ends up served by nothing. That is the reference's
 	 * behaviour and not an interpretation of it: a disabled name gets no source there
-	 * ({@code ShaderPack.java:290-294}), {@code ProgramSet.get} then answers empty
+	 * ({@code ShaderPack.java:292-295}), {@code ProgramSet.get} then answers empty
 	 * ({@code programs/ProgramSet.java:279-285}), and the resolver walks to the parent
 	 * ({@code programs/ProgramFallbackResolver.java:27-42}).
 	 */

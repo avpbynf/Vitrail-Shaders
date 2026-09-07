@@ -123,6 +123,7 @@ public final class TargetPlan {
 	private final Map<String, Set<Integer>> samples;
 	private final int geometryAt;
 	private final List<String> computes;
+	private final List<String> passing;
 	private final List<String> unreadable;
 	private final List<String> notes;
 	private final int programsRead;
@@ -144,6 +145,7 @@ public final class TargetPlan {
 		this.samples = Collections.unmodifiableMap(new LinkedHashMap<>(draft.samples));
 		this.geometryAt = draft.geometryAt;
 		this.computes = List.copyOf(draft.computes);
+		this.passing = List.copyOf(draft.passing);
 		this.written = Collections.unmodifiableSet(new TreeSet<>(draft.written));
 		this.sampled = Collections.unmodifiableSet(new TreeSet<>(draft.sampled));
 
@@ -212,8 +214,11 @@ public final class TargetPlan {
 		Map<String, String> defines = settings.globalDefines(options);
 		draft.blend = properties.blend(defines);
 		read(source, options, settings, properties, entries, draft);
-		walk(properties, options, defines, entries, filter, draft);
+		// Ahead of the walk and it used to follow it: the walk owes a moment in the frame to every
+		// program a compute hangs off, and it cannot know which those are before this has said so.
+		// Nothing here reads what the walk writes, so the two only ever ran in this order by habit.
 		computes(properties, options, defines, programs, draft);
+		walk(properties, options, defines, programs, entries, filter, draft);
 
 		return new TargetPlan(draft);
 	}
@@ -223,7 +228,7 @@ public final class TargetPlan {
 	 * <p>
 	 * Iris refuses a disabled program at the source: its provider hands back nothing for the name,
 	 * so no family is read and none is compiled, computes included
-	 * ({@code ShaderPack.java:261-265} fills the list, {@code :290-294} refuses on it). Here the
+	 * ({@code ShaderPack.java:261-265} fills the list, {@code :292-295} refuses on it). Here the
 	 * toggles are applied where each list is built, and this one was left out while nothing ran
 	 * it. BSL conditions its three {@code shadowcomp} programs on
 	 * {@code MULTICOLORED_BLOCKLIGHT}, and the setting takes with it both the {@code image.}
@@ -246,7 +251,8 @@ public final class TargetPlan {
 			// up, and NOT the base name. A compute hangs off a composite by a letter, so
 			// world0/composite21_a is a name of its own and a pack switching off
 			// world0/composite21 has said nothing about it. Iris keeps those computes and runs
-			// them with no fragment stage at all, CompositeRenderer.java:135-141.
+			// them as a pass with no fragment stage at all (CompositeRenderer.java:137-145), and
+			// so does the chain here: passingOf below names that program.
 			String file = key.file();
 			int dot = file.lastIndexOf('.');
 			String path = dot < 0 ? file : file.substring(0, dot);
@@ -300,8 +306,8 @@ public final class TargetPlan {
 	 * reads its answer and none of it works the answer out again.
 	 */
 	private static void walk(ShaderProperties properties, OptionIndex options,
-			Map<String, String> defines, List<ProgramSet.ProgramKey> entries, ChainFilter filter,
-			Draft draft) {
+			Map<String, String> defines, ProgramSet programs, List<ProgramSet.ProgramKey> entries,
+			ChainFilter filter, Draft draft) {
 		Map<String, Boolean> toggles = properties.programToggles(defines, options);
 		Map<String, String> conditions = properties.programConditions(defines);
 		List<TargetSchedule.Step> steps = new ArrayList<>();
@@ -376,7 +382,90 @@ public final class TargetPlan {
 			draft.geometryAt = draft.running.size();
 		}
 
-		draft.schedule = TargetSchedule.of(steps, properties.flips(defines));
+		draft.passing = passingOf(programs, toggles, draft);
+		draft.schedule = TargetSchedule.of(steps, properties.flips(defines), draft.passing);
+	}
+
+	/**
+	 * The programs a compute hangs off that this place draws no pass for, in frame order.
+	 * <p>
+	 * This is Iris's {@code source == null || !source.isValid()} and nothing wider: a pass of the
+	 * computes alone is built there and only there
+	 * ({@code pipeline/CompositeRenderer.java:137-145}). A pack reaches it three ways and only the
+	 * first reads as obvious. It ships neither half of the program, having written the
+	 * {@code .csh} and nothing else. Or it ships both halves and turns the program off with its
+	 * own switch, which makes the source provider hand back nothing for that name
+	 * ({@code shaderpack/ShaderPack.java:292-295}) while the computes are read under their own
+	 * file names, which the switch never mentioned
+	 * ({@code shaderpack/programs/ProgramSet.java:190-210}): {@code composite3_a} outlives
+	 * {@code composite3} and runs without it. Or it ships one half only, which is
+	 * {@code !isValid()} and takes the very same road
+	 * ({@code shaderpack/programs/ProgramSource.java:81-83}).
+	 * <p>
+	 * <strong>A program THIS ENGINE'S pass filter cuts is not one of them</strong>, and that is a
+	 * rule of ours rather than a reading of Iris, which has no such filter. {@code passes=N} and
+	 * the named form both exist to say that a part of the frame must not happen, so a compute of a
+	 * cut program running anyway would put a piece of it back and the knob would stop cutting the
+	 * chain where it says it does. What it costs is the parity of a bisected chain against Iris,
+	 * which is a chain nobody plays on and that is measured against itself.
+	 * <p>
+	 * Shadow composites are not in it either, {@link ProgramNames#computeBase} answering empty for
+	 * them: their moment is the shadow stage rather than this walk, and the shadow list is what
+	 * carries them.
+	 * <p>
+	 * <strong>Nor is the final</strong>, and that one is a reading of Iris rather than a rule of
+	 * ours. The final is not built by the walk above at all: its computes are made inside the
+	 * {@code map} over the final source and nowhere else
+	 * ({@code pipeline/FinalPassRenderer.java:115-125}), so a pack shipping {@code final_a.csh} and
+	 * no {@code final.fsh} gets nothing built for it there, no compute-only pass and no dispatch.
+	 * The rest of the road treats it like any other family, {@code ProgramNames.computeBase}
+	 * answering {@code final} for the file, which is why it has to be taken out here.
+	 * <p>
+	 * A program shipped with its fragment half and not its vertex one is the one name that lands
+	 * here and in {@link #running()} at once, the walk reading the fragments and so keeping it. It
+	 * draws nothing either way: a place whose running program does not serve both stages is
+	 * refused whole ({@code glsl/PackProgram.java:1398-1404}), so no frame is ever drawn off that
+	 * plan.
+	 * <p>
+	 * Deduplicated on the base name: {@code prepare}, {@code prepare_a} and {@code prepare_b} are
+	 * three computes of one program and there is one moment in the frame for the three of them.
+	 */
+	private static List<String> passingOf(ProgramSet programs, Map<String, Boolean> toggles,
+			Draft draft) {
+		Set<String> fragments = new HashSet<>();
+		Set<String> vertices = new HashSet<>();
+		for (ProgramSet.ProgramKey key : programs.keys()) {
+			if (!key.dimension().equals(draft.place)) {
+				continue;
+			}
+
+			if (key.stage() == ProgramStage.FRAGMENT) {
+				fragments.add(key.name().baseName());
+			} else if (key.stage() == ProgramStage.VERTEX) {
+				vertices.add(key.name().baseName());
+			}
+		}
+
+		return draft.computes.stream()
+				.map(ProgramNames::computeBase)
+				.flatMap(Optional::stream)
+				.filter(base -> !base.equals(FINAL))
+				.filter(base -> !sourced(base, fragments, vertices, toggles, draft))
+				.distinct()
+				.sorted(ProgramNames.frameOrder())
+				.toList();
+	}
+
+	/**
+	 * Whether this place hands out a source Iris would build a drawing pass from: both halves
+	 * shipped, and the pack's own switch left alone. Asked of the key the walk asks the switch
+	 * under, the path exactly as the pack wrote it, for the reason given there.
+	 */
+	private static boolean sourced(String base, Set<String> fragments, Set<String> vertices,
+			Map<String, Boolean> toggles, Draft draft) {
+		String path = draft.place.isEmpty() ? base : draft.place + "/" + base;
+		return fragments.contains(base) && vertices.contains(base)
+				&& !Boolean.FALSE.equals(toggles.get(path));
 	}
 
 	/**
@@ -657,11 +746,26 @@ public final class TargetPlan {
 	}
 
 	/**
+	 * The programs that the computes of {@link #computes()} hang off and that this place draws no
+	 * pass for, in frame order, one entry per program however many computes it carries. Either the
+	 * pack ships less than both halves of the program or it switched the program off itself; a
+	 * program this engine's filter cut is never one of them, and passingOf says why.
+	 * <p>
+	 * They draw nothing, they are in no step of the {@link #schedule} and they are in no count taken
+	 * off it. What they are is a moment in the frame: their computes run there, which is what the
+	 * reference does with a stage entry it has computes for and no valid source
+	 * ({@code pipeline/CompositeRenderer.java:137-145}).
+	 */
+	public List<String> passing() {
+		return this.passing;
+	}
+
+	/**
 	 * Compute entry points this place ships and keeps on, by file name without the extension,
 	 * letter included: {@code deferred4_a} and {@code deferred4} are two of them. Shadowcomp is
 	 * dispatched at the head of the frame, a compute hanging off a begin, prepare, deferred,
-	 * composite or final pass right before that pass, and the rest are named in {@link #notes()}
-	 * until a stage exists for them.
+	 * composite or final pass right before that pass, one hanging off a program of
+	 * {@link #passing()} at that program's own moment, and the rest are named in {@link #notes()}.
 	 */
 	public List<String> computes() {
 		return this.computes;
@@ -811,20 +915,40 @@ public final class TargetPlan {
 			List<String> shadow = draft.computes.stream()
 					.filter(name -> ProgramNames.shadowComposite(ProgramNames.familyOf(name)))
 					.toList();
-			// Hanging off a pass this place draws: the chain dispatches them before it. Iris also
-			// runs a compute whose pass has no fragment program, as a pass of its own
-			// (CompositeRenderer.java:135-141), and the chain has no step for that yet.
+			// Hanging off a program this place draws no pass for, so there is nothing to run them
+			// before and they are run at that program's own moment in the frame instead, which is
+			// what the reference does with them (CompositeRenderer.java:137-145). Asked BEFORE the
+			// chained list and in the order PackCompute.load asks it: a program shipped with its
+			// fragment half and not its vertex one is in running() and in passing() at once, and
+			// the two lists reading it in opposite orders would name it one thing and dispatch it
+			// the other.
+			List<String> alone = draft.computes.stream()
+					.filter(name -> !shadow.contains(name))
+					.filter(name -> ProgramNames.computeBase(name)
+							.filter(draft.passing::contains).isPresent())
+					.toList();
+			// Hanging off a pass this place draws: the chain dispatches them before it.
 			List<String> chained = draft.computes.stream()
-					.filter(name -> !ProgramNames.shadowComposite(ProgramNames.familyOf(name)))
+					.filter(name -> !shadow.contains(name) && !alone.contains(name))
 					.filter(name -> ProgramNames.computeBase(name)
 							.filter(draft.running::contains).isPresent())
 					.toList();
+			// The final's computes are built inside the reference's map over the final source and
+			// nowhere else (FinalPassRenderer.java:115-125), so a final nothing draws carries none.
+			List<String> finals = draft.computes.stream()
+					.filter(name -> !shadow.contains(name) && !alone.contains(name)
+							&& !chained.contains(name))
+					.filter(name -> ProgramNames.computeBase(name)
+							.filter(FINAL::equals).isPresent())
+					.toList();
 			List<String> orphaned = draft.computes.stream()
-					.filter(name -> !shadow.contains(name) && !chained.contains(name))
+					.filter(name -> !shadow.contains(name) && !alone.contains(name)
+							&& !chained.contains(name) && !finals.contains(name))
 					.filter(name -> ProgramNames.computeBase(name).isPresent())
 					.toList();
 			List<String> other = draft.computes.stream()
-					.filter(name -> !shadow.contains(name) && !chained.contains(name)
+					.filter(name -> !shadow.contains(name) && !alone.contains(name)
+							&& !chained.contains(name) && !finals.contains(name)
 							&& !orphaned.contains(name))
 					.toList();
 			if (!shadow.isEmpty()) {
@@ -835,9 +959,21 @@ public final class TargetPlan {
 				notes.add("compute programs dispatched before the pass they hang off: " + chained);
 			}
 
+			if (!alone.isEmpty()) {
+				notes.add("compute programs dispatched at the moment of the program they hang off, "
+						+ "which this place draws no pass for: " + alone);
+			}
+
+			if (!finals.isEmpty()) {
+				notes.add("compute programs skipped, they hang off a final this place does not "
+						+ "draw and the reference builds a final's computes with the final alone: "
+						+ finals);
+			}
+
 			if (!orphaned.isEmpty()) {
-				notes.add("compute programs skipped, the pass they hang off does not run here and "
-						+ "the reference runs them as a pass of their own: " + orphaned);
+				notes.add("compute programs skipped, the pass filter took the program they hang "
+						+ "off out of the chain, at the user's ask or because a sampler of it is "
+						+ "one this backend cannot bind: " + orphaned);
 			}
 
 			if (!other.isEmpty()) {
@@ -1128,6 +1264,7 @@ public final class TargetPlan {
 		private TargetDirectives directives;
 		private TargetSchedule schedule;
 		private List<String> computes = List.of();
+		private List<String> passing = List.of();
 		private int programsRead;
 		private long expandMillis;
 	}

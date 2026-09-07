@@ -117,6 +117,18 @@ what the next one holds.
 
 ### Fixed
 
+- **A compute a pack ships for a step of the chain that draws nothing now runs.** It was left out
+  on the grounds that there was no pass to run it before; it is now dispatched on its own, at the
+  moment the program it hangs off would have run at, which is what Iris does with it: its family
+  says whether that falls before the world's translucents or after them, and its name says where it
+  lands among the passes drawn there. A pack reaches that state by shipping the compute and no
+  drawing program for the step, or by shipping one and switching it off itself, its switch never
+  naming the compute file. A pack may go further and build every one of its worlds out of such
+  computes with no full screen pass at all, which used to stop its chain before the first frame:
+  RenderPearl is written that way. Noble computes the sun's illuminance and the sky's coefficients
+  in one and everything that lights its world reads what that leaves behind, so its diffuse
+  lighting, its shadows, its gbuffers and its fog all went dark at once.
+
 - **A pass that writes into an image no longer goes missing.** A pack can name, in the shader
   itself, the format of the image that shader writes to, and that word was being dropped as the
   declaration was moved to where this backend wants it. What was left is a declaration the compiler
