@@ -3,10 +3,12 @@ package dev.vitrail.pack.texture;
 import dev.vitrail.pack.model.ImageInformation;
 import dev.vitrail.pack.model.TargetFormat;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The storage images the loaded pack declared.
@@ -17,10 +19,24 @@ import java.util.Set;
  */
 public final class CustomImages {
 
+	/**
+	 * Every word GLSL takes as an image format, which is what {@link #glslLayout} spells and so
+	 * exactly the formats a target can be given. Read to tell a format apart from the other things
+	 * a {@code layout} carries, {@code binding} and {@code set} and their values.
+	 */
+	private static final Set<String> LAYOUT_FORMATS = Arrays.stream(TargetFormat.values())
+			.map(CustomImages::glslLayout)
+			.collect(Collectors.toUnmodifiableSet());
+
 	private static volatile Map<String, ImageInformation> byName = Map.of();
 	private static volatile Set<String> names = Set.of();
 
 	private CustomImages() {
+	}
+
+	/** Whether this word names an image format, as opposed to anything else a layout carries. */
+	public static boolean isLayoutFormat(String word) {
+		return LAYOUT_FORMATS.contains(word);
 	}
 
 	/** Records the live {@code image.NAME} lines of the pack about to be translated. */

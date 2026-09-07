@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -34,7 +35,8 @@ import java.util.Set;
  */
 record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, AlphaTest alphaTest,
 		Set<String> extensions,
-		Map<String, String> engineDefines, Map<String, String> memoryQualifiers, Set<String> used,
+		Map<String, String> engineDefines, Map<String, String> memoryQualifiers,
+		Map<String, String> imageFormats, Set<String> used,
 		Set<String> declaredNames, Map<String, String> synthesized,
 		Map<String, VolumeAtlas> readVolumes, Map<Integer, Output> packOutputs,
 		int maxFragmentOutput, Map<String, String> owedOutputs, VaryingSplit splits,
@@ -566,35 +568,46 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 	}
 
 	/**
-	 * Vulkan GLSL requires a format on a storage image, unless the image is write-only. Iris's GL
-	 * bind supplies the format at bind time, so Complementary writes
-	 * {@code writeonly uniform uimage3D voxel_img} with none, and BSL writes
-	 * {@code writeonly uniform image3D lightimg0} the same way. The format comes off the
-	 * {@code image.} directive and is written here, in the header: the body declaration has
-	 * already been lifted, so a layout qualifier inserted into the token stream would qualify a
-	 * statement that is no longer in the shader.
+	 * shaderc refuses a storage image declaration that carries no format layout qualifier, unless
+	 * the image is write-only. Iris's GL bind supplies the format at bind time, so Complementary
+	 * writes {@code writeonly uniform uimage3D voxel_img} with none, and BSL writes
+	 * {@code writeonly uniform image3D lightimg0} the same way. The format is written here, in the
+	 * header: the body declaration has already been lifted, so a layout qualifier inserted into the
+	 * token stream would qualify a statement that is no longer in the shader.
 	 * <p>
-	 * The pack's own memory qualifiers are written back for the same reason, and they are what
-	 * carries a declaration whose format we never learn: a pack switches its images off with the
-	 * setting that switches off the program reading them, and then the {@code image.} lines go
-	 * with it while the {@code writeonly} on the declaration stays. Dropping it turned a legal
-	 * declaration into one shaderc refuses.
+	 * The pack's own format comes first and the {@code image.} directive second, because the pack's
+	 * own is the text Iris hands its compiler: a pack that declares a volume one way and writes
+	 * another word in the shader is compiled on the word in the shader, and reading it back is the
+	 * only way to stay on the same side of that. It is also the only answer there is for a colour
+	 * target written as {@code colorimgN}, which no directive names.
+	 * <p>
+	 * The two words are not the same statement. The one in the shader is the format the SPIR-V
+	 * declares its loads and stores with; the {@code image.} directive is the format of the image
+	 * the chain binds under that name. A pack whose two disagree is asking for a reinterpretation
+	 * nothing promised it, and it is no better off under Iris, which binds the texture under its own
+	 * internal format and leaves the shader the word it wrote
+	 * ({@code samplers/IrisImages.java:39-41}), so the access format and the declared one part
+	 * company there as well. No pack of the corpus writes a word its own directive contradicts, so
+	 * this order is choosing between two spellings of one format rather than between two formats.
+	 * <p>
+	 * The memory qualifiers are written back for the same reason, and they are what carries a
+	 * declaration the pack left bare: a pack switches its images off with the setting that
+	 * switches off the program reading them, and then the {@code image.} lines go with it while the
+	 * {@code writeonly} on the declaration stays. Dropping it turned a legal declaration into one
+	 * shaderc refuses.
 	 */
 	private String declareOpaque(TranslatedUnit.Uniform sampler) {
 		String memory = this.memoryQualifiers.getOrDefault(sampler.name(), "");
 		String tail = (memory.isEmpty() ? "" : memory + " ") + "uniform " + sampler.declaration()
 				+ ";";
-		if (!isImageType(sampler.type())) {
+		if (!LegacyGlsl.isImageType(sampler.type())) {
 			return tail;
 		}
 
-		return CustomImages.layoutFormat(sampler.name())
+		return Optional.ofNullable(this.imageFormats.get(sampler.name()))
+				.or(() -> CustomImages.layoutFormat(sampler.name()))
 				.map(format -> "layout(" + format + ") " + tail)
 				.orElse(tail);
-	}
-
-	private static boolean isImageType(String type) {
-		return type.startsWith("image") || type.startsWith("iimage") || type.startsWith("uimage");
 	}
 
 	/**

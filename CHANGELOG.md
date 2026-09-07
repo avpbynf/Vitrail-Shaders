@@ -103,6 +103,12 @@ what the next one holds.
 
 ### Fixed
 
+- **A pass that writes into an image no longer goes missing.** A pack can name, in the shader
+  itself, the format of the image that shader writes to, and that word was being dropped as the
+  declaration was moved to where this backend wants it. What was left is a declaration the compiler
+  refuses, so the pass never built and the frame went on without it. Noble is the pack this showed
+  on, where nothing wrote its screen space reflections.
+
 - **A pack's quality profile is named again instead of reading "Custom".** A profile can list a
   setting the pack does not actually have, and one such name was enough to stop the profile from
   ever being recognised: the shader screen and the F3 overlay both fell back to "Custom" on a pack
