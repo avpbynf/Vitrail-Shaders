@@ -772,6 +772,8 @@ public final class FrameState implements WorldState {
 			// different animal.
 			noVehicle();
 
+			noFlags();
+
 			return;
 		}
 
@@ -816,6 +818,39 @@ public final class FrameState implements WorldState {
 		this.vehicleId = 0;
 		this.vehicleLookVector.zero();
 		this.relativeVehiclePosition.zero();
+	}
+
+	/**
+	 * What the ten flags answer while there is no player, which is false for every one of them.
+	 * <p>
+	 * Left alone they would still be the previous frame's, and a boolean is the one value stale
+	 * enough to be believed: false is what a pack reads off a player standing still, so a sprint or
+	 * a burn carried out of the world just left arrives looking measured. Iris answers each of them
+	 * false, one supplier at a time, and the ten follow those: {@code sneaking} from
+	 * {@code uniforms/CommonUniforms.java:216-222}, {@code sprinting} from {@code :224-230},
+	 * {@code hurt} from {@code :192-198}, {@code invisible} from {@code :200-206}, {@code burning}
+	 * from {@code :208-214} and {@code onGround} from {@code :188-190}; then {@code elytraFlying}
+	 * from {@code uniforms/IrisExclusiveUniforms.java:167-173}, {@code riding} from
+	 * {@code :159-165}, {@code feetInWater} from {@code :143-149} and {@code swimming} from
+	 * {@code :151-157}.
+	 * <p>
+	 * Nothing reaches this today, and it is written anyway. The game reads the player's portal
+	 * intensity before it hands the level to the renderer ({@code renderer/GameRenderer.java:548}),
+	 * so a level drawn without one never gets as far as this engine; and the neighbours here all
+	 * fall back rather than hold, {@code readStats} and {@code readHeld} both, which leaves
+	 * these ten as the only reading of a frame that would answer for a player who is not there.
+	 */
+	private void noFlags() {
+		this.sneaking = false;
+		this.sprinting = false;
+		this.hurt = false;
+		this.invisible = false;
+		this.burning = false;
+		this.onGround = false;
+		this.elytraFlying = false;
+		this.riding = false;
+		this.feetInWater = false;
+		this.swimming = false;
 	}
 
 	/**
