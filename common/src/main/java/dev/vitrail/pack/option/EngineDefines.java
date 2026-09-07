@@ -189,6 +189,18 @@ public final class EngineDefines {
 		// emission under it.
 		defines.put("IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE", "");
 
+		// A blending entity draw asks for the pack's own gbuffers_entities_translucent rather than
+		// for the opaque entity file, and its block entity twin for gbuffers_block_translucent
+		// (render/EntityDraw), each falling back onto its own opaque name so a pack that ships one
+		// entity program still draws its whole family with the file it wrote
+		// (pack/model/ProgramFallbacks). That is the whole of what the name buys: Iris routes the
+		// blending entity pipelines through getTranslucent whatever the pack declared
+		// (pipeline/IrisPipelines.java:35,38,210-220) and reads the flag nowhere else, holding it
+		// usable on every machine (features/FeatureFlags.java:18). A pack that ships the program
+		// without declaring the name is therefore drawn the same on both, which is what BSL,
+		// Complementary and Noble do.
+		defines.put("IRIS_FEATURE_ENTITY_TRANSLUCENT", "");
+
 		// shadowtex0HW and shadowtex1HW are bound, the same two depth images as the plain pair and
 		// compared where the pack declares them so (SamplerPlan.SHADOW_DEPTH). Iris poses this one
 		// whatever the hardware, features/FeatureFlags.java:12.
