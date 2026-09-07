@@ -80,6 +80,14 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack reloaded while you play no longer comes back with the world drawn in one colour.** On
+  Photon with its coloured lighting on, most reloads left the world with no red and no blue in it
+  for about half a minute, and then it put itself right. A pack of that kind keeps its light in
+  volumes it fills a little at a time rather than writing whole, and it was handed those volumes
+  still holding whatever had been in that memory, so its first frames spread that instead of light.
+  They are now emptied once, when they are made. Volumes far larger than any of these are left
+  alone, because emptying one of those at that moment is what took the display driver down once.
+
 - **A setting compared against a number with a decimal point no longer switches a pass off.** Some
   packs write conditions like "if the motion blur is above 0.0" or "if the falloff equals 1", with
   the setting itself holding 0.5 or 1.0. Those were read as whole numbers, so a half became nought

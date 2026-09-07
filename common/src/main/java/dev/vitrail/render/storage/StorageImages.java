@@ -50,6 +50,47 @@ public final class StorageImages implements AutoCloseable {
 
 	private static volatile StorageImages current = none();
 
+	/**
+	 * Whether a volume the pack does NOT ask to clear is emptied once, when it is created.
+	 * <p>
+	 * <strong>What it is for.</strong> A volume is created with undefined contents, and the ones
+	 * the pack marks {@code clear} are emptied by {@link #clearMarked} at the head of every shadow
+	 * stage. The others are the ones a pack carries FORWARD, and the assumption written here was
+	 * that the pack's own compute writes them whole on its first dispatch. That holds for a
+	 * floodfill written from nothing. It does not hold for one that PROPAGATES: Photon's
+	 * {@code light_img_a} and {@code light_img_b} are read and written in turn, so its first
+	 * dispatch reads whatever the allocator handed back, and that is what the light carries until
+	 * enough frames have overwritten it. Measured 7 September 2026: after a pack reload the world
+	 * comes back with red and blue at nought for about thirty seconds, on eight reloads out of ten,
+	 * and not once with the pack's coloured lighting turned off.
+	 *
+	 * @see #CLEAR_AT_BIRTH_BUDGET for why this is not simply done for every volume
+	 */
+	private static final boolean CLEAR_AT_BIRTH = Boolean.parseBoolean(
+			System.getProperty("vitrail.clearStorageAtBirth", "true"));
+
+	/**
+	 * The size AT which this stops emptying at birth, in bytes, and the reason the emptying is
+	 * bounded rather than universal. At the bound and above a volume is left alone, the bound
+	 * being exclusive on purpose: several packs of the corpus declare one of exactly sixty-four
+	 * mebibytes, and the cautious side of a bound nobody has measured is the side that refuses.
+	 * <p>
+	 * <strong>Two comments of this engine disagree on why the device was lost that day, and this
+	 * bound takes the cautious side of both rather than choosing.</strong> The one that used to sit
+	 * in {@link #layoutIfNeeded} blames the SIZE, a five hundred mebibyte clear beside a 773 MiB
+	 * storage-buffer fill on one command buffer; {@link GpuRecording#afterTransfer} blames the
+	 * missing FENCE after a three-dimensional clear. The fence is now recorded either way, so if the
+	 * second is the true reason this bound costs only the volumes it refuses; if the first is, it is
+	 * what keeps the device alive. Settling it needs a measurement nobody has taken.
+	 * <p>
+	 * <strong>What it cuts, and it is a debt rather than a line drawn where it belongs.</strong>
+	 * Sixty-four mebibytes covers Photon's volumes at its own default and below, and refuses them at
+	 * its two largest settings, where the defect this exists for comes back untouched. And the
+	 * hazard the bound guards against is per COMMAND BUFFER rather than per volume, which a per
+	 * volume bound cannot express: several volumes each under it are emptied on one buffer.
+	 */
+	private static final long CLEAR_AT_BIRTH_BUDGET = 64L * 1024L * 1024L;
+
 	private final ImageInformation.Reading declared;
 	private final List<Allocated> allocated = new ArrayList<>();
 
@@ -468,6 +509,7 @@ public final class StorageImages implements AutoCloseable {
 			return;
 		}
 
+		List<Allocated> born = new ArrayList<>();
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			for (Allocated image : this.allocated) {
 				// Only the images created since the last pass here. An UNDEFINED transition
@@ -478,6 +520,7 @@ public final class StorageImages implements AutoCloseable {
 				}
 
 				image.laidOut = true;
+				born.add(image);
 				// The scratch beside its image and in the same breath: it is a transfer end of the
 				// same volume, so it has to leave UNDEFINED before the first copy names it, and a
 				// copy is the only thing that ever will.
@@ -504,14 +547,77 @@ public final class StorageImages implements AutoCloseable {
 						VK12.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, null, null, barriers);
 			}
 
-			// Only the images the pack marked clear. Complementary's two floodfill volumes are
-			// 500 MiB each at Ultra: zeroing them here with the 773 MiB SSBO fill on the same
-			// command buffer is what killed the device two seconds later (Windows TDR). Voxel
-			// is clear=true and is emptied each shadow frame by clearMarked. Floodfill is
-			// written by shadowcomp on this same first dispatch.
+			clearBornImages(commands, stack, born);
 		}
 
 		this.laidOut = true;
+	}
+
+	/**
+	 * Empties the volumes that have just been created and that nothing else will ever empty, which
+	 * is every one the pack did not mark {@code clear}.
+	 * <p>
+	 * <strong>The clear is fenced on its far side, and that is not a detail.</strong> The near side
+	 * is already carried by the layout barrier recorded above, whose destination mask names
+	 * {@code TRANSFER_WRITE}. The far side is {@link GpuRecording#afterTransfer}, and leaving it out
+	 * is the shape that helper exists to forbid: the game's own compute to compute barrier does not
+	 * wait for transfer writes, so the pack's first dispatch would race the zeros it is being given,
+	 * which is both the defect coming back and the way the device was lost once.
+	 * <p>
+	 * Said in the log whichever road it takes, one line per volume refused with its name and the
+	 * reason, because a size refusal and a switched-off engine are not the same state and a reading
+	 * taken on either has to be able to say which it was.
+	 */
+	private void clearBornImages(VkCommandBuffer commands, MemoryStack stack, List<Allocated> born) {
+		List<Allocated> emptying = new ArrayList<>();
+		for (Allocated image : born) {
+			// The marked ones are emptied at the head of every shadow stage anyway, so a clear here
+			// would be the same write twice in one frame.
+			if (image.declared.clear()) {
+				continue;
+			}
+
+			if (!CLEAR_AT_BIRTH) {
+				Vitrail.logger().info("Storage volume {} is left as the allocator handed it back, "
+						+ "property=vitrail.clearStorageAtBirth", image.declared.name());
+				continue;
+			}
+
+			long bytes = bytes(image);
+			if (bytes >= CLEAR_AT_BIRTH_BUDGET) {
+				Vitrail.logger().info("Storage volume {} is {} MiB, at or over the {} MiB where this "
+						+ "stops emptying, so it is left as the allocator handed it back and a pack "
+						+ "reading it before writing it whole reads that",
+						image.declared.name(), bytes / (1024L * 1024L),
+						CLEAR_AT_BIRTH_BUDGET / (1024L * 1024L));
+				continue;
+			}
+
+			emptying.add(image);
+		}
+
+		if (emptying.isEmpty()) {
+			return;
+		}
+
+		for (Allocated image : emptying) {
+			clearImage(commands, stack, image);
+		}
+
+		// The one fence between these zeros and the pack's first dispatch. See the javadoc above.
+		GpuRecording.afterTransfer(commands, stack);
+
+		// Said per allocation pass rather than per pack load, which is the same thing for a volume
+		// of the pack's own size and is NOT for one sized on the screen: those are destroyed and
+		// built again at every resize, so this line follows a window being dragged. The words say
+		// "created" and not "carried forward" for that reason.
+		Vitrail.logger().info("{} storage volume(s) emptied as they were created, "
+				+ "property=vitrail.clearStorageAtBirth", emptying.size());
+	}
+
+	private static long bytes(Allocated image) {
+		return (long) image.width * image.height * image.depth
+				* image.declared.internalFormat().used().bytesPerPixel();
 	}
 
 	private static void clearImage(VkCommandBuffer commands, MemoryStack stack, Allocated image) {
