@@ -411,6 +411,13 @@ public final class GlslTranslator {
 	 */
 	private final Map<String, String> memoryQualifiers = new LinkedHashMap<>();
 
+	/**
+	 * The format a pack wrote in the {@code layout} of a storage image, by the name it declared.
+	 * Kept for the same reason as the memory qualifiers: the lifting rebuilds the declaration from
+	 * the type onwards, so a format nobody kept here is a format the shader no longer carries.
+	 */
+	private final Map<String, String> imageFormats = new LinkedHashMap<>();
+
 	/** Storage blocks this unit declares at file scope, each under the binding it was written at. */
 	private final List<TranslatedUnit.StorageBlock> storageBlocks = new ArrayList<>();
 
@@ -4066,7 +4073,7 @@ public final class GlslTranslator {
 		}
 
 		Map<String, String> found = new LinkedHashMap<>();
-		if (!readDeclarators(parts, cursor + 1, type, "", found)) {
+		if (!readDeclarators(parts, cursor + 1, type, "", "", found)) {
 			return null;
 		}
 
@@ -4229,12 +4236,38 @@ public final class GlslTranslator {
 		//
 		// Recorded for an opaque uniform alone, which is the only declaration these can be
 		// written on and the only one that reads them back out of the header.
-		if (!readDeclarators(parts, cursor + 1, type, opaque ? String.join(" ", memory) : "",
+		//
+		// The format goes the same way and for the same reason, and it is asked of a storage image
+		// alone: no other opaque type can be declared with one, and the header writes a format back
+		// in front of an image declaration and nowhere else, so read off a sampler it would sit
+		// there unread.
+		String format = opaque && LegacyGlsl.isImageType(type) ? imageFormat(parts, keywordAt) : "";
+		if (!readDeclarators(parts, cursor + 1, type, opaque ? String.join(" ", memory) : "", format,
 				opaque ? this.samplers : this.blockMembers)) {
 			return;
 		}
 
 		this.tokens.blankRange(start, end);
+	}
+
+	/**
+	 * The image format the pack wrote in front of {@code uniform}, or nothing where it wrote none.
+	 * <p>
+	 * By the vocabulary and not by the position, so that a {@code layout} carrying more than one
+	 * qualifier reads the same as one carrying a format alone: {@code binding} and {@code set} and
+	 * the numbers beside them are not format words, and neither is a name a {@code #define} stands
+	 * for, so a pack naming its format through a macro the expander did not resolve is read as
+	 * having written none rather than as having written that name.
+	 */
+	private String imageFormat(List<Integer> parts, int keywordAt) {
+		for (int part = 0; part < keywordAt; part++) {
+			Token token = this.tokens.get(parts.get(part));
+			if (token.kind() == Kind.IDENTIFIER && CustomImages.isLayoutFormat(token.text())) {
+				return token.text();
+			}
+		}
+
+		return "";
 	}
 
 	/**
@@ -4780,9 +4813,11 @@ public final class GlslTranslator {
 	 *               rather than in the declaration so that the type stays the first word of it.
 	 *               Empty for everything but an opaque uniform, which is the only declaration
 	 *               these can be written on.
+	 * @param format the image format the pack wrote, kept beside the name for the same reason.
+	 *               Empty for everything but a storage image, and for one the pack left bare.
 	 */
 	private boolean readDeclarators(List<Integer> parts, int from, String type, String memory,
-			Map<String, String> target) {
+			String format, Map<String, String> target) {
 		int cursor = from;
 		boolean any = false;
 
@@ -4798,6 +4833,10 @@ public final class GlslTranslator {
 
 			if (!memory.isEmpty()) {
 				this.memoryQualifiers.put(token.text(), memory);
+			}
+
+			if (!format.isEmpty()) {
+				this.imageFormats.put(token.text(), format);
 			}
 
 			StringBuilder declaration = new StringBuilder(type).append(' ').append(token.text());
@@ -4853,7 +4892,8 @@ public final class GlslTranslator {
 	private Emitter emitter() {
 		return new Emitter(this.stage, this.inputs, this.bound, this.alphaTest, this.extensions,
 				this.engineDefines,
-				this.memoryQualifiers, this.used, this.declaredNames, this.synthesized,
+				this.memoryQualifiers, this.imageFormats, this.used, this.declaredNames,
+				this.synthesized,
 				this.volumes.read(), this.packOutputs, this.maxFragmentOutput, this.owedOutputs,
 				this.splits, this.gameTextureMatrix,
 				this.gameModelView, this.softRewrites, this.trigCalls, this.hashCalls,

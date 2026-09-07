@@ -475,6 +475,9 @@ public final class LegacyGlsl {
 			Set.of("sampler", "isampler", "usampler", "image", "iimage", "uimage",
 					"texture", "itexture", "utexture", "subpassInput", "atomic_uint");
 
+	/** The opaque prefixes that name a storage image, the one kind a format is asked of. */
+	private static final Set<String> IMAGE_PREFIXES = Set.of("image", "iimage", "uimage");
+
 	/**
 	 * Whether the pass this program is wanted for draws entities, and so reads
 	 * {@link #ENTITY_UNIFORMS} whether it declares them or not.
@@ -555,6 +558,21 @@ public final class LegacyGlsl {
 	 */
 	public static boolean isOpaqueType(String type) {
 		for (String prefix : OPAQUE_PREFIXES) {
+			if (type.startsWith(prefix)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether a uniform of this type is a storage image, which is the one opaque kind a format is
+	 * asked of: shaderc refuses an image declaration carrying no format layout qualifier unless it
+	 * is written {@code writeonly}.
+	 */
+	static boolean isImageType(String type) {
+		for (String prefix : IMAGE_PREFIXES) {
 			if (type.startsWith(prefix)) {
 				return true;
 			}
