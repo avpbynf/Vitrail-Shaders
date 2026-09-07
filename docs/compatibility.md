@@ -244,16 +244,17 @@ after the deferred stage, onto a picture the chain has already composed, and tak
 outright. So a pack that writes a normal or a specular map from `gbuffers_hand` can light the hand
 from them, and a sleeve or any half-transparent layer blends against what stands behind it.
 
-What a `gbuffers_hand` reads as depth is not what the reference hands it, and that is a divergence
-rather than a rule of the format. There, at the moment the solid hand is drawn, `depthtex0` is the
-live scene depth and `depthtex1` the opaque copy taken the frame before
-(`mixin/MixinLevelRenderer.java:269-274`, `pipeline/IrisRenderingPipeline.java:1043-1063`); here
-both answer the far plane. The live depth is the attachment the hand's own pass writes, which a
-pass cannot sample on this backend; the frame before's copy is there and withheld, on the ground
-that it stands one frame of camera movement behind, which is a choice and not an obstacle. What it
-costs: a hand program that fogs, occludes or refracts against the scene depth sees no scene at all.
-`depthtex2` is a real copy, taken one line before the pass is drawn, as there: the name a pack
-reads to see what the hand it is holding stands in front of.
+What a `gbuffers_hand` reads as `depthtex1` is the opaque world of the frame before, which is what
+the reference hands it too: its copy is refreshed one step behind the solid hand
+(`mixin/MixinLevelRenderer.java:269-274`, `pipeline/IrisRenderingPipeline.java:1051-1063`), so every
+program drawn ahead of that step reads the frame before's under that name, the terrain and the mobs
+as much as the hand. `depthtex0` is the live scene depth there; here it answers the far plane, and
+that is a divergence: the live depth is the attachment the hand's own pass writes, which a pass
+cannot sample on this backend, and nothing older than this frame is dressed as the live depth. What
+it costs is a hand program that reads `depthtex0` rather than `depthtex1` for the scene it stands
+in, which none of the packs measured does. `depthtex2` is a real copy, taken one line before the
+pass is drawn, as there: the name a pack reads to see what the hand it is holding stands in front
+of.
 
 **The mobs and the block entities are drawn into the pack's own shadow map**, so they cast as
 well as receive, and the log names the shadow passes one by one when a place first draws. A mob's

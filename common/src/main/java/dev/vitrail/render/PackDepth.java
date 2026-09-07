@@ -583,16 +583,21 @@ final class PackDepth {
 		this.frameBefore = before;
 
 		if (before) {
-			dropOutgrown(width, height);
+			forgetOutgrown(width, height);
 		}
 	}
 
 	/**
-	 * Forgets every image the screen has moved away from, so that the window serves the far plane
+	 * Forgets every image the screen has moved away from, so that a reader is served the far plane
 	 * for the one frame rather than a depth of the right numbers at the wrong size. Each of them is
 	 * reallocated at its own take later in this frame, where {@code ensure} already stood.
+	 * <p>
+	 * Called where the window opens, and once more at the head of every frame from
+	 * {@code PackChain.openTargets}, which every geometry pass reaches before it samples: the
+	 * opaque image answers those passes with the frame before's depth, and on the frame the screen
+	 * changed size that image is the old screen's until the take refills it.
 	 */
-	private void dropOutgrown(int width, int height) {
+	void forgetOutgrown(int width, int height) {
 		if (outgrown(this.opaque, width, height)) {
 			this.opaqueWritten = false;
 		}

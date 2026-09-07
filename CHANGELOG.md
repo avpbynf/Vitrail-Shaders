@@ -156,6 +156,17 @@ what the next one holds.
   the whole target. Where it wrote part of it, or where the pass that writes it did not run, the
   pack was handed one image on one frame and the previous one on the next. It is steady standing
   still and shows as the view moves, so it reads as lighting that slides.
+
+- **A geometry program drawn before the water sees the world's depth again.** The terrain, the
+  mobs, the opaque particles and the held item are drawn before the frame takes its copy of the
+  opaque world, and those programs were handed an empty world where a pack asked for that copy,
+  so a shader that softens or fogs itself against the scene from one of them saw nothing in front
+  of it. They now read the copy as it stands, which at that point of the frame is the frame
+  before's, exactly what the reference hands them; the live depth stays out of reach there, being
+  the very image those programs draw into. Complementary Reimagined and Photon draw the same
+  picture as before: the one only reads that copy from its water, drawn after the take, and the
+  other reads it from its particles and glowing eyes without using it there.
+
 - **A greyscale picture a pack ships is read as the pack wrote it.** Every grey image came out
   lighter than the file, its darks lifted towards white, because the decoder converted the picture
   out of its own colour space instead of taking the bytes as they were written. A pack that compares
