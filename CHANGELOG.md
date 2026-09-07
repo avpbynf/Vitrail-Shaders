@@ -125,6 +125,16 @@ what the next one holds.
   draws a few clouds. The clouds are clouds again, and every grey lookup table, mask and noise field
   a pack ships now holds the values it was authored with.
 
+- **A pack that sizes a compute step through one of its own settings is no longer run at full
+  size.** Those steps say how much of the screen they cover, and a pack may say it with the name of
+  a setting rather than with a number. The name meant nothing to the engine, which then ran the step
+  over the whole screen. On Reverie the clouds were marched at four times the width and four times
+  the height the pack asks for, sixteen times the work for the same picture. Those names are now
+  read at the value the settings give them, so the step covers what the pack asked for and that
+  march is a sixteenth of what it was; what it gives back in frame rate was not measured. Where a
+  name stands for nothing the engine can read, the step still covers the whole screen and the log
+  says which word it could not read.
+
 - **The world is no longer painted over by the stage meant to run before it.** Some packs open the
   frame with a "prepare" stage, whose job is to fill a table the rest of the frame reads. It ran
   once the world was already drawn instead of ahead of it, so on a pack whose prepare fills the very

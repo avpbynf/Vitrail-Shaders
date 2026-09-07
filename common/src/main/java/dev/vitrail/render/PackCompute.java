@@ -262,6 +262,17 @@ final class PackCompute implements AutoCloseable {
 					continue;
 				}
 
+				// Ahead of the roads parting and once for the program: any of the three can be
+				// missing a word, and a word means the same on all of them, that the directive it
+				// belongs to is read as absent. What that absence costs is the size said below.
+				// Said here rather than beside a size, where a word off a road the dispatch never
+				// took would read as the reason for a size that was read correctly.
+				List<String> unread = compute.get().unresolved();
+				if (!unread.isEmpty()) {
+					Vitrail.logger().info("compute {} reads no number for {}, so that directive "
+							+ "counts as absent", path, String.join(", ", unread));
+				}
+
 				// Left undispatched rather than dispatched at a guessed size. A program on one of
 				// the screen roads is sized by dividing the screen by its own local size, and a
 				// local size this engine cannot read as a number would have to be invented: read

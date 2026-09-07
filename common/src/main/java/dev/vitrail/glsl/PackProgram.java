@@ -30,6 +30,8 @@ import dev.vitrail.pack.texture.VolumeAtlas;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -37,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -418,17 +421,32 @@ public final class PackProgram {
 	 * with does not enter it. A count of work groups reads the same here as it does there.
 	 *
 	 * @param groupsX the count the pack wrote, or -1 in all three when it wrote no
-	 *                {@code workGroups}. Absence cannot be spelt with nought, which is a value a
-	 *                pack does mean: Reverie writes {@code ivec3(0, 0, 0)} on the branch that turns
-	 *                a pass off, and Iris dispatches nothing for it
+	 *                {@code workGroups} that could be read. Absence cannot be spelt with nought,
+	 *                which is a value a pack does mean: Reverie writes {@code ivec3(0, 0, 0)} on
+	 *                the branch that turns a pass off, and Iris dispatches nothing for it
 	 * @param renderX the multiplier of the pass size, or -1 in both when the pack wrote no
-	 *                {@code workGroupsRender}
+	 *                {@code workGroupsRender} that could be read
 	 * @param localX  the shader's own {@code local_size_x}, or -1 in both when it is not written
-	 *                as a literal there. A derived road cannot be walked without it, and
+	 *                as a number there. A derived road cannot be walked without it, and
 	 *                {@link #sized()} is what says so
+	 * @param unresolved what a directive of this program wrote where a number belongs and this
+	 *                engine could make no number of, whole and as the pack wrote it, each beside
+	 *                the directive that wrote it. Every road here reads a name through the unit's
+	 *                defines first, so what is left is a name the pack declares nowhere, one
+	 *                standing for something other than a number, or an expression only a compiler
+	 *                settles. It is never guessed at: the road is walked as though the directive
+	 *                were absent, and the caller says the word out loud so that a size has what
+	 *                went unread beside it. The directive travels with the word because a program
+	 *                writes three of them and the dispatch takes one road: a word off a road
+	 *                nobody walked would otherwise read as the reason for a size read correctly
 	 */
 	public record Compute(Loaded loaded, int groupsX, int groupsY, int groupsZ, float renderX,
-			float renderY, int localX, int localY) {
+			float renderY, int localX, int localY, List<String> unresolved) {
+
+		/** The names are read once and looked at by the log alone, so nobody else may add to them. */
+		public Compute {
+			unresolved = List.copyOf(unresolved);
+		}
 
 		/** Whether the pack asked for a count of its own, the one road that ignores the size. */
 		public boolean fixed() {
@@ -477,27 +495,52 @@ public final class PackProgram {
 		}
 	}
 
+	/**
+	 * The first road's directive, at the head of its line. <strong>A declaration only counts where
+	 * it is the first thing the line says</strong>, which is the one rule Iris reads them by
+	 * ({@code ConstDirectiveParser.java:45} refuses a line whose trimmed head is not {@code const}),
+	 * and without it a pack that writes a directive out and then comments it away is read at the
+	 * value it crossed out. Every argument of the three is captured whole rather than as digits,
+	 * {@link #valueOf} saying afterwards what the pack wrote there.
+	 */
 	private static final Pattern WORK_GROUPS = Pattern.compile(
-			"const\\s+ivec3\\s+workGroups\\s*=\\s*ivec3\\s*\\(\\s*(-?\\d+)\\s*,\\s*(-?\\d+)\\s*,\\s*(-?\\d+)\\s*\\)");
+			"^\\s*const\\s+ivec3\\s+workGroups\\s*=\\s*ivec3\\s*\\(\\s*([^,()]+?)\\s*,"
+					+ "\\s*([^,()]+?)\\s*,\\s*([^,()]+?)\\s*\\)");
 
-	/**
-	 * The second road's directive. Its arguments are floats and a pack does write them with no
-	 * decimal point at all, Reverie's {@code vec2(1, 1)}, so the number is matched in both forms.
-	 */
+	/** The second road's directive, at the head of its line and captured whole for both reasons. */
 	private static final Pattern WORK_GROUPS_RENDER = Pattern.compile(
-			"const\\s+vec2\\s+workGroupsRender\\s*=\\s*vec2\\s*\\(\\s*(-?\\d*\\.?\\d+)[fF]?\\s*,"
-					+ "\\s*(-?\\d*\\.?\\d+)[fF]?\\s*\\)");
+			"^\\s*const\\s+vec2\\s+workGroupsRender\\s*=\\s*vec2\\s*\\(\\s*([^,()]+?)\\s*,"
+					+ "\\s*([^,()]+?)\\s*\\)");
 
 	/**
-	 * What both derived roads divide the pass size by, written on the shader's {@code layout}.
-	 * The value is captured whole rather than as digits, so that one written through a macro is
-	 * found and refused rather than missed and replaced by a default.
+	 * Where both derived roads' divisor is written, on the shader's {@code layout}. It sits inside
+	 * a bracket rather than at the head of a line, so nothing anchors it and the value is not part
+	 * of the match: {@link #argumentAt} takes that, running to the comma or the bracket that closes
+	 * it, which no pattern can find. RenderPearl writes one as
+	 * {@code min(gl_MaxComputeWorkGroupSize.x, LL_CAPACITY)}, whose own comma closes nothing.
 	 */
-	private static final Pattern LOCAL_SIZE =
-			Pattern.compile("local_size_([xy])\\s*=\\s*([^,)\\s]+)");
+	private static final Pattern LOCAL_SIZE = Pattern.compile("local_size_([xy])\\s*=\\s*");
 
-	/** A literal the reader may believe, as opposed to a macro nothing here substitutes. */
+	/** A name the unit's define table may stand a value in for. */
+	private static final Pattern MACRO = Pattern.compile("[A-Za-z_]\\w*");
+
+	/** A count, once every name written into it has been stood in for. */
+	private static final Pattern WHOLE = Pattern.compile("-?\\d+");
+
+	/**
+	 * A multiplier, once the same has been done. A pack does write one with no decimal point at
+	 * all, Reverie's {@code vec2(1, 1)}, so the number is read in both forms.
+	 */
+	private static final Pattern FRACTION = Pattern.compile("-?(?:\\d+\\.?\\d*|\\.\\d+)[fF]?");
+
+	/** A local size, which the language counts in whole numbers and cannot write as a negative. */
 	private static final Pattern LITERAL = Pattern.compile("\\d+");
+
+	/**
+	 * How far a name is followed before the reader gives up on it. A define whose value is another
+	 * name is ordinary; a pair that name each other is not, and without a bound it never ends.
+	 */
+	private static final int MACRO_HOPS = 8;
 
 	/**
 	 * One {@code .csh} entry point, translated on its own. Empty when the pack does not ship it.
@@ -527,12 +570,15 @@ public final class PackProgram {
 		ProgramTranslator.TranslatedProgram program = ProgramTranslator.translate(units,
 				VertexInputs.FULLSCREEN, VertexInputs.FULLSCREEN.elements(), AlphaTest.OFF, false,
 				programOf(path), textures.volumes());
-		int[] groups = workGroupsOf(unit);
-		float[] render = workGroupsRenderOf(unit);
-		int[] local = localSizeOf(unit);
+		Set<String> unresolved = new LinkedHashSet<>();
+		List<String> text = uncommented(unit.lines());
+		int[] groups = workGroupsOf(unit, text, unresolved);
+		float[] render = workGroupsRenderOf(unit, text, unresolved);
+		int[] local = localSizeOf(unit, text, unresolved);
 		return Optional.of(new Compute(
 				bind(source.packName(), path, program, targets, AlphaTest.OFF, textures),
-				groups[0], groups[1], groups[2], render[0], render[1], local[0], local[1]));
+				groups[0], groups[1], groups[2], render[0], render[1], local[0], local[1],
+				List.copyOf(unresolved)));
 	}
 
 	/**
@@ -556,19 +602,35 @@ public final class PackProgram {
 	 * clamped, a pack writing it to turn a pass off, which is why an absent directive is answered
 	 * with -1 and not with a count.
 	 */
-	private static int[] workGroupsOf(ExpandedUnit unit) {
+	private static int[] workGroupsOf(ExpandedUnit unit, List<String> lines,
+			Collection<String> unresolved) {
 		int[] groups = { -1, -1, -1 };
-		List<String> lines = unit.lines();
 		for (int i = 0; i < lines.size(); i++) {
 			if (!unit.isLive(i)) {
 				continue;
 			}
 
 			Matcher matcher = WORK_GROUPS.matcher(lines.get(i));
-			while (matcher.find()) {
-				groups[0] = Math.max(0, Integer.parseInt(matcher.group(1)));
-				groups[1] = Math.max(0, Integer.parseInt(matcher.group(2)));
-				groups[2] = Math.max(0, Integer.parseInt(matcher.group(3)));
+			if (matcher.find()) {
+				int[] read = new int[3];
+				boolean whole = true;
+				// Every axis is read even once one of them has failed. The answer is the same
+				// either way, and the log is the only place a word this engine cannot read is
+				// ever said, so a directive naming two of them owes both.
+				for (int axis = 0; axis < 3; axis++) {
+					Integer count = valueOf(matcher.group(axis + 1), unit.defines(), WHOLE,
+							Integer::valueOf, "workGroups", unresolved);
+					whole &= count != null;
+					if (count != null) {
+						read[axis] = Math.max(0, count);
+					}
+				}
+
+				// One argument this engine cannot read leaves the whole directive where it was
+				// rather than a count with a nought in it, which is a pass the pack turned off.
+				if (whole) {
+					groups = read;
+				}
 			}
 		}
 
@@ -579,26 +641,38 @@ public final class PackProgram {
 	 * The multiplier of the pass size, which is the road Iris takes when the pack asked for no
 	 * count of its own. Read off the live branch like the count above, and for the same reason.
 	 * <p>
-	 * <strong>A pack may write the value as a macro rather than as a literal</strong>, Reverie's
-	 * {@code vec2(VOLUMETRICS_RES, VOLUMETRICS_RES)}, and Iris reads it substituted because it
-	 * parses a preprocessed source. Nothing substitutes it here, so such a directive reads as
-	 * absent and the program covers the whole pass rather than the fraction the pack asked for.
+	 * <strong>A pack may write the value as a macro rather than out in the open</strong>, and
+	 * Reverie does: {@code vec2(VOLUMETRICS_RES, VOLUMETRICS_RES)} on the branch that runs, against
+	 * the {@code vec2(1, 1)} of its own neighbours, and the macro is one of its settings. Iris reads
+	 * it substituted because it parses a preprocessed source: {@code ShaderPack.java:317} runs the
+	 * include-expanded file through jcpp before {@code ProgramSet.java:247} looks for the directive
+	 * at all. Here the text keeps the pack's own names, so the name is stood in for out of the
+	 * unit's define table instead, which the expander built over the same includes and with the
+	 * player's settings applied.
+	 * <p>
+	 * <strong>A name that stands for nothing readable leaves the directive absent</strong>, which
+	 * covers the whole pass rather than the fraction the pack asked for, and the caller names it.
 	 * That errs by a factor the local size caps, the tile of pixels a group covers being the same
 	 * on both roads, so unlike a missing local size it stays a wrong image and not a stalled one.
-	 * No pack of the corpus writes it that way on a program this engine dispatches.
 	 */
-	private static float[] workGroupsRenderOf(ExpandedUnit unit) {
+	private static float[] workGroupsRenderOf(ExpandedUnit unit, List<String> lines,
+			Collection<String> unresolved) {
 		float[] render = { -1.0F, -1.0F };
-		List<String> lines = unit.lines();
 		for (int i = 0; i < lines.size(); i++) {
 			if (!unit.isLive(i)) {
 				continue;
 			}
 
 			Matcher matcher = WORK_GROUPS_RENDER.matcher(lines.get(i));
-			while (matcher.find()) {
-				render[0] = Math.max(0.0F, Float.parseFloat(matcher.group(1)));
-				render[1] = Math.max(0.0F, Float.parseFloat(matcher.group(2)));
+			if (matcher.find()) {
+				Float width = valueOf(matcher.group(1), unit.defines(), FRACTION, Float::valueOf,
+						"workGroupsRender", unresolved);
+				Float height = valueOf(matcher.group(2), unit.defines(), FRACTION, Float::valueOf,
+						"workGroupsRender", unresolved);
+				if (width != null && height != null) {
+					render[0] = Math.max(0.0F, width);
+					render[1] = Math.max(0.0F, height);
+				}
 			}
 		}
 
@@ -606,41 +680,152 @@ public final class PackProgram {
 	}
 
 	/**
+	 * One argument of a directive as a number, or null when this engine cannot make one of it, in
+	 * which case the argument joins the words the caller is to say out loud, whole and beside the
+	 * directive it was written in.
+	 * <p>
+	 * A name is stood in for out of the unit's own table and then read again, because a pack does
+	 * define one setting as another. The hops are bounded rather than trusted: two names defined as
+	 * each other compile nowhere, but they would spin here forever, and the bound ends on a name
+	 * rather than on a number, which is the refusal every other unreadable argument gets.
+	 * <p>
+	 * <strong>A number too wide for what it is read into is refused like a name.</strong> The
+	 * digits are the pack's own the moment a table stands them in, a setting being whatever the
+	 * player left it at, and thrown from here the refusal would leave the whole compute behind: the
+	 * caller's caller catches it around the translation and drops the program, where Iris only
+	 * carries the directive absent.
+	 */
+	private static <T> T valueOf(String argument, Map<String, String> defines, Pattern shape,
+			Function<String, T> number, String directive, Collection<String> unresolved) {
+		String value = argument.trim();
+		for (int hop = 0; hop < MACRO_HOPS && MACRO.matcher(value).matches(); hop++) {
+			String stood = defines.get(value);
+			if (stood == null) {
+				break;
+			}
+
+			value = stood.trim();
+		}
+
+		if (shape.matcher(value).matches()) {
+			try {
+				return number.apply(value);
+			} catch (NumberFormatException wide) {
+				// Digits the shape reads and the type cannot hold, so the word is said instead.
+			}
+		}
+
+		unresolved.add(argument.trim() + " in " + directive);
+
+		return null;
+	}
+
+	/**
+	 * One argument of a directive as the pack wrote it, from where it begins to the comma or the
+	 * bracket that closes it. The brackets are counted rather than the first comma taken: a pack
+	 * writes an argument holding commas of its own, RenderPearl's local size being a call to
+	 * {@code min}, and half of such a word said in the log is a word its reader cannot find in the
+	 * file.
+	 */
+	private static String argumentAt(String line, int from) {
+		int depth = 0;
+		for (int at = from; at < line.length(); at++) {
+			char letter = line.charAt(at);
+			if (letter == '(') {
+				depth++;
+			} else if (letter == ')' && depth > 0) {
+				depth--;
+			} else if (letter == ')' || (letter == ',' && depth == 0)) {
+				return line.substring(from, at).trim();
+			}
+		}
+
+		return line.substring(from).trim();
+	}
+
+	/**
+	 * The unit's lines with every comment blanked out and the columns of everything else left where
+	 * they were, which is the text the compiler is going to read.
+	 * <p>
+	 * <strong>What a pack crossed out itself is not a directive</strong>, and the unit's own
+	 * liveness answers nothing about it: that is the preprocessor's crossing out, and a size a pack
+	 * commented away is live text by it. The two forms need reading rather than searching for,
+	 * because a block a pack opened lines above leaves nothing on the line inside it to see, which
+	 * is how Sildur's hides a whole run of declarations from {@code TargetPlan} as well.
+	 */
+	private static List<String> uncommented(List<String> lines) {
+		List<String> read = new ArrayList<>(lines.size());
+		boolean commented = false;
+		for (String line : lines) {
+			char[] text = line.toCharArray();
+			for (int at = 0; at < text.length; at++) {
+				boolean pair = at + 1 < text.length;
+				if (commented) {
+					boolean closes = pair && text[at] == '*' && text[at + 1] == '/';
+					text[at] = ' ';
+					if (closes) {
+						text[++at] = ' ';
+						commented = false;
+					}
+				} else if (pair && text[at] == '/' && text[at + 1] == '/') {
+					Arrays.fill(text, at, text.length, ' ');
+					break;
+				} else if (pair && text[at] == '/' && text[at + 1] == '*') {
+					text[at] = ' ';
+					text[++at] = ' ';
+					commented = true;
+				}
+			}
+
+			read.add(new String(text));
+		}
+
+		return read;
+	}
+
+	/**
 	 * The shader's own work group size, which both derived roads divide the pass size by, or -1 in
-	 * both where it cannot be read as a literal. Iris asks the linked program for it
+	 * both where it cannot be read as a number. Iris asks the linked program for it
 	 * ({@code GL_COMPUTE_WORK_GROUP_SIZE}) and is never in that position; nothing is linked here
 	 * at the moment the question is asked, so it comes off the same live text as the directives
 	 * and by the same last match wins rule.
 	 * <p>
-	 * <strong>An axis written through a macro refuses the whole answer rather than falling back on
-	 * the GLSL default of one.</strong> The default is right for an axis the shader really leaves
-	 * out and catastrophic for one it writes and this engine cannot read: sixteen read as one is
-	 * two million groups at 1080p where the shader asked for eight thousand, at the shader's real
-	 * two hundred and fifty-six invocations apiece, which is a frozen game rather than a wrong
-	 * picture. Which of the two it is cannot be told from a missed match, so the value is captured
-	 * whole and refused when it is not a number. {@code local_size_x} is required of every compute
-	 * shader, so finding none of it at all is the same failure to read and gets the same answer.
+	 * <strong>An axis this engine still cannot read refuses the whole answer rather than falling
+	 * back on the GLSL default of one.</strong> A name goes through the unit's define table like
+	 * the two directives above, so a shader that writes its size as one of its own settings is
+	 * read rather than refused; what is left is a name the table stands nothing in for. The default
+	 * is right for an axis the shader really leaves out and catastrophic for one it writes and this
+	 * engine cannot read: sixteen read as one is two million groups at 1080p where the shader asked
+	 * for eight thousand, at the shader's real two hundred and fifty-six invocations apiece, which
+	 * is a frozen game rather than a wrong picture. Which of the two it is cannot be told from a
+	 * missed match, so the value is captured whole and refused when it is not a number.
+	 * {@code local_size_x} is required of every compute shader, so finding none of it at all is the
+	 * same failure to read and gets the same answer.
 	 */
-	private static int[] localSizeOf(ExpandedUnit unit) {
+	private static int[] localSizeOf(ExpandedUnit unit, List<String> lines,
+			Collection<String> unresolved) {
 		int[] local = { -1, 1 };
-		List<String> lines = unit.lines();
+		boolean read = true;
 		for (int i = 0; i < lines.size(); i++) {
 			if (!unit.isLive(i)) {
 				continue;
 			}
 
-			Matcher matcher = LOCAL_SIZE.matcher(lines.get(i));
+			String line = lines.get(i);
+			Matcher matcher = LOCAL_SIZE.matcher(line);
 			while (matcher.find()) {
-				if (!LITERAL.matcher(matcher.group(2)).matches()) {
-					return new int[] { -1, -1 };
+				String axis = matcher.group(1);
+				Integer size = valueOf(argumentAt(line, matcher.end()), unit.defines(), LITERAL,
+						Integer::valueOf, "local_size_" + axis, unresolved);
+				read &= size != null;
+				if (size != null) {
+					local["x".equals(axis) ? 0 : 1] = Math.max(1, size);
 				}
-
-				local["x".equals(matcher.group(1)) ? 0 : 1] =
-						Math.max(1, Integer.parseInt(matcher.group(2)));
 			}
 		}
 
-		return local;
+		// One axis refuses both, and the walk goes on past it for the sake of the words it says.
+		return read ? local : new int[] { -1, -1 };
 	}
 
 	/**
