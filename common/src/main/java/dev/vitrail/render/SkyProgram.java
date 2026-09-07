@@ -129,13 +129,4 @@ final class SkyProgram extends FamilyProgram {
 		this.body.sampler(sampler);
 	}
 
-	/**
-	 * Whether the pipeline a pass has bound is this program's.
-	 *
-	 * @see GeometryProgram#owns
-	 */
-	boolean owns(RenderPipeline bound) {
-		return this.body.owns(bound);
-	}
-
 }
