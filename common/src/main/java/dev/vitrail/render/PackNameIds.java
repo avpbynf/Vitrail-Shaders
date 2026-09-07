@@ -104,7 +104,7 @@ public final class PackNameIds {
 	 * the flame is no kind of entity and has nothing to fall back on.
 	 */
 	public static int flame() {
-		return entities.id(ENTITY_FLAME.toString());
+		return id(entities, ENTITY_FLAME);
 	}
 
 	/**
@@ -121,7 +121,7 @@ public final class PackNameIds {
 		}
 
 		Identifier key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-		int id = key == null ? NameIds.NONE : entities.id(key.toString());
+		int id = key == null ? NameIds.NONE : id(entities, key);
 		cache.put(type, id);
 
 		return id;
@@ -141,10 +141,31 @@ public final class PackNameIds {
 			return known;
 		}
 
-		int id = items.id(name.toString());
+		int id = id(items, name);
 		cache.put(name, id);
 
 		return id;
+	}
+
+	/**
+	 * One lookup in one of the two tables, and <strong>a file the pack does not ship answers nought
+	 * where a file it does ship answers {@link NameIds#NONE} for a name it leaves out.</strong>
+	 * <p>
+	 * The two are not the same question and Iris does not give them the same answer. It builds a
+	 * table per file and hands an EMPTY one over where the file is missing
+	 * ({@code shaderpack/IdMap.java:70-71} for the items and {@code :73-74} for the entities, both
+	 * {@code orElse(Object2IntMaps.emptyMap())}); fastutil's empty map answers nought, where a table
+	 * that was parsed carries the {@code defaultReturnValue(-1)} it is given at {@code :162}. So
+	 * what a pack meets is nought for a file it never wrote and minus one for a name it left out of
+	 * one it did.
+	 * <p>
+	 * Which the corpus reaches rather than being a corner: of its eleven packs four ship no
+	 * {@code item.properties} and one no {@code entity.properties}, so on those the hand and the
+	 * mount reported the minus one that says "the pack named this nothing" where there was no table
+	 * for it to be named in.
+	 */
+	private static int id(NameIds table, Identifier name) {
+		return table.present() ? table.id(name.toString()) : 0;
 	}
 
 	/**

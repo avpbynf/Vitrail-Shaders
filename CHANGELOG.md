@@ -66,6 +66,20 @@ what the next one holds.
   that says it cannot draw without them was being refused for something it would have got. Clarity
   and Noble now load.
 
+- **The pack is told what you are holding.** A shader recognises an item by the number the pack
+  gives it in its own table, and nothing was looking your hands up in that table, so whatever you
+  carried the pack was told you carried nothing it knew. What that drives on most packs is the
+  light in your hand: on Complementary a torch, a soul lantern and a froglight all cast the same
+  generic glow instead of their own colour, and a lava bucket cast none at all; on Pegasus the
+  light was white whichever torch you held. Both hands are read. The block you are aiming at and
+  the mount you are riding go through tables of the same kind and are read with them.
+
+  **And the off hand no longer answers for the main one on a pack that asked it not to.** A pack
+  says whether the brighter of your two hands is what the main one reports, which is how it worked
+  before the off hand had a light of its own, and that was being done whatever the pack said. Seven
+  of the eleven packs tested ask for it to stop: on those, a torch in the off hand was being
+  reported in both hands at once, so the pack lit the scene from the empty one beside it as well.
+
 ### Changed
 
 - **The compiled shaders kept on disk are three times smaller.** Every one of them carried a copy

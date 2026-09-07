@@ -193,8 +193,9 @@ What is left in the uniform table for those four names is the right answer rathe
 Outside a pass drawn from this mesh, a composite or the terrain or the sky, the reference hands over
 a uniform too, and the numbers here are its numbers. Inside one, the name never reaches a table on
 either engine. So none of the four is listed among the stand-ins, which is what that list looks like
-when it works: what is still listed beside them is the held item, the block in front and the vehicle,
-whose tables are read and live and whose asking is not there.
+when it works. The held item, the block in front and the vehicle are read out of those same tables
+and are not on that list either: they are frame values rather than mesh values, asked once a frame of
+the player rather than of a draw.
 
 **What a pack still reads as a constant on this mesh is the block id**, and the reference does not
 serve it here either: an entity is not a block state and has no id to travel on. A pack branching on

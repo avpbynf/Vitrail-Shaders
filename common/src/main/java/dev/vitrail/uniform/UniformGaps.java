@@ -89,17 +89,7 @@ public final class UniformGaps {
 	private static Map<String, String> standIns() {
 		Map<String, String> reasons = new LinkedHashMap<>();
 
-		// The tables themselves are read and live, block.properties, item.properties and
-		// entity.properties alike; what is missing is the asking, each of these four naming a thing
-		// the frame holds rather than a thing being drawn.
-		String noTable = "nothing looks the held item, the block in front or the vehicle up in the "
-				+ "pack's own identifier table yet";
-		reasons.put("heldItemId", noTable);
-		reasons.put("heldItemId2", noTable);
-		reasons.put("currentSelectedBlockId", noTable);
-		reasons.put("vehicleId", noTable);
-
-		// And only this one of the four settings values. The other three are read off the game's
+		// Only this one of the four settings values. The other three are read off the game's
 		// own options and are as true as anything else here; listing them said a measured value was
 		// a placeholder, which is the same mistake as the reverse and costs the list its point.
 		reasons.put("currentColorSpace", "there is no settings screen to choose it from, which is "

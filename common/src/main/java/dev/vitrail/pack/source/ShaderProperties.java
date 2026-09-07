@@ -127,6 +127,12 @@ public final class ShaderProperties {
 	// live lines and on separateAo's rule in every respect, and answered the same way.
 	private static final Pattern BREAKS_ANISOTROPY =
 			Pattern.compile("^\\s*breaksAnisotropy\\s*=\\s*(.*)$");
+	// Whether the main hand reports the brighter of the two hands' light, which is what a pack
+	// written before the off hand had a light of its own expects. Read on the live lines and on
+	// separateAo's rule in every respect, the default alone being the other way round. Seven of the
+	// eleven packs of the corpus write it, all seven write false, and none writes true, so a flat
+	// default would have an off hand torch answering for seven main hands that asked it not to.
+	private static final Pattern OLD_HAND_LIGHT = Pattern.compile("^\\s*oldHandLight\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
 	// The fifth word of that family, kept apart because it is the one that takes neither a yes nor a
@@ -411,6 +417,12 @@ public final class ShaderProperties {
 		// On that same rule, and read for the same reason: a word this cannot read leaves the
 		// default standing rather than being stepped over.
 		if (BREAKS_ANISOTROPY.matcher(line).matches()) {
+			return;
+		}
+
+		// And on that rule too, for that reason: a word this cannot read is what puts the answer back
+		// to the default, so the line is read whether the word is one of the four or not.
+		if (OLD_HAND_LIGHT.matcher(line).matches()) {
 			return;
 		}
 
@@ -1404,6 +1416,35 @@ public final class ShaderProperties {
 		}
 
 		return Boolean.TRUE.equals(asked);
+	}
+
+	/**
+	 * Whether the main hand reports the brighter of the two hands' light, live lines only, ON unless
+	 * the pack says otherwise.
+	 * <p>
+	 * <strong>The default is the other way round from its two neighbours above, and it is Iris's</strong>
+	 * ({@code shaderpack/properties/PackDirectives.java:96}, {@code getOldHandLight().orElse(true)}).
+	 * A pack that says nothing was written when the off hand had no light of its own, so the one
+	 * name it reads has to answer for whichever hand carries the torch.
+	 * <p>
+	 * <strong>It decides a light and never an identifier.</strong> Iris builds the off hand's
+	 * supplier with the rule switched off outright ({@code uniforms/IdMapUniforms.java:29}) and
+	 * applies it inside the light alone ({@code :98-100}, after the identifier is settled at
+	 * {@code :93}), so a torch in the off hand brightens the scene without making an empty main hand
+	 * read as a torch.
+	 * <p>
+	 * Read through {@link #live} and answered like {@link #separateAo}, whose note carries why the
+	 * last live line decides even when it carries a word this cannot read.
+	 *
+	 * @param defines the pack's settings, which decide which lines of the file are alive at all
+	 */
+	public boolean oldHandLight(Map<String, String> defines) {
+		Boolean asked = null;
+		for (Matcher line : live(OLD_HAND_LIGHT, defines)) {
+			asked = truth(line.group(1).trim());
+		}
+
+		return asked == null || asked;
 	}
 
 	/** Each profile's unexpanded body, in the order the pack declares them. */

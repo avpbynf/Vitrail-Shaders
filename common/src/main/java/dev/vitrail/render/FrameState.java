@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.dh.DhDepth;
+import dev.vitrail.pack.id.NameIds;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.uniform.ClipSpace;
@@ -18,8 +19,11 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.data.AtlasIds;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.attribute.EnvironmentAttributes;
@@ -36,6 +40,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.pattern.BlockInWorld;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.material.FogType;
@@ -107,6 +112,13 @@ public final class FrameState implements WorldState {
 
 	/** From the pack's own properties file rather than from its GLSL, hence not a directive. */
 	private boolean endFlashShadows;
+
+	/**
+	 * The same, and on until the pack says otherwise, which is the default Iris gives it
+	 * ({@code shaderpack/properties/PackDirectives.java:96}). A pack loaded before this is set at
+	 * all is therefore read the way a pack that writes nothing is.
+	 */
+	private boolean oldHandLight = true;
 
 	/** Which world the last frame was in, by identity, so that a change of one is noticed. */
 	private Object lastLevel;
@@ -191,6 +203,7 @@ public final class FrameState implements WorldState {
 	private boolean feetInWater;
 	private boolean swimming;
 	private boolean vehicleInWater;
+	private int vehicleId;
 	private final Vector3d vehicleLookVector = new Vector3d();
 	private final Vector3d relativeVehiclePosition = new Vector3d();
 	private float playerHealth = -1.0F;
@@ -200,9 +213,12 @@ public final class FrameState implements WorldState {
 	private float playerAir = -1.0F;
 	private float playerMaxAir = -1.0F;
 	private final Vector3f selectedBlockPos = new Vector3f(NOTHING_SELECTED);
+	private int selectedBlockId;
 	private final Vector4f lightningBoltPosition = new Vector4f();
 	/** The tick the position beside this was searched for on, so a frame does not do it again. */
 	private long lightningTick = Long.MIN_VALUE;
+	private int heldItemId = NameIds.NONE;
+	private int heldItemId2 = NameIds.NONE;
 	private int heldBlockLight;
 	private int heldBlockLight2;
 
@@ -242,11 +258,16 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
-	 * The one thing the pack says about itself that is not in its GLSL. Set on a pack load, next to
-	 * the directives, and for the same reason.
+	 * One of the two things the pack says about itself that are not in its GLSL. Set on a pack load,
+	 * next to the directives, and for the same reason.
 	 */
 	public void endFlashShadows(boolean endFlashShadows) {
 		this.endFlashShadows = endFlashShadows;
+	}
+
+	/** And the other, which {@link #readHeld} is the whole of what reads. */
+	public void oldHandLight(boolean oldHandLight) {
+		this.oldHandLight = oldHandLight;
 	}
 
 	/** The view geometry, which comes from a captured matrix rather than from a game object. */
@@ -659,7 +680,7 @@ public final class FrameState implements WorldState {
 		readStats(minecraft, player);
 		readSelection(minecraft, level, camera);
 		readLightning(level, pt);
-		readHeldLight(player);
+		readHeld(player);
 	}
 
 	/**
@@ -744,6 +765,13 @@ public final class FrameState implements WorldState {
 
 	private void readFlags(LocalPlayer player) {
 		if (player == null) {
+			// The mount goes back to nothing rather than standing: each of the four names it answers
+			// asks after the player before it asks after the vehicle and gives up on the first
+			// question (uniforms/IrisExclusiveUniforms.java:106, :119, :126 and :137). A number
+			// carried over is the last world's mount read against this world's table, which names a
+			// different animal.
+			noVehicle();
+
 			return;
 		}
 
@@ -761,17 +789,33 @@ public final class FrameState implements WorldState {
 		this.swimming = player.isSwimming();
 
 		Entity vehicle = player.getVehicle();
-		this.vehicleInWater = vehicle != null && vehicle.isInShallowWater();
 		if (vehicle == null) {
-			this.vehicleLookVector.zero();
-			this.relativeVehiclePosition.zero();
+			noVehicle();
 		} else {
+			this.vehicleInWater = vehicle.isInShallowWater();
+			this.vehicleId = PackNameIds.entity(vehicle.getType());
 			Vec3 forward = vehicle.getForward();
 			this.vehicleLookVector.set(forward.x, forward.y, forward.z);
 			Vec3 position = vehicle.getPosition(this.partialTick);
 			this.relativeVehiclePosition.set(this.shift.unshifted())
 					.sub(position.x, position.y, position.z);
 		}
+	}
+
+	/**
+	 * What the four names about the mount answer when there is none, which is also what they answer
+	 * when there is no player to ride one.
+	 * <p>
+	 * The number is nought and not the table's minus one, which is the difference between "riding
+	 * nothing" and "riding something the pack said nothing about". Iris answers the same nought on
+	 * the first of those ({@code uniforms/IrisExclusiveUniforms.java:106-107}) and the table's own
+	 * answer on the second ({@code :115}).
+	 */
+	private void noVehicle() {
+		this.vehicleInWater = false;
+		this.vehicleId = 0;
+		this.vehicleLookVector.zero();
+		this.relativeVehiclePosition.zero();
 	}
 
 	/**
@@ -807,27 +851,32 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
-	 * Where the block the player is looking at is, but only while the game is drawing its outline.
+	 * Where the block the player is looking at is and what the pack calls it, but only while the
+	 * game is drawing its outline.
 	 * <p>
 	 * The outline test is the whole difference between this and reading the hit result, and it is
 	 * not a detail: a pack uses this to draw its own highlight, so without the test the highlight
 	 * stays on with the interface hidden, which is the one moment somebody is taking a screenshot.
 	 * Iris reads the game's own answer through a mixin; the two cases that answer differently from
 	 * the hit result are reachable without one, so they are written out here instead.
+	 * <p>
+	 * The number carries two tests the position does not, and they are the reference's own
+	 * ({@code uniforms/IrisExclusiveUniforms.java:189} against :197-205): a block outside the world
+	 * border and an air block are both aimed at and neither is named.
 	 */
 	private void readSelection(Minecraft minecraft, ClientLevel level, Camera camera) {
 		HitResult hit = minecraft.hitResult;
 		if (hit == null || hit.getType() != HitResult.Type.BLOCK
 				|| !(minecraft.getCameraEntity() instanceof Player player)
 				|| minecraft.gui.hud.isHidden()) {
-			this.selectedBlockPos.set(NOTHING_SELECTED);
+			nothingSelected();
 
 			return;
 		}
 
 		BlockPos block = ((BlockHitResult) hit).getBlockPos();
 		if (!player.getAbilities().mayBuild && !outlined(minecraft, level, player, block)) {
-			this.selectedBlockPos.set(NOTHING_SELECTED);
+			nothingSelected();
 
 			return;
 		}
@@ -836,6 +885,23 @@ public final class FrameState implements WorldState {
 		this.selectedBlockPos.set((float) (block.getX() + 0.5 - position.x),
 				(float) (block.getY() + 0.5 - position.y),
 				(float) (block.getZ() + 0.5 - position.z));
+
+		BlockState state = level.getBlockState(block);
+		this.selectedBlockId = state.isAir() || !level.getWorldBorder().isWithinBounds(block)
+				? 0
+				: BlockStateIds.id(state);
+	}
+
+	/**
+	 * Nought for the number and the far away sentinel for the position, which are not the same kind
+	 * of "nothing" and are not written as one: nought is a number the pack may hand out itself, so
+	 * what tells it apart from a block the pack named nothing about is the minus one the table
+	 * answers there. Iris ends on the same nought
+	 * ({@code uniforms/IrisExclusiveUniforms.java:194}).
+	 */
+	private void nothingSelected() {
+		this.selectedBlockPos.set(NOTHING_SELECTED);
+		this.selectedBlockId = 0;
 	}
 
 	/**
@@ -890,22 +956,72 @@ public final class FrameState implements WorldState {
 	}
 
 	/**
-	 * The {@code oldHandLight} rule, which defaults to on: the brighter of the two hands is what
-	 * the main hand reports, so a torch in the off hand still lights the scene on a pack that only
-	 * reads one of them.
+	 * What is in the two hands: the number the pack gave each item, and the light each one emits.
+	 * <p>
+	 * <strong>The pack's {@code oldHandLight} decides the main hand's light, and it decides nothing
+	 * else.</strong> Where the pack leaves it on, which is where it says nothing, the brighter of
+	 * the two hands is what the main hand reports, so a torch in the off hand still lights the scene
+	 * on a pack that reads one hand only; where the pack turns it off, the main hand answers its own
+	 * item and the second name is the whole of what carries the off hand. The reference gates it the
+	 * same way, handing the flag to the main hand's supplier and a flat false to the off hand's
+	 * ({@code uniforms/IdMapUniforms.java:28-29}, the flag itself coming from
+	 * {@code uniforms/CommonUniforms.java:134}).
+	 * <p>
+	 * <strong>It is the light and never the identifier</strong>, on either setting: the reference
+	 * applies the rule inside the light alone ({@code uniforms/IdMapUniforms.java:98-100}, after the
+	 * identifier is settled at {@code :93}), so a torch in the off hand brightens the scene without
+	 * making an empty main hand read as a torch.
 	 */
-	private void readHeldLight(LocalPlayer player) {
+	private void readHeld(LocalPlayer player) {
 		if (player == null) {
+			this.heldItemId = NameIds.NONE;
+			this.heldItemId2 = NameIds.NONE;
 			this.heldBlockLight = 0;
 			this.heldBlockLight2 = 0;
 
 			return;
 		}
 
-		int main = emission(player.getItemInHand(InteractionHand.MAIN_HAND));
-		int off = emission(player.getItemInHand(InteractionHand.OFF_HAND));
-		this.heldBlockLight = Math.max(main, off);
+		ItemStack mainHand = player.getItemInHand(InteractionHand.MAIN_HAND);
+		ItemStack offHand = player.getItemInHand(InteractionHand.OFF_HAND);
+		this.heldItemId = itemId(mainHand);
+		this.heldItemId2 = itemId(offHand);
+
+		int main = emission(mainHand);
+		int off = emission(offHand);
+		this.heldBlockLight = this.oldHandLight ? Math.max(main, off) : main;
 		this.heldBlockLight2 = off;
+	}
+
+	/**
+	 * The pack's number for what one hand holds, named by the model the item points at and by its
+	 * registry key after that, which is the order the reference takes
+	 * ({@code uniforms/IdMapUniforms.java:89-92}) and the same one the DRAWN item takes here: a
+	 * resource pack that points two items at one model then has the pack answer once for both.
+	 * <p>
+	 * <strong>An empty hand is not a case of its own, and deliberately so.</strong> It holds air,
+	 * whose components are empty, so the model is absent and the registry key is what answers;
+	 * against a pack that says nothing about air that is minus one, which is what a pack expects
+	 * from an empty hand. Against one that does name it, and Complementary names it at
+	 * {@code shaders/item.properties:9}, it is that pack's own number; against one that ships no
+	 * such file at all it is nought, for the reason {@link PackNameIds} carries. The reference asks
+	 * the same question of an empty hand rather than short circuiting on it, so both engines answer
+	 * alike.
+	 * <p>
+	 * The registry key is not weighed against null, because it cannot be one: the item registry is a
+	 * {@code DefaultedRegistry}, whose {@code getKey} answers the default key rather than nothing for
+	 * a value it does not hold, and {@code getKeyOrNull} is the other method for whoever wants the
+	 * question asked. The reference dereferences it unguarded on the same ground
+	 * ({@code uniforms/IdMapUniforms.java:93}).
+	 */
+	private static int itemId(ItemStack stack) {
+		if (stack == null) {
+			return NameIds.NONE;
+		}
+
+		Identifier name = stack.get(DataComponents.ITEM_MODEL);
+
+		return PackNameIds.item(name == null ? BuiltInRegistries.ITEM.getKey(stack.getItem()) : name);
 	}
 
 	/**
@@ -1532,10 +1648,9 @@ public final class FrameState implements WorldState {
 		return this.vehicleInWater;
 	}
 
-	/** Needs the pack's entity.properties table, which nothing reads yet. */
 	@Override
 	public int vehicleId() {
-		return 0;
+		return this.vehicleId;
 	}
 
 	@Override
@@ -1593,10 +1708,9 @@ public final class FrameState implements WorldState {
 		return this.selectedBlockPos;
 	}
 
-	/** Needs the pack's block.properties table, which nothing reads yet. */
 	@Override
 	public int selectedBlockId() {
-		return 0;
+		return this.selectedBlockId;
 	}
 
 	@Override
@@ -1604,19 +1718,14 @@ public final class FrameState implements WorldState {
 		return this.lightningBoltPosition;
 	}
 
-	/**
-	 * Needs the item the player is holding, which nothing here has. The pack's own table is read and
-	 * live, {@code PackNameIds}, and is asked about what is being DRAWN rather than about what is in
-	 * a hand; the two are different questions and this is the one still owed.
-	 */
 	@Override
 	public int heldItemId() {
-		return -1;
+		return this.heldItemId;
 	}
 
 	@Override
 	public int heldItemId2() {
-		return -1;
+		return this.heldItemId2;
 	}
 
 	@Override
