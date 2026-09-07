@@ -183,10 +183,6 @@ wrote rather than on the ones it was given.
 **Water that looks like the game's.** That is the fallback working: the pack's water program was
 refused for a stage mismatch, so the game drew its own. The log names it.
 
-Water can also be the game's for a much simpler reason: some packs ship a water program in one
-dimension only. Sildur's has one at the root, so in other dimensions the water is the game's, drawn
-outside the chain entirely.
-
 ## The horizon line
 
 **A straight edge across the sky, with a paler band under it, wherever the distant horizon is
@@ -247,11 +243,16 @@ after the deferred stage, onto a picture the chain has already composed, and tak
 outright. So a pack that writes a normal or a specular map from `gbuffers_hand` can light the hand
 from them, and a sleeve or any half-transparent layer blends against what stands behind it.
 
-What a `gbuffers_hand` does not get is this frame's scene depth. `depthtex0` and `depthtex1` are
-answered with the far plane, the image of the opaque world not having been taken when the pass is
-drawn, and handing it the previous frame's would be wrong by one frame of camera movement.
-`depthtex2` is the exception and is a real copy, taken one line before the pass is drawn, which is
-the name a pack reads to see what the hand it is holding stands in front of.
+What a `gbuffers_hand` reads as depth is not what the reference hands it, and that is a divergence
+rather than a rule of the format. There, at the moment the solid hand is drawn, `depthtex0` is the
+live scene depth and `depthtex1` the opaque copy taken the frame before
+(`mixin/MixinLevelRenderer.java:269-274`, `pipeline/IrisRenderingPipeline.java:1043-1063`); here
+both answer the far plane. The live depth is the attachment the hand's own pass writes, which a
+pass cannot sample on this backend; the frame before's copy is there and withheld, on the ground
+that it stands one frame of camera movement behind, which is a choice and not an obstacle. What it
+costs: a hand program that fogs, occludes or refracts against the scene depth sees no scene at all.
+`depthtex2` is a real copy, taken one line before the pass is drawn, as there: the name a pack
+reads to see what the hand it is holding stands in front of.
 
 **The mobs and the block entities are drawn into the pack's own shadow map**, so they cast as
 well as receive, and the log names the shadow passes one by one when a place first draws. A mob's
@@ -267,16 +268,14 @@ already has; and it is the one where the reference does the same thing for its o
 cancelling the foil while the map is filled. Receiving and casting are two different things here,
 and the second is the shorter list.
 
-**Turn the game's improved transparency off if the rain or the translucent particles do not change.**
-It is a video setting of its own, which the Fabulous preset turns on everywhere except macOS. With
-it on, the game draws both of those into targets of its own and composes them itself, and this
-engine hands them back rather than attach the pack's targets beside an image it does not read. The
-log says so in those words, once for the rain and once for the particles. The entities are affected
-too, but by row rather than by family: with the setting on, the see-through ghost of an invisible
-mob (the game only draws one where the body is hidden but not hidden from you), an experience orb,
-a translucent item sheet and the translucent glint of an enchantment go back to the game the same
-way. An ordinarily visible mob keeps all of its rows, translucent ones included: its render types
-name no target of their own.
+**The game's improved transparency is turned off while a pack draws**, at the pack's load and again
+whenever the world renderer rebuilds, which is what the reference does as soon as shaders are
+enabled. It is a video setting of its own, which the Fabulous preset turns on everywhere except
+macOS. With it on, the game draws the rain, the translucent particles and a handful of entity rows
+into targets of its own and composes them itself, beside an image the pack never reads, so the
+engine lowers the setting rather than hand any of them back: the video settings show it off and the
+graphics preset reads Custom afterwards, and a hand that turns it back on is undone at the next
+rebuild of the world renderer.
 
 Two consequences follow from how that geometry reaches the pack, and both are worth recognising
 rather than reporting as separate bugs:
