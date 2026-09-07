@@ -187,9 +187,10 @@ world.
 
 ## Uniforms the pack defines for itself
 
-A pack can declare its own values as expressions over engine values and over each other. Some are
-intermediates the shader never sees; some are exposed to it. They share one namespace and may refer
-to each other in any order.
+A pack can declare its own values as expressions over engine values and over each other, under
+either of two keywords: one reads as an intermediate and the other as a value the shader sees,
+though which was used is not what decides whether a program can read the name (below). They share
+one namespace and may refer to each other in any order.
 
 That is why they are resolved as a graph rather than as a list. A declaration several levels deep
 (and real packs have them) evaluated out of order gives a plausible number rather than an error.
@@ -209,6 +210,15 @@ stays **named** instead of turning into a permanently wrong image:
   broke.
 - A declaration that shadows a name the engine already answers is refused, so a pack cannot quietly
   redefine what the engine means by a builtin.
+
+**Which of the two keywords a pack used does not decide what a program may read.** One is written as
+an intermediate and the other as a value the shader sees, and that is how the format documents them,
+but the reference records the keyword and never acts on it: what actually reaches a program is a walk
+over every declaration that resolved, taking a location for each name the program declares. So a pack
+may write the intermediate keyword and still read the value as a uniform, which is what E-LITE does
+with the hour of the day. Both keywords are handed over here for the same reason. The keyword still
+decides one thing, which is where the graph is walked out from when the declarations nothing reads
+are dropped, and that is a divergence written down beside the code that makes it.
 
 A cycle is refused by naming the uniforms it runs through. This is a deliberate divergence: the
 reference throws, and a pack that writes a cycle in one line should lose that line rather than the

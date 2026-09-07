@@ -123,6 +123,26 @@ what the next one holds.
   refuses, so the pass never built and the frame went on without it. Noble is the pack this showed
   on, where nothing wrote its screen space reflections.
 
+- **The sun and the moon carry their texture again on a pack written for the core profile.** Such a
+  pack spells the matrix that places a texture under a plain name rather than the old fixed function
+  one, and nothing here answered that spelling, so every corner of the sun and of the moon was handed
+  the same texture coordinate and both came out as flat squares of a single colour. Clarity is the
+  pack this showed on, in the program that draws them.
+
+- **E-LITE's clouds follow the hour of the day again.** A pack may declare a value of its own under
+  either of two keywords, and only one of them was reaching the shaders. E-LITE writes the hour of
+  the day under the other one and its sky reads it, so it arrived as nought: the count of days was
+  all the clock the cloud cover had left, and it changed in day-sized steps instead of drifting
+  through the day. Either keyword now reaches a program that asks for the name, which is what Iris
+  does with the same pack.
+
+- **The log stops calling a value missing from this engine when nothing supplies it anywhere.** A
+  pack often reads a name no shader engine has ever answered: one left behind by the pack it grew
+  out of, one belonging to a mod that is not installed, or one it simply misspelt. Those were being
+  listed as values this engine still owes, which sends whoever reads the log looking for something
+  that was never written. They are now named for what they are, and a pack gets the same nought under
+  Iris.
+
 - **A pack's quality profile is named again instead of reading "Custom".** A profile can list a
   setting the pack does not actually have, and one such name was enough to stop the profile from
   ever being recognised: the shader screen and the F3 overlay both fell back to "Custom" on a pack
