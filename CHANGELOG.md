@@ -13,6 +13,14 @@ what the next one holds.
 
 ## Unreleased
 
+### Fixed
+
+- **A pack's quality profile is named again instead of reading "Custom".** A profile can list a
+  setting the pack does not actually have, and one such name was enough to stop the profile from
+  ever being recognised: the shader screen and the F3 overlay both fell back to "Custom" on a pack
+  nobody had touched, and the profile buttons could never land on a name. Photon is the pack this
+  showed on, where all four of its profiles now read as themselves.
+
 ### Added
 
 - **Temporal Fold, a new setting on the engine page.** A world drawn at a lower render scale loses

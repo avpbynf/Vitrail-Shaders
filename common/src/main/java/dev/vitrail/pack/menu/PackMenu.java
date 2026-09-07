@@ -179,15 +179,36 @@ public final class PackMenu {
 
 		Map<String, Map<String, String>> profiles = new LinkedHashMap<>();
 		for (String name : properties.profiles().keySet()) {
-			profiles.put(name, expand(properties, name));
+			profiles.put(name, expand(properties, index, warnings, name));
 		}
 
 		return new PackMenu(packName, pages, options, profiles, lang, warnings);
 	}
 
-	private static Map<String, String> expand(ShaderProperties properties, String name) {
+	/**
+	 * What a profile constrains, which is not always what it writes.
+	 * <p>
+	 * A bare positive token naming a setting the pack declares nowhere is dropped, the one form the
+	 * reference checks ({@code ProfileSet.java:78-81}), because a constraint on a name that exists
+	 * nowhere can never be met and would cost the profile its whole purpose: Photon writes
+	 * {@code GTAO} in all four of its profiles and declares it in none of its shaders, so keeping it
+	 * makes every profile fail to match and the overlay read {@code Custom} on a pack nobody has
+	 * touched.
+	 */
+	private static Map<String, String> expand(ShaderProperties properties, OptionIndex index,
+			List<String> warnings, String name) {
 		Map<String, String> expanded = new LinkedHashMap<>();
-		properties.expandProfile(name).forEach((option, value) -> expanded.put(option, text(value)));
+		properties.expandProfile(name, token -> {
+			boolean toggle = index.get(token)
+					.filter(option -> option.kind() == PackOption.Kind.TOGGLE)
+					.isPresent();
+			if (!toggle) {
+				warnings.add("profile." + name + " names " + token
+						+ ", which this pack declares nowhere as a toggle, so it is not a constraint");
+			}
+
+			return toggle;
+		}).forEach((option, value) -> expanded.put(option, text(value)));
 
 		return Collections.unmodifiableMap(expanded);
 	}

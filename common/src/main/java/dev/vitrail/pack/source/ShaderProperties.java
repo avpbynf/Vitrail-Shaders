@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -1129,8 +1130,30 @@ public final class ShaderProperties {
 	 * chain; the later choice wins, which is what lets a profile refine the one it includes.
 	 */
 	public Map<String, OptionValue> expandProfile(String name) {
+		return expandProfile(name, _ -> true);
+	}
+
+	/**
+	 * The same, with a say over the ONE form the reference checks before it keeps it.
+	 * <p>
+	 * <strong>A bare positive token naming a setting the pack declares nowhere is not a
+	 * constraint.</strong> {@code ProfileSet.parse} looks that form up in the boolean half of its
+	 * index and drops it with a warning when it is not there
+	 * ({@code shaderpack/option/ProfileSet.java:78-81}), leaving the profile made of what remains.
+	 * The other three forms it takes go through unchecked, and so do they here.
+	 * <p>
+	 * Keeping it costs what a profile is for. Photon writes {@code GTAO} in all four of its
+	 * profiles and declares it in no shader, so a constraint on it can never be met: every profile
+	 * fails to match, the overlay reads {@code Custom (+0 options changed by user)}, which is its own
+	 * contradiction, and the selector can never land on a name. The picture is untouched either way,
+	 * both engines applying a word nowhere, which is why {@link #expandProfile(String)} keeps its
+	 * old behaviour for the paths that only apply values.
+	 *
+	 * @param known answers whether the pack declares that name as a toggle
+	 */
+	public Map<String, OptionValue> expandProfile(String name, Predicate<String> known) {
 		Map<String, OptionValue> chosen = new LinkedHashMap<>();
-		expandProfile(name, chosen, 0, new int[1]);
+		expandProfile(name, chosen, 0, new int[1], known);
 
 		return chosen;
 	}
@@ -1142,7 +1165,8 @@ public final class ShaderProperties {
 	 *               choice wins and a profile named twice is written twice on purpose, and the
 	 *               second stops only cycles, which are not what costs
 	 */
-	private void expandProfile(String name, Map<String, OptionValue> chosen, int depth, int[] budget) {
+	private void expandProfile(String name, Map<String, OptionValue> chosen, int depth, int[] budget,
+			Predicate<String> known) {
 		String body = this.profiles.get(name);
 		if (body == null || depth > MAX_PROFILE_DEPTH || ++budget[0] > MAX_PROFILE_EXPANSIONS) {
 			return;
@@ -1155,14 +1179,14 @@ public final class ShaderProperties {
 			}
 
 			if (token.startsWith("profile.")) {
-				expandProfile(token.substring("profile.".length()), chosen, depth + 1, budget);
+				expandProfile(token.substring("profile.".length()), chosen, depth + 1, budget, known);
 			} else if (token.startsWith("!")) {
 				chosen.put(token.substring(1), OptionValue.off());
 			} else {
 				int equals = token.indexOf('=');
 				if (equals >= 0) {
 					chosen.put(token.substring(0, equals), OptionValue.of(token.substring(equals + 1)));
-				} else {
+				} else if (known.test(token)) {
 					chosen.put(token, OptionValue.on());
 				}
 			}
