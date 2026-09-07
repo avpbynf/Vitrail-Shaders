@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.uniform.WorldState;
 
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
@@ -93,6 +94,15 @@ abstract class FamilyProgram implements DumpedProgram {
 	@Override
 	public String label() {
 		return this.body.label();
+	}
+
+	/**
+	 * Whether the pipeline a pass has bound is this program's.
+	 *
+	 * @see GeometryProgram#owns
+	 */
+	boolean owns(RenderPipeline bound) {
+		return this.body.owns(bound);
 	}
 
 	/**

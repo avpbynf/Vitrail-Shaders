@@ -264,15 +264,6 @@ public final class TerrainProgram extends FamilyProgram {
 	}
 
 	/**
-	 * Whether the pipeline a pass has bound is this program's.
-	 *
-	 * @see GeometryProgram#owns
-	 */
-	boolean owns(RenderPipeline bound) {
-		return this.body.owns(bound);
-	}
-
-	/**
 	 * Whether this program can still be served, which everything built on it has to agree with.
 	 *
 	 * @see GeometryProgram#servable
