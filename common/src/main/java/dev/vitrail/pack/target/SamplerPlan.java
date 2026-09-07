@@ -20,8 +20,14 @@ import java.util.Set;
  * here is the same list, in the same order, that builds the bind group layout, and the Vulkan
  * backend throws {@code Missing sampler} the moment a name in the layout is not bound. So a name
  * this engine has no answer for cannot be dropped; it has to come back as {@link Kind#UNSERVED}
- * and be given something harmless, and it has to be named in the log rather than quietly given
- * the scene, which draws a program that looks as though it works.
+ * and be given something harmless.
+ * <p>
+ * <strong>A full screen program is the one place where a name nothing answers for is given the
+ * scene on purpose</strong>, because that is the rule its pack was written against and the reason
+ * is in {@link #of(List, Map, TargetPlan, Optional, Set, Kind, boolean)}. It is not given quietly:
+ * {@link Binding#defaulted} marks every name that took it, {@link #defaulted()} lists them, and
+ * the caller prints that list once per program. A name given the scene without being named would
+ * draw a program that looks as though it works.
  * <p>
  * The side of a colour target is answered here too, from the schedule and for this program, so
  * that no caller has to work out where the ping pong stands.
@@ -108,6 +114,18 @@ public final class SamplerPlan {
 	 */
 	private static final int MAX_SHADOW_COLOURS = PackDirectives.MAX_SHADOW_COLOURS;
 
+	/** The colour target a full screen program reads under a name nothing else answers for. */
+	public static final int DEFAULT_TARGET = 0;
+
+	/**
+	 * The one declared type the default sampler is moved onto, spelled out rather than reduced to a
+	 * shape: {@link SamplerTypes#shapeOf} strips the integer and unsigned prefixes
+	 * ({@code SamplerTypes.java:59-63}), so a shape of {@code 2D} also covers {@code isampler2D}
+	 * and {@code usampler2D}, which read the same unit through a different sampling type and come
+	 * back with something that is not the scene.
+	 */
+	private static final String FLAT = "sampler2D";
+
 	private final List<Binding> bindings;
 	private final Map<String, Binding> byName;
 	private final boolean waterShadow;
@@ -137,11 +155,19 @@ public final class SamplerPlan {
 	/**
 	 * What one sampler name of the program is bound to.
 	 *
-	 * @param index the colour target for {@link Kind#COLORTEX}, the shadow colour target for
-	 *              {@link Kind#SHADOW_COLOUR}, -1 otherwise. The two families are numbered apart and
-	 *              never share a texture, so the kind has to be read before the index means anything
+	 * @param index     the colour target for {@link Kind#COLORTEX}, the shadow colour target for
+	 *                  {@link Kind#SHADOW_COLOUR}, -1 otherwise. The two families are numbered apart
+	 *                  and never share a texture, so the kind has to be read before the index means
+	 *                  anything
+	 * @param defaulted whether the name got what it got as the default sampler of a full screen
+	 *                  program rather than by naming it. The kind is then whatever {@code colortex0}
+	 *                  resolves to, so the binding side needs no second rule; what this flag is for
+	 *                  is telling the log, and telling a supplied texture apart from one the name
+	 *                  really asked for, since the file was named against {@code colortex0} and has
+	 *                  to be looked up under that name and not under this one
 	 */
-	public record Binding(String sampler, Kind kind, int index, TargetSchedule.Side side) {
+	public record Binding(String sampler, Kind kind, int index, TargetSchedule.Side side,
+			boolean defaulted) {
 	}
 
 	/**
@@ -166,7 +192,19 @@ public final class SamplerPlan {
 	 *                 narrowed to it
 	 */
 	public static Kind classify(String name, String type, Set<String> supplied) {
-		if (CustomImages.named(name)) {
+		return classify(name, type, supplied, CustomImages.names());
+	}
+
+	/**
+	 * The same, told the pack's image names instead of asking the registry for them.
+	 *
+	 * @param images every name an {@code image.} directive of THIS pack hangs on,
+	 *               {@link CustomImages#namesOf} being where they come from either way. The
+	 *               registry is installed by the translation, so a caller running before it, the
+	 *               target plan above all, would otherwise be answered for the pack before
+	 */
+	public static Kind classify(String name, String type, Set<String> supplied, Set<String> images) {
+		if (images.contains(name)) {
 			return Kind.CUSTOM_IMAGE;
 		}
 
@@ -286,6 +324,12 @@ public final class SamplerPlan {
 
 	/**
 	 * Works out what each sampler the program declares will be bound to.
+	 * <p>
+	 * The full screen flag is read off the program's own name, so the default sampler is on for a
+	 * composite and off for a gbuffers pass. <strong>No name takes it here whatever the family</strong>,
+	 * because no types are handed in and a name the reader could not type takes no default: what
+	 * this overload reports for a pack that reads the screen under a name of its own is the
+	 * {@link Kind#UNSERVED} the name has before a type is known, not the scene.
 	 *
 	 * @param declared the sampler names the translated program declares, in that order
 	 * @param program  the program the plan is for, so the flip snapshot is the right one
@@ -295,27 +339,50 @@ public final class SamplerPlan {
 	}
 
 	/**
-	 * The same, with the types the reader managed to put on those names.
+	 * The same, with the types the reader managed to put on those names. The full screen flag is
+	 * still the program's own name, and a name typed {@code sampler2D} that nothing else answers
+	 * for now takes the default in the families that have one.
 	 *
 	 * @param types the declared type of each name. A name missing from it is one the reader could
-	 *              not type, and is taken at its word rather than refused on a guess
+	 *              not type, and is taken at its word rather than refused on a guess, except for
+	 *              the default sampler, which no untyped name takes
 	 */
 	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
 			String program) {
-		return of(declared, types, plan, program, Set.of());
+		return of(declared, types, plan, program, Set.of(), Set.of());
 	}
 
 	/**
-	 * The same, told which names the pack supplies a file for.
+	 * The same, told which names the pack supplies a file for and nothing about what the pack lays
+	 * over {@code colortex0}, so the default sampler stands on the colour target. That is the
+	 * answer a reader measuring what a pack takes over under its own names wants, the file behind
+	 * the first target changing none of those.
+	 */
+	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
+			String program, Set<String> supplied) {
+		return of(declared, types, plan, program, supplied, Set.of());
+	}
+
+	/**
+	 * The same, told which of those names a flat picture stands on. The full screen flag is the
+	 * program's own name here too, and what the default sampler stands on is decided from those
+	 * names: a picture the pack laid over {@code colortex0} for the stage stands there instead of
+	 * the target.
 	 *
 	 * @param supplied every name the pack supplies a file for at this program's stage. What is
 	 *                 still standing by the time this program draws is worked out here rather than
 	 *                 handed in, because it is the plan that knows
+	 * @param pictures the ones of those the default sampler can stand on, which
+	 *                 {@link #byDefault} says the rest of
 	 */
 	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
-			String program, Set<String> supplied) {
+			String program, Set<String> supplied, Set<String> pictures) {
+		// The picture is narrowed the way the declared override is, and by the same walk: Iris
+		// deactivates an override once its target has been flipped, whichever road reads it
+		// (gl/program/ProgramSamplers.java:258).
 		return of(declared, types, plan, plan.schedule().step(program),
-				standing(plan, program, supplied));
+				standing(plan, program, supplied),
+				byDefault(standing(plan, program, pictures)), fullscreen(program));
 	}
 
 	/**
@@ -323,6 +390,12 @@ public final class SamplerPlan {
 	 * needs: its halves are the pass's and not the file's. The translucent pass reads its colour
 	 * targets on the sides the deferred stage leaves them, and looking the file up in the schedule
 	 * would answer for the wrong side of that boundary.
+	 * <p>
+	 * <strong>There is no full screen flag to read off a step, so this overload turns the default
+	 * sampler OFF.</strong> That is the answer these callers want rather than a shortcut: the step
+	 * is handed in exactly by the geometry programs, which reserve their first texture units for
+	 * the game's own atlas and have no default unit to spare
+	 * ({@code samplers/IrisSamplers.java:36} against {@code :39}).
 	 *
 	 * @param step where the reader stands in the frame, deciding the half of every colour target.
 	 *             Empty falls back to MAIN everywhere, as it always has
@@ -333,24 +406,115 @@ public final class SamplerPlan {
 	}
 
 	/**
-	 * The same, with the program's step in the schedule and its overrides already worked out.
+	 * The same, with the program's step in the schedule and its overrides already worked out. The
+	 * default sampler is OFF here as well, and for the same reason: a step names no family.
 	 *
 	 * @param supplied the names the pack supplies a file for, already narrowed to this program's
 	 *                 stage and to the overrides that still stand
 	 */
 	public static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
 			Optional<TargetSchedule.Bound> step, Set<String> supplied) {
+		return of(declared, types, plan, step, supplied, Kind.UNSERVED, false);
+	}
+
+	/**
+	 * The same, told whether the program is drawn over the whole screen.
+	 * <p>
+	 * <strong>What the flag decides is the name nothing else answers for.</strong> A full screen
+	 * program of Iris is built with no reserved texture unit at all
+	 * ({@code samplers/IrisSamplers.java:39}), and {@code colortex0} is handed the first one through
+	 * {@code addDefaultSampler} ({@code :93-95}), which takes unit nought whatever names the program
+	 * carries and refuses to run anywhere else
+	 * ({@code gl/program/ProgramSamplers.java:155-162}). Every sampler uniform Iris then never
+	 * assigns a unit to keeps the value GLSL gives it, which is nought, so it reads whatever unit
+	 * nought holds. That is the whole of OptiFine's rule that the first colour target is the
+	 * default texture of a composite, and Iris never binds the geometry names over it either: the
+	 * composite and the final renderers ask for the render target samplers alone
+	 * ({@code pipeline/CompositeRenderer.java:398}, {@code pipeline/FinalPassRenderer.java:368}) and
+	 * call {@code addLevelSamplers} nowhere.
+	 * <p>
+	 * A descriptor set has no such default: a name is bound or the draw throws, so a name nothing
+	 * served used to be given one black texel. That reads as a rule until a pack writes its chain
+	 * against the OptiFine one. I Like Vanilla calls the screen {@code tex} throughout
+	 * ({@code shaders/basics/common.glsl:59}) and names {@code colortex0} only in directives, in
+	 * the format block it keeps commented ({@code shaders/basics/settings.glsl:9}) and in the
+	 * mipmap flag of the pass that reads the screen at a level
+	 * ({@code shaders/program/composite10.glsl:7}, whose body fetches {@code tex} at that level):
+	 * the one target it never declares a sampler for is the one every pass of its chain reads. All
+	 * of them read black, and the picture the pack presents is exactly zero.
+	 * <p>
+	 * <strong>What unit nought holds is not always the colour target</strong>, so the name nothing
+	 * answers for is given whatever the default sampler itself stands on, standing overrides and
+	 * all. A pack may lay a flat picture of its own over {@code colortex0} for a stage, and Iris
+	 * then replaces the default sampler by it rather than binding the target
+	 * ({@code gl/program/ProgramSamplers.java:298-306}); the defaulted name follows, which is why
+	 * {@link Binding#defaulted} exists, the file having been named against {@code colortex0}.
+	 * <p>
+	 * <strong>A picture is the one shape that reaches it, and the two engines agree on that.</strong>
+	 * Only the picture form of {@code texture.<stage>.<name>} enters the map the interceptor looks
+	 * in ({@code ShaderProperties.java:485-486}); a declaration that spells a raw blob out, the 1D,
+	 * the rectangle and the volume alike, goes to the renaming road instead ({@code :480}), which
+	 * retypes the declaration naming it and never touches a name nothing serves. {@link #byDefault}
+	 * counts the same one form, so a blob laid over {@code colortex0} leaves the default sampler on
+	 * the target on both sides. Photon lays a 64 cube of noise there for its composites
+	 * ({@code shaders/shaders.properties:357}) and its composites go on reading the colour target
+	 * under that name in either engine, with no defaulted name at all besides.
+	 * <p>
+	 * Only a plain two dimensional sampler takes the default, and only one whose type was really
+	 * read: a name the reader could not type is left alone, since the name is not evidence for a
+	 * question that is about a name nothing answers for. A cube or a shadow declaration under an
+	 * unknown name would read unit nought through its own type, where Iris put a 2D texture and
+	 * nothing else, so black is what it reads there as well; a storage image is not a sampler at
+	 * all and keeps its own road. A volume the backend refuses stays refused, and a texture of the
+	 * pack's own that could not be read stays black, both for the reasons they already carry.
+	 *
+	 * @param stands     what the default sampler stands on for this program, which is a property of
+	 *                   the program and not of any name: what a reader with no unit of its own lands
+	 *                   on is one texture unit, whatever the pack called it
+	 * @param fullscreen whether the program covers the screen, which is the begin, prepare,
+	 *                   deferred, composite and final families
+	 */
+	private static SamplerPlan of(List<String> declared, Map<String, String> types, TargetPlan plan,
+			Optional<TargetSchedule.Bound> step, Set<String> supplied, Kind stands,
+			boolean fullscreen) {
 		List<Binding> bindings = new ArrayList<>();
+		Kind byDefault = fullscreen ? stands : Kind.UNSERVED;
+		Set<String> images = CustomImages.names();
 
 		for (String name : declared) {
-			Kind kind = classify(name, types.get(name), supplied);
+			String type = types.get(name);
+			Kind kind = classify(name, type, supplied, images);
+			if (fullscreen && takesDefault(name, type, supplied, images)) {
+				// Through the same allocation test the target's own name goes through below, and
+				// for the same reason: a plan that decides everything before a frame has nothing to
+				// bind for an index nothing allocated. TargetPlan allocates it wherever a full
+				// screen program of the place declares a name that lands here, which is where Iris
+				// creates it on demand (samplers/IrisSamplers.java:60-62 and
+				// targets/RenderTargets.java:118), so the target is there whenever a pack asks for
+				// it; the name falls back to the black texel where it is not, on the pass road and
+				// on the compute road both, rather than the plan handing out an index the binding
+				// then has to refuse.
+				if (byDefault == Kind.COLORTEX && plan.allocated().contains(DEFAULT_TARGET)) {
+					bindings.add(new Binding(name, Kind.COLORTEX, DEFAULT_TARGET,
+							side(step, DEFAULT_TARGET), true));
+					continue;
+				}
+
+				if (byDefault == Kind.PACK_TEXTURE) {
+					bindings.add(new Binding(name, Kind.PACK_TEXTURE, -1,
+							TargetSchedule.Side.MAIN, true));
+					continue;
+				}
+			}
+
 			if (kind == Kind.SHADOW_COLOUR) {
-				bindings.add(new Binding(name, kind, shadowColour(name), TargetSchedule.Side.MAIN));
+				bindings.add(new Binding(name, kind, shadowColour(name), TargetSchedule.Side.MAIN,
+						false));
 				continue;
 			}
 
 			if (kind != Kind.COLORTEX) {
-				bindings.add(new Binding(name, kind, -1, TargetSchedule.Side.MAIN));
+				bindings.add(new Binding(name, kind, -1, TargetSchedule.Side.MAIN, false));
 				continue;
 			}
 
@@ -360,17 +524,96 @@ public final class SamplerPlan {
 			// there is nothing to bind. Saying so by name is the whole difference between a gap
 			// and a wrong image.
 			if (!plan.allocated().contains(index)) {
-				bindings.add(new Binding(name, Kind.UNSERVED, -1, TargetSchedule.Side.MAIN));
+				bindings.add(new Binding(name, Kind.UNSERVED, -1, TargetSchedule.Side.MAIN, false));
 				continue;
 			}
 
-			int wanted = index;
-			TargetSchedule.Side side = step.map(bound -> bound.read(wanted))
-					.orElse(TargetSchedule.Side.MAIN);
-			bindings.add(new Binding(name, Kind.COLORTEX, index, side));
+			bindings.add(new Binding(name, Kind.COLORTEX, index, side(step, index), false));
 		}
 
 		return new SamplerPlan(bindings);
+	}
+
+	/** Which half of one colour target a reader standing at this step reads. */
+	private static TargetSchedule.Side side(Optional<TargetSchedule.Bound> step, int index) {
+		return step.map(bound -> bound.read(index)).orElse(TargetSchedule.Side.MAIN);
+	}
+
+	/**
+	 * Whether a declaration reads the one texture unit the default sampler fills, which is a plain
+	 * two dimensional one and nothing else.
+	 * <p>
+	 * The type has to be KNOWN and it has to be exactly that one, which is the opposite of the rule
+	 * the rest of this class follows for a name it could not type. Everywhere else an untyped name
+	 * is taken at its word because the name is evidence; here there is no name to go on, the whole
+	 * question being what to do with a name nothing answers for, so a reader that saw no type saw
+	 * nothing at all. Letting one through moved the default onto declarations of every shape under
+	 * a caller that hands in no types: Reverie's {@code sampler3D worleyNoiseTexture} read as
+	 * colour target nought that way.
+	 */
+	private static boolean flat(String type) {
+		return FLAT.equals(type);
+	}
+
+	/**
+	 * Whether a name a full screen program declares falls to the default sampler, asked in the one
+	 * place so that what is ALLOCATED for the default and what is BOUND to it cannot drift apart.
+	 * {@code TargetPlan} asks it while the plan is built and {@link #of} asks it again per program.
+	 * <p>
+	 * Two questions stand between them and have to be answered the same way twice. The type: the
+	 * allocation reads the pack's own text, the binding reads a translated unit, and a translation
+	 * may declare ordinary a comparison sampler it had to move into arithmetic. The name is handed
+	 * in untyped there rather than under the type the rewrite left ({@code PackProgram.typesIn}),
+	 * so a comparison is a comparison on both sides and neither moves it. And the pack's images,
+	 * which is why they are handed in: the registry behind {@link CustomImages#named} is installed
+	 * by the translation, so the allocation reads the directives itself and both ends are answered
+	 * for the pack in hand.
+	 *
+	 * @param type     the declared type as the PACK wrote it, or null for a name that could not be
+	 *                 typed, which takes no default
+	 * @param supplied the names the pack supplies a file for at this program's stage
+	 * @param images   the names the pack's own {@code image.} directives hang on
+	 */
+	public static boolean takesDefault(String name, String type, Set<String> supplied,
+			Set<String> images) {
+		return classify(name, type, supplied, images) == Kind.UNSERVED && flat(type);
+	}
+
+	/**
+	 * What the default sampler stands on at a stage: the colour target, or the flat picture the
+	 * pack laid over its name there. {@link Kind#COLORTEX} is the only answer that needs an
+	 * allocation.
+	 *
+	 * @param pictures the names the pack lays a flat picture over IN THIS STAGE, which is the one
+	 *                 form of override that reaches the default sampler and which
+	 *                 {@code PackTextures.picturesTo} answers for. Iris takes that form of
+	 *                 {@code texture.<stage>.<name>} into the map its interceptor replaces the
+	 *                 default sampler out of ({@code ShaderProperties.java:485-486} into
+	 *                 {@code pipeline/CustomTextureManager.java:56-67}); a raw blob goes to the
+	 *                 renaming road at {@code ShaderProperties.java:480} instead and the default
+	 *                 sampler stays on the target, and so does the whole {@code customTexture.}
+	 *                 family, which names no stage and is bound by name alone
+	 *                 ({@code samplers/IrisSamplers.java:237-239})
+	 */
+	public static Kind byDefault(Set<String> pictures) {
+		return pictures.contains(TargetName.canonical(DEFAULT_TARGET))
+				? Kind.PACK_TEXTURE
+				: Kind.COLORTEX;
+	}
+
+	/**
+	 * Whether a program is drawn over the whole screen, which is the one thing the default sampler
+	 * turns on. Read off the family the way {@link #standing} reads it, so the two answers cannot
+	 * drift apart.
+	 * <p>
+	 * A compute file answers yes through its own family, {@code composite1_a} parsing as a
+	 * composite, and that is wanted rather than tolerated: Iris builds the computes of a stage with
+	 * the same call and the same full screen flag as the passes they hang off
+	 * ({@code pipeline/CompositeRenderer.java:454} beside {@code :398}), so the name that reads the
+	 * screen in {@code composite1.fsh} reads it in {@code composite1_a.csh} too.
+	 */
+	public static boolean fullscreen(String program) {
+		return stageOf(TargetName.bareName(program)) != null;
 	}
 
 	/**
@@ -399,9 +642,23 @@ public final class SamplerPlan {
 			return supplied;
 		}
 
+		// The pass a compute hangs off, because a compute is in no running order: composite1_a is
+		// not a pass and a walk looking for its own name would run to the end of the stage, count
+		// the writes of every pass AFTER it, and drop an override the pass beside it keeps. Iris
+		// snapshots what has been flipped once it reaches the index and hands that same snapshot to
+		// the pass (CompositeRenderer.java:134 taken, :151 given it), to the computes hanging off
+		// it (:154) and to a compute whose program draws nothing (:141), so all of them stop here.
+		String upTo = ProgramNames.computeBase(bare).orElse(bare);
+
+		// Stopped where the name FALLS in the frame rather than where it is found, because the
+		// program a compute hangs off may draw nothing and be in no running order either: Pegasus
+		// ships prepare_a and no prepare.fsh, and a walk looking for that name would again run to
+		// the end of the stage. This is the moment the chain dispatches such a compute at
+		// (PackChain.standaloneOf places it before the first pass that does not sort ahead of it),
+		// and the two have to be one answer.
 		Set<String> abandoned = new LinkedHashSet<>();
 		for (String earlier : plan.running()) {
-			if (earlier.equals(bare)) {
+			if (!ProgramNames.before(earlier, upTo)) {
 				break;
 			}
 
@@ -447,7 +704,7 @@ public final class SamplerPlan {
 		Binding found = this.byName.get(sampler);
 
 		return found == null
-				? new Binding(sampler, Kind.UNSERVED, -1, TargetSchedule.Side.MAIN)
+				? new Binding(sampler, Kind.UNSERVED, -1, TargetSchedule.Side.MAIN, false)
 				: found;
 	}
 
@@ -464,6 +721,21 @@ public final class SamplerPlan {
 
 	public List<String> unserved() {
 		return named(Kind.UNSERVED);
+	}
+
+	/**
+	 * The names that took the default sampler without asking for it, in declaration order.
+	 * <p>
+	 * Meant to be printed once for the program: it is the one binding a reader cannot work out from
+	 * the pack's own text, since the pack never wrote {@code colortex0} beside these names, and it
+	 * decides whether a pass reads the scene or reads nothing. Empty for everything that is not
+	 * drawn over the whole screen.
+	 */
+	public List<String> defaulted() {
+		return this.bindings.stream()
+				.filter(Binding::defaulted)
+				.map(Binding::sampler)
+				.toList();
 	}
 
 	/** Names declared under a type no pipeline of this backend can carry. Empty is the norm. */

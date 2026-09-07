@@ -5,6 +5,7 @@ import dev.vitrail.pack.model.TargetFormat;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -48,7 +49,7 @@ public final class CustomImages {
 		}
 
 		byName = Map.copyOf(images);
-		names = Set.copyOf(images.keySet());
+		names = namesOf(reading);
 	}
 
 	public static void clear() {
@@ -56,9 +57,34 @@ public final class CustomImages {
 		names = Set.of();
 	}
 
+	/**
+	 * Every name an {@code image.} directive hangs on, the image and the sampler that reads the
+	 * same volume, read straight off the directives.
+	 * <p>
+	 * This is what {@link #named} answers once {@link #install} has run, and it is exposed so that
+	 * a caller needing the answer BEFORE that asks the same question of the same text instead of
+	 * asking a registry that still holds the pack before. A target plan is built while the registry
+	 * is another pack's, and a name read as unserved there and as an image here is a target
+	 * allocated for nobody, or a name handed a colour target the plan never opened.
+	 */
+	public static Set<String> namesOf(ImageInformation.Reading reading) {
+		Set<String> named = new LinkedHashSet<>();
+		for (ImageInformation image : reading.images()) {
+			named.add(image.name());
+			image.sampler().ifPresent(named::add);
+		}
+
+		return Set.copyOf(named);
+	}
+
 	/** Image name or sampler name hanging off an {@code image.} directive. */
 	public static boolean named(String name) {
 		return names.contains(name);
+	}
+
+	/** The same names as a set, for a reader that asks about more than one of them. */
+	public static Set<String> names() {
+		return names;
 	}
 
 	/** The image uniform itself, as opposed to the sampler that reads the same volume. */

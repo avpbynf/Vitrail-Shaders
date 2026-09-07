@@ -537,6 +537,31 @@ public final class PackTextures {
 		return names;
 	}
 
+	/**
+	 * The names of that stage a flat picture stands on, which are the ones a program's DEFAULT
+	 * sampler can land on rather than on the colour target.
+	 * <p>
+	 * Narrower than {@link #suppliedTo} three times over, and each is Iris's own line. The stage
+	 * form alone: {@code customTexture.NAME} names no stage and is bound by name and nothing else
+	 * ({@code samplers/IrisSamplers.java:237-239}), so it never stands where a name nothing serves
+	 * lands. The picture alone: a declaration that spells a raw blob out goes to the renaming road
+	 * ({@code ShaderProperties.java:480}), and only a picture enters the map the default sampler is
+	 * swapped out of ({@code :485-486}). And a name with nothing behind it at all is not one of
+	 * them: a picture Iris fails to read leaves its stage map without that name
+	 * ({@code pipeline/CustomTextureManager.java:56-67}), so the default sampler goes back to the
+	 * target, which is what a name this engine refused does here.
+	 */
+	public Set<String> picturesTo(TextureStage stage) {
+		Set<String> names = new LinkedHashSet<>();
+		this.overrides.getOrDefault(stage, Map.of()).forEach((sampler, texture) -> {
+			if (texture.raw().isEmpty()) {
+				names.addAll(spellings(sampler));
+			}
+		});
+
+		return names;
+	}
+
 	/** A colour target under both its names, anything else under its own. */
 	private static List<String> spellings(String sampler) {
 		OptionalInt index = TargetName.index(sampler);

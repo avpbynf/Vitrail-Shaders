@@ -179,7 +179,7 @@ final class PackCompute implements AutoCloseable {
 	 * like the passes on the declaration surviving the translation. Such a compute is handed the
 	 * texel the same way its pass is, so a chain whose only reader is one has to fold it the same
 	 * way: Iris arms the fold from its compute builder as it does from a composite
-	 * ({@code pipeline/CompositeRenderer.java:466}).
+	 * ({@code pipeline/CompositeRenderer.java:470}).
 	 * <p>
 	 * The shadow computes do not count. They run at the head of the frame, before the opaque
 	 * world whose depth the fold takes exists, and Iris hands them no such sampler at all: its
@@ -291,6 +291,18 @@ final class PackCompute implements AutoCloseable {
 					Vitrail.logger().info("Loaded compute {} before {} ({})", path, base.get(),
 							sizing(compute.get()));
 				}
+
+				// The one binding the pack's own text cannot be read for, said here for a compute
+				// as PackPass.describe says it for a pass. Past all three roads rather than on one
+				// of them, and once per program: a compute of a full screen family takes the
+				// default whether or not the program it hangs off draws anything, and Pegasus,
+				// whose prepare stage is four computes and no pass, would never have said so.
+				List<String> defaulted = compute.get().loaded().samplers().defaulted();
+				if (!defaulted.isEmpty()) {
+					Vitrail.logger().info("{} reads {} by default under {}", path,
+							TargetName.canonical(SamplerPlan.DEFAULT_TARGET),
+							String.join(", ", defaulted));
+				}
 			} catch (IOException | RuntimeException e) {
 				Vitrail.logger().warn("compute {} could not be translated: {}", path, e.toString());
 			}
@@ -332,9 +344,9 @@ final class PackCompute implements AutoCloseable {
 	 *                and so what its computes read under the same name: Iris hands a compute the
 	 *                three depth names of the pass it hangs off through the same
 	 *                {@code IrisSamplers.addCompositeSamplers} call
-	 *                ({@code pipeline/CompositeRenderer.java:458} against {@code :402}), and the
+	 *                ({@code pipeline/CompositeRenderer.java:462} against {@code :406}), and the
 	 *                far terrain's through the same {@code addRenderTargetSamplers}
-	 *                ({@code :450} against {@code :394})
+	 *                ({@code :454} against {@code :398})
 	 * @param distant what that pass reads as {@code dhDepthTex0}, on the same split, or null for
 	 *                the far plane on the frames the pack drew no far terrain
 	 */
@@ -451,7 +463,7 @@ final class PackCompute implements AutoCloseable {
 		// before any of it: on the first frame after a pack loads the fields are still nought,
 		// which is a dispatch of no groups at all, and every resize afterwards would size a frame
 		// by the window it had before. Iris asks the same object at the same moment,
-		// ShadowCompositeRenderer.java:211-212.
+		// ShadowCompositeRenderer.java:213-214.
 		Minecraft minecraft = Minecraft.getInstance();
 		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
 		int width = main == null ? 0 : main.width;
@@ -547,20 +559,19 @@ final class PackCompute implements AutoCloseable {
 					orWhite(targets, shadow == null ? null : shadow.depthWithoutTranslucents());
 			// Every name SamplerPlan reads as a shadow colour, the bare shadowcolor with them, and
 			// the white stand-in for one no program of the place named. That is the rule a full
-			// screen pass follows for the same names (PackPass.java:585), and the ceiling is not
+			// screen pass follows for the same names (PackPass.java:640), and the ceiling is not
 			// consulted here because it does not have to be: a buffer the pack may not reach was
 			// never allocated, so colour() answers null for it and white is what the compute reads,
 			// exactly as it does for a buffer nothing has written.
 			//
 			// White covers one more case than it should, and that is a divergence rather than a
-			// rule: what gets allocated is read off the FRAGMENT stages of the place alone
-			// (TargetPlan.build walks fragmentsOf), so a shadowcolor that only a COMPUTE of the
-			// place names is never opened, and this hands the compute white for a buffer the pack
-			// does mean to read. Iris opens it from the compute itself, addShadowSamplers calling
-			// createIfEmpty for each shadowcolor the program declares, on the compute path as on
-			// the composite one (CompositeRenderer.java:461, samplers/IrisSamplers.java:156-163).
-			// Closing it means expanding every compute of the pack while the plan is built, which
-			// is a second reading of the archive, and nothing of the corpus asks for it: every
+			// rule: which shadow buffers get allocated is read off the FRAGMENT stages of the place
+			// alone (TargetPlan.read fills shadowNamed there and nowhere else), so a shadowcolor
+			// that only a COMPUTE of the place names is never seen, and this hands the compute
+			// white for a buffer the pack does mean to read. Iris opens it from the compute itself,
+			// addShadowSamplers calling createIfEmpty for each shadowcolor the program declares, on
+			// the compute path as on the composite one (CompositeRenderer.java:465,
+			// samplers/IrisSamplers.java:156-164). Nothing of the corpus asks for it: every
 			// shadowcolor a compute of it names is named by a fragment stage of the same place too.
 			default -> SamplerPlan.isShadowColour(name)
 					? orWhite(targets, shadow == null ? null : shadow.colour(SamplerPlan.shadowColour(name)))
@@ -732,9 +743,9 @@ final class PackCompute implements AutoCloseable {
 				VK12.vkCmdBindPipeline(commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, this.pipeline);
 				pushDescriptors(commands, stack, targets, step, depth, distant);
 				// The screen and not the shadow map: Iris sizes a shadow composite's compute off
-				// the main render target, ShadowCompositeRenderer.java:212, and the resolution of
-				// the shadow map is what it sizes the shadow GEOMETRY computes off instead,
-				// IrisRenderingPipeline.java:916.
+				// the main render target, ShadowCompositeRenderer.java:213-214, and the resolution
+				// of the shadow map is what it sizes the shadow GEOMETRY computes off instead,
+				// IrisRenderingPipeline.java:908.
 				int[] groups = this.compute.groupsAt(width, height);
 				VK12.vkCmdDispatch(commands, groups[0], groups[1], groups[2]);
 			}
@@ -1031,7 +1042,7 @@ final class PackCompute implements AutoCloseable {
 					// The depth of the pass this compute hangs off, under the three names, the far
 					// terrain's and the smoothed centre depth, answered by the methods that answer
 					// the pass itself: Iris gives a compute the depth samplers of its pass
-					// (CompositeRenderer.java:458 and :461), and Reverie's cloud compute reads
+					// (CompositeRenderer.java:462 and :470), and Reverie's cloud compute reads
 					// depthtex1 to know where the sky ends. Ahead of the engine set below because
 					// that set carries no depth, and a name it did not carry threw on every
 					// dispatch, so the compute never ran and said so once.
@@ -1060,6 +1071,54 @@ final class PackCompute implements AutoCloseable {
 						write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 						write.pImageInfo(imageInfo);
 						continue;
+					}
+
+					// And last, the default sampler of the family this compute hangs off. Iris
+					// builds a compute of a stage with the same call and the same full screen flag
+					// as the passes of that stage (CompositeRenderer.java:454 beside :398), so a
+					// name that reads the screen in composite1.fsh reads it in composite1_a.csh as
+					// well, and a rule posed on one and not the other kills the compute over a
+					// declaration the pass takes in its stride. The plan already worked out what
+					// colortex0 is for this program, standing overrides and all; a shadow compute
+					// has no such default and its plan carries none.
+					SamplerPlan.Binding byDefault =
+							this.compute.loaded().samplers().binding(entry.name());
+					if (byDefault.defaulted()) {
+						String screen = TargetName.canonical(SamplerPlan.DEFAULT_TARGET);
+						// The colour target needs the step, its half being the pass's; the file the
+						// pack lays over the target does not, being one image whichever half the
+						// compute is dispatched on, so the second road is not held behind the first
+						// one's condition.
+						if (byDefault.kind() == SamplerPlan.Kind.COLORTEX && step != null
+								&& colourTarget(write, imageInfo, screen, targets, step,
+										this.program)) {
+							continue;
+						}
+
+						ColorTargets.PackBinding laid = targets.packTexture(this.textureStage, screen);
+						if (laid != null && laid.view() instanceof VulkanGpuTextureView served) {
+							imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(laid.repeat(),
+									laid.filter(), false)).vkSampler());
+							imageInfo.imageView(served.vkImageView());
+							imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
+							write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+							write.pImageInfo(imageInfo);
+							continue;
+						}
+
+						// And one black texel where the default resolved to nothing, which is what
+						// the pass beside this compute binds for the very same name
+						// (PackPass.java:724). The pass draws on black there; taking the compute
+						// out of the frame instead would be this engine answering one declaration
+						// two ways.
+						if (targets.black() instanceof VulkanGpuTextureView blank) {
+							imageInfo.sampler(samplerFor(entry.name()));
+							imageInfo.imageView(blank.vkImageView());
+							imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
+							write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+							write.pImageInfo(imageInfo);
+							continue;
+						}
 					}
 
 					throw new IllegalStateException("Missing storage image " + entry.name());
@@ -1116,8 +1175,21 @@ final class PackCompute implements AutoCloseable {
 			}
 
 			TargetSurface surface = targets.surface(index.getAsInt(), step.read(index.getAsInt()));
+
+			// One black texel for a target this place never allocated, which is the answer a full
+			// screen pass gives the same name (PackPass.java:724). Throwing here took the whole
+			// compute out of the frame over a declaration the pass beside it draws with.
 			if (surface == null || !(surface.view() instanceof VulkanGpuTextureView view)) {
-				throw new IllegalStateException(name + " is not an allocated colour target");
+				if (!(targets.black() instanceof VulkanGpuTextureView blank)) {
+					return false;
+				}
+
+				imageInfo.sampler(samplerFor(name));
+				imageInfo.imageView(blank.vkImageView());
+				imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
+				write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+				write.pImageInfo(imageInfo);
+				return true;
 			}
 
 			// Clamped, filtered and mipmapped the way the pass this hangs off binds the same

@@ -3,6 +3,7 @@ package dev.vitrail.pack.target;
 import dev.vitrail.pack.model.TargetFormat;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.model.TargetSize;
+import dev.vitrail.pack.model.TextureStage;
 import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.SettingSet;
 import dev.vitrail.pack.model.BlendMode;
@@ -14,6 +15,8 @@ import dev.vitrail.pack.source.DimensionSet;
 import dev.vitrail.pack.source.IncludeExpander;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
+import dev.vitrail.pack.texture.CustomImages;
+import dev.vitrail.pack.texture.PackTextures;
 
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 
@@ -68,10 +71,19 @@ public final class TargetPlan {
 	/**
 	 * Sampler declarations are found in the text rather than by translating, because thirty one
 	 * programs are read here and one of them is translated. Optional precision qualifiers are
-	 * allowed for; several packs still write them.
+	 * allowed for; several packs still write them. So is a {@code layout}, on EITHER side of the
+	 * {@code uniform}: a pack writes it to pin a binding of its own and writes it both ways round,
+	 * the translation reads either without trouble, and a declaration carrying one has to be seen
+	 * here too, or it would be bound to the default sampler and allocated by nothing.
+	 * <p>
+	 * One line at a time, and only one: a declaration the pack spread over several lines matches
+	 * nothing here and the name it carries is read by nothing here either. A {@code layout} holding
+	 * parentheses of its own is out of scope with them, the group inside stopping at the first
+	 * closing one.
 	 */
 	private static final Pattern SAMPLER = Pattern.compile(
-			"^\\s*uniform\\s+(?:(?:lowp|mediump|highp)\\s+)?([iu]?sampler\\w*)\\s+([^;]*);.*$");
+			"^\\s*(?:layout\\s*\\([^)]*\\)\\s*)?uniform\\s+(?:layout\\s*\\([^)]*\\)\\s*)?"
+					+ "(?:(?:lowp|mediump|highp)\\s+)?([iu]?sampler\\w*)\\s+([^;]*);.*$");
 
 	private static final String FINAL = "final";
 
@@ -213,14 +225,160 @@ public final class TargetPlan {
 
 		Map<String, String> defines = settings.globalDefines(options);
 		draft.blend = properties.blend(defines);
-		read(source, options, settings, properties, entries, draft);
+
+		// What the pack lays over a name for each stage, which the default sampler is decided
+		// against: a picture over colortex0 stands where the target would, so the target is not
+		// allocated on its account. Kept for the opening rather than read per place, since the
+		// directives are the pack's and the same for all twenty five of them.
+		PackTextures textures = source.derived(List.of(PackTextures.class, defines),
+				() -> PackTextures.read(properties, defines, source));
+
+		// Read from the directives rather than asked of CustomImages, which the TRANSLATION
+		// installs and which still holds the pack before while this runs: a name an image.
+		// directive gives a sampler to is served by that image and asks for no colour target, and
+		// answering that against another pack's directives allocates a target nothing reads, or
+		// leaves a name reading one this place never opened.
+		Set<String> images = CustomImages.namesOf(properties.imageDirectives(defines));
+
+		read(source, options, settings, properties, entries, textures, images, draft);
 		// Ahead of the walk and it used to follow it: the walk owes a moment in the frame to every
 		// program a compute hangs off, and it cannot know which those are before this has said so.
 		// Nothing here reads what the walk writes, so the two only ever ran in this order by habit.
 		computes(properties, options, defines, programs, draft);
+		// After the computes, whose two lists it reads to leave out the files this place never
+		// opens. Nothing in the computes reads what this writes.
+		defaults(source, options, settings, properties, defines, programs, textures, images, draft);
 		walk(properties, options, defines, programs, entries, filter, draft);
 
 		return new TargetPlan(draft);
+	}
+
+	/**
+	 * Allocates the default target for the stages the one walk above does not open.
+	 * <p>
+	 * That walk reads the FRAGMENT entry points of the place, which is every stage that says
+	 * anything about a colour target, and until there was a default sampler it was every stage that
+	 * said anything at all. It is not: the samplers of a program are the union of its stages
+	 * ({@code glsl/ProgramTranslator} folds them into one bind group), and a compute of a full
+	 * screen stage is a program of its own. So a name that reads the screen in {@code composite1.vsh}
+	 * or in {@code composite1_a.csh} and nowhere else asks for the first colour target as loudly as
+	 * one in the fragment stage, and would have been handed an index this place never allocated.
+	 * <p>
+	 * <strong>Nothing is opened once the target is allocated</strong>, which is what keeps this from
+	 * being a second reading of the archive on every pack. The target is written or sampled by
+	 * something in all but a handful of places, the walk above has already said so by the time this
+	 * runs, and there is then no question left to answer.
+	 * <p>
+	 * Only that question is asked of these files. What a program writes, the format tables it
+	 * carries and the shadow buffers it names are read off the fragment stages alone, as they always
+	 * were: a vertex stage declares no draw buffer, and a compute that names a shadow colour nothing
+	 * else names is the divergence {@code render/PackCompute} carries.
+	 * <p>
+	 * <strong>A file this place never opens asks for nothing.</strong> Iris builds no program at
+	 * all for a name its own switch turns off, computes included
+	 * ({@code shaderpack/ShaderPack.java:292-295}), and it never reads a compute past a gap in its
+	 * letters ({@code ProgramSet.readComputeArray}), so neither creates a target on demand. Both
+	 * lists are the ones {@link #computes} drew up, which is why this runs after it.
+	 */
+	private static void defaults(ShaderPackSource source, OptionIndex options, SettingSet settings,
+			ShaderProperties properties, Map<String, String> defines, ProgramSet programs,
+			PackTextures textures, Set<String> images, Draft draft) {
+		if (draft.written.contains(SamplerPlan.DEFAULT_TARGET)
+				|| draft.sampled.contains(SamplerPlan.DEFAULT_TARGET)) {
+			return;
+		}
+
+		Map<String, Boolean> toggles = properties.programToggles(defines, options);
+		IncludeExpander expander = new IncludeExpander(source, settings);
+		for (ProgramSet.ProgramKey key : programs.keys()) {
+			String bare = key.name().baseName();
+			if (key.stage() == ProgramStage.FRAGMENT || !key.dimension().equals(draft.place)
+					|| !SamplerPlan.fullscreen(bare) || off(key, bare, toggles, draft)) {
+				continue;
+			}
+
+			Set<String> supplied = suppliedTo(textures, bare);
+			if (SamplerPlan.byDefault(picturesTo(textures, bare)) != SamplerPlan.Kind.COLORTEX) {
+				continue;
+			}
+
+			Optional<Path> file = source.file(key.file());
+			if (file.isEmpty()) {
+				continue;
+			}
+
+			ExpandedUnit unit;
+			try {
+				unit = expander.expand(file.get());
+			} catch (IOException | RuntimeException e) {
+				// One unreadable stage must not cost the pack the target every other one asks for.
+				draft.unreadable.add(key.file());
+				continue;
+			}
+
+			for (Declaration sampler : samplers(unit)) {
+				if (SamplerPlan.takesDefault(sampler.name(), sampler.type(), supplied, images)) {
+					draft.sampled.add(SamplerPlan.DEFAULT_TARGET);
+					return;
+				}
+			}
+		}
+	}
+
+	/**
+	 * Whether a switch has taken this file out of the frame, which is the question asked of each
+	 * kind of file where its own answer lives.
+	 * <p>
+	 * A compute is switched off under its OWN name, letter and all, and is dropped past a gap in
+	 * the letters before it; the two lists are {@link #computes}'s. Anything else is switched off
+	 * under the program's name, which is the key the pack wrote, place included, for the reason the
+	 * walk gives: a pack conditions {@code world0/composite1} and {@code world-1/composite1} on two
+	 * different expressions.
+	 */
+	private static boolean off(ProgramSet.ProgramKey key, String bare, Map<String, Boolean> toggles,
+			Draft draft) {
+		if (key.stage() == ProgramStage.COMPUTE) {
+			String stem = stemOf(key.file(), draft.place);
+			return draft.disabledComputes.containsKey(stem)
+					|| draft.unreachableComputes.contains(stem);
+		}
+
+		return Boolean.FALSE.equals(toggles.get(pathOf(bare, draft.place)));
+	}
+
+	/** The name a program is switched off under, the place in front of it where there is one. */
+	private static String pathOf(String name, String place) {
+		return place.isEmpty() ? name : place + "/" + name;
+	}
+
+	/**
+	 * The name a compute file is known by: its own, letter included, without its extension and
+	 * relative to the place. {@code deferred4_a} and {@code deferred4} are two computes of one pass
+	 * and the stage that runs them opens each under its own name.
+	 */
+	private static String stemOf(String file, String place) {
+		int dot = file.lastIndexOf('.');
+		String path = dot < 0 ? file : file.substring(0, dot);
+		String prefix = place.isEmpty() ? "" : place + "/";
+
+		return path.startsWith(prefix) ? path.substring(prefix.length()) : path;
+	}
+
+	/**
+	 * Every name the pack lays a file over in the stage a program is drawn in.
+	 * <p>
+	 * The whole stage, where the binding narrows the same set to the overrides no earlier
+	 * program of the stage has written over ({@code SamplerPlan.standing}). The two cannot part
+	 * on the one name this asks about: what that narrowing drops, it drops because a program
+	 * wrote that target, and writing a target is what allocates it.
+	 */
+	private static Set<String> suppliedTo(PackTextures textures, String program) {
+		return TextureStage.of(program).map(textures::suppliedTo).orElse(Set.of());
+	}
+
+	/** The ones of those the default sampler can stand on, which is where the target is decided. */
+	private static Set<String> picturesTo(PackTextures textures, String program) {
+		return TextureStage.of(program).map(textures::picturesTo).orElse(Set.of());
 	}
 
 	/**
@@ -253,14 +411,8 @@ public final class TargetPlan {
 			// world0/composite21 has said nothing about it. Iris keeps those computes and runs
 			// them as a pass with no fragment stage at all (CompositeRenderer.java:137-145), and
 			// so does the chain here: passingOf below names that program.
-			String file = key.file();
-			int dot = file.lastIndexOf('.');
-			String path = dot < 0 ? file : file.substring(0, dot);
-			// The file, letter included, relative to the place: deferred4_a and deferred4 are two
-			// computes of one pass, run in that order, and the stage that runs them opens each
-			// under its own name.
-			String prefix = draft.place.isEmpty() ? "" : draft.place + "/";
-			String stem = path.startsWith(prefix) ? path.substring(prefix.length()) : path;
+			String stem = stemOf(key.file(), draft.place);
+			String path = pathOf(stem, draft.place);
 			if (Boolean.FALSE.equals(toggles.get(path))) {
 				off.put(stem, conditions.getOrDefault(path, "shaders.properties"));
 				continue;
@@ -532,7 +684,8 @@ public final class TargetPlan {
 	}
 
 	private static void read(ShaderPackSource source, OptionIndex options, SettingSet settings,
-			ShaderProperties properties, List<ProgramSet.ProgramKey> entries, Draft draft) {
+			ShaderProperties properties, List<ProgramSet.ProgramKey> entries, PackTextures textures,
+			Set<String> images, Draft draft) {
 		IncludeExpander expander = new IncludeExpander(source, settings);
 		TargetDirectives.Builder builder = TargetDirectives.builder();
 		long began = System.nanoTime();
@@ -605,12 +758,39 @@ public final class TargetPlan {
 				draft.written.addAll(writes);
 			}
 
+			// A full screen program reads colortex0 under every name nothing else answers for, which
+			// is what SamplerPlan gives it and why Iris hands its default sampler the first colour
+			// target (samplers/IrisSamplers.java:93-95). Iris pays for that target when the binding
+			// asks for it (targets/RenderTargets.java:118); a plan that decides everything before a
+			// frame has to pay for it here, or the one name a pack like I Like Vanilla reads the
+			// screen through would be given a target this place never allocated.
+			//
+			// Asked in the words the binding will ask it in, SamplerPlan.takesDefault, and not off
+			// the name: the type decides, so a sampler3D under a name of the pack's own pays for
+			// nothing, and what the pack lays over the stage decides, so a name it supplies a file
+			// for takes no default and a picture laid over colortex0 stands where the target would.
+			//
+			// It joins what the PLACE samples, which is what allocates, and not what this PROGRAM
+			// samples: the second list is the indices the pack itself named, and the chain's
+			// verdicts are phrased against it. A name the pack wrote as tex is this engine saying
+			// it will read colortex0, not the pack saying so.
+			String bare = key.name().baseName();
+			Set<String> supplied = suppliedTo(textures, bare);
+			boolean screen = SamplerPlan.fullscreen(bare)
+					&& SamplerPlan.byDefault(picturesTo(textures, bare)) == SamplerPlan.Kind.COLORTEX;
+
 			Set<Integer> indices = new TreeSet<>();
-			for (String sampler : samplers(unit)) {
+			for (Declaration declaration : samplers(unit)) {
+				String sampler = declaration.name();
+				if (screen
+						&& SamplerPlan.takesDefault(sampler, declaration.type(), supplied, images)) {
+					draft.sampled.add(SamplerPlan.DEFAULT_TARGET);
+				}
+
 				// Under the same ceiling, which is what stops a name from allocating an image Iris
 				// would not have. Iris binds a shadow colour sampler by walking the array it sized
 				// off the declaration and building each one it finds a name for
-				// (samplers/IrisSamplers.java:159-163), so shadowcolor2 in a pack that never asked
+				// (samplers/IrisSamplers.java:159-164), so shadowcolor2 in a pack that never asked
 				// for the eight is a name nothing answers rather than an image.
 				if (SamplerPlan.isShadowColour(sampler)
 						&& SamplerPlan.shadowColour(sampler) < draft.shadowCeiling) {
@@ -631,13 +811,37 @@ public final class TargetPlan {
 		draft.expandMillis = (System.nanoTime() - began) / 1_000_000L;
 	}
 
-	/** Every name declared as a sampler on a live line, whatever the sampler is for. */
-	private static List<String> samplers(ExpandedUnit unit) {
-		List<String> names = new ArrayList<>();
+	/**
+	 * One sampler a program declares, under the type it was declared with.
+	 * <p>
+	 * The type travels with the name because the default sampler is decided on it: {@code sampler3D
+	 * worleyNoiseTexture} and {@code sampler2D tex} are the same name to everything else here and
+	 * two different questions to that one.
+	 */
+	private record Declaration(String name, String type) {
+	}
+
+	/**
+	 * Every name declared as a sampler on a live line, whatever the sampler is for.
+	 * <p>
+	 * Live means both things a line can be crossed out by. The preprocessor is one, and the pack's
+	 * own comments are the other: Sildur's puts a whole block of declarations behind a {@code /*} in
+	 * two of its dimensions, and read as text those are samplers nothing compiles, one of which
+	 * would allocate the first colour target for a program that never asks for it.
+	 * <p>
+	 * A line that OPENS a comment and declares nothing before it matches nothing anyway, the
+	 * pattern wanting the declaration at the head of the line, so what has to be tracked is only
+	 * whether a block comment was already open when the line began.
+	 */
+	private static List<Declaration> samplers(ExpandedUnit unit) {
+		List<Declaration> names = new ArrayList<>();
 		List<String> lines = unit.lines();
+		boolean commented = false;
 
 		for (int line = 0; line < lines.size(); line++) {
-			if (!unit.isLive(line)) {
+			boolean opened = commented;
+			commented = afterLine(lines.get(line), commented);
+			if (opened || !unit.isLive(line)) {
 				continue;
 			}
 
@@ -646,6 +850,7 @@ public final class TargetPlan {
 				continue;
 			}
 
+			String type = matcher.group(1);
 			for (String declarator : matcher.group(2).split(",", -1)) {
 				String name = declarator.trim();
 				int bracket = name.indexOf('[');
@@ -654,12 +859,35 @@ public final class TargetPlan {
 				}
 
 				if (!name.isEmpty()) {
-					names.add(name);
+					names.add(new Declaration(name, type));
 				}
 			}
 		}
 
 		return names;
+	}
+
+	/**
+	 * Whether a block comment is still open once this line has been read. A line comment closes at
+	 * the end of the line and so ends the walk of it; inside a block, neither form opens anything
+	 * and only the closing pair is looked for.
+	 */
+	private static boolean afterLine(String line, boolean commented) {
+		for (int at = 0; at < line.length() - 1; at++) {
+			if (commented) {
+				if (line.charAt(at) == '*' && line.charAt(at + 1) == '/') {
+					commented = false;
+					at++;
+				}
+			} else if (line.charAt(at) == '/' && line.charAt(at + 1) == '/') {
+				return false;
+			} else if (line.charAt(at) == '/' && line.charAt(at + 1) == '*') {
+				commented = true;
+				at++;
+			}
+		}
+
+		return commented;
 	}
 
 	public String packName() {

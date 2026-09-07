@@ -33,7 +33,7 @@ import java.util.Map;
 final class TranslatedProgramCodec {
 
 	/** Bumped by hand when the layout changes. It is part of the key, so old blobs go unread. */
-	static final String FORMAT = "vitrail-translation-4";
+	static final String FORMAT = "vitrail-translation-5";
 
 	private TranslatedProgramCodec() {
 	}
@@ -152,6 +152,7 @@ final class TranslatedProgramCodec {
 		names(out, notes.conflictNames());
 		names(out, notes.comparedSamplers());
 		names(out, notes.hardwareCompared());
+		names(out, notes.retypedSamplers());
 		storageBlocks(out, notes.storageBlocks());
 		out.writeInt(notes.volumeLookups());
 		out.writeInt(notes.volumesLeftAlone());
@@ -165,7 +166,7 @@ final class TranslatedProgramCodec {
 				in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt(),
 				in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt(),
 				in.readInt(), in.readInt(),
-				names(in), names(in), names(in), storageBlocks(in),
+				names(in), names(in), names(in), names(in), storageBlocks(in),
 				in.readInt(), in.readInt(), in.readInt(), in.readInt(), in.readInt());
 	}
 

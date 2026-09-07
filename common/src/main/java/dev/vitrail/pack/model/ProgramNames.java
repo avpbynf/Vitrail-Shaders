@@ -104,6 +104,23 @@ public final class ProgramNames {
 	}
 
 	/**
+	 * Whether one program's moment in the frame comes before another's, which is
+	 * {@link #frameOrder} asked of two names rather than sorted over a list.
+	 * <p>
+	 * It is how a compute whose program draws nothing is placed against the passes that do draw:
+	 * the compute runs where its own name falls, so everything the walk has reached is everything
+	 * that sorts before it. The chain places its dispatch that way and the plan answers what such
+	 * a compute reads the same way, and the two have to agree name for name, a compute placed one
+	 * pass late reading a half nothing wrote yet.
+	 * <p>
+	 * The compute letter says nothing here, {@code prepare_a} and {@code prepare} being one family
+	 * and one slot, which is what lets either spelling be handed in.
+	 */
+	public static boolean before(String program, String other) {
+		return frameOrder().compare(program, other) < 0;
+	}
+
+	/**
 	 * The order Iris folds directives in, from {@code ProgramSet.locateDirectives}. Setup programs
 	 * are not in it: they go to the compute list there and are only ever read for their work group
 	 * size, so they declare no format however they are written.

@@ -202,8 +202,15 @@ final class PackPass {
 		this.samplerBindings = this.samplers.stream().map(loaded.samplers()::binding).toList();
 		List<ColorTargets.PackSource> sources = new ArrayList<>();
 		for (int at = 0; at < this.samplers.size(); at++) {
-			sources.add(this.samplerBindings.get(at).kind() == SamplerPlan.Kind.PACK_TEXTURE
-					? targets.packSource(this.textureStage, this.samplers.get(at))
+			SamplerPlan.Binding binding = this.samplerBindings.get(at);
+			// A name that took the default is looked up under colortex0 and not under itself: the
+			// pack wrote the directive against the target, and the name only reaches the file
+			// because it landed on the same texture unit.
+			String named = binding.defaulted()
+					? TargetName.canonical(SamplerPlan.DEFAULT_TARGET)
+					: this.samplers.get(at);
+			sources.add(binding.kind() == SamplerPlan.Kind.PACK_TEXTURE
+					? targets.packSource(this.textureStage, named)
 					: null);
 		}
 		this.packSources = Collections.unmodifiableList(sources);
@@ -451,11 +458,21 @@ final class PackPass {
 							+ " pixels");
 		}
 
-		return line.append(", ")
+		line.append(", ")
 				.append(this.loaded.program().uniforms().size()).append(" uniforms and ")
 				.append(this.samplers.size()).append(" samplers, ")
-				.append(descriptors()).append(" descriptors")
-				.toString();
+				.append(descriptors()).append(" descriptors");
+
+		// Said here and nowhere else, because this is the one binding the pack's own text cannot be
+		// read for: the pack never wrote colortex0 beside these names, and whether they read the
+		// scene or read nothing is the whole picture on a pack that calls the screen tex.
+		List<String> defaulted = this.loaded.samplers().defaulted();
+		if (!defaulted.isEmpty()) {
+			line.append(", ").append(TargetName.canonical(SamplerPlan.DEFAULT_TARGET))
+					.append(" by default for ").append(String.join(", ", defaulted));
+		}
+
+		return line.toString();
 	}
 
 	private String writes() {
@@ -763,7 +780,7 @@ final class PackPass {
 	 * The one texel {@code centerDepthSmooth} is read out of, and white until the pass behind it
 	 * has drawn once: the far plane in the pack's own window, so a focus point at the horizon,
 	 * where black would be one at the camera. Package private for the compute road, which Iris
-	 * hands the same texel ({@code pipeline/CompositeRenderer.java:461}).
+	 * hands the same texel ({@code pipeline/CompositeRenderer.java:470}).
 	 */
 	static GpuTextureView centerDepth(ColorTargets targets) {
 		return or(targets.centerDepth().view(), targets.white());
