@@ -35,6 +35,17 @@ import java.util.TreeSet;
  * packs are written against Iris: two declarations covering one state is ordinary rather than a
  * mistake, and resolving it the other way round lights the block as something else.
  * <p>
+ * <strong>A pack that ships no {@code block.properties} is named nothing here, where the reference
+ * still names a hundred blocks.</strong> Iris fills its block map from {@code LegacyIdMap} whenever
+ * that file is missing ({@code shaderpack/IdMap.java:84-88}), which is the numbering shadersmod
+ * handed out before the file existed: twenty-five numbers over a hundred block entries, stone 1,
+ * water 9, torch 50, the sixteen wools 35 ({@code shaderpack/materialmap/LegacyIdMap.java:21-78}).
+ * None of that is written here, so such a pack gets {@link #empty} and every state falls to the
+ * minus one that table defaults to: {@code currentSelectedBlockId} reads minus one on a block the
+ * reference would have numbered, and the mesh carries {@link #NONE} where it would have carried
+ * that number. What it costs is a pack old enough to be relying on the legacy numbering, and every
+ * one of the eleven packs of the corpus ships the file, so today it costs them nothing.
+ * <p>
  * Read on the chunk build threads and written on whichever thread loads a pack, so what they share
  * is one immutable map swapped whole. Nothing is ever added to a table that is being read.
  */

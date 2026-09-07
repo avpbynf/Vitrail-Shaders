@@ -208,6 +208,7 @@ public interface WorldState extends ViewSource {
 
 	boolean vehicleInWater();
 
+	/** The pack's own number for what is being ridden, 0 for nothing and -1 for the unnamed. */
 	int vehicleId();
 
 	Vector3dc vehicleLookVector();
@@ -234,12 +235,18 @@ public interface WorldState extends ViewSource {
 	/** {@code vec3(-256)} when nothing is aimed at. */
 	Vector3fc selectedBlockPos();
 
+	/** Nought where nothing is aimed at, against -1 for a block the pack named nothing about. */
 	int selectedBlockId();
 
 	Vector4fc lightningBoltPosition();
 
+	/**
+	 * The pack's own number for the main hand's item, -1 for one it named nothing about. It is the
+	 * main hand's alone, where the light below borrows the off hand's whenever that one is brighter.
+	 */
 	int heldItemId();
 
+	/** And the off hand's. */
 	int heldItemId2();
 
 	int heldBlockLight();

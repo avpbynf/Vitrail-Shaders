@@ -132,6 +132,7 @@ public final class PackValues {
 
 		values.state.directives(PackDirectives.read(source, settings, dimension));
 		values.state.endFlashShadows(properties.endFlashShadows(settings.globalDefines(options)));
+		values.state.oldHandLight(properties.oldHandLight(settings.globalDefines(options)));
 		values.skyElements = properties.skyElements(settings.globalDefines(options));
 		values.weather = properties.weather(settings.globalDefines(options));
 		values.rainDepth = properties.rainDepth(settings.globalDefines(options));
