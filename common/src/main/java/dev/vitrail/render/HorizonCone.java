@@ -57,9 +57,10 @@ import net.minecraft.client.Minecraft;
  * armour decal is the single pipeline that does not blend and does not write depth, and it tests
  * {@code EQUAL}, so it lands only where something in its own phase already wrote one.
  * <p>
- * And the seed never falls outside that half. {@code PackChain.drawRange} paints a rank that lands
- * on the boundary between the two at the tail of the first one, and the plan never puts the world
- * past that boundary: the rank counts the begins and the prepares, and {@code deferredEnd()} counts
+ * And the seed never falls outside that half. Its rank is where that half begins, so
+ * {@code PackChain.drawRange} paints it at the head of the walk, and at the tail of it where the
+ * walk is empty. The plan never puts the world past the far end of the half either: the rank counts
+ * the begins and the prepares, and {@code deferredEnd()} counts
  * those and the deferred stage after them. A place shipping no deferred at all has the two equal,
  * and it is that equality a half open interval loses: the seed would miss the first half and lead
  * the second, at {@code AfterLevel}, by which time the clouds, the weather and the particles are in

@@ -86,8 +86,11 @@ depends on it:
 
 Iris steps its history on read and gets away with it because it uploads per program. Vitrail writes
 one block per pass, so the boundary has to be a place in the code rather than a convention, and it
-is. The frame may be opened by the chain or, earlier, by a geometry program that runs during the
-world; whichever comes first opens it, and the second one finds it already open.
+is. The frame may be opened by the pack's shadow compute, which is dispatched ahead of anything the
+chain draws and needs this frame's counters to pick the half it writes; by the chain, at the head of
+the level frame on a pack whose chain has something to run before the world; or by a geometry
+program that runs during the world. Whichever comes first opens it, and the others find it already
+open.
 
 The clock is quantised to the millisecond, because that is the time step every smoothed value
 integrates over and an unquantised one puts all of them slightly off the reference for no visible
@@ -100,9 +103,14 @@ the colour it modulates by, and which stage of the frame it is. Those are set be
 write and dropped rather than carried over, in two places that are not one guard written twice. The
 frame boundary drops the model view, the projection and the colour at the head of the frame, which
 covers whatever reads before the first geometry pass. The chain drops those three again and the
-render stage with them, and says its own depth convention rather than inheriting the one the shadow
-programs flipped, before it writes its own blocks: every geometry family has run by then, so what
-would otherwise stand is whatever the last of them set. Left standing from the pass before, the
+render stage with them, and says its own depth convention rather than inheriting it, before it
+writes its own blocks: what would otherwise stand is whatever wrote the table last, and which one
+that is depends on where the chain first reaches this. A place with a begin or a prepare reaches it
+at the head of the level frame, and what stands there is the previous frame's shadow map, drawn at
+the tail of it under the forward window, or this frame's shadow compute, which flips to that same
+window a moment earlier on any pack that ships one. A place with neither reaches it at the deferred
+stage instead, and what stands there is this frame's sky, terrain and entities. Left standing from
+the pass before, the
 render stage would tell every full-screen pass of the frame that it was drawing the moon, because
 that value sits in the same table a full-screen pass shares with a geometry one.
 

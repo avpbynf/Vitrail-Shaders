@@ -468,10 +468,13 @@ All eight and not the branch in hand, which costs one thing worth naming: a plac
 and not the other holds the served branch back too, though the two are never drawn together. Every
 pack of the corpus answers both sky programs in the End, so nothing pays for it there today.
 
-Because the sky is drawn before the world, the sky stage is more often than not what opens the
-frame. Not always: `sky=off` in the options stops it, so does a pack that serves no sky program at
-all, and so does the Nether, whose skybox is none and which opens no sky pass whatever. In those
-cases the terrain opens the frame, as it always did.
+Because the sky is drawn before the rest of the world, the sky stage is often what opens the frame.
+Not always, and no longer first either: a pack with a begin or a prepare to run opens the frame at
+the head of the level frame, ahead of the sky, since that part of the chain is drawn before one
+triangle of the world is. Where nothing has opened it by the time the sky is reached, the sky opens
+it, and where the sky stage does not run at all the terrain does, as it always did. `sky=off` in the
+options stops the sky stage, so does a pack that serves no sky program at all, and so does the
+Nether, whose skybox is none and which opens no sky pass whatever.
 
 **And a boss stops it, which is the one worth knowing before diagnosing anything in the End.** The
 game builds no sky pass at all on a frame where a boss bar asks for world fog, and the ender

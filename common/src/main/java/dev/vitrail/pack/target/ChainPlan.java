@@ -32,8 +32,9 @@ import java.util.stream.Stream;
  * The other thing it owns is the honesty of the picture. The chunk passes fill the targets the
  * pack sends them to and the game's own finished frame stands in for the gbuffers nothing draws
  * yet, in a single target; every other target a pass reads before anything writes it holds a clear
- * colour. Which ones those are, and why, is worked out here and said in the pack's own terms,
- * because the alternative is a plausible image nobody can account for.
+ * colour, or what the frame before left there where the pack keeps that target between frames.
+ * Which ones those are, and why, is worked out here and said in the pack's own terms, because the
+ * alternative is a plausible image nobody can account for.
  */
 public final class ChainPlan {
 
@@ -48,6 +49,19 @@ public final class ChainPlan {
 	 * handed the rank instead would walk the passes again and could reach another answer.
 	 */
 	private static final int DEFERRED_RANK = ProgramNames.frameRank("deferred");
+
+	/**
+	 * Where the prepare stage sits in the frame. Everything at this rank or below belongs before the
+	 * world's opaque geometry, and {@link #prepareEnd()} is the boundary a caller reads instead.
+	 */
+	private static final int PREPARE_RANK = ProgramNames.frameRank("prepare");
+
+	/**
+	 * Where the begin stage sits, which is the head of everything. It cuts the range before the
+	 * world in two, {@link #beginEnd()} being the boundary a caller reads: the begins belong ahead
+	 * of the shadow stage and the prepares behind it.
+	 */
+	private static final int BEGIN_RANK = ProgramNames.frameRank("begin");
 
 	private static final String FINAL = "final";
 
@@ -268,6 +282,8 @@ public final class ChainPlan {
 	}
 
 	private final List<Pass> passes;
+	private final int beginEnd;
+	private final int prepareEnd;
 	private final int deferredEnd;
 	private final Pass last;
 
@@ -335,6 +351,8 @@ public final class ChainPlan {
 			List<String> history) {
 		this.place = place;
 		this.passes = List.copyOf(passes);
+		this.beginEnd = pastRank(this.passes, BEGIN_RANK);
+		this.prepareEnd = pastRank(this.passes, PREPARE_RANK);
 		this.deferredEnd = pastDeferred(this.passes);
 		this.last = last;
 		this.present = present;
@@ -911,15 +929,17 @@ public final class ChainPlan {
 	 * frame before. Which of the two, and why, is what these lines say.
 	 * <p>
 	 * The seed counts from where it is drawn and not from the start of the frame. A begin or a
-	 * prepare runs before the world does, so it reads its target as the clear left it, and calling
-	 * the seed filled from the first pass onwards would drop exactly the notes those passes need.
+	 * prepare runs before the world does, so it reads its target as the frame before left it, and
+	 * calling the seed filled from the first pass onwards would drop exactly the notes those passes
+	 * need.
 	 * <p>
 	 * The world's own passes count from where they are drawn for the same reason, and they are counted
-	 * at all because they really are drawn: the opaque ones before the whole chain, since the chunk
-	 * renderer has finished with them by the time the first half of the frame runs, and the
-	 * translucent ones after the last deferred, which is the whole reason their targets are taken on
-	 * the other snapshot. Reading the geometry off the schedule alone, as this did, blamed the clear
-	 * for a half {@code gbuffers_water} had just written.
+	 * at all because they really are drawn: the opaque ones once the begins and the prepares are
+	 * through, those two stages running while the level's frame graph is built and the chunk renderer
+	 * filling its targets inside it, and the translucent ones after the last deferred, which is the
+	 * whole reason their targets are taken on the other snapshot. Reading the geometry off the
+	 * schedule alone, as this did, blamed the clear for a half {@code gbuffers_water} had just
+	 * written.
 	 *
 	 * @param seed  where the game's finished frame is really painted, or null where the line that
 	 *              paints it is off - or where the plan itself could not say where it would go,
@@ -956,16 +976,22 @@ public final class ChainPlan {
 		// hence one identical Pass: the solid and the cutout pass always, and a pack with no cloud
 		// program of its own has its clouds and its particles answered by the same one too.
 		//
-		// The near side goes in at nought and not where the seed goes. The seed is painted where
-		// OptiFine draws the world, in the middle of the chain, but the game is not: it has drawn the
-		// opaque terrain, the opaque particles and everything else on that side before the first half
-		// of the chain is even asked to run, so a prepare of this engine reads what they wrote in THIS
-		// frame.
+		// The near side goes in where the begins and the prepares end, which is where the seed is
+		// painted and where the game really draws it: those two stages run while the level's frame
+		// graph is being built, and the opaque terrain, the opaque particles and everything else on
+		// that side are drawn after them.
+		//
+		// AT NOUGHT INSTEAD, AS THIS HAD IT, EVERY PREPARE READING A GBUFFER TARGET WAS CALLED A
+		// READER OF A HALF THIS FRAME HAD ALREADY FILLED, and the note it exists to earn was dropped
+		// exactly where the order matters most. What such a pass really reads there is whatever left
+		// that half standing at the end of the frame before, which is the branch below and not
+		// silence.
+		int beforeWorld = pastRank(ordered, PREPARE_RANK);
 		int afterDeferred = pastDeferred(ordered);
 		Map<Integer, Set<Pass>> drawn = new LinkedHashMap<>();
 		world.forEach((key, drawing) -> {
-			drawn.computeIfAbsent(key.afterDeferred() ? afterDeferred : 0, _ -> new LinkedHashSet<>())
-					.add(drawing);
+			drawn.computeIfAbsent(key.afterDeferred() ? afterDeferred : beforeWorld,
+					_ -> new LinkedHashSet<>()).add(drawing);
 			undrawn.removeAll(drawing.targets());
 		});
 
@@ -1009,8 +1035,13 @@ public final class ChainPlan {
 	 * deferreds, so the walk has stopped long before reaching it.
 	 */
 	private static int pastDeferred(List<Pass> ordered) {
+		return pastRank(ordered, DEFERRED_RANK);
+	}
+
+	/** How many of {@code ordered} sit at {@code rank} or below, the list being in frame order. */
+	private static int pastRank(List<Pass> ordered, int rank) {
 		int at = 0;
-		while (at < ordered.size() && ordered.get(at).frameRank() <= DEFERRED_RANK) {
+		while (at < ordered.size() && ordered.get(at).frameRank() <= rank) {
 			at++;
 		}
 
@@ -1041,6 +1072,10 @@ public final class ChainPlan {
 			// Which of the two the reader really gets is the clear directive's answer and never the
 			// order's: a target the pack clears is emptied on BOTH halves at the top of every frame,
 			// so nothing of the frame before is left there to be read.
+			//
+			// The stage that reaches this branch oftenest is the prepares, and the writer it names is
+			// then a gbuffers program: a target the world alone fills holds the world of the FRAME
+			// BEFORE where a prepare samples it, which is what Iris hands one there as well.
 			return new Verdict(name + " is not written until " + later + ", later in the same frame"
 					+ (kept ? before : clear), kept);
 		}
@@ -1147,7 +1182,10 @@ public final class ChainPlan {
 
 	/**
 	 * How many of {@link #passes()} belong before the world's translucents, the deferred stage
-	 * included. It is where the renderer cuts the frame in two.
+	 * included. It is the last of the three points the renderer cuts the frame at, {@link
+	 * #beginEnd()} and {@link #prepareEnd()} being the two before it: what runs ahead of the shadow
+	 * stage, what runs behind it and still before the world, what runs before the world's
+	 * translucents, and what runs after the world.
 	 * <p>
 	 * Answered here and not counted again by the renderer, for the reason this whole class exists:
 	 * the same number already decides where {@link #notes()} puts the translucent chunk pass, and
@@ -1157,6 +1195,41 @@ public final class ChainPlan {
 	 */
 	public int deferredEnd() {
 		return this.deferredEnd;
+	}
+
+	/**
+	 * How many of {@link #passes()} belong before the world's opaque geometry, which is the begins
+	 * and the prepares together. It is the second of the three points the renderer cuts the frame
+	 * at.
+	 * <p>
+	 * <strong>These passes write the very targets the gbuffers write.</strong> A prepare naming a
+	 * draw buffer the terrain, the sky or the hand also names is a full screen write over the half
+	 * they draw into, so run after them it replaces the whole opaque world with whatever the prepare
+	 * computes, which is usually a table built from uniforms alone. OptiFine runs the stage before
+	 * the world and Iris with it, on the last line of its shadow render
+	 * ({@code pipeline/IrisRenderingPipeline.java:1025}, reached before the main pass is submitted),
+	 * so what the gbuffers write lands over the prepare and never under it.
+	 */
+	public int prepareEnd() {
+		return this.prepareEnd;
+	}
+
+	/**
+	 * How many of {@link #passes()} belong ahead of the shadow stage, which is the begins alone. It
+	 * is the first of the three points the renderer cuts the frame at, and everything from here to
+	 * {@link #prepareEnd()} is the prepares.
+	 * <p>
+	 * <strong>The two halves of the range before the world do not run at the same moment.</strong>
+	 * Iris draws its begins at the head of the level render
+	 * ({@code pipeline/IrisRenderingPipeline.java:1014}) and its prepares on the last line of the
+	 * shadow render ({@code :1025}), with the shadow map and the {@code shadowcomp} stage between
+	 * them ({@code shadows/ShadowRenderer.java:632-633}). A pack builds on that order: a prepare
+	 * reads what the shadow stage of this frame has just written, where a begin reads what the frame
+	 * before left, and running the two together puts one of the two at the wrong end of the shadow
+	 * map.
+	 */
+	public int beginEnd() {
+		return this.beginEnd;
 	}
 
 	/** The final. Its attachments are always empty: it writes the game's own target. */
