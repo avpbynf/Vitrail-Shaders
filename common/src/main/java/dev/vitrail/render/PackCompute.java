@@ -477,9 +477,26 @@ final class PackCompute implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Frees every pass this load built: the shadow computes, the ones hanging off a full screen
+	 * pass, and the ones dispatched at the moment of a program this place draws no pass for.
+	 * <p>
+	 * A pass holds a shader module, a descriptor set layout, a pipeline layout, a pipeline and a
+	 * ring of uniform buffers. {@link Pass#destroy} queues the module, both layouts and the
+	 * pipeline on {@link GpuRecording#destroyLater}, and {@link Pass#close} queues the ring there
+	 * as well rather than closing it where it stands, since this is not a quiet moment: every
+	 * error path of a frame calls {@link PackChain#release} in the middle of one, after the chain
+	 * has dispatched these computes, so a pass is closed while frames that still name its objects
+	 * are in flight.
+	 * <p>
+	 * Every container of passes declared above has to be named here, and one added later has to be
+	 * added here with it: {@link Pass} is private to this class, so a pass this method does not
+	 * reach is a pass nothing can reach, and it lives until the process ends.
+	 */
 	@Override
 	public void close() {
 		this.passes.forEach(Pass::close);
+		this.chained.values().forEach(list -> list.forEach(Pass::close));
 		this.alone.values().forEach(list -> list.forEach(Pass::close));
 	}
 
@@ -1127,7 +1144,7 @@ final class PackCompute implements AutoCloseable {
 			}
 
 			if (this.block != null) {
-				this.block.close();
+				GpuRecording.destroyLater(this.block::close);
 				this.block = null;
 			}
 		}
