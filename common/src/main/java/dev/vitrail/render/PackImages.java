@@ -69,7 +69,9 @@ final class PackImages {
 	 *
 	 * @param pixels four channels a texel in the order the encoder wants them, which is the order
 	 *               {@link NoiseTexture} already produces for the noise image; a byte a channel for
-	 *               an image, and the blob's own channel type for a volume laid out flat
+	 *               an image, and the blob's own channel type for a volume laid out flat. A PNG is
+	 *               read sample by sample as the file wrote it, a grey one replicated over red,
+	 *               green and blue rather than converted out of the grey colour space
 	 * @param format what the surface is allocated as, which is what the pixels are
 	 * @param shape  one clause for the log, saying what was read and how big it came out
 	 */

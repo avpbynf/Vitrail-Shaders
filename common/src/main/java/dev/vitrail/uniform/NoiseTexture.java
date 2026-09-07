@@ -5,7 +5,11 @@ import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 
+import java.awt.color.ColorSpace;
 import java.awt.image.BufferedImage;
+import java.awt.image.IndexColorModel;
+import java.awt.image.Raster;
+import java.awt.image.SampleModel;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Iterator;
@@ -71,7 +75,9 @@ public final class NoiseTexture {
 	 * <p>
 	 * Decoded with ImageIO rather than the game's image class, for the same reason the generator
 	 * writes raw bytes: this package names no graphics API, which is what lets the harness measure
-	 * it without starting the game. ImageIO is the JDK's and works headless.
+	 * it without starting the game. ImageIO is the JDK's and works headless. The samples then come
+	 * off the raster as the file wrote them, expanded to four channels the way stb expands a PNG;
+	 * see {@link #pixels}, where the reading is what a grey image turns on.
 	 * <p>
 	 * The header is read before the pixels are, and that is the whole point of going through a
 	 * reader rather than through {@code ImageIO.read}: the size is in the first bytes of the file
@@ -104,8 +110,104 @@ public final class NoiseTexture {
 		}
 	}
 
+	/**
+	 * Four channels a texel, expanded the way stb expands a PNG: one band gives grey, grey, grey and
+	 * opaque, two give grey, grey, grey and the alpha, three give the colour opaque, four are taken
+	 * as they are.
+	 * <p>
+	 * The samples are read off the raster, which is the whole point rather than a detail.
+	 * {@code getRGB} goes through the colour model, and on a grey image it converts the grey colour
+	 * space to sRGB and hands back every byte lifted: MakeUp UltraFast's cloud field comes out with a
+	 * mean of 0.728 where the file holds 0.501, and the pack thresholds that field at 0.55, so a few
+	 * filaments become a full white cover. Iris decodes with stb, which replicates the byte over red,
+	 * green and blue and converts nothing.
+	 * <p>
+	 * A sixteen bit sample is read as its top byte, which is what stb does when it is asked for eight
+	 * bit output.
+	 */
 	private static Image pixels(BufferedImage image, int width, int height) {
 		byte[] pixels = new byte[width * height * 4];
+		if (bands(image)) {
+			raster(image, width, height, pixels);
+		} else {
+			converted(image, width, height, pixels);
+		}
+
+		return new Image(width, height, pixels);
+	}
+
+	/** Whether the bands of the image mean a channel each, which is what lets them be read raw. */
+	private static boolean bands(BufferedImage image) {
+		// An indexed palette is the first of the models whose bands say nothing on their own: the
+		// sample is an index. Whole bytes are the other half of the question, a band of five or of
+		// ten bits being a field of a packed word rather than a channel. Both go through getRGB,
+		// which converts nothing there: a palette and a packed word are both already sRGB.
+		//
+		// A sample is a channel only in a grey or an RGB space with its alpha kept apart: a
+		// premultiplied alpha or a CMYK band would be uploaded as the colour it is not. A PNG never
+		// carries either, so this is about the other formats the reader accepts, which the
+		// reference refuses outright; they take the colour model road rather than a raw one.
+		if (image.getColorModel() instanceof IndexColorModel || image.isAlphaPremultiplied()) {
+			return false;
+		}
+
+		int space = image.getColorModel().getColorSpace().getType();
+		if (space != ColorSpace.TYPE_GRAY && space != ColorSpace.TYPE_RGB) {
+			return false;
+		}
+
+		SampleModel samples = image.getSampleModel();
+		if (samples.getNumBands() > 4) {
+			return false;
+		}
+
+		for (int band = 0; band < samples.getNumBands(); band++) {
+			if (samples.getSampleSize(band) != 8 && samples.getSampleSize(band) != 16) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static void raster(BufferedImage image, int width, int height, byte[] pixels) {
+		Raster raster = image.getRaster();
+		int bands = raster.getNumBands();
+		int[] shift = new int[bands];
+		for (int band = 0; band < bands; band++) {
+			shift[band] = image.getSampleModel().getSampleSize(band) == 16 ? 8 : 0;
+		}
+
+		int minX = raster.getMinX();
+		int minY = raster.getMinY();
+		int[] row = new int[width * bands];
+		for (int y = 0; y < height; y++) {
+			raster.getPixels(minX, minY + y, width, 1, row);
+			for (int x = 0; x < width; x++) {
+				int at = x * bands;
+				int red = sample(row, at, shift, 0);
+				int green = bands < 3 ? red : sample(row, at, shift, 1);
+				int blue = bands < 3 ? red : sample(row, at, shift, 2);
+				int alpha = switch (bands) {
+					case 2 -> sample(row, at, shift, 1);
+					case 4 -> sample(row, at, shift, 3);
+					default -> 255;
+				};
+
+				int offset = (y * width + x) * 4;
+				pixels[offset] = (byte) red;
+				pixels[offset + 1] = (byte) green;
+				pixels[offset + 2] = (byte) blue;
+				pixels[offset + 3] = (byte) alpha;
+			}
+		}
+	}
+
+	private static int sample(int[] row, int at, int[] shift, int band) {
+		return (row[at + band] >> shift[band]) & 0xFF;
+	}
+
+	private static void converted(BufferedImage image, int width, int height, byte[] pixels) {
 		int[] row = new int[width];
 		for (int y = 0; y < height; y++) {
 			image.getRGB(0, y, width, 1, row, 0, width);
@@ -118,8 +220,6 @@ public final class NoiseTexture {
 				pixels[offset + 3] = (byte) (argb >> 24);
 			}
 		}
-
-		return new Image(width, height, pixels);
 	}
 
 	/**
