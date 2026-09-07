@@ -2093,16 +2093,27 @@ final class GeometryProgram {
 	/**
 	 * What a depth sampler reads, which depends on which side of the frame this pass stands.
 	 * <p>
-	 * The translucent pass gets the opaque world's image. At that point of the frame depthtex0 and
-	 * depthtex1 are one depth, the opaque world's, and that image is exactly it; the live depth
-	 * cannot be the answer for either of them, being an attachment of this very pass, and sampling an
-	 * attachment is a thing Vulkan gives no meaning to. This is what BSL's water fog and refraction
-	 * read.
+	 * The translucent pass gets the opaque world's image for depthtex0 and depthtex1 alike. At that
+	 * point of the frame the two are one depth, the opaque world's, and that image is exactly it; the
+	 * live depth cannot be the answer for either of them, being an attachment of this very pass, and
+	 * sampling an attachment is a thing Vulkan gives no meaning to. This is what BSL's water fog and
+	 * refraction read.
 	 * <p>
-	 * The solid and cutout passes stay on the constant for those two. They draw before the image of
-	 * THIS frame is taken, so the only one in existence at that moment holds the previous frame's,
-	 * and handing them that would be the exact shape of picture this project refuses: plausible, and
-	 * wrong by one frame of camera movement.
+	 * The solid and cutout passes get the same image as depthtex1 and the constant as depthtex0.
+	 * They draw before the image of THIS frame is taken, so what the name holds at their moment is
+	 * the frame before's opaque world, and that is what Iris hands them too: its copy is refreshed
+	 * at {@code beginTranslucents}, one step behind the solid hand
+	 * ({@code mixin/MixinLevelRenderer.java:269-274},
+	 * {@code pipeline/IrisRenderingPipeline.java:1051-1063}), so every gbuffers program drawn ahead
+	 * of that step reads the frame before's copy under that name
+	 * ({@code samplers/IrisSamplers.java:223}). The shadow pass, drawn at the end of the frame here,
+	 * reads this frame's image under the same rule, which is the one Iris's shadow pass reads at the
+	 * head of the next. depthtex0 is the live depth there ({@code samplers/IrisSamplers.java:221}),
+	 * which on the world passes is this pass's own attachment and cannot be sampled, so that one
+	 * stays the far plane: a divergence on the attachment alone, with nothing older than this frame
+	 * ever dressed as the live depth. The shadow pass is left on the far plane with it rather than
+	 * served apart, and there the two engines agree: Iris draws its map at the head of the frame,
+	 * where the game has just cleared its depth, so the live name reads the far plane under it too.
 	 * <p>
 	 * <strong>depthtex2 is asked before that test and not inside it.</strong> It is the one copy
 	 * taken in the middle of the world rather than at the edge of a half:
@@ -2128,10 +2139,11 @@ final class GeometryProgram {
 	 * full screen draw where Iris moves depth to depth. That is a preference, so it does not make a
 	 * divergence admissible, and the honest name for it is an unpaid gap.
 	 * <p>
-	 * What holds it at that: the same passes read the same far plane on {@code main}, this class
-	 * having answered every depth copy with the constant ahead of the deferred stage long before
-	 * there was a third image; the range that added the image changed nothing for them. And no pack
-	 * of the eight measured reads the name from a program drawn there - the readers are BSL's two
+	 * What holds it at that: a pass drawn before the copy is taken falls through to the opaque
+	 * image below, the frame before's world WITH the hand in it, where Iris hands the frame
+	 * before's world without it; the two differ by the hand alone, and the name is read to see past
+	 * that very hand, so the fall through is nearer than the far plane and still not the answer. And
+	 * no pack of the eight measured reads the name from a program drawn there - the readers are BSL's two
 	 * composites, Bliss's deferred, and Sildur's two deferreds, its composite and its final, with no
 	 * gbuffers and no shadow program among them; two more files of Bliss declare the sampler and
 	 * never fetch it. Iris's own table carries a comment asking whether those programs should be
@@ -2145,7 +2157,10 @@ final class GeometryProgram {
 			}
 		}
 
-		if (this.pass.afterDeferred()) {
+		// The two copies read the opaque image wherever it exists, the frame before's ahead of the
+		// take and this frame's behind it; the live name only once the pass stands behind the
+		// deferred stage, where the two are one depth.
+		if (this.pass.afterDeferred() || SamplerPlan.depthCopy(sampler)) {
 			GpuTextureView opaque = this.targets.depth().opaque();
 			if (opaque != null) {
 				return opaque;
@@ -2169,7 +2184,9 @@ final class GeometryProgram {
 	 * 109-110}), and by the time an opaque gbuffers program draws, DH's opaque LODs are already in
 	 * it. What stops that here: the image a pack reads is a converted copy rather than the live
 	 * attachment, and the only copy in existence when the solid passes draw is the previous
-	 * frame's, which is the shape of picture this engine refuses by rule. What it costs: an opaque
+	 * frame's, which is not what Iris hands there either, its live image already holding this
+	 * frame's opaque LODs; the world's depth above has no such gap, the frame before's copy being
+	 * exactly what Iris gives. What it costs: an opaque
 	 * geometry program reading {@code dhDepthTex} sees no far terrain, where under Iris it sees the
 	 * opaque LODs; no program of the eight-pack corpus makes that read, the readers being deferreds
 	 * and composites throughout.
@@ -2303,9 +2320,10 @@ final class GeometryProgram {
 	/**
 	 * Whether the plan answers this name with an image rather than with one pixel. A colour target
 	 * counts even when it is empty at this point of the frame: it is the pack's own image and what
-	 * it holds is a question about the order of the frame, not about the binding. A depth sampler
-	 * counts only on the translucent pass, where the copy answers it, and depthtex2 on the hand's
-	 * solid pass as well, the copy that name reads being taken one line before that pass is drawn.
+	 * it holds is a question about the order of the frame, not about the binding. The two depth
+	 * copies count on every pass, the opaque image answering them wherever it exists, the frame
+	 * before's ahead of the take; the live name counts on the translucent pass alone, where that
+	 * same image answers it.
 	 * <p>
 	 * The plan's answer and not a frame's, and that is the whole of what it is for: this feeds a line
 	 * said once at the load, where no frame has run. A screen too big to allocate a depth image at
@@ -2352,9 +2370,8 @@ final class GeometryProgram {
 				|| (kind == SamplerPlan.Kind.COLORTEX && (!collides(binding) || copied(binding)))
 				|| kind == SamplerPlan.Kind.CUSTOM_IMAGE
 				|| kind == SamplerPlan.Kind.NOISE
-				|| (kind == SamplerPlan.Kind.DEPTH && (this.pass.afterDeferred()
-						|| (SamplerPlan.preHandCopy(sampler)
-								&& this.pass.stage() == RenderStage.HAND_SOLID)))
+				|| (kind == SamplerPlan.Kind.DEPTH
+						&& (this.pass.afterDeferred() || SamplerPlan.depthCopy(sampler)))
 				// The map exists from the first frame, but a pass that draws it reads its own
 				// attachment and is answered with a constant like everything else that collides.
 				|| (!this.pass.shadow() && kind == SamplerPlan.Kind.SHADOW_DEPTH
@@ -2469,8 +2486,8 @@ final class GeometryProgram {
 		}
 
 		if (!flat.isEmpty()) {
-			// What is left is what nothing fills for this pass: the shadow map, the depth on the
-			// passes that draw before the copy of this frame is taken, and the two material maps
+			// What is left is what nothing fills for this pass: the shadow map, the live depth on
+			// the passes that draw ahead of the deferred stage, and the two material maps
 			// wherever the RESOURCE pack ships no file beside the sprites of this pass's atlas. The
 			// last of the three is the one a reader can act on, and it is not a shader pack's doing.
 			Vitrail.logger().warn("{} read one pixel, because nothing fills them yet: {}",

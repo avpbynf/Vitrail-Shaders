@@ -1112,6 +1112,11 @@ public final class PackChain {
 			return false;
 		}
 
+		// The depth images the screen moved away from go before any geometry pass samples one: the
+		// opaque image is refilled later in the frame at the new size, and until then a geometry
+		// pass would read the frame before's at the old one, stretched over the screen.
+		this.targets.depth().forgetOutgrown(main.width, main.height);
+
 		// Taken here and not held from the load: it is the fog of THIS frame, and the whole value of
 		// clearing colortex0 to it is that the sky the pack has not drawn over reads as distance
 		// rather than as a hole. Read after beginFrame, which every caller of this does first, so the
