@@ -397,6 +397,18 @@ public final class RenderScale {
 	/** Whether the main target currently holds the scaled set, which never survives a frame. */
 	private static boolean swapped;
 
+	/**
+	 * Whether the world being drawn right now is going to be upscaled.
+	 * <p>
+	 * The one question worth asking for a pass that only earns its cost when something is going to
+	 * rebuild the image afterwards. It is the frame's answer and not the player's setting: a
+	 * hundred percent, a frame with no world, and an allocation this class refused all read false
+	 * here, which is what {@link #swapped} already means.
+	 */
+	static boolean upscaling() {
+		return swapped;
+	}
+
 	/** The window-sized set the game allocated, held only while the scaled set stands in for it. */
 	private static GpuTexture fullColor;
 	private static GpuTextureView fullColorView;
@@ -412,6 +424,12 @@ public final class RenderScale {
 	private static TargetSurface upscaled;
 
 	private static GpuBuffer quad;
+
+	/**
+	 * The temporal probe, which is nothing at all unless it was asked for on the command line. Held
+	 * here because this class owns the moment it would run at, between the upscale and the sharpen.
+	 */
+	private static final TemporalAccumulation TEMPORAL = new TemporalAccumulation();
 
 	/** Whether the entity outline target is at the scaled size and owes the window its own back. */
 	private static boolean outlineScaled;
@@ -555,8 +573,11 @@ public final class RenderScale {
 		RenderPipeline rcas = easu == null ? null : RCAS.get(device);
 		if (easu != null && rcas != null && upscaled != null) {
 			draw(encoder, device, easu, world, upscaled.view(), FilterMode.LINEAR, UPSCALE_LABEL);
-			draw(encoder, device, rcas, upscaled.view(), fullColorView(main), FilterMode.NEAREST,
-					SHARPEN_LABEL);
+			// Between the two and not after the sharpen: RCAS raises local contrast, and folding a
+			// sharpened frame into a sharpened history sharpens the same edge once per frame it
+			// survives. Sharpening last is also what AMD's own chain does.
+			draw(encoder, device, rcas, sharpenFrom(encoder, device, main), fullColorView(main),
+					FilterMode.NEAREST, SHARPEN_LABEL);
 
 			return;
 		}
@@ -633,6 +654,10 @@ public final class RenderScale {
 			upscaled.close();
 			upscaled = null;
 		}
+
+		// With them and not on its own latch: the history is the size of the window, so whatever
+		// frees the window-sized pair here has the same reason to free that one.
+		TEMPORAL.release();
 	}
 
 	/** Puts the game's own textures back into the target's fields, closing nothing. */
@@ -724,6 +749,29 @@ public final class RenderScale {
 		}
 
 		outlineScaled = scaledNow;
+	}
+
+	/**
+	 * What the sharpen reads: the upscaled frame, or the fold of it into the frames before when the
+	 * temporal probe is asked for and has everything it needs. The probe answers null for every
+	 * reason there is, a missing motion vector image included, and each of them lands back on the
+	 * plain upscale rather than on a black screen.
+	 */
+	private static GpuTextureView sharpenFrom(CommandEncoder encoder, GpuDevice device,
+			RenderTarget main) {
+		if (!TemporalAccumulation.wanted() || scaled == null) {
+			// Given back here and not left to the release below: that one is only reached when the
+			// scale stands down altogether, so a player who turns the fold off while still scaling
+			// would keep two window-sized images of half floats for the rest of the session.
+			TEMPORAL.release();
+
+			return upscaled.view();
+		}
+
+		GpuTextureView folded = TEMPORAL.fold(encoder, device, quad(device), upscaled.view(),
+				PackChain.motionVectors(), main.width, main.height, scaled.width, scaled.height);
+
+		return folded == null ? upscaled.view() : folded;
 	}
 
 	/** One full screen pass: sample one image whole, write another whole. */

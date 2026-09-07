@@ -59,6 +59,23 @@ public final class ViewMatrices implements ViewSource {
 	private final Matrix4f previousModelView = new Matrix4f();
 	private final Matrix4f previousProjection = new Matrix4f();
 
+	/**
+	 * The frame before's {@link #rendered}, which is the same camera as {@link #previousProjection}
+	 * expressed in the volume the device rasterises into rather than the one a pack reads.
+	 * <p>
+	 * <strong>The two are not interchangeable and the difference is silent.</strong>
+	 * {@code previousProjection} has been through {@link ClipSpace#toLegacyDepth}, so its z maps to
+	 * -1..1 the way an OpenGL pack expects; this one is reversed Z over 0..1, which is what the
+	 * depth image actually holds. Anything reprojecting a depth SAMPLE belongs on this side: pairing
+	 * the sampled depth with the published matrix reads a plausible position for every pixel, wrong
+	 * by an amount that grows with distance, and no picture says so.
+	 * <p>
+	 * Kept rather than derived from {@code previousProjection} by inverting the conversion. That
+	 * would be the second conversion of the same matrix, and the class already keeps every matrix
+	 * singly converted for exactly that reason.
+	 */
+	private final Matrix4f previousRendered = new Matrix4f();
+
 	private final Matrix4f shadowModelView = new Matrix4f();
 	private final Matrix4f shadowModelViewInverse = new Matrix4f();
 	private final Matrix4f shadowProjection = new Matrix4f();
@@ -227,6 +244,7 @@ public final class ViewMatrices implements ViewSource {
 		if (this.seeded) {
 			this.previousModelView.set(this.modelView);
 			this.previousProjection.set(this.projection);
+			this.previousRendered.set(this.rendered);
 		}
 
 		// Pre-multiplied and not appended: the bob is applied to the world after the camera has
@@ -245,6 +263,7 @@ public final class ViewMatrices implements ViewSource {
 			// vector in the first frame the whole screen.
 			this.previousModelView.set(this.modelView);
 			this.previousProjection.set(this.projection);
+			this.previousRendered.set(this.rendered);
 			this.seeded = true;
 		}
 
@@ -696,6 +715,27 @@ public final class ViewMatrices implements ViewSource {
 	@Override
 	public Matrix4fc gbufferPreviousProjection() {
 		return this.previousProjection;
+	}
+
+	/**
+	 * The frame's projection in the volume the device rasterises into, reversed Z over 0..1.
+	 * <p>
+	 * <strong>Not by itself what the level was drawn with, whenever the bob split holds.</strong>
+	 * It is then the clean camera, and the game drew with this times {@link #cameraBob}. The product
+	 * that matters is this one times {@link #gbufferModelView}, which is the bob back in place,
+	 * because the model view is where a pack expects the bob and where this class put it.
+	 * <p>
+	 * Engine side, and deliberately not on {@link ViewSource}: no pack names it, and handing it out
+	 * as a pack uniform would put a second convention behind a name packs read in the other one.
+	 * What it is for is the pair with {@link #previousRendered}, which reprojects a sampled depth.
+	 */
+	Matrix4fc rendered() {
+		return this.rendered;
+	}
+
+	/** The frame before's {@link #rendered}, and see that field for why it is kept apart. */
+	Matrix4fc previousRendered() {
+		return this.previousRendered;
 	}
 
 	@Override
