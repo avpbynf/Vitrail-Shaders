@@ -34,16 +34,16 @@ import java.nio.file.Path;
  *
  * <h2>What it does not cover, and what that looks like</h2>
  *
- * <strong>Casters that move freeze with the map.</strong> A mob, a boat, a falling block or the
- * player's own shadow keep the position they had on the frame the map was drawn, and jump to the
- * new one when it is drawn again. That is the whole visible cost of this, it grows with the
- * interval, and it is why the interval is small and why this is off unless it is asked for.
+ * <strong>Only the OPAQUE world is kept.</strong> Everything that moves is drawn into the restored
+ * map on every frame, so a mob, a boat, a falling block and the player's own shadow are exact
+ * whatever the interval. What ages is the ground: a block placed or broken, or a section that
+ * finishes loading, keeps casting the shadow it had until the map is drawn again.
  * <p>
- * <strong>And it is judged by walking, not by capturing.</strong> The lag is counted in frames, so
- * what it looks like depends on the frame rate: three frames at two hundred a second is fifteen
- * milliseconds and reads as a bug on the player's own shadow, while the same three frames leave a
- * pinned camera's capture below the noise of two relaunches. The setting that survived a walk is
- * {@link #DEFAULT_FRAMES}, and anything above it is for a measurement rather than for playing.
+ * <strong>And it is judged by walking, not by capturing.</strong> A lag counted in frames looks
+ * like whatever the frame rate makes of it, and a pinned camera cannot see it at all: captures
+ * taken on one put the difference below the noise two relaunches make on their own. Keeping the
+ * whole finished map, which is what this did before the movers were drawn back into it, froze them
+ * too, and three frames of that reads as a bug on the player's own shadow at two hundred a second.
  * <p>
  * <strong>A pack that voxelises into its shadow pass must not be amortised at all</strong>, its
  * shadow programs writing a volume the rest of the frame reads rather than only a depth. That
@@ -67,13 +67,15 @@ public final class ShadowAmortisation {
 	 * What an empty arming file asks for: the map kept for ONE frame after the one that drew it, so
 	 * it is never more than two frames old.
 	 * <p>
-	 * Three was the first value and it is visibly wrong. Walked in game on 6 September 2026 at three
-	 * frames, the player's own shadow lags the player plainly enough to read as a bug, and a mob's
-	 * does the same. At one it is not seen. That is the whole width of the setting: the artefact
-	 * grows with it, the gain grows with it, and the eye finds the edge between them long before any
-	 * capture does. The captures of that afternoon, taken on a pinned camera where nothing moves,
-	 * put the difference BELOW the noise two relaunches make on their own and would have signed off
-	 * on three.
+	 * One is where a walk left it, and that walk was made against the map kept WHOLE, where three
+	 * frames lagged the player's own shadow plainly enough to read as a bug and one was not seen.
+	 * The movers are drawn back in now, so what that walk judged is gone and nobody has yet walked
+	 * what remains, which is the ground. The value stays where the harsher behaviour put it rather
+	 * than being widened on the strength of a lag nobody has looked at.
+	 * <p>
+	 * The captures of that walk, taken on a pinned camera where nothing moves, put the difference
+	 * BELOW the noise two relaunches make on their own and would have signed off on three. An eye
+	 * finds this edge and an instrument does not.
 	 */
 	public static final int DEFAULT_FRAMES = 1;
 
@@ -81,8 +83,9 @@ public final class ShadowAmortisation {
 	public static final int MIN_FRAMES = 0;
 
 	/**
-	 * The most frames a map may be kept for, whatever the file says. Three is where a walk finds it,
-	 * so the selector stops one short of the value that reads as a bug rather than offering it.
+	 * The most frames a map may be kept for, whatever the file says. Three is where a walk of the
+	 * map kept whole found the artefact, so the selector stops one short of it. Inherited rather
+	 * than measured against the ground alone: see {@link #DEFAULT_FRAMES}.
 	 */
 	public static final int MAX_FRAMES = 2;
 
@@ -255,7 +258,8 @@ public final class ShadowAmortisation {
 			// the map it is looking at is not this frame's.
 			if (frames > 0) {
 				Vitrail.logger().info("Shadow map kept for {} frame(s) after the one that draws it, "
-						+ "so a caster that moves is that many frames late in it", frames);
+						+ "so the ground in it is that many frames old, everything that moves being "
+						+ "drawn afresh", frames);
 			}
 		}
 
