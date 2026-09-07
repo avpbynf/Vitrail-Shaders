@@ -434,6 +434,18 @@ public final class GlslTranslator {
 	private final List<Scoped> hardwareComparisonSamplers = new ArrayList<>();
 
 	/**
+	 * The FILE SCOPE declarations whose type this translation really rewrote, and nothing else.
+	 * <p>
+	 * It is the one set a reader can compare the pack's own text against: the type the translated
+	 * unit carries for these names is not the type the pack wrote. A parameter is kept out however
+	 * its type ends up, because a parameter is a name inside a function and the declaration it
+	 * shadows is untouched: Bliss declares {@code sampler2D tex} at file scope and takes
+	 * {@code in sampler2DShadow tex} in a helper of {@code lib/texFiltering.glsl}, and counting that
+	 * helper would say the pack's own {@code tex} had been retyped when nothing touched it.
+	 */
+	private final List<Scoped> retypedSamplers = new ArrayList<>();
+
+	/**
 	 * The samplers a function takes as a parameter, over the lines of that function. Nothing is
 	 * rewritten from them; they are what {@link #countDepthLookup} measures the blind spot with.
 	 */
@@ -4373,6 +4385,7 @@ public final class GlslTranslator {
 			} else {
 				this.tokens.replace(index, plain);
 				this.comparisonSamplers.addAll(introduced);
+				this.retypedSamplers.addAll(introduced);
 			}
 		}
 
@@ -4990,7 +5003,7 @@ public final class GlslTranslator {
 				this.fragCoordZ, this.fragCoordXyz,
 				this.fragCoordUnhandled, this.fragDepthWrites, this.fragDepthUnhandled,
 				List.copyOf(this.conflicts), comparedSamplers(), hardwareComparedSamplers(),
-				List.copyOf(this.storageBlocks),
+				retypedSamplers(), List.copyOf(this.storageBlocks),
 				this.volumes.lookups(), this.volumes.leftAlone(), this.trigCalls, this.gameTextureMatrix,
 				this.gameModelView);
 	}
@@ -5008,6 +5021,11 @@ public final class GlslTranslator {
 	/** The bound ones of the road that kept its spelling, which the binding owes a comparison. */
 	private List<String> hardwareComparedSamplers() {
 		return descriptors(this.hardwareComparisonSamplers.stream());
+	}
+
+	/** The bound ones this unit declares under a type the pack did not write. */
+	private List<String> retypedSamplers() {
+		return descriptors(this.retypedSamplers.stream());
 	}
 
 	private List<String> descriptors(Stream<Scoped> scoped) {

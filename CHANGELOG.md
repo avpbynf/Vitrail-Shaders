@@ -126,6 +126,15 @@ what the next one holds.
   frame, where the world lands over it, and the begin stage that opens it runs ahead of the shadow
   map rather than behind it.
 
+- **A pack that calls the screen by one of the game's texture names draws its picture again.** In a
+  full screen pass, OptiFine leaves the first colour target as the default texture, so a pack may
+  read the scene under a name that means something else in the world pass, `tex` and `texture` among
+  them. Those names read nothing here, so every pass of such a chain worked on black and what
+  reached the screen was black. They now read the screen, in the compute passes of those stages as
+  well, and a pack that lays a picture of its own over the first colour target has that picture read
+  instead, as it does under the reference. The log names them once per pass. I Like Vanilla is the
+  pack this showed on, and it showed on the whole picture.
+
 - **Switching packs no longer leaves graphics memory behind on packs that use compute shaders.**
   A pack can attach a compute program to a step of its chain, and those programs kept their
   pipelines and their buffers when the pack was replaced, so every switch and every press of the

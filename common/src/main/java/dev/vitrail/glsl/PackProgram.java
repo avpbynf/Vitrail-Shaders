@@ -217,16 +217,9 @@ public final class PackProgram {
 		 * serves it.
 		 */
 		public Loaded rebind(TargetPlan plan, Optional<TargetSchedule.Bound> step) {
-			List<String> declared = new ArrayList<>();
-			Map<String, String> types = new LinkedHashMap<>();
-			for (TranslatedUnit.Uniform sampler : this.program.samplers()) {
-				declared.add(sampler.name());
-				types.putIfAbsent(sampler.name(), sampler.type());
-			}
-
 			return new Loaded(this.packName, this.path, this.program, plan,
-					SamplerPlan.of(declared, types, plan, step, this.supplied), this.alphaTest,
-					this.supplied);
+					SamplerPlan.of(declaredIn(this.program), typesIn(this.program), plan, step,
+							this.supplied), this.alphaTest, this.supplied);
 		}
 	}
 
@@ -465,7 +458,7 @@ public final class PackProgram {
 		/**
 		 * How many groups to dispatch over a pass run at that size, for a program {@link #sized()}
 		 * answers for. Iris hands its shadow composites the main render target's size
-		 * ({@code ShadowCompositeRenderer.java:212}), so that is the size this is asked about, and
+		 * ({@code ShadowCompositeRenderer.java:213-214}), so that is the size this is asked about, and
 		 * the answer moves with the window.
 		 */
 		public int[] groupsAt(int width, int height) {
@@ -1529,21 +1522,56 @@ public final class PackProgram {
 	private static Loaded bind(String packName, String path,
 			ProgramTranslator.TranslatedProgram program, TargetPlan targets, AlphaTest alphaTest,
 			PackTextures textures) {
-		List<String> declared = new ArrayList<>();
-		Map<String, String> types = new LinkedHashMap<>();
-		for (TranslatedUnit.Uniform sampler : program.samplers()) {
-			declared.add(sampler.name());
-			types.putIfAbsent(sampler.name(), sampler.type());
-		}
-
 		// The stage of the program the pass draws, which is what narrows a texture.STAGE.NAME
 		// override to the half of the frame the pack meant it for.
-		Set<String> supplied = TextureStage.of(programOf(path))
-				.map(textures::suppliedTo)
-				.orElse(Set.of());
+		Optional<TextureStage> stage = TextureStage.of(programOf(path));
+		Set<String> supplied = stage.map(textures::suppliedTo).orElse(Set.of());
 
 		return new Loaded(packName, path, program, targets,
-				SamplerPlan.of(declared, types, targets, path, supplied), alphaTest, supplied);
+				SamplerPlan.of(declaredIn(program), typesIn(program), targets, path, supplied,
+						stage.map(textures::picturesTo).orElse(Set.of())),
+				alphaTest, supplied);
+	}
+
+	/** Every sampler the program declares, in the order the stages were folded together. */
+	private static List<String> declaredIn(ProgramTranslator.TranslatedProgram program) {
+		return program.samplers().stream().map(TranslatedUnit.Uniform::name).toList();
+	}
+
+	/**
+	 * The type each of those names was declared under, as the PACK wrote it and not as the
+	 * translated text carries it.
+	 * <p>
+	 * The two part on one declaration. A comparison sampler whose comparison cannot be left to the
+	 * hardware is declared ordinary in the translated text, the comparison being made in arithmetic
+	 * at each lookup instead, so {@code uniform sampler2DShadow tex} arrives here spelled
+	 * {@code sampler2D}. Handing that on would make the binding move a name that reads unit nought
+	 * through a comparison, which {@code SamplerPlan.takesDefault} refuses, and which the text
+	 * {@code TargetPlan} reads refuses too: the two ends would then disagree over one declaration,
+	 * one giving it the colour target and the other allocating nothing for it. Such a name is left
+	 * untyped here, which is the answer both ends already give a declaration nothing could type.
+	 * <p>
+	 * The declarations the translation really rewrote and no others, which is why the narrow list
+	 * is the one read: {@code comparedSamplers} carries the samplers a function takes as a
+	 * PARAMETER as well, and a parameter that spells a name the file also declares says nothing
+	 * about that declaration. Bliss declares {@code uniform sampler2D tex} and takes
+	 * {@code in sampler2DShadow tex} in a helper of {@code lib/texFiltering.glsl}; read off the
+	 * wider list, its {@code tex} would lose the type it was really written under and with it the
+	 * screen a full screen pass reads through that name.
+	 */
+	private static Map<String, String> typesIn(ProgramTranslator.TranslatedProgram program) {
+		Set<String> retyped = program.stages().values().stream()
+				.flatMap(stage -> stage.notes().retypedSamplers().stream())
+				.collect(Collectors.toSet());
+
+		Map<String, String> types = new LinkedHashMap<>();
+		for (TranslatedUnit.Uniform sampler : program.samplers()) {
+			if (!retyped.contains(sampler.name())) {
+				types.putIfAbsent(sampler.name(), sampler.type());
+			}
+		}
+
+		return types;
 	}
 
 	/**

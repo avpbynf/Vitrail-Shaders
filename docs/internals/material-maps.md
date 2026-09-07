@@ -32,9 +32,14 @@ pass. That is what lets the block atlas, the item atlas and the particle atlas e
 themselves: the terrain reads the block atlas's companions, a particle reads whichever atlas that
 layer came off, and neither has to be told which it is.
 
-Only the geometry programs are served, which is what Iris does too. What a composite declaring one
-of the names reads is not the same on both sides: here it reads one black pixel, where Iris leaves
-the sampler unassigned and it falls to whatever texture unit nought holds.
+Only the geometry programs are served, which is what Iris does too, and a composite declaring one of
+the names as a plain `sampler2D` is not left with nothing: it is simply not this file that answers
+it. A name a full screen pass assigns no texture unit to falls to the default sampler, which holds
+the first colour target unless the pack lays a flat picture of its own over that target for the
+stage, in which case it holds the picture. So what such a composite reads is the scene, or whatever
+the pack put in its place, and not a map. Both sides work that way, and on the same one shape: a
+picture is what the default sampler can stand on, and a raw blob, a volume among them, goes to the
+renaming road instead and leaves the target where it was.
 
 A sprite the resource pack ships no map for reads the same flat value the whole companion is cleared
 to: a normal pointing straight out of the face with nothing occluded, and a material that is nought

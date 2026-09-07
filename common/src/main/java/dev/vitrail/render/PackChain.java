@@ -2491,8 +2491,10 @@ public final class PackChain {
 				continue;
 			}
 
+			// The same test the plan stops its walk of the overrides on, so that the moment this
+			// dispatch takes and the halves the plan says it reads are the one answer.
 			int at = 0;
-			while (at < built.size() && order.compare(built.get(at).program(), program) < 0) {
+			while (at < built.size() && ProgramNames.before(built.get(at).program(), program)) {
 				at++;
 			}
 

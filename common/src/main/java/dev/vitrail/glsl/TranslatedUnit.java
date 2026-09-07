@@ -119,6 +119,14 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 	 *                           binding owes each a comparison sampler and the lookup is the
 	 *                           hardware's. The rest are declared ordinary, with the comparison
 	 *                           made in arithmetic where each lookup stood
+	 * @param retypedSamplers    the file scope declarations this unit carries under a type the pack
+	 *                           did not write, which is that second road seen from the other end. A
+	 *                           reader answering for the type the PACK wrote has to take these names
+	 *                           as untyped, the text saying {@code sampler2D} where the pack said
+	 *                           {@code sampler2DShadow}. Narrower than {@code comparedSamplers},
+	 *                           which carries the function parameters as well: a parameter that
+	 *                           shadows a file scope uniform would otherwise say that uniform had
+	 *                           been rewritten when nothing touched it
 	 * @param storageBlocks      the storage blocks this unit declares at file scope, each with the
 	 *                           binding it was written at. A {@code bufferObject} that matches one
 	 *                           by name or by binding is bound; the rest refuse the program that
@@ -149,7 +157,8 @@ public record TranslatedUnit(String entry, ProgramStage stage, String text, Note
 			int fragCoordZ, int fragCoordXyz, int fragCoordUnhandled,
 			int fragDepthWrites, int fragDepthUnhandled,
 			List<String> conflictNames, List<String> comparedSamplers,
-			List<String> hardwareCompared, List<StorageBlock> storageBlocks,
+			List<String> hardwareCompared, List<String> retypedSamplers,
+			List<StorageBlock> storageBlocks,
 			int volumeLookups, int volumesLeftAlone, int trigCalls, int gameTextureMatrix,
 			int gameModelView) {
 	}
