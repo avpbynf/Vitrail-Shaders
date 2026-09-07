@@ -64,30 +64,34 @@ public final class StorageImages implements AutoCloseable {
 	 * comes back with red and blue at nought for about thirty seconds, on eight reloads out of ten,
 	 * and not once with the pack's coloured lighting turned off.
 	 *
-	 * @see #CLEAR_AT_BIRTH_BUDGET for why this is not simply done for every volume
+	 * @see #CLEAR_AT_BIRTH_BUDGET for why this is not simply done for every volume of every pass
 	 */
 	private static final boolean CLEAR_AT_BIRTH = Boolean.parseBoolean(
 			System.getProperty("vitrail.clearStorageAtBirth", "true"));
 
 	/**
-	 * The size AT which this stops emptying at birth, in bytes, and the reason the emptying is
-	 * bounded rather than universal. At the bound and above a volume is left alone, the bound
-	 * being exclusive on purpose: several packs of the corpus declare one of exactly sixty-four
-	 * mebibytes, and the cautious side of a bound nobody has measured is the side that refuses.
+	 * How many bytes of emptying one allocation pass may record, and the reason the emptying is
+	 * bounded rather than universal.
 	 * <p>
-	 * <strong>Two comments of this engine disagree on why the device was lost that day, and this
-	 * bound takes the cautious side of both rather than choosing.</strong> The one that used to sit
-	 * in {@link #layoutIfNeeded} blames the SIZE, a five hundred mebibyte clear beside a 773 MiB
+	 * <strong>It is a budget for the PASS and not a size for one volume, because that is the shape
+	 * of what it guards.</strong> What went wrong the day the device was lost went wrong on a
+	 * command buffer, not inside an image: what a buffer carries is the sum of what was recorded
+	 * into it. A per volume bound cannot say that, and it let a pack declaring several volumes each
+	 * just under it record their total with nothing to stop it. Reverie declares four such volumes
+	 * and BSL two.
+	 * <p>
+	 * <strong>Two comments of this engine disagree on why that device was lost, and this budget
+	 * takes the cautious side of both rather than choosing.</strong> The one that used to sit in
+	 * {@link #layoutIfNeeded} blamed the SIZE, a five hundred mebibyte clear beside a 773 MiB
 	 * storage-buffer fill on one command buffer; {@link GpuRecording#afterTransfer} blames the
-	 * missing FENCE after a three-dimensional clear. The fence is now recorded either way, so if the
-	 * second is the true reason this bound costs only the volumes it refuses; if the first is, it is
-	 * what keeps the device alive. Settling it needs a measurement nobody has taken.
+	 * missing FENCE after a three-dimensional clear. The fence is recorded now either way, so if the
+	 * second is the true reason this budget costs only what it refuses; if the first is, it is what
+	 * keeps the device alive. Settling it needs a measurement nobody has taken, and taking it means
+	 * asking a machine to survive the thing that killed one.
 	 * <p>
-	 * <strong>What it cuts, and it is a debt rather than a line drawn where it belongs.</strong>
-	 * Sixty-four mebibytes covers Photon's volumes at its own default and below, and refuses them at
-	 * its two largest settings, where the defect this exists for comes back untouched. And the
-	 * hazard the bound guards against is per COMMAND BUFFER rather than per volume, which a per
-	 * volume bound cannot express: several volumes each under it are emptied on one buffer.
+	 * <strong>What it still cuts, and it stays a debt.</strong> Photon's volumes at its own default
+	 * and below fit inside it twice over; at its two largest settings one volume alone is over it,
+	 * and there the defect this exists for comes back untouched.
 	 */
 	private static final long CLEAR_AT_BIRTH_BUDGET = 64L * 1024L * 1024L;
 
@@ -570,6 +574,7 @@ public final class StorageImages implements AutoCloseable {
 	 */
 	private void clearBornImages(VkCommandBuffer commands, MemoryStack stack, List<Allocated> born) {
 		List<Allocated> emptying = new ArrayList<>();
+		long spent = 0L;
 		for (Allocated image : born) {
 			// The marked ones are emptied at the head of every shadow stage anyway, so a clear here
 			// would be the same write twice in one frame.
@@ -584,15 +589,20 @@ public final class StorageImages implements AutoCloseable {
 			}
 
 			long bytes = bytes(image);
-			if (bytes >= CLEAR_AT_BIRTH_BUDGET) {
-				Vitrail.logger().info("Storage volume {} is {} MiB, at or over the {} MiB where this "
-						+ "stops emptying, so it is left as the allocator handed it back and a pack "
+			// Against what this pass has already spent, so the answer is about the command buffer
+			// and not about the image. A volume refused here does not stop a smaller one after it:
+			// the budget is what the buffer may carry, and a volume that fits in what is left fits.
+			if (spent + bytes > CLEAR_AT_BIRTH_BUDGET) {
+				Vitrail.logger().info("Storage volume {} is {} MiB and this pass has {} MiB of its "
+						+ "{} MiB left, so it is left as the allocator handed it back and a pack "
 						+ "reading it before writing it whole reads that",
 						image.declared.name(), bytes / (1024L * 1024L),
+						(CLEAR_AT_BIRTH_BUDGET - spent) / (1024L * 1024L),
 						CLEAR_AT_BIRTH_BUDGET / (1024L * 1024L));
 				continue;
 			}
 
+			spent += bytes;
 			emptying.add(image);
 		}
 
