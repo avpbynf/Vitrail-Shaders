@@ -159,6 +159,15 @@ what the next one holds.
   name stands for nothing the engine can read, the step still covers the whole screen and the log
   says which word it could not read.
 
+- **A pack that says it cannot be drawn without the translucent entity program now loads.**
+  RenderPearl names that capability in its own file, the engine did not count the name among the
+  ones it serves, and the pack was turned away before any of its programs was read, with nothing of
+  it on screen. The capability itself was already there: a blending entity draw asks for the pack's
+  `gbuffers_entities_translucent` and a blending block entity for its `gbuffers_block_translucent`,
+  each falling back on the opaque file of its own family where the pack ships neither. The name is
+  now served, and announced as a define beside the others so that a pack testing for it reads the
+  truth.
+
 - **The world is no longer painted over by the stage meant to run before it.** Some packs open the
   frame with a "prepare" stage, whose job is to fill a table the rest of the frame reads. It ran
   once the world was already drawn instead of ahead of it, so on a pack whose prepare fills the very

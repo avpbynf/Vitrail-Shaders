@@ -331,8 +331,10 @@ public final class PackChoice {
 			// light into the eight it asked for, a storage block is bound off the pack's own
 			// bufferObject, compute passes are dispatched at the head of the frame and before the
 			// pass they hang off, a per buffer blend directive is built into the attachment whose
-			// rank its target holds, and custom images are served now, so a pack that cannot draw
-			// without one of those is simply right about what it needs. The list is the one EngineDefines poses
+			// rank its target holds, a blending entity draw reaches the pack's own
+			// gbuffers_entities_translucent and a blending block entity its block twin, and custom
+			// images are served now, so a pack that cannot draw without one of those is simply right
+			// about what it needs. The list is the one EngineDefines poses
 			// IRIS_FEATURE_ for, and the two have to move together: a define is a promise, and a
 			// refusal is the same promise refused.
 			//
@@ -345,7 +347,8 @@ public final class PackChoice {
 			// serves. ShaderProperties.declares already reads the same lists that way.
 			Set<String> served = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 			served.addAll(List.of("BLOCK_EMISSION_ATTRIBUTE", "COMPUTE_SHADERS", "CUSTOM_IMAGES",
-					PackDirectives.HIGHER_SHADOWCOLOR, "SSBO", "SEPARATE_HARDWARE_SAMPLERS"));
+					"ENTITY_TRANSLUCENT", PackDirectives.HIGHER_SHADOWCOLOR, "SSBO",
+					"SEPARATE_HARDWARE_SAMPLERS"));
 			// The one name of the list the DEVICE answers for rather than the engine, and Iris makes
 			// the same call on the same ground: its own flag is usable only where the driver parts
 			// the blend state of one attachment from the next (features/FeatureFlags.java:15). Ours

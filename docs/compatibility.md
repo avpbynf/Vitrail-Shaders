@@ -63,12 +63,12 @@ and did not get, the log listing them, rather than the symptom that would have c
 name Reverie declares is served now, so it is no longer refused there.
 
 **Any name this engine has not built refuses the declaration.** The names built and served today
-are `BLOCK_EMISSION_ATTRIBUTE`, `COMPUTE_SHADERS`, `CUSTOM_IMAGES`, `HIGHER_SHADOWCOLOR`,
-`PER_BUFFER_BLENDING`, `SEPARATE_HARDWARE_SAMPLERS` and `SSBO`, so a pack that requires those
-alone loads, and every other name still refuses the pack, with the list in the log. The served
-flags are also the only `IRIS_FEATURE_` defines a pack finds: a capability define is a promise, so
-each appears the day its feature is served and not before, and the optional declarations keep
-reading the truth.
+are `BLOCK_EMISSION_ATTRIBUTE`, `COMPUTE_SHADERS`, `CUSTOM_IMAGES`, `ENTITY_TRANSLUCENT`,
+`HIGHER_SHADOWCOLOR`, `PER_BUFFER_BLENDING`, `SEPARATE_HARDWARE_SAMPLERS` and `SSBO`, so a pack
+that requires those alone loads, and every other name still refuses the pack, with the list in the
+log. The served flags are also the only `IRIS_FEATURE_` defines a pack finds: a capability define
+is a promise, so each appears the day its feature is served and not before, and the optional
+declarations keep reading the truth.
 
 One of those names is the device's answer rather than the engine's. `PER_BUFFER_BLENDING` lets a
 pack give one of the targets a pass writes a different blend function from the others, and Vulkan
@@ -113,9 +113,10 @@ message is one of its passes, and it is drawn because a capability test in its c
 The test reads capability defines. This engine announces itself the way Iris does, but a capability
 define is a promise, so it defines only what the backend actually serves, which today is
 `IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE`, `IRIS_FEATURE_COMPUTE_SHADERS`,
-`IRIS_FEATURE_CUSTOM_IMAGES`, `IRIS_FEATURE_HIGHER_SHADOWCOLOR`,
-`IRIS_FEATURE_SEPARATE_HARDWARE_SAMPLERS`, `IRIS_FEATURE_SSBO` and, where the driver parts the
-blend state of one attachment from the next, `IRIS_FEATURE_PER_BUFFER_BLENDING`, and nothing else.
+`IRIS_FEATURE_CUSTOM_IMAGES`, `IRIS_FEATURE_ENTITY_TRANSLUCENT`,
+`IRIS_FEATURE_HIGHER_SHADOWCOLOR`, `IRIS_FEATURE_SEPARATE_HARDWARE_SAMPLERS`,
+`IRIS_FEATURE_SSBO` and, where the driver parts the blend state of one attachment from the next,
+`IRIS_FEATURE_PER_BUFFER_BLENDING`, and nothing else.
 The section above says why the features behind the other names are closed. A pack that finds the
 announcement without the capability it wants concludes it is running on OptiFine, the only
 renderer in that position when the pack was written, and words its message for it. Read "OptiFine"
