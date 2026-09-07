@@ -109,6 +109,26 @@ awkward interface. Two bounds are applied there: a limit per side, which is what
 accept, and a limit on **total texels**, which is what the memory actually is and what nothing else
 in the pack states.
 
+## A grey image is read, not converted
+
+The pixels are taken sample by sample off the raster the decoder produces, and expanded to four
+channels the way stb expands a PNG: one channel in the file gives grey, grey, grey and opaque, two
+give grey, grey, grey and the alpha, three give the colour opaque, four are taken as they are. A
+sixteen bit sample is read as its top byte.
+
+Asking the decoded image for a colour instead goes through its colour model, and a greyscale PNG
+carries the grey colour space rather than sRGB, so every byte comes back **lifted**: a field written
+with a mean of 0.501 reads 0.728. That is not a subtle shade difference. A pack that thresholds such
+a field a little above its own mean draws something else entirely, a cloud field going from a few
+filaments to a solid cover. The reference decodes with stb, which replicates the byte over the three
+channels and converts nothing, so reading the samples is what agrees with it. A colour PNG comes
+through either road byte for byte, which is why only the grey ones were wrong.
+
+The one model whose samples are not read is an indexed palette, where a sample is an index and means
+nothing on its own, along with any layout whose bands are not whole bytes, a premultiplied alpha, or
+a colour space other than grey and RGB. Those go through the colour model instead, which converts
+nothing for a palette or a packed word; none of them is a shape a PNG takes.
+
 ## A texture that cannot be served costs only that texture
 
 Allocation is attempted and caught per texture. The name that fails reads one black pixel and is

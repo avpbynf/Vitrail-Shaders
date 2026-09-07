@@ -436,7 +436,12 @@ naming a stage and a sampler. Both are read through the pack's conditionals, so 
 inside a disabled branch is not bound. A declared texture rebinds that sampler name to the file
 instead of to the colour target that would otherwise carry the same name.
 
-Four rules here were each paid for:
+The rules here were each paid for:
+
+**A greyscale PNG is read as it was written.** Its samples are taken raw and replicated over red,
+green and blue, the way the reference decoder expands one, rather than read through the colour model
+that would convert the grey colour space to sRGB and lift every byte. A pack that thresholds a grey
+field gets the threshold it wrote.
 
 **A cap on file size does not bound decoding.** A flat-colour image of huge dimensions compresses to
 almost nothing and demands gigabytes once decoded, so the decoder reads the image header before the

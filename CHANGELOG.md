@@ -117,6 +117,14 @@ what the next one holds.
 
 ### Fixed
 
+- **A greyscale picture a pack ships is read as the pack wrote it.** Every grey image came out
+  lighter than the file, its darks lifted towards white, because the decoder converted the picture
+  out of its own colour space instead of taking the bytes as they were written. A pack that compares
+  such a picture against a number wrote that number for the picture it made, so the comparison
+  landed somewhere else: on MakeUp UltraFast the sky carried a solid white cover where the pack
+  draws a few clouds. The clouds are clouds again, and every grey lookup table, mask and noise field
+  a pack ships now holds the values it was authored with.
+
 - **The world is no longer painted over by the stage meant to run before it.** Some packs open the
   frame with a "prepare" stage, whose job is to fill a table the rest of the frame reads. It ran
   once the world was already drawn instead of ahead of it, so on a pack whose prepare fills the very
