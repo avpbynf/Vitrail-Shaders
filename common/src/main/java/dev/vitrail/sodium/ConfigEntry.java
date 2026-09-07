@@ -4,6 +4,7 @@ import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.render.PackChoice;
 import dev.vitrail.render.ShadowAmortisation;
 import dev.vitrail.render.StartupGuard;
+import dev.vitrail.render.TemporalAccumulation;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.screen.SettingsScreen;
 import dev.vitrail.ScreenText;
@@ -93,6 +94,10 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	private static final Identifier SHADOW_AMORTISATION =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "shadow_amortisation");
 
+	/** Whether the upscaled frames are folded together, directly under the scale it serves. */
+	private static final Identifier TEMPORAL_FOLD =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "temporal_fold");
+
 	/** What the selector offers while the pack draws the world, and what it offers otherwise. */
 	private static final Set<TextureFilteringMethod> WITHOUT_RGSS =
 			Set.of(TextureFilteringMethod.NONE, TextureFilteringMethod.ANISOTROPIC);
@@ -116,6 +121,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 								.addOption(shadowDistance(builder))
 								.addOption(shadowMapScale(builder))
 								.addOption(renderScale(builder))
+								.addOption(temporalFold(builder))
 								.addOption(shadowAmortisation(builder))
 								.addOption(graphicsApi(builder))
 								.addOption(moduleCacheCeiling(builder))))
@@ -250,6 +256,34 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				// LATER launch starts on and costs the running frame nothing at all. Sodium's own
 				// impact labels are about the frame being drawn.
 				.setStorageHandler(() -> {});
+	}
+
+	/**
+	 * Whether the upscaled frames are folded into one another, which puts back some of the detail
+	 * the render scale above stopped drawing.
+	 * <p>
+	 * <strong>Greyed out at a scale of a hundred, because there it does nothing at all.</strong> The
+	 * fold rebuilds a large picture out of several small ones, and at full size the small ones are
+	 * the picture: there is nothing to recover and the pass would be spent for no gain. Asked of the
+	 * live state rather than read once, and declared against {@code RENDER_SCALE} so that moving that
+	 * slider greys this one in and out under the player's hand rather than at the next screen.
+	 * <p>
+	 * MEDIUM and not LOW, and the cost is worth counting properly: TWO passes, one at the render
+	 * size that writes the motion vectors and one at the window's size that folds, and THREE images,
+	 * a two-channel one at the render size and a pair of half-float ones at the window's size, since
+	 * a fold cannot read the image it writes. It is spent to make a cheaper scale look better rather
+	 * than to make the frame faster.
+	 */
+	private static OptionBuilder temporalFold(ConfigBuilder builder) {
+		return builder.createBooleanOption(TEMPORAL_FOLD)
+				.setName(Component.translatable(ScreenText.TEMPORAL_FOLD))
+				.setTooltip(_ -> Component.translatable(ScreenText.TEMPORAL_FOLD_TOOLTIP))
+				.setDefaultValue(TemporalAccumulation.DEFAULT_WANTED)
+				.setBinding(TemporalAccumulation::setWanted, TemporalAccumulation::wanted)
+				.setEnabledProvider(state -> state.readIntOption(RENDER_SCALE) < PackFile.MAX_RENDER_SCALE,
+						RENDER_SCALE)
+				.setStorageHandler(() -> {})
+				.setImpact(OptionImpact.MEDIUM);
 	}
 
 	/**

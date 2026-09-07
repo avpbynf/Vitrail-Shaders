@@ -74,6 +74,32 @@ the window whatever the slider says, so what they cost does not shrink as the sc
 is a fixed addition, paid once per frame, that buys back the sharpness. Lowering the scale from 70
 to 50 makes the world cheaper and leaves the upscale exactly where it was.
 
+## Folding the frames together
+
+A world drawn small loses the thin things first, and those are exactly what crawls as the camera
+moves: distant leaves, fences, the far edges of terrain. The spatial upscale above cannot put them
+back, because it only ever sees one frame and the detail is not in it.
+
+**Temporal Fold takes it from the frames before instead.** Several small pictures of a moving scene
+do not carry the same detail as each other, so blending them recovers some of what any one of them
+dropped, and the picture at a low scale settles rather than crawling. Each pixel is matched to where
+it stood a frame ago, which the engine works out by reprojecting the depth through the two cameras,
+and the value found there is held to the range of the pixels around it before it is mixed in. That
+clamp is what keeps a match that landed on the wrong surface from dragging a colour across an edge.
+
+It is off until asked for, and the checkbox greys out at a scale of 100 percent, where there is
+nothing to rebuild and the pass would be spent for nothing.
+
+**What it costs is two more passes and three more images**, on top of the fixed cost above. One pass
+writes the match at the render size into a two-channel image, and one folds at the window's size
+into a pair of half-float images, a pair because a fold cannot read the image it is writing. At
+1920x1080 that pair alone is about 32 MiB.
+
+**What it does not carry is anything that moves on its own.** The match is worked out from the
+camera alone, so a mob walking across a still screen is matched to where its pixels were rather than
+to where it was, and it keeps a faint trail. The clamp bounds how far that can go, which is why the
+result reads as a slight softness on moving things rather than as a smear behind them.
+
 ## Per-pass costs do not shrink either
 
 The scale buys fragment work and nothing else. A frame also pays for things counted per pass, per

@@ -13,6 +13,8 @@
 	"options.vitrail.shadow_map_scale_tooltip": "Share of the pack's shadow map that is actually drawn.\nLower is faster, and edges get softer or coarser. \"100%\" is what the pack asked for.\nReloads the pack.",
 	"options.vitrail.render_scale": "Render Scale",
 	"options.vitrail.render_scale_tooltip": "Resolution the world is drawn at, as a share of the window.\nLower is faster. AMD FSR 1.0 then fills the window. The interface stays sharp.\nApplies at the next frame. No pack reload.",
+	"options.vitrail.temporal_fold": "Temporal Fold",
+	"options.vitrail.temporal_fold_tooltip": "Folds several upscaled frames into one, so a lower Render Scale keeps more detail.\nDistant leaves and fences stop crawling. Things that move keep a faint trail.\nNeeds a Render Scale under 100%.\nApplies at the next frame. No pack reload.",
 	"options.vitrail.shadow_amortisation": "Shadow Reuse",
 	"options.vitrail.shadow_amortisation_tooltip": "How many frames the shadow map is kept before it is drawn again.\nHigher is faster: drawing it is the most expensive pass of the frame.\nShadows of things that MOVE are that many frames late.\nApplies at the next frame. No pack reload.",
 	"options.vitrail.shadow_amortisation_off": "Off",

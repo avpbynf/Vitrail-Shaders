@@ -77,6 +77,9 @@ public final class ScreenText {
 	public static final String RENDER_SCALE = "options.vitrail.render_scale";
 	public static final String RENDER_SCALE_TOOLTIP = "options.vitrail.render_scale_tooltip";
 
+	public static final String TEMPORAL_FOLD = "options.vitrail.temporal_fold";
+	public static final String TEMPORAL_FOLD_TOOLTIP = "options.vitrail.temporal_fold_tooltip";
+
 	/**
 	 * How large the compiled-shader disk store may grow. No counterpart in Iris, so both strings
 	 * are this project's own. The tooltip names the default and says the change applies at once.

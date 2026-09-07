@@ -15,6 +15,17 @@ what the next one holds.
 
 ### Added
 
+- **Temporal Fold, a new setting on the engine page.** A world drawn at a lower render scale loses
+  the thin things first, and those are what crawls as you move: distant leaves, fences, the far
+  edges of terrain. The upscale cannot put them back, because it only sees one frame. This blends
+  each frame with the ones before it, matching every pixel to where it stood a frame ago, so the
+  detail comes from the frames themselves and a low scale settles instead of shimmering.
+
+  It is off until you turn it on, and the checkbox is greyed out at a render scale of 100 percent,
+  where there is nothing to rebuild. It costs two more passes and three more images, about 32 MiB of
+  them at 1920x1080. Things that move on their own keep a faint trail, because the match is worked
+  out from the camera and not from what each object did.
+
 - **Shadow Reuse, a new setting on the engine page.** Filling the shadow map means walking the whole
   world a second time, for the sun, and it is the most expensive thing the frame does. Between two
   frames of a player standing still nothing in that map moves, so it is now kept and reused instead
