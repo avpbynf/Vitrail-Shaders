@@ -156,7 +156,8 @@ public final class PackDefines {
 		// same answer the reduction and the sampler already run on: a pack told one thing and a
 		// specular map reduced under another would be two conventions in one picture.
 		return new EngineDefines.Environment(EngineDefines.DEFAULT_MC_VERSION, os(), vendor,
-				renderer, mipmap, DhDepth.present(), biomeIds(), categories(), PbrAtlases.format());
+				renderer, mipmap, DhDepth.present(), biomeIds(), categories(), PbrAtlases.format(),
+				BufferBlending.served());
 	}
 
 	private static Map<String, Integer> biomeIds() {

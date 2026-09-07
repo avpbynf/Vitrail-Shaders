@@ -58,6 +58,7 @@
 		"QuadParticleFeatureRendererMixin",
 		"RenderPassMixin",
 		"access.RenderPipelineAccessor",
+		"RenderPipelineBuilderMixin",
 		"RenderPipelineMixin",
 		"sodium.MixinRenderRegion",
 		"access.RenderSectionManagerAccessor",

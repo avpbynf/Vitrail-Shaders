@@ -5,6 +5,7 @@ import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.pack.model.AlphaTest;
+import dev.vitrail.pack.model.BlendMode;
 import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.model.TargetName;
@@ -623,7 +624,8 @@ final class GeometryProgram {
 		// the chain does not run or the plan had no attachments to give, and then say of the water,
 		// the clouds and the weather that they are drawn before a seed they are drawn after - or
 		// before a seed that is never painted at all. Nothing tests the shadow map here because
-		// nothing needs to: every shadow pass is built with an empty blend.
+		// nothing needs to: no pass drawn from the light carries a blend of its own, whatever a
+		// pack's own directive later puts on its attachments.
 		this.demoted = owns && !this.ownsFirst && pass.blended() && !pass.afterDeferred();
 		this.extra = this.ownsFirst
 				? List.copyOf(writes)
@@ -778,30 +780,35 @@ final class GeometryProgram {
 		// form writes slot nought every time, so three calls would leave one state and a pipeline
 		// the pass refuses to bind, by name and in the middle of the world.
 		if (pass.shadow()) {
-			// One state per shadowcolor the program's own draw buffers name, in their order. The
-			// format is each buffer's own and not a constant: Mellow asks for R8 on nought, and a
-			// state naming four channels against a one channel attachment is the pipeline refusing
-			// to bind.
+			// One state per shadowcolor the program's own draw buffers name, in their order, which
+			// is also the rank a per buffer blend directive on this program lands on. The format is
+			// each buffer's own and not a constant: Mellow asks for R8 on nought, and a state naming
+			// four channels against a one channel attachment is the pipeline refusing to bind.
 			for (int slot = 0; slot < this.shadowColours.size(); slot++) {
 				builder.withColorTargetState(slot,
-						state(targets.shadowFormat(this.shadowColours.get(slot))));
+						state(slot, targets.shadowFormat(this.shadowColours.get(slot))));
 			}
 		} else {
 			for (int slot = 0; slot < this.slots.size(); slot++) {
 				Slot one = this.slots.get(slot);
 				switch (one.bound()) {
+					// Held as a null state, which the backend turns into a colour write mask of
+					// nought while every neighbour carries WRITE_ALL (VulkanRenderPipeline:182-189).
+					// So a pass that covers its outputs hands the device an attachment array whose
+					// elements already differ, blend functions or no blend functions, and has since
+					// long before any of them were read by rank.
 					case UNUSED -> builder.withUnusedColorTargetState(slot);
 					// The mask is written outright and never blended, whatever the pack asked for its
 					// own targets: what it carries is the depth the fragment left, and a depth mixed
 					// with the one behind it is the depth of nothing at all.
 					case COVERAGE -> builder.withColorTargetState(slot, new ColorTargetState(
 							Optional.empty(), one.format(), ColorTargetState.WRITE_ALL));
-					default -> builder.withColorTargetState(slot, state(one.format()));
+					default -> builder.withColorTargetState(slot, state(slot, one.format()));
 				}
 			}
 		}
 
-		this.pipeline = builder.build();
+		this.pipeline = part(builder);
 
 		// Filed against the pipeline and not the program, because the pipeline is what the
 		// descriptor walk can see when it has to answer for a name.
@@ -857,21 +864,73 @@ final class GeometryProgram {
 	}
 
 	/**
-	 * What the pack asked to blend with, falling back to what the pass wants when it asked nothing,
-	 * on every attachment alike. The per buffer form, {@code blend.<program>.<buffer>}, reaches
-	 * here folded into that one answer by the plan, where every attachment of the program comes
-	 * out with the same function; where two would come out apart the plan keeps the whole program
-	 * function and says so in its notes, one pipeline carrying one blend function for every target
-	 * it writes.
+	 * What the pack asked to blend this one attachment with, falling back to what the pass wants
+	 * when it asked nothing.
 	 * <p>
-	 * Four packs of the corpus name the translucent chunk pass here. Reverie asks for no blending
-	 * at all on its water, which is the opposite of what the pass would have chosen, and Bliss and
-	 * the two Complementary give a function whose alpha half differs from the one assumed.
+	 * The per buffer form, {@code blend.<program>.<buffer>}, is read here by the RANK the target
+	 * holds among the program's draw buffers, which is the rank this slot holds: the pipeline is
+	 * built over the pack's draw buffers in their own order, and the one slot that is not the
+	 * pack's own is draw buffer nought demoted onto the game's target, which is where that draw
+	 * buffer's colour goes. A pass drawn from the light ranks the same way over the shadowcolor
+	 * buffers its program declared. Iris resolves both the same way, the camera's at
+	 * {@code ShaderCreator.java:155-160} and the light's at {@code :358-363}, and applies the whole
+	 * program function before either ({@code ExtendedShader.java:244-250}), which is the order the
+	 * plan already folded them in.
+	 * <p>
+	 * <strong>Where the device cannot part its attachments the whole program answer stands on all
+	 * of them.</strong> Two attachments of one Vulkan pipeline may carry two blend states only
+	 * under {@code independentBlend}, so {@link BufferBlending} is asked first and the plan's
+	 * rankless answer is what a device without it gets, which is the function this pass carried
+	 * before the ranks were read at all. That function is the whole of what the fallback keeps back.
+	 * It does not hand such a device an identical array, and it never did: an unused slot is held as
+	 * a null state and the backend gives that one a colour write mask of nought beside its
+	 * neighbours' {@code WRITE_ALL} ({@code VulkanRenderPipeline:182-189}), so a pass covering its
+	 * outputs was parting its attachments there already. What the device gets back is what it had.
+	 * <p>
+	 * It is a fallback and never a refusal: the pipeline builder throws on two states that disagree,
+	 * so a pack whose directives part its targets would otherwise not be built at all, and a program
+	 * that is not built is a pass the pack does not draw.
+	 * <p>
+	 * The whole program form is what the corpus writes on the translucent chunk pass, and it is
+	 * often not what the pass would have chosen: Reverie, Noble and Photon ask for no blending at
+	 * all on their water, which is the opposite of it, and Bliss gives a function whose alpha half
+	 * differs from the one assumed.
+	 *
+	 * @param rank the slot's place among the draw buffers of the program being built, which is what
+	 *             a per buffer directive names its target by
 	 */
-	private ColorTargetState state(GpuFormat format) {
-		return new ColorTargetState(
-				BlendFunctions.of(this.targets.blend(this.loaded.path()), this.pass.blend()), format,
+	private ColorTargetState state(int rank, GpuFormat format) {
+		BlendMode asked = BufferBlending.served()
+				? this.targets.blend(this.loaded.path(), rank)
+				: this.targets.blend(this.loaded.path());
+
+		return new ColorTargetState(BlendFunctions.of(asked, this.pass.blend()), format,
 				ColorTargetState.WRITE_ALL);
+	}
+
+	/**
+	 * The build itself, with the game's refusal of two colour targets naming different blend
+	 * functions lifted for the length of it and for this thread alone.
+	 * <p>
+	 * The refusal stands in the builder every pipeline of the process is built through, so
+	 * {@code RenderPipelineBuilderMixin} cannot lift it on the device's answer alone: the wrap it
+	 * carries runs for the game's own pipelines and every other mod's, and none of those asked for
+	 * anything. The mark raised here is what the mixin reads beside that answer, which makes the
+	 * lift as wide as this engine's builds on a device that granted {@code independentBlend} and no
+	 * wider. Both of ours go through here, this class being the only place two attachments of one of
+	 * our pipelines can come out with different functions.
+	 * <p>
+	 * On the thread because the builds are not all on one: the pack-load worker builds the six
+	 * families ahead of their first draw while the render thread builds what a first draw asks for
+	 * and what {@link #reshapeAs} rebuilds inside another mod's draw.
+	 */
+	private static RenderPipeline part(RenderPipeline.Builder builder) {
+		BufferBlending.building(true);
+		try {
+			return builder.build();
+		} finally {
+			BufferBlending.building(false);
+		}
 	}
 
 	/**
@@ -1138,7 +1197,7 @@ final class GeometryProgram {
 			}
 		}
 
-		RenderPipeline built = builder.build();
+		RenderPipeline built = part(builder);
 
 		// The comparison note is keyed on the pipeline object, not read off its states, so it is
 		// the one answer a rebuild does not carry by itself. Left unfiled, the descriptor walk

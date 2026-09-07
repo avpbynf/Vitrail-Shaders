@@ -105,12 +105,19 @@ public final class TargetPlan {
 	private final Map<String, List<Integer>> writes;
 
 	/**
-	 * What each program asks to blend with, by its bare name, the whole program form and the per
-	 * buffer form folded into one function by {@link #blendsOf}. Only the programs that say
+	 * What each program asks to blend with as a whole, by its bare name. Only the programs that say
 	 * something are in here; a program that says nothing is answered by whatever the engine would
 	 * have used anyway, which is not this plan's business.
 	 */
 	private final Map<String, BlendMode> blend;
+
+	/**
+	 * The same answer taken one attachment at a time, by the RANK the target holds among the
+	 * program's draw buffers, for the programs that carry a per buffer directive. An entry is null
+	 * where that attachment is left with the whole program answer, which is how {@link #blendsOf}
+	 * fills the ranks no directive names.
+	 */
+	private final Map<String, List<BlendMode>> blendPerTarget;
 
 	private final Set<String> inferred;
 	private final Map<String, Set<Integer>> samples;
@@ -132,6 +139,7 @@ public final class TargetPlan {
 		this.writes = Collections.unmodifiableMap(new LinkedHashMap<>(draft.effective));
 		Blends blends = blendsOf(draft);
 		this.blend = blends.byProgram();
+		this.blendPerTarget = blends.byTarget();
 		this.inferred = Collections.unmodifiableSet(new TreeSet<>(draft.inferred));
 		this.samples = Collections.unmodifiableMap(new LinkedHashMap<>(draft.samples));
 		this.geometryAt = draft.geometryAt;
@@ -783,13 +791,9 @@ public final class TargetPlan {
 		}
 
 		if (!blends.honoured().isEmpty()) {
-			notes.add("per buffer blend directives honoured, every target their program writes "
-					+ "taking the same function: " + blends.honoured());
-		}
-
-		if (!blends.shadow().isEmpty()) {
-			notes.add("per buffer blend directives on a program drawn from the light, whose passes "
-					+ "this engine builds without blending whatever the pack asks: " + blends.shadow());
+			notes.add("per buffer blend directives read onto the attachment whose rank their target "
+					+ "holds, which the pass carries where the device parts its attachments and drops "
+					+ "back to the whole program function where it does not: " + blends.honoured());
 		}
 
 		if (!blends.fullscreen().isEmpty()) {
@@ -801,12 +805,6 @@ public final class TargetPlan {
 		if (!blends.dropped().isEmpty()) {
 			notes.add("per buffer blend directives naming a target their program does not write, "
 					+ "dropped as the reference drops them: " + blends.dropped());
-		}
-
-		if (!blends.apart().isEmpty()) {
-			notes.add("per buffer blend directives that would blend two targets of one program "
-					+ "differently, which one pipeline does not carry here, so those programs keep "
-					+ "the whole program function: " + blends.apart());
 		}
 
 		if (!draft.computes.isEmpty()) {
@@ -935,22 +933,27 @@ public final class TargetPlan {
 	 * form and the per buffer form folded together the way the reference applies them: the whole
 	 * program function first, on every attachment, then each per buffer directive on the
 	 * attachment whose RANK among the program's draw buffers is the target it names, a directive
-	 * naming a target the program does not write being dropped ({@code ShaderCreator.java:142-147}
-	 * and {@code SodiumPrograms.java:145-153} resolve the rank, {@code ExtendedShader.java:225-233}
-	 * applies the two forms in that order). The reference reads the per buffer form for its
-	 * geometry programs only: a composite takes the whole program form and nothing else
-	 * ({@code CompositeRenderer.java:510-517}), the final takes neither
-	 * ({@code FinalPassRenderer.java:256-257}), so a per buffer line on one is dropped here as
-	 * well. A program drawn from the light is left out too: this engine builds every shadow
-	 * pass without blending, and the plan holds no draw buffer list for it to rank against.
+	 * naming a target the program does not write being dropped ({@code ShaderCreator.java:155-160}
+	 * resolves the rank, {@code ExtendedShader.java:244-250} applies the two forms in that order).
+	 * The reference reads the per buffer form for its geometry programs only: a composite takes the
+	 * whole program form and nothing else ({@code CompositeRenderer.java:514-522}), the final takes
+	 * neither ({@code FinalPassRenderer.java:258-259}), so a per buffer line on one is dropped here
+	 * as well.
 	 * <p>
-	 * One pipeline carries one blend function for every attachment here, so the per buffer form
-	 * is honoured exactly when every attachment of its program comes out with the same function:
-	 * a program writing one target, which is what most such directives are written for, or several
-	 * targets under directives that agree. A program whose attachments would come out apart keeps
-	 * its whole program function, and the notes name it, honouring half of such a directive being
-	 * worse than honouring none of it. A value in a form this engine cannot read is left out too,
-	 * and named the same way.
+	 * Geometry drawn from the light is in, on both forms, because the reference has it on both:
+	 * {@code createShadow} carries the whole program override into the shadow program and builds
+	 * the same rank list off that program's own draw buffers ({@code ShaderCreator.java:318}, the
+	 * block at {@code :358-363}). The rank is taken against what the shadow program DECLARED, which
+	 * this plan keeps raw because those indices name shadowcolor and none of them is allocated
+	 * here; a shadow program that declared nothing ranks against nought alone, which is how the
+	 * reference reads that silence ({@code shaderpack/properties/ProgramDirectives.java:73-76}).
+	 * <p>
+	 * The answer is kept twice over: one function for the whole program, which is what a caller
+	 * holding no attachment reads, and one function per RANK for the programs a per buffer
+	 * directive lands on. Whether two attachments of one pass may really carry two functions is not
+	 * this plan's question, and it is not the same on every device: what is said here is what the
+	 * pack asked for, and the side that builds the pipeline answers for what it can give. A value
+	 * in a form this engine cannot read is left out, and named in the notes.
 	 */
 	private static Blends blendsOf(Draft draft) {
 		Map<String, BlendMode> whole = new LinkedHashMap<>();
@@ -969,28 +972,30 @@ public final class TargetPlan {
 		}
 
 		Map<String, BlendMode> resolved = new LinkedHashMap<>(whole);
+		Map<String, List<BlendMode>> byTarget = new LinkedHashMap<>();
 		List<String> honoured = new ArrayList<>();
-		List<String> shadow = new ArrayList<>();
 		List<String> fullscreen = new ArrayList<>();
 		List<String> dropped = new ArrayList<>();
-		List<String> apart = new ArrayList<>();
 		perBuffer.forEach((program, directives) -> {
 			String family = ProgramNames.familyOf(program);
-			if (ProgramNames.shadowGeometry(family)) {
-				directives.forEach(directive -> shadow.add(spelling(directive)));
-				return;
-			}
-
 			if (!ProgramNames.geometry(family)) {
 				directives.forEach(directive -> fullscreen.add(spelling(directive)));
 				return;
 			}
 
-			// A program this place does not run has no attachment for a directive to land on.
-			List<Integer> writes = draft.effective.get(program);
-			if (writes == null) {
+			// A program this place does not run has no attachment for a directive to land on. The
+			// camera's geometry ranks against what the place effectively runs it with, the light's
+			// against the raw declaration: the two lists are kept apart because a shadow program's
+			// indices name shadowcolor and never enter what is allocated.
+			boolean fromTheLight = ProgramNames.shadowGeometry(family);
+			List<Integer> declared = fromTheLight
+					? draft.writes.get(program)
+					: draft.effective.get(program);
+			if (declared == null) {
 				return;
 			}
+
+			List<Integer> writes = fromTheLight && declared.isEmpty() ? List.of(0) : declared;
 
 			// Null stands for the engine's own choice, which is what an attachment no directive
 			// names is left with, and it is as much a function as the others when they are compared.
@@ -1022,18 +1027,22 @@ public final class TargetPlan {
 				return;
 			}
 
+			byTarget.put(program, Collections.unmodifiableList(Arrays.asList(functions)));
+			honoured.addAll(landed.values());
+
+			// The whole program answer follows only where every attachment agreed, which is what a
+			// caller holding no rank reads and what a device that cannot part two attachments falls
+			// back on. Where they disagree it stays whatever the bare directive gave, so that road
+			// answers as it did before the ranks were kept.
 			BlendMode first = functions[0];
 			if (Arrays.stream(functions).allMatch(function -> Objects.equals(function, first))) {
 				resolved.put(program, first);
-				honoured.addAll(landed.values());
-			} else {
-				apart.addAll(landed.values());
 			}
 		});
 
-		return new Blends(Collections.unmodifiableMap(resolved), List.copyOf(unreadable),
-				List.copyOf(honoured), List.copyOf(shadow), List.copyOf(fullscreen),
-				List.copyOf(dropped), List.copyOf(apart));
+		return new Blends(Collections.unmodifiableMap(resolved),
+				Collections.unmodifiableMap(byTarget), List.copyOf(unreadable),
+				List.copyOf(honoured), List.copyOf(fullscreen), List.copyOf(dropped));
 	}
 
 	/** The directive as the pack spelt its key, {@code gbuffers_water.colortex13} or bare. */
@@ -1042,21 +1051,43 @@ public final class TargetPlan {
 				: directive.program() + "." + directive.buffer();
 	}
 
-	/** What {@link #blendsOf} settled: the map the plan answers from, and the lines the notes carry. */
-	private record Blends(Map<String, BlendMode> byProgram, List<String> unreadable,
-			List<String> honoured, List<String> shadow, List<String> fullscreen, List<String> dropped,
-			List<String> apart) {
+	/** What {@link #blendsOf} settled: the maps the plan answers from, and the lines the notes carry. */
+	private record Blends(Map<String, BlendMode> byProgram, Map<String, List<BlendMode>> byTarget,
+			List<String> unreadable, List<String> honoured, List<String> fullscreen,
+			List<String> dropped) {
 	}
 
 	/**
-	 * What this program asks to blend with, or empty when it asks for nothing and the engine's own
-	 * choice stands. A per buffer directive is in the answer where every target the program writes
-	 * agreed on it, and in {@link #notes()} where they did not.
+	 * What this program asks to blend with as a whole, or empty when it asks for nothing and the
+	 * engine's own choice stands. A per buffer directive is in this answer only where every target
+	 * the program writes agreed on it; {@link #blend(String, int)} is where they are read apart.
 	 *
 	 * @param program the bare name, {@code gbuffers_water}, not the file that ends up serving it
 	 */
 	public Optional<BlendMode> blend(String program) {
 		return Optional.ofNullable(this.blend.get(TargetName.bareName(program)));
+	}
+
+	/**
+	 * The same for one attachment of that program, which is what serves {@code PER_BUFFER_BLENDING}.
+	 * <p>
+	 * A rank no directive named, and every rank of a program that carries none at all, answers the
+	 * whole program form, so a caller that walks its attachments in order gets the same picture as
+	 * the reference builds: the whole program function on every attachment, each per buffer
+	 * directive over the one whose rank its target holds.
+	 *
+	 * @param rank the attachment's place among the program's draw buffers, which is the order both
+	 *             the pipeline and the descriptor walk them in, and for a program drawn from the
+	 *             light its place among the shadowcolor buffers it declared. Out of range answers
+	 *             the whole program form, for the slots a pass carries beyond what the pack writes
+	 */
+	public Optional<BlendMode> blend(String program, int rank) {
+		List<BlendMode> perTarget = this.blendPerTarget.get(TargetName.bareName(program));
+		if (perTarget == null || rank < 0 || rank >= perTarget.size()) {
+			return blend(program);
+		}
+
+		return Optional.ofNullable(perTarget.get(rank));
 	}
 
 	private static final class Draft {
