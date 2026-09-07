@@ -27,11 +27,14 @@ on:
 permissions:
   contents: read
 
-# A branch only needs its latest push checked. Superseded runs are cancelled rather than left to
-# finish and report on a commit nobody is looking at any more.
+# A pull request only needs its latest push checked, so a superseded run there is cancelled rather
+# than left to finish and report on a commit nobody is looking at any more. A push on one of the
+# two long-lived branches is a commit that has landed for good, and every one of those keeps its
+# own verdict: two requests merged a minute apart used to leave the first commit with a cancelled
+# run, which reads as a failure on the branch and denies that commit the check it earned.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
