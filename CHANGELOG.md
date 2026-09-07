@@ -117,6 +117,13 @@ what the next one holds.
 
 ### Fixed
 
+- **Switching packs no longer leaves graphics memory behind on packs that use compute shaders.**
+  A pack can attach a compute program to a step of its chain, and those programs kept their
+  pipelines and their buffers when the pack was replaced, so every switch and every press of the
+  Reload Shaders key added to what was never given back. Long sessions spent trying packs out ended
+  with graphics memory that only closing the game freed. Photon, which builds its sky lighting in
+  such a compute, is among the packs this held on to.
+
 - **A compute a pack ships for a step of the chain that draws nothing now runs.** It was left out
   on the grounds that there was no pass to run it before; it is now dispatched on its own, at the
   moment the program it hangs off would have run at, which is what Iris does with it: its family
