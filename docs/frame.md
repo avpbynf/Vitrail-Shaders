@@ -31,22 +31,49 @@ The terrain renderer does not move any of this. Every decision below is anchored
 points, and a pass placed at the wrong one produces an image that is plausible and wrong rather
 than an error.
 
-## The chain is cut in two around the translucent world
+## The chain is cut in three around the world
 
-A pack's passes are not all run at the same moment. The chain is split, and each half hangs off one
-of the seams above:
+A pack's passes are not all run at the same moment. The chain is cut in three, and each part hangs
+off a different point of the game's frame:
 
-- the begin and prepare stages, the seed, and the deferred stages run at **after opaque
-  features**, which is before the world's translucent geometry;
+- the begin and prepare stages run while the level's frame graph is being built, which is before any
+  pass of that graph executes and so before one triangle of the world is drawn, with the shadow
+  stage between the two: the begins run ahead of it and the prepares behind it, so a prepare reads
+  what this frame's shadow work has just written and a begin reads what the frame before left;
+- the seed and the deferred stages run at **after opaque features**, which is before the world's
+  translucent geometry;
 - the composite stages and the final pass run at **after level**, once the whole world render is
   done.
 
-That split is what lets the pack's own translucent geometry (water, glass) be drawn into the
-pack's targets on the halves that the deferred stages have already written, which is exactly what
-several packs assume when they sample a colour target from inside their water program.
+What each part reads as depth follows from where it sits. The game empties its own colour and depth
+before it enters the level renderer at all, so the first part reads the **far plane** as the depth
+of the world as drawn: nothing of this frame has been written into it, and nothing of the frame
+before survives there either. The copies are the other way round, since nothing rewrites them until
+later in the frame: the pre-translucent copy, the pre-hand copy and the far terrain's own depth all
+hand that part **the frame before's** images.
 
-The consequence for a pack author: a deferred pass sees the opaque world, and a composite sees the
-world with translucents in it. Placing an effect in the wrong stage is not a subtle difference.
+The frame before's, and never one older than that. The pre-hand copy is only taken on the frames the
+engine really draws something held in front of the camera, and the far terrain's only on the frames
+Distant Horizons really drew. A frame that did neither leaves nothing to hand on, and the first part
+of the next one then reads the pre-translucent copy in place of the pre-hand one, which on such a
+frame is the same depth to the bit, and the far plane in place of the far terrain, which is what a
+pack with no Distant Horizons reads anyway. A screen that changed size between the two frames drops
+all of it for one frame, since those images are reallocated later in the frame than this part runs.
+
+The second part reads this frame's opaque world, and the third reads the whole scene with its
+translucents in it.
+
+The cut around the translucents is what lets the pack's own translucent geometry (water, glass) be
+drawn into the pack's targets on the halves that the deferred stages have already written, which is
+exactly what several packs assume when they sample a colour target from inside their water program.
+The cut around the opaque world is what keeps a prepare under the gbuffers rather than over them: a
+prepare that names a draw buffer the terrain, the sky or the hand also names is a full-screen write
+over the very half they draw into, and run after them it replaces the world with a table built out
+of uniforms.
+
+The consequence for a pack author: a prepare sees none of the world, a deferred pass sees the opaque
+world, and a composite sees the world with translucents in it. Placing an effect in the wrong stage
+is not a subtle difference.
 
 ## Colour targets, and the rule that governs every read
 

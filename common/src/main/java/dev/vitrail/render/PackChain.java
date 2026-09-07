@@ -57,8 +57,10 @@ import java.util.stream.Collectors;
 import java.util.TreeSet;
 
 /**
- * Runs one pack's chain over the finished world: every full screen program the pack keeps on, in
- * frame order, and then its {@code final} onto the game's own target.
+ * Runs one pack's chain around the world: every full screen program the pack keeps on, in frame
+ * order, and then its {@code final} onto the game's own target. Around and not after, the frame
+ * being cut in three: the begins and the prepares before the world is drawn at all, the scene seed
+ * and the deferred stage before its translucents, the composites and the final once it is done.
  * <p>
  * Nothing here decides what runs or which half of a target a pass touches. The plan walked the
  * frame once when the pack was read, {@link ChainPlan} unfolded that walk into attachments, and a
@@ -221,6 +223,12 @@ public final class PackChain {
 	 * names the origin of the world rather than where the player stands.
 	 */
 	private boolean everAdvanced;
+
+	/** Whether the begins, which belong ahead of the shadow stage, have run. */
+	private boolean begun;
+
+	/** Whether the prepares, which belong behind the shadow stage and before the world, have run. */
+	private boolean prepared;
 
 	/** Whether the half of the chain that belongs before the world's translucents has run. */
 	private boolean early;
@@ -947,7 +955,7 @@ public final class PackChain {
 	 * Dispatches {@code shadowcomp} at the head of the frame, over the shadow geometry the frame
 	 * before it wrote.
 	 * <p>
-	 * Iris dispatches it inside its own shadow render ({@code ShadowRenderer.java:631-632}), which is
+	 * Iris dispatches it inside its own shadow render ({@code ShadowRenderer.java:632-633}), which is
 	 * the same moment relative to the READERS: there the map is drawn and read within one frame,
 	 * here the shadow stage stands at the end of a frame and the map is one frame late, so the
 	 * moment that shares the frame of the gbuffers reading the volumes is this one. The caller in
@@ -968,6 +976,16 @@ public final class PackChain {
 		chain.beginFrame();
 		chain.reanchorCustomImages();
 		chain.compute.dispatch(chain.values, chain.targets);
+
+		// And the table goes back to the window every block of the chain is written under, because
+		// the dispatch above leaves the light's standing behind it. This stage stands between the
+		// two ranges the frame opens with, and a compute of the prepares writes its block off the
+		// live table at the moment it is dispatched, where a pass reads a block written once at the
+		// head of the frame: left flipped, a place with a begin ahead of this stage and a shadow
+		// compute in it hands every compute of its prepares the light's window instead of the
+		// screen's. Put back where it is flipped rather than at the head of each range, so that a
+		// range drawn here later cannot forget what it never has to know.
+		chain.values.convention(ClipSpace.REVERSED);
 	}
 
 	/**
@@ -1072,15 +1090,16 @@ public final class PackChain {
 	 * Allocates the colour targets if they are not there and clears them, once a frame, and answers
 	 * whether they can be drawn into.
 	 * <p>
-	 * <strong>This has to happen before the world and not where the chain starts.</strong> The chain
-	 * runs once the world is finished; the terrain writes its targets during it. Clearing where the
-	 * chain starts would therefore throw away everything the terrain had just written, and it would
-	 * do it silently, the targets reading exactly as they do when no geometry runs at all.
+	 * <strong>This has to happen before the world and never where the deferred stage starts.</strong>
+	 * The terrain writes its targets during the world and that stage runs once the world is finished,
+	 * so clearing there would throw away everything the terrain had just written, and it would do it
+	 * silently, the targets reading exactly as they do when no geometry runs at all.
 	 * <p>
 	 * Called from both sides for that reason, whichever comes first: from the terrain, at the point
 	 * the chunk renderer asks for its shader, which is the last moment before it opens a pass; and
-	 * from the chain, for the frames and the configurations where no terrain runs at all. The second
-	 * call is free.
+	 * from the chain, which reaches this at the head of the level frame on a place with a begin or a
+	 * prepare, and on the frames and the configurations where no terrain runs at all otherwise. The
+	 * second call is free.
 	 */
 	boolean openTargets(GpuDevice device) {
 		if (this.opened) {
@@ -1131,6 +1150,8 @@ public final class PackChain {
 		GeometryHold.flush(() -> "the frame before it closing");
 		this.advanced = false;
 		this.opened = false;
+		this.begun = false;
+		this.prepared = false;
 		this.early = false;
 		this.filled = false;
 		this.seeded = false;
@@ -1303,20 +1324,26 @@ public final class PackChain {
 	 * is only the moment the commands are recorded.
 	 *
 	 * @param depth   what this half's programs read as {@code depthtex0}, in the pack's own window:
-	 *                the opaque world before the translucents and the whole scene after
-	 * @param distant what they read as {@code dhDepthTex0}, on the same split: the far terrain
-	 *                before its water and with it after, or null for the far plane on the frames the
-	 *                pack drew no far terrain
+	 *                the opaque world before the translucents and the whole scene after, or null for
+	 *                the far plane on the parts that run before the world, where the game has just
+	 *                emptied its own depth and nothing has drawn into it since
+	 * @param distant what they read as {@code dhDepthTex0}: the far terrain with its water on the
+	 *                parts that run before the world, where the frame before's is what Iris's live
+	 *                image holds, then this frame's without its water up to the world's translucents
+	 *                and with it after, or null for the far plane wherever no far terrain was drawn
+	 * @param seeding whether the game's own frame may be painted inside this range. False on the
+	 *                parts that run before the world: the seed's rank is where the world goes, so it
+	 *                falls on their own end, and there is no world to paint yet
 	 * @param cut     which cut of the frame this range is, which is what says whose standalone
-	 *                computes belong to it. Said rather than read off the bounds: where the whole
-	 *                chain runs before the world the two cuts have the same bounds, and a compute
-	 *                placed by those would run in both of them or in neither
+	 *                computes belong to it. Said rather than read off the bounds: where a cut draws
+	 *                no pass of its own its bounds are empty and sit on a neighbour's, and a compute
+	 *                placed by those would run in the wrong cut or in none
 	 */
 	private void drawRange(GpuDevice device, Ready ready, int from, int to, GpuTextureView depth,
-			GpuTextureView distant, Cut cut) {
+			GpuTextureView distant, boolean seeding, Cut cut) {
 		// Clamped to the list, so that the rank of a chain whose every pass runs before the world is
 		// one the walk below can reach rather than one nothing ever equals.
-		int seedAt = ready.seeding()
+		int seedAt = seeding && ready.seeding()
 				? Math.min(this.chain.chain().seed().map(ChainPlan.Seed::at).orElse(-1),
 						this.programs.size())
 				: -1;
@@ -1333,13 +1360,6 @@ public final class PackChain {
 		// list, and the deferred emptying inside a draw clears every target still owed one.
 		this.currentChains.clear();
 		for (int at = from; at < to; at++) {
-			// The standalones standing on this index are taken in two goes around the seed, as the
-			// end of the range is below: a prepare compute with no prepare pass stands on the first
-			// deferred pass, which is the index the seed is painted at, and its family says it runs
-			// before the world. Noble's world0 is written that way, and taken in one go after the
-			// seed its illuminance was computed over a world already lit by the frame before.
-			dispatchStandalone(cut, at, Reach.AT_INDEX_BEFORE_SEED, encoder, device, ready, depth,
-					distant, this.targets.hasPendingClears());
 			if (!this.seeded && at == seedAt) {
 				paintSeed(encoder, ready);
 				this.currentChains.clear();
@@ -1348,8 +1368,11 @@ public final class PackChain {
 			PackPass pass = this.programs.get(at);
 
 			boolean emptying = this.targets.hasPendingClears();
-			dispatchStandalone(cut, at, Reach.AT_INDEX_AFTER_SEED, encoder, device, ready, depth,
-					distant, emptying);
+			// Where a pass of this index would be drawn, the seed above included: what a cut can still
+			// hold here is of a family the frame runs after the world, the begins and the prepares
+			// having a cut apiece that runs before it and paints no seed at all.
+			dispatchStandalone(cut, at, Reach.AT_INDEX, encoder, device, ready, depth, distant,
+					emptying);
 			if (this.compute.hangsOff(pass.program())) {
 				// The frame's clears are paid before the computes and not inside the draw after
 				// them, where the first pass of the frame pays them: a compute storing into a
@@ -1404,19 +1427,6 @@ public final class PackChain {
 			}
 		}
 
-		// The end of this cut, where the ones no pass of it follows are dispatched: the loop stops
-		// before that index, so without the two calls below the compute of a cut that draws no pass
-		// after it would never run at all. It is where the frame really leaves this part of itself,
-		// and a compute of a family the cut carries has nowhere later to go.
-		//
-		// Taken in two goes with the seed between them, because there is no pass left here to place
-		// them against. The loop puts the seed before the pass its rank falls on and after the one
-		// before it, which is the passes of a family the frame runs no later than the world running
-		// ahead of it; the family answers the same question for a standalone, and the two halves of
-		// this end are what a pass of its name would have been on either side of.
-		dispatchStandalone(cut, to, Reach.PAST_END_BEFORE_SEED, encoder, device, ready, depth,
-				distant, this.targets.hasPendingClears());
-
 		// A rank that falls exactly on the end of this half is painted here, at its tail, and never
 		// at the head of the next one. The world is drawn before the deferred stage and not after
 		// it: walked as a half open range alone, a seed whose rank equals deferredEnd() - which is
@@ -1431,8 +1441,13 @@ public final class PackChain {
 			this.currentChains.clear();
 		}
 
-		dispatchStandalone(cut, to, Reach.PAST_END_AFTER_SEED, encoder, device, ready, depth,
-				distant, this.targets.hasPendingClears());
+		// The end of this cut, where the ones no pass of it follows are dispatched: the loop stops
+		// before that index, so without this call the compute of a cut that draws no pass after it
+		// would never run at all. It is where the frame really leaves this part of itself, and a
+		// compute of a family the cut carries has nowhere later to go. Behind the seed for the reason
+		// the walk's own dispatch is behind it.
+		dispatchStandalone(cut, to, Reach.PAST_END, encoder, device, ready, depth, distant,
+				this.targets.hasPendingClears());
 	}
 
 	/**
@@ -1443,11 +1458,12 @@ public final class PackChain {
 	 * and that rests on one thing: an index below the range cannot happen. The index counts the
 	 * passes that run before the program in frame order, and the head of a cut is the count of
 	 * passes whose rank the earlier cuts carry, every one of which sorts before anything this cut
-	 * holds. A cut added between these two divides the same ranks the same way and keeps it.
+	 * holds. The cuts are lines through the same ranks and nothing else, so however many of them
+	 * the frame is drawn in, each of them keeps it.
 	 *
 	 * @param at       the index the walk has reached
-	 * @param reach    which of them this go takes, every point of the walk being taken in two with
-	 *                 the seed between them
+	 * @param reach    which of them this go takes: those standing on that index, or those the walk
+	 *                 has run out of passes to stand on
 	 * @param emptying whether targets are still owed their clear, which is paid here for the reason
 	 *                 the chained dispatch pays it: a compute storing into a target still owed one
 	 *                 would have its stores emptied by the pass that follows
@@ -1478,35 +1494,17 @@ public final class PackChain {
 	/**
 	 * Which of a cut's standalones one dispatch takes. The walk reaches each of them once: on the
 	 * index of the pass it runs before, or, past the last pass of the cut, at the end of the range.
-	 * Both points are taken twice, with the scene seed painted between the two goes, and the family
-	 * says which go a standalone belongs to: the seed stands at the world's own rank, and a family
-	 * the frame runs no later than the world is dispatched before it.
 	 */
 	private enum Reach {
 
-		/** On the index the loop has reached, those of a family the frame runs no later than the world. */
-		AT_INDEX_BEFORE_SEED(false, false),
+		/** Those standing on the index the loop has reached. */
+		AT_INDEX,
 
-		/** On that index, those of a family it runs after the world. */
-		AT_INDEX_AFTER_SEED(false, true),
-
-		/** Past the last pass, those of a family the frame runs no later than the world. */
-		PAST_END_BEFORE_SEED(true, false),
-
-		/** Past the last pass, those of a family it runs after the world. */
-		PAST_END_AFTER_SEED(true, true);
-
-		private final boolean pastEnd;
-		private final boolean afterSeed;
-
-		Reach(boolean pastEnd, boolean afterSeed) {
-			this.pastEnd = pastEnd;
-			this.afterSeed = afterSeed;
-		}
+		/** Those no pass of the cut follows, taken at the end of the range. */
+		PAST_END;
 
 		boolean takes(Standalone waiting, int at) {
-			return (this.pastEnd ? waiting.at() >= at : waiting.at() == at)
-					&& waiting.afterSeed() == this.afterSeed;
+			return this == PAST_END ? waiting.at() >= at : waiting.at() == at;
 		}
 	}
 
@@ -1516,8 +1514,74 @@ public final class PackChain {
 	}
 
 	/**
-	 * The half of the chain that belongs before the world's translucents: the begins, the prepares,
-	 * the scene seed and the whole deferred stage.
+	 * The begins, which are the head of the chain and belong ahead of the shadow stage.
+	 * <p>
+	 * <strong>The range before the world is cut in two, and the shadow stage stands in the
+	 * cut.</strong> Iris draws its begins at the head of the level render
+	 * ({@code pipeline/IrisRenderingPipeline.java:1014} from
+	 * {@code mixin/MixinLevelRenderer.java:123}), then its shadow map and the {@code shadowcomp}
+	 * stage that closes it ({@code shadows/ShadowRenderer.java:632-633}), and only then its prepares
+	 * ({@code pipeline/IrisRenderingPipeline.java:1025}, the last line of {@code renderShadows}).
+	 * Run together, one of the two ends up on the wrong side of the shadow map: a prepare reads what
+	 * the shadow stage of this frame has just written, and a begin reads what the frame before left.
+	 * <p>
+	 * Called once a frame, while the level's frame graph is being built, which is before any pass of
+	 * it executes and so before one triangle of the world is drawn. Called from {@link #drawEarly}
+	 * too, for the frames that moment came and went on without this being able to draw, and the
+	 * second call is free.
+	 */
+	public static void drawBegins() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (disabled || chain == null || device == null || !chainWanted) {
+			return;
+		}
+
+		try {
+			chain.drawBegins(device);
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
+	}
+
+	/**
+	 * The prepares, which belong behind the shadow stage and still before the world's opaque
+	 * geometry.
+	 * <p>
+	 * <strong>These passes write the targets the gbuffers write, so the order between them is the
+	 * picture.</strong> A prepare naming a draw buffer the terrain, the sky or the hand also names
+	 * is a full screen write over the very half they draw into. Run after them it replaces the whole
+	 * opaque world with a table the prepare builds out of uniforms, and what is left on screen is a
+	 * flat field the depth of the scene still shades: the ground gone, the hand gone and the sky no
+	 * longer the brightest thing in the frame.
+	 * <p>
+	 * Called once a frame, from the same moment the begins are and one line behind the shadow stage.
+	 * That is where Iris runs them: the last line of {@code renderShadows}
+	 * ({@code pipeline/IrisRenderingPipeline.java:1025}), which its level renderer mixin calls one
+	 * call ahead of the main pass being submitted ({@code mixin/MixinLevelRenderer.java:181-196}).
+	 * Called from {@link #drawEarly} too, on the same terms as the begins.
+	 */
+	public static void drawPrepares() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (disabled || chain == null || device == null || !chainWanted) {
+			return;
+		}
+
+		try {
+			chain.drawPrepares(device);
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
+	}
+
+	/**
+	 * The half of the chain that belongs before the world's translucents: the scene seed and the
+	 * whole deferred stage.
 	 * <p>
 	 * <strong>This is where the deferred stage really belongs, and it is not a refinement.</strong>
 	 * The OptiFine frame runs shadow, prepare, opaque geometry, deferred, translucent geometry,
@@ -1637,8 +1701,8 @@ public final class PackChain {
 	 * one line ahead of it.
 	 * <p>
 	 * The moment is Iris's and so is the reason. Its {@code beginHand} copies the depth and draws no
-	 * hand ({@code pipeline/IrisRenderingPipeline.java:1050-1057}); the solid hand is drawn on the
-	 * line after the call to it, by the mixin ({@code mixin/MixinLevelRenderer.java:279-280}); and the
+	 * hand ({@code pipeline/IrisRenderingPipeline.java:1043-1049}); the solid hand is drawn on the
+	 * line after the call to it, by the mixin ({@code mixin/MixinLevelRenderer.java:271-272}); and the
 	 * {@code beginTranslucents} that copies {@code depthtex1} comes one step behind both. So
 	 * {@code depthtex2} is the only depth of the pair the hand is missing from. A pack reads it to
 	 * see what the hand it is holding stands in front of, and served the image with the hand in it
@@ -1881,10 +1945,147 @@ public final class PackChain {
 		}
 	}
 
+	/**
+	 * Draws the begins, on the far plane and the depths of the frame before.
+	 * <p>
+	 * <strong>The depth names do not answer alike here, and Iris is why.</strong> Its
+	 * {@code depthtex0} is the game's own main depth texture, live
+	 * ({@code samplers/IrisSamplers.java:228-230} through
+	 * {@code targets/RenderTargets.java:139-141}), and the game empties that texture before the
+	 * level renderer is entered at all: {@code GameRenderer.render} clears the main colour and depth
+	 * ({@code GameRenderer.java:408-412}) and only then calls {@code renderLevel} ({@code :429}),
+	 * which is where the frame graph is built. So the name holds a cleared depth at this moment,
+	 * which is the far plane, and nothing of the frame before. Its {@code depthtex1} and
+	 * {@code depthtex2} are two copies Iris owns instead
+	 * ({@code targets/RenderTargets.java:143-153}), rewritten inside {@code beginTranslucents} and
+	 * {@code beginHand} ({@code pipeline/IrisRenderingPipeline.java:1063} and {@code :1048}), both
+	 * later in the frame, so those two really do hand the stage the frame before.
+	 * <p>
+	 * That is what is handed here. The far plane goes in as {@code depthtex0} by passing no image at
+	 * all, which is the answer this engine already gives a {@code dhDepthTex} on a frame with no far
+	 * terrain. {@code depthtex1} is the opaque image, which is not forgotten at the frame boundary
+	 * and so is the frame before's at this point of the frame; {@code depthtex2} and the far
+	 * terrain's two images are forgotten there, and {@link PackDepth#frameBefore} is what serves the
+	 * frame before's for the length of this range and takes them away again after it.
+	 */
+	private void drawBegins(GpuDevice device) {
+		if (this.begun) {
+			return;
+		}
+
+		// A place with nothing at all in this range is left alone entirely, and the early return is
+		// the whole of what keeps it so: everything below opens the frame, writes the blocks and
+		// clears the targets, and a place with neither family goes on paying all three at the moment
+		// it always paid them at rather than at the head of the frame. A compute standing on its own
+		// is something in the range: it is then all the range runs, and refusing it for want of a pass
+		// would drop the one thing the pack asked for there.
+		if (this.chain.chain().beginEnd() == 0 && !standing(Cut.AHEAD_OF_SHADOWS)) {
+			this.begun = true;
+
+			return;
+		}
+
+		Ready ready = ready(device);
+		if (ready == null) {
+			return;
+		}
+
+		this.begun = true;
+		drawBeforeWorld(device, ready, 0, beginEnd(), Cut.AHEAD_OF_SHADOWS);
+	}
+
+	/**
+	 * Draws the prepares, on the same depths the begins were drawn on: the shadow stage stands
+	 * between the two ranges and writes no depth of the world.
+	 */
+	private void drawPrepares(GpuDevice device) {
+		if (this.prepared) {
+			return;
+		}
+
+		// The same early return as the begins', on this range's own emptiness. Together the two keep
+		// a place with neither family out of the head of the frame entirely.
+		if (this.chain.chain().beginEnd() == this.chain.chain().prepareEnd()
+				&& !standing(Cut.BEFORE_WORLD)) {
+			this.prepared = true;
+
+			return;
+		}
+
+		Ready ready = ready(device);
+		if (ready == null) {
+			return;
+		}
+
+		this.prepared = true;
+		drawBeforeWorld(device, ready, beginEnd(), prepareEnd(), Cut.BEFORE_WORLD);
+	}
+
+	/**
+	 * Whether a compute stands alone in that cut, which is a range with work in it and no pass.
+	 * <p>
+	 * Read off the computes the pack shipped and never off {@link #standalone}, which says the same
+	 * thing but only once {@link #build} has filled it. Both callers are early returns that run
+	 * BEFORE {@link #ready}, and build() is inside ready(): read off the field, the answer on the
+	 * first drawable frame of every load is that the range is empty, so the range is latched and the
+	 * one dispatch it holds is lost for that frame, which is the very thing those early returns are
+	 * written not to do. The cut comes from the program's family here exactly as it does there, so
+	 * the two agree from the frame the field is filled on.
+	 */
+	private boolean standing(Cut cut) {
+		for (String program : this.compute.standingAlone()) {
+			if (Cut.of(program) == cut) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** One of the two ranges that run before the world, inside the window of the frame before. */
+	private void drawBeforeWorld(GpuDevice device, Ready ready, int from, int to, Cut cut) {
+		PackDepth depth = this.targets.depth();
+		depth.frameBefore(true, ready.main().width, ready.main().height);
+		try {
+			// Null for the far plane rather than an image, which is what the game has left in its own
+			// depth at this point of the frame. The far terrain's is read inside the window, so what
+			// goes in is the image the frame before drew and not the nothing this frame holds, and it
+			// is the one WITH the water: Iris hands dhDepthTex0 the live texture of Distant Horizons,
+			// which after a frame it drew holds the far terrain's water as well.
+			drawRange(device, ready, from, to, null, depth.distantScene(), false, cut);
+		} finally {
+			depth.frameBefore(false, ready.main().width, ready.main().height);
+		}
+	}
+
 	private void drawEarly(GpuDevice device) {
 		if (this.early) {
 			return;
 		}
+
+		// First, because a frame that never reached the graph's setup with a chain to draw still owes
+		// its begins and its prepares, and owes them before anything below reads what they wrote. On
+		// every ordinary frame both have already run and the two calls cost a field read each.
+		//
+		// WHICH FRAMES REACH THEM HERE, since the depth they read on this road is not the one they
+		// read on the other. The setup runs at the head of every level frame, LevelRenderer.render on
+		// Fabric and the frame graph event on NeoForge, so the only frames left to this line are the
+		// ones where the chain could not draw yet when the graph was built and can by now: the frame
+		// a load or a reload finishes warming on, ready() compiling one pipeline per call and being
+		// called twice a frame, and a frame the pack was turned on in the middle of.
+		//
+		// THE DIVERGENCE THAT LEAVES. Iris always draws them ahead of its own copies: its begins at
+		// IrisRenderingPipeline.java:1014 and its prepares at :1025, both before beginHand rewrites
+		// noHand at :1043-1048, so what they read for depthtex2 and for the far terrain is the frame
+		// before's whatever the frame did. Here EngineStages.java:227 and :237 have already taken
+		// both by the time this line is reached, so on these frames the window serves this frame's
+		// images instead of the previous frame's. It cannot be matched without keeping a second copy
+		// of each all frame long, which is a full screen image apiece to be right on the frames a
+		// pack finishes compiling. What it costs is that a prepare reading depthtex2 or dhDepthTex
+		// there sees the world of the frame it is opening rather than the one behind it, on the one
+		// frame per load where nothing else of the pack is on screen yet either.
+		drawBegins(device);
+		drawPrepares(device);
 
 		Ready ready = ready(device);
 		if (ready == null) {
@@ -1902,19 +2103,18 @@ public final class PackChain {
 				ready.depthView(), ready.main().width, ready.main().height);
 
 		// Here and not after the deferreds, because here is Iris's beginHand: it is called at the
-		// head of iris$beginTranslucents, MixinLevelRenderer.java:277-279, which is before the solid
+		// head of iris$beginTranslucents, MixinLevelRenderer.java:271, which is before the solid
 		// hand, before the world's translucents and before beginTranslucents runs the deferred
 		// stage. So the deferreds below read the value of THIS frame rather than of the one before.
 		// What is NOT the same is that the hand has already been drawn by the time this line is
 		// reached, which is why the fold reads the copy kept before it rather than the image the
 		// line above has just taken. Outside any render pass, since it opens one.
 		//
-		// The begins and the prepares are in the range below too, so they read this frame's texel
-		// where under Iris they would read the previous frame's: it runs both before beginHand,
-		// IrisRenderingPipeline.java:1022 and :1033, the prepares from inside renderShadows and so
-		// before the opaque world exists at all. That difference is where this chain runs its begins
-		// and prepares and not what this line decides, and no pack of the corpus declares the name
-		// in either family.
+		// The begins and the prepares are not in the range below. Both run ahead of beginHand under
+		// Iris: the begins at IrisRenderingPipeline.java:1014, the prepares at :1025 from inside
+		// renderShadows and so before the opaque world exists at all, beginHand itself at :1043. So
+		// what they read of this texel is the frame before's. drawBegins and drawPrepares run them at
+		// that same point of the frame here, and say which of the depth names is the frame before's.
 		sampleCenterDepth(device);
 		// Here because the opaque depth taken above is this frame's, and because the matrices have
 		// been advanced once for this frame already, so what the pass calls the previous pair really
@@ -1932,31 +2132,39 @@ public final class PackChain {
 			vectors.standDown();
 		}
 
+		int world = prepareEnd();
 		int end = deferredEnd();
 		if (!this.split) {
 			this.split = true;
 			// Said once, because the alternative is a chain that silently runs entirely after the
 			// world again: nothing on screen tells the two apart, and the pack that needs the split
-			// is the one whose water disappears.
+			// is the one whose water disappears. The first count is said apart from the second for
+			// the same kind of reason: a prepare run after the world writes over the gbuffers it was
+			// meant to be written over by, and that too looks like a pack of its own rather than
+			// like a misplaced stage.
 			//
-			// A place with no full screen pass says what it does instead. The line above would read
-			// as two noughts and an empty list, which is a chain that runs nothing at all, and what
-			// this one really runs is its computes: they are named, since a place that draws no pass
-			// has nothing else to be recognised by.
+			// A place with no full screen pass says what it does instead. The line below would read
+			// as three noughts and two empty lists, which is a chain that runs nothing at all, and
+			// what this one really runs is its computes: they are named, since a place that draws no
+			// pass has nothing else to be recognised by.
 			if (this.programs.isEmpty()) {
 				Vitrail.logger().info("This chain draws no full screen pass and runs its computes on "
 						+ "their own: {}", this.standalone.stream()
 								.map(Standalone::program)
 								.toList());
 			} else {
-				Vitrail.logger().info("{} of this chain run before the world's translucents, {} after: {}",
-						end, this.programs.size() - end,
-						this.programs.stream().limit(end).map(PackPass::path).toList());
+				Vitrail.logger().info("{} of this chain run before the world {}, {} more before its "
+						+ "translucents {}, {} after",
+						world, this.programs.stream().limit(world).map(PackPass::path).toList(),
+						end - world,
+						this.programs.stream().skip(world).limit(end - world).map(PackPass::path)
+								.toList(),
+						this.programs.size() - end);
 			}
 		}
 
-		drawRange(device, ready, 0, end, this.targets.depth().opaque(),
-				this.targets.depth().distantOpaque(), Cut.BEFORE_TRANSLUCENTS);
+		drawRange(device, ready, world, end, this.targets.depth().opaque(),
+				this.targets.depth().distantOpaque(), true, Cut.BEFORE_TRANSLUCENTS);
 	}
 
 	/**
@@ -1969,6 +2177,16 @@ public final class PackChain {
 	 */
 	private int deferredEnd() {
 		return Math.min(this.chain.chain().deferredEnd(), this.programs.size());
+	}
+
+	/** The same clamp on the boundary the world's opaque geometry is drawn at. */
+	private int prepareEnd() {
+		return Math.min(this.chain.chain().prepareEnd(), this.programs.size());
+	}
+
+	/** The same clamp on the boundary the shadow stage stands at, which the begins end on. */
+	private int beginEnd() {
+		return Math.min(this.chain.chain().beginEnd(), this.programs.size());
 	}
 
 	private void run() {
@@ -2013,7 +2231,7 @@ public final class PackChain {
 		}
 
 		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene(),
-				this.targets.depth().distantScene(), Cut.AFTER_TRANSLUCENTS);
+				this.targets.depth().distantScene(), true, Cut.AFTER_TRANSLUCENTS);
 
 		// After the whole chain and before the halves swap back, which is where a final would have
 		// drawn. Only on a pack that ships none; ChainPresent says what it stands in for.
@@ -2035,8 +2253,8 @@ public final class PackChain {
 	 * <strong>The opaque world's depth from before the hand</strong>, which is the copy
 	 * {@link #markPreHandDepth} keeps and not the image {@link #drawEarly} has just taken. Iris folds
 	 * the live depth attachment inside {@code beginHand}
-	 * ({@code pipeline/IrisRenderingPipeline.java:1051-1052}), which its level renderer mixin calls
-	 * on the line before the solid hand is drawn ({@code mixin/MixinLevelRenderer.java:279-280}), so
+	 * ({@code pipeline/IrisRenderingPipeline.java:1044}), which its level renderer mixin calls
+	 * on the line before the solid hand is drawn ({@code mixin/MixinLevelRenderer.java:271-272}), so
 	 * what it folds has no hand in it. This chain runs a step later, and folded from the image the
 	 * hand is in, one texel wide, the focus lands on the item being held whenever it covers the
 	 * middle of the screen and the whole scene behind it goes soft. The image with the hand is the
@@ -2151,7 +2369,13 @@ public final class PackChain {
 		return all;
 	}
 
-	/** The last rank the early cut carries, which is the rank the plan cuts the pass list at. */
+	/** The last rank the begins' cut carries, which is the rank the plan cuts the pass list at. */
+	private static final int BEGIN_RANK = ProgramNames.frameRank("begin");
+
+	/** The same for the prepares' cut, and the same boundary of the plan. */
+	private static final int PREPARE_RANK = ProgramNames.frameRank("prepare");
+
+	/** The same for the cut that ends on the world's translucents. */
 	private static final int DEFERRED_RANK = ProgramNames.frameRank("deferred");
 
 	/**
@@ -2166,29 +2390,50 @@ public final class PackChain {
 	 * a program that is not counted: Pegasus, whose whole chain is composites, has a {@code prepare}
 	 * compute at index nought and a boundary at nought, and the late cut's walk ran it after the
 	 * world.
+	 * <p>
+	 * <strong>The prepares are a cut of their own, and that is what answers for a compute of theirs
+	 * against the scene seed.</strong> Noble's world0 stands a {@code prepare} compute on the first
+	 * deferred pass, which is the index the seed is painted at. Carried by the cut its family names,
+	 * it is dispatched before the world is drawn at all, so there is no seed in that range for it to
+	 * fall on either side of; its world1, which ships the pass, runs the same step at the same moment.
 	 */
 	private enum Cut {
 
-		/** The begins, the prepares, the seed and the deferreds, before the world's translucents. */
+		/** The begins, drawn ahead of the shadow stage and before the world. */
+		AHEAD_OF_SHADOWS,
+
+		/** The prepares, drawn behind that stage and still before the world. */
+		BEFORE_WORLD,
+
+		/** The seed and the deferreds, drawn before the world's translucents. */
 		BEFORE_TRANSLUCENTS,
 
 		/** The composites and the final, drawn after them. */
 		AFTER_TRANSLUCENTS;
 
 		/**
-		 * Where the frame runs the family of that program. One comparison against the last rank a
-		 * cut carries, which is how another cut is added: the ranks are the same ranks and the
+		 * Where the frame runs the family of that program. One comparison against the last rank each
+		 * cut carries, which is how another cut is added: the ranks are the same ranks and every
 		 * boundary the frame graph draws is another line through them.
 		 */
 		static Cut of(String program) {
-			return rankOf(program) <= DEFERRED_RANK ? BEFORE_TRANSLUCENTS : AFTER_TRANSLUCENTS;
+			int rank = rankOf(program);
+			if (rank <= BEGIN_RANK) {
+				return AHEAD_OF_SHADOWS;
+			}
+
+			if (rank <= PREPARE_RANK) {
+				return BEFORE_WORLD;
+			}
+
+			return rank <= DEFERRED_RANK ? BEFORE_TRANSLUCENTS : AFTER_TRANSLUCENTS;
 		}
 	}
 
 	/**
 	 * Where the frame runs a program, read off its family and never off a position in a list: it is
-	 * what places a program the chain draws nothing for, both against the cut boundary and against
-	 * the scene seed.
+	 * what places a program the chain draws nothing for, against every boundary the frame is cut
+	 * at.
 	 */
 	private static int rankOf(String program) {
 		return ProgramNames.frameRank(ProgramNames.familyOf(TargetName.bareName(program)));
@@ -2197,24 +2442,19 @@ public final class PackChain {
 	/**
 	 * A compute of a program this place draws no pass for, with where the walk dispatches it.
 	 *
-	 * @param cut       the cut of the frame its family belongs to, which is the whole of what decides
-	 *                  whether it runs before the world's translucents or after them
-	 * @param at        the index in {@link #programs} of the first pass that runs after it, or the
-	 *                  length of the list where every pass of the chain runs before it. Past the end
-	 *                  of its own cut it is dispatched at that end, the cut being where the frame
-	 *                  stops carrying its family at all
-	 * @param program   the program it hangs off, which is the name its halves and its texture stage
-	 *                  are read under however little of it is drawn
-	 * @param step      the halves it reads, from {@link TargetSchedule#passing} and never from a
-	 *                  pass: there is none, and the step of the pass after it would carry the flips
-	 *                  of every stage opened in between
-	 * @param afterSeed whether the frame runs its family after the world, the scene seed standing at
-	 *                  the world's own rank. Past the last pass of its cut there is nothing left to
-	 *                  place it against, and this is the side of the seed a pass of its name would
-	 *                  have drawn on
+	 * @param cut     the cut of the frame its family belongs to, which is the whole of what decides
+	 *                which of the frame's four moments it runs at
+	 * @param at      the index in {@link #programs} of the first pass that runs after it, or the
+	 *                length of the list where every pass of the chain runs before it. Past the end of
+	 *                its own cut it is dispatched at that end, the cut being where the frame stops
+	 *                carrying its family at all
+	 * @param program the program it hangs off, which is the name its halves and its texture stage are
+	 *                read under however little of it is drawn
+	 * @param step    the halves it reads, from {@link TargetSchedule#passing} and never from a pass:
+	 *                there is none, and the step of the pass after it would carry the flips of every
+	 *                stage opened in between
 	 */
-	private record Standalone(Cut cut, int at, String program, TargetSchedule.Bound step,
-			boolean afterSeed) {
+	private record Standalone(Cut cut, int at, String program, TargetSchedule.Bound step) {
 	}
 
 	/**
@@ -2232,12 +2472,6 @@ public final class PackChain {
 	 * draws no full screen pass at all and ships five such computes, so all five stand on index
 	 * nought, and taken in the order their file names came out of the map its {@code deferred} ran
 	 * after its {@code composite3}.
-	 * <p>
-	 * Each carries which side of the scene seed its family falls on as well, for the index the seed
-	 * is painted at and for the end of a range, where the index has run out of passes to name and
-	 * the seed is the only thing left to be placed against. Noble's world0 paints the seed at index
-	 * nought and stands a {@code prepare} compute on that same index, so without the family the one
-	 * step ran after the world there and before it in its world1, which ships the pass.
 	 */
 	private List<Standalone> standaloneOf(List<PackPass> built) {
 		if (this.compute.standingAlone().isEmpty()) {
@@ -2262,8 +2496,7 @@ public final class PackChain {
 				at++;
 			}
 
-			waiting.add(new Standalone(Cut.of(program), at, program, step,
-					rankOf(program) > ProgramNames.GEOMETRY_RANK));
+			waiting.add(new Standalone(Cut.of(program), at, program, step));
 		}
 
 		waiting.sort(Comparator.comparing(Standalone::program, order));
@@ -2585,29 +2818,42 @@ public final class PackChain {
 		// The clocks, the counters and the previous frame's matrices move at the frame boundary and
 		// never here: two passes of one frame have to be handed the same numbers, or the second one
 		// silently reprojects against itself and a smooth() of the pack fades at twice the speed.
-		// A terrain program runs during the world, so it may already have opened this frame.
+		// Idempotent, and whoever gets here first pays it, WHICH IS OFTEN NOT THIS LINE. A pack with
+		// a begin opens the frame here, at the head of the level frame and one step ahead of the
+		// shadow stage. A pack with no begin and a shadow compute opens it at dispatchShadowCompute
+		// instead, PackChain.java:964, which stands between the two ranges and carries a reason of
+		// its own; a pack with a prepare and neither of those opens it here too, one step behind
+		// that stage. On a place with none of the three, the terrain opens it during the world and
+		// this is free.
 		beginFrame();
 
-		// Said rather than inherited. Every pass of the chain draws into a target the game rasterised
-		// under a reversed Z, and the shadow programs, which draw into one of ours and flip this to
-		// the forward window, have already run by the time this does.
+		// Said rather than inherited, and what makes it necessary is that the table is shared rather
+		// than the moment this line runs at. Every value below is left standing by whoever wrote it
+		// last and is put back by nothing in between: from the head of the frame, where a place with
+		// a begin or a prepare reaches this, that is the previous frame's shadow map, drawn at the
+		// tail of it under the forward window; from the deferred stage, where a place with none of
+		// the three still reaches it, that is this frame's sky, terrain and entities. The one flip
+		// this frame makes between the two ranges puts itself back, dispatchShadowCompute saying
+		// why. Every pass of the chain draws into a target the game rasterised under a reversed Z,
+		// whichever it was.
 		this.values.convention(ClipSpace.REVERSED);
 
 		// The same, and for a sharper reason: renderStage is in the table a full screen pass shares
-		// with a geometry one, and the sky, the terrain and the entities have all written theirs by the time
-		// this runs. Left standing, every composite of the frame would be told it was drawing the moon.
+		// with a geometry one, so a stage left standing is read by the whole chain. On the frames
+		// this runs after the sky it would tell every composite it was drawing the moon.
 		this.values.renderStage(RenderStage.NONE);
 
 		// And the same again for three of the four values a pass writes beside it, the alpha
 		// reference being the one kept, ViewSource.passAlphaTest saying why. Two geometry families
 		// set a matrix of their own: the sky pushes the rotation of the day, and the hand is drawn
 		// under an identity model view and sets a whole projection besides, the head-up volume with
-		// its clip depth squeezed to an eighth. Whichever drew last would
-		// otherwise stand in for the camera in every composite of the frame - the hand's case is
-		// the worst of the three, the squeezed volume reprojecting the whole screen - and in the
-		// decoded dump beside it. The frame boundary drops them as
-		// well and that is not the same guard: it drops them at the head of the frame, and every one
-		// of those families writes after it and before this.
+		// its clip depth squeezed to an eighth. Whichever set one last would otherwise stand in for
+		// the camera in every composite of the frame, and in the decoded dump beside it; the hand's
+		// case is the worst of the three, the squeezed volume reprojecting the whole screen.
+		//
+		// Nothing is owed in the other direction. GeometryProgram.writeBlock sets all of these again
+		// before every geometry block it writes, the convention and the render stage included, so
+		// what this line leaves neutral never reaches a pass of the world.
 		this.values.modelView(null, null);
 		this.values.passColour(null);
 		this.values.projection(null);

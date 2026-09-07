@@ -77,7 +77,7 @@ import java.util.Optional;
  * texture beside the other two ({@code targets/RenderTargets.java:73}), rebuilds it on a resize or
  * a depth format change like the pair ({@code targets/RenderTargets.java:172-178}) and refills it
  * once a frame, its copy being called unconditionally
- * ({@code targets/RenderTargets.java:234} from {@code pipeline/IrisRenderingPipeline.java:1056}).
+ * ({@code targets/RenderTargets.java:234} from {@code pipeline/IrisRenderingPipeline.java:1048}).
  * What a pack reads is the same either way, and that is
  * the whole of why the difference is allowed to stand: nothing between the two moments writes the
  * game's depth except the hand's own solid pass, so on a frame that draws no hand the two images
@@ -85,6 +85,52 @@ import java.util.Optional;
  * the difference buys is one full screen image and one conversion a frame, which arrive with
  * {@code hand=on} and go with it: {@link #forgetPreHand} hands the image back the frame the family
  * stops being this engine's, and the conversion is only paid on the frames a hand is really drawn.
+ * <p>
+ * <strong>The images a frame boundary forgets are still served to the one stage that runs before
+ * the world.</strong> The begins and the prepares are drawn while the level's frame graph is being
+ * built, so this frame has taken neither the pre-hand image nor the far terrain's yet, and what
+ * Iris hands those programs there is the frame before's: its {@code noHand} is only rewritten from
+ * inside {@code beginHand} ({@code pipeline/IrisRenderingPipeline.java:1043-1048}) and Distant
+ * Horizons' own depth only where that mod draws, both later in the frame, and neither image is
+ * emptied in between, each name resolving to a texture nothing clears
+ * ({@code targets/RenderTargets.java:151-153} and {@code compat/dh/DHCompatInternal.java:256-258}).
+ * {@link #frameBefore} opens that window here and closes it again. It costs nothing: the
+ * forgettings already lower a flag and leave the image where it was, so what the stage is served is
+ * memory this class was holding anyway, no second conversion is paid for it, and every reader after
+ * the window goes on finding nothing until this frame has filled the image itself.
+ * <p>
+ * <strong>What the window may serve is the frame before and never a frame older than that</strong>,
+ * which is the whole of what the kept flags are for. They are raised at the frame boundary out of
+ * the per frame flags rather than at the take, so each of them says that the frame just ended
+ * really filled that image and nothing weaker.
+ * <p>
+ * The hand's is the one the difference is sharpest on. Iris copies {@code noHand} on every frame
+ * whether a hand is drawn or not, the call sitting at the head of {@code beginHand} and
+ * {@code beginHand} being made unconditionally ({@code mixin/MixinLevelRenderer.java:271}), so what
+ * its {@code depthtex2} holds at the head of a frame is always the opaque world of the frame before
+ * without the hand. Here the image is only taken on the frames a hand is really drawn, so the
+ * window serves it when the frame before drew one and falls through to the opaque image when it did
+ * not, and the fall through is the same depth to the bit: nothing between the two takes writes the
+ * game's depth except the hand's own solid pass, which drew nothing on such a frame. What the
+ * window must never do is serve that image across a run of frames that drew no hand, which is a
+ * pre-hand depth as old as the last held item.
+ * <p>
+ * The far terrain's is the same rule against a different reference. Iris's {@code dhDepthTex0} is
+ * DH's live texture and nothing of Iris's own ({@code compat/dh/DHCompatInternal.java:256-258},
+ * attached at {@code :166-172} from the event that fires as DH clears it), so it holds the far
+ * terrain of the frame before wherever DH drew that frame, water included, and answers texture
+ * nought where DH is absent or its rendering off ({@code compat/dh/DHCompat.java:153-154}). The
+ * window follows both halves: the frame before's images when it drew the far terrain, the far plane
+ * when it did not. {@link #distantScene} is what {@code dhDepthTex0} reads there and
+ * {@link #distantOpaque} what {@code dhDepthTex1} reads, which is the pair Iris keeps and costs no
+ * copy that was not taken already.
+ * <p>
+ * <strong>A screen that moved between the two frames drops what it outgrew.</strong> Every
+ * {@code ensure} of this class runs at take time, which is later in the frame than the window, so a
+ * frame opened at a new size would otherwise find the kept images at the old one and stretch a
+ * depth over the screen rather than fail. Dropping them costs the far plane for one frame, and it
+ * is the cheap half of the choice: resizing them at the window would allocate a full screen image
+ * inside the frame graph build to hold a depth that is about to be retaken anyway.
  */
 final class PackDepth {
 
@@ -245,6 +291,30 @@ final class PackDepth {
 	 */
 	private boolean distantOpaqueWritten;
 	private boolean distantSceneWritten;
+
+	/**
+	 * Whether the third image and the far terrain's pair hold the depth of the frame that has just
+	 * ended, which is the one thing the three per frame flags above cannot say once they are down.
+	 * <p>
+	 * Raised at the frame boundary out of those flags and nowhere else, which is what keeps them
+	 * exactly one frame wide: an image the boundary has forgotten still holds the frame before's
+	 * depth, but only if that frame is the one that filled it, where a fresh image holds whatever
+	 * the driver left there and an image several frames old holds a camera that has moved on. They
+	 * are only ever served inside {@link #frameBefore}'s window.
+	 */
+	private boolean preHandKept;
+	private boolean distantOpaqueKept;
+	private boolean distantSceneKept;
+
+	/**
+	 * Whether the reader is the stage that runs before the world's opaque geometry, which is the one
+	 * window the two images above are served through.
+	 * <p>
+	 * A moment of the frame and not a property of the pass, which is why it is a latch here rather
+	 * than an argument on every draw: a begin, a prepare and a compute hanging off either all ask
+	 * the same question at that point of the frame, and all three want the same answer.
+	 */
+	private boolean frameBefore;
 
 	private boolean broken;
 
@@ -423,9 +493,16 @@ final class PackDepth {
 	 * width, a refusal already logged at this size and being met again, and {@link #fill} finding no
 	 * quad, no live depth or no image to draw into. None of them is a state a line would add
 	 * anything to.
+	 * <p>
+	 * Inside {@link #frameBefore}'s window it is the frame before's image instead, and only when
+	 * that frame is the one that filled it. A frame before that drew no hand falls through to the
+	 * opaque image with the rest, which is the same depth to the bit on such a frame; the class
+	 * comment says why that is the answer there and a held image several frames old is not.
 	 */
 	GpuTextureView preHand() {
-		return this.preHandWritten ? this.preHand.view() : null;
+		return this.preHandWritten || (this.frameBefore && this.preHandKept)
+				? this.preHand.view()
+				: null;
 	}
 
 	/**
@@ -446,14 +523,30 @@ final class PackDepth {
 	/**
 	 * The far terrain's depth without its water, or null while this frame has none. Null falls back
 	 * to the far plane, which is what the name answered before the pack drew the far terrain at all.
+	 * <p>
+	 * Inside {@link #frameBefore}'s window it is the frame before's image, on the same argument as
+	 * the one above: the far terrain of this frame has not been drawn yet when the stage runs, and
+	 * a frame before that drew none leaves the far plane rather than an older far terrain.
 	 */
 	GpuTextureView distantOpaque() {
-		return this.distantOpaqueWritten ? this.distantOpaque.view() : null;
+		return this.distantOpaqueWritten || (this.frameBefore && this.distantOpaqueKept)
+				? this.distantOpaque.view()
+				: null;
 	}
 
-	/** The far terrain's depth with its water in, or null while this frame has none. */
+	/**
+	 * The far terrain's depth with its water in, or null while this frame has none.
+	 * <p>
+	 * Inside {@link #frameBefore}'s window it is the frame before's image, which is what makes it
+	 * the answer for {@code dhDepthTex0} there rather than the one without the water: Iris hands
+	 * that name DH's own live texture, and after a frame DH drew, that texture holds the far terrain
+	 * with its water. The image is retaken on every frame the far terrain is served, so keeping it
+	 * across the boundary costs a flag and no copy.
+	 */
 	GpuTextureView distantScene() {
-		return this.distantSceneWritten ? this.distantScene.view() : null;
+		return this.distantSceneWritten || (this.frameBefore && this.distantSceneKept)
+				? this.distantScene.view()
+				: null;
 	}
 
 	/**
@@ -461,10 +554,64 @@ final class PackDepth {
 	 * hand's image is forgotten there: they are only filled on the frames the pack really drew the
 	 * far terrain, so a flag left standing would serve a stale one. The memory stays, like the
 	 * hand's, because the frames that fill it again are every frame Distant Horizons draws.
+	 * <p>
+	 * What the boundary keeps is exactly what this frame filled, so that the window before the next
+	 * world serves the frame before and a frame that drew no far terrain leaves the far plane there.
 	 */
 	void forgetDistant() {
+		this.distantOpaqueKept = this.distantOpaqueWritten;
+		this.distantSceneKept = this.distantSceneWritten;
 		this.distantOpaqueWritten = false;
 		this.distantSceneWritten = false;
+	}
+
+	/**
+	 * Opens or closes the window in which {@link #preHand}, {@link #distantOpaque} and
+	 * {@link #distantScene} answer with the image the frame before left, which is the range of the
+	 * chain that runs ahead of the world's opaque geometry and nothing else.
+	 * <p>
+	 * The caller closes it in a {@code finally}: left open, a pass drawn later in the frame would
+	 * read a depth one frame of camera movement out of date, which is the one kind of picture this
+	 * class is built to refuse.
+	 * <p>
+	 * The size is the screen the stage is about to draw at, and opening the window drops every kept
+	 * image that is not at it. The class comment says why dropping them is the answer here and
+	 * resizing them at the window is not. Read only while opening: closing the window has nothing to
+	 * decide.
+	 */
+	void frameBefore(boolean before, int width, int height) {
+		this.frameBefore = before;
+
+		if (before) {
+			dropOutgrown(width, height);
+		}
+	}
+
+	/**
+	 * Forgets every image the screen has moved away from, so that the window serves the far plane
+	 * for the one frame rather than a depth of the right numbers at the wrong size. Each of them is
+	 * reallocated at its own take later in this frame, where {@code ensure} already stood.
+	 */
+	private void dropOutgrown(int width, int height) {
+		if (outgrown(this.opaque, width, height)) {
+			this.opaqueWritten = false;
+		}
+
+		if (outgrown(this.preHand, width, height)) {
+			this.preHandKept = false;
+		}
+
+		if (outgrown(this.distantOpaque, width, height)) {
+			this.distantOpaqueKept = false;
+		}
+
+		if (outgrown(this.distantScene, width, height)) {
+			this.distantSceneKept = false;
+		}
+	}
+
+	private static boolean outgrown(TargetSurface surface, int width, int height) {
+		return surface != null && (surface.width() != width || surface.height() != height);
 	}
 
 	/**
@@ -483,16 +630,23 @@ final class PackDepth {
 	 * built again at every one of them would trade one full screen image, whose real size
 	 * {@link #ensurePreHand} prints, for an allocation a frame.
 	 *
+	 * What the boundary keeps is exactly what this frame filled, and that is the difference between
+	 * a window one frame wide and one arbitrarily deep: on a run of frames that drew no hand - third
+	 * person, empty hands - the flag falls with the first of them, and the window before the next
+	 * world reads the opaque image, which on such a frame is the pre-hand depth itself.
+	 *
 	 * @param held whether the hand is still this engine's to draw, which is the load's answer and
 	 *             not the frame's: it goes false when the family is turned off in the options and
 	 *             when {@code EntityDraw} drops it mid session after a failed draw, and the image
 	 *             has nothing left to be for in either case
 	 */
 	void forgetPreHand(boolean held) {
+		this.preHandKept = this.preHandWritten;
 		this.preHandWritten = false;
 
 		if (!held) {
 			this.preHand = close(this.preHand);
+			this.preHandKept = false;
 			this.preHandBroken = false;
 		}
 	}
@@ -507,6 +661,8 @@ final class PackDepth {
 		this.distantScene = close(this.distantScene);
 		this.distantOpaqueWritten = false;
 		this.distantSceneWritten = false;
+		this.distantOpaqueKept = false;
+		this.distantSceneKept = false;
 		this.distantBroken = false;
 	}
 
@@ -524,6 +680,7 @@ final class PackDepth {
 		this.opaqueWritten = false;
 		this.sceneWritten = false;
 		this.preHandWritten = false;
+		this.preHandKept = false;
 		this.preHandBroken = false;
 	}
 
@@ -607,6 +764,9 @@ final class PackDepth {
 		}
 
 		try {
+			// The kept flag falls with the surface it described, or the stage that runs before the
+			// world would dereference an image this very line has just closed.
+			this.preHandKept = false;
 			this.preHand = close(this.preHand);
 			this.preHand =
 					new TargetSurface("Vitrail depth before the hand", FORMAT, false, width, height);
@@ -667,6 +827,8 @@ final class PackDepth {
 			// very block has just closed.
 			this.distantOpaqueWritten = false;
 			this.distantSceneWritten = false;
+			this.distantOpaqueKept = false;
+			this.distantSceneKept = false;
 			this.distantOpaque = close(this.distantOpaque);
 			this.distantScene = close(this.distantScene);
 			this.distantOpaque = new TargetSurface("Vitrail far terrain depth before its water",

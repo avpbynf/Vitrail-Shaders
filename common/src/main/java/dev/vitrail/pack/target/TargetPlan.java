@@ -809,13 +809,14 @@ public final class TargetPlan {
 	 * <p>
 	 * The scene seed carries in what this engine still leaves to the game - the entities above all,
 	 * already lit and already tone mapped - so this is where that seed goes. It is the point OptiFine
-	 * draws the world at, which is not where the families this engine does draw fill their targets:
-	 * the chunk renderer has finished with the opaque ones before the first pass of the chain runs.
+	 * draws the world at, and it is where the families this engine draws fill their targets too: the
+	 * begins and the prepares run while the level's frame graph is being built, and the chunk
+	 * renderer fills the opaque targets after them and inside it.
 	 * It is answered here rather than downstream because {@link #running()} holds no geometry
 	 * to mark the spot, and a frame that painted the seed anywhere else would contradict the very
 	 * schedule that gave it its half: a begin or a prepare writing the same target would land on
 	 * the wrong side of it, and one sampling it would be handed this frame's world where the walk
-	 * says it reads a clear colour.
+	 * says it reads what the frame before left.
 	 */
 	public int geometryAt() {
 		return this.geometryAt;

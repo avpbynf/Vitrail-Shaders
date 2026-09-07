@@ -134,7 +134,7 @@ public final class EngineStages {
 	 * at the end of the frame, for the next one, and this is what the stage needs from here.
 	 * <p>
 	 * It is also the top of the level frame, which is a second thing entirely and is why the first
-	 * line below has nothing to do with the two arguments.
+	 * and the last lines below have nothing to do with the two arguments.
 	 */
 	public static void frameGraphSetup(Matrix4fc modelView, Vec3 cameraPosition) {
 		// First, and before the shadow question below can send this line home: the graph is being
@@ -145,10 +145,32 @@ public final class EngineStages {
 		// mob first comes on screen.
 		PbrTextures.load();
 
-		if (!TerrainDraw.shadows()) {
-			return;
+		// The begins ahead of the shadow stage and the prepares behind it, which is the order
+		// OptiFine runs them in and the order Iris keeps: its begins are the head of the level render
+		// (pipeline/IrisRenderingPipeline.java:1014, from mixin/MixinLevelRenderer.java:123), its
+		// shadow map and the shadowcomp stage that closes it come next
+		// (pipeline/IrisRenderingPipeline.java:1020-1024 over shadows/ShadowRenderer.java:632-633),
+		// and its prepares are the last line of renderShadows (:1025). Drawn as one range on either
+		// side of the shadow stage, one of the two families reads the wrong frame of what that stage
+		// writes: a prepare is meant to read this frame's shadow work, a begin the frame before's.
+		//
+		// Both are outside the shadow gate, because a place with no shadow map still has begins and
+		// prepares, and they belong before the world whether or not anything was drawn from the
+		// light.
+		PackChain.drawBegins();
+
+		if (TerrainDraw.shadows()) {
+			shadowStage(modelView, cameraPosition);
 		}
 
+		PackChain.drawPrepares();
+	}
+
+	/**
+	 * What the shadow map's own stage owes at the head of the level frame, which is only reached
+	 * while a pack draws one.
+	 */
+	private static void shadowStage(Matrix4fc modelView, Vec3 cameraPosition) {
 		ShadowTerrain.capture(modelView, cameraPosition);
 
 		// The pack's shadow compute, HERE at the head of the frame and not beside the shadow map
@@ -183,8 +205,9 @@ public final class EngineStages {
 	 * that: three lines later it copies a depth between two targets, which refuses outright inside
 	 * a pass.
 	 * <p>
-	 * Runs the half of the pack's chain that belongs before the world's translucents: the begins,
-	 * the prepares, the scene seed and the deferred stage. Then redirects the game's translucent
+	 * Runs the half of the pack's chain that belongs before the world's translucents: the scene seed
+	 * and the deferred stage. The begins and the prepares are not in it, having run at the head of
+	 * the frame where the world had yet to be drawn over them. Then redirects the game's translucent
 	 * features into the layer that hands them to the pack's image.
 	 * <p>
 	 * The placement itself and not a refinement of it. BSL's {@code gbuffers_water} reads
@@ -209,7 +232,7 @@ public final class EngineStages {
 		// above has just closed, and BEFORE the deferred stage the last line runs. That is exactly
 		// where Iris puts it, copyPreHandDepth included: beginHand copies, renderSolid draws, and
 		// beginTranslucents then runs the deferreds behind both
-		// (mixin/MixinLevelRenderer.java:277-283, pipeline/IrisRenderingPipeline.java:1051-1073).
+		// (mixin/MixinLevelRenderer.java:271-274, pipeline/IrisRenderingPipeline.java:1043-1065).
 		// Drawn after the deferreds instead, the hand would write gbuffers nothing would ever read.
 		PackChain.markPreHandDepth();
 		HandDraw.drawSolid();
@@ -240,8 +263,8 @@ public final class EngineStages {
 	public static void afterLevel() {
 		// The hand's blending half, before the chain and never after it: what it draws has to be in
 		// the picture the composites read, and this stage is the last moment it can be. Iris draws it
-		// at the same place, one line ahead of its own finalizeLevelRendering
-		// (mixin/MixinLevelRenderer.java:170-179).
+		// at the same place, at the head of the call that ends its level render and so ahead of its
+		// own finalizeLevelRendering (mixin/MixinLevelRenderer.java:162 ahead of :168).
 		HandDraw.drawTranslucent();
 
 		// Nothing is drawn when no pack can be: the game's own image is a better answer than

@@ -117,6 +117,15 @@ what the next one holds.
 
 ### Fixed
 
+- **The world is no longer painted over by the stage meant to run before it.** Some packs open the
+  frame with a "prepare" stage, whose job is to fill a table the rest of the frame reads. It ran
+  once the world was already drawn instead of ahead of it, so on a pack whose prepare fills the very
+  image its terrain, its sky or its hand draws into, that table replaced all of them. On MakeUp
+  UltraFast and on E-LITE the ground vanished behind a pale blue field, the held item was not there
+  and the sky stopped being the brightest thing on screen. The stage now runs at the head of the
+  frame, where the world lands over it, and the begin stage that opens it runs ahead of the shadow
+  map rather than behind it.
+
 - **Switching packs no longer leaves graphics memory behind on packs that use compute shaders.**
   A pack can attach a compute program to a step of its chain, and those programs kept their
   pipelines and their buffers when the pack was replaced, so every switch and every press of the
@@ -127,9 +136,9 @@ what the next one holds.
 - **A compute a pack ships for a step of the chain that draws nothing now runs.** It was left out
   on the grounds that there was no pass to run it before; it is now dispatched on its own, at the
   moment the program it hangs off would have run at, which is what Iris does with it: its family
-  says whether that falls before the world's translucents or after them, and its name says where it
-  lands among the passes drawn there. A pack reaches that state by shipping the compute and no
-  drawing program for the step, or by shipping one and switching it off itself, its switch never
+  says whether that falls before the world, before its translucents or after them, and its name says
+  where it lands among the passes drawn there. A pack reaches that state by shipping the compute and
+  no drawing program for the step, or by shipping one and switching it off itself, its switch never
   naming the compute file. A pack may go further and build every one of its worlds out of such
   computes with no full screen pass at all, which used to stop its chain before the first frame:
   RenderPearl is written that way. Noble computes the sun's illuminance and the sky's coefficients
