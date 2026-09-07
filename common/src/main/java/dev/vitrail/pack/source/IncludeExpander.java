@@ -150,7 +150,7 @@ public final class IncludeExpander {
 		expandFile(entry, 0, state);
 
 		ExpandedUnit unit = new ExpandedUnit(relative, List.copyOf(state.output), state.version,
-				state.toStats(), state.live);
+				state.toStats(), state.live, state.defines);
 		if (this.partOfALoad) {
 			LoadClock.expansion(System.nanoTime() - began);
 			this.source.rememberUnit(this.settings, relative, unit);
@@ -628,9 +628,18 @@ public final class IncludeExpander {
 	 *             branch nobody takes makes it unconditional, and packs do declare the same name
 	 *             as a uniform in one branch and as an ordinary global in the other. Conditional
 	 *             lines themselves count as taken; they are directives, never declarations.
+	 * @param defines what the names of the unit stand for once the whole of it has been read: the
+	 *             engine's own symbols, then every {@code #define} the taken branches declare with
+	 *             the player's settings already applied to it, and none of the ones an
+	 *             {@code #undef} took back. The text keeps the names as the pack wrote them,
+	 *             because the compiler substitutes them itself; a reader that has to know a value
+	 *             BEFORE anything is compiled, as the dispatch size of a compute program is, has
+	 *             nowhere else to read it. It is the table as the last line of the unit leaves it,
+	 *             so a name the pack declares twice reads as its second declaration wherever it is
+	 *             used, which is the one shape a preprocessor would answer differently
 	 */
 	public record ExpandedUnit(String entry, List<String> lines, String version,
-			ExpansionStats stats, BitSet live) {
+			ExpansionStats stats, BitSet live, Map<String, String> defines) {
 
 		/**
 		 * Copied in and copied out, a {@link BitSet} being mutable. In on its own was enough while
@@ -638,9 +647,13 @@ public final class IncludeExpander {
 		 * to every walk of a load that asks for it, a reader that set a bit would set it for all
 		 * the others too, and the key a translation is found on disk by is taken over this set,
 		 * so a stray bit moves which cached program a unit lands on.
+		 * <p>
+		 * The define table is copied for the same reason: what is handed in is the mutable table the
+		 * expander kept in step with the text line by line.
 		 */
 		public ExpandedUnit {
 			live = (BitSet) live.clone();
+			defines = Map.copyOf(defines);
 		}
 
 		@Override
