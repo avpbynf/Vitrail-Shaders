@@ -62,12 +62,22 @@ line is read before any of its programs is translated, so a refusal names what t
 and did not get, the log listing them, rather than the symptom that would have come later. Every
 name Reverie declares is served now, so it is no longer refused there.
 
-**Any name this engine has not built refuses the declaration.** Five names are built and served
-today, `BLOCK_EMISSION_ATTRIBUTE`, `CUSTOM_IMAGES`, `HIGHER_SHADOWCOLOR`,
-`SEPARATE_HARDWARE_SAMPLERS` and `SSBO`, so a pack that requires those alone loads, and every
-other name still refuses the pack, with the list in the log. The served flags are also the only
-`IRIS_FEATURE_` defines a pack finds: a capability define is a promise, so each appears the day
-its feature is served and not before, and the optional declarations keep reading the truth.
+**Any name this engine has not built refuses the declaration.** The names built and served today
+are `BLOCK_EMISSION_ATTRIBUTE`, `COMPUTE_SHADERS`, `CUSTOM_IMAGES`, `HIGHER_SHADOWCOLOR`,
+`PER_BUFFER_BLENDING`, `SEPARATE_HARDWARE_SAMPLERS` and `SSBO`, so a pack that requires those
+alone loads, and every other name still refuses the pack, with the list in the log. The served
+flags are also the only `IRIS_FEATURE_` defines a pack finds: a capability define is a promise, so
+each appears the day its feature is served and not before, and the optional declarations keep
+reading the truth.
+
+One of those names is the device's answer rather than the engine's. `PER_BUFFER_BLENDING` lets a
+pack give one of the targets a pass writes a different blend function from the others, and Vulkan
+allows two attachments of one pass to differ only where the driver has `independentBlend`. Where it
+has not, the name is refused and the whole-program function stands on every target the pass writes.
+Iris withholds the name where its own API cannot part the targets either, its driver needing
+`ARB_draw_buffers_blend` or OpenGL 4.0. Same rule, asked of a different API: one is a Vulkan device
+feature and the other a GL extension, and a machine can be told yes by one and no by the other, so
+a pack refused here is not for that reason refused there.
 
 Iris refuses a required flag only when the name is unknown to it or the hardware cannot serve
 it, and it has built every one of the ones Reverie asks for: some outright, some wherever the
@@ -102,12 +112,14 @@ message is one of its passes, and it is drawn because a capability test in its c
 
 The test reads capability defines. This engine announces itself the way Iris does, but a capability
 define is a promise, so it defines only what the backend actually serves, which today is
-`IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE`, `IRIS_FEATURE_CUSTOM_IMAGES`,
-`IRIS_FEATURE_HIGHER_SHADOWCOLOR`, `IRIS_FEATURE_SEPARATE_HARDWARE_SAMPLERS` and
-`IRIS_FEATURE_SSBO` and nothing else. The section above says why the features behind the other
-names are closed. A pack that finds the announcement without the capability it wants concludes it
-is running on OptiFine, the only renderer in that position when the pack was written, and words
-its message for it. Read "OptiFine" as "not Iris" and the message is accurate.
+`IRIS_FEATURE_BLOCK_EMISSION_ATTRIBUTE`, `IRIS_FEATURE_COMPUTE_SHADERS`,
+`IRIS_FEATURE_CUSTOM_IMAGES`, `IRIS_FEATURE_HIGHER_SHADOWCOLOR`,
+`IRIS_FEATURE_SEPARATE_HARDWARE_SAMPLERS`, `IRIS_FEATURE_SSBO` and, where the driver parts the
+blend state of one attachment from the next, `IRIS_FEATURE_PER_BUFFER_BLENDING`, and nothing else.
+The section above says why the features behind the other names are closed. A pack that finds the
+announcement without the capability it wants concludes it is running on OptiFine, the only
+renderer in that position when the pack was written, and words its message for it. Read "OptiFine"
+as "not Iris" and the message is accurate.
 
 Complementary was the pack of the test set that did this, and it is why the define exists. Its
 colored lighting, which its two top profiles Very High and Ultra turn on, is voxel lighting:

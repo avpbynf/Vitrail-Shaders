@@ -820,6 +820,14 @@ final class ColorTargets {
 	}
 
 	/**
+	 * The same for the attachment holding that rank among the program's draw buffers, which is what
+	 * a {@code blend.<program>.<buffer>} directive lands on. Null when neither form says anything.
+	 */
+	BlendMode blend(String program, int rank) {
+		return this.plan.blend(program, rank).orElse(null);
+	}
+
+	/**
 	 * Which targets one program reads at a lod, narrowed to those that carry a chain.
 	 * <p>
 	 * Per program and not the union, because this is what decides when a chain is rebuilt. A chain

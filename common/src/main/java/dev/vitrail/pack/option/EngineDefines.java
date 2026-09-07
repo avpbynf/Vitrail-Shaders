@@ -107,17 +107,20 @@ public final class EngineDefines {
 	 * @param textureFormat   what the resource pack declares its material maps are drawn in, null
 	 *                        where it declares nothing or names a convention this engine has no
 	 *                        symbol for
+	 * @param bufferBlending  whether the device lets two attachments of one pass blend differently.
+	 *                        A device answer and not an engine one, which is why it travels with
+	 *                        the vendor and the renderer rather than being read here
 	 */
 	public record Environment(int mcVersion, Os os, String vendorName, String rendererName,
 			int mipmapLevel, boolean distantHorizons, Map<String, Integer> biomes,
-			List<String> biomeCategories, TextureFormat textureFormat) {
+			List<String> biomeCategories, TextureFormat textureFormat, boolean bufferBlending) {
 
 		/** What a caller with no resource pack to ask hands over: {@link #of}, and the harness. */
 		public Environment(int mcVersion, Os os, String vendorName, String rendererName,
 				int mipmapLevel, boolean distantHorizons, Map<String, Integer> biomes,
 				List<String> biomeCategories) {
 			this(mcVersion, os, vendorName, rendererName, mipmapLevel, distantHorizons, biomes,
-					biomeCategories, null);
+					biomeCategories, null, false);
 		}
 
 		public static Environment of(int mcVersion) {
@@ -217,10 +220,24 @@ public final class EngineDefines {
 		// left to test, as with the storage blocks above.
 		defines.put("IRIS_FEATURE_COMPUTE_SHADERS", "");
 
-		// The rest of IRIS_FEATURE_ stays unposted until each capability is served, and each of the
-		// five above is posed for every pack. That is a divergence: Iris poses IRIS_FEATURE_X only
-		// where the pack itself listed X under iris.features.optional
-		// (shaderpack/ShaderPack.java:247-251), its all-usable list serving the evaluation of
+		// Per buffer blending is served where the DEVICE serves it, which is the one symbol here
+		// that is not posed for every machine: a blend.<program>.<buffer> directive is built into
+		// the attachment whose rank its target holds (render/GeometryProgram.state), and two
+		// attachments of one Vulkan pipeline carry two blend states only under independentBlend.
+		// Iris withholds its own flag where ITS api cannot part them either, the driver having to
+		// carry ARB_draw_buffers_blend or OpenGL 4.0 (features/FeatureFlags.java:15,
+		// IrisRenderSystem.supportsBufferBlending). Same rule over a different question: a Vulkan
+		// device feature and a GL extension are asked of two APIs, so the machines the two engines
+		// withhold the symbol from are not the same set.
+		if (environment.bufferBlending()) {
+			defines.put("IRIS_FEATURE_PER_BUFFER_BLENDING", "");
+		}
+
+		// The rest of IRIS_FEATURE_ stays unposted until each capability is served, and every name
+		// above but the per buffer one is posed for every pack, that one following the device as
+		// said just above. That is a divergence: Iris poses IRIS_FEATURE_X only where the pack
+		// itself listed X under iris.features.optional
+		// (shaderpack/ShaderPack.java:246-250), its all-usable list serving the evaluation of
 		// shaders.properties and nothing in the GLSL (lines 171-175). The two differ only for a
 		// pack that reads a symbol it never declared, and closing it is a lot of its own. See
 		// ShaderProperties.declares for the declaration itself, and PackChain for what a pack

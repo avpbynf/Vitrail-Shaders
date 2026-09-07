@@ -23,6 +23,18 @@ what the next one holds.
 
 ### Added
 
+- **A pack may now blend one of a pass's targets differently from the others.** A shader pack can
+  ask for a blend function per target rather than one for the whole program, and the engine read
+  those lines and then dropped them the moment two targets of one pass disagreed, putting the
+  program's plain function on all of them. Each line now lands on the target it names, which is
+  what decides the shape of anything drawn over something else: an overlay that should multiply, a
+  surface that should add, a second target written straight through while the first blends. The
+  shadow map is in, the same as anywhere else.
+
+  With it, `PER_BUFFER_BLENDING` is served, so that name alone no longer turns a pack away. It
+  needs a driver that lets the targets of one pass differ; where there is none the name is refused
+  as before and the whole-program function stands, which is the ground Iris refuses it on too.
+
 - **Temporal Fold, a new setting on the engine page.** A world drawn at a lower render scale loses
   the thin things first, and those are what crawls as you move: distant leaves, fences, the far
   edges of terrain. The upscale cannot put them back, because it only sees one frame. This blends
