@@ -28,10 +28,11 @@ what the next one holds.
   to fill it every frame, so the engine refuses the reuse there and says so once in the log. What
   is left is every pack that does not, and the same packs with coloured lighting off.
 
-  The price, where it applies, is on shadows of things that MOVE, a mob, a boat, your own shadow,
-  which are as many frames late as the setting keeps. One frame is what it ships at and is not
-  visible in play; the slider goes to two and stops there. Turning it off restores the previous
-  behaviour exactly.
+  What is kept is the ground alone. Everything that moves, a mob, a boat, your own shadow, is drawn
+  into the kept map afresh on every frame, so none of it is ever late. The price is on the ground
+  itself: a block you place or break casts the shadow it had for as many frames as the setting
+  keeps. One frame is what it ships at and is not visible in play; the slider goes to two and stops
+  there. Turning it off restores the previous behaviour exactly.
 
 - **A pack that ships no `final` program now draws.** Some packs end their chain on their last
   composite and expect what it wrote to be the picture; they were refused outright, with nothing on
