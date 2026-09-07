@@ -13,14 +13,6 @@ what the next one holds.
 
 ## Unreleased
 
-### Fixed
-
-- **A pack's quality profile is named again instead of reading "Custom".** A profile can list a
-  setting the pack does not actually have, and one such name was enough to stop the profile from
-  ever being recognised: the shader screen and the F3 overlay both fell back to "Custom" on a pack
-  nobody had touched, and the profile buttons could never land on a name. Photon is the pack this
-  showed on, where all four of its profiles now read as themselves.
-
 ### Added
 
 - **A pack may now blend one of a pass's targets differently from the others.** A shader pack can
@@ -110,6 +102,12 @@ what the next one holds.
   gained.
 
 ### Fixed
+
+- **A pack's quality profile is named again instead of reading "Custom".** A profile can list a
+  setting the pack does not actually have, and one such name was enough to stop the profile from
+  ever being recognised: the shader screen and the F3 overlay both fell back to "Custom" on a pack
+  nobody had touched, and the profile buttons could never land on a name. Photon is the pack this
+  showed on, where all four of its profiles now read as themselves.
 
 - **A pack reloaded while you play no longer comes back with the world drawn in one colour.** On
   Photon with its coloured lighting on, most reloads left the world with no red and no blue in it
