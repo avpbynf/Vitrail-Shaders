@@ -65,15 +65,22 @@ import java.util.zip.InflaterOutputStream;
  * Absent, unreadable, corrupt, larger than any translation is, or of a shape this build cannot
  * read: every one of them is a MISS, and a miss is the translation that would have happened anyway.
  * <p>
- * The store is bounded at a quarter of a gigabyte and bounded per edition, and it is off until
- * somebody installs it. {@code -Dvitrail.translationDir=<path>} installs it outside the game, which
- * is how the harness reaches it.
+ * The store is bounded at a quarter of a gigabyte, and bounded per edition rather than in total: a
+ * development install that keeps a neighbour holds two editions and half a gigabyte. It is off
+ * until somebody installs it. {@code -Dvitrail.translationDir=<path>} installs it outside the game,
+ * which is how the harness reaches it.
  * <p>
- * <strong>The edition is the version this build DECLARES</strong>, and that is all it can be.
- * Two builds carrying one version number share a folder and share every key, which is every
- * build made between two releases: a translator changed without the version moving is served its
- * predecessor's units, and nothing says so. What answers that in the workshop is deleting the
- * folder, or bumping {@code TranslatedProgramCodec.FORMAT} by hand, and neither is automatic.
+ * <strong>The edition is the version this build declares, and the commit it was built
+ * from.</strong> The version alone cannot hold two builds apart: every build made between two
+ * releases declares the same one, so a translator changed without the version moving would be
+ * served its predecessor's units with nothing saying so. A development build therefore translates
+ * into a folder named for its commit, which no other build has written to. A release build does
+ * not, and must not: a player's translations are worth keeping across every jar of one version,
+ * and nothing but a release changes what those jars translate. {@code Vitrail.cacheEdition} is
+ * where the two halves are put together, for this cache and for the module cache at once.
+ * <p>
+ * A build that carries a commit keeps one neighbour rather than emptying the whole folder, and
+ * {@link #dropOtherEditions} says which and why.
  */
 public final class TranslationCache {
 
@@ -83,6 +90,13 @@ public final class TranslationCache {
 	private static final String FOLDER = "translations";
 	private static final String SUFFIX = ".tr";
 	private static final String PART_SUFFIX = ".part";
+
+	/**
+	 * What stands between the family and the commit in the name of a directory here. The caller
+	 * joins the two halves with a plus, which {@link #plain} cannot hold in a directory name and
+	 * replaces, so what a neighbour is matched on is the underscore that reaches the disk.
+	 */
+	private static final String EDITION_SEPARATOR = "_";
 
 	/** SHA-256, sitting behind the blob in every file and answering for it. */
 	private static final int DIGEST_BYTES = 32;
@@ -127,7 +141,7 @@ public final class TranslationCache {
 		try {
 			String outside = System.getProperty(DIRECTORY_PROPERTY, "");
 			if (!outside.isEmpty()) {
-				open(Path.of(outside).resolve(FOLDER).resolve("outside-the-game"), false);
+				open(Path.of(outside).resolve(FOLDER).resolve("outside-the-game"), "");
 			}
 		} catch (RuntimeException e) {
 			problem = e.toString();
@@ -138,33 +152,40 @@ public final class TranslationCache {
 	}
 
 	/**
-	 * Puts the cache under a directory of the caller's choosing, and clears out every other
-	 * edition's.
+	 * Puts the cache under a directory of the caller's choosing, and clears out what another
+	 * edition left.
 	 * <p>
-	 * The edition names a whole set of keys at once: nothing under another one can ever be asked for
-	 * again, and the ceiling has to be about what is still reachable. Called once, before the first
-	 * pack is read; a failure here leaves the cache off for the run and the loads exactly as long as
-	 * they were.
+	 * The edition names a whole set of keys at once: nothing under another one can be asked for by
+	 * this build, and the ceiling has to be about what is still reachable. One neighbour is spared
+	 * for the build that owns it, and {@link #dropOtherEditions} says which and why. Called once,
+	 * before the first pack is read; a failure here leaves the cache off for the run and the loads
+	 * exactly as long as they were.
+	 *
+	 * @param edition what this build translates into, which carries the commit it was built from
+	 *                when there is one to carry and is otherwise the family entire
+	 * @param family  what every edition of this version and this game begins with, which is what
+	 *                decides whether a neighbour is another build of this version or the leavings
+	 *                of another version altogether
 	 */
-	public static void install(Path parent, String edition) {
-		open(parent.resolve(FOLDER).resolve(edition.replaceAll("[^A-Za-z0-9._-]", "_")), true);
+	public static void install(Path parent, String edition, String family) {
+		open(parent.resolve(FOLDER).resolve(plain(edition)), plain(family));
 	}
 
 	/**
 	 * Makes the directory, measures what is in it, and takes it into service.
 	 *
-	 * @param dropOthers whether every sibling edition goes with it. True for the game, where the
-	 *                   edition is the only one that can ever be asked for again and the ceiling
-	 *                   has to be about what is still reachable. False for the road the property
-	 *                   opens, which runs in a static initialiser and would therefore delete the
-	 *                   game's own edition a moment before the game installed it
+	 * @param family the sanitized family of this edition, or empty to leave every neighbour alone.
+	 *               Empty for the road the property opens, which runs in a static initialiser and
+	 *               would otherwise delete the game's own edition a moment before the game
+	 *               installed it
 	 */
-	private static void open(Path mine, boolean dropOthers) {
+	private static void open(Path mine, String family) {
 		synchronized (LOCK) {
 			try {
 				Files.createDirectories(mine);
-				if (dropOthers) {
-					dropOtherEditions(mine.getParent(), mine);
+				if (!family.isEmpty()) {
+					touch(mine);
+					dropOtherEditions(mine.getParent(), mine, family);
 				}
 
 				BYTES.set(total(scan(mine, true)));
@@ -531,7 +552,16 @@ public final class TranslationCache {
 		}
 	}
 
-	/** Marks a blob as asked for, so a sweep drops what nothing loads rather than what is oldest. */
+	/**
+	 * Marks a blob as asked for, so a sweep drops what nothing loads rather than what is oldest,
+	 * and at install the edition's own directory as opened.
+	 * <p>
+	 * The directory is stamped for the choice {@link #dropOtherEditions} makes, and stamped at
+	 * install rather than only by the blobs landing in it: a file system moves a directory's own
+	 * stamp when a blob is created inside it, so without this line a run that hit on everything and
+	 * wrote nothing would leave a folder reading as abandoned. With it, the stamp is the last time
+	 * the edition was used at all, by a launch or by a write.
+	 */
 	private static void touch(Path file) {
 		try {
 			Files.setLastModifiedTime(file, FileTime.from(Instant.now()));
@@ -540,14 +570,74 @@ public final class TranslationCache {
 		}
 	}
 
-	private static void dropOtherEditions(Path root, Path mine) throws IOException {
-		try (Stream<Path> entries = Files.list(root)) {
-			for (Path entry : entries.toList()) {
-				if (!entry.equals(mine)) {
-					dropTree(entry);
-				}
+	/**
+	 * Deletes what another edition left, sparing one neighbour when this build has a commit in its
+	 * name: the edition of this build's own family used most recently.
+	 * <p>
+	 * Two builds of one version are two editions, and a developer moving between them would
+	 * otherwise have each of them empty the other's folder on the way in, which is every pack
+	 * translated from cold at every swap. One is what a swap needs, and it is what bounds the disk
+	 * at two editions rather than at one per build ever made. A build whose edition IS the family
+	 * spares none, which is every release and also a development build no commit could be read for.
+	 */
+	private static void dropOtherEditions(Path root, Path mine, String family) throws IOException {
+		List<Path> entries;
+		try (Stream<Path> found = Files.list(root)) {
+			entries = found.toList();
+		}
+
+		String kept = mine.getFileName().toString().equals(family)
+				? "" : newestSibling(entries, mine, family);
+
+		for (Path entry : entries) {
+			if (!entry.equals(mine) && !entry.getFileName().toString().equals(kept)) {
+				dropTree(entry);
 			}
 		}
+	}
+
+	/**
+	 * The name of the edition of this family used most recently, or empty when this build is the
+	 * only one of its family to have run here. A directory has a name, so an empty answer matches
+	 * nothing.
+	 */
+	private static String newestSibling(List<Path> entries, Path mine, String family)
+			throws IOException {
+		String newest = "";
+		long stamp = Long.MIN_VALUE;
+
+		for (Path entry : entries) {
+			String name = entry.getFileName().toString();
+			if (entry.equals(mine) || !ofFamily(name, family)) {
+				continue;
+			}
+
+			long when = Files.getLastModifiedTime(entry).toMillis();
+			if (when > stamp) {
+				stamp = when;
+				newest = name;
+			}
+		}
+
+		return newest;
+	}
+
+	/**
+	 * Whether a directory name is an edition of this family: the family entire, or the family and
+	 * then a commit behind the separator.
+	 * <p>
+	 * The separator is what makes this an answer and not a guess. A name beginning with the family
+	 * is not an edition of it: {@code ...mc26.20} begins with {@code ...mc26.2} and is another game
+	 * version altogether, whose blobs are exactly the ones nothing can ever ask for again, so a
+	 * prefix on its own would spare the folder that most needs sweeping.
+	 */
+	private static boolean ofFamily(String name, String family) {
+		return name.equals(family) || name.startsWith(family + EDITION_SEPARATOR);
+	}
+
+	/** Whatever a directory name cannot hold, replaced so that a name is never two names. */
+	private static String plain(String text) {
+		return text.replaceAll("[^A-Za-z0-9._-]", "_");
 	}
 
 	private static void dropTree(Path entry) throws IOException {

@@ -61,3 +61,36 @@ tasks.named("processResources", ProcessResources).configure {
 		rename { "config-icon.png" }
 	}
 }
+
+// The commit this jar was built from, for the two disk caches, which cannot tell two development
+// builds of one version apart without it. Written by the build rather than kept in the tree, for
+// the reason the root build gives where the value is read, and it lands here because both caches
+// are this module's and both loader jars take this module's output whole.
+//
+// A release build has no commit to write and the file is then absent, which is the answer
+// Vitrail.buildIdentity reads as a release: its jar carries nothing this task did not exist for.
+def buildIdentity = rootProject.buildIdentity
+def buildIdentityDir = layout.buildDirectory.dir("generated/resources/build-identity")
+
+def writeBuildIdentity = tasks.register("writeBuildIdentity") {
+	description = "Writes the commit a development build was made from into the jar."
+
+	inputs.property("identity", buildIdentity)
+	outputs.dir(buildIdentityDir)
+
+	doLast {
+		def directory = buildIdentityDir.get().asFile
+		def stamp = new File(directory, "vitrail-build-identity")
+
+		directory.mkdirs()
+
+		if (buildIdentity.isEmpty()) {
+			stamp.delete()
+		} else {
+			stamp.setText(buildIdentity, "UTF-8")
+		}
+	}
+}
+
+// The task rather than its directory, so that processResources waits for it without being told.
+sourceSets.main.resources.srcDir(writeBuildIdentity)
