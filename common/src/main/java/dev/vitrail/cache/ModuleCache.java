@@ -53,12 +53,12 @@ import java.util.stream.Stream;
  * <p>
  * <strong>The key IS the input, hashed</strong>, and nothing else: the exact text handed to the
  * compiler, the stage it is compiled for, and everything that decides what that text turns into,
- * which is the mod's version, the game's, the loader with its own version, and the LWJGL build
- * whose bundled shaderc and SPIRV-Cross do the work. Nothing is keyed on a pack name, a file path
- * or the debug name the module carries, so there is no invalidation to get wrong and none is
- * written. An edited shader, a moved pack setting, a translator that emits one word differently, a
- * loader that patches the compiler: each is a different key, and the blob under the old one is
- * never asked for again.
+ * which is the mod's version and, on a development build, the commit behind it, the game's, the
+ * loader with its own version, and the LWJGL build whose bundled shaderc and SPIRV-Cross do the
+ * work. Nothing is keyed on a pack name, a file path or the debug name the module carries, so
+ * there is no invalidation to get wrong and none is written. An edited shader, a moved pack
+ * setting, a translator that emits one word differently, a loader that patches the compiler: each
+ * is a different key, and the blob under the old one is never asked for again.
  * <p>
  * <strong>The debug name stays out of the key on purpose.</strong> The game's pipeline cache is
  * keyed on the identifier and never on the text, so this engine puts the load number in that name
@@ -92,21 +92,26 @@ import java.util.stream.Stream;
  * platter, so what answers for a file after a power cut is the digest behind it and not the move.
  * <p>
  * <strong>The disk is bounded</strong>, at half a gigabyte by default, and bounded per edition:
- * the files sit under a directory named for the mod and game versions, and any directory named
- * for another edition is deleted when this one opens. Without that an update would fill a fresh
- * set of keys on top of the set it had just made unreachable, and two packs plus one update
- * would go over the ceiling with nothing in the way. The Sodium slider writes the number, and
- * a store already over it is swept at once. Past the ceiling the units nothing has asked for
- * lately go first, down to three quarters of it so that the sweep is not paid again at the
- * very next write.
+ * the files sit under a directory named for the mod and game versions, and for a development
+ * build the commit as well, and a directory named for another edition is deleted when this one
+ * opens. Without that an update would fill a fresh set of keys on top of the set it had just made
+ * unreachable, and two packs plus one update would go over the ceiling with nothing in the way. A
+ * build carrying a commit keeps one neighbour and so holds two of those ceilings rather than one,
+ * and {@link #dropOtherEditions} says which neighbour and why. The Sodium slider writes the number,
+ * and a store already over it is swept at once. Past the ceiling the units nothing has asked for
+ * lately go first, down to three quarters of it so that the sweep is not paid again at the very
+ * next write.
  * <p>
  * <strong>The folder's name is narrower than the key</strong>, and deliberately: the key also
  * carries the loader, its version and the LWJGL build, so a NeoForge or an LWJGL bump makes every
  * blob unreachable without moving the folder, and what those blobs then cost is space until a
  * sweep collects them. Naming the folder after all five would sweep the whole store on a loader
- * bump, which is the same space spent on the same day for no reading. And two builds declaring
- * one version share the folder AND the keys, which is every build made between two releases: in
- * the workshop the answer is to delete the folder, and there is nothing automatic about it.
+ * bump, which is the same space spent on the same day for no reading. What the folder does carry
+ * beyond the two versions is the commit, and only on a development build: without it, two builds
+ * declaring one version would share the folder AND the keys, which is every build made between
+ * two releases, and a translator changed since yesterday would be served yesterday's modules with
+ * nothing saying so. A release build carries no commit, because a player's store is worth keeping
+ * across every jar of one version and nothing but a release changes what those jars compile.
  * <p>
  * {@code -Dvitrail.moduleCache=false} turns the whole thing off, and the line is still printed, so
  * one jar answers the question in both directions.
@@ -173,6 +178,12 @@ public final class ModuleCache {
 	private static final String FORMAT = "vitrail-module-3";
 
 	private static final String FOLDER = "modules";
+
+	/**
+	 * What {@link Vitrail#cacheEdition()} puts between the family and the commit, and what a
+	 * neighbour of this family is therefore matched on.
+	 */
+	private static final String EDITION_SEPARATOR = "+";
 
 	/** How many of a load's rebuilt units are named on the line that counts them. */
 	private static final int NAMED_MISSES = 12;
@@ -326,6 +337,17 @@ public final class ModuleCache {
 
 		feed(digest, FORMAT);
 		feed(digest, Vitrail.cacheVersion());
+
+		// The commit, on a development build and only there. The folder already keeps two such
+		// builds apart, and this is the same claim made where the class makes every other one: the
+		// key IS the input, and on a development build the version alone does not name the
+		// translator that produced the text. A release feeds nothing extra, which is what leaves
+		// every key a player already holds exactly where it was.
+		String build = Vitrail.buildIdentity();
+		if (!build.isEmpty()) {
+			feed(digest, build);
+		}
+
 		feed(digest, Vitrail.platform().minecraftVersion());
 		feed(digest, Vitrail.platform().loaderName());
 		feed(digest, Vitrail.platform().loaderVersion());
@@ -677,7 +699,8 @@ public final class ModuleCache {
 	}
 
 	/**
-	 * Makes the edition's directory, clears out every other edition's, and measures what is left.
+	 * Makes the edition's directory, clears out what other editions left but for the one neighbour
+	 * {@link #dropOtherEditions} spares, and measures what is left.
 	 * <p>
 	 * The only moment at which a leftover neighbour can be swept up: nothing else has been handed
 	 * the directory yet, because {@link #directory} is set on the last line, so a {@code .part} seen
@@ -686,9 +709,10 @@ public final class ModuleCache {
 	private static void open() {
 		try {
 			Path root = Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID).resolve(FOLDER);
-			Path mine = root.resolve(edition());
+			Path mine = root.resolve(Vitrail.cacheEdition());
 			Files.createDirectories(mine);
-			dropOtherEditions(root, mine);
+			touch(mine);
+			dropOtherEditions(root, mine, Vitrail.cacheEditionFamily());
 			BYTES.set(total(scan(mine, true)));
 			directory = mine;
 		} catch (IOException | RuntimeException e) {
@@ -699,31 +723,74 @@ public final class ModuleCache {
 	}
 
 	/**
-	 * What names a whole set of keys at once, and therefore what names their directory. The version
-	 * is the one {@link Vitrail#cacheVersion()} answers, so that a build off a topic branch shares
-	 * this folder with every other build between the same two releases rather than emptying it.
+	 * Deletes what another edition left, because not one of its keys can be asked for by this build
+	 * and the ceiling has to be about the blobs that are still reachable.
+	 * <p>
+	 * <strong>A build carrying a commit spares one of them</strong>, the edition of its own family
+	 * used most recently. Two builds of one version are two editions, and a developer moving between
+	 * them would otherwise have each of them empty the other's folder on the way in, which is every
+	 * pack compiled from cold at every swap and exactly what an edition exists to prevent. One is
+	 * what a swap needs, and it is also what bounds the disk: two editions under one ceiling each,
+	 * rather than a folder for every build ever made. A third build's folder goes at the launch
+	 * after it.
+	 * <p>
+	 * A build whose edition IS the family spares none, so a player's store holds the one edition it
+	 * always held. That is every RELEASE, and also a development build git could answer no question
+	 * for, which carries no commit to name a folder of its own with.
 	 */
-	private static String edition() {
-		return plain(Vitrail.cacheVersion()) + "+mc"
-				+ plain(Vitrail.platform().minecraftVersion());
-	}
+	private static void dropOtherEditions(Path root, Path mine, String family) throws IOException {
+		List<Path> entries;
+		try (Stream<Path> found = Files.list(root)) {
+			entries = found.toList();
+		}
 
-	private static String plain(String text) {
-		return text.replaceAll("[^A-Za-z0-9._-]", "_");
+		String kept = mine.getFileName().toString().equals(family)
+				? "" : newestSibling(entries, mine, family);
+
+		for (Path entry : entries) {
+			if (!entry.equals(mine) && !entry.getFileName().toString().equals(kept)) {
+				dropTree(entry);
+			}
+		}
 	}
 
 	/**
-	 * Deletes what an earlier or later edition left, because not one of its keys can ever be asked
-	 * for again and the ceiling has to be about the blobs that are still reachable.
+	 * The name of the edition of this family used most recently, or empty when this build is the
+	 * only one of its family to have run here. A directory has a name, so an empty answer matches
+	 * nothing.
 	 */
-	private static void dropOtherEditions(Path root, Path mine) throws IOException {
-		try (Stream<Path> entries = Files.list(root)) {
-			for (Path entry : entries.toList()) {
-				if (!entry.equals(mine)) {
-					dropTree(entry);
-				}
+	private static String newestSibling(List<Path> entries, Path mine, String family)
+			throws IOException {
+		String newest = "";
+		long stamp = Long.MIN_VALUE;
+
+		for (Path entry : entries) {
+			String name = entry.getFileName().toString();
+			if (entry.equals(mine) || !ofFamily(name, family)) {
+				continue;
+			}
+
+			long when = Files.getLastModifiedTime(entry).toMillis();
+			if (when > stamp) {
+				stamp = when;
+				newest = name;
 			}
 		}
+
+		return newest;
+	}
+
+	/**
+	 * Whether a directory name is an edition of this family: the family entire, or the family and
+	 * then a commit behind the separator {@link Vitrail#cacheEdition()} puts between them.
+	 * <p>
+	 * The separator is what makes this an answer and not a guess. A name beginning with the family
+	 * is not an edition of it: {@code ...+mc26.20} begins with {@code ...+mc26.2} and is another
+	 * game version altogether, whose blobs are exactly the ones nothing can ever ask for again, so a
+	 * prefix on its own would spare the folder that most needs sweeping.
+	 */
+	private static boolean ofFamily(String name, String family) {
+		return name.equals(family) || name.startsWith(family + EDITION_SEPARATOR);
 	}
 
 	private static void dropTree(Path entry) throws IOException {
@@ -750,12 +817,12 @@ public final class ModuleCache {
 	 * One piece of the key, behind its own length so that two different splits of the same
 	 * characters cannot hash alike.
 	 * <p>
-	 * <strong>The four versions are the half that is easy to leave out and expensive to leave
+	 * <strong>The versions are the half that is easy to leave out and expensive to leave
 	 * out</strong>: the text alone names none of them, and a translator that emits differently, a
 	 * game that compiles differently, a loader that patches the compiler, or an LWJGL bump that
 	 * brings a new shaderc and a new SPIRV-Cross with it are each a different answer to a question
 	 * whose text has not moved. Serving the old blob for one of those is exactly the failure this
-	 * class has to be unable to have, and none of the four announces itself any other way.
+	 * class has to be unable to have, and not one of them announces itself any other way.
 	 */
 	private static void feed(MessageDigest digest, String text) {
 		byte[] raw = text.getBytes(StandardCharsets.UTF_8);
@@ -778,6 +845,12 @@ public final class ModuleCache {
 	/**
 	 * Marks a unit as asked for, so that the sweep drops what nothing loads rather than what was
 	 * written longest ago. A stamp that cannot be set costs a worse choice later and nothing now.
+	 * <p>
+	 * The edition's own directory is stamped the same way at {@link #open}, and that is the half
+	 * that has to be written down: a file system already moves a directory's stamp when a unit is
+	 * created inside it, so a run that WROTE is stamped whether this line exists or not, while a run
+	 * that hit on everything wrote nothing and would read as abandoned by the very next build.
+	 * Between the two, the stamp is the last time the edition was used at all.
 	 */
 	private static void touch(Path file) {
 		try {

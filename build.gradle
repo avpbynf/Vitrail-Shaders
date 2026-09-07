@@ -19,26 +19,30 @@ plugins {
 // release exactly what gradle.properties says. `.github/workflows/release.yml` compares the tag
 // against that line and refuses a mismatch, and it checks a tag out, so its head is detached and
 // carries no branch name to append anyway. `dev` and `main` are left bare for the other half of
-// the reason: there is nothing there to tell one build from another.
+// the reason: a branch name that every build of the line shares tells no build from another. What
+// does tell them apart is the commit, and that is read below and kept out of the version.
 def effectiveVersion = project.mod_version
+def development = effectiveVersion.endsWith("-dev")
 
-if (effectiveVersion.endsWith("-dev")) {
-	def branch = null
-
+// What git says to one question, trimmed, or null when there is no git on the path, no repository
+// under this directory, or the command itself refused. A build out of a tarball is a legitimate
+// build, so every caller below answers a null rather than stopping on it.
+def gitSaid = { String... command ->
 	try {
-		def git = new ProcessBuilder("git", "rev-parse", "--abbrev-ref", "HEAD")
+		def git = new ProcessBuilder(command)
 				.directory(rootDir)
 				.redirectErrorStream(true)
 				.start()
 		def said = git.inputStream.getText("UTF-8").trim()
 
-		if (git.waitFor() == 0) {
-			branch = said
-		}
+		return git.waitFor() == 0 ? said : null
 	} catch (IOException ignored) {
-		// No git on the path, or no repository under this directory. A build out of a tarball is
-		// a legitimate build, and the bare suffix is the right answer for it rather than a stop.
+		return null
 	}
+}
+
+if (development) {
+	def branch = gitSaid("git", "rev-parse", "--abbrev-ref", "HEAD")
 
 	// "HEAD" is what a detached head answers, which is what continuous integration checks out and
 	// what a release build therefore is.
@@ -69,6 +73,40 @@ if (effectiveVersion.endsWith("-dev")) {
 // Put back on the project because both loader modules read it too, each of them naming it in the
 // metadata it expands and in the name of the jar it writes.
 ext.effectiveVersion = effectiveVersion
+
+// The commit a development build was made from, which is the one thing that tells two of them
+// apart. The number above cannot: every build between two releases declares the same one, and the
+// two disk caches name their editions after it, so a jar built today is served the units a jar
+// built last week wrote. A translator fixed without the number moving is then invisible on screen,
+// with nothing anywhere saying why.
+//
+// It stays out of the version. The version is what a player reads, what names a jar and what two
+// loaders parse, and a hash there is noise to all three. It travels as a resource the common
+// module writes instead, and the road is the branch's: read from git here, committed nowhere,
+// because the answer depends on which commit is checked out and a committed one would be wrong at
+// the next.
+//
+// A release build leaves it empty, and that is what leaves a player's caches exactly as they are:
+// they are worth keeping across every jar of one version, since nothing but a release changes what
+// those jars compile.
+def buildIdentity = ""
+
+if (development) {
+	def head = gitSaid("git", "rev-parse", "--short", "HEAD")
+
+	if (head != null && !head.isEmpty()) {
+		// A jar built over an edited tree is described by no commit, so it says so. Two such jars
+		// off one commit still share the name, which is the one case left where a build can read
+		// another's units. An unanswered question counts as edited for the same reason a silence
+		// counts against: what must not happen is a folder claiming a commit it does not hold.
+		def edits = gitSaid("git", "status", "--porcelain")
+
+		buildIdentity = edits == null || !edits.isEmpty() ? head + ".dirty" : head
+	}
+}
+
+// Read by the common module, which is where the caches that need it live.
+ext.buildIdentity = buildIdentity
 
 subprojects {
 	apply plugin: "java"

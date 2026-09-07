@@ -83,11 +83,16 @@ public final class EngineStages {
 	 * The edition is the mod's version and the game's, and it names a whole set of keys at once: a
 	 * translator that emits one word differently answers differently to every key it ever held, so
 	 * a RELEASE takes its predecessor's folder away rather than filling a second one beside it.
-	 * Two builds declaring one version share the folder and every key in it, which is every build
-	 * made between two releases; what answers that in the workshop is deleting the folder by hand.
-	 * The branch a build was made on is cut out of the version first, by
-	 * {@link Vitrail#cacheVersion()}, so that a topic build is one of those two builds and not the
-	 * owner of a folder of its own.
+	 * Two builds declaring one version would share the folder and every key in it, which is every
+	 * build made between two releases, so a development build carries the commit it was built from
+	 * in its edition and translates into a folder nothing else has written to. The branch a build
+	 * was made on is cut out of the version first, by {@link Vitrail#cacheVersion()}, the commit
+	 * having already said which build this is.
+	 * <p>
+	 * The family goes over beside the edition because it is what decides the sweep at install: a
+	 * build carrying a commit keeps the neighbour of its own family used most recently, so that
+	 * moving between two builds does not empty a store on every swap.
+	 * <p>
 	 * The loader is not in the name, and does not need to be: the two loaders run the same
 	 * translator over the same text, and what does differ between them is in the key of every
 	 * entry.
@@ -95,7 +100,8 @@ public final class EngineStages {
 	private static void openTranslationCache() {
 		TranslationCache.install(
 				Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID),
-				Vitrail.cacheVersion() + "+mc" + Vitrail.platform().minecraftVersion());
+				Vitrail.cacheEdition(),
+				Vitrail.cacheEditionFamily());
 
 		if (!TranslationCache.installed()) {
 			Vitrail.logger().warn("No translation cache this run, so every pack load translates "
