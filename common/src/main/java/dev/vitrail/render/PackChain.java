@@ -118,6 +118,21 @@ public final class PackChain {
 	private static volatile PackChain active;
 
 	/**
+	 * What this frame's motion vector pass wrote, or null on any frame it did not draw, which is
+	 * every frame with no pack and every frame the world is not being upscaled on.
+	 * <p>
+	 * Static because the reader is {@link RenderScale}, which stands outside the chain and outside
+	 * the pack: it owns the moment the upscale runs at, and the chain owns the image.
+	 */
+	static GpuTextureView motionVectors() {
+		PackChain chain = active;
+
+		return chain == null || chain.targets == null
+				? null
+				: chain.targets.motionVectors().view();
+	}
+
+	/**
 	 * Whether the frame has stopped drawing the pack, for a reason the load or the frame found and
 	 * {@link PackChoice#lastError} says. Lifted only by the next load.
 	 */
@@ -1784,6 +1799,21 @@ public final class PackChain {
 		// and prepares and not what this line decides, and no pack of the corpus declares the name
 		// in either family.
 		sampleCenterDepth(device);
+		// Here because the opaque depth taken above is this frame's, and because the matrices have
+		// been advanced once for this frame already, so what the pass calls the previous pair really
+		// is the frame before rather than this one. Both halves of that are the same boundary
+		// FrameState.advance draws, and moving this line either side of it would reproject a frame
+		// against itself and write a screen of noughts that looks exactly like a still camera.
+		// The gate is asked BEFORE anything is built for the call: an encoder made in the argument
+		// list is two allocations a frame for a player who never turns any of this on.
+		MotionVectors vectors = this.targets.motionVectors();
+		if (RenderScale.upscaling() && TemporalAccumulation.wanted()) {
+			vectors.draw(device.createCommandEncoder(), device, this.quad,
+					this.targets.depth().opaque(), ready.main().width, ready.main().height,
+					this.values.view(), this.values.world());
+		} else {
+			vectors.standDown();
+		}
 
 		int end = deferredEnd();
 		if (!this.split) {

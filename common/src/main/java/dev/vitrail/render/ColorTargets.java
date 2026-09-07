@@ -204,6 +204,13 @@ final class ColorTargets {
 	 */
 	private final CenterDepth centerDepth = new CenterDepth();
 
+	/**
+	 * Where each pixel stood in the previous frame. Held here beside the rest, though no pack binds
+	 * it: what owns a full screen image of this engine owns it here, and a second home for one image
+	 * is how a resize comes to free some of them and not others.
+	 */
+	private final MotionVectors motionVectors = new MotionVectors();
+
 	private final Map<Integer, GpuFormat> formats = new LinkedHashMap<>();
 
 	/** The filter each carried target is sampled with, settled with its format. */
@@ -778,6 +785,14 @@ final class ColorTargets {
 		return this.centerDepth;
 	}
 
+	/**
+	 * The pass that reprojects the frame, and the image it writes. Camera only, and the class says
+	 * what that costs.
+	 */
+	MotionVectors motionVectors() {
+		return this.motionVectors;
+	}
+
 	/** Never held from one frame to the next. Null when this index was never allocated. */
 	GpuTextureView view(int index, TargetSchedule.Side side) {
 		TargetSurface surface = target(index, side);
@@ -968,6 +983,7 @@ final class ColorTargets {
 		this.shadowMap.release();
 		this.depth.release();
 		this.centerDepth.release();
+		this.motionVectors.release();
 		this.pendingClears.clear();
 
 		// Whatever is allocated next is a first allocation again, and it has to say what it costs

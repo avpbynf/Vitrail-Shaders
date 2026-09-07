@@ -621,6 +621,15 @@ public final class PackValues {
 	}
 
 	/**
+	 * The frame's matrices, for the engine's own passes rather than for a block. Package private and
+	 * not on {@link WorldState}, which is the pack's window onto the frame: what reads this reads
+	 * the rendered pair, and no name a pack knows is written in that volume.
+	 */
+	ViewMatrices view() {
+		return this.state.view();
+	}
+
+	/**
 	 * Moves the frame on. Called once, at a named point, before the first block of the frame is
 	 * written and never per program: the previous frame's matrices shift here, and a
 	 * {@code smooth()} in a pack's expression integrates here, so calling it twice makes every
