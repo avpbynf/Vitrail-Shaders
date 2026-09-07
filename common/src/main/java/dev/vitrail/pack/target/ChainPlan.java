@@ -1169,13 +1169,13 @@ public final class ChainPlan {
 	 * {@code colortex0} on the half the chain leaves it, and empty on every place that runs one.
 	 * <p>
 	 * A pack shipping no final is not a pack that draws nothing: Iris copies {@code colortex0}
-	 * into the game's own target and says so in as many words, {@code pipeline/FinalPassRenderer.java:113}
-	 * making the pass optional and {@code :268-277} doing the copy under a comment naming the
+	 * into the game's own target and says so in as many words, {@code pipeline/FinalPassRenderer.java:115}
+	 * making the pass optional and {@code :268-280} doing the copy under a comment naming the
 	 * transfer. Two packs of this corpus ship none, I Like Vanilla ending its chain on
 	 * {@code composite99} and Pegasus on {@code composite11}.
 	 * <p>
 	 * The half is the one the schedule ends the frame on, which is the same question Iris asks its
-	 * flip state when it builds that copy's framebuffer ({@code :131}). A chain whose last write
+	 * flip state when it builds that copy's framebuffer ({@code :133}). A chain whose last write
 	 * landed on the far half and which was read from the near one would otherwise show the frame
 	 * before this one.
 	 */

@@ -1,5 +1,6 @@
 package dev.vitrail.pack.model;
 
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -79,6 +80,27 @@ public final class ProgramNames {
 			case "composite" -> 5;
 			default -> 6;
 		};
+	}
+
+	/**
+	 * The order the frame runs two BARE program names in: the rank of their families first, and
+	 * then the slot inside the family, so that {@code composite2} comes before {@code composite10}
+	 * and {@code prepare} before {@code prepare1}. A name that parses as no program at all sorts
+	 * after every one that does.
+	 * <p>
+	 * This is the order {@code ProgramSet.sorted} lays the entries out in and the order Iris fills
+	 * the array of a stage, which is what makes it the order of the frame. Kept here for the reason
+	 * {@link #frameRank} is kept here, and with more readers to disagree: the plan, the schedule and
+	 * the chain each have to place a compute whose program draws nothing, and two of them answering
+	 * differently produces no error at all, only a dispatch at the wrong moment reading the half
+	 * that nothing has written yet.
+	 */
+	public static Comparator<String> frameOrder() {
+		return Comparator
+				.comparingInt((String program) -> frameRank(familyOf(program)))
+				.thenComparingInt(program -> parse(program)
+						.map(ProgramName::slot)
+						.orElse(Integer.MAX_VALUE));
 	}
 
 	/**

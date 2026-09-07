@@ -263,9 +263,12 @@ asked of the device.
 None of this is inference. A compute shader built with that shaderc, dispatched against a storage
 image allocated through VMA, writes texels the same frame reads back unchanged: the road is open,
 and nothing of it was ever in the backend's way. The stage that walks it is `PackCompute`, which
-compiles a pack's `shadowcomp` and dispatches it at the head of the frame, and compiles the
-computes hanging off a full screen pass and dispatches them right before that pass, between two
-barriers of its own since the game's render pass boundary orders graphics against graphics only.
+compiles a pack's `shadowcomp` and dispatches it at the head of the frame, compiles the computes
+hanging off a full screen pass and dispatches them right before that pass, and dispatches a
+compute whose program the place draws no pass for at that program's own moment, its family saying
+whether that falls before the world's translucents or after them and its name where it lands among
+the passes drawn there. Every one of them runs between two barriers of its own, since the game's
+render pass boundary orders graphics against graphics only.
 Which programs it serves, including the pack's own switch deciding whether it serves any at all,
 and why the shadow moment rather than beside the shadow map that feeds it, is answered where the
 pack's chain is.

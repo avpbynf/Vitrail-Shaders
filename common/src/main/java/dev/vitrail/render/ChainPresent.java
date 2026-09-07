@@ -9,6 +9,7 @@ import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
@@ -31,8 +32,8 @@ import java.util.Optional;
  * game's target rather than a colour target of the pack's, and most packs use it for their tone
  * mapping. A pack without one has simply finished in {@code colortex0} and expects what is there to
  * be the picture. Iris answers that by copying the target into the main framebuffer and says so in
- * as many words, {@code pipeline/FinalPassRenderer.java:113} making the pass optional and
- * {@code :268-277} doing the copy. Refusing such a pack, which is what this engine did until this
+ * as many words, {@code pipeline/FinalPassRenderer.java:115} making the pass optional and
+ * {@code :268-280} doing the copy. Refusing such a pack, which is what this engine did until this
  * class existed, cost I Like Vanilla and Pegasus their whole picture.
  * <p>
  * <strong>A draw and not a copy, for {@link SceneSeed}'s reason and it is the same one.</strong>
@@ -129,9 +130,21 @@ final class ChainPresent {
 				.build();
 	}
 
+	/**
+	 * The compiled form of this pass, which is what the device's cache holds for it now.
+	 * <p>
+	 * Handed back rather than a yes or no, because comparing it with the instance of the frame
+	 * before is the one way to notice that the cache was emptied, and a place that draws no full
+	 * screen pass has no other pipeline of its own to ask. This one is the engine's and carries no
+	 * load in its name, so no purge ever carries it over: it comes back new every time.
+	 */
+	CompiledRenderPipeline compiled(GpuDevice device) {
+		return device.precompilePipeline(this.pipeline, this.source);
+	}
+
 	/** Called every frame: a resource reload empties the pipeline cache. */
 	boolean prepare(GpuDevice device) {
-		if (device.precompilePipeline(this.pipeline, this.source).isValid()) {
+		if (compiled(device).isValid()) {
 			return true;
 		}
 

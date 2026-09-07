@@ -156,10 +156,12 @@ every pack with an unusual dimension name.
 
 **A compute is looked up under the file it ships in, letter included.** A compute hangs off a
 name by a single letter, so `world0/composite21_a` is a key of its own and a pack switching off
-`world0/composite21` has said nothing about it. The reference keeps such a compute and runs it
-with no fragment stage at all, which is why the lookup cannot fall back to the name the letter
-came off. This engine keeps it too, and then has no pass to hang it off: it is named in the log
-as skipped, and its dispatch is a gap still owed.
+`world0/composite21` has said nothing about it. The reference keeps such a compute and runs it as
+a pass with no fragment stage at all, which is why the lookup cannot fall back to the name the
+letter came off. This engine keeps it too, and runs it at the moment the switched-off program
+would have run at: its family says whether that is before the world's translucents or after them,
+and its name says where it falls among the passes drawn there. There is no pass to hang it before,
+so it is dispatched on its own, reading the halves the chain stands on at that point.
 
 Both an empty value and a non-evaluable expression mean enabled: this file is read fail-open.
 

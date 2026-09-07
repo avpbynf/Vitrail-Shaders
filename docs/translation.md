@@ -366,11 +366,15 @@ for that path, three different mechanisms, and it is worth knowing which:
   head of the frame, and a compute hanging off a pass the chain draws, begin, prepare, deferred,
   composite or final, right before that pass, the letter-less file first and then in letter
   order, reading and writing the colour targets on the halves the pass itself reads, which is the
-  reference's moment and side for it. Only where the pack keeps it, and a pack that switches the
-  program off takes with it the declarations that program reads, so one switched off does not
-  draw nothing, it does not compile. A setup compute, and a compute whose pass the chain does not
-  draw, which the reference runs as a pass of its own, are named in the log and go no further,
-  translation included.
+  reference's moment and side for it. Only where the pack keeps the compute file itself, and a
+  pack that switches a program off takes with it the declarations that program reads, so one
+  switched off does not draw nothing, it does not compile. A compute whose program this place
+  draws no pass for, the pack having shipped less than both its halves or having switched the
+  program off, runs on its own at that program's own moment: its family puts it before the world's
+  translucents or after them, its name puts it among the passes drawn there, and that is the moment
+  and the side the reference gives it. A setup compute goes no further, and so does a compute of a
+  final this place does not draw and one whose program the pass filter took out of the chain: they
+  are named in the log and nothing translates them.
 - **Storage buffers and storage images are worse than refused on the facade: they are ignored.**
   Reflection asks for uniform buffers, sampled images, outputs and inputs, and never enumerates
   them. On the facade's own walk they pass compilation and are bound to nothing, so the walk is

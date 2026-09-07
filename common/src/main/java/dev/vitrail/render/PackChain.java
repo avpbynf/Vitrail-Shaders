@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.pack.model.ProgramNames;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.option.OptionValue;
@@ -11,6 +12,7 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetPlan;
+import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.render.storage.StorageImages;
 import dev.vitrail.render.timing.PassTimings;
@@ -42,6 +44,7 @@ import java.nio.ByteOrder;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -320,6 +323,13 @@ public final class PackChain {
 	private List<PackPass> programs;
 	private PackPass last;
 
+	/**
+	 * The computes of a program this place draws no pass for, in frame order, each with the cut of
+	 * the frame it belongs to and the point of that cut's walk it is dispatched at. Empty for every
+	 * place that ships both halves of every program it writes a compute for, which is most of them.
+	 */
+	private List<Standalone> standalone = List.of();
+
 	/** Whether any program of this chain reads centerDepthSmooth, settled once the passes are built. */
 	private boolean centerDepthRead;
 
@@ -460,7 +470,8 @@ public final class PackChain {
 		this.compute = PackCompute.load(opened, chain.place(), chain.targets().computes(), this.load,
 				values.shadowGeometryCatalog(), values.catalog(),
 				ordered(chain.chain()).stream().map(ChainPlan.Pass::program)
-						.collect(Collectors.toSet()));
+						.collect(Collectors.toSet()),
+				Set.copyOf(chain.targets().passing()));
 		// Before the first frame allocates a target: the usage a compute needs is baked into the
 		// image at creation, and nothing can add it afterwards.
 		this.targets.storageTargets(this.compute.storageTargets());
@@ -745,9 +756,10 @@ public final class PackChain {
 			return false;
 		}
 
-		// An empty composite list will never become drawable. Skipping the world for it would
-		// leave the player in a black pause with nothing left to compile.
-		if (chain.programs != null && chain.programs.isEmpty()) {
+		// An empty composite list will never become drawable, unless computes stand alone in it and
+		// give the frame something to run. Skipping the world for one that will not would leave the
+		// player in a black pause with nothing left to compile.
+		if (chain.programs != null && chain.programs.isEmpty() && chain.standalone.isEmpty()) {
 			return false;
 		}
 
@@ -1295,9 +1307,13 @@ public final class PackChain {
 	 * @param distant what they read as {@code dhDepthTex0}, on the same split: the far terrain
 	 *                before its water and with it after, or null for the far plane on the frames the
 	 *                pack drew no far terrain
+	 * @param cut     which cut of the frame this range is, which is what says whose standalone
+	 *                computes belong to it. Said rather than read off the bounds: where the whole
+	 *                chain runs before the world the two cuts have the same bounds, and a compute
+	 *                placed by those would run in both of them or in neither
 	 */
 	private void drawRange(GpuDevice device, Ready ready, int from, int to, GpuTextureView depth,
-			GpuTextureView distant) {
+			GpuTextureView distant, Cut cut) {
 		// Clamped to the list, so that the rank of a chain whose every pass runs before the world is
 		// one the walk below can reach rather than one nothing ever equals.
 		int seedAt = ready.seeding()
@@ -1317,6 +1333,13 @@ public final class PackChain {
 		// list, and the deferred emptying inside a draw clears every target still owed one.
 		this.currentChains.clear();
 		for (int at = from; at < to; at++) {
+			// The standalones standing on this index are taken in two goes around the seed, as the
+			// end of the range is below: a prepare compute with no prepare pass stands on the first
+			// deferred pass, which is the index the seed is painted at, and its family says it runs
+			// before the world. Noble's world0 is written that way, and taken in one go after the
+			// seed its illuminance was computed over a world already lit by the frame before.
+			dispatchStandalone(cut, at, Reach.AT_INDEX_BEFORE_SEED, encoder, device, ready, depth,
+					distant, this.targets.hasPendingClears());
 			if (!this.seeded && at == seedAt) {
 				paintSeed(encoder, ready);
 				this.currentChains.clear();
@@ -1325,6 +1348,8 @@ public final class PackChain {
 			PackPass pass = this.programs.get(at);
 
 			boolean emptying = this.targets.hasPendingClears();
+			dispatchStandalone(cut, at, Reach.AT_INDEX_AFTER_SEED, encoder, device, ready, depth,
+					distant, emptying);
 			if (this.compute.hangsOff(pass.program())) {
 				// The frame's clears are paid before the computes and not inside the draw after
 				// them, where the first pass of the frame pays them: a compute storing into a
@@ -1336,7 +1361,7 @@ public final class PackChain {
 
 				// The computes hanging off this pass run right before it, on the halves it reads,
 				// as Iris does, and before the chains below are filled, as Iris fills them after
-				// its dispatch (CompositeRenderer.java:287-313): a compute storing into a target
+				// its dispatch (CompositeRenderer.java:289-300): a compute storing into a target
 				// the pass reads at a lod is what the chain has to be built from. Outside any
 				// render pass: a dispatch is a command of its own, and the barriers around it are
 				// what let the pass sample what the compute stored.
@@ -1379,6 +1404,19 @@ public final class PackChain {
 			}
 		}
 
+		// The end of this cut, where the ones no pass of it follows are dispatched: the loop stops
+		// before that index, so without the two calls below the compute of a cut that draws no pass
+		// after it would never run at all. It is where the frame really leaves this part of itself,
+		// and a compute of a family the cut carries has nowhere later to go.
+		//
+		// Taken in two goes with the seed between them, because there is no pass left here to place
+		// them against. The loop puts the seed before the pass its rank falls on and after the one
+		// before it, which is the passes of a family the frame runs no later than the world running
+		// ahead of it; the family answers the same question for a standalone, and the two halves of
+		// this end are what a pass of its name would have been on either side of.
+		dispatchStandalone(cut, to, Reach.PAST_END_BEFORE_SEED, encoder, device, ready, depth,
+				distant, this.targets.hasPendingClears());
+
 		// A rank that falls exactly on the end of this half is painted here, at its tail, and never
 		// at the head of the next one. The world is drawn before the deferred stage and not after
 		// it: walked as a half open range alone, a seed whose rank equals deferredEnd() - which is
@@ -1390,6 +1428,85 @@ public final class PackChain {
 		// the length of the list, so it equals the end of the last half.
 		if (!this.seeded && seedAt >= from && seedAt <= to) {
 			paintSeed(encoder, ready);
+			this.currentChains.clear();
+		}
+
+		dispatchStandalone(cut, to, Reach.PAST_END_AFTER_SEED, encoder, device, ready, depth,
+				distant, this.targets.hasPendingClears());
+	}
+
+	/**
+	 * Dispatches whatever of this cut stands at that point of the walk, which is nothing for a place
+	 * whose programs all draw.
+	 * <p>
+	 * Between the loop and the end of the range every standalone of the cut is reached exactly once,
+	 * and that rests on one thing: an index below the range cannot happen. The index counts the
+	 * passes that run before the program in frame order, and the head of a cut is the count of
+	 * passes whose rank the earlier cuts carry, every one of which sorts before anything this cut
+	 * holds. A cut added between these two divides the same ranks the same way and keeps it.
+	 *
+	 * @param at       the index the walk has reached
+	 * @param reach    which of them this go takes, every point of the walk being taken in two with
+	 *                 the seed between them
+	 * @param emptying whether targets are still owed their clear, which is paid here for the reason
+	 *                 the chained dispatch pays it: a compute storing into a target still owed one
+	 *                 would have its stores emptied by the pass that follows
+	 */
+	private void dispatchStandalone(Cut cut, int at, Reach reach, CommandEncoder encoder,
+			GpuDevice device, Ready ready, GpuTextureView depth, GpuTextureView distant,
+			boolean emptying) {
+		boolean ran = false;
+		for (Standalone waiting : this.standalone) {
+			if (waiting.cut() != cut || !reach.takes(waiting, at)) {
+				continue;
+			}
+
+			if (emptying && !ran) {
+				this.targets.flushPending(encoder);
+			}
+
+			ran = true;
+			this.compute.dispatchAlone(waiting.program(), encoder, device, this.values, this.targets,
+					waiting.step(), depth, distant, ready.main().width, ready.main().height);
+		}
+
+		if (ran) {
+			this.currentChains.clear();
+		}
+	}
+
+	/**
+	 * Which of a cut's standalones one dispatch takes. The walk reaches each of them once: on the
+	 * index of the pass it runs before, or, past the last pass of the cut, at the end of the range.
+	 * Both points are taken twice, with the scene seed painted between the two goes, and the family
+	 * says which go a standalone belongs to: the seed stands at the world's own rank, and a family
+	 * the frame runs no later than the world is dispatched before it.
+	 */
+	private enum Reach {
+
+		/** On the index the loop has reached, those of a family the frame runs no later than the world. */
+		AT_INDEX_BEFORE_SEED(false, false),
+
+		/** On that index, those of a family it runs after the world. */
+		AT_INDEX_AFTER_SEED(false, true),
+
+		/** Past the last pass, those of a family the frame runs no later than the world. */
+		PAST_END_BEFORE_SEED(true, false),
+
+		/** Past the last pass, those of a family it runs after the world. */
+		PAST_END_AFTER_SEED(true, true);
+
+		private final boolean pastEnd;
+		private final boolean afterSeed;
+
+		Reach(boolean pastEnd, boolean afterSeed) {
+			this.pastEnd = pastEnd;
+			this.afterSeed = afterSeed;
+		}
+
+		boolean takes(Standalone waiting, int at) {
+			return (this.pastEnd ? waiting.at() >= at : waiting.at() == at)
+					&& waiting.afterSeed() == this.afterSeed;
 		}
 	}
 
@@ -1821,13 +1938,25 @@ public final class PackChain {
 			// Said once, because the alternative is a chain that silently runs entirely after the
 			// world again: nothing on screen tells the two apart, and the pack that needs the split
 			// is the one whose water disappears.
-			Vitrail.logger().info("{} of this chain run before the world's translucents, {} after: {}",
-					end, this.programs.size() - end,
-					this.programs.stream().limit(end).map(PackPass::path).toList());
+			//
+			// A place with no full screen pass says what it does instead. The line above would read
+			// as two noughts and an empty list, which is a chain that runs nothing at all, and what
+			// this one really runs is its computes: they are named, since a place that draws no pass
+			// has nothing else to be recognised by.
+			if (this.programs.isEmpty()) {
+				Vitrail.logger().info("This chain draws no full screen pass and runs its computes on "
+						+ "their own: {}", this.standalone.stream()
+								.map(Standalone::program)
+								.toList());
+			} else {
+				Vitrail.logger().info("{} of this chain run before the world's translucents, {} after: {}",
+						end, this.programs.size() - end,
+						this.programs.stream().limit(end).map(PackPass::path).toList());
+			}
 		}
 
 		drawRange(device, ready, 0, end, this.targets.depth().opaque(),
-				this.targets.depth().distantOpaque());
+				this.targets.depth().distantOpaque(), Cut.BEFORE_TRANSLUCENTS);
 	}
 
 	/**
@@ -1884,7 +2013,7 @@ public final class PackChain {
 		}
 
 		drawRange(device, ready, deferredEnd(), this.programs.size(), this.targets.depth().scene(),
-				this.targets.depth().distantScene());
+				this.targets.depth().distantScene(), Cut.AFTER_TRANSLUCENTS);
 
 		// After the whole chain and before the halves swap back, which is where a final would have
 		// drawn. Only on a pack that ships none; ChainPresent says what it stands in for.
@@ -2002,6 +2131,7 @@ public final class PackChain {
 		}
 
 		this.programs = List.copyOf(built);
+		this.standalone = standaloneOf(built);
 		// Asked of the plan and not of the list: ordered() puts the final at the end when there is
 		// one, and where there is none the last of the list is an ordinary composite that writes
 		// its own targets. Drawing that one onto the game's target would be the chain's middle
@@ -2021,6 +2151,126 @@ public final class PackChain {
 		return all;
 	}
 
+	/** The last rank the early cut carries, which is the rank the plan cuts the pass list at. */
+	private static final int DEFERRED_RANK = ProgramNames.frameRank("deferred");
+
+	/**
+	 * A cut of the frame: a stretch of the chain the renderer records at one moment of the game's
+	 * own, drawn by one call of {@link #drawRange}.
+	 * <p>
+	 * A program belongs to the cut its FAMILY'S rank puts it in, and only to that one. A pass has no
+	 * need to be told, holding a place in a list the cuts are windows onto; a compute of a program
+	 * nothing draws holds no such place, so the cut is what it is given and the index only says
+	 * where inside the cut it goes. Deciding it off the index instead read the cut out of the
+	 * boundary between the two, which is the plan's count of what runs early and says nothing about
+	 * a program that is not counted: Pegasus, whose whole chain is composites, has a {@code prepare}
+	 * compute at index nought and a boundary at nought, and the late cut's walk ran it after the
+	 * world.
+	 */
+	private enum Cut {
+
+		/** The begins, the prepares, the seed and the deferreds, before the world's translucents. */
+		BEFORE_TRANSLUCENTS,
+
+		/** The composites and the final, drawn after them. */
+		AFTER_TRANSLUCENTS;
+
+		/**
+		 * Where the frame runs the family of that program. One comparison against the last rank a
+		 * cut carries, which is how another cut is added: the ranks are the same ranks and the
+		 * boundary the frame graph draws is another line through them.
+		 */
+		static Cut of(String program) {
+			return rankOf(program) <= DEFERRED_RANK ? BEFORE_TRANSLUCENTS : AFTER_TRANSLUCENTS;
+		}
+	}
+
+	/**
+	 * Where the frame runs a program, read off its family and never off a position in a list: it is
+	 * what places a program the chain draws nothing for, both against the cut boundary and against
+	 * the scene seed.
+	 */
+	private static int rankOf(String program) {
+		return ProgramNames.frameRank(ProgramNames.familyOf(TargetName.bareName(program)));
+	}
+
+	/**
+	 * A compute of a program this place draws no pass for, with where the walk dispatches it.
+	 *
+	 * @param cut       the cut of the frame its family belongs to, which is the whole of what decides
+	 *                  whether it runs before the world's translucents or after them
+	 * @param at        the index in {@link #programs} of the first pass that runs after it, or the
+	 *                  length of the list where every pass of the chain runs before it. Past the end
+	 *                  of its own cut it is dispatched at that end, the cut being where the frame
+	 *                  stops carrying its family at all
+	 * @param program   the program it hangs off, which is the name its halves and its texture stage
+	 *                  are read under however little of it is drawn
+	 * @param step      the halves it reads, from {@link TargetSchedule#passing} and never from a
+	 *                  pass: there is none, and the step of the pass after it would carry the flips
+	 *                  of every stage opened in between
+	 * @param afterSeed whether the frame runs its family after the world, the scene seed standing at
+	 *                  the world's own rank. Past the last pass of its cut there is nothing left to
+	 *                  place it against, and this is the side of the seed a pass of its name would
+	 *                  have drawn on
+	 */
+	private record Standalone(Cut cut, int at, String program, TargetSchedule.Bound step,
+			boolean afterSeed) {
+	}
+
+	/**
+	 * Places each of them in the walk, at the moment the program it hangs off would have run.
+	 * <p>
+	 * Iris puts its compute-only pass at the index the missing program holds inside its own stage
+	 * ({@code CompositeRenderer.java:137-145}), so the moment is the program's place in the frame
+	 * and not the head of its stage: a pack shipping {@code composite3.csh} with no
+	 * {@code composite3.fsh} runs it after {@code composite2} and before {@code composite4}, and the
+	 * halves it reads are the ones those two left behind. Read off the names for the same reason the
+	 * plan reads its ranks off them: a position in a list moves the moment the day a pass is cut,
+	 * and it moves without a word.
+	 * <p>
+	 * Sorted in frame order, which is what settles two that land on the same index: RenderPearl
+	 * draws no full screen pass at all and ships five such computes, so all five stand on index
+	 * nought, and taken in the order their file names came out of the map its {@code deferred} ran
+	 * after its {@code composite3}.
+	 * <p>
+	 * Each carries which side of the scene seed its family falls on as well, for the index the seed
+	 * is painted at and for the end of a range, where the index has run out of passes to name and
+	 * the seed is the only thing left to be placed against. Noble's world0 paints the seed at index
+	 * nought and stands a {@code prepare} compute on that same index, so without the family the one
+	 * step ran after the world there and before it in its world1, which ships the pass.
+	 */
+	private List<Standalone> standaloneOf(List<PackPass> built) {
+		if (this.compute.standingAlone().isEmpty()) {
+			return List.of();
+		}
+
+		Comparator<String> order = ProgramNames.frameOrder();
+		List<Standalone> waiting = new ArrayList<>();
+		for (String program : this.compute.standingAlone()) {
+			TargetSchedule.Bound step = this.targets.schedule().passing(program).orElse(null);
+			// The plan named it and the schedule did not, which is the plan disagreeing with itself
+			// rather than anything a pack can cause. Left undispatched: a compute pushed with no
+			// halves would be handed no colour target at all and throw once per frame.
+			if (step == null) {
+				Vitrail.logger().warn("compute of {} is not dispatched: the schedule gives it no "
+						+ "halves to read", program);
+				continue;
+			}
+
+			int at = 0;
+			while (at < built.size() && order.compare(built.get(at).program(), program) < 0) {
+				at++;
+			}
+
+			waiting.add(new Standalone(Cut.of(program), at, program, step,
+					rankOf(program) > ProgramNames.GEOMETRY_RANK));
+		}
+
+		waiting.sort(Comparator.comparing(Standalone::program, order));
+
+		return List.copyOf(waiting);
+	}
+
 	/**
 	 * Compiles at most one program a frame, and says whether the chain may be drawn.
 	 * <p>
@@ -2036,38 +2286,31 @@ public final class PackChain {
 	 * the rule. {@link #pumpWarmup} repeats the compiles here for as long as a short budget on
 	 * the frame allows. The device cache itself is only ever written on the render thread: the
 	 * worker builds the objects, {@code GeometryProgram.compile} hands them over.
+	 * <p>
+	 * A place with no full screen pass at all has nothing here to compile and is not refused for
+	 * it, so long as computes stand alone in it. It has a frame to run then: the reference builds
+	 * those into passes whether a program of the place draws or not
+	 * ({@code CompositeRenderer.java:137-145}). RenderPearl is written that way, five computes and
+	 * no {@code .fsh} for any of them, and the whole of its chain used to stop on this line. A place
+	 * with neither is still refused, and {@link #drawable} says what that refusal is worth: nothing
+	 * of the pack would run, and the frame after would paint a target nothing had written over the
+	 * game's own.
+	 * <p>
+	 * Such a place has nothing to compile and the cache still has to be watched under it: its
+	 * terrain and its leftover families are pipelines like any other, and a reload takes them with
+	 * everything else. {@link #warmPresent} keeps the watch there.
 	 *
 	 * @return false while a program is still missing, in which case nothing of the chain is drawn.
 	 *         What the screen holds for those frames is the terrain's answer and not this one, and
 	 *         {@link #drawable} is where the two are joined
 	 */
-	@SuppressWarnings("ReferenceEquality")
 	private boolean warm(GpuDevice device) {
-		if (this.programs.isEmpty()) {
+		if (this.programs.isEmpty() && this.standalone.isEmpty()) {
 			return false;
 		}
 
-		CompiledRenderPipeline first = this.programs.get(0).compile(device);
-		if (!valid(first, this.programs.get(0))) {
-			return false;
-		}
-
-		if (first != this.head) {
-			this.head = first;
-			this.warmed = 1;
-			forgetGeometry();
-
-			return false;
-		}
-
-		if (this.warmed < this.programs.size()) {
-			PackPass pass = this.programs.get(this.warmed);
-			if (!valid(pass.compile(device), pass)) {
-				return false;
-			}
-
-			this.warmed++;
-
+		boolean standing = this.programs.isEmpty() ? warmPresent(device) : warmPasses(device);
+		if (!standing) {
 			return false;
 		}
 
@@ -2095,6 +2338,74 @@ public final class PackChain {
 		}
 
 		this.geometryReady = true;
+
+		return true;
+	}
+
+	/**
+	 * The full screen passes of the chain, one a frame, and whether they are all standing.
+	 *
+	 * @return false while one is still missing or while the first has just come back different,
+	 *         which is the device having emptied its cache under the chain
+	 */
+	@SuppressWarnings("ReferenceEquality")
+	private boolean warmPasses(GpuDevice device) {
+		CompiledRenderPipeline first = this.programs.get(0).compile(device);
+		if (!valid(first, this.programs.get(0))) {
+			return false;
+		}
+
+		if (first != this.head) {
+			this.head = first;
+			this.warmed = 1;
+			forgetGeometry();
+
+			return false;
+		}
+
+		if (this.warmed < this.programs.size()) {
+			PackPass pass = this.programs.get(this.warmed);
+			if (!valid(pass.compile(device), pass)) {
+				return false;
+			}
+
+			this.warmed++;
+
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * The same watch on the device's cache for a place that draws no full screen pass, kept on the
+	 * one pipeline such a place still owns: {@link ChainPresent}'s, which brings its colour to the
+	 * screen in the stead of the final it has none of. It is asked for every frame anyway, and it is
+	 * the engine's own pipeline rather than the pack's, so a purge always takes it and it always
+	 * comes back new; the pack's own may be carried over one.
+	 * <p>
+	 * The geometry is what the watch is for. Nothing of the chain compiles here, but the terrain and
+	 * the leftover families do, and a place with no pass at all used to be the one place where the
+	 * cache was emptied under them and nothing lowered the flags that say they are compiled. A place
+	 * the plan named no target to bring back for has nothing to watch here and falls back on the
+	 * compile a program's own draw pays, which is the fallback everywhere else too.
+	 *
+	 * @return false on the frame the emptying is noticed, the geometry then compiling back a
+	 *         pipeline a frame as it does after any other reload
+	 */
+	@SuppressWarnings("ReferenceEquality")
+	private boolean warmPresent(GpuDevice device) {
+		if (this.present == null) {
+			return true;
+		}
+
+		CompiledRenderPipeline first = this.present.compiled(device);
+		if (first != this.head) {
+			this.head = first;
+			forgetGeometry();
+
+			return false;
+		}
 
 		return true;
 	}
@@ -2177,12 +2488,16 @@ public final class PackChain {
 	 * seconds of a screen with no world in it, at every F3+T. Terrain pipelines take that same
 	 * road after the composites. Leftover families compile on the worker.
 	 * <p>
-	 * The empty chain answers no rather than yes on a vacuous count. A place with no program has no
-	 * final either, so nothing would ever bring that target back, and {@link #warm} refuses it in
-	 * its first line for the same reason.
+	 * The empty chain answers no rather than yes on a vacuous count, unless it has computes standing
+	 * on their own. A place with no program has no final either, so what brings the target back is
+	 * {@link ChainPresent}, which is built for exactly that; taking the world off the screen for
+	 * that copy is worth it only where something of the pack really runs, and the standalone
+	 * computes are that. {@link #warm} refuses the place with neither on its first line, and the
+	 * two answers have to agree: this one turns the terrain's redirect on, that one lets the frame
+	 * that reads it back be drawn.
 	 */
 	boolean drawable() {
-		return this.programs != null && !this.programs.isEmpty()
+		return this.programs != null && !(this.programs.isEmpty() && this.standalone.isEmpty())
 				&& this.warmed == this.programs.size()
 				&& this.geometryReady;
 	}
