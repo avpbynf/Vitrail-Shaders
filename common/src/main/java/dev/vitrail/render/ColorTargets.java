@@ -75,7 +75,7 @@ import java.util.stream.Collectors;
  * <p>
  * A target the schedule turns over carries two textures, and which half a program reads and
  * writes is the schedule's answer rather than a flag kept here. The one thing this class owes the
- * ping pong is {@link #swapBack}: a target the pack keeps between frames and that the chain left
+ * ping pong is {@link #copyBack}: a target the pack keeps between frames and that the chain left
  * on the alternate half has to come back to the main one, because the next frame starts its walk
  * from an empty flipped set and would read the half nothing wrote.
  * <p>
@@ -777,7 +777,7 @@ final class ColorTargets {
 	 * targets the frame leaves on the far half, whatever is done to bring them back, and the
 	 * harness reads it under that name.
 	 */
-	void swapBack(CommandEncoder encoder, List<Integer> targets) {
+	void copyBack(CommandEncoder encoder, List<Integer> targets) {
 		for (int index : targets) {
 			TargetSurface alt = this.altSide.get(index);
 			TargetSurface main = this.mainSide.get(index);
