@@ -135,7 +135,7 @@ public final class UniformCatalog {
 	}
 
 	/**
-	 * The two names OptiFine's core profile mode gives the fixed function pair, answered from
+	 * The three names OptiFine's core profile mode gives the fixed function state, answered from
 	 * whatever that layer has just put behind the {@code gl_} spelling.
 	 * <p>
 	 * Called last in each of the three tables rather than written into the three values classes,
@@ -143,10 +143,30 @@ public final class UniformCatalog {
 	 * family at a time and over two transformers picked by the profile the unit declares; the
 	 * paths and their lines are set out in {@link dev.vitrail.glsl.LegacyGlsl#CORE_MATRICES}, and
 	 * the packs are written against them.
+	 * <p>
+	 * The third is the texture matrix, and it is unit NOUGHT rather than the array: the core
+	 * spelling names one matrix where the fixed function spelling names eight, so the alias answers
+	 * the element a bare member asks for. Iris substitutes it on the same three paths as the pair,
+	 * {@code mat4(1.0)} over a quad and over a chunk
+	 * ({@code CompositeCoreTransformer.java:27}, {@code SodiumCoreTransformer.java:47}), and the
+	 * draw's own matrix on the families the game hands over as a render type
+	 * ({@code VanillaCoreTransformer.java:85}).
+	 * <p>
+	 * <strong>That last path is a divergence, and it is the one already carried by
+	 * {@link dev.vitrail.glsl.LegacyGlsl#GAME_TEXTURE_MATRIX} rather than a new one.</strong> A
+	 * literal {@code gl_TextureMatrix[0]} is redirected in the translation on the passes that bind
+	 * the game's transforms; the core spelling arrives here instead, as a member the pack declared,
+	 * and this table has one answer per family. So a core profile program drawn from one of the six
+	 * render types that set a texture transform would read the identity here where Iris reads the
+	 * draw's matrix. Nothing of the corpus reads that difference: the one pack that names it is
+	 * Clarity, in {@code shaders/prog/generic.vsh:14}, included only by its {@code gbuffers_skybasic}
+	 * and {@code gbuffers_skytextured}, and neither of those is drawn from a render type that sets
+	 * one.
 	 */
 	private static void coreMatrices(Builder builder) {
 		builder.alias("modelViewMatrix", "of_ModelViewMatrix");
 		builder.alias("projectionMatrix", "of_ProjectionMatrix");
+		builder.alias("textureMatrix", "of_TextureMatrix");
 	}
 
 	public static Builder builder() {

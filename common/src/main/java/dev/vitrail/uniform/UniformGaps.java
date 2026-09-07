@@ -83,6 +83,75 @@ public final class UniformGaps {
 		reasons.put("farPlane", "no engine answers it, Iris included, so a pack reads the same "
 				+ "nought there");
 
+		// Iris does register it, in uniforms/HardcodedCustomUniforms.java:54, as the distance the
+		// camera moved between the two positions its tracker holds. That file is not wired to
+		// anything: addHardcodedCustomUniforms has no caller in the whole of the 26.2 tree, so the
+		// whole shim it belongs to is unreachable and Complementary reads the same nought there,
+		// shaders/lib/uniforms.glsl:195 on Reimagined and Unbound alike. AstraLex is the one pack
+		// of the corpus that does not, and it does not because it declares the value itself,
+		// shaders/shaders.properties:634, which is answered as any other declaration is.
+		String shimNotWired = "Iris registers it in a shim nothing in that repository calls, so it "
+				+ "is a nought there too";
+		reasons.put("velocity", shimNotWired);
+
+		// The uniforms of the Voxy mod. The mod sets the symbol a pack guards them with, and neither
+		// engine sets it: it appears nowhere in the Iris tree either, so a pack that guards both the
+		// declaration and the read never puts these names in front of an engine at all. What reaches
+		// a block is a pack that declares them whatever that symbol says, which is what raises the
+		// line: Solas, shaders/programs/deferred1.glsl:12, has them beside Distant Horizons' render
+		// distance with no guard over either.
+		String voxyMod = "it belongs to the Voxy mod, and no engine answers it with that mod absent";
+		reasons.put("vxRenderDistance", voxyMod);
+		reasons.put("vxProj", voxyMod);
+		reasons.put("vxProjInv", voxyMod);
+		reasons.put("vxProjPrev", voxyMod);
+		reasons.put("vxModelView", voxyMod);
+		reasons.put("vxModelViewInv", voxyMod);
+		reasons.put("vxModelViewPrev", voxyMod);
+
+		// Reverie's, shaders/lib/all_the_uniforms.glsl:27, beside the previousCameraPosition it
+		// really does read. Iris spells the split pair previousCameraPositionInt and
+		// previousCameraPositionFract, uniforms/CameraUniforms.java:33-34, with the camera's C in
+		// capitals; GLSL is case sensitive, so what the pack wrote reaches nothing on either engine.
+		reasons.put("previouscameraPositionFract", "the name is misspelt: Iris supplies "
+				+ "previousCameraPositionFract, with a capital C, and so does this engine");
+
+		// What is left is a pack reading a name of its own that no engine ever registered, and each
+		// one is answered with the same nought under Iris. The name is the pack's to declare and
+		// several of them nearly do: I Like Vanilla writes the declaration for rainReflectionStrength
+		// and leaves it commented out, shaders/shaders.properties:442.
+		String packsOwn = "no engine registers it, Iris included, and the pack that reads it does "
+				+ "not declare it either";
+		// BVS, shaders/world0/composite.fsh:15, and Body Camera and Cursed Fog at :13 of theirs.
+		reasons.put("playerPosition", packsOwn);
+		// Sildur's, shaders/deferred.fsh:80, in the three dimensions alike.
+		reasons.put("isNether", packsOwn);
+		// Noble, shaders/include/uniforms.glsl:73. Iris builds the family from one supplier and
+		// gives it three shapes, uniforms/MatrixUniforms.java:34-38: the matrix, its inverse and
+		// the previous frame's. There is no inverse OF the previous one, on either engine.
+		reasons.put("gbufferPreviousModelViewInverse", packsOwn);
+		// Photon, shaders/program/d3_ao.fsh:58 and d2_clouds_upscaling.fsh:66.
+		reasons.put("clouds_offset", packsOwn);
+		// Bliss, shaders/dimensions/composite11.fsh:34.
+		reasons.put("Moon_Weather_properties", packsOwn);
+		// I Like Vanilla, shaders/basics/uniforms.glsl:85, against the commented line above.
+		reasons.put("rainReflectionStrength", packsOwn);
+		// Pegasus, shaders/shaders/composite1.fsh:96 among four of its composites.
+		reasons.put("focolortex5", packsOwn);
+		// Bliss again, six of them together at shaders/dimensions/all_translucent.fsh:85-101, and
+		// the first two once more in shaders/world1/gbuffers_weather.fsh:13-14.
+		reasons.put("skyIntensity", packsOwn);
+		reasons.put("skyIntensityNight", packsOwn);
+		reasons.put("moonIntensity", packsOwn);
+		reasons.put("sunIntensity", packsOwn);
+		reasons.put("sunColor", packsOwn);
+		reasons.put("nsunColor", packsOwn);
+		// The same weather program asks for one more, shaders/world1/gbuffers_weather.fsh:9, where
+		// every other program of the pack carries that name as a flat varying it fills itself
+		// (shaders/dimensions/composite1.vsh:52). No engine registers it: the whole Iris tree has
+		// the name nowhere, uniform or otherwise.
+		reasons.put("lightCol", packsOwn);
+
 		return Map.copyOf(reasons);
 	}
 

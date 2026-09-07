@@ -35,11 +35,21 @@ import java.util.Set;
 /**
  * The uniforms a pack declares for itself, resolved once at load and evaluated once a frame.
  * <p>
- * A {@code variable.} is an intermediate the shader never sees; a {@code uniform.} is one it
- * does. They share one namespace, they may refer to each other in any order, and they may read
+ * A {@code variable.} is written as an intermediate and a {@code uniform.} as a value the shader
+ * reads. They share one namespace, they may refer to each other in any order, and they may read
  * any value the engine catalogue answers. That is the whole feature, and it is why it is written
  * as a graph rather than as a list: BSL's {@code shadowFade} is four other declarations deep, and
  * evaluating those out of order gives a plausible number rather than an error.
+ * <p>
+ * <strong>The two keywords decide nothing at the point a program is written, and that is the
+ * reference's behaviour rather than a shortcut.</strong> Iris records the keyword on its
+ * {@code Builder.Variable} and reads it in exactly one place, a list it builds and drops on the
+ * spot ({@code uniforms/custom/CustomUniforms.java:64-67}); what actually reaches a program is
+ * {@code assignTo} ({@code :189-202}), which walks every declaration that resolved and takes a
+ * location for each one the program declares. So a pack may write {@code variable.} and still read
+ * the value as a uniform, and one pack of the corpus does: E-LITE declares
+ * {@code variable.float.hour_world} in its {@code shaders.properties} and declares
+ * {@code uniform float hour_world} in {@code shaders/lib/oscilator_utils.glsl:9}.
  * <p>
  * Three rules decide what happens when a pack gets it wrong, and all three exist so that a
  * mistake stays named instead of turning into a permanently wrong image:
@@ -70,7 +80,14 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 	private final Map<String, Input> engineInputs = new LinkedHashMap<>();
 	private final Map<String, Derived> declared = new LinkedHashMap<>();
 	private final Map<Node, List<Node>> dependsOn = new LinkedHashMap<>();
+
+	/**
+	 * The names the pack wrote as {@code uniform.} rather than as {@code variable.}. It decides
+	 * nothing about what a program may read, for the reason at the top of this class; what it still
+	 * decides is which declarations {@link #prune} walks out from.
+	 */
 	private final Set<String> exposedNames = new LinkedHashSet<>();
+
 	private final List<Node> order = new ArrayList<>();
 	private final Set<Node> live = new LinkedHashSet<>();
 
@@ -171,10 +188,10 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 		return this.deltaSeconds;
 	}
 
-	/** Null when the name is not one the pack exposes, or was dropped on the way. */
+	/** Null when the pack declares no such name, or when the declaration was dropped on the way. */
 	public UniformSource source(String name) {
 		Derived node = this.declared.get(name);
-		if (node == null || !this.exposedNames.contains(name) || !this.live.contains(node)) {
+		if (node == null || !this.live.contains(node)) {
 			return null;
 		}
 
@@ -191,10 +208,13 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 		return node == null ? null : Type.convert(node.type);
 	}
 
-	/** The names the pack exposes that survived resolution, in declaration order. */
+	/**
+	 * The names a program can read, which is every declaration that survived resolution and is
+	 * still reached, in declaration order. Both keywords, for the reason at the top of this class.
+	 */
 	public Set<String> exposed() {
 		Set<String> names = new LinkedHashSet<>();
-		for (String name : this.exposedNames) {
+		for (String name : this.declared.keySet()) {
 			if (source(name) != null) {
 				names.add(name);
 			}
@@ -236,7 +256,9 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 		/**
 		 * Takes one declaration as the properties file wrote it.
 		 *
-		 * @param exposed true for a {@code uniform.} line, false for a {@code variable.} one
+		 * @param exposed true for a {@code uniform.} line, false for a {@code variable.} one. It
+		 *                does not decide what a program may read, which is set out at the top of
+		 *                this class; it decides which declarations the graph is walked out from
 		 */
 		Builder declare(String name, String type, String expression, boolean exposed);
 
@@ -428,9 +450,21 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 	}
 
 	/**
-	 * Keeps only what an exposed uniform reaches. A pack that leaves a {@code variable.} behind
-	 * after an edit should not pay for it every frame, and neither should one whose engine inputs
-	 * are all read by declarations that were dropped.
+	 * Keeps only what a {@code uniform.} declaration reaches. A pack that leaves a {@code variable.}
+	 * behind after an edit should not pay for it every frame, and neither should one whose engine
+	 * inputs are all read by declarations that were dropped.
+	 * <p>
+	 * <strong>This is the one place the keyword still decides anything, and it leaves a
+	 * divergence.</strong> Iris keeps every declaration that resolved and drops one only in
+	 * {@code optimise} ({@code uniforms/custom/CustomUniforms.java:241}), which counts the passes
+	 * that have already claimed a location ({@code pipeline/IrisRenderingPipeline.java:477}) and so
+	 * keeps whatever one of them asked for, whichever keyword wrote it. Nothing here can do the same:
+	 * this table is built once, before a single program has been read, so it cannot tell a leftover
+	 * declaration from one a program is about to name, and keeping every one means evaluating every
+	 * one on every frame. What it costs is measured over the corpus rather than guessed: exactly one
+	 * name is written as {@code variable.} and declared as a uniform by the pack's own GLSL, E-LITE's
+	 * {@code hour_world}, and its {@code day_moment} reads it, so the walk reaches it and no pack of
+	 * the corpus loses a value here.
 	 */
 	private void prune() {
 		Deque<Node> pending = new ArrayDeque<>();
