@@ -23,12 +23,12 @@ import java.util.Set;
  * <p>
  * <strong>The two halves stand on opposite sides of the frame</strong>, which is the whole reason
  * they are two programs rather than one with two blends. The opaque half is drawn among the game's
- * solid features, before the deferred stage, so it is in the entities' position: it writes every draw
- * buffer but the first, and the first reaches the pack's picture through the scene seed. The
- * translucent half is drawn last of all, after the world's own water, so it is in the weather's
- * position: it blends onto a picture the chain has already put there and takes draw buffer nought
- * outright. Nothing here decides that - {@link GeometryProgram} reads it off whether the game's
- * pipeline blends - and it is worth naming because the two halves look interchangeable and are not.
+ * solid features, before the deferred stage, so it is in the entities' position: it writes the
+ * coverage mask and owns every draw buffer the pack asked for, nought included. The translucent
+ * half is drawn last of all, after the world's own water, so it is in the weather's position: it
+ * blends onto a picture the chain has already put there and owns draw buffer nought on the strength
+ * of its side. What the mask buys the opaque half is written where this class builds the pass, and
+ * it is worth naming because the two halves look interchangeable and are not.
  * <p>
  * <strong>The image belongs to the draw.</strong> One pass draws every particle of its half, and the
  * layers inside it come off three different atlases, so a pack reading {@code gtexture} has to be
@@ -88,15 +88,32 @@ final class ParticleProgram extends FamilyProgram {
 		return new ParticleProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				element.element(), NAMESPACE, ANSWERED, false,
 				game.getColorTargetState().blendFunction(),
-				// No coverage mask, on the opaque half as well as on the translucent one, and the two
-				// have different reasons. The translucent half is the sky's star quad again, mostly
-				// transparent and claiming every pixel it spans. The opaque half is the entities'
-				// case: it is drawn over pixels the seed is going to repaint anyway, and marking one
-				// would only take the game's own picture away from whatever is drawn there next.
+				// The coverage mask on the opaque half and not on the translucent one, which is the
+				// entities' rule and is what decides whether the pack owns draw buffer nought.
+				//
+				// WITHOUT IT THE OPAQUE HALF NEVER WRITES THE PACK'S TARGET AT ALL. Draw buffer
+				// nought falls back to the game's own, so a pack whose particle program declares one
+				// draw buffer writes nothing of the pack's and its colour reaches the picture only
+				// through the seed, already tone mapped and flat. Photon is that pack: its
+				// gbuffers_particles writes colortex1, which is its gbuffer, and the deferred stage
+				// shades what it finds there. Reached through the seed instead, the smoke arrives as
+				// a finished LDR colour the deferred stage then reads as gbuffer data, which is the
+				// warm haze a capture pair put beside Iris's dark smoke.
+				//
+				// Iris binds every gbuffers program to a framebuffer over the pack's own declared
+				// draw buffers, the particles among them (pipeline/IrisRenderingPipeline.java:677-678
+				// with the two particle keys at pipeline/programs/ShaderKey.java:94,96), so the
+				// pack's colour never makes that trip there.
+				//
+				// The translucent half owes no mask for the reason every after-deferred pass owes
+				// none: the seed has run long before it draws, and it owns draw buffer nought on the
+				// strength of its side alone.
+				//
 				// claimed: no sibling marks these pixels for them. The opaque half is drawn with
 				// RenderPipelines.OPAQUE_PARTICLE, which blends nothing, so the question does not
 				// arise there either.
-				false, false, element.afterDeferred(), game.getPrimitiveTopology(), game.isCull(),
+				!element.afterDeferred(), false, element.afterDeferred(),
+				game.getPrimitiveTopology(), game.isCull(),
 				game.getDepthStencilState(), element.stage(),
 				// Nothing of the game's bound beside the mesh, unlike the clouds: a particle carries
 				// its whole geometry in the vertex buffer the renderer fills.

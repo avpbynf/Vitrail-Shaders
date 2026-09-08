@@ -128,6 +128,20 @@ what the next one holds.
 
 ### Fixed
 
+- **Smoke, flame and the other solid particles take the colour the pack meant them to.**
+  The game draws its quad particles in two goes, the solid ones with the world and the
+  see-through ones after the water, and only the second lot were reaching the pack's own
+  image. The first lot were painted into the game's picture instead and carried in from
+  there, already finished, so a pack that lights its particles itself was handed a colour
+  somebody else had already lit: under Photon a campfire's smoke came out a warm haze where
+  it should be dark, and any pack asking for more than one target had everything past the
+  first written nowhere. They are now drawn into the targets the pack asked for, as the rest
+  of the world is.
+
+  Packs that had this half handed back to the game altogether get it too: a pack whose
+  particle program writes a target the world's own picture is not painted into was refused
+  for a road it no longer travels.
+
 - **Water that reads the picture behind it draws its fog and its reflections.** Some packs
   sample one of their own colour targets from the water, the translucent blocks or the particles
   while drawing into that same target, for the colour of the world behind the surface and for

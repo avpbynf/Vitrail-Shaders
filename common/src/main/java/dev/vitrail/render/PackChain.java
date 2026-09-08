@@ -458,12 +458,12 @@ public final class PackChain {
 		// that stage instead, and that is why they need the switch and this does not.
 		this.weather = new WeatherDraw(this, packPath, chain.place(), chosen, profile, values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
-		// And the sixth, which needs the seed's switch as the entities do and only for half of
-		// itself: its opaque half is drawn among the game's solid features, before the deferred
-		// stage, and that half's first output has the same one road into the pack's picture.
+		// And the sixth, which straddles the deferred stage: its opaque half is drawn among the
+		// game's solid features and writes the coverage mask as the entities do, its translucent
+		// half after the world's water. Neither half asks whether the seed is painted, both owning
+		// the draw buffers the pack asked for.
 		this.particles = new ParticleDraw(this, packPath, chain.place(), chosen, profile, values,
-				this.load, chain.chain(), chain.targets(), chainWanted,
-				seedEnabled && this.seed != null, this.targets);
+				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 		// And the seventh, read on demand like the five before it and for the sharpest reason of
 		// them: most sessions have no Distant Horizons at all, and the ones that do only reach this
 		// on the frames DH really draws a far terrain.
