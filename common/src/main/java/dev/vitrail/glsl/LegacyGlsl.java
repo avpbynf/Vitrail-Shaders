@@ -439,6 +439,9 @@ public final class LegacyGlsl {
 			"packHalf2x16", "unpackHalf2x16",
 			"bitfieldExtract", "bitfieldInsert", "bitfieldReverse", "bitCount", "findLSB", "findMSB");
 
+	/** The 8 and 16 bit types, each with the 32 bit type {@link #widened} declares it under. */
+	private static final Map<String, String> NARROW_TYPES = narrowTypes();
+
 	/**
 	 * Built-in type names. Used to tell a declaration from a use: an identifier straight after one
 	 * of these is being named, anywhere else it is being read.
@@ -599,7 +602,77 @@ public final class LegacyGlsl {
 			}
 		}
 
+		// The explicitly sized types of GL_EXT_shader_explicit_arithmetic_types, which a pack
+		// written for a recent card declares its outputs and varyings under. Left out, a
+		// declaration under one of them read as a use, so the declaration was neither lifted nor
+		// counted, and RenderPearl's f16vec4 output stayed in the body under an ofFragData0 laid on
+		// the same location.
+		names.addAll(NARROW_TYPES.keySet());
+		names.addAll(List.of("float32_t", "float64_t", "int32_t", "int64_t", "uint32_t", "uint64_t"));
+		for (String prefix : List.of("f32", "f64", "i32", "i64", "u32", "u64")) {
+			for (int size = 2; size <= 4; size++) {
+				names.add(prefix + "vec" + size);
+			}
+		}
+
+		for (String prefix : List.of("f32", "f64")) {
+			for (int rows = 2; rows <= 4; rows++) {
+				names.add(prefix + "mat" + rows);
+				for (int columns = 2; columns <= 4; columns++) {
+					names.add(prefix + "mat" + rows + "x" + columns);
+				}
+			}
+		}
+
 		return Set.copyOf(names);
+	}
+
+	/**
+	 * The 8 and 16 bit types, each mapped onto the 32 bit type it converts to on its own: the
+	 * extension lets a narrow value flow into a wider variable with no cast, so a variable declared
+	 * under the wide name still takes every value the pack assigns it.
+	 */
+	private static Map<String, String> narrowTypes() {
+		Map<String, String> widened = new LinkedHashMap<>();
+		widened.put("float16_t", "float");
+		widened.put("int16_t", "int");
+		widened.put("uint16_t", "uint");
+		widened.put("int8_t", "int");
+		widened.put("uint8_t", "uint");
+
+		for (int size = 2; size <= 4; size++) {
+			widened.put("f16vec" + size, "vec" + size);
+			widened.put("i16vec" + size, "ivec" + size);
+			widened.put("u16vec" + size, "uvec" + size);
+			widened.put("i8vec" + size, "ivec" + size);
+			widened.put("u8vec" + size, "uvec" + size);
+		}
+
+		for (int rows = 2; rows <= 4; rows++) {
+			widened.put("f16mat" + rows, "mat" + rows);
+			for (int columns = 2; columns <= 4; columns++) {
+				widened.put("f16mat" + rows + "x" + columns, "mat" + rows + "x" + columns);
+			}
+		}
+
+		return Collections.unmodifiableMap(widened);
+	}
+
+	/**
+	 * The type a fragment output is declared under in the translation: the pack's own, unless it is
+	 * an 8 or 16 bit one, which becomes its 32 bit form.
+	 * <p>
+	 * A workaround, and it is paid in nothing the image can see. Iris leaves the declaration as the
+	 * pack wrote it, since OpenGL takes a narrow output on any card that takes the extension. On
+	 * Vulkan a narrow variable in the input or output storage class asks the module for the
+	 * {@code StorageInputOutput16} capability, which GeForce does not expose, so the module is
+	 * invalid on that card. The value written is the same either way: the attachment holds the
+	 * format the pack gave it, and a half is widened to float on the way in whether the conversion
+	 * happens in the shader or in the write. A varying declared narrow is left as written, no pack
+	 * of the corpus declaring one; the same capability would refuse it.
+	 */
+	static String widened(String type) {
+		return NARROW_TYPES.getOrDefault(type, type);
 	}
 
 	private static Map<String, String> engineAttributes() {

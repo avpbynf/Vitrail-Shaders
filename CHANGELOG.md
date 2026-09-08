@@ -117,6 +117,15 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack written for half precision no longer takes the driver down with it.** RenderPearl
+  declares the colour it writes as a sixteen bit vector, and the engine did not know that type: the
+  declaration stayed where the pack wrote it, a second one was laid on the same slot, and the
+  program that did get through asked the card for a sixteen bit output it does not have. Those types
+  are known now, an output declared under one is declared under its ordinary width, and the value
+  written is the same. The same pack tells the compiler it leaves the depth alone, and the engine's
+  own code wrote that depth above the pack's line, which the compiler refuses as a redeclaration
+  after use: the engine's code now comes after the pack's, where the reference puts its own.
+
 - **A greyscale picture a pack ships is read as the pack wrote it.** Every grey image came out
   lighter than the file, its darks lifted towards white, because the decoder converted the picture
   out of its own colour space instead of taking the bytes as they were written. A pack that compares

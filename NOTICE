@@ -922,6 +922,14 @@ Apache License, Version 2.0
   same conditionals, and Iris runs the same preprocessor over them too. None of jcpp's code is
   here.
 
+  common/src/main/java/dev/vitrail/glsl/Emitter.java writes the main that stands in for a pack's
+  own after the pack's body, at the end of the file, which is where
+  net.irisshaders.iris.pipeline.transform.transformer.VanillaTransformer injects the one wrapping
+  main it writes, the one that widens lines, lines 200 to 223, read on 8 September 2026. What is
+  taken is the place: a builtin the wrapper writes, gl_FragDepth, may be redeclared by the pack
+  with a depth layout, and a use above that redeclaration is refused by the compiler. The wrapper
+  itself, and what it writes, are this engine's.
+
 AMD FidelityFX Super Resolution 1.0, https://github.com/GPUOpen-Effects/FidelityFX-FSR
 Copyright (c) 2021 Advanced Micro Devices, Inc.
 MIT License

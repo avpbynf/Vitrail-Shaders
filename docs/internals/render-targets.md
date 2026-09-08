@@ -243,7 +243,17 @@ and would take rank zero whatever the entry point does. For the same reason, any
 adds around the pack's entry point (the alpha test epilogue, for instance, which reads the alpha
 of output zero) has to be emitted **after** both the declarations and the ordering function. A
 wrapper emitted above them reorders every attachment in the program, and the result is a complete,
-convincing, wrong image.
+convincing, wrong image. It is in fact emitted after the pack's whole body, at the end of the
+file, the way the reference places its own: a wrapper that writes `gl_FragDepth` above a pack's
+`layout(depth_unchanged)` redeclaration of it is refused by the compiler, a builtin having been
+used before it was redeclared.
+
+**A fragment output declared under a 16 bit type is declared under the 32 bit one.** The
+reference leaves such a declaration alone, OpenGL taking it on any card that takes the
+extension. On Vulkan a 16 bit variable in the input or output storage class asks the module for
+a capability GeForce does not expose, so the module is invalid on that card. The value written is
+the same either way, the attachment holding whatever format the
+pack gave it, and the pack's own assignments still fit, a half converting to a float on its own.
 
 ## Identity, caching and reload
 
