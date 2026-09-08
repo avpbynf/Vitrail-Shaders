@@ -26,6 +26,9 @@ public final class TargetName {
 
 	private static final String PREFIX = "colortex";
 
+	/** What the same target is called where a compute writes it rather than samples it. */
+	private static final String IMAGE_PREFIX = "colorimg";
+
 	/** By position: index 0 is {@code gcolor}, index 7 is {@code gaux4}, and nothing past that. */
 	private static final List<String> LEGACY = List.of(
 			"gcolor", "gdepth", "gnormal", "composite", "gaux1", "gaux2", "gaux3", "gaux4");
@@ -45,6 +48,30 @@ public final class TargetName {
 		}
 
 		String digits = name.substring(PREFIX.length());
+		if (digits.isEmpty() || digits.length() > 2 || !digits.chars().allMatch(Character::isDigit)) {
+			return OptionalInt.empty();
+		}
+
+		int index = Integer.parseInt(digits);
+
+		return index < MAX_TARGETS ? OptionalInt.of(index) : OptionalInt.empty();
+	}
+
+	/**
+	 * The same target under the name a compute STORES into, {@code colorimg7} answering with 7.
+	 * <p>
+	 * No alias answers here and that is the reference's own shape: Iris builds the set of image
+	 * names itself, one per target and none of the eight names from before the format was numbered
+	 * ({@code samplers/IrisImages.java:21}), so a pack writing {@code gaux4img} has written a name
+	 * nothing binds there either. The two digits and the ceiling are {@link #index}'s, so that one
+	 * spelling of a target's number cannot be read where the other is refused.
+	 */
+	public static OptionalInt imageIndex(String name) {
+		if (!name.startsWith(IMAGE_PREFIX)) {
+			return OptionalInt.empty();
+		}
+
+		String digits = name.substring(IMAGE_PREFIX.length());
 		if (digits.isEmpty() || digits.length() > 2 || !digits.chars().allMatch(Character::isDigit)) {
 			return OptionalInt.empty();
 		}
