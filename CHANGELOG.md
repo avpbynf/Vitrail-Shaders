@@ -117,6 +117,15 @@ what the next one holds.
 
 ### Fixed
 
+- **Water that reads the picture behind it draws its fog and its reflections.** Some packs
+  sample one of their own colour targets from the water, the translucent blocks or the particles
+  while drawing into that same target, for the colour of the world behind the surface and for
+  what it reflects; that is what OpenGL hands them, the target as it stands. This engine
+  answered the read with one black pixel, and Sildur's Vibrant Shaders drew its lakes a flat
+  saturated blue with nothing mirrored in them. The read is now served a copy of the target
+  taken just ahead of the pass, which holds the world the pass wants to see behind itself, at
+  the cost of two image copies a frame per such target.
+
 - **A pack written for half precision no longer takes the driver down with it.** RenderPearl
   computes in sixteen and eight bit numbers, and five things stood between it and the screen, one of
   which crashed the game the moment the pack's first program was built. The engine did not know
