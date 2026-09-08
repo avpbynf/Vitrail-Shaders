@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
 
@@ -180,6 +181,24 @@ final class ColorTargets {
 
 	/** One surface per texture the pack ships, allocated and uploaded with the constants. */
 	private final Map<PackImages.Image, TargetSurface> packSurfaces = new LinkedHashMap<>();
+
+	/**
+	 * Which formats this device blends between two texels of, asked once each and kept.
+	 * <p>
+	 * Keyed on the FORMAT and filled where it is read rather than beside the surfaces, because the
+	 * two do not happen in that order: the passes are built before the targets are prepared
+	 * ({@code PackChain.ready}), so a pass captures what it reads from a name while
+	 * {@link #packSurfaces} is still empty. A table filled at allocation would have answered every
+	 * pass nearest.
+	 * <p>
+	 * Concurrent because it is written from two threads. A geometry program is built on the
+	 * pack-load worker ({@code FamilyWarmup}) and asks {@link #packSource} from its constructor,
+	 * where a full screen pass asks the same method on the render thread; {@code TargetCopies}
+	 * guards its own two collections for exactly that reason. Every format that reaches here is one
+	 * an allocated image is in, and {@link #ensurePackTextures} asks for all of them on the render
+	 * thread, so the device itself is answered before any worker exists.
+	 */
+	private final Map<GpuFormat, Boolean> filterable = new ConcurrentHashMap<>();
 
 	/**
 	 * The shadow map, allocated and cleared with the rest.
@@ -1018,6 +1037,7 @@ final class ColorTargets {
 
 		this.packSurfaces.values().forEach(TargetSurface::close);
 		this.packSurfaces.clear();
+		this.filterable.clear();
 		this.storageImages.close();
 		this.storageBuffers.close();
 
@@ -1113,6 +1133,14 @@ final class ColorTargets {
 		for (PackImages.Image image : images) {
 			Vitrail.logger().info("The pack supplies {}", PackImages.describe(image));
 
+			// On the render thread, and before the pack-load worker exists: this is what answers the
+			// device for every format the pack supplies, so a geometry program built off thread
+			// reads the table rather than filling it. The note belongs here for the same reason.
+			if (image.texture().blur() && !filterable(image.format())) {
+				note(image.texture().sampler() + " is read at the nearest texel, this device not "
+						+ "filtering " + image.format() + " linearly");
+			}
+
 			// One at a time, because one refusal here must cost one texture and not the pack. These
 			// are the only surfaces of the engine whose size comes from a downloaded file rather
 			// than from the window, and everything else in this method is on the road that sets
@@ -1172,9 +1200,42 @@ final class ColorTargets {
 
 		boolean flat = !sampler.equals(SamplerPlan.behind(sampler));
 
-		return new PackSource(image,
-				image.texture().blur() ? FilterMode.LINEAR : FilterMode.NEAREST,
-				!flat && !image.texture().clamp());
+		return new PackSource(image, filterFor(image), !flat && !image.texture().clamp());
+	}
+
+	/**
+	 * How one supplied texture is read: what the pack asked for, unless this device cannot filter
+	 * the format it went up in.
+	 * <p>
+	 * The formats that can lose here are the ones the specification does not require a device to
+	 * filter, which among the four an atlas is allocated as are the thirty two bit float and the
+	 * sixteen bit normalised one. What is lost is the blend between two entries of a lookup table:
+	 * read at the nearest entry it still draws the picture the pack drew, banded.
+	 */
+	private FilterMode filterFor(PackImages.Image image) {
+		return image.texture().blur() && filterable(image.format())
+				? FilterMode.LINEAR
+				: FilterMode.NEAREST;
+	}
+
+	/**
+	 * Asked of the device the first time a format is met here, and said once when it answers no.
+	 * <p>
+	 * The log line rather than a note, because this is reachable from the pack-load worker and the
+	 * note list is the render thread's; {@link #ensurePackTextures} writes the note for every format
+	 * the pack really supplies, which is every format that can reach here.
+	 */
+	private boolean filterable(GpuFormat format) {
+		return this.filterable.computeIfAbsent(format, one -> {
+			boolean answer = GpuFormats.filtersLinearly(one);
+			if (!answer) {
+				Vitrail.logger().warn("This device does not filter {} linearly, so what the pack "
+						+ "supplies in it is read at the nearest texel where its directive asked for "
+						+ "a blend", one);
+			}
+
+			return answer;
+		});
 	}
 
 	/** The view behind a supplied image, or null while nothing could be put behind it. */

@@ -97,10 +97,36 @@ final class GpuFormats {
 	 * False with no Vulkan device to ask, which is no device to store into either.
 	 */
 	static boolean storageCapable(GpuFormat format) {
+		return feature(format, VK10.VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT, false);
+	}
+
+	/**
+	 * Whether this device blends between two texels of that format, which is what a pack asks for
+	 * every time it leaves blur on.
+	 * <p>
+	 * Asked of the device because the specification only REQUIRES it of some formats. A sixteen bit
+	 * float is one of them; a thirty two bit float is not, and neither is the sixteen bit
+	 * normalised pair, which are two of the four an atlas is allocated as. The thirty two bit float
+	 * is what iterationT's atmosphere table goes up in, and Metal does not filter that width at
+	 * all, so under MoltenVK the answer here is no and the sampler falls back to nearest rather
+	 * than asking for something the driver never promised. GL required it of every one of them,
+	 * which is why Iris asks nothing.
+	 * <p>
+	 * Yes with no Vulkan device to ask, which is the opposite default to {@link #storageCapable}
+	 * and for the opposite reason: a storage image the engine cannot prove is a compute it must not
+	 * schedule, where a filter it cannot prove would take linear filtering away from every texture
+	 * of every pack on a reading that proves nothing.
+	 */
+	static boolean filtersLinearly(GpuFormat format) {
+		return feature(format, VK10.VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT, true);
+	}
+
+	/** One bit of what this device does with that format, or {@code absent} with no device to ask. */
+	private static boolean feature(GpuFormat format, int bit, boolean absent) {
 		GpuDevice device = RenderSystem.tryGetDevice();
 		if (device == null
 				|| !(((GpuDeviceAccessor) device).vitrail$backend() instanceof VulkanDevice vulkan)) {
-			return false;
+			return absent;
 		}
 
 		try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -108,7 +134,7 @@ final class GpuFormats {
 			VK10.vkGetPhysicalDeviceFormatProperties(vulkan.vkDevice().getPhysicalDevice(),
 					VulkanConst.toVk(format), properties);
 
-			return (properties.optimalTilingFeatures() & VK10.VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0;
+			return (properties.optimalTilingFeatures() & bit) != 0;
 		}
 	}
 }
