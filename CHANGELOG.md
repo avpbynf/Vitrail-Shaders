@@ -15,6 +15,19 @@ what the next one holds.
 
 ### Added
 
+- **A pack's three dimensional lookup table is served whatever it holds.** Some packs ship a block
+  of numbers rather than a picture, a table their shaders read in three directions: an atmosphere
+  sampled by height, by sun angle and by view angle, a noise field a cloud is carved out of. The
+  engine laid out the small ones and turned away any table written in full precision numbers, and
+  it read no pack file over eight megabytes at all, a limit meant for shader text. A pack whose
+  table was either lost every program that read it: on iterationT that was nineteen of the passes
+  it draws the overworld with, which left the bare picture on screen with none of its sky, its
+  clouds or its water put in. Such a table is now read to the length its own declaration announces,
+  however long the file is, and at the precision the pack wrote it.
+
+  Where a card cannot blend between two of those values, Apple's among them, the table is read at
+  its nearest entry instead and the log says so.
+
 - **A pack's geometry stage is drawn.** Some packs put a third shader between the two the engine
   builds every draw from, and use it to work something out per triangle rather than per corner:
   how coarse the texture on a block face is, whether a sky quad is the moon or the sun. The engine

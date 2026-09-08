@@ -546,6 +546,42 @@ public final class ShaderPackSource implements AutoCloseable {
 		return Files.size(file);
 	}
 
+	/**
+	 * The first {@code wanted} bytes of a file, for a raw texture whose own declaration says how
+	 * many there are to read.
+	 * <p>
+	 * The ceiling on {@link #bytes} is the one a shader SOURCE gets, and a raw texture is not one.
+	 * iterationT ships a thirty three megabyte atmosphere table, four times that ceiling, and
+	 * reading it under the source's rule left the pack with a {@code sampler3D} nothing stood
+	 * behind and nineteen passes of its overworld that could not be built. What bounds this read
+	 * instead is the declaration: {@code PackTextures} refuses one longer than the file it names
+	 * before this is ever called, and the atlas laid out for it has already had to fit inside what
+	 * this engine will spend on one.
+	 * <p>
+	 * The tail past the declaration is not read at all, which is what the note beside such a
+	 * declaration says out loud: what the file holds is the author's business, what the directive
+	 * announces is what the shaders address.
+	 *
+	 * @throws IOException if the file holds fewer than {@code wanted} bytes, which would otherwise
+	 *                     go up padded with zeroes and read as a lookup table
+	 */
+	public byte[] head(Path file, long wanted) throws IOException {
+		if (wanted < 0 || wanted > Integer.MAX_VALUE) {
+			throw new IOException(rel(file) + " is asked for " + wanted
+					+ " bytes, which is not a length anything here can hold");
+		}
+
+		try (InputStream in = Files.newInputStream(file)) {
+			byte[] read = in.readNBytes((int) wanted);
+			if (read.length < wanted) {
+				throw new IOException(rel(file) + " holds " + read.length
+						+ " bytes where the declaration asks for " + wanted);
+			}
+
+			return read;
+		}
+	}
+
 	/** A file's raw bytes, under the same ceiling as the sources: an image is not exempt. */
 	public byte[] bytes(Path file) throws IOException {
 		long size = Files.size(file);

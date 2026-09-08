@@ -127,7 +127,14 @@ final class PackImages {
 		declared.refused().forEach(refused -> notes.add("Dropped " + refused));
 
 		for (PackTexture texture : declared.supplied()) {
-			VolumeAtlas atlas = flat.get(texture.sampler());
+			// The layout is this declaration's own, not the name's: iterationT points colortex8 at a
+			// volume for the sampler3D and at a PNG for the sampler2D, exactly as the reference
+			// files the two apart, and handing the atlas to the PNG would spread an image over
+			// nothing and leave six programs reading a lookup table.
+			VolumeAtlas atlas = texture.raw().filter(VolumeAtlas::serves).isPresent()
+					? flat.get(texture.sampler())
+					: null;
+
 			Image image = decode(texture, atlas, source, notes);
 			if (image == null) {
 				continue;
@@ -171,15 +178,19 @@ final class PackImages {
 		}
 
 		try {
-			byte[] bytes = source.bytes(file.get());
 			if (atlas != null) {
+				// Read to the length the declaration announces and no further, which is what lets a
+				// blob past the ceiling a shader source gets be read at all: iterationT's atmosphere
+				// table is four times that ceiling.
 				PackTexture.Raw raw = texture.raw().orElseThrow();
 
 				return new Image(texture, atlas.atlasWidth(), atlas.atlasHeight(),
-						atlas.spread(bytes), format(atlas), raw.sizeX() + "x" + raw.sizeY() + "x"
-								+ raw.sizeZ() + " laid out flat as " + atlas.atlasWidth() + "x"
-								+ atlas.atlasHeight());
+						atlas.spread(source.head(file.get(), raw.bytes())), format(atlas),
+						raw.sizeX() + "x" + raw.sizeY() + "x" + raw.sizeZ() + " laid out flat as "
+								+ atlas.atlasWidth() + "x" + atlas.atlasHeight());
 			}
+
+			byte[] bytes = source.bytes(file.get());
 
 			// Any other blob means what its own format says it means, and nothing here turns one of
 			// those into an image. The corpus ships none; a pack that starts to has to be named
@@ -341,6 +352,7 @@ final class PackImages {
 			case UNSIGNED_BYTE -> GpuFormat.RGBA8_UNORM;
 			case UNSIGNED_SHORT -> GpuFormat.RGBA16_UNORM;
 			case HALF_FLOAT -> GpuFormat.RGBA16_FLOAT;
+			case FLOAT -> GpuFormat.RGBA32_FLOAT;
 			default -> throw new IllegalStateException(atlas.type() + " is not a type an atlas holds");
 		};
 	}

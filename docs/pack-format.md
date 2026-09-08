@@ -464,10 +464,17 @@ What forces that is the data rather than the type: the blob is uploaded as one f
 and nothing builds a three-dimensional view over a texture a pack ships. The declared type stopped
 being the obstacle the day a mixin made the bind group's walk read `SpvDim3D` as 2D, which is what a
 volume an `image` directive fills is bound through.
-The atlas keeps the blob's own channel type, an unsigned byte, an unsigned short or a half float
-a channel, and the addressing the pack asked for is baked into it: a repeating volume carries the far edge in the
+The atlas keeps the blob's own channel type, an unsigned byte, an unsigned short or a float of
+either width a channel, and the addressing the pack asked for is baked into it: a repeating volume
+carries the far edge in the
 gutter of each slice and the helper wraps, a clamped one carries the edge again and the helper
-clamps. A read written through a macro that stands for exactly the sampler's name is a read of the
+clamps. The file is read to the length the declaration announces and no further, so a blob past the
+ceiling a shader source gets is read all the same and a tail past the declaration is uploaded by
+neither engine. Two of the four formats an atlas is allocated as are ones Vulkan only PERMITS a
+device to filter linearly rather than requiring it, the thirty two bit float and the sixteen bit
+normalised one, so the device is asked and a refusal leaves that atlas read at its nearest texel
+with a line in the log.
+A read written through a macro that stands for exactly the sampler's name is a read of the
 volume; one reached any other way leaves the program refused, and the log counts it. The volume
 answers only the `sampler3D` declarations of its name: a `sampler2D` of the same name in the same
 stage goes on reading the colour target, as under the reference, which renames a declaration to a
