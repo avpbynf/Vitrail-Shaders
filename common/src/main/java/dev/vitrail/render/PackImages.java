@@ -1,11 +1,13 @@
 package dev.vitrail.render;
 
 import dev.vitrail.pack.model.PackTexture;
+import dev.vitrail.pack.model.PixelType;
 import dev.vitrail.pack.model.TextureStage;
 import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.texture.PackTextures;
+import dev.vitrail.pack.texture.RawImage;
 import dev.vitrail.pack.texture.VolumeAtlas;
 import dev.vitrail.render.pbr.PbrAtlases;
 import dev.vitrail.uniform.NoiseTexture;
@@ -201,19 +203,35 @@ final class PackImages {
 				PackTexture.Raw raw = texture.raw().orElseThrow();
 
 				return new Image(texture, atlas.atlasWidth(), atlas.atlasHeight(),
-						atlas.spread(source.head(file.get(), raw.bytes())), format(atlas),
+						atlas.spread(source.head(file.get(), raw.bytes())), format(atlas.type()),
 						raw.sizeX() + "x" + raw.sizeY() + "x" + raw.sizeZ() + " laid out flat as "
 								+ atlas.atlasWidth() + "x" + atlas.atlasHeight());
+			}
+
+			// A blob that is a plain two dimensional texture goes up as it stands, its channels
+			// widened to the four the engine allocates. Read to the declared length for the reason
+			// the atlas is: the ceiling above this was written for a shader source.
+			PackTexture.Raw plain = texture.raw().filter(RawImage::serves).orElse(null);
+			if (plain != null) {
+				RawImage image = RawImage.of(plain);
+
+				return new Image(texture, image.width(), image.height(),
+						image.widen(source.head(file.get(), plain.bytes())), format(image.type()),
+						image.width() + "x" + image.height());
 			}
 
 			byte[] bytes = source.bytes(file.get());
 
 			// Any other blob means what its own format says it means, and nothing here turns one of
-			// those into an image. The corpus ships none; a pack that starts to has to be named
-			// rather than served something plausible.
+			// those into an image: a shape that is neither a volume nor a plain texture, or either
+			// of those in a channel type or order nothing lays out. A one dimensional blob and a
+			// rectangle are read through samplers this backend does not bind; the corpus ships
+			// neither.
 			if (!texture.png()) {
-				notes.add(texture.path() + " is a raw " + texture.raw().orElseThrow().shape()
-						+ ", which this engine only lays out flat for a volume, so "
+				PackTexture.Raw refused = texture.raw().orElseThrow();
+				notes.add(texture.path() + " is a raw " + refused.shape() + " of "
+						+ refused.pixelFormat() + " " + refused.pixelType()
+						+ ", which this engine does not lay out, so "
 						+ texture.sampler() + " reads one black pixel");
 
 				return null;
@@ -353,8 +371,8 @@ final class PackImages {
 	}
 
 	/**
-	 * What a flattened volume is allocated as: four channels of the blob's own type, so that the
-	 * bytes go up as the file holds them.
+	 * What a blob is allocated as, flattened volume and plain texture alike: four channels of its
+	 * own type, so that the bytes go up as the file holds them.
 	 * <p>
 	 * The channel type decides and the internal format the declaration names does not, which is a
 	 * divergence from GL where the two disagree: GL stores what the declaration says and converts
@@ -363,13 +381,13 @@ final class PackImages {
 	 * its bytes are in, so nothing draws differently for it today, and a pack that disagrees gets
 	 * its bytes unconverted rather than a conversion written for a case nothing exercises.
 	 */
-	private static GpuFormat format(VolumeAtlas atlas) {
-		return switch (atlas.type()) {
+	private static GpuFormat format(PixelType type) {
+		return switch (type) {
 			case UNSIGNED_BYTE -> GpuFormat.RGBA8_UNORM;
 			case UNSIGNED_SHORT -> GpuFormat.RGBA16_UNORM;
 			case HALF_FLOAT -> GpuFormat.RGBA16_FLOAT;
 			case FLOAT -> GpuFormat.RGBA32_FLOAT;
-			default -> throw new IllegalStateException(atlas.type() + " is not a type an atlas holds");
+			default -> throw new IllegalStateException(type + " is not a type a blob goes up in");
 		};
 	}
 
