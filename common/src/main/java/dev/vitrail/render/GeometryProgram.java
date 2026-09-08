@@ -566,7 +566,7 @@ final class GeometryProgram {
 		// so anything sent there would simply vanish; when the plan had no answer there is nowhere
 		// else to send it; when a half that ASKED for a mask could not be given one, the seed would
 		// repaint the whole target and take the geometry with it; when a half never asked for one,
-		// which is the opaque particles and the weather, the seed carries it in by design; and the
+		// which is the weather alone, the seed carries it in by design; and the
 		// last is what the statement after next is about, a blending pass drawn before the seed with
 		// nothing marking the pixels it blends onto. Either way the pass draws where Sodium would
 		// have, which is also what keeps the pipeline's one state the pass's.

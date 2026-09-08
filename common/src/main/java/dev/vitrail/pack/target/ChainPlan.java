@@ -128,12 +128,12 @@ public final class ChainPlan {
 			// where the verdicts are handed their map.
 			SKY_PROGRAMS.stream()
 					.map(program -> new NamedProgram(program, CLOUD_PROGRAM.equals(program),
-							false, NOT_EVERYWHERE)),
+							NOT_EVERYWHERE)),
 			Stream.of(
 					// The entity halves are the two the file has to ask for, and they are drawn in
 					// every place once it has: what decides them is the line and not the format.
-					new NamedProgram("gbuffers_entities", false, false, Families::entities),
-					new NamedProgram("gbuffers_block", false, false, Families::entities),
+					new NamedProgram("gbuffers_entities", false, Families::entities),
+					new NamedProgram("gbuffers_block", false, Families::entities),
 					// The blending half of those same two, on the far side of the stage: the game
 					// draws them among its translucent features, which is after the deferreds have
 					// run. Five entries for four names because the side is half the key, and the
@@ -154,9 +154,9 @@ public final class ChainPlan {
 					// render/FeatureLayer composes, so the glyph lands there drawn by the PACK
 					// rather than by the game. Nothing about the text decides that: it is the
 					// family's answer, and FeatureLayer names it beside the other two roads in.
-					new NamedProgram("gbuffers_entities_translucent", true, false,
+					new NamedProgram("gbuffers_entities_translucent", true,
 							Families::entities),
-					new NamedProgram("gbuffers_block_translucent", true, false, Families::entities),
+					new NamedProgram("gbuffers_block_translucent", true, Families::entities),
 					// The OPAQUE entity name on the far side, which reads like a contradiction and is
 					// the energy swirl over a charged creeper: Iris pins that row to ENTITIES_CUTOUT
 					// outright (pipeline/IrisPipelines.java:60) while the game blends it, so it is
@@ -171,7 +171,7 @@ public final class ChainPlan {
 					// carry. Where a pack ships no gbuffers_entities_translucent of its own the
 					// blending name falls back on this very file, and that entry counts it; three
 					// packs of the corpus are in that case and this entry moves nothing for them.
-					new NamedProgram("gbuffers_entities", true, false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_entities", true, NOT_EVERYWHERE),
 					// The glowing eyes of a mob, drawn among the translucent features beside the two
 					// above and on the same side of the stage. One entry and not two: its two
 					// pipelines ask for the one name, both blend, and neither is ever drawn before
@@ -182,7 +182,7 @@ public final class ChainPlan {
 					// front of the camera. A verdict that took the eyes for drawn would report
 					// targets as written in every place a plan is built for, which is every place
 					// none of the six is standing.
-					new NamedProgram("gbuffers_spidereyes", true, false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_spidereyes", true, NOT_EVERYWHERE),
 					// The overlay over a block being mined, drawn among the translucent features
 					// beside the eyes and on the same side of the stage. Left out of this list, its
 					// family drew one output onto the game's cleared target, and the multiply the
@@ -190,7 +190,7 @@ public final class ChainPlan {
 					//
 					// Not counted, on the hand's argument: a crack is drawn where somebody is mining
 					// a block, which is a per frame answer no per place map may carry.
-					new NamedProgram("gbuffers_damagedblock", true, false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_damagedblock", true, NOT_EVERYWHERE),
 					// The game's lines, the block outline first among them, drawn among the
 					// translucent features beside the overlay and on the same side of the stage.
 					// The same entry the overlay owed: without it the line program resolved to no
@@ -200,7 +200,7 @@ public final class ChainPlan {
 					//
 					// Not counted, on the hand's argument: an outline is drawn where somebody is
 					// aiming at a block, a per frame answer no per place map may carry.
-					new NamedProgram("gbuffers_line", true, false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_line", true, NOT_EVERYWHERE),
 					// The hand's two passes, which straddle the stage as the particles do and for the
 					// same kind of reason: the solid one is drawn among the game's opaque features and
 					// the blending one at the end of the level. Not counted, and not by a switch:
@@ -212,8 +212,8 @@ public final class ChainPlan {
 					// gbuffers_hand, and that is exactly why they are two entries rather than one: a
 					// single walk would put one key in and leave the other side of the same file
 					// unanswered, which is the silence the head of this list is about.
-					new NamedProgram("gbuffers_hand", false, false, NOT_EVERYWHERE),
-					new NamedProgram("gbuffers_hand_water", true, false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_hand", false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_hand_water", true, NOT_EVERYWHERE),
 					// An enchantment's glint, which straddles the stage for a reason of its own: what
 					// CARRIES it decides which half the game executes it in. An enchanted book is
 					// submitted among the solid features, foil and all, since the sort looks at the
@@ -225,20 +225,20 @@ public final class ChainPlan {
 					// Not counted, and on the hand's argument rather than the weather's: a glint is
 					// drawn where somebody is holding or wearing something enchanted, which is a per
 					// frame answer no per place map may carry.
-					new NamedProgram("gbuffers_armor_glint", false, false, NOT_EVERYWHERE),
-					new NamedProgram("gbuffers_armor_glint", true, false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_armor_glint", false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_armor_glint", true, NOT_EVERYWHERE),
 					// Drawn, and still not counted: the game draws no rain and no snow where there is
 					// no weather, which is every place but the overworld.
-					new NamedProgram("gbuffers_weather", true, false, NOT_EVERYWHERE),
+					new NamedProgram("gbuffers_weather", true, NOT_EVERYWHERE),
 					// The one family that straddles the stage: the game submits every particle group
 					// twice, and the two land on either side of it. Counted wherever its line is on,
 					// and what earns it is that particles are drawn in every place there is.
 					//
-					// And the last name of this list riding on the seed: its opaque half never asks
-					// for a coverage mask, so its first output makes the trip through the game's
-					// own target and reaches the pack's picture through the seed and nowhere else.
-					new NamedProgram("gbuffers_particles", false, true, Families::particles),
-					new NamedProgram("gbuffers_particles_translucent", true, false,
+					// Its opaque half writes the coverage mask as the entities do, so it owns the
+					// draw buffers the pack asked for and the seed's own target says nothing about
+					// whether its draw was taken.
+					new NamedProgram("gbuffers_particles", false, Families::particles),
+					new NamedProgram("gbuffers_particles_translucent", true,
 							Families::particles),
 					// And Distant Horizons' far terrain, on both sides of the stage: that mod draws
 					// its own two halves from the head of the game's opaque chunk group and from the
@@ -252,23 +252,14 @@ public final class ChainPlan {
 					// rule is decided why the seed could not carry it. Neither half is counted, for
 					// the reason no family with a switch is: the far terrain is drawn where that mod
 					// is installed and running, which is no place in particular.
-					new NamedProgram("dh_terrain", false, false, NOT_EVERYWHERE),
-					new NamedProgram("dh_water", true, false, NOT_EVERYWHERE)))
+					new NamedProgram("dh_terrain", false, NOT_EVERYWHERE),
+					new NamedProgram("dh_water", true, NOT_EVERYWHERE)))
 			.toList();
 
 	/**
 	 * One name of that list, the side of the deferred stage the family asking for it draws on, and
 	 * when a verdict may take its targets for filled.
 	 *
-	 * @param ridesTheSeed whether this name's FIRST output reaches the pack's picture through the
-	 *                   scene seed rather than being written into the pack's own target. It is what
-	 *                   holds a name to the seed's own target below, and it is a question about the
-	 *                   coverage mask and not about the side of the stage: a family drawn before the
-	 *                   seed that writes the mask keeps the seed off the pixels it wrote and takes
-	 *                   its first draw buffer outright, so the seed's target is no longer its
-	 *                   business. Only the opaque particles ride it, which
-	 *                   {@code render/ParticleDraw} says in the same words and {@code GeometryProgram}
-	 *                   lists among the halves that never asked for a mask
 	 * @param everywhere whether this engine draws that family, with the switches it was handed, in
 	 *                   EVERY place a plan is built for. Not simply whether it draws it: a plan is
 	 *                   per place, and a family drawn in the overworld alone would have a verdict
@@ -277,7 +268,7 @@ public final class ChainPlan {
 	 *                   about the verdicts, which are the one place that must not tell a reader a
 	 *                   target holds a clear colour when a family of ours has just written it
 	 */
-	private record NamedProgram(String program, boolean afterDeferred, boolean ridesTheSeed,
+	private record NamedProgram(String program, boolean afterDeferred,
 			Predicate<Families> everywhere) {
 	}
 
@@ -468,9 +459,9 @@ public final class ChainPlan {
 	 *                  the one road into the pack's picture for a family drawn BEFORE the deferred
 	 *                  stage that writes no coverage mask, so off it takes the seed's own target with
 	 *                  it and hands the opaque particles back to the game, which is
-	 *                  {@code render/ParticleDraw.writes} refusing on the same answer. The entities
-	 *                  are not on that road: they write the mask and take their first draw
-	 *                  buffer in the pack's own targets, so this switch moves nothing for them
+	 *                  and nothing of the pack's is written there. No family of the game is on
+	 *                  that road any more: each writes the mask and takes its first draw buffer in
+	 *                  the pack's own targets, so this switch moves nothing for them
 	 */
 	public record Families(boolean terrain, boolean entities, boolean particles, boolean seed) {
 
@@ -602,25 +593,15 @@ public final class ChainPlan {
 		// WHAT IT LEAVES OPEN, said rather than hidden: those notes stay wrong, and the only honest
 		// way to close them is a per place answer rather than a per name one, which this record
 		// cannot carry. The End's sky widened that by one place the day it was served.
-		// AND, on the near side, only where the draw is really taken. A family whose FIRST output
-		// reaches the pack's picture through the scene seed takes over a pass the renderer opened
-		// with one attachment of its own, so it can only be redirected when that output is the seed's
-		// target and half; where it is not, the game keeps its own shader and nothing of the pack's
-		// is written. That is leadsWithSeed, and ParticleDraw refuses on the same answer. Bliss is
-		// why it is here: its seed is colortex1 against a first output of colortex2, so its opaque
-		// particles are handed back in all three places, and counting them would silence three notes
-		// that are true. Nothing on the corpus moves for it - Bliss's colortex9 is silenced by the
-		// translucent half, which carries no such condition - and that is the point: it costs no note
-		// and it stops the map claiming a draw that never happened.
-		//
-		// IT IS THE SEED'S ROAD AND NOT THE SIDE OF THE STAGE, and the two parted company when the
-		// entities took their first draw buffer in the pack's own targets. A family drawn before the
-		// seed that writes the coverage mask keeps the seed off the pixels it wrote, so its first
-		// output never makes the trip and the seed's target says nothing about whether its draw was
-		// taken; render/EntityDraw stopped asking, and a map still asking would hand the entities
-		// back on any pack whose entity program leads with a target other than the seed's - and on
-		// every pack under seed=off, where the family is served all the same. ridesTheSeed carries
-		// which names are left on that road, and only the opaque particles are.
+		// AND, on the near side, nothing about the seed's own target any more. A family drawn
+		// before the deferred stage that writes the coverage mask keeps the seed off the pixels it
+		// wrote and takes its first draw buffer in the pack's own targets, so where the seed is
+		// painted says nothing about whether its draw was taken. The entities were the first to
+		// leave that road and the opaque particles were the last on it; a map still asking would
+		// hand a family back on any pack whose program leads with a target other than the seed's,
+		// and on every pack under seed=off, where the family is served all the same. Bliss is the
+		// pack that shows it: its seed is colortex1 against a first output of colortex2, so its
+		// opaque particles were handed back in all three of its places and are now drawn there.
 		//
 		// WHAT THAT OVER-CLAIMS, said rather than hidden: this map cannot know whether the mask was
 		// really placed, which is the translation's answer and per FILE. A pack whose entity program
@@ -645,11 +626,8 @@ public final class ChainPlan {
 		// them refused here, would be counted half drawn while the family served nothing. No pack of
 		// the corpus reaches that case.
 		//
-		// WHAT THIS MAP DELIBERATELY DOES NOT FOLLOW: with chain=off the opaque particles are still
-		// drawn even with seed=off, which render/ParticleDraw spells out - it is the one
-		// configuration that tells a wrong gbuffer from a wrong composite. This map has them handed
-		// back there. It costs nothing worth the branch: with the chain off, no pass of it draws, so
-		// every line these notes carry is about a frame that does not happen.
+		// WHAT THIS MAP DELIBERATELY DOES NOT FOLLOW: with chain=off no pass of it draws, so every
+		// line these notes carry is about a frame that does not happen, whatever the families say.
 		Map<Key, Pass> world = new LinkedHashMap<>();
 		if (families.terrain()) {
 			terrainKeys.values().forEach(key -> world.put(key, attachments.get(key)));
@@ -658,8 +636,7 @@ public final class ChainPlan {
 		for (NamedProgram named : NAMED_PROGRAMS) {
 			Key key = named.everywhere().test(families) ? namedKeys.get(named) : null;
 			Pass drawing = key == null ? null : attachments.get(key);
-			if (drawing != null && drawing.size().equals(TargetSize.ofScreen())
-					&& (!named.ridesTheSeed() || leadsWithSeed(painted, drawing))) {
+			if (drawing != null && drawing.size().equals(TargetSize.ofScreen())) {
 				world.put(key, drawing);
 			}
 		}
@@ -1325,13 +1302,9 @@ public final class ChainPlan {
 	 * attachment of its own, so an engine that redirects the draw can only redirect the first output,
 	 * and the only target where that is not a loss is the one already carrying the game's frame.
 	 * <p>
-	 * Answered here because two readers need the same answer and they are far apart. The one that
-	 * acts on it is {@code render/ParticleDraw}, which hands the opaque half back to the game when
-	 * this is false; the one that reports on it is {@link #verdicts}, which must not count a family's
-	 * targets as filled where the draw was handed back. Bliss is the pack that separates them: its
-	 * seed is colortex1 and its particle program writes colortex2 first, so the opaque half is
-	 * refused in all three of its places while the translucent half, which has no such condition,
-	 * draws.
+	 * One reader is left, {@code render/EntityDraw}, which hands a piece back to the game when this
+	 * is false. Every other family that used to ask writes the coverage mask instead and takes its
+	 * first draw buffer outright, which is what took the question away from them.
 	 */
 	public static boolean leadsWithSeed(Seed seed, Pass pass) {
 		if (seed == null || pass == null || pass.attachments().isEmpty()) {
