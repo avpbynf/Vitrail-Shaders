@@ -44,7 +44,8 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		boolean mainWrapped, boolean depthEpilogue, boolean terrainPrologue,
 		boolean distantPrologue, boolean entityWrapped, boolean linesWrapped,
 		boolean alphaEpilogue, boolean covers,
-		boolean wrapsFragment, boolean ordered, boolean namesFragDepth, boolean makesOverlayColour) {
+		boolean ordered, boolean ordersInWrapper, boolean namesFragDepth,
+		boolean makesOverlayColour) {
 
 	private static final String VERSION = "#version 460 core";
 
@@ -475,8 +476,13 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 				+ (this.distantPrologue ? DistantVertex.PROLOGUE + "(); " : "")
 				+ overlayPrologue()
 				+ identifierPrologue(varyings)
-				+ (wrapsFragment() ? GlslTranslator.ORDER_OUTPUTS + "(); " : "")
-				+ coveragePrologue()
+				// Its own question, and neither of the two it looks like: not whether the function
+				// exists, since a stage declaring no output at all is wrapped for the depth seed with
+				// nothing to order, and not whether the body is wrapped, since a stage wrapped later
+				// for its splits already carries the call inside its own main.
+				// GlslTranslator.ordersInWrapper holds both halves.
+				+ (this.ordersInWrapper ? GlslTranslator.ORDER_OUTPUTS + "(); " : "")
+				+ fragDepthPrologue()
 				+ owedPrologue()
 				+ this.splits.matrixPrologue()
 				+ this.splits.structPrologue()
@@ -531,16 +537,23 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 	 * Gives {@code gl_FragDepth} the value the hardware would have written, before the pack's own
 	 * body runs and can write another.
 	 * <p>
-	 * <strong>Only where the mask is written and the stage names the builtin</strong>, and both
-	 * halves are paid for. A stage that names it may still leave it alone on the branch that runs -
-	 * Bliss writes it under {@code POM} and nowhere else ({@code dimensions/all_solid.fsh:359,394})
-	 * - and reading a builtin the stage never wrote is undefined, so the mask would carry whatever
-	 * the driver left there. Writing it costs the early depth test, which is why a stage that never
-	 * names it is left alone: it would pay that for a value the line below can read off
-	 * {@code gl_FragCoord} instead.
+	 * <strong>Wherever the stage names the builtin at all</strong>, because naming it is what puts
+	 * it in the entry point's interface and that alone replaces the depth: the attachment then
+	 * receives the variable, whether or not anything ever assigned it.
+	 * {@link GlslTranslator#planFragDepth} carries what an unassigned one does to the picture in
+	 * this engine's reversed volume, and why a pack that only redeclares the builtin for a layout
+	 * hint is the case that matters.
+	 * <p>
+	 * The mask reads the same variable and is the second thing this covers. A stage may name the
+	 * builtin and still leave it alone on the branch that runs, Bliss writing it under {@code POM}
+	 * and nowhere else ({@code dimensions/all_solid.fsh:359,394}), so without the seed the mask
+	 * would carry whatever the driver left there.
+	 * <p>
+	 * A stage that never names it is left alone, and pays nothing: no name means no depth
+	 * replacement, the early depth test is kept, and the mask reads {@code gl_FragCoord} instead.
 	 */
-	private String coveragePrologue() {
-		return this.covers && this.namesFragDepth ? "gl_FragDepth = gl_FragCoord.z; " : "";
+	private String fragDepthPrologue() {
+		return this.namesFragDepth ? "gl_FragDepth = gl_FragCoord.z; " : "";
 	}
 
 	/**

@@ -520,6 +520,9 @@ public final class GlslTranslator {
 
 	private int maxFragmentOutput = -1;
 	private boolean ordered;
+
+	/** Whether the ascending call went into the pack's own main rather than being left to a wrapper. */
+	private boolean orderInjected;
 	private int dynamicFragData;
 	private int shadowCalls;
 	private int unwrappedShadowCalls;
@@ -612,6 +615,13 @@ public final class GlslTranslator {
 	 * where the surface was before the parallax moved it.
 	 */
 	private boolean namesFragDepth;
+
+	/**
+	 * Whether the wrapper gives {@code gl_FragDepth} the interpolated depth before the pack's body
+	 * runs. {@link #planFragDepth} says when it cannot, which is when there is no {@code main} to
+	 * wrap.
+	 */
+	private boolean seedsFragDepth;
 
 	/** Where the fragment stage's own {@code main} stands, once the alpha test has claimed it. */
 	private int packMainName = -1;
@@ -819,6 +829,9 @@ public final class GlslTranslator {
 		// answer rather than each asking again.
 		planAlphaEpilogue();
 		planCoverage();
+		// After convertDepth, which is where namesFragDepth is settled, and beside the other two
+		// reasons a fragment body is wrapped rather than anywhere else: all three share the wrapper.
+		planFragDepth();
 		// Before the ascending call goes in, and that is the whole point: the call replaces the
 		// opening brace of main with text of ours, which is no longer an operator, so a brace
 		// counter run afterwards would walk past main without opening it and close one brace too
@@ -3809,7 +3822,22 @@ public final class GlslTranslator {
 		if (brace >= 0) {
 			this.tokens.inject(brace, "{ " + ORDER_OUTPUTS + "();");
 			this.ordered = true;
+			this.orderInjected = true;
 		}
+	}
+
+	/**
+	 * Whether the WRAPPER is the one that has to call the ascending function.
+	 * <p>
+	 * Not the same question as whether the body is wrapped, and the difference is a stage this pass
+	 * left alone that {@link #wrapMainForSplits} wraps afterwards: the call is already inside the
+	 * pack's own main by then, and the wrapper would make it a second time. Not the same question as
+	 * whether the function exists either, since a stage declaring no fragment output at all is
+	 * wrapped for the depth seed with nothing to order, and the call would name a function nobody
+	 * wrote.
+	 */
+	private boolean ordersInWrapper() {
+		return this.ordered && !this.orderInjected;
 	}
 
 	/**
@@ -3874,9 +3902,59 @@ public final class GlslTranslator {
 		this.covers = this.packMainName >= 0;
 	}
 
-	/** Whether the fragment stage's own {@code main} is wrapped, by the alpha test or by the mask. */
+	/**
+	 * Decides that the wrapper seeds {@code gl_FragDepth}, which is what stops a stage naming the
+	 * builtin from writing the depth attachment with a value nobody set.
+	 * <p>
+	 * <strong>Declaring the builtin is enough to replace the depth, writing to it is not
+	 * required.</strong> A fragment entry point whose interface carries {@code FragDepth} performs
+	 * depth replacement, so the attachment receives whatever that variable holds, and a stage that
+	 * only redeclares it to hand the driver a layout hint has never put anything in it. What the
+	 * hint then says decides whether that costs the picture: {@code depth_unchanged} promises the
+	 * value equals the one the rasteriser produced, so an implementation is free to use that one and
+	 * the unwritten variable never reaches the attachment, while {@code depth_greater} promises only
+	 * a direction and the variable's own value is what lands.
+	 * <p>
+	 * <strong>And the direction is read in the volume this engine rasterises in, not the one the
+	 * pack was written for.</strong> Far is nought here and the test is greater than
+	 * ({@code render/ColorTargets.java:115}, {@code render/DistantProgram.java:81-88}), so an
+	 * unwritten depth that comes out as nought is the far plane and fails against anything already
+	 * drawn; under the reference's zero to one volume and its less than test the same nought is the
+	 * near plane and passes everything, which is why a pack doing this draws there and vanishes
+	 * here. RenderPearl redeclares it on every terrain stage and writes it nowhere in the pack, so
+	 * its cutout geometry, every leaf and every blade of grass, was thrown away by the depth test
+	 * while its solid terrain, which takes the {@code depth_unchanged} branch, drew.
+	 * <p>
+	 * The seed is the interpolated depth, which satisfies both hints and is what the pack expects to
+	 * be there, and the pack's own writes still land after it. The early depth test is already lost
+	 * to the redeclaration itself, so this costs nothing a stage naming the builtin was not paying.
+	 * <p>
+	 * Asked of {@link #namesFragDepth}, which answers for a dead branch too, so a stage naming the
+	 * builtin only where the preprocessor took the other road is seeded and loses its early depth
+	 * test for nothing. That is the bias {@link #convertDepth} already chose and for the same
+	 * reason: over counting costs the test, under counting costs a picture. What is written is the
+	 * depth the rasteriser produced either way, so no such stage draws differently, and the corpus
+	 * carries none of them.
+	 */
+	private void planFragDepth() {
+		if (this.stage != ProgramStage.FRAGMENT || !this.namesFragDepth) {
+			return;
+		}
+
+		// The same wrapper and the same name as the alpha test and the mask, whichever asked first.
+		if (this.packMainName < 0) {
+			this.packMainName = mainName();
+		}
+
+		this.seedsFragDepth = this.packMainName >= 0;
+	}
+
+	/**
+	 * Whether the fragment stage's own {@code main} is wrapped, by the alpha test, by the mask, or
+	 * by the depth seed.
+	 */
 	private boolean wrapsFragment() {
-		return this.alphaEpilogue || this.covers;
+		return this.alphaEpilogue || this.covers || this.seedsFragDepth;
 	}
 
 	/**
@@ -5363,7 +5441,7 @@ public final class GlslTranslator {
 				this.gameModelView, this.softRewrites, this.trigCalls, this.hashCalls,
 				this.mainWrapped, this.depthEpilogue, this.terrainPrologue, this.distantPrologue,
 				this.entityWrapped, this.linesWrapped, this.alphaEpilogue, this.covers,
-				wrapsFragment(), this.ordered, this.namesFragDepth, this.makesOverlayColour);
+				this.ordered, ordersInWrapper(), this.namesFragDepth, this.makesOverlayColour);
 	}
 
 	/**

@@ -97,6 +97,19 @@ to a function, or written with a compound assignment, cannot be rewritten where 
 are counted rather than guessed at. What the translator never rewrites at all is a **lookup through
 a sampler**. Those are served by converting the *image* instead, once, when the depth is taken.
 
+**A stage that names the output depth is given one, whether or not it writes one.** Naming
+`gl_FragDepth` puts it in the fragment entry point's interface, and that alone is what makes the
+hardware take the depth from the shader rather than from the geometry: writing to it is not
+required. A pack may name it and never write it, redeclaring it only to hand the driver a layout
+hint such as `layout(depth_greater)`, and the attachment then receives a variable nothing set.
+`depth_unchanged` hides that, since it promises the value equals the interpolated one and an
+implementation may use that instead; a directional hint does not, and here the unset value lands.
+Read in reversed Z it is the far plane rather than the near one, so the whole pass is thrown away
+where the same pack draws under the convention it was written for. So the wrapper assigns the
+interpolated depth before the pack's body runs, wherever the stage names the builtin. A pack's own
+write still lands after it, and the early depth test was already gone the moment the name entered
+the interface.
+
 **A lookup through a sampler bound without a mip chain is pinned to the base level.**
 `texture(s, uv)` becomes `textureLod(s, uv, 0.0)`, a level the pack wrote out becomes nought, and a
 bias or a pair of derivatives, which only ever chose a level, is dropped. The reference binds the

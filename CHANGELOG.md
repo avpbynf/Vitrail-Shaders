@@ -150,6 +150,19 @@ what the next one holds.
 
 ### Fixed
 
+- **Grass, leaves and every other cut out block come back on RenderPearl.** A pack may tell the
+  driver, once, that it is going to write its own depth, either to say the value will only move one
+  way or to say it will not move at all. Saying it is enough to make the driver take the depth from
+  the shader rather than from the geometry, and a pack that says it without ever writing a value
+  leaves whatever happened to be lying around. Where the promise was that it would not move, that
+  costs nothing; where the promise was a direction, the reading came out at the far plane and the
+  block was thrown away as if something stood in front of it. RenderPearl drew its terrain, its sky
+  and its water and not one leaf or blade of grass because of it, its trees standing as bare trunks.
+  The depth is now filled in with the one the geometry produced before the pack's own code runs, so
+  a pack that writes its own still wins, and a pack that only made the promise gets what it
+  expected. Eight other packs write their depth on some branches and not others, and they stop
+  depending on what was left behind on the branches that do not.
+
 - **A pack that paints its picture with compute shaders draws it.** A few packs do their whole
   post-processing in compute programs rather than in full screen passes, and store the finished
   frame into a colour buffer of their own. The engine only ever opened a colour buffer for what a
