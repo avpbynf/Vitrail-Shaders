@@ -770,8 +770,17 @@ public final class SamplerPlan {
 	 * would move {@code shadow} here and not there. No pack of the corpus writes the name at all.
 	 */
 	public boolean withoutTranslucents(String name) {
+		return withoutTranslucents(name, this.waterShadow);
+	}
+
+	/**
+	 * The same rule, for a caller that knows whether the program declares {@code watershadow} and
+	 * has no plan to ask. Written once here rather than twice, the translator asking it of a unit
+	 * it has just read the samplers of.
+	 */
+	public static boolean withoutTranslucents(String name, boolean waterShadow) {
 		return name.equals("shadowtex1") || name.equals("shadowtex1HW")
-				|| (this.waterShadow && name.equals("shadow"));
+				|| (waterShadow && name.equals("shadow"));
 	}
 
 	/**

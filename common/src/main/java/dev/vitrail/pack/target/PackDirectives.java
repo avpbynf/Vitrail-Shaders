@@ -89,7 +89,7 @@ public final class PackDirectives {
 	private final float shadowFarPlane;
 	private final float shadowIntervalSize;
 	private final Map<Integer, ShadowColour> shadowColours;
-	private final List<Boolean> shadowDepthNearest;
+	private final List<ShadowDepth> shadowDepths;
 
 	/**
 	 * What one {@code shadowcolor} buffer asks for: the format to allocate it in, whether the shadow
@@ -109,6 +109,17 @@ public final class PackDirectives {
 	 */
 	public record ShadowColour(TargetFormat.Resolution format, boolean clear,
 			TargetDirectives.Colour clearColour, boolean declaresClearColour) {
+	}
+
+	/**
+	 * What one depth image of the map asks for: how it is filtered, and whether it carries a mip
+	 * chain. {@code shadowtex0} at nought and {@code shadowtex1} at one, which is the pair Iris
+	 * carries ({@code shaderpack/properties/PackShadowDirectives.java:97}).
+	 * <p>
+	 * Both start false, which is where Iris starts too, and neither is the whole corpus: Pegasus
+	 * asks for NEAREST on both images and iterationT asks for a chain on nought.
+	 */
+	public record ShadowDepth(boolean nearest, boolean mipmap) {
 	}
 
 	private PackDirectives(Builder builder) {
@@ -131,7 +142,9 @@ public final class PackDirectives {
 		Map<Integer, ShadowColour> colours = new TreeMap<>();
 		builder.shadowColours.forEach((index, setting) -> colours.put(index, setting.build()));
 		this.shadowColours = Collections.unmodifiableMap(colours);
-		this.shadowDepthNearest = List.of(builder.depthNearest[0], builder.depthNearest[1]);
+		this.shadowDepths = List.of(
+				new ShadowDepth(builder.depthNearest[0], builder.depthMipmap[0]),
+				new ShadowDepth(builder.depthNearest[1], builder.depthMipmap[1]));
 	}
 
 	/** What a pack that declares nothing gets, which is what most of the corpus gets. */
@@ -314,25 +327,42 @@ public final class PackDirectives {
 	}
 
 	/**
-	 * Whether the pack asked for NEAREST on one of the two depth images of the map,
-	 * {@code shadowtex0} at nought and {@code shadowtex1} at one, which is the pair Iris carries
-	 * ({@code shaderpack/properties/PackShadowDirectives.java:184-198}).
+	 * How the pack asks for one of the two depth images of the map to be read back: the filter, and
+	 * whether it carries a mip chain. {@code shadowtex0} at nought and {@code shadowtex1} at one,
+	 * which is the pair Iris carries
+	 * ({@code shaderpack/properties/PackShadowDirectives.java:147-198}).
 	 * <p>
-	 * False is where both engines start, and it is not where the whole corpus stays: Pegasus asks
-	 * for NEAREST on both images. Several other packs carry the names too, set to false, or inside
-	 * a block comment, which is why the corpus is asked through the reader and never through a
-	 * grep: {@code .local/harness/ShadowSampling} answers it in one command.
+	 * Both false is where the two engines start, and it is not where the whole corpus stays:
+	 * Pegasus asks for NEAREST on both images, iterationT asks for a chain on nought. Several other
+	 * packs carry the names too, set to false, or inside a block comment, which is why the corpus
+	 * is asked through the reader and never through a grep:
+	 * {@code .local/harness/ShadowSampling} answers it in one command.
 	 * <p>
-	 * The colour buffers have the same family of names and it is deliberately not read, because
-	 * <strong>Iris parses those and then binds the buffer through a LINEAR sampler object
-	 * regardless</strong> ({@code samplers/IrisSamplers.java:156-176}, {@code GlSampler.LINEAR} on
-	 * every {@code shadowcolor} bind), and a GL sampler object overrules the texture's own
-	 * parameters. OptiFine does honour them, so honouring them here would be a divergence from the
-	 * engine packs are tuned against, on the one buffer where a pack blurs light across a penumbra.
+	 * The colour buffers have the same two families of names and neither is read, deliberately,
+	 * because <strong>Iris parses both and then binds every {@code shadowcolor} through
+	 * {@code GlSampler.LINEAR} regardless</strong> ({@code samplers/IrisSamplers.java:156-176}). A
+	 * GL sampler object overrules the texture's own parameters, and that one's minification filter
+	 * is plain {@code GL_LINEAR}, which selects the base level whatever level of detail a lookup
+	 * asks for: the chain Iris fills on those buffers ({@code shadows/ShadowRenderer.java:283-291})
+	 * is written and never read. So a pack reading {@code shadowcolor0} at a lod gets level nought
+	 * there, and serving it a coarser level here would be a divergence on the one buffer where a
+	 * pack blurs light across a penumbra. OptiFine does honour them, and that is not the engine
+	 * these packs are tuned against.
 	 */
+	public ShadowDepth shadowDepth(int index) {
+		return index >= 0 && index < this.shadowDepths.size()
+				? this.shadowDepths.get(index)
+				: new ShadowDepth(false, false);
+	}
+
+	/** Whether the pack asked for NEAREST on one depth image. See {@link #shadowDepth(int)}. */
 	public boolean shadowDepthNearest(int index) {
-		return index >= 0 && index < this.shadowDepthNearest.size()
-				&& this.shadowDepthNearest.get(index);
+		return shadowDepth(index).nearest();
+	}
+
+	/** Whether the pack asked for a mip chain on one depth image. See {@link #shadowDepth(int)}. */
+	public boolean shadowDepthMipmap(int index) {
+		return shadowDepth(index).mipmap();
 	}
 
 	public static final class Builder {
@@ -355,6 +385,7 @@ public final class PackDirectives {
 		private static final int SHADOW_DEPTHS = 2;
 
 		private final boolean[] depthNearest = new boolean[SHADOW_DEPTHS];
+		private final boolean[] depthMipmap = new boolean[SHADOW_DEPTHS];
 
 		private static final ShadowColour SHADOW_COLOUR_DEFAULT = new ShadowColour(
 				TargetFormat.defaultFormat(), true, new TargetDirectives.Colour(1.0F, 1.0F, 1.0F, 1.0F),
@@ -436,6 +467,20 @@ public final class PackDirectives {
 						asBool(directive, value -> this.depthNearest[0] = value);
 				case "shadowtex1Nearest", "shadow1MinMagNearest" ->
 						asBool(directive, value -> this.depthNearest[1] = value);
+				// Whether the map carries a chain, folded the same way and with the same shape of
+				// spellings: generateShadowMipmap covers both images at once where the per-image
+				// names cover one, and shadowtexMipmap is the older spelling of shadowtex0Mipmap
+				// with no shadowtex1 equivalent (PackShadowDirectives.java:147-168). The blanket
+				// name wins or loses on where it stands and not on being the blanket, which is
+				// Iris's own shape: it registers one consumer per name and walks the declarations
+				// in text order.
+				case "generateShadowMipmap" -> asBool(directive, value -> {
+					this.depthMipmap[0] = value;
+					this.depthMipmap[1] = value;
+				});
+				case "shadowtexMipmap", "shadowtex0Mipmap" ->
+						asBool(directive, value -> this.depthMipmap[0] = value);
+				case "shadowtex1Mipmap" -> asBool(directive, value -> this.depthMipmap[1] = value);
 				default -> shadowColour(directive);
 			}
 		}
