@@ -135,6 +135,29 @@ final class PackImages {
 					? flat.get(texture.sampler())
 					: null;
 
+			// The FIRST volume under that name is the one whose layout was printed into every
+			// shader, and PackTextures keeps the first too, so a second one is handed that same
+			// atlas rather than a second copy of it. A pack writing two files for one name on two
+			// stages would otherwise have the last file spread over the first one's tiles, and what
+			// comes out of that still looks like noise; writing the SAME file twice, which is what
+			// a directive per stage makes a pack do, spread iterationT's atmosphere table twice for
+			// one lookup.
+			Image already = atlas == null ? null : volumes.get(texture.sampler());
+			if (already != null) {
+				// The extents count as much as the path: the same file declared at two sizes is one
+				// of the two layouts printed into the shaders and one blob spread over the other's
+				// tiles, which comes out looking exactly like the noise it is not.
+				if (!already.texture().path().equals(texture.path())
+						|| !already.texture().raw().equals(texture.raw())) {
+					notes.add(texture.path() + " is a second volume under the name "
+							+ texture.sampler() + ", and the shaders read " + already.shape()
+							+ " of " + already.texture().path());
+				}
+
+				byTexture.put(texture, already);
+				continue;
+			}
+
 			Image image = decode(texture, atlas, source, notes);
 			if (image == null) {
 				continue;
@@ -143,14 +166,7 @@ final class PackImages {
 			images.add(image);
 			byTexture.put(texture, image);
 			if (atlas != null) {
-				// The FIRST declaration under that name, which is the one whose layout was printed
-				// into every shader: PackTextures keeps the first too. A pack writing two files for
-				// one name on two stages would otherwise have the last file spread over the first
-				// one's tiles, and what comes out of that still looks like noise.
-				if (volumes.putIfAbsent(texture.sampler(), image) != null) {
-					notes.add(texture.path() + " is a second volume under the name "
-							+ texture.sampler() + ", and the shaders read the first");
-				}
+				volumes.put(texture.sampler(), image);
 			}
 		}
 
