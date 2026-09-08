@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vulkan.VulkanBackend;
 import com.mojang.blaze3d.vulkan.VulkanPhysicalDevice;
 import com.mojang.blaze3d.vulkan.init.VulkanFeature;
+import dev.vitrail.glsl.VendorExtensions;
 import dev.vitrail.render.BufferBlending;
 import dev.vitrail.Vitrail;
 import org.lwjgl.system.MemoryStack;
@@ -153,6 +154,14 @@ public abstract class VulkanBackendMixin {
 		enable(physical, features, EXTENDED_FORMATS, enabled, VOXELS);
 		enable(physical, features, WRITE_WITHOUT_FORMAT, enabled, VOXELS);
 		BufferBlending.serve(enable(physical, features, INDEPENDENT_BLEND, enabled, PER_BUFFER));
+		// The vendor extensions a pack may gate a vendor instruction on, answered by the device
+		// and not by the compiler, which defines the macro of every one it knows; the ones the
+		// device has are enabled on it here, since a module using one needs it enabled.
+		List<String> vendor = VendorExtensions.serve(physical::hasDeviceExtension, extensions::add);
+		if (!vendor.isEmpty()) {
+			Vitrail.logger().info("Vulkan vendor extensions: {}", String.join(", ", vendor));
+		}
+
 		enable(physical, features, SHADER_FLOAT16, enabled, NARROW);
 		enable(physical, features, SHADER_INT8, enabled, NARROW);
 		enable(physical, features, SHADER_INT16, enabled, NARROW);

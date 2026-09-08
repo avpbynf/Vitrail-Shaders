@@ -118,17 +118,21 @@ what the next one holds.
 ### Fixed
 
 - **A pack written for half precision no longer takes the driver down with it.** RenderPearl
-  computes in sixteen and eight bit numbers, and four things stood between it and the screen. The
-  engine did not know those types, so the colour output declared under one stayed where the pack
-  wrote it and a second output was laid on the same slot; it is declared under its ordinary width
-  now, and the value written is the same. The programs asked the card for arithmetic the game never
-  turns on, and a program asking for what was not turned on is invalid: the engine now turns on
-  every such feature the card reports. The pack passes its values between the two stages in a block
-  of its own, which the game counts as one value when it numbers them, so the value after the block
-  landed inside it: the block's members are passed one by one now, at the cost of the packing the
-  pack had chosen. The same pack tells the compiler it leaves the depth alone, and the engine's own
-  code wrote that depth above the pack's line, which the compiler refuses as a redeclaration after
-  use: the engine's code now comes after the pack's, where the reference puts its own.
+  computes in sixteen and eight bit numbers, and five things stood between it and the screen, one of
+  which crashed the game the moment the pack's first program was built. The engine did not know
+  those types, so the colour output declared under one stayed where the pack wrote it and a second
+  output was laid on the same slot; it is declared under its ordinary width now, and the value
+  written is the same. The programs asked the card for arithmetic the game never turns on, and a
+  program asking for what was not turned on is invalid: the engine now turns on every such feature
+  the card reports. The pack passes its values between the two stages in a block of its own, which
+  the game counts as one value when it numbers them, so the value after the block landed inside it:
+  the block's members are passed one by one now, at the cost of the packing the pack had chosen. And
+  the pack asks whether the card has an AMD instruction before using it, a question the shader
+  compiler answered yes on every card, and the instruction is what took the driver down on a
+  GeForce: the engine now answers it the way the card does, so the pack takes the road it wrote for
+  that card. The same pack tells the compiler it leaves the depth alone, and the engine's own code
+  wrote that depth above the pack's line, which the compiler refuses as a redeclaration after use:
+  the engine's code now comes after the pack's, where the reference puts its own.
 
 - **A pack that declares its own output where another of its branches wrote the old-style one loads
   again.** Iteration keeps every one of its final passes in one file, one writing the old-style
