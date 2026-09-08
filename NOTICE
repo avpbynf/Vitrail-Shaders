@@ -310,6 +310,19 @@ GNU Lesser General Public License version 3
   stated in common/src/main/java/dev/vitrail/render/GeometryProgram.java, Iris writing its hand
   colour to the pack's own target where here it reaches the pack through the scene seed.
 
+  common/src/main/java/dev/vitrail/render/TargetCopies.java serves a geometry program that
+  samples one of its own draw targets what the reference's framebuffer holds there: Iris binds
+  colortex4 and up, and none of the first four, to a target's main half, or to its alternate
+  half once the target is flipped, and attaches the draw buffer to that same half,
+  net.irisshaders.iris.samplers.IrisSamplers lines 51 to 69 against
+  net.irisshaders.iris.targets.RenderTargets lines 309 to 320 and 345 to 368, both off the one
+  snapshot net.irisshaders.iris.pipeline.IrisRenderingPipeline takes at lines 359 to 360 and
+  677 to 678, read on 8 September 2026. What is not a transcription is the copy: Iris reads the
+  attachment itself, a read OpenGL leaves undefined and lets a program make where this backend
+  refuses it, so the passes drawn after the deferred stage are handed a copy of the target
+  taken ahead of them, and the passes drawn before it are answered one pixel. The file writes
+  both out.
+
   common/src/main/java/dev/vitrail/render/PackDepth.java keeps a third depth image, the world as it
   stood before the player's own hand was drawn, which is what a pack reads as depthtex2. Both the
   image and the moment it is taken at are net.irisshaders.iris.targets.RenderTargets's, read in

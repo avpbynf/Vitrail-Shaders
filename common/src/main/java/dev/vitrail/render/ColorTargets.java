@@ -199,6 +199,12 @@ final class ColorTargets {
 	private final PackDepth depth = new PackDepth();
 
 	/**
+	 * The copies of the targets a translucent geometry program samples on the half it writes,
+	 * held here for the same reason again: they answer a sampler a program binds.
+	 */
+	private final TargetCopies copies = new TargetCopies();
+
+	/**
 	 * The smoothed depth at the centre of the screen, held here for the same reason again: it is a
 	 * sampler a program binds, and everything that binds one already holds this object.
 	 */
@@ -464,6 +470,11 @@ final class ColorTargets {
 					changed |= ensureSide(this.altSide, index, width, height, " alt");
 				}
 			}
+
+			// After the targets and sized on them, and not folded into the debt above: a copy is
+			// filled by the frame before anything reads it, so it is never owed a clear. A refusal
+			// there is the copy's own to keep, one target at a time, and takes nothing else down.
+			this.copies.ensure(this::target);
 		} catch (RuntimeException e) {
 			this.broken = true;
 			this.brokenWidth = screenWidth;
@@ -778,6 +789,14 @@ final class ColorTargets {
 	}
 
 	/**
+	 * The copies served where a translucent geometry program reads a target it writes. Never
+	 * null, and each of its images is null until a frame has filled it.
+	 */
+	TargetCopies copies() {
+		return this.copies;
+	}
+
+	/**
 	 * The one texel {@code centerDepthSmooth} is read out of, and the pass that draws it. Its own
 	 * image is null until a frame has drawn it, and a name bound to it then reads the far plane.
 	 */
@@ -990,6 +1009,7 @@ final class ColorTargets {
 		this.coverage = release(this.coverage);
 		this.shadowMap.release();
 		this.depth.release();
+		this.copies.release();
 		this.centerDepth.release();
 		this.motionVectors.release();
 		this.pendingClears.clear();

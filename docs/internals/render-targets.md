@@ -142,7 +142,13 @@ One set is the form to keep, because two copies of one fact is one of them being
 Two facts about who flips:
 
 - **Geometry passes write the side they read and flip nothing.** They paint over the world rather
-  than filter it, so alternating would be meaningless. Only full-screen passes flip.
+  than filter it, so alternating would be meaningless. Only full-screen passes flip. A geometry
+  pass that samples a target it also writes therefore reads the half it is drawing into, which
+  under OpenGL is the attachment itself and here cannot be: a pass drawn after the deferred
+  stage is served a copy of that half taken ahead of it, once at the end of that stage and once
+  after the game's translucent features are composed, and a pass
+  drawn before it, or reading one of the first four targets, which the reference binds to no
+  geometry program, is answered one pixel. `TargetCopies` carries the rule and the cost.
 - **Stage-level pre-flip directives belong to no program.** The reference plays them when it
   constructs each stage's renderer, before its loop, whether or not that stage has any valid source
   in this place. So they are applied at stage opening, driven by the stage's rank rather than by

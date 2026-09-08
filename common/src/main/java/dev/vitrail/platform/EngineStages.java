@@ -254,6 +254,9 @@ public final class EngineStages {
 		// open, and composing opens one of its own where the encoder allows only one at a time.
 		EntityDraw.translucentFeatures(false);
 		PackChain.closeFeatures();
+		// Then the copy a translucent program reads where it samples a target it writes, which
+		// has to hold the layer just composed and everything before it.
+		PackChain.takeReadCopies();
 	}
 
 	/**

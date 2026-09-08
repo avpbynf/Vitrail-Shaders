@@ -1153,6 +1153,9 @@ public final class PackChain {
 		this.begun = false;
 		this.prepared = false;
 		this.early = false;
+		// A per frame picture like the depths: a frame that takes none reads the pixel, never the
+		// frame before's world.
+		this.targets.copies().forget();
 		this.filled = false;
 		this.seeded = false;
 		this.sceneDepth = false;
@@ -1889,6 +1892,59 @@ public final class PackChain {
 	}
 
 	/**
+	 * Takes, for the second time this frame, the copy a translucent geometry program reads where
+	 * it samples a target it writes, at the last moment before the world's translucents: after the
+	 * deferred stage, the scene seed at its rank among the deferreds, the hand's solid pass, the
+	 * translucent half of the entities and the game's own features composed by
+	 * {@link #closeFeatures}, which are the last writers of what a water program reads behind
+	 * itself. The reference's framebuffer holds all of that when such a program is drawn.
+	 * <p>
+	 * <strong>Two takes and not one, because the readers are drawn on both sides of the game's
+	 * features window.</strong> The translucent half of the entities is drawn inside it, between
+	 * the deferred stage and this line, and what it reads behind itself under the reference is
+	 * the opaque world as the deferreds left it: that is the take at the end of {@code drawEarly}.
+	 * The world's water, the translucent particles, the clouds, the weather and the hand's water
+	 * are drawn after this line, and what they read has the entities and the layer in it: that is
+	 * this one, over the first. One image copy apiece per target read this way, the second only
+	 * where the first was, and a pack whose translucents read no target of their own pays neither.
+	 * <p>
+	 * Outside any render pass, as a copy has to be, which is what {@link #closeFeatures} leaves.
+	 */
+	public static void takeReadCopies() {
+		PackChain chain = active;
+		GpuDevice device = RenderSystem.tryGetDevice();
+		// The early half is the gate and not drawable(): a frame that never reached it has no
+		// deferred stage behind the target, and a copy of that is the picture this refuses.
+		if (disabled || chain == null || device == null || !chainWanted || !chain.early) {
+			return;
+		}
+
+		try {
+			chain.takeReadCopies(device);
+		} catch (RuntimeException e) {
+			disabled = true;
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
+	}
+
+	/**
+	 * One take of the copies, with the clears still owed paid first, so a target no pass has
+	 * attached yet in this frame is copied emptied rather than holding the frame before: under
+	 * Iris the clear pass ran at the head of the frame and a water reads the clear colour there.
+	 * Nothing is paid, and no encoder is made, when no copy exists to take.
+	 */
+	private void takeReadCopies(GpuDevice device) {
+		if (!this.targets.copies().any()) {
+			return;
+		}
+
+		CommandEncoder encoder = device.createCommandEncoder();
+		this.targets.flushPending(encoder);
+		this.targets.copies().take(encoder);
+	}
+
+	/**
 	 * Puts the game's overrides back and composes the layer onto the half of the pack's target the
 	 * world's translucents are about to blend onto, which keeps vanilla's order: features first,
 	 * then water.
@@ -2165,6 +2221,12 @@ public final class PackChain {
 
 		drawRange(device, ready, world, end, this.targets.depth().opaque(),
 				this.targets.depth().distantOpaque(), true, Cut.BEFORE_TRANSLUCENTS);
+
+		// The first of the frame's two takes, for the translucent passes drawn inside the game's
+		// features window that opens right after this: the translucent half of the entities reads
+		// the opaque world as the deferreds and the seed left it, which is what stands here.
+		// takeReadCopies says where the second one is and why there are two.
+		takeReadCopies(device);
 	}
 
 	/**
