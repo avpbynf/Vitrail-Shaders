@@ -171,7 +171,13 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 		}
 
 		int aspect = VulkanConst.formatAspectMask(texture.getFormat());
-		int filter = integer(texture) ? VK10.VK_FILTER_NEAREST : VK10.VK_FILTER_LINEAR;
+		// NEAREST on an integer format because there is nothing between two of its values, and
+		// NEAREST on a depth one because Vulkan says so outright: a blit whose source is a depth or
+		// stencil image must be filtered NEAREST (VUID-vkCmdBlitImage-srcImage-00232), the layers
+		// refusing the call rather than the driver approximating it. That is the whole chain of the
+		// shadow map, so the rule is not theoretical here.
+		boolean colour = (aspect & VK10.VK_IMAGE_ASPECT_COLOR_BIT) != 0;
+		int filter = colour && !integer(texture) ? VK10.VK_FILTER_LINEAR : VK10.VK_FILTER_NEAREST;
 		long vkImage = image.vkImage();
 		// The wide wait, when armed, stands where each transfer barrier would: a reporter whose
 		// image is still wrong with it on has then cleared the synchronisation of this road too,
@@ -282,9 +288,11 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 	 * only writes standing unsynchronised at this point are the blits themselves: the pass that
 	 * wrote the base has already closed on its own barrier, and that is also what ordered the
 	 * first blit's read. What can touch the chain next is a sampled read from any shader stage, a
-	 * pass writing the base again, or another transfer; the image is a colour target, so no depth
-	 * stage ever meets it. The wide wait never reaches here: while it is armed, the game's own
-	 * barrier already stands after the last blit.
+	 * pass writing the base again, or another transfer. The depth stages are named beside them
+	 * because the image is not always a colour target: the shadow map's depth pair carries a chain
+	 * wherever the pack asked for one, and the next frame's stage clears that base through a
+	 * load-op and draws the world into it. The wide wait never reaches here: while it is armed, the
+	 * game's own barrier already stands after the last blit.
 	 */
 	@Unique
 	private static void vitrail$chainTailBarrier(VkCommandBuffer commands, MemoryStack stack) {
@@ -296,11 +304,15 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR
+						| KHRSynchronization2.VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR
 						| KHRSynchronization2.VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR)
 				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT_KHR
+						| KHRSynchronization2.VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_READ_BIT_KHR
 						| KHRSynchronization2.VK_ACCESS_2_TRANSFER_WRITE_BIT_KHR);
 		VkDependencyInfo info = VkDependencyInfo.calloc(stack)
