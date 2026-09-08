@@ -45,14 +45,15 @@ public final class VolumeAtlas {
 	/**
 	 * What the atlas is allowed to come out as, which is not what the volume is allowed to be.
 	 * <p>
-	 * A blob is bounded by the ceiling on a pack file and its declaration is checked against its
-	 * length, so a volume is at most a few million texels; the atlas is what those texels are laid
-	 * out AS, and one long axis lays them out in a line. A megabyte declared as
-	 * {@code 4096 1 2048} spreads to a hundred and eighty eight thousand texels across, which no
-	 * device will allocate and which nothing in the file said. The sides are what a device takes and
-	 * the total is what the memory is, counted in bytes because a texel is four to eight of them: a
-	 * hundred and twenty eight mebibytes at the very most, and a megabyte for the noise volumes of
-	 * the corpus.
+	 * A blob is bounded by nothing but the file the pack ships and the declaration checked against
+	 * its length, and THIS is what bounds it: nothing downstream reads a blob whose atlas was
+	 * refused here. The atlas is what the volume's texels are laid out AS, and one long axis lays
+	 * them out in a line. A megabyte declared as {@code 4096 1 2048} spreads to a hundred and
+	 * eighty eight thousand texels across, which no device will allocate and which nothing in the
+	 * file said. The sides are what a device takes and the total is what the memory is, counted in
+	 * bytes because a texel is four to sixteen of them: a hundred and twenty eight mebibytes at the
+	 * very most, which is a megabyte for the noise volumes of the corpus and thirty seven for
+	 * iterationT's atmosphere table.
 	 */
 	private static final int MAX_SIDE = 16384;
 
@@ -65,15 +66,20 @@ public final class VolumeAtlas {
 	private static final int ALPHA = 3;
 
 	/**
-	 * The channel types this lays out: unsigned bytes and shorts, and half floats, the types the
-	 * corpus's noise volumes and Photon's atmosphere table are made of. Everything else is refused
-	 * until a pack ships it, and two of the refusals are not a matter of writing more: a single
-	 * float a channel would be allocated in a format Vulkan does not promise to filter linearly,
-	 * which is the whole of what the atlas asks the hardware to do, and an integer format is read
-	 * through an integer sampler the helper is not written for.
+	 * The channel types this lays out: unsigned bytes and shorts, and floats of both widths, the
+	 * types the corpus's noise volumes and iterationT's atmosphere table are made of. An integer
+	 * format stays out, and that refusal is not a matter of writing more: it is read through an
+	 * integer sampler the helper is not written for.
+	 * <p>
+	 * A single float a channel goes up as the pack declared it, which is what Iris uploads and what
+	 * GL filters for it. Vulkan only PERMITS a device to filter a thirty two bit float format
+	 * linearly where it requires it of a half, so on a device that does not the sampler falls back
+	 * to nearest and says so, which costs the blend between two entries of a lookup table and
+	 * nothing else. Laying such a blob out in halves instead would keep the filtering and round
+	 * every value, and a table like this one is read for its values.
 	 */
 	private static final Set<PixelType> TYPES = Set.of(PixelType.UNSIGNED_BYTE,
-			PixelType.UNSIGNED_SHORT, PixelType.HALF_FLOAT);
+			PixelType.UNSIGNED_SHORT, PixelType.HALF_FLOAT, PixelType.FLOAT);
 
 	/** The channel orders laid out as they come: a swapped order would have to be swapped back. */
 	private static final Set<PixelFormat> FORMATS = Set.of(PixelFormat.RED, PixelFormat.RG,
@@ -211,6 +217,7 @@ public final class VolumeAtlas {
 			case UNSIGNED_BYTE -> new byte[] {(byte) 0xFF};
 			case UNSIGNED_SHORT -> new byte[] {(byte) 0xFF, (byte) 0xFF};
 			case HALF_FLOAT -> new byte[] {0x00, 0x3C};
+			case FLOAT -> new byte[] {0x00, 0x00, (byte) 0x80, 0x3F};
 			default -> throw new IllegalStateException(this.type + " is not a type this lays out");
 		};
 	}
