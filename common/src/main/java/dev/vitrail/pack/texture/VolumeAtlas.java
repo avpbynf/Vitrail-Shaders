@@ -1,10 +1,7 @@
 package dev.vitrail.pack.texture;
 
 import dev.vitrail.pack.model.PackTexture;
-import dev.vitrail.pack.model.PixelFormat;
 import dev.vitrail.pack.model.PixelType;
-
-import java.util.Set;
 
 /**
  * Where every texel of a volume ends up once the volume is laid out flat, decided once and read
@@ -41,49 +38,6 @@ public final class VolumeAtlas {
 
 	/** One texel on each side of every tile, holding the copy of what lies past the edge. */
 	public static final int GUTTER = 1;
-
-	/**
-	 * What the atlas is allowed to come out as, which is not what the volume is allowed to be.
-	 * <p>
-	 * A blob is bounded by nothing but the file the pack ships and the declaration checked against
-	 * its length, and THIS is what bounds it: nothing downstream reads a blob whose atlas was
-	 * refused here. The atlas is what the volume's texels are laid out AS, and one long axis lays
-	 * them out in a line. A megabyte declared as {@code 4096 1 2048} spreads to a hundred and
-	 * eighty eight thousand texels across, which no device will allocate and which nothing in the
-	 * file said. The sides are what a device takes and the total is what the memory is, counted in
-	 * bytes because a texel is four to sixteen of them: a hundred and twenty eight mebibytes at the
-	 * very most, which is a megabyte for the noise volumes of the corpus and thirty seven for
-	 * iterationT's atmosphere table.
-	 */
-	private static final int MAX_SIDE = 16384;
-
-	private static final long MAX_BYTES = 128L * 1024 * 1024;
-
-	/** Four channels a texel in the atlas whatever the blob holds, the width the engine allocates. */
-	private static final int CHANNELS = 4;
-
-	/** The alpha channel, the one a blob short of channels is answered one for rather than nought. */
-	private static final int ALPHA = 3;
-
-	/**
-	 * The channel types this lays out: unsigned bytes and shorts, and floats of both widths, the
-	 * types the corpus's noise volumes and iterationT's atmosphere table are made of. An integer
-	 * format stays out, and that refusal is not a matter of writing more: it is read through an
-	 * integer sampler the helper is not written for.
-	 * <p>
-	 * A single float a channel goes up as the pack declared it, which is what Iris uploads and what
-	 * GL filters for it. Vulkan only PERMITS a device to filter a thirty two bit float format
-	 * linearly where it requires it of a half, so on a device that does not the sampler falls back
-	 * to nearest and says so, which costs the blend between two entries of a lookup table and
-	 * nothing else. Laying such a blob out in halves instead would keep the filtering and round
-	 * every value, and a table like this one is read for its values.
-	 */
-	private static final Set<PixelType> TYPES = Set.of(PixelType.UNSIGNED_BYTE,
-			PixelType.UNSIGNED_SHORT, PixelType.HALF_FLOAT, PixelType.FLOAT);
-
-	/** The channel orders laid out as they come: a swapped order would have to be swapped back. */
-	private static final Set<PixelFormat> FORMATS = Set.of(PixelFormat.RED, PixelFormat.RG,
-			PixelFormat.RGB, PixelFormat.RGBA);
 
 	private final int width;
 	private final int height;
@@ -128,16 +82,19 @@ public final class VolumeAtlas {
 	public static boolean serves(PackTexture.Raw raw) {
 		return raw.shape() == PackTexture.Shape.TEXTURE_3D
 				&& raw.sizeX() > 0 && raw.sizeY() > 0 && raw.sizeZ() > 0
-				&& TYPES.contains(raw.pixelType()) && FORMATS.contains(raw.pixelFormat());
+				&& RawTexels.holds(raw.pixelType(), raw.pixelFormat());
 	}
 
 	/**
 	 * Whether this layout is one a device could hold and this engine is willing to spend. Asked
 	 * before a volume is served, because a layout that does not fit is one nothing can draw with.
+	 * <p>
+	 * The ATLAS is what is measured and not the volume, and the two are not the same question: a
+	 * megabyte declared as {@code 4096 1 2048} spreads to a hundred and eighty eight thousand
+	 * texels across, which no device will allocate and which nothing in the file said.
 	 */
 	public boolean fits() {
-		return atlasWidth() <= MAX_SIDE && atlasHeight() <= MAX_SIDE
-				&& (long) atlasWidth() * atlasHeight() * texelBytes() <= MAX_BYTES;
+		return RawTexels.fits(atlasWidth(), atlasHeight(), texelBytes());
 	}
 
 	/**
@@ -185,7 +142,7 @@ public final class VolumeAtlas {
 		}
 
 		int out = texelBytes();
-		byte[] one = one();
+		byte[] one = RawTexels.one(this.type);
 		byte[] atlas = new byte[atlasWidth() * atlasHeight() * out];
 		for (int z = 0; z < this.depth; z++) {
 			// From -1 to width inclusive: the two extra columns and rows are the gutter, and they
@@ -196,8 +153,8 @@ public final class VolumeAtlas {
 					int y = past(v, this.height);
 					int to = texel(u, v, z) * out;
 					System.arraycopy(blob, index(x, y, z) * in, atlas, to, in);
-					if (this.components <= ALPHA) {
-						System.arraycopy(one, 0, atlas, to + ALPHA * channelBytes(), one.length);
+					if (this.components <= RawTexels.ALPHA) {
+						System.arraycopy(one, 0, atlas, to + RawTexels.ALPHA * channelBytes(), one.length);
 					}
 				}
 			}
@@ -209,17 +166,6 @@ public final class VolumeAtlas {
 	/** The texel a coordinate one past the edge reads: the far edge when repeating, the edge itself when clamping. */
 	private int past(int at, int size) {
 		return this.clamp ? Math.clamp(at, 0, size - 1) : Math.floorMod(at, size);
-	}
-
-	/** One, in the channel's own type and in the byte order the blob is in, which is the machine's. */
-	private byte[] one() {
-		return switch (this.type) {
-			case UNSIGNED_BYTE -> new byte[] {(byte) 0xFF};
-			case UNSIGNED_SHORT -> new byte[] {(byte) 0xFF, (byte) 0xFF};
-			case HALF_FLOAT -> new byte[] {0x00, 0x3C};
-			case FLOAT -> new byte[] {0x00, 0x00, (byte) 0x80, 0x3F};
-			default -> throw new IllegalStateException(this.type + " is not a type this lays out");
-		};
 	}
 
 	/** How far apart two tiles start across, gutter included: 66 for a 64 wide volume. */
@@ -278,6 +224,6 @@ public final class VolumeAtlas {
 
 	/** Bytes in one texel of the atlas: four channels of the blob's type. */
 	public int texelBytes() {
-		return CHANNELS * channelBytes();
+		return RawTexels.CHANNELS * channelBytes();
 	}
 }
