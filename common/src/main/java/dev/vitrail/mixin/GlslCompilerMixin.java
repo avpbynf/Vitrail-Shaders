@@ -3,24 +3,38 @@ package dev.vitrail.mixin;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderType;
+import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
+import com.mojang.blaze3d.vulkan.VulkanDevice;
 import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
+import com.mojang.blaze3d.vulkan.glsl.ShaderCompileException;
 import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.LoadClock;
+import dev.vitrail.render.GeometryStage;
 import dev.vitrail.render.RawLocals;
 import dev.vitrail.render.ShaderDebugInfo;
 import dev.vitrail.render.storage.StorageImages;
+import org.lwjgl.util.shaderc.Shaderc;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 
 /**
  * Lets a sampled or stored 3D image through the bind-group walk, gives the compiler's output its
  * zeroes before the reflection reads it, and puts {@link ModuleCache} around the one call that
  * turns a pack's GLSL into a module, which is also where {@link LoadClock} counts what that costs.
+ * <p>
+ * It also binds the geometry stage a pack ships: shaderc is asked for kind 3, the unit joins the
+ * bind group the two other stages share, and the rebind chain runs through it rather than past it.
+ * {@link GeometryStage} carries the road and the reason each piece sits where it does.
  * <p>
  * It also decides, at the compiler's own constructor, whether shaderc writes debug information
  * into every module of the session: {@link ShaderDebugInfo} says what that costs and why the
@@ -49,6 +63,105 @@ import java.nio.ByteBuffer;
  */
 @Mixin(GlslCompiler.class)
 public abstract class GlslCompilerMixin {
+
+	/**
+	 * Stage token hashed into {@link ModuleCache}'s key for a geometry unit, which travels this
+	 * road under {@code ShaderType.VERTEX}. {@code shaderc_glsl_geometry_shader} is 3.
+	 */
+	@Unique
+	private static final String GEOMETRY_STAGE = "GEOMETRY/shaderc-kind3";
+
+	/** {@code shaderc_glsl_geometry_shader}. */
+	@Unique
+	private static final int GEOMETRY_KIND = Shaderc.shaderc_glsl_geometry_shader;
+
+	@Shadow
+	private static void addToBindGroup(List<VulkanBindGroupLayout.Entry> entries,
+			IntermediaryShaderModule shader, RenderPipeline pipeline) throws ShaderCompileException {
+		throw new AssertionError();
+	}
+
+	/**
+	 * Asks shaderc for a geometry unit where {@link GeometryStage} is compiling one. The game maps
+	 * its two-armed {@code ShaderType} to kinds 0 and 1 and has no third arm to add: the enum is
+	 * Minecraft's, a pack's geometry stage is not the game's business, and a constant read off a
+	 * flag raised for the length of one call cannot be reached by anything else compiling on
+	 * another thread.
+	 */
+	@ModifyArg(method = "createIntermediary", require = 1, index = 2,
+			at = @At(value = "INVOKE",
+					target = "Lorg/lwjgl/util/shaderc/Shaderc;shaderc_compile_into_spv("
+							+ "JLjava/nio/ByteBuffer;ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;J)J"))
+	private int vitrail$geometryKind(int kind) {
+		return GeometryStage.compiling() ? GEOMETRY_KIND : kind;
+	}
+
+	/**
+	 * Compiles the pack's geometry stage, where the pipeline being built ships one, and puts what
+	 * it declares into the bind group the two other stages are sharing. Hung off the second walk
+	 * rather than a head injection so it runs after both of them and before the first rebind: a
+	 * name only this stage declares has to be an entry before {@code rebind} looks for it, which
+	 * throws over anything the list never named, and before the layout is created off that same
+	 * list at the end of the method. The entries the two other stages added keep their index, an
+	 * arrival at the end of the list moving none of them.
+	 */
+	@WrapOperation(method = "compile", require = 1,
+			at = @At(value = "INVOKE", ordinal = 1,
+					target = "Lcom/mojang/blaze3d/vulkan/glsl/GlslCompiler;addToBindGroup("
+							+ "Ljava/util/List;Lcom/mojang/blaze3d/vulkan/glsl/IntermediaryShaderModule;"
+							+ "Lcom/mojang/blaze3d/pipeline/RenderPipeline;)V"))
+	private void vitrail$geometryResources(List<VulkanBindGroupLayout.Entry> entries,
+			IntermediaryShaderModule fragment, RenderPipeline pipeline, Operation<Void> original)
+			throws ShaderCompileException {
+		original.call(entries, fragment, pipeline);
+		IntermediaryShaderModule geometry =
+				GeometryStage.begin((GlslCompiler) (Object) this, pipeline);
+		if (geometry != null) {
+			addToBindGroup(entries, geometry, pipeline);
+		}
+	}
+
+	/**
+	 * Rebinds the geometry stage between the two, which is the whole point of the road: OpenGL
+	 * links the stages by name and Vulkan by location, so the fragment stage has to be numbered
+	 * over what the stage BEFORE it writes. That stage is the geometry one wherever a pack ships
+	 * it, and the vertex stage's outputs, which the game hands in here, name the geometry stage's
+	 * inputs instead.
+	 */
+	@WrapOperation(method = "compile", require = 1,
+			at = @At(value = "INVOKE", ordinal = 1,
+					target = "Lcom/mojang/blaze3d/vulkan/glsl/IntermediaryShaderModule;rebind("
+							+ "Ljava/util/List;Ljava/util/List;)V"))
+	private void vitrail$rebindBetween(IntermediaryShaderModule fragment, List<String> written,
+			List<VulkanBindGroupLayout.Entry> entries, Operation<Void> original)
+			throws ShaderCompileException {
+		IntermediaryShaderModule geometry = GeometryStage.building();
+		if (geometry == null) {
+			original.call(fragment, written, entries);
+
+			return;
+		}
+
+		geometry.rebind(written, entries);
+		original.call(fragment, GeometryStage.outputs(geometry), entries);
+	}
+
+	/**
+	 * Creates the device module for the geometry stage, on the one call that has a device in hand.
+	 * The handle waits on the thread for {@code VulkanRenderPipelineMixin}, which is the next call
+	 * on whichever thread is building.
+	 */
+	@WrapOperation(method = "compile", require = 1,
+			at = @At(value = "INVOKE", ordinal = 1,
+					target = "Lcom/mojang/blaze3d/vulkan/glsl/IntermediaryShaderModule;"
+							+ "createVulkanShaderModule(Lcom/mojang/blaze3d/vulkan/VulkanDevice;)J"))
+	private long vitrail$geometryModule(IntermediaryShaderModule fragment, VulkanDevice device,
+			Operation<Long> original) {
+		long id = original.call(fragment, device);
+		GeometryStage.built(device);
+
+		return id;
+	}
 
 	/**
 	 * Skips the one call that asks shaderc for debug information, unless somebody asked for it
@@ -111,7 +224,12 @@ public abstract class GlslCompilerMixin {
 		// store one state's module under the other's key.
 		RawLocals.begin();
 		try {
-			String key = ModuleCache.keyOf(source, type.name());
+			// A geometry stage comes past under VERTEX, the enum having no arm for it, and is
+			// keyed under its own name all the same: the two roads compile the same text to
+			// different bytes, and a blob stored under the wrong one would be served to the wrong
+			// stage.
+			String key = ModuleCache.keyOf(source,
+					GeometryStage.compiling() ? GEOMETRY_STAGE : type.name());
 			IntermediaryShaderModule served = ModuleCache.lookup(key, filename);
 			if (served != null) {
 				return served;

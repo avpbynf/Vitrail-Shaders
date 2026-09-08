@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout.Entry;
 import dev.vitrail.pack.texture.CustomImages;
+import dev.vitrail.render.GeometryStage;
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
 import org.lwjgl.vulkan.VkDescriptorSetLayoutBinding;
@@ -56,5 +57,28 @@ public abstract class VulkanBindGroupLayoutMixin {
 		}
 
 		return original.call(binding, type);
+	}
+
+	/**
+	 * Adds the geometry bit to the vertex and fragment the game writes, on the layouts of the
+	 * pipelines that carry a geometry stage. A binding is only readable from the stages its flags
+	 * name, and the pair the game writes names the two stages around the middle one and not the
+	 * middle one itself, so the uniform iterationT's terrain geometry stage reads would be out of
+	 * its reach.
+	 * <p>
+	 * Narrowed to those layouts rather than written on every one of the process: this method builds
+	 * the layout of every pipeline the game and every other mod compiles, and a flag nothing reads
+	 * is still a flag nobody asked for. The question is asked of the thread, which is where the
+	 * stage in flight is held, and this call is the last of the compile that put it there.
+	 */
+	@WrapOperation(method = "create", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lorg/lwjgl/vulkan/VkDescriptorSetLayoutBinding;stageFlags(I)"
+							+ "Lorg/lwjgl/vulkan/VkDescriptorSetLayoutBinding;"))
+	private static VkDescriptorSetLayoutBinding vitrail$geometryStage(
+			VkDescriptorSetLayoutBinding binding, int flags,
+			Operation<VkDescriptorSetLayoutBinding> original) {
+		return original.call(binding,
+				GeometryStage.buildingHere() ? flags | GeometryStage.STAGE_BIT : flags);
 	}
 }

@@ -189,7 +189,7 @@ public final class ShadowCullFrustum implements Frustum {
 	 * {@code BoxCullingFrustum} ({@code :302-323}). Voxelisation is a geometry stage present
 	 * ({@code :163-165}) <em>or</em>, here alone, an image load / store still standing on that
 	 * program: Iris computes that half and reads it nowhere, its {@code setUsesImages} having no
-	 * caller. Not a {@code .gsh} this engine binds. A bound wider than the loaded
+	 * caller. A bound wider than the loaded
 	 * world, or not positive, drops the box too and keeps everything, which is Iris's
 	 * {@code NonCullingFrustum} ({@code :317-318}), not the light's own volume.
 	 * {@link dev.vitrail.pack.source.ShadowCullState#SAFE_ZONE} still sweeps along the light.

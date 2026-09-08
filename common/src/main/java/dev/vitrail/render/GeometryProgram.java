@@ -819,6 +819,13 @@ final class GeometryProgram {
 		// descriptor walk can see when it has to answer for a name.
 		ShadowCompare.note(this.pipeline, this.path, loaded);
 
+		// Same filing, same reason: the compile road has the pipeline in hand and nothing else. And
+		// the same refusal the storage block below takes, on the one road that answers no: a pack
+		// ships a geometry stage and the device has not got the feature to run one.
+		if (!GeometryStage.note(this.pipeline, this.path, loaded)) {
+			this.broken = true;
+		}
+
 		// A storage block this engine has no bufferObject for is the one refusal that does not
 		// announce itself. An unbindable sampler stops the pipeline from being built and this class
 		// already falls back on that; a storage block compiles, never enters a bind group, and
@@ -1209,6 +1216,7 @@ final class GeometryProgram {
 		// answers no for every compared name of this program and the variant's depth-reference
 		// lookups run on an ordinary sampler, undefined and silent.
 		ShadowCompare.noteBeside(built, this.pipeline);
+		GeometryStage.noteBeside(built, this.pipeline);
 
 		return built;
 	}

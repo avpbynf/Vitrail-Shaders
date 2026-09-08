@@ -345,11 +345,12 @@ public final class ProgramTranslator {
 	 * it was. No pack of the corpus writes one, and the shape is worth naming rather than reading as
 	 * covered.
 	 * <p>
-	 * <strong>The stage before is the vertex stage, and in this game it can be nothing else.</strong>
+	 * <strong>The stage before is usually the vertex stage and is not always.</strong>
 	 * {@code GlslCompiler.compile:62-63} takes one vertex module and one fragment module and pairs
-	 * those two at :86; 26.2 compiles no geometry stage at all. The walk is written over the pipeline
-	 * order anyway rather than reaching for the vertex stage by name, so that a stage appearing
-	 * between them is paired correctly rather than silently skipped.
+	 * those two at :86, and {@code GeometryStage} puts a third between them wherever the pack ships
+	 * one. The walk is written over the pipeline order rather than reaching for the vertex stage by
+	 * name, so the stage that appears between them is paired correctly rather than silently
+	 * skipped.
 	 *
 	 * @param prepared the stages of one program, keyed by stage, in pipeline order
 	 */
@@ -390,8 +391,7 @@ public final class ProgramTranslator {
 	 * {@code layout(location = n)} is still in the body here, {@code liftFragmentOutputs} only
 	 * taking out the ones that carry one. Demoting it would leave the pass compiling, drawing, and
 	 * writing to nothing. It costs nothing to step over: a compute stage is dispatched on its own,
-	 * and {@code GlslCompiler.compile:62-63} pairs one vertex module with one fragment module and
-	 * takes no third.
+	 * and nothing in a pipeline hands it a varying.
 	 *
 	 * @param prepared the stages of one program, keyed by stage, in pipeline order
 	 */

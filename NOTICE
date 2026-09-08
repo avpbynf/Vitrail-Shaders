@@ -99,6 +99,14 @@ GNU Lesser General Public License version 3
   carries the alpha of an earlier version. The names and the shape of the generated code are this
   engine's.
 
+  common/src/main/java/dev/vitrail/render/GeometryStage.java keeps the rule that a program's
+  geometry stage is linked whenever the pack ships the file, from
+  net.irisshaders.iris.gl.program.ProgramBuilder, whose begin builds a third shader out of the
+  .gsh at lines 44 and 45 and hands it to the link at line 55. The rule is what packs are written
+  against: a stage that renames the varyings between the two others is only correct in a pipeline
+  that carries it. Everything under it is this engine's own, Vulkan asking for a device feature,
+  a shaderc kind, a bind group and a stage description where OpenGL asks for a link.
+
   common/src/main/java/dev/vitrail/render/HorizonCone.java takes the shape of the horizon geometry
   from net.irisshaders.iris.pathways.HorizonRenderer, read on 6 August 2026, whose own header, lines
   23 to 31, states what vanilla lacks: an inverted octagonal cone around the player, where the game
