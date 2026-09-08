@@ -89,6 +89,7 @@ public final class PackDirectives {
 	private final float shadowFarPlane;
 	private final float shadowIntervalSize;
 	private final Map<Integer, ShadowColour> shadowColours;
+	private final List<Boolean> shadowDepthNearest;
 
 	/**
 	 * What one {@code shadowcolor} buffer asks for: the format to allocate it in, whether the shadow
@@ -130,6 +131,7 @@ public final class PackDirectives {
 		Map<Integer, ShadowColour> colours = new TreeMap<>();
 		builder.shadowColours.forEach((index, setting) -> colours.put(index, setting.build()));
 		this.shadowColours = Collections.unmodifiableMap(colours);
+		this.shadowDepthNearest = List.of(builder.depthNearest[0], builder.depthNearest[1]);
 	}
 
 	/** What a pack that declares nothing gets, which is what most of the corpus gets. */
@@ -311,6 +313,28 @@ public final class PackDirectives {
 		return this.shadowColours.keySet();
 	}
 
+	/**
+	 * Whether the pack asked for NEAREST on one of the two depth images of the map,
+	 * {@code shadowtex0} at nought and {@code shadowtex1} at one, which is the pair Iris carries
+	 * ({@code shaderpack/properties/PackShadowDirectives.java:184-198}).
+	 * <p>
+	 * False is where both engines start, and it is not where the whole corpus stays: Pegasus asks
+	 * for NEAREST on both images. Several other packs carry the names too, set to false, or inside
+	 * a block comment, which is why the corpus is asked through the reader and never through a
+	 * grep: {@code .local/harness/ShadowSampling} answers it in one command.
+	 * <p>
+	 * The colour buffers have the same family of names and it is deliberately not read, because
+	 * <strong>Iris parses those and then binds the buffer through a LINEAR sampler object
+	 * regardless</strong> ({@code samplers/IrisSamplers.java:156-176}, {@code GlSampler.LINEAR} on
+	 * every {@code shadowcolor} bind), and a GL sampler object overrules the texture's own
+	 * parameters. OptiFine does honour them, so honouring them here would be a divergence from the
+	 * engine packs are tuned against, on the one buffer where a pack blurs light across a penumbra.
+	 */
+	public boolean shadowDepthNearest(int index) {
+		return index >= 0 && index < this.shadowDepthNearest.size()
+				&& this.shadowDepthNearest.get(index);
+	}
+
 	public static final class Builder {
 
 		private static final float DRYNESS_HALFLIFE = 200.0F;
@@ -326,6 +350,11 @@ public final class PackDirectives {
 		private static final int MAX_NOISE_RESOLUTION = 4096;
 
 		private static final String SHADOW_COLOUR = "shadowcolor";
+
+		/** {@code shadowtex0} and {@code shadowtex1}, the two depth names OptiFine's model has. */
+		private static final int SHADOW_DEPTHS = 2;
+
+		private final boolean[] depthNearest = new boolean[SHADOW_DEPTHS];
 
 		private static final ShadowColour SHADOW_COLOUR_DEFAULT = new ShadowColour(
 				TargetFormat.defaultFormat(), true, new TargetDirectives.Colour(1.0F, 1.0F, 1.0F, 1.0F),
@@ -395,6 +424,18 @@ public final class PackDirectives {
 				case "shadowNearPlane" -> asFloat(directive, value -> this.shadowNearPlane = value);
 				case "shadowFarPlane" -> asFloat(directive, value -> this.shadowFarPlane = value);
 				case "shadowIntervalSize" -> asFloat(directive, value -> this.shadowIntervalSize = value);
+				// How the depth pair is read back. The family is folded in text order like everything
+				// else here: Iris registers one consumer per name and then walks the declarations of
+				// every fragment stage in order, so a per-image spelling wins over the blanket one
+				// only by standing after it ({@code shaderpack/programs/ProgramSet.java:255-268}).
+				//
+				// shadowtexNearest is the older spelling of shadowtex0Nearest and has no shadowtex1
+				// equivalent, which is Iris's shape as well: it hands the name to the first sampler
+				// of the list ({@code shaderpack/properties/PackShadowDirectives.java:185-187}).
+				case "shadowtexNearest", "shadowtex0Nearest", "shadow0MinMagNearest" ->
+						asBool(directive, value -> this.depthNearest[0] = value);
+				case "shadowtex1Nearest", "shadow1MinMagNearest" ->
+						asBool(directive, value -> this.depthNearest[1] = value);
 				default -> shadowColour(directive);
 			}
 		}
@@ -485,6 +526,22 @@ public final class PackDirectives {
 			}
 		}
 
+		/**
+		 * A {@code const bool} and nothing else. Anything but the two words is dropped without a
+		 * default, which is what Iris does with it as well: its boolean dispatch takes {@code true}
+		 * and {@code false} and leaves the setting where it stood otherwise.
+		 */
+		private static void asBool(ConstDirectives.Directive directive, BooleanSetter setter) {
+			if (!directive.type().equals("bool")) {
+				return;
+			}
+
+			String value = directive.value().trim();
+			if (value.equals("true") || value.equals("false")) {
+				setter.set(value.equals("true"));
+			}
+		}
+
 		/** One buffer's three answers while they are still being folded, any of them still unsaid. */
 		private static final class ShadowSetting {
 
@@ -504,6 +561,11 @@ public final class PackDirectives {
 		@FunctionalInterface
 		private interface FloatSetter {
 			void set(float value);
+		}
+
+		@FunctionalInterface
+		private interface BooleanSetter {
+			void set(boolean value);
 		}
 
 		@FunctionalInterface

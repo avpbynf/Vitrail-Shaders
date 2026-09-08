@@ -674,11 +674,15 @@ final class PackPass {
 			// The noise image is LINEAR for the same reason the terrain reads it LINEAR: it is a
 			// continuous field the pack interpolates surfaces out of, and Iris binds it that way.
 			//
-			// A shadow COLOUR is LINEAR as well, and that is both authorities rather than a taste:
-			// OptiFine filters shadowcolor linearly unless the pack writes shadowcolorNNearest, and
-			// Iris binds it LINEAR outright (IrisSamplers.addShadowSamplers). It carries the light
-			// that came through stained glass and water, which a pack blurs across a penumbra; read
-			// NEAREST it steps in blocks the size of a shadow texel.
+			// A shadow COLOUR is LINEAR as well, whatever the pack declares, and that is the
+			// reference rather than a taste: OptiFine filters shadowcolor linearly unless the pack
+			// writes shadowcolorNNearest, while Iris parses that name and then binds the buffer
+			// through GlSampler.LINEAR regardless (IrisSamplers.java:156-176), a sampler object
+			// overruling the texture's own parameters. Honouring it here would diverge from the
+			// engine packs are tuned against, on the buffer that carries the light which came
+			// through stained glass and water: a pack blurs that across a penumbra, and read
+			// NEAREST it steps in blocks the size of a shadow texel. Pegasus declares
+			// shadowcolor0Nearest and sees it ignored under Iris.
 			//
 			// The shadow DEPTH is LINEAR for a reason of its own, and the reason a reader reaches
 			// for to keep it NEAREST does not hold. An averaged depth would indeed be a comparison
@@ -693,14 +697,21 @@ final class PackPass {
 			// NEAREST every edge of such a loop walks in texels of the map however many taps it
 			// pays for.
 			//
-			// The three names that would ask for NEAREST back - shadowtexNearest, shadowtexNNearest
-			// and shadowNMinMagNearest - are not read: no pack of the corpus writes one.
+			// The names that ask for NEAREST back on the DEPTH pair are read: shadowtexNearest,
+			// shadowtexNNearest and shadowNMinMagNearest. The depth paragraph above is what a pack
+			// that writes none of them gets, and that is not the whole corpus: Pegasus declares
+			// shadowtex0Nearest and shadowtex1Nearest true and reads its map through a manual PCF
+			// loop, so what it was shown was a map smoothed against its own declaration. The map
+			// itself is asked rather than this line deciding, which is what keeps the three roads
+			// that bind it - here, a geometry program and a compute - reading it one way.
 			//
 			// A custom image is the image's own answer and not this pass's, which is why it is
 			// asked of one place rather than decided here: see customImageFilter.
 			FilterMode filter = supplied != null ? source.filter() : switch (binding.kind()) {
 				case COLORTEX -> targets.filter(binding.index());
-				case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
+				case NOISE, SHADOW_COLOUR -> FilterMode.LINEAR;
+				case SHADOW_DEPTH -> targets.shadow()
+						.depthFilter(this.loaded.samplers().withoutTranslucents(binding.sampler()));
 				case CUSTOM_IMAGE -> customImageFilter(sampler);
 				default -> FilterMode.NEAREST;
 			};

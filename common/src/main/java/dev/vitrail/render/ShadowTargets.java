@@ -10,6 +10,7 @@ import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import org.joml.Vector4f;
@@ -94,6 +95,14 @@ final class ShadowTargets {
 	private final List<PackDirectives.ShadowColour> asked;
 	private final List<GpuFormat> formats;
 	private final List<Vector4fc> clearColours;
+
+	/**
+	 * Whether the pack asked for NEAREST on each depth image, {@code shadowtex0} at nought and
+	 * {@code shadowtex1} at one. Kept here so that the three roads that bind the map ask one place:
+	 * a full screen pass, a geometry program and a compute reading one image through two filters is
+	 * a difference nothing would ever explain.
+	 */
+	private final List<Boolean> depthNearest;
 
 	/**
 	 * How many of them this pack may reach, its own declaration deciding. Clamped to what the arrays
@@ -198,9 +207,11 @@ final class ShadowTargets {
 	 *                program declaring nothing is {@code {0, 1}} in there, which is the one way the
 	 *                pair reaches this class
 	 * @param ceiling how many the pack may reach, from {@code TargetPlan.shadowCeiling}
+	 * @param depthNearest whether the pack asked for NEAREST on {@code shadowtex0} and on
+	 *                {@code shadowtex1}, in that order
 	 */
-	ShadowTargets(int resolution, List<PackDirectives.ShadowColour> asked, Set<Integer> named,
-			int ceiling) {
+	ShadowTargets(int resolution, List<PackDirectives.ShadowColour> asked,
+			List<Boolean> depthNearest, Set<Integer> named, int ceiling) {
 		// Clamped rather than refused: a directive that survived a setting nobody expanded can be
 		// any number at all, and a shadow map is not worth taking the pack down for.
 		this.resolution = Math.clamp(resolution, 1, MAX_RESOLUTION);
@@ -224,11 +235,31 @@ final class ShadowTargets {
 					one.format().alphaAdded() && !one.declaresClearColour() ? 1.0F : colour.a());
 		}).toList();
 
+		this.depthNearest = List.copyOf(depthNearest);
 		this.ceiling = Math.clamp(ceiling, 1, MAX_COLOURS);
 		SortedSet<Integer> live = new TreeSet<>(Set.of(0));
 		named.stream().filter(index -> index > 0 && index < this.ceiling).forEach(live::add);
 		this.live = List.copyOf(live);
 	}
+
+	/**
+	 * How one depth image of the map is filtered, LINEAR unless the pack asked otherwise.
+	 * <p>
+	 * LINEAR is where both engines start ({@code shadows/ShadowRenderer.java:267-280}), and what it
+	 * decides is the read every pack of the corpus makes: a PCF loop sampling {@code shadowtex} as a
+	 * plain {@code sampler2D}, every tap of which rides on this filter. A pack that writes
+	 * {@code shadowtexNearest} or one of its per-index spellings is asking for those taps to land in
+	 * texels of the map, and is tuned against an engine that gives it that.
+	 *
+	 * @param withoutTranslucents whether the name reads {@code shadowtex1}, the image drawn without
+	 *                            the translucents, which is the second of the pair
+	 */
+	FilterMode depthFilter(boolean withoutTranslucents) {
+		return this.depthNearest.get(withoutTranslucents ? 1 : 0)
+				? FilterMode.NEAREST
+				: FilterMode.LINEAR;
+	}
+
 
 	/**
 	 * Makes the map exist and empties it once. Must run on the render thread and outside any render

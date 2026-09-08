@@ -2409,7 +2409,10 @@ final class GeometryProgram {
 		// and cloud shapes from it and counts on the interpolation. Iris binds it LINEAR_REPEAT,
 		// and reading it NEAREST shatters every one of those surfaces into facets. A shadow colour
 		// is continuous in the same way, carrying the light that came through glass and water
-		// across a penumbra, and both OptiFine and Iris filter it linearly.
+		// across a penumbra, and it stays LINEAR whatever the pack declares: OptiFine filters it
+		// linearly unless the pack writes shadowcolorNNearest, while Iris parses that name and
+		// binds the buffer through GlSampler.LINEAR regardless (IrisSamplers.java:156-176). Reading
+		// it as the pack asked would diverge from the engine packs are tuned against.
 		//
 		// The shadow DEPTH is LINEAR too, and the reason a reader reaches for to keep it NEAREST
 		// does not hold: where the compare mode is on, a sampler averages the RESULTS of the
@@ -2417,17 +2420,20 @@ final class GeometryProgram {
 		// nowhere. Iris filters this LINEAR unless the pack asks otherwise, its SamplingSettings
 		// starting at nearest=false and shadowtexNearest with its per-index spellings turning that
 		// round (shadows/ShadowRenderer.java:267-280), and adds GL_COMPARE_REF_TO_TEXTURE on top
-		// only where the pack writes shadowHardwareFiltering. Those three names are not read here
-		// and no pack of the corpus writes one, which is what PackPass says of the same bind two
-		// files away. The manual PCF loops packs write are the whole point either way,
-		// since every tap of such a loop rides on this filter. It has to match PackPass, which binds
-		// the same name for the full screen passes: the two halves of one frame reading one map
-		// through two filters is a difference nothing would ever explain.
+		// only where the pack writes shadowHardwareFiltering. Those names are read, and LINEAR is
+		// what a pack that writes none of them gets, which is not all of them: Pegasus declares
+		// the depth pair NEAREST. The manual PCF loops packs write are the
+		// whole point either way, since every tap of such a loop rides on this filter. The map
+		// itself is asked rather than this line deciding, which is what makes the answer PackPass's
+		// as well, it binding the same name for the full screen passes: the two halves of one frame
+		// reading one map through two filters is a difference nothing would ever explain.
 		// A custom image follows its format, and it is asked of one place for the same reason the
 		// shadow map is: a volume read one way here and another from a composite is a difference
 		// nothing would ever explain. PackPass.customImageFilter is that place.
 		return switch (binding.kind()) {
-			case NOISE, SHADOW_COLOUR, SHADOW_DEPTH -> FilterMode.LINEAR;
+			case NOISE, SHADOW_COLOUR -> FilterMode.LINEAR;
+			case SHADOW_DEPTH -> this.targets.shadow()
+					.depthFilter(this.loaded.samplers().withoutTranslucents(sampler));
 			case CUSTOM_IMAGE -> PackPass.customImageFilter(sampler);
 			default -> FilterMode.NEAREST;
 		};

@@ -144,6 +144,19 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack asking for a hard shadow edge gets one.** A shader pack can say that its shadow map is
+  to be read without smoothing, and the engine listed those lines among the pack's settings and
+  then bound the map smoothed anyway, so a pack written for a hard, stepped shadow came out soft.
+  They are read now, on the full screen passes, the world's own programs and the compute passes
+  alike, so one map is read one way across a whole frame.
+
+  A pack that says nothing is unchanged, its map staying smoothed, which is where both engines
+  start. One pack of those at hand does say something: Pegasus asks for its shadow map to be read
+  without smoothing, and now gets it, on a shadow test that steps hard enough for the change to sit
+  on the edge of a shadow rather than across it. The same request on the shadow's colour buffer
+  stays ignored, as it is by the engine packs are tuned against, and asking for a mip chain under
+  the map is a separate line and still ignored too.
+
 - **Smoke, flame and the other solid particles take the colour the pack meant them to.**
   The game draws its quad particles in two goes, the solid ones with the world and the
   see-through ones after the water, and only the second lot were reaching the pack's own

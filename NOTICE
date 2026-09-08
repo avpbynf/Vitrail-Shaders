@@ -46,6 +46,15 @@ GNU Lesser General Public License version 3
   GAUX4FORMAT and the promotion of colortex1 on a gdepth uniform, are not implemented. The flip
   state is carried once rather than as the pair BufferFlipper keeps.
 
+  common/src/main/java/dev/vitrail/pack/target/PackDirectives.java takes the names of the
+  shadow depth filtering directives, and which image each one moves, from
+  net.irisshaders.iris.shaderpack.properties.PackShadowDirectives: shadowtexNearest is an
+  alias for the first image alone, shadowtexNNearest and shadowNMinMagNearest name one image
+  each, and the same family on the colour buffers answers to a second spelling of the prefix
+  where the format and clear directives do not. The colour half is parsed by Iris and then
+  overruled at the bind, net.irisshaders.iris.samplers.IrisSamplers binding every shadowcolor
+  through a LINEAR sampler object whatever the pack asked, so it is not honoured here either.
+
   common/src/main/java/dev/vitrail/pack/target/SamplerPlan.java reproduces the sampler aliasing
   rules of net.irisshaders.iris.samplers.IrisSamplers and of
   net.irisshaders.iris.gl.program.ProgramSamplers, read on 19 August 2026: shadow reads the map
