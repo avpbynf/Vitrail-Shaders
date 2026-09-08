@@ -12,6 +12,8 @@ import org.lwjgl.vulkan.VK12;
 import org.lwjgl.vulkan.VkDevice;
 import org.lwjgl.vulkan.VkPhysicalDeviceFeatures;
 import org.lwjgl.vulkan.VkPhysicalDeviceFeatures2;
+import org.lwjgl.vulkan.VkPhysicalDeviceVulkan11Features;
+import org.lwjgl.vulkan.VkPhysicalDeviceVulkan12Features;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -28,9 +30,8 @@ import java.util.Set;
  * ({@code UpdateVoxelMap} under {@code SHADOW && VERTEX_SHADER}). Vulkan ignores those stores
  * unless {@code vertexPipelineStoresAndAtomics} is enabled, and {@code r16ui} / {@code rgba16f}
  * are not core storage formats unless {@code shaderStorageImageExtendedFormats} is on. The game's
- * {@code VulkanBackend} enables neither: its required set is draw-indirect, anisotropy and
- * dynamic rendering. Without this, floodfill runs on a volume that stays empty and the pack's
- * coloured lamps never light.
+ * {@code VulkanBackend} enables neither. Without this, floodfill runs on a volume that stays
+ * empty and the pack's coloured lamps never light.
  * <p>
  * And {@code independentBlend}, which is the device's half of {@code PER_BUFFER_BLENDING}. A pass
  * writing several targets under a {@code blend.<program>.<buffer>} directive needs each attachment
@@ -68,8 +69,69 @@ public abstract class VulkanBackendMixin {
 			VulkanBackend.VK10_FEATURES_STRUCT, "independentBlend",
 			VkPhysicalDeviceFeatures.INDEPENDENTBLEND);
 
+	// The narrow arithmetic a pack written for a recent card asks for. RenderPearl computes in
+	// float16_t, int16_t and int8_t throughout and keeps a half in its storage buffers, so its
+	// modules carry the Float16, Int16, Int8 and 16 and 8 bit storage capabilities, each of which
+	// is only valid on a device that enabled the matching feature. The game enables none, so a
+	// module carrying one of them is invalid on the device it was built for, which the validation
+	// layer refuses and no driver is bound to run. OpenGL, where Iris runs, exposes the same
+	// arithmetic through GL_EXT_shader_explicit_arithmetic_types with nothing to enable.
+	//
+	// storageInputOutput16 is not asked for: GeForce does not have it, and the translator
+	// declares a 16 bit fragment output under its 32 bit type on every card rather than answer
+	// it per device (LegacyGlsl.widened). A 16 bit varying is left as the pack wrote it, and no
+	// pack of the corpus declares one.
+	@Unique
+	private static final VulkanFeature SHADER_FLOAT16 = new VulkanFeature(
+			VulkanBackend.VK12_FEATURES_STRUCT, "shaderFloat16",
+			VkPhysicalDeviceVulkan12Features.SHADERFLOAT16);
+
+	@Unique
+	private static final VulkanFeature SHADER_INT8 = new VulkanFeature(
+			VulkanBackend.VK12_FEATURES_STRUCT, "shaderInt8",
+			VkPhysicalDeviceVulkan12Features.SHADERINT8);
+
+	@Unique
+	private static final VulkanFeature SHADER_INT16 = new VulkanFeature(
+			VulkanBackend.VK10_FEATURES_STRUCT, "shaderInt16",
+			VkPhysicalDeviceFeatures.SHADERINT16);
+
+	// Subgroup operations over those types, which the pack reaches through the extended types
+	// subgroup extensions: a reduction over a half vector is refused without this one.
+	@Unique
+	private static final VulkanFeature SUBGROUP_EXTENDED = new VulkanFeature(
+			VulkanBackend.VK12_FEATURES_STRUCT, "shaderSubgroupExtendedTypes",
+			VkPhysicalDeviceVulkan12Features.SHADERSUBGROUPEXTENDEDTYPES);
+
+	@Unique
+	private static final VulkanFeature STORAGE_16 = new VulkanFeature(
+			VulkanBackend.VK11_FEATURES_STRUCT, "storageBuffer16BitAccess",
+			VkPhysicalDeviceVulkan11Features.STORAGEBUFFER16BITACCESS);
+
+	@Unique
+	private static final VulkanFeature UNIFORM_STORAGE_16 = new VulkanFeature(
+			VulkanBackend.VK11_FEATURES_STRUCT, "uniformAndStorageBuffer16BitAccess",
+			VkPhysicalDeviceVulkan11Features.UNIFORMANDSTORAGEBUFFER16BITACCESS);
+
+	@Unique
+	private static final VulkanFeature STORAGE_8 = new VulkanFeature(
+			VulkanBackend.VK12_FEATURES_STRUCT, "storageBuffer8BitAccess",
+			VkPhysicalDeviceVulkan12Features.STORAGEBUFFER8BITACCESS);
+
+	@Unique
+	private static final VulkanFeature UNIFORM_STORAGE_8 = new VulkanFeature(
+			VulkanBackend.VK12_FEATURES_STRUCT, "uniformAndStorageBuffer8BitAccess",
+			VkPhysicalDeviceVulkan12Features.UNIFORMANDSTORAGEBUFFER8BITACCESS);
+
 	@Unique
 	private static final String VOXELS = "voxel lighting will not write";
+
+	@Unique
+	private static final String NARROW = "a pack computing in 16 or 8 bit types cannot be built";
+
+	@Unique
+	private static final String NARROW_SUBGROUP =
+			"a pack reducing 16 or 8 bit values across a subgroup cannot be built";
 
 	@Unique
 	private static final String PER_BUFFER = "a pack requiring PER_BUFFER_BLENDING is refused and "
@@ -91,6 +153,14 @@ public abstract class VulkanBackendMixin {
 		enable(physical, features, EXTENDED_FORMATS, enabled, VOXELS);
 		enable(physical, features, WRITE_WITHOUT_FORMAT, enabled, VOXELS);
 		BufferBlending.serve(enable(physical, features, INDEPENDENT_BLEND, enabled, PER_BUFFER));
+		enable(physical, features, SHADER_FLOAT16, enabled, NARROW);
+		enable(physical, features, SHADER_INT8, enabled, NARROW);
+		enable(physical, features, SHADER_INT16, enabled, NARROW);
+		enable(physical, features, SUBGROUP_EXTENDED, enabled, NARROW_SUBGROUP);
+		enable(physical, features, STORAGE_16, enabled, NARROW);
+		enable(physical, features, UNIFORM_STORAGE_16, enabled, NARROW);
+		enable(physical, features, STORAGE_8, enabled, NARROW);
+		enable(physical, features, UNIFORM_STORAGE_8, enabled, NARROW);
 		if (!enabled.isEmpty()) {
 			Vitrail.logger().info("Vulkan device features: {}", String.join(", ", enabled));
 		}
