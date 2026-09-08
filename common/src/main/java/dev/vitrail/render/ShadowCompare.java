@@ -40,6 +40,11 @@ import java.util.WeakHashMap;
  * ({@code ShadowRenderTargets.getSamplerFor}, under {@code shadowHardwareFiltering}), {@code
  * GL_LINEAR} plus {@code GL_COMPARE_REF_TO_TEXTURE}; every pack of the corpus that declares the
  * type writes that directive, and without it Iris leaves what such a declaration reads undefined.
+ * <strong>LINEAR here is unconditional where Iris's is not</strong>: a pack that writes one of the
+ * nearest directives beside the hardware one gets NEAREST_HW from Iris. No pack of the corpus
+ * writes both live, so nothing measures it today. This sampler is one object kept for the device's
+ * life, so serving it would need a second one, and such a pack reads the map NEAREST on the
+ * ordinary bind and blended over four texels here.
  * The sense is LEQUAL: OptiFine sets that on a shadow texture, so it is what every pack is written
  * against, and the map stores the forward window where nearer is smaller. Filtered, the hardware
  * compares each of the four texels and blends the RESULTS with the bilinear weights, which is

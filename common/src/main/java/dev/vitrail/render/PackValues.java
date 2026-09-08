@@ -529,6 +529,16 @@ public final class PackValues {
 	}
 
 	/**
+	 * Whether the pack asked for NEAREST on {@code shadowtex0} and on {@code shadowtex1}, in that
+	 * order. Beside {@link #shadowColours()} rather than inside it: the depth pair takes no format
+	 * and no clear colour, and the one thing a pack says about it is how it is read back.
+	 */
+	public List<Boolean> shadowDepthNearest() {
+		return List.of(this.state.directives().shadowDepthNearest(0),
+				this.state.directives().shadowDepthNearest(1));
+	}
+
+	/**
 	 * How far the pack tilts the path the sun and the moon travel, in degrees, nought unless the
 	 * pack says otherwise. BSL asks for minus forty.
 	 * <p>

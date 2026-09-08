@@ -178,11 +178,14 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		// road binds the same pair through the descriptor instead of coming here.
 		//
 		// Not conditioned on shadowHardwareFiltering, and nothing here could condition it: the
-		// header is written per stage, before any of the pack's directives are folded. It costs
-		// nothing on this corpus. Without that directive Iris leaves the comparison mode off and
-		// what a sampler2DShadow reads is undefined, so the declaration this translation found is
-		// the only live meaning the directive has; and the harder shape the pair can ask for,
-		// NEAREST_HW, needs shadowtexNearest, which no pack of the corpus writes.
+		// header is written per stage, before any of the pack's directives are folded. Without that
+		// directive Iris leaves the comparison mode off and what a sampler2DShadow reads is
+		// undefined, so the declaration this translation found is the only live meaning the
+		// directive has. What it would cost is the harder shape the pair can ask for, NEAREST_HW,
+		// which needs a nearest directive beside the hardware one, and no pack of the corpus
+		// declares both live: the one that asks for NEAREST asks for no hardware filtering. Named
+		// in ShadowCompare, which is where the unconditional LINEAR of the comparison sampler
+		// lives.
 		//
 		// The sense is LEQUAL, which is what OptiFine sets on a shadow texture and therefore what
 		// every pack is written against: one where the fragment is no further from the light than

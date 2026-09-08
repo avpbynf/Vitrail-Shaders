@@ -597,18 +597,24 @@ final class PackCompute implements AutoCloseable {
 	/**
 	 * The same sampler state the graphics passes bind for the name. The noise field repeats and
 	 * is filtered, Iris's choice: a pack indexes it in texels well past one, and clamped it reads
-	 * the same edge row for the whole volume. The shadow set is filtered the way Iris filters its
-	 * shadow samplers. A volume the pack declared follows its format, through the one place that
-	 * answers that for every road, so a compute reads it exactly as the composite after it will.
+	 * the same edge row for the whole volume. A shadow colour stays LINEAR, which is what the two
+	 * graphics roads bind for it whatever the pack declares; a shadow depth is filtered the way the
+	 * map itself says, and it is asked of the map for the reason a volume is asked of its format: a
+	 * compute reads an image exactly as the composite after it will.
+	 * <p>
+	 * The kind comes from the plan and not from the spelling of the name. {@code shadow} and
+	 * {@code watershadow} read a depth image without carrying the word, and which of the pair they
+	 * read is the program's answer rather than the name's.
 	 */
-	private static long samplerFor(String name) {
+	private static long samplerFor(ColorTargets targets, SamplerPlan samplers, String name) {
 		boolean noise = "noisetex".equals(name);
-		boolean shadow = name.startsWith("shadowtex") || name.startsWith("shadowcolor");
 		// Every other name keeps the answer this line gave before there was one place to ask:
 		// customImageFilter is NEAREST for a name no image directive declared.
-		FilterMode filter = noise || shadow
-				? FilterMode.LINEAR
-				: PackPass.customImageFilter(name);
+		FilterMode filter = noise ? FilterMode.LINEAR : switch (samplers.binding(name).kind()) {
+			case SHADOW_COLOUR -> FilterMode.LINEAR;
+			case SHADOW_DEPTH -> targets.shadow().depthFilter(samplers.withoutTranslucents(name));
+			default -> PackPass.customImageFilter(name);
+		};
 
 		return ((VulkanGpuSampler) PackPass.sampler(noise, filter, false)).vkSampler();
 	}
@@ -1044,8 +1050,8 @@ final class PackCompute implements AutoCloseable {
 					continue;
 				}
 
-				if (bound == null && step != null && colourTarget(write, imageInfo, entry.name(),
-						targets, step, this.program)) {
+				if (bound == null && step != null && colourTarget(write, imageInfo, entry.name(), targets,
+						this.compute.loaded().samplers(), step, this.program)) {
 					continue;
 				}
 
@@ -1064,7 +1070,7 @@ final class PackCompute implements AutoCloseable {
 						default -> null;
 					};
 					if (read instanceof VulkanGpuTextureView served) {
-						imageInfo.sampler(samplerFor(entry.name()));
+						imageInfo.sampler(samplerFor(targets, this.compute.loaded().samplers(), entry.name()));
 						imageInfo.imageView(served.vkImageView());
 						imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
 						write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
@@ -1076,7 +1082,7 @@ final class PackCompute implements AutoCloseable {
 					// set among them: shadowcomp reads them the way a composite does, and only a
 					// name neither the pack's images nor this set carries is a real miss.
 					if (engineView(targets, entry.name()) instanceof VulkanGpuTextureView served) {
-						imageInfo.sampler(samplerFor(entry.name()));
+						imageInfo.sampler(samplerFor(targets, this.compute.loaded().samplers(), entry.name()));
 						imageInfo.imageView(served.vkImageView());
 						imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
 						write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
@@ -1101,8 +1107,8 @@ final class PackCompute implements AutoCloseable {
 						// compute is dispatched on, so the second road is not held behind the first
 						// one's condition.
 						if (byDefault.kind() == SamplerPlan.Kind.COLORTEX && step != null
-								&& colourTarget(write, imageInfo, screen, targets, step,
-										this.program)) {
+								&& colourTarget(write, imageInfo, screen, targets,
+										this.compute.loaded().samplers(), step, this.program)) {
 							continue;
 						}
 
@@ -1123,7 +1129,7 @@ final class PackCompute implements AutoCloseable {
 						// out of the frame instead would be this engine answering one declaration
 						// two ways.
 						if (targets.black() instanceof VulkanGpuTextureView blank) {
-							imageInfo.sampler(samplerFor(entry.name()));
+							imageInfo.sampler(samplerFor(targets, this.compute.loaded().samplers(), entry.name()));
 							imageInfo.imageView(blank.vkImageView());
 							imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
 							write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
@@ -1136,7 +1142,8 @@ final class PackCompute implements AutoCloseable {
 				}
 
 				boolean storage = bound.storage();
-				imageInfo.sampler(storage ? 0L : samplerFor(entry.name()));
+				imageInfo.sampler(storage ? 0L
+						: samplerFor(targets, this.compute.loaded().samplers(), entry.name()));
 				imageInfo.imageView(bound.view());
 				imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
 				write.descriptorType(storage
@@ -1161,7 +1168,7 @@ final class PackCompute implements AutoCloseable {
 		 */
 		private static boolean colourTarget(VkWriteDescriptorSet write,
 				VkDescriptorImageInfo.Buffer imageInfo, String name, ColorTargets targets,
-				TargetSchedule.Bound step, String program) {
+				SamplerPlan samplers, TargetSchedule.Bound step, String program) {
 			Matcher image = COLOUR_IMAGE.matcher(name);
 			if (image.matches()) {
 				int index = Integer.parseInt(image.group(1));
@@ -1195,7 +1202,7 @@ final class PackCompute implements AutoCloseable {
 					return false;
 				}
 
-				imageInfo.sampler(samplerFor(name));
+				imageInfo.sampler(samplerFor(targets, samplers, name));
 				imageInfo.imageView(blank.vkImageView());
 				imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
 				write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
