@@ -537,6 +537,22 @@ public final class TerrainDraw {
 	}
 
 	/**
+	 * Fills the mip chain of the map, which the caller invokes at the tail of the stage, once
+	 * everything the map holds is in it. Outside any render pass, which that seam is.
+	 * <p>
+	 * Where Iris puts it ({@code shadows/ShadowRenderer.java:613-615}), and it costs nothing on a
+	 * pack that asked for no chain, which is all of this corpus but one: the map then carries a
+	 * single level and there is nothing to fill.
+	 */
+	public static void mipShadowMap() {
+		TerrainDraw self = PackChain.terrain();
+		GpuDevice device = RenderSystem.tryGetDevice();
+		if (self != null && device != null) {
+			self.targets.shadow().generateMipmaps(device.createCommandEncoder());
+		}
+	}
+
+	/**
 	 * Opens the end-of-frame shadow stage: makes the map exist, empties it, and settles that its
 	 * three programs will really be served, once and before any group is drawn into it. Must run
 	 * outside any render pass, which the end of the frame is.

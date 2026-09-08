@@ -5,7 +5,6 @@ import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuFormat;
-import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
@@ -13,6 +12,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import net.minecraft.util.Mth;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
 
@@ -55,6 +55,14 @@ import java.util.TreeSet;
  * shadow bias and its texel coordinates from the number it declared, so a map allocated at any
  * other size is a picture computed against an image that does not exist.
  * <p>
+ * <strong>Every image here is allocated by this class, one call each, and they cannot part company
+ * on a size because they read the same field.</strong> The depth and the first colour were once one
+ * {@code TextureTarget}, which is what kept the two attachments of one render pass on one area;
+ * that class allocates every texture with a single level ({@code RenderTarget.createBuffers}, a
+ * hard coded 1) and so cannot express the chain a pack asks for on the depth. What it did for us
+ * was two textures, two views and a depth format, and that is what is written out here: the same
+ * usage word it passes, 15, and the same {@code GpuFormat.D32_FLOAT}.
+ * <p>
  * <strong>The map stores the forward window, nought at the near plane and one at the far one, and
  * that is a decision rather than an inheritance.</strong> The scene is drawn under a reversed Z the
  * translation undoes on the way out, but a {@code shadowtex} lookup is never wrapped: the pack
@@ -65,8 +73,8 @@ import java.util.TreeSet;
  * <p>
  * No caller ever holds a texture view, for the same reason {@link ColorTargets} hands none out: a
  * resize closes the views behind it and nothing on this backend notices a view that has outlived its
- * texture. The one view held here is the depth copy without the translucents, and it is safe because
- * this map is square at the resolution the pack asked for and is never resized.
+ * texture. The views held here are safe because this map is square at the resolution the pack asked
+ * for and is never resized.
  */
 final class ShadowTargets {
 
@@ -75,6 +83,21 @@ final class ShadowTargets {
 
 	/** Past this the pack is asking for more than any device here will give it. */
 	private static final int MAX_RESOLUTION = 16384;
+
+	/**
+	 * What the depth pair holds, which is the format {@code RenderTarget.createBuffers} gives a
+	 * target that asked for a depth, and the one Iris allocates the map in
+	 * ({@code shadows/ShadowRenderTargets.java:65-66}, the same {@code GpuFormat.D32_FLOAT}).
+	 */
+	private static final GpuFormat DEPTH_FORMAT = GpuFormat.D32_FLOAT;
+
+	/**
+	 * What the game asks for its own render targets, and what this class asks for every image it
+	 * allocates: sampled, drawn into, and copied both ways. The blit that fills a chain needs the
+	 * last two on one image, being a transfer from the level above into the level below.
+	 */
+	private static final int USAGE = GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_COPY_SRC
+			| GpuTexture.USAGE_TEXTURE_BINDING | GpuTexture.USAGE_RENDER_ATTACHMENT;
 
 	/**
 	 * The highest a {@code shadowcolor} name can go, which is what the arrays below are sized at and
@@ -97,12 +120,12 @@ final class ShadowTargets {
 	private final List<Vector4fc> clearColours;
 
 	/**
-	 * Whether the pack asked for NEAREST on each depth image, {@code shadowtex0} at nought and
-	 * {@code shadowtex1} at one. Kept here so that the three roads that bind the map ask one place:
-	 * a full screen pass, a geometry program and a compute reading one image through two filters is
-	 * a difference nothing would ever explain.
+	 * How the pack asks for each depth image to be read back, {@code shadowtex0} at nought and
+	 * {@code shadowtex1} at one: its filter, and whether it carries a chain. Kept here so that the
+	 * three roads that bind the map ask one place: a full screen pass, a geometry program and a
+	 * compute reading one image through two filters is a difference nothing would ever explain.
 	 */
-	private final List<Boolean> depthNearest;
+	private final List<PackDirectives.ShadowDepth> depths;
 
 	/**
 	 * How many of them this pack may reach, its own declaration deciding. Clamped to what the arrays
@@ -119,8 +142,7 @@ final class ShadowTargets {
 	 * Nought is in it whatever the pack names, and that is Iris rather than a floor of our own: it
 	 * builds the buffer at construction, for the framebuffer its depth copy is taken through
 	 * ({@code shadows/ShadowRenderTargets.java:73,75}), so the image exists before a program has
-	 * asked for anything. Here it is the colour attachment the depth shares a {@link TextureTarget}
-	 * with, so it exists for the same reason and cannot be left out of the clear.
+	 * asked for anything.
 	 */
 	private final List<Integer> live;
 
@@ -132,12 +154,8 @@ final class ShadowTargets {
 	 */
 	private final boolean[] unstarted = new boolean[MAX_COLOURS];
 
-	private TextureTarget target;
-
 	/**
-	 * Every colour past nought, which the depth cannot share a {@link TextureTarget} with: that class
-	 * carries one colour attachment and one depth, so the rest are images of their own, attached
-	 * beside it by whoever opens the pass.
+	 * The colour buffers of the place, one slot per name a pack may write.
 	 * <p>
 	 * <strong>The live ones are all made with the map, where Iris builds each one the first time a
 	 * framebuffer or a sampler names it</strong> ({@code shadows/ShadowRenderTargets.java:127,136}).
@@ -151,8 +169,22 @@ final class ShadowTargets {
 	 * from the programs would have to be answered by a pass already recording, where nothing may
 	 * allocate. The plan is read instead, and it read every fragment stage of the place before the
 	 * chain was built, which is why a pack that writes only nought pays for only nought.
+	 * <p>
+	 * None of them carries a chain, and the directives that ask for one are read by nobody: see
+	 * {@link PackDirectives#shadowDepth(int)} for what Iris does with those names.
 	 */
-	private final TargetSurface[] rest = new TargetSurface[MAX_COLOURS - 1];
+	private final TargetSurface[] colours = new TargetSurface[MAX_COLOURS];
+
+	/** The depth the world is drawn into, which the pack reads as {@code shadowtex0}. */
+	private GpuTexture depth;
+	private GpuTextureView depthView;
+
+	/**
+	 * Level nought of the depth alone, which is what a render pass takes: Vulkan attaches a view of
+	 * exactly one level, and the light draws into the base. The same object as {@link #depthView} on
+	 * a map with no chain, where the whole view is one level already.
+	 */
+	private GpuTextureView depthAttachment;
 
 	/**
 	 * The map as it stood before anything translucent was drawn into it, which the OptiFine model
@@ -163,6 +195,9 @@ final class ShadowTargets {
 	 * and let the translucent half carry on into the original. What a pack does with the pair is
 	 * compare them: a point occluded in nought and clear in one is behind something translucent, and
 	 * that is the whole test a coloured shadow rests on.
+	 * <p>
+	 * It takes its own chain from its own directive, the pack naming the two images apart, which is
+	 * Iris's shape as well ({@code shadows/ShadowRenderTargets.java:65-66}).
 	 */
 	private GpuTexture noTranslucents;
 	private GpuTextureView noTranslucentsView;
@@ -195,6 +230,22 @@ final class ShadowTargets {
 	 */
 	private boolean copied;
 
+	/**
+	 * Whether anything has written the levels past the base of each depth image since it was
+	 * allocated, {@code shadowtex0} at nought and {@code shadowtex1} at one.
+	 * <p>
+	 * The one thing that decides whether a lod read is safe, and it is the rule {@link TargetSurface}
+	 * follows for a colour target: a fresh image's levels hold whatever the driver left there, so a
+	 * sampler allowed to climb before the reduction has run once serves undefined memory rather than
+	 * a coarser image. The reduction is allowed to fail, a device refusing the blit on a depth
+	 * format, and then this stays down and every lookup reads the base, which is the map a pack got
+	 * before there were chains at all.
+	 * <p>
+	 * One flag per image and not one for the pair: the two are filled by two blits, and either may
+	 * be refused while the other went through.
+	 */
+	private final boolean[] chainWritten = new boolean[2];
+
 	private boolean broken;
 
 	/** Load-ops waiting for the first shadow pass of the frame, or a standalone encode if none opens. */
@@ -207,11 +258,11 @@ final class ShadowTargets {
 	 *                program declaring nothing is {@code {0, 1}} in there, which is the one way the
 	 *                pair reaches this class
 	 * @param ceiling how many the pack may reach, from {@code TargetPlan.shadowCeiling}
-	 * @param depthNearest whether the pack asked for NEAREST on {@code shadowtex0} and on
-	 *                {@code shadowtex1}, in that order
+	 * @param depths  how the pack asks for {@code shadowtex0} and {@code shadowtex1} to be read
+	 *                back, in that order
 	 */
 	ShadowTargets(int resolution, List<PackDirectives.ShadowColour> asked,
-			List<Boolean> depthNearest, Set<Integer> named, int ceiling) {
+			List<PackDirectives.ShadowDepth> depths, Set<Integer> named, int ceiling) {
 		// Clamped rather than refused: a directive that survived a setting nobody expanded can be
 		// any number at all, and a shadow map is not worth taking the pack down for.
 		this.resolution = Math.clamp(resolution, 1, MAX_RESOLUTION);
@@ -235,7 +286,7 @@ final class ShadowTargets {
 					one.format().alphaAdded() && !one.declaresClearColour() ? 1.0F : colour.a());
 		}).toList();
 
-		this.depthNearest = List.copyOf(depthNearest);
+		this.depths = List.copyOf(depths);
 		this.ceiling = Math.clamp(ceiling, 1, MAX_COLOURS);
 		SortedSet<Integer> live = new TreeSet<>(Set.of(0));
 		named.stream().filter(index -> index > 0 && index < this.ceiling).forEach(live::add);
@@ -255,11 +306,71 @@ final class ShadowTargets {
 	 *                            the translucents, which is the second of the pair
 	 */
 	FilterMode depthFilter(boolean withoutTranslucents) {
-		return this.depthNearest.get(withoutTranslucents ? 1 : 0)
+		return this.depths.get(withoutTranslucents ? 1 : 0).nearest()
 				? FilterMode.NEAREST
 				: FilterMode.LINEAR;
 	}
 
+	/**
+	 * Whether a lookup on one depth image may climb past level nought.
+	 * <p>
+	 * Two things at once, and both have to hold. The pack has to have asked for the chain, which is
+	 * {@code generateShadowMipmap} and its per-image spellings, and the chain has to have been
+	 * written since the image was allocated, which {@link #generateMipmaps} says. A sampler that
+	 * climbed on the strength of the directive alone would read undefined memory on the frames the
+	 * blit was refused, which is worse than the coarse level it was after.
+	 * <p>
+	 * The second question is asked of the image really bound and not of the name:
+	 * {@link #depthWithoutTranslucents} falls back to the live map while no copy stands for it, and
+	 * that image carries the OTHER directive's chain, or none.
+	 */
+	boolean depthMipmapped(boolean withoutTranslucents) {
+		if (!this.depths.get(withoutTranslucents ? 1 : 0).mipmap()) {
+			return false;
+		}
+
+		return this.chainWritten[withoutTranslucents && this.copied ? 1 : 0];
+	}
+
+	/**
+	 * How many levels one image of the pair carries: Iris's count, which is not the full chain.
+	 * <p>
+	 * {@code shadows/ShadowRenderTargets.java:65-66} allocates {@code log2(resolution)} levels, the
+	 * logarithm floored, where a chain running to one texel is one more. On a map of 1024 that is
+	 * ten levels and the last is two texels square, so a pack reading a lod of ten or past it is
+	 * clamped to that level there and would be handed a single averaged texel by a full chain. Iris
+	 * is what the packs are tuned against, so the count is Iris's; the colour targets of the screen
+	 * build the full chain instead ({@link TargetSurface#levelsFor}) because that is what
+	 * {@code glGenerateMipmap} gives them there.
+	 * <p>
+	 * <strong>And one level wherever the device will not fill the chain.</strong> The fill is a
+	 * blit, and Vulkan requires neither transfer bit of a depth format, where GL gave Iris
+	 * {@code glGenerateMipmap} on anything. A command buffer records what it is given without
+	 * answering, so there is no failure to catch afterwards: allocating the levels anyway would
+	 * hand a pack whatever the driver left in them under the name of a coarser map. Asked once,
+	 * before the memory is taken, and said in the log where the map's own line is.
+	 */
+	private int levels(int index) {
+		if (!this.depths.get(index).mipmap()) {
+			return 1;
+		}
+
+		if (!GpuFormats.blitsBothWays(DEPTH_FORMAT)) {
+			return 1;
+		}
+
+		return Math.max(1, Mth.log2(this.resolution));
+	}
+
+	/**
+	 * Whether the pack asked for a chain this device will not give it, which is the one case worth
+	 * a word of its own: everything else about the chain is either the pack's own silence or a
+	 * chain that works.
+	 */
+	private boolean chainRefused() {
+		return (this.depths.get(0).mipmap() || this.depths.get(1).mipmap())
+				&& !GpuFormats.blitsBothWays(DEPTH_FORMAT);
+	}
 
 	/**
 	 * Makes the map exist and empties it once. Must run on the render thread and outside any render
@@ -280,22 +391,21 @@ final class ShadowTargets {
 			return false;
 		}
 
-		if (this.target != null) {
+		if (this.depth != null) {
 			return true;
 		}
 
 		try {
-			// One object for the first colour and the depth, so that they cannot part company on a
-			// size: they are attachments of one render pass and one render pass has one area.
-			this.target = new TextureTarget("Vitrail shadow", this.resolution, this.resolution, true,
-					this.formats.get(0));
-			this.unstarted[0] = true;
-			for (int index : this.live) {
-				if (index == 0) {
-					continue;
-				}
+			int depthLevels = levels(0);
+			this.depth = RenderSystem.getDevice().createTexture(() -> "Vitrail shadow depth", USAGE,
+					DEPTH_FORMAT, this.resolution, this.resolution, 1, depthLevels);
+			this.depthView = RenderSystem.getDevice().createTextureView(this.depth);
+			this.depthAttachment = depthLevels > 1
+					? RenderSystem.getDevice().createTextureView(this.depth, 0, 1)
+					: this.depthView;
 
-				this.rest[index - 1] = new TargetSurface("Vitrail shadowcolor" + index,
+			for (int index : this.live) {
+				this.colours[index] = new TargetSurface("Vitrail shadowcolor" + index,
 						this.formats.get(index), false, this.resolution, this.resolution);
 				this.unstarted[index] = true;
 			}
@@ -371,7 +481,7 @@ final class ShadowTargets {
 
 	/** Standalone clears for whatever the pass about to open will not write. */
 	void flushPending(CommandEncoder encoder) {
-		if (this.target == null) {
+		if (this.depth == null) {
 			return;
 		}
 
@@ -399,7 +509,7 @@ final class ShadowTargets {
 		}
 
 		if (colours.isEmpty()) {
-			encoder.clearDepthTexture(this.target.getDepthTexture(), FAR);
+			encoder.clearDepthTexture(this.depth, FAR);
 			return;
 		}
 
@@ -409,7 +519,7 @@ final class ShadowTargets {
 		}
 
 		if (depth) {
-			descriptor.withDepthAttachment(this.target.getDepthTextureView(), OptionalDouble.of(FAR));
+			descriptor.withDepthAttachment(this.depthAttachment, OptionalDouble.of(FAR));
 		}
 
 		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0, this.resolution, this.resolution));
@@ -423,22 +533,19 @@ final class ShadowTargets {
 			this.pendingColour[index] = null;
 		}
 
-		if (this.target == null) {
+		if (this.depth == null) {
 			return;
 		}
 
+		// The chain stops standing for the map the moment the map is emptied, exactly as the copy
+		// beside it does: what the levels hold is an average of a picture this call is throwing
+		// away, and a lookup climbing to one would read the last frame's world under this frame's
+		// base. The tail of the stage fills them again before anything reads them.
+		this.chainWritten[0] = false;
+		this.chainWritten[1] = false;
 		this.pendingDepth = true;
-		if (wanted(0)) {
-			this.pendingColour[0] = this.clearColours.get(0);
-		}
-
 		for (int index : this.live) {
-			if (index == 0) {
-				continue;
-			}
-
-			TargetSurface surface = this.rest[index - 1];
-			if (surface != null && wanted(index)) {
+			if (this.colours[index] != null && wanted(index)) {
 				this.pendingColour[index] = this.clearColours.get(index);
 			}
 		}
@@ -469,6 +576,23 @@ final class ShadowTargets {
 					.append(this.asked.get(index).clear() ? "" : ", which the pack keeps between frames");
 		}
 
+		int zero = levels(0);
+		int one = levels(1);
+		if (zero > 1 || one > 1) {
+			// What each NAME is read at rather than what each image holds: the copy shadowtex1 is
+			// read through is allocated the first time the stage takes it, and a pack no program of
+			// which names it never has one at all.
+			text.append(", and the pack asks for a chain the light fills every frame, ")
+					.append(zero).append(" levels where it reads shadowtex0 and ")
+					.append(one).append(" where it reads shadowtex1");
+		} else if (chainRefused()) {
+			// Said where the map's own line is, because it is the map that is smaller than the pack
+			// asked for: a chain nobody can fill would be read as a coarser image and hold whatever
+			// the driver left in it, so the map keeps one level and every lookup reads the base.
+			text.append(", and the pack asks for a chain this device will not fill on a depth "
+					+ "format, so the map carries one level and every lookup reads it");
+		}
+
 		return text.toString();
 	}
 
@@ -478,23 +602,53 @@ final class ShadowTargets {
 	 * the render thread and outside any render pass.
 	 */
 	void copyWithoutTranslucents(CommandEncoder encoder) {
-		GpuTexture depth = this.target == null ? null : this.target.getDepthTexture();
-		if (depth == null || this.broken) {
+		if (this.depth == null || this.broken) {
 			return;
 		}
 
 		if (this.noTranslucents == null) {
 			// The source's own format rather than an assumed one, the same rule the world's depth
 			// copy follows: a copy whose format differs from its source is refused outright.
+			// Three usages and not the four the map itself takes: nothing ever draws into this
+			// image, it is written by the copy alone. COPY_SRC is here for the chain, a blit
+			// reading the level above the one it writes.
 			this.noTranslucents = RenderSystem.getDevice().createTexture(() -> "Vitrail shadowtex1",
-					GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_TEXTURE_BINDING, depth.getFormat(),
-					this.resolution, this.resolution, 1, 1);
+					GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_COPY_SRC
+							| GpuTexture.USAGE_TEXTURE_BINDING,
+					this.depth.getFormat(), this.resolution, this.resolution, 1,
+					levels(1));
 			this.noTranslucentsView = RenderSystem.getDevice().createTextureView(this.noTranslucents);
 		}
 
-		encoder.copyTextureToTexture(depth, this.noTranslucents, 0, 0, 0, 0, 0, this.resolution,
+		encoder.copyTextureToTexture(this.depth, this.noTranslucents, 0, 0, 0, 0, 0, this.resolution,
 				this.resolution);
 		this.copied = true;
+	}
+
+	/**
+	 * Fills the levels past the base of both depth images, which the stage invokes at its tail, once
+	 * everything the map holds is in it. Must run outside any render pass.
+	 * <p>
+	 * Where Iris puts it, and for the same reason: it generates the chain after the translucent
+	 * group and before it restores the player's viewport
+	 * ({@code shadows/ShadowRenderer.java:613-615}), so what the levels average is the finished map
+	 * and never a half drawn one. Every frame and not once, because every frame writes the base
+	 * again, whether by drawing the world into it or by putting the store back.
+	 * <p>
+	 * Silent and harmless on a pack that asked for no chain, which is all of the corpus but one: the
+	 * images then carry a single level and the reduction has nothing to do.
+	 */
+	void generateMipmaps(CommandEncoder encoder) {
+		if (this.depth == null || this.broken) {
+			return;
+		}
+
+		this.chainWritten[0] = MipmapReduction.generate(encoder, this.depth);
+		// Its own chain over its own base, which the copy has just written. Left out, the levels of
+		// shadowtex1 would hold the average of whatever the last fill saw, which is a frame of the
+		// world older than the base under them.
+		this.chainWritten[1] = this.noTranslucents != null
+				&& MipmapReduction.generate(encoder, this.noTranslucents);
 	}
 
 	/**
@@ -505,16 +659,15 @@ final class ShadowTargets {
 	 * because a frame that restores half of them draws this frame's movers over last frame's colour.
 	 */
 	void keep(CommandEncoder encoder) {
-		GpuTexture depth = this.target == null ? null : this.target.getDepthTexture();
-		if (depth == null || this.broken || !copyable(depth)) {
+		if (this.depth == null || this.broken || !copyable(this.depth)) {
 			return;
 		}
 
 		if (this.keptDepth == null) {
-			this.keptDepth = store("Vitrail kept shadow depth", depth.getFormat());
+			this.keptDepth = store("Vitrail kept shadow depth", this.depth.getFormat());
 		}
 
-		encoder.copyTextureToTexture(depth, this.keptDepth, 0, 0, 0, 0, 0, this.resolution,
+		encoder.copyTextureToTexture(this.depth, this.keptDepth, 0, 0, 0, 0, 0, this.resolution,
 				this.resolution);
 		for (int index : this.live) {
 			GpuTexture colour = colourTexture(index);
@@ -548,12 +701,11 @@ final class ShadowTargets {
 	 * @return whether there was anything to put back
 	 */
 	boolean restore(CommandEncoder encoder) {
-		GpuTexture depth = this.target == null ? null : this.target.getDepthTexture();
-		if (!this.kept || depth == null || this.broken || this.keptDepth == null) {
+		if (!this.kept || this.depth == null || this.broken || this.keptDepth == null) {
 			return false;
 		}
 
-		encoder.copyTextureToTexture(this.keptDepth, depth, 0, 0, 0, 0, 0, this.resolution,
+		encoder.copyTextureToTexture(this.keptDepth, this.depth, 0, 0, 0, 0, 0, this.resolution,
 				this.resolution);
 		for (int index : this.live) {
 			GpuTexture colour = colourTexture(index);
@@ -564,6 +716,10 @@ final class ShadowTargets {
 		}
 
 		this.copied = false;
+		// The store holds level nought alone, so a restore leaves the levels above it standing for
+		// a map that is no longer under them. The tail of the stage fills them again.
+		this.chainWritten[0] = false;
+		this.chainWritten[1] = false;
 		if (!this.saidRestored) {
 			this.saidRestored = true;
 			Vitrail.logger().info("Shadow map put back from the store, so this frame draws only "
@@ -590,11 +746,7 @@ final class ShadowTargets {
 	}
 
 	private GpuTexture colourTexture(int index) {
-		if (index == 0) {
-			return this.target == null ? null : this.target.getColorTexture();
-		}
-
-		TargetSurface surface = this.rest[index - 1];
+		TargetSurface surface = this.colours[index];
 
 		return surface == null ? null : surface.texture();
 	}
@@ -620,7 +772,15 @@ final class ShadowTargets {
 
 	/** The depth with everything in it, which the pack reads as {@code shadowtex0}. */
 	GpuTextureView depth() {
-		return this.target == null ? null : this.target.getDepthTextureView();
+		return this.depthView;
+	}
+
+	/**
+	 * The same image as one level, which is what a render pass attaches. Never handed to a sampler:
+	 * a lookup at a lod on this view would be clamped to the base whatever the pack asked for.
+	 */
+	GpuTextureView depthAttachment() {
+		return this.depthAttachment;
 	}
 
 	/**
@@ -647,11 +807,7 @@ final class ShadowTargets {
 			return null;
 		}
 
-		if (index == 0) {
-			return this.target == null ? null : this.target.getColorTextureView();
-		}
-
-		TargetSurface surface = this.rest[index - 1];
+		TargetSurface surface = this.colours[index];
 
 		return surface == null ? null : surface.view();
 	}
@@ -681,15 +837,30 @@ final class ShadowTargets {
 
 	void release() {
 		this.copied = false;
-		if (this.target != null) {
-			this.target.destroyBuffers();
-			this.target = null;
+		this.chainWritten[0] = false;
+		this.chainWritten[1] = false;
+		// The one-level view first, and only where it is an object of its own: on a map with no
+		// chain it IS the whole view, and closing it twice closes a handle somebody else may still
+		// hold under the other name.
+		if (this.depthAttachment != null && this.depthAttachment != this.depthView) {
+			this.depthAttachment.close();
 		}
 
-		for (int index = 1; index < MAX_COLOURS; index++) {
-			if (this.rest[index - 1] != null) {
-				this.rest[index - 1].close();
-				this.rest[index - 1] = null;
+		this.depthAttachment = null;
+		if (this.depthView != null) {
+			this.depthView.close();
+			this.depthView = null;
+		}
+
+		if (this.depth != null) {
+			this.depth.close();
+			this.depth = null;
+		}
+
+		for (int index = 0; index < MAX_COLOURS; index++) {
+			if (this.colours[index] != null) {
+				this.colours[index].close();
+				this.colours[index] = null;
 			}
 		}
 

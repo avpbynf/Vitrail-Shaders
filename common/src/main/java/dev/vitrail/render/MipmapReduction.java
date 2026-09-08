@@ -4,9 +4,10 @@ import dev.vitrail.mixin.access.CommandEncoderAccessor;
 
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.CommandEncoderBackend;
+import com.mojang.blaze3d.textures.GpuTexture;
 
 /**
- * Fills the mip chain of a colour target. Nothing of the pack takes part.
+ * Fills the mip chain of a colour target, or of the shadow map. Nothing of the pack takes part.
  * <p>
  * It exists because the public encoder has no {@code generateMipmaps}. Iris pays one
  * {@code glGenerateMipmap} per chain; the Vulkan equivalent is a blit of each level into the next
@@ -18,8 +19,10 @@ import com.mojang.blaze3d.systems.CommandEncoderBackend;
  * wholesale the moment a jump moves that pixel from the ground to the sky. The same pack reads lods
  * for its depth of field and for the tiles of its bloom.
  * <p>
- * The blit uses the hardware linear filter, which is what {@code glGenerateMipmap} gave the packs,
- * and it floors the extent of every level, which is what lets a chain run to one texel on the
+ * The blit uses the hardware linear filter on a colour target, which is what
+ * {@code glGenerateMipmap} gave the packs, and the nearest one on the shadow map, Vulkan allowing
+ * no other where the source of a blit carries a depth aspect. It floors the extent of every level,
+ * which is what lets a chain run to one texel on the
  * longer side: a render pass per level was the road before it, and the game refuses a pass on a
  * level whose shorter side shifts to nought, so that road stopped a level short of OpenGL's chain
  * on every screen that is not as tall as it is wide.
@@ -43,15 +46,31 @@ final class MipmapReduction {
 			return false;
 		}
 
-		GeometryHold.flush(() -> "a mip chain being filled");
-		CommandEncoderBackend backend = ((CommandEncoderAccessor) encoder).vitrail$backend();
-		if (!(backend instanceof MipmapCommands commands)
-				|| !commands.vitrail$generateMipmaps(surface.texture())) {
+		if (!generate(encoder, surface.texture())) {
 			return false;
 		}
 
 		surface.chainWritten(true);
 
 		return true;
+	}
+
+	/**
+	 * The same over an image this engine holds directly, which is the shadow map: its depth pair is
+	 * not a colour target of a pack and carries its level count from its own directive.
+	 *
+	 * @return false when the chain could not be filled, in which case the levels hold whatever they
+	 *         held and the caller must keep its readers at the base
+	 */
+	static boolean generate(CommandEncoder encoder, GpuTexture texture) {
+		if (texture == null || texture.getMipLevels() <= 1) {
+			return false;
+		}
+
+		GeometryHold.flush(() -> "a mip chain being filled");
+		CommandEncoderBackend backend = ((CommandEncoderAccessor) encoder).vitrail$backend();
+
+		return backend instanceof MipmapCommands commands
+				&& commands.vitrail$generateMipmaps(texture);
 	}
 }

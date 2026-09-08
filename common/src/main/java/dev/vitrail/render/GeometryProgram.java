@@ -1535,11 +1535,12 @@ final class GeometryProgram {
 
 		// The noise image tiles and everything else clamps, the same rule the chain follows.
 		//
-		// Never past level nought, even on a target that carries a chain, and this is not a gap left
-		// open. Nothing fills a chain for a geometry program, because the reduction opens render
-		// passes and a terrain pass draws inside the one Sodium opened, where no other can start; a
-		// sampler that let these reads climb would hand them levels nothing has written, which is
-		// undefined memory rather than a coarser image.
+		// A COLOUR TARGET is never read past level nought here, even where it carries a chain, and
+		// this is not a gap left open. Nothing fills such a chain for a geometry program: it is
+		// filled right before the full screen pass that reads it, and a terrain pass draws inside
+		// the one Sodium opened, where no transfer may be recorded. A sampler that let these reads
+		// climb would hand them levels nothing has written, which is undefined memory rather than a
+		// coarser image.
 		//
 		// Nothing asks for it either, and that was measured rather than assumed: across the eight
 		// packs there are fifty reads at a lod other than nought and not one of them is in a
@@ -1547,6 +1548,12 @@ final class GeometryProgram {
 		// Bliss on gaux1 the loudest, and none of those programs ever reads the target at a lod. So
 		// the directive is theirs to declare and dead on their side, and the cost of honouring it
 		// here would be a risk taken for nobody.
+		//
+		// The SHADOW MAP is the one exception, and it is one because of when its chain is filled:
+		// at the tail of the stage that drew the map, outside every pass, so it stands for the
+		// whole frame that reads it and a geometry program is inside that frame like anything else.
+		// The map itself answers, as it answers for the filter, so that the three roads that bind
+		// it read it one way.
 		SamplerPlan.Kind kind = one.binding.kind();
 		if (one.source != null && this.targets.packView(one.source.image()) != null) {
 			// A file of the pack's own is filtered and addressed as the pack asked, in the .mcmeta
@@ -1554,7 +1561,7 @@ final class GeometryProgram {
 			return PackPass.sampler(one.source.repeat(), one.source.filter(), false);
 		}
 
-		return PackPass.sampler(kind, filter(name), false);
+		return PackPass.sampler(kind, filter(name), mipmapped(name, kind));
 	}
 
 	/**
@@ -1754,7 +1761,9 @@ final class GeometryProgram {
 	 * the shadow programs writing over the world.
 	 */
 	private RenderPassDescriptor shadowDescriptor() {
-		GpuTextureView depth = this.shadow.depth();
+		// The one-level view and not the sampled one: a pack that asked for a chain gets a map of
+		// several levels, and Vulkan attaches exactly one.
+		GpuTextureView depth = this.shadow.depthAttachment();
 		if (depth == null) {
 			return null;
 		}
@@ -2391,6 +2400,16 @@ final class GeometryProgram {
 	/** A name answered per frame, an image or the far plane, which is not one nothing fills. */
 	private boolean readsTheDistantDepth(String sampler) {
 		return this.loaded.samplers().binding(sampler).kind() == SamplerPlan.Kind.DISTANT_DEPTH;
+	}
+
+	/**
+	 * Whether a lookup on this name may climb past level nought, which only the shadow map's depth
+	 * pair ever may here. The map answers, and it answers no while the pack asked for no chain or
+	 * while nothing has filled one.
+	 */
+	private boolean mipmapped(String sampler, SamplerPlan.Kind kind) {
+		return kind == SamplerPlan.Kind.SHADOW_DEPTH && this.targets.shadow()
+				.depthMipmapped(this.loaded.samplers().withoutTranslucents(sampler));
 	}
 
 	private FilterMode filter(String sampler) {

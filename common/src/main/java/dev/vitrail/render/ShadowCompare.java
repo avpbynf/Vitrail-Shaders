@@ -49,9 +49,10 @@ import java.util.WeakHashMap;
  * against, and the map stores the forward window where nearer is smaller. Filtered, the hardware
  * compares each of the four texels and blends the RESULTS with the bilinear weights, which is
  * exactly the arithmetic the translation writes on its other road; the two roads answer the same
- * fraction. The level of detail is pinned to the base: nothing here ever fills a chain on the
- * shadow map, where Iris can mip it under {@code shadowtexMipmap}, and that gap is the map's and
- * not this sampler's.
+ * fraction. The level of detail is pinned to the base, and that is this sampler's own gap now that
+ * the map does carry a chain wherever a pack asks for one: Iris hands a compared read a mipmapped
+ * sampler under {@code shadowtexMipmap} and this one clamps. The line that sets it says why it is
+ * kept.
  * <p>
  * The registry is weak on the pipeline, because that is the lifetime being described: a pipeline
  * dropped on a pack change takes its entry with it, and a reload registers the new ones as they
@@ -200,8 +201,19 @@ public final class ShadowCompare {
 					.addressModeW(VK12.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
 					.compareEnable(true)
 					.compareOp(VK12.VK_COMPARE_OP_LESS_OR_EQUAL)
-					// Level nought and no further, which is what a lookup's level of detail came
-					// to on the other road as well: nothing ever fills a chain on the shadow map.
+					// Level nought and no further, and that is now a KEPT gap rather than an
+					// absence: the map may carry a chain, and Iris hands a compared read a
+					// mipmapped sampler where the pack asked for one
+					// (ShadowRenderTargets.getSamplerFor, MIPPED_LINEAR_HW). Lifting the ceiling
+					// here would serve it, and it is not lifted, for two reasons that hold
+					// together. This is ONE object for the device's life, so it cannot follow a
+					// per-image directive, and no pack of the corpus asks for a chain and a
+					// comparison on the same image, so nothing would measure the change. And the
+					// ceiling is doing work nobody asked it for: a compared lookup is skipped by
+					// the level pinning outright, so its level is implicit, and this clamp is what
+					// keeps such a read on the base under the divergent flow this driver renders
+					// wrong. Lifting it belongs with the second comparison sampler, and with a
+					// pack to prove it on.
 					.minLod(0.0F)
 					.maxLod(0.0F);
 			LongBuffer handle = stack.mallocLong(1);

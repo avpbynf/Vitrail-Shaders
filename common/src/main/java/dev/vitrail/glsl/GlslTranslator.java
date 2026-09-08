@@ -209,6 +209,33 @@ public final class GlslTranslator {
 	private static volatile boolean softCompareArmed;
 
 	/**
+	 * Whether the loaded pack asked for a mip chain on each depth image of its shadow map,
+	 * {@code shadowtex0} at nought and {@code shadowtex1} at one.
+	 * <p>
+	 * It decides one thing here and one only: whether a lookup that WROTE its own level on the map
+	 * keeps what it wrote, or has it overwritten with the base along with the undirected reads. A
+	 * directive of the pack and not of a program, folded over every fragment stage of the
+	 * dimension, which is why it arrives on a switch instead of off the unit in hand:
+	 * {@code colortexNMipmapEnabled} is a program's own word and is read from the text, where
+	 * {@code generateShadowMipmap} belongs to the pack and the unit that declares it need not be
+	 * the unit that reads at a level. iterationT is exactly that shape, declaring it in
+	 * {@code composite.fsh} and reading at a level inside an include.
+	 * <p>
+	 * Armed at every pack read, before a unit is translated, and false where nobody armed it, which
+	 * is every harness run: a tool measuring the text alone then sees the pinned form, which is the
+	 * translation of a pack that asked for no chain.
+	 * <p>
+	 * <strong>A pack read while another pack's families are still being warmed can hand them this
+	 * answer</strong>, the switch being one pair for the process. What bounds it is the second gate:
+	 * a lookup only reaches a level past nought if {@code ShadowTargets.depthMipmapped} also says
+	 * so, and that asks the map really bound, so the worst case is a written level clamped back to
+	 * the base by the sampler. The disk cache is not exposed to it at all, this pair being part of
+	 * {@link #emissionSwitches} and therefore of the key.
+	 */
+	private static volatile boolean shadowChainZero;
+	private static volatile boolean shadowChainOne;
+
+	/**
 	 * What a call to {@code sin} or {@code cos} becomes: a sine of this translation's own, and
 	 * never the driver's.
 	 * <p>
@@ -747,6 +774,16 @@ public final class GlslTranslator {
 		softCompareArmed = asked;
 	}
 
+	/**
+	 * Says which depth images of this pack's shadow map carry a chain, which is what lets a lookup
+	 * on them keep the level the pack wrote. Called once per pack read, from where the directives
+	 * were just folded, and before a unit is translated.
+	 */
+	public static void askShadowChains(boolean shadowtex0, boolean shadowtex1) {
+		shadowChainZero = shadowtex0;
+		shadowChainOne = shadowtex1;
+	}
+
 	private static boolean softCompare() {
 		return SOFT_COMPARE || softCompareArmed;
 	}
@@ -766,7 +803,8 @@ public final class GlslTranslator {
 	 */
 	public static String emissionSwitches() {
 		return (reduceTrig ? "trig-reduced" : "trig-driver")
-				+ (softCompare() ? " compare-in-shader" : " compare-on-sampler");
+				+ (softCompare() ? " compare-in-shader" : " compare-on-sampler")
+				+ " shadow-chain-" + (shadowChainZero ? '1' : '0') + (shadowChainOne ? '1' : '0');
 	}
 
 	private void rewrite() {
@@ -2904,8 +2942,10 @@ public final class GlslTranslator {
 	 * {@code colortexNMipmapEnabled} directives {@code TargetDirectives} reads; in a geometry
 	 * program, the names the engine serves out of a colour target, a depth, the noise or the shadow
 	 * map, and never the atlas or a material map, which carry chains and are read through them.
-	 * The shadow map's samplers are pinned with the rest, whatever mipmap directive the pack
-	 * wrote for them, because nothing of this engine fills a chain on the map. A sampler a
+	 * The shadow map's samplers are pinned with the rest, and one read of them is not: a lookup that
+	 * WROTE its own level on an image the pack asked for a chain on keeps what it wrote, which is
+	 * {@link #keepsWrittenLevel}. That is narrower than the exemption a colour target gets, and the
+	 * reason it has to be is in that method. A sampler a
 	 * function takes as a parameter has no name to classify, as {@link #countDepthLookup} says,
 	 * so its call sites are read instead: the parameter is pinned when every call of its function
 	 * hands it a sampler already pinned or a parameter already proven, and outright, call sites
@@ -2973,6 +3013,12 @@ public final class GlslTranslator {
 					continue;
 				}
 			} else if (!pinned.contains(name)) {
+				continue;
+			} else if (writesItsOwnLevel(token.text()) && keepsWrittenLevel(name)) {
+				// Inside this branch and not after it, so that it can only ever reach a name the
+				// FILE declares. A parameter spelled after one of the map's names is bound to
+				// whatever its call sites hand it, which may be a target with one level, and the
+				// name would say otherwise.
 				continue;
 			}
 
@@ -3128,10 +3174,13 @@ public final class GlslTranslator {
 	 * The samplers this program asks a chain for, under the names it declares them by: the targets
 	 * its {@code colortexNMipmapEnabled} directives name, whatever spelling the sampler took. Read
 	 * the way {@code TargetDirectives} reads them, on the live lines of this unit and the last
-	 * declaration winning. The shadow map's own mipmap directives are not read: Iris honours them
-	 * on the map's samplers and this engine fills no chain on the map, so its shadow lookups read
-	 * the base whatever the pack asked, pinned or not, and that is the older gap rather than this
-	 * pass's.
+	 * declaration winning.
+	 * <p>
+	 * The shadow map is NOT in here, whatever its own directives say, and that is deliberate: a
+	 * name in this set escapes the pin entirely, undirected reads included, which would hand the
+	 * map's lookups back the implicit level this pass exists to take away. What the map gets
+	 * instead is the narrower exemption {@link #keepsWrittenLevel} describes, and the two are not
+	 * interchangeable.
 	 */
 	private Set<String> chainedSamplers() {
 		Set<Integer> targets = new HashSet<>();
@@ -3163,10 +3212,60 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Whether a name is one the engine binds an image of its own under in every family and never
-	 * gives a chain to in a geometry program: a colour target, a depth of the world or of the far
-	 * terrain, the noise, or the shadow map's depth and colour, on which nothing of this engine
-	 * fills a chain in any family.
+	 * Whether this lookup already carries a level of its own, as opposed to one the hardware would
+	 * work out from the derivatives of its coordinate.
+	 * <p>
+	 * The two are not the same read at all, and this pass has only ever been about the second: the
+	 * defect it exists for is a level computed under divergent flow, and a literal or an expression
+	 * the pack wrote is computed by nobody.
+	 */
+	private static boolean writesItsOwnLevel(String lookup) {
+		return lookup.equals("textureLod") || lookup.equals("textureLodOffset");
+	}
+
+	/**
+	 * Whether a lookup that wrote its own level on this name keeps it.
+	 * <p>
+	 * The shadow map alone, and only where the pack asked for a chain on every image the name could
+	 * read. Pinning such a read was never about the driver: the pack handed a level and the pass
+	 * overwrote it with nought, which was the right answer only while the map carried one level.
+	 * With a chain under it, that rewrite is the engine deciding a pack's filter width for it, and
+	 * iterationT is the pack it decided for, asking for {@code log2(shadowMapResolution / 512)} and
+	 * being served the full size map.
+	 * <p>
+	 * Every image the name could read, and not the one it probably reads. {@code shadowtex0},
+	 * {@code shadowtex0HW} and {@code watershadow} are the first, {@code shadowtex1} and
+	 * {@code shadowtex1HW} the second: those five are fixed, whatever else the program declares.
+	 * The bare {@code shadow} is the one that moves, and it is the PROGRAM that moves it, being the
+	 * first image unless some stage also declares {@code watershadow} and the second when one does
+	 * ({@code samplers/IrisSamplers.java:145-152} on the 26.2 branch). This class sees one unit
+	 * where the binding folds the stages together, so the two can disagree about that one name: it
+	 * is admitted only where both images carry a chain, which is where the disagreement cannot
+	 * change the answer.
+	 * <p>
+	 * Undirected reads on those same names stay pinned, which is a divergence from Iris and the one
+	 * this pass already owed: there a mipmapped shadow sampler lets an ordinary {@code texture} call
+	 * pick its own level, and here it reads the base. Serving that would put the map back on the
+	 * exact read this driver renders wrong, so it waits for the day that defect is closed.
+	 */
+	private boolean keepsWrittenLevel(String name) {
+		if (SamplerPlan.classify(name) != SamplerPlan.Kind.SHADOW_DEPTH) {
+			return false;
+		}
+
+		if (name.equals("shadow")) {
+			return shadowChainZero && shadowChainOne;
+		}
+
+		return SamplerPlan.withoutTranslucents(name, false) ? shadowChainOne : shadowChainZero;
+	}
+
+	/**
+	 * Whether a name is one the engine binds an image of its own under in every family: a colour
+	 * target, a depth of the world or of the far terrain, the noise, or the shadow map's depth and
+	 * colour. It says the name is a candidate for pinning in a geometry program, and no more; a
+	 * colour target is taken back out by the caller's set of chained samplers, and one read of the
+	 * shadow map by {@link #keepsWrittenLevel}.
 	 */
 	private static boolean servedOutOfATarget(String name) {
 		return switch (SamplerPlan.classify(name)) {

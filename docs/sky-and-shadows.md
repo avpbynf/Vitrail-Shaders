@@ -128,6 +128,37 @@ Coloured light through stained glass does not rest on that swap. It rests on the
 shadow colour buffer: a point occluded in one image and clear in the other has something translucent
 between it and the light, and the tint comes from the colour buffer.
 
+### A pack may ask for coarser copies of the map
+
+`generateShadowMipmap` asks for a mip chain on both depth images at once, `shadowtex0Mipmap` and
+`shadowtex1Mipmap` for one each, and the older `shadowtexMipmap` is the first of those under
+another name. A pack that reads its map at a level of detail of its own is estimating something
+over an area rather than at a point: how wide a penumbra should be, at the cost of one read instead
+of many.
+
+Each image takes its own chain, sized as the reference sizes it, and the chain is filled once per
+frame at the tail of the stage that drew the map, after the copy the second name reads. It has to be
+refilled every frame because every frame writes the base again, by drawing the world into it or by
+putting the reuse store back, and a level standing over a base it no longer averages is an older
+frame's world.
+
+Two things gate a lookup that climbs, and both must hold: the pack asked, and the fill went through.
+A device that refuses the transfer leaves the levels holding whatever it left there, so the engine
+keeps every read on the base rather than serving undefined memory as a coarser image. The same two
+questions decide on all three roads that bind the map, the full screen passes, the world's own
+programs and the compute passes, which is why they ask the map itself.
+
+The shadow colour buffers carry the same family of names and it is read by nobody. The reference
+parses them, fills a chain on the first buffer, and then binds every `shadowcolor` through a sampler
+whose minification setting can only ever return the base level, so a pack reading one at a level of
+detail gets the full-size image there. Serving a coarser one here would diverge on the buffer that
+carries the light which came through stained glass.
+
+A lookup that leaves the level to be worked out from the derivatives of its coordinate reads the
+base whatever the pack asked, where the reference lets it pick a level. That is the older
+divergence: a level computed that way under a branch or a loop comes back wrong on this hardware,
+so those reads are held to the base and only a level the pack wrote out is honoured.
+
 ### What goes into the map is decided in its own namespace
 
 The directives that describe shadow colour buffers (their format, whether they are cleared, and to

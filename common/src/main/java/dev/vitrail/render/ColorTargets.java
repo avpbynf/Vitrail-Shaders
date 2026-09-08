@@ -373,7 +373,8 @@ final class ColorTargets {
 	 */
 	ColorTargets(TargetPlan plan, int noiseResolution, NoiseTexture.Image noiseImage,
 			PackImages packImages, ImageInformation.Reading storageImages, int shadowResolution,
-			List<PackDirectives.ShadowColour> shadowColours, List<Boolean> shadowDepthNearest) {
+			List<PackDirectives.ShadowColour> shadowColours,
+			List<PackDirectives.ShadowDepth> shadowDepths) {
 		this.plan = plan;
 		this.packImages = packImages;
 		this.storageImages = new StorageImages(storageImages);
@@ -389,7 +390,7 @@ final class ColorTargets {
 		// count, on the rule the colour targets themselves follow: a pack naming shadowcolor2 gets
 		// the image, a pack writing nought alone pays for nought alone. The ceiling those names were
 		// read against comes from the same place, being the pack's own declaration and not ours.
-		this.shadowMap = new ShadowTargets(shadowResolution, shadowColours, shadowDepthNearest,
+		this.shadowMap = new ShadowTargets(shadowResolution, shadowColours, shadowDepths,
 				plan.shadowAllocated(), plan.shadowCeiling());
 		this.doubled = Set.copyOf(plan.schedule().doubled());
 

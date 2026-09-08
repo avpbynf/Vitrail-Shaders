@@ -121,6 +121,25 @@ final class GpuFormats {
 		return feature(format, VK10.VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT, true);
 	}
 
+	/**
+	 * Whether this device transfers a rectangle of that format into another of the same, at both
+	 * ends, which is what filling a mip chain by blit needs: every level past the base is read from
+	 * the level above it and written into itself.
+	 * <p>
+	 * Asked of the device because the specification requires neither bit of a DEPTH format, and
+	 * that is the format the shadow map is in. There is no runtime answer to fall back on: a
+	 * command buffer records what it is given and says nothing, so a chain allocated on a device
+	 * that cannot fill it would be read as a coarser image and hold whatever the driver left there.
+	 * The question is therefore asked before the memory is taken, and a device that says no gets a
+	 * map of one level, which is the map every pack had before there were chains.
+	 * <p>
+	 * No with no Vulkan device to ask, which is no device to blit on either.
+	 */
+	static boolean blitsBothWays(GpuFormat format) {
+		return feature(format, VK10.VK_FORMAT_FEATURE_BLIT_SRC_BIT, false)
+				&& feature(format, VK10.VK_FORMAT_FEATURE_BLIT_DST_BIT, false);
+	}
+
 	/** One bit of what this device does with that format, or {@code absent} with no device to ask. */
 	private static boolean feature(GpuFormat format, int bit, boolean absent) {
 		GpuDevice device = RenderSystem.tryGetDevice();

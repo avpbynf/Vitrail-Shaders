@@ -389,6 +389,11 @@ public final class ShadowTerrain {
 			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.TRANSLUCENT,
 					matrices, camera.x, camera.y, camera.z, sampler));
 		}
+
+		// And the chain last of all, on a map nothing else will write this frame, which is where
+		// Iris fills it too (shadows/ShadowRenderer.java:613-615). After the copy and not before:
+		// shadowtex1 takes its own chain over the base the copy just wrote.
+		TerrainDraw.mipShadowMap();
 	}
 
 	/** Every section a walk kept, which is what says how tight the shape it measured against was. */

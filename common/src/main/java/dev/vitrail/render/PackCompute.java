@@ -616,7 +616,14 @@ final class PackCompute implements AutoCloseable {
 			default -> PackPass.customImageFilter(name);
 		};
 
-		return ((VulkanGpuSampler) PackPass.sampler(noise, filter, false)).vkSampler();
+		// The map's chain is the third road's half of one answer, asked of the map like the filter:
+		// it is filled at the tail of the stage that drew it and stands for the whole frame, so a
+		// compute reads it exactly as the pass it hangs off does. Nothing else a compute binds
+		// carries a chain a dispatch could safely climb.
+		boolean mipmaps = !noise && samplers.binding(name).kind() == SamplerPlan.Kind.SHADOW_DEPTH
+				&& targets.shadow().depthMipmapped(samplers.withoutTranslucents(name));
+
+		return ((VulkanGpuSampler) PackPass.sampler(noise, filter, mipmaps)).vkSampler();
 	}
 
 	/**
