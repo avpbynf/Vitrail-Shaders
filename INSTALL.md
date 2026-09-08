@@ -18,9 +18,9 @@ is. Building it yourself gives the same thing for whatever commit you are on, an
 | Component | Version |
 | --- | --- |
 | Minecraft | 26.2 |
-| NeoForge | 26.2.0.32-beta or later in the 26.2 line |
-| or Fabric Loader | 0.19.3 or later, with Fabric API |
-| Sodium | 0.9.x, the build for whichever loader is in front |
+| NeoForge | 26.2.0.82 or later in the 26.2 line |
+| or Fabric Loader | 0.19.5 or later, with Fabric API |
+| Sodium | 0.9.1 or later in the 0.9 line, the build for whichever loader is in front |
 | Java | 25, to build (the game brings its own runtime) |
 
 One jar for both loaders: each loader reads its own metadata out of it and

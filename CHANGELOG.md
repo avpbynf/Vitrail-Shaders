@@ -109,6 +109,12 @@ what the next one holds.
 
 ### Changed
 
+- **The loader and Sodium versions asked for are the current ones.** The mod declared NeoForge
+  26.2.0.32-beta, a build from before that line stopped publishing betas, Fabric Loader 0.19.3,
+  and any Sodium of the 0.9 line, 0.9.0 included. It asks now for NeoForge 26.2.0.82, Fabric
+  Loader 0.19.5 and Sodium 0.9.1, each the current release of its line, and it still takes every
+  newer build of the same line, alpha and beta alike, which is what the benches run.
+
 - **The compiled shaders kept on disk are three times smaller.** Every one of them carried a copy
   of the whole shader text and a marker in front of nearly every instruction, which is what a
   driver would need to name a line inside a shader and which nothing else reads. Measured on
