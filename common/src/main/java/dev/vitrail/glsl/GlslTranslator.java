@@ -302,8 +302,10 @@ public final class GlslTranslator {
 	private static final String DRAW_MODEL_VIEW =
 			"(" + LegacyGlsl.CAMERA_BOB + " * " + LegacyGlsl.GAME_MODEL_VIEW + ")";
 
-	/** The one call a volume lookup may be written as. */
+	/** The two calls a volume lookup may be written as, the second carrying a level or a bias. */
 	static final String LOOKUP = "texture";
+
+	static final String LEVELLED_LOOKUP = "textureLod";
 
 	/** What the word sampler is followed by when the declaration asks for a comparison. */
 	private static final String SHADOW_SHAPE = "Shadow";

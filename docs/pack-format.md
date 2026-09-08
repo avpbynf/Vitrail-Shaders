@@ -474,8 +474,9 @@ neither engine. Two of the four formats an atlas is allocated as are ones Vulkan
 device to filter linearly rather than requiring it, the thirty two bit float and the sixteen bit
 normalised one, so the device is asked and a refusal leaves that atlas read at its nearest texel
 with a line in the log.
-A read written through a macro that stands for exactly the sampler's name is a read of the
-volume; one reached any other way leaves the program refused, and the log counts it. The volume
+A read is `texture(name, coordinate)` or `textureLod(name, coordinate, level)`, the level dropped
+because an atlas carries one, and the name may be a macro standing for exactly the sampler's name;
+one reached any other way leaves the program refused, and the log counts it. The volume
 answers only the `sampler3D` declarations of its name: a `sampler2D` of the same name in the same
 stage goes on reading the colour target, as under the reference, which renames a declaration to a
 custom texture only when its type matches the texture's shape.
