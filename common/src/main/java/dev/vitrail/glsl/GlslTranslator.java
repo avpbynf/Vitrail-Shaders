@@ -773,6 +773,7 @@ public final class GlslTranslator {
 		settleRedefinedMacros();
 		dropRedeclaredVertexBlock();
 		flattenInterfaceBlocks();
+		hideAbsentExtensionMacros();
 		rewriteIdentifiers();
 		// After the identifiers, because the goldberg idiom's sine has become ofReducedSin by then
 		// and that is one of the two names the site is recognised under, the other being the plain
@@ -1464,14 +1465,16 @@ public final class GlslTranslator {
 	 * So they are hoisted instead: the header re-emits them straight after the version, where the
 	 * language wants them, and {@link #extensions} is what carries them there.
 	 * <p>
-	 * <strong>All of them, and as {@code enable} rather than as the {@code require} the pack
-	 * wrote.</strong> Both halves are deliberate. A pack gates its extensions on macros this
+	 * <strong>All the device has, and as {@code enable} rather than as the {@code require} the
+	 * pack wrote.</strong> Both halves are deliberate. A pack gates its extensions on macros this
 	 * engine's own {@code #if} evaluation cannot answer, since what defines them is the compiler
 	 * further down the road, so keeping only the live ones would keep none of the ones that
 	 * matter; and a name the compiler does not know is a warning under {@code enable} where
 	 * {@code require} is an error, which turns a pack asking for a vendor extension it will not
 	 * get into a pack that still compiles. What decides whether the pack's code USES an extension
-	 * is unchanged either way: its own macro test, answered by the compiler and not by us.
+	 * is unchanged either way: its own macro test, answered by the compiler, which for a vendor
+	 * extension the device has not got is given the device's answer to read
+	 * ({@link #hideAbsentExtensionMacros}, {@link VendorExtensions}).
 	 */
 	private void dropVersionAndExtensions() {
 		for (int index = 0; index < this.tokens.size(); index++) {
@@ -1483,7 +1486,11 @@ public final class GlslTranslator {
 			if (token.directive().equals("extension")) {
 				this.strippedExtensions++;
 				String named = extensionNamed(index);
-				if (named != null) {
+				// Not hoisted where the device has not got it: the compiler would take the line
+				// and emit the vendor instruction, which is the one thing the device cannot run
+				// (VendorExtensions). The pack's own guard on the macro is hidden further down,
+				// so its fallback is what compiles.
+				if (named != null && !VendorExtensions.absent(named)) {
 					this.extensions.add(named);
 				}
 			} else if (!token.directive().equals("version")) {
@@ -1983,6 +1990,27 @@ public final class GlslTranslator {
 	/** Blanks a {@code layout(...)} whose every key is {@code location} or {@code component}. */
 	private void dropLocationLayout(int layout) {
 		dropLayoutOf(layout, Set.of("location", "component"));
+	}
+
+	/**
+	 * Renames, in the pack's own preprocessor lines, the macro of every vendor extension the device
+	 * has not got, so that the compiler answers {@code defined} the way the device would.
+	 * <p>
+	 * The reason is with {@link VendorExtensions}: the compiler defines the macro of every
+	 * extension it knows, and a pack gating a vendor instruction on that macro takes the branch on
+	 * a card that cannot run the instruction. Under a GL driver the macro is only defined where the
+	 * card has the extension, which is the answer restored here. Every line is rewritten, live or
+	 * not, since the question is what the compiler will read; the engine's own evaluation already
+	 * answered undefined for a name it never defines, so the two agree afterwards.
+	 */
+	private void hideAbsentExtensionMacros() {
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() != null && token.kind() == Kind.IDENTIFIER
+					&& VendorExtensions.absent(token.text())) {
+				this.tokens.replace(index, VendorExtensions.hidden(token.text()));
+			}
+		}
 	}
 
 	/** Blanks the {@code layout(...)} at this token when every key it carries is one of these. */
