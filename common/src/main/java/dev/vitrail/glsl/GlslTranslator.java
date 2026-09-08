@@ -772,6 +772,7 @@ public final class GlslTranslator {
 		dropVersionAndExtensions();
 		settleRedefinedMacros();
 		dropRedeclaredVertexBlock();
+		flattenInterfaceBlocks();
 		rewriteIdentifiers();
 		// After the identifiers, because the goldberg idiom's sine has become ofReducedSin by then
 		// and that is one of the two names the site is recognised under, the other being the plain
@@ -1621,6 +1622,390 @@ public final class GlslTranslator {
 				this.tokens.blankRange(keyword, end);
 			}
 		}
+	}
+
+	/** The qualifiers a block or a member may carry in front of its type, interpolation apart. */
+	private static final Set<String> INTERPOLATION_QUALIFIERS = Set.of("flat", "smooth", "noperspective");
+	private static final Set<String> OTHER_QUALIFIERS = Set.of("centroid", "sample", "invariant", "precise",
+			"highp", "mediump", "lowp");
+
+	/** One member of a block as the pass read it, applied only once every member of the block read. */
+	private record BlockMember(int typeAt, List<Integer> names, int layoutAt, Set<String> qualifiers) {
+	}
+
+	/**
+	 * Turns a pack's own {@code in} or {@code out} block into one varying per member, named after
+	 * the block, and rewrites every {@code instance.member} of the unit to that name.
+	 * <p>
+	 * A workaround for the game's linker, paid in nothing the image can see. Iris leaves the block
+	 * as the pack wrote it, and OpenGL takes a block whose members carry their own locations and
+	 * components, which is how RenderPearl packs nine varyings into four slots ({@code
+	 * lib/v_data_lit.glsl}). The game numbers a stage's outputs itself, one location per output
+	 * VARIABLE in the order its reflection lists them, and rebinds the next stage's inputs by name
+	 * to those numbers ({@code IntermediaryShaderModule.java:112-116} and {@code rebind}). A block
+	 * is one variable there and spans as many locations as it has members, so whichever output
+	 * the reflection lists after it lands inside that span, two outputs on one location, which the
+	 * validator refuses ({@code VUID-StandaloneSpirv-OpEntryPoint-08722}). Which output that is
+	 * depends on the order the compiler met them in: the pack's own modules validated alone and
+	 * failed once the engine's {@code entityColor} joined them after the wrapping main moved below
+	 * the body. With the block gone, every member is a varying the game numbers like any other,
+	 * and the matrix split and the varying collection read it like any other too, since the
+	 * storage word put in front of it is a real token and not injected text.
+	 * <p>
+	 * The name is the block's and not the instance's, because the two stages need not agree on the
+	 * instance: Reverie writes {@code out Data {...} DataOut;} against {@code in Data {...}
+	 * DataIn;}, and the game matches the two sides by name. A member keeps its own qualifiers,
+	 * takes the block's where the block carries one it does not, and loses its location and
+	 * component, the game renumbering every location anyway: what the pack loses is the packing by
+	 * component. The preprocessor lines inside the block stay where they are, so a member behind
+	 * an {@code #ifdef} is declared under the same condition as before; the head may be written
+	 * across a conditional, {@code out} under one branch and {@code in} under the other, which is
+	 * read through, the live word deciding; and a read of the instance inside a macro body is
+	 * rewritten with the rest. A block with no instance name already reads its members as globals
+	 * and is only unwrapped. Left whole: a block declared as an array, which only a geometry or
+	 * tessellation stage reads and this engine binds neither; a {@code patch} block, for the same
+	 * reason; {@code gl_PerVertex}, the compiler's block and not a pack's; and a block one of
+	 * whose members the pass cannot read, since half a block is worse than the whole one. What is
+	 * not told apart is a local named like the instance whose own field is named like a member,
+	 * which no pack of the corpus writes.
+	 */
+	private void flattenInterfaceBlocks() {
+		int[] lines = this.tokens.lineNumbers();
+		List<TokenStream.Insertion> insertions = new ArrayList<>();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.directive() != null || !(token.identifier("in") || token.identifier("out"))
+					|| !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			int name = blockNameAfter(index);
+			if (name < 0 || this.tokens.get(name).text().startsWith("gl_")) {
+				continue;
+			}
+
+			int brace = this.tokens.significantAfter(name);
+			if (brace < 0 || !this.tokens.get(brace).operator("{")) {
+				continue;
+			}
+
+			int close = this.tokens.matchingBracket(brace);
+			int after = close < 0 ? -1 : this.tokens.significantAfter(close);
+			if (after < 0) {
+				continue;
+			}
+
+			String instance = null;
+			int end = after;
+			if (this.tokens.get(after).kind() == Kind.IDENTIFIER) {
+				instance = this.tokens.get(after).text();
+				end = this.tokens.significantAfter(after);
+			}
+
+			if (end < 0 || !this.tokens.get(end).operator(";")) {
+				index = close;
+				continue;
+			}
+
+			// The qualifiers the block carries as a whole, in front of its storage word: handed
+			// down to every member without them, and dropped with the head along with a layout,
+			// the members being numbered by the game. A patch block belongs to a stage this
+			// engine never binds.
+			int start = index;
+			List<String> carried = new ArrayList<>();
+			boolean patch = false;
+			for (int before = this.tokens.significantBefore(index); before >= 0;
+					before = this.tokens.significantBefore(before)) {
+				Token qualifier = this.tokens.get(before);
+				if (qualifier.identifier("patch")) {
+					patch = true;
+				} else if (qualifier.kind() == Kind.IDENTIFIER && (INTERPOLATION_QUALIFIERS.contains(qualifier.text())
+						|| OTHER_QUALIFIERS.contains(qualifier.text()))) {
+					carried.add(0, qualifier.text());
+				} else if (qualifier.operator(")")) {
+					int layout = layoutBefore(before);
+					if (layout < 0) {
+						break;
+					}
+
+					before = layout;
+				} else {
+					break;
+				}
+
+				start = before;
+			}
+
+			if (patch) {
+				index = close;
+				continue;
+			}
+
+			List<BlockMember> members = new ArrayList<>();
+			List<Integer> declaration = new ArrayList<>();
+			boolean readable = true;
+			for (int at = brace + 1; at < close && readable; at++) {
+				Token piece = this.tokens.get(at);
+				if (piece.directive() != null || piece.trivia() || piece.kind() == Kind.NEWLINE
+						|| piece.text().isEmpty()) {
+					continue;
+				}
+
+				if (!piece.operator(";")) {
+					declaration.add(at);
+					continue;
+				}
+
+				BlockMember member = readBlockMember(declaration);
+				readable = member != null;
+				members.add(member);
+				declaration.clear();
+			}
+
+			if (!readable || !declaration.isEmpty()) {
+				index = close;
+				continue;
+			}
+
+			String storage = token.text();
+			String prefix = instance == null ? "" : "of_" + this.tokens.get(name).text() + "_";
+			List<String> names = new ArrayList<>();
+			for (BlockMember member : members) {
+				flattenMember(member, storage, carried, prefix, names, insertions);
+			}
+
+			blankCode(start, brace);
+			blankCode(close, end);
+			if (instance != null) {
+				rewriteBlockReads(instance, prefix, names);
+			}
+
+			index = close;
+		}
+
+		this.tokens.insertTokens(insertions);
+	}
+
+	/**
+	 * The name of the block a storage word opens, or -1 where what follows is not a block. Only
+	 * trivia, directive lines and the other branch's storage word may stand between the two.
+	 */
+	private int blockNameAfter(int storage) {
+		for (int scan = storage + 1; scan < this.tokens.size(); scan++) {
+			Token token = this.tokens.get(scan);
+			if (token.trivia() || token.kind() == Kind.NEWLINE || token.directive() != null
+					|| token.identifier("in") || token.identifier("out")) {
+				continue;
+			}
+
+			return token.kind() == Kind.IDENTIFIER ? scan : -1;
+		}
+
+		return -1;
+	}
+
+	/** The {@code layout} a closing parenthesis ends, or -1 where it closes something else. */
+	private int layoutBefore(int closing) {
+		int depth = 0;
+		for (int scan = closing; scan >= 0; scan--) {
+			Token token = this.tokens.get(scan);
+			if (token.kind() != Kind.OPERATOR || token.directive() != null) {
+				continue;
+			}
+
+			if (token.operator(")")) {
+				depth++;
+			} else if (token.operator("(")) {
+				depth--;
+				if (depth == 0) {
+					int keyword = this.tokens.significantBefore(scan);
+					return keyword >= 0 && this.tokens.get(keyword).identifier("layout") ? keyword : -1;
+				}
+			}
+		}
+
+		return -1;
+	}
+
+	/**
+	 * One member of a block read off the significant tokens of its declaration: an optional
+	 * layout, qualifiers, a type, then one or more names each with an optional array size. Null
+	 * where the declaration is not of that shape.
+	 */
+	private BlockMember readBlockMember(List<Integer> declaration) {
+		int part = 0;
+		int layoutAt = -1;
+		Set<String> qualifiers = new HashSet<>();
+		while (part < declaration.size()) {
+			int at = declaration.get(part);
+			Token piece = this.tokens.get(at);
+			if (piece.identifier("layout")) {
+				int closing = this.tokens.matchingBracket(this.tokens.callOpener(at));
+				if (closing < 0 || layoutAt >= 0) {
+					return null;
+				}
+
+				layoutAt = at;
+				while (part < declaration.size() && declaration.get(part) <= closing) {
+					part++;
+				}
+			} else if (piece.kind() == Kind.IDENTIFIER && (INTERPOLATION_QUALIFIERS.contains(piece.text())
+					|| OTHER_QUALIFIERS.contains(piece.text()))) {
+				qualifiers.add(piece.text());
+				part++;
+			} else {
+				break;
+			}
+		}
+
+		if (part >= declaration.size() || this.tokens.get(declaration.get(part)).kind() != Kind.IDENTIFIER) {
+			return null;
+		}
+
+		int typeAt = declaration.get(part++);
+		List<Integer> names = new ArrayList<>();
+		boolean expectName = true;
+		for (; part < declaration.size(); part++) {
+			int at = declaration.get(part);
+			Token piece = this.tokens.get(at);
+			if (expectName) {
+				if (piece.kind() != Kind.IDENTIFIER) {
+					return null;
+				}
+
+				names.add(at);
+				expectName = false;
+			} else if (piece.operator("[")) {
+				int closing = this.tokens.matchingBracket(at);
+				if (closing < 0) {
+					return null;
+				}
+
+				while (part + 1 < declaration.size() && declaration.get(part + 1) <= closing) {
+					part++;
+				}
+			} else if (piece.operator(",")) {
+				expectName = true;
+			} else {
+				return null;
+			}
+		}
+
+		return names.isEmpty() || expectName ? null : new BlockMember(typeAt, names, layoutAt, qualifiers);
+	}
+
+	/**
+	 * A member becomes a varying of its own, or several where it lists several names: the storage
+	 * word goes in front of its type as a token of its own, the block's qualifiers before that
+	 * where the member lacks them, each name takes the block's prefix, and a location or component
+	 * layout on the member is dropped.
+	 */
+	private void flattenMember(BlockMember member, String storage, List<String> carried, String prefix,
+			List<String> names, List<TokenStream.Insertion> insertions) {
+		if (member.layoutAt() >= 0) {
+			dropLocationLayout(member.layoutAt());
+		}
+
+		for (int nameAt : member.names()) {
+			String name = this.tokens.get(nameAt).text();
+			names.add(name);
+			this.tokens.replace(nameAt, prefix + name);
+		}
+
+		boolean interpolated = member.qualifiers().stream().anyMatch(INTERPOLATION_QUALIFIERS::contains);
+		for (String qualifier : carried) {
+			boolean interpolation = INTERPOLATION_QUALIFIERS.contains(qualifier);
+			if (interpolation ? !interpolated : !member.qualifiers().contains(qualifier)) {
+				insertions.add(new TokenStream.Insertion(member.typeAt(), new Token(Kind.IDENTIFIER, qualifier, null)));
+				insertions.add(new TokenStream.Insertion(member.typeAt(), new Token(Kind.SPACE, " ", null)));
+			}
+		}
+
+		insertions.add(new TokenStream.Insertion(member.typeAt(), new Token(Kind.IDENTIFIER, storage, null)));
+		insertions.add(new TokenStream.Insertion(member.typeAt(), new Token(Kind.SPACE, " ", null)));
+	}
+
+	/** Blanks a range of code, leaving the directive lines inside it standing. */
+	private void blankCode(int start, int end) {
+		for (int at = start; at <= end; at++) {
+			if (this.tokens.get(at).directive() == null) {
+				this.tokens.blankRange(at, at);
+			}
+		}
+	}
+
+	/**
+	 * Rewrites every {@code instance.member} of a flattened block to the member's own name, in the
+	 * pack's macro bodies as well as in its code, and never the field of something else that
+	 * happens to be named like the instance. Only the two tokens of the access are blanked, one
+	 * by one, so that a spliced line inside a macro body keeps its splice.
+	 */
+	private void rewriteBlockReads(String instance, String prefix, List<String> members) {
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.macroName() || !token.identifier(instance) || fieldAccess(index)) {
+				continue;
+			}
+
+			int dot = this.tokens.significantAfter(index);
+			if (dot < 0 || !this.tokens.get(dot).operator(".")) {
+				continue;
+			}
+
+			int member = this.tokens.significantAfter(dot);
+			if (member < 0 || this.tokens.get(member).kind() != Kind.IDENTIFIER
+					|| !members.contains(this.tokens.get(member).text())) {
+				continue;
+			}
+
+			this.tokens.replace(index, prefix + this.tokens.get(member).text());
+			this.tokens.blank(dot);
+			this.tokens.blank(member);
+		}
+	}
+
+	/** Whether the token at this index is reached through a dot on its own line, a field of something. */
+	private boolean fieldAccess(int index) {
+		for (int scan = index - 1; scan >= 0; scan--) {
+			Token token = this.tokens.get(scan);
+			if (token.kind() == Kind.NEWLINE) {
+				return false;
+			}
+
+			if (!token.trivia()) {
+				return token.operator(".");
+			}
+		}
+
+		return false;
+	}
+
+	/** Blanks a {@code layout(...)} whose every key is {@code location} or {@code component}. */
+	private void dropLocationLayout(int layout) {
+		dropLayoutOf(layout, Set.of("location", "component"));
+	}
+
+	/** Blanks the {@code layout(...)} at this token when every key it carries is one of these. */
+	private void dropLayoutOf(int layout, Set<String> keys) {
+		int open = this.tokens.callOpener(layout);
+		int close = this.tokens.matchingBracket(open);
+		if (open < 0 || close < 0) {
+			return;
+		}
+
+		// A key is the identifier that opens an entry: the first inside the parenthesis and every
+		// one that follows a comma.
+		boolean opensEntry = true;
+		for (int part : this.tokens.significantRange(open + 1, close - 1)) {
+			Token token = this.tokens.get(part);
+			if (opensEntry && !(token.kind() == Kind.IDENTIFIER && keys.contains(token.text()))) {
+				return;
+			}
+
+			opensEntry = token.operator(",");
+		}
+
+		this.tokens.blankRange(layout, close);
 	}
 
 	/**
