@@ -1056,8 +1056,11 @@ public final class GlslTranslator {
 
 	private TranslatedUnit render(List<TranslatedUnit.Uniform> block,
 			List<TranslatedUnit.Uniform> samplers, Set<String> varyings, Set<String> shadowed) {
+		Emitter emitter = emitter();
+
 		return new TranslatedUnit(this.unit.entry(), this.stage,
-				emitter().header(block, samplers, varyings, shadowed) + body(shadowed) + "\n", notes(),
+				emitter.header(block, samplers, varyings, shadowed) + body(shadowed) + "\n"
+						+ emitter.wrapper(varyings, shadowed), notes(),
 				List.copyOf(this.drawBuffers), List.copyOf(block), List.copyOf(samplers));
 	}
 
@@ -3307,7 +3310,11 @@ public final class GlslTranslator {
 			return;
 		}
 
-		if (this.packOutputs.putIfAbsent(location, new Output(name.text(), type)) == null) {
+		// Declared under its 32 bit type where the pack wrote a 16 bit one: the reason is with
+		// LegacyGlsl.widened, and the pack's own assignments still fit, a half converting to a
+		// float on its own.
+		Output output = new Output(name.text(), LegacyGlsl.widened(type));
+		if (this.packOutputs.putIfAbsent(location, output) == null) {
 			this.tokens.blankRange(start, end);
 		}
 	}

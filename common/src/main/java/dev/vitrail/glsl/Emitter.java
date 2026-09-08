@@ -389,60 +389,72 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		// not meet today. They are ordered anyway rather than left to that argument holding.
 		this.owedOutputs.forEach((name, qualified) -> lines.add(outDeclaration(name, qualified)));
 
-		// Below the block, since it reads it, and below the outputs and the ascending function for a
-		// reason that decides the picture: a wrapper standing above them would be the first place the
-		// compiler met an output name, and the rank it hands out there is the location the game
-		// writes back. It has to be the ascending function that gets there first, so this goes last.
-		// The pack's body is concatenated after the header, so its own main is only a name here and
-		// has to be declared before it can be called.
-		// Asked of the one thing that decides it, which is whether the pack's own main was renamed.
-		// Every reason to wrap sets that flag as it renames, so this is the list of reasons said
-		// once instead of twice, and it cannot fall out of step with them. It used to be the list
-		// itself, and a split taken back out by dropUnprovidedSplits after the rename then left a
-		// stage whose main was called ofPackMain and whose wrapper nobody wrote: no entry point,
-		// which is the fragment stage of Sildur's gbuffers_textured.
-		if (this.mainWrapped) {
-			lines.add("void " + GlslTranslator.PACK_MAIN + "();");
-			// The lines mesh runs the pack's main twice, the far end of the edge first and the
-			// vertex itself second, so that every varying holds the vertex's own value when the
-			// epilogues below read them, and widens between the two clip positions: Iris's own
-			// order (VanillaTransformer.java:214-222). The depth conversion still lands after,
-			// on the widened position, whose z the widening leaves alone.
-			String body = this.linesWrapped
-					? LinesVertex.OFFSET + " = Normal.xyz; " + GlslTranslator.PACK_MAIN
-							+ "(); vec4 of_LineEnd = "
-							+ "gl_Position; gl_Position = vec4(0.0); " + LinesVertex.OFFSET
-							+ " = vec3(0.0); " + GlslTranslator.PACK_MAIN + "(); " + LinesVertex.WIDEN
-							+ "(gl_Position, of_LineEnd);"
-					: GlslTranslator.PACK_MAIN + "();";
-			// The mask goes last of all, after the discard: a fragment the alpha test threw away
-			// covered nothing, and marking it covered would leave a hole where a leaf was.
-			lines.add("void main() { "
-					+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
-					+ (this.distantPrologue ? DistantVertex.PROLOGUE + "(); " : "")
-					+ overlayPrologue()
-					+ identifierPrologue(varyings)
-					+ (wrapsFragment() ? GlslTranslator.ORDER_OUTPUTS + "(); " : "")
-					+ coveragePrologue()
-					+ owedPrologue()
-					+ this.splits.matrixPrologue()
-					+ this.splits.structPrologue()
-					+ this.splits.arrayPrologue()
-					+ body
-					+ this.splits.matrixEpilogue()
-					+ this.splits.structEpilogue()
-					+ this.splits.arrayEpilogue()
-					+ (this.depthEpilogue ? " gl_Position.z = " + GlslTranslator.DEPTH_CONV
-							+ ".x * gl_Position.z + " + GlslTranslator.DEPTH_CONV
-							+ ".y * gl_Position.w;" : "")
-					+ (this.alphaEpilogue
-							? " " + this.alphaTest.discard(outputName(0, shadowed) + ".a")
-							: "")
-					+ (this.covers ? " " + COVERAGE + " = " + writtenDepth() + ";" : "")
-					+ " }");
+		return String.join("\n", lines) + "\n";
+	}
+
+	/**
+	 * The {@code main} that stands in for the pack's own, written AFTER the pack's body, or nothing
+	 * where the pack's main was left its name.
+	 * <p>
+	 * After the body and not in the header, for two reasons that both decide the picture. The
+	 * header's ascending function has to be the first place the compiler meets an output name, the
+	 * rank it hands out there being the location the game writes back, and a wrapper below the body
+	 * cannot get there first. And the wrapper may write {@code gl_FragDepth}, which a pack is free to
+	 * redeclare with a depth layout, as RenderPearl does on every terrain stage, {@code
+	 * depth_greater} or {@code depth_unchanged} by branch: a builtin used above its redeclaration
+	 * is refused, {@code cannot redeclare after use}, so the use has to come below it. Iris injects
+	 * its own wrapping main, the one that widens lines, at the end of the file too
+	 * ({@code VanillaTransformer.java:200-223}, {@code ASTInjectionPoint.END}).
+	 * <p>
+	 * Asked of the one thing that decides it, which is whether the pack's own main was renamed.
+	 * Every reason to wrap sets that flag as it renames, so this is the list of reasons said once
+	 * instead of twice, and it cannot fall out of step with them. It used to be the list itself,
+	 * and a split taken back out by dropUnprovidedSplits after the rename then left a stage whose
+	 * main was called ofPackMain and whose wrapper nobody wrote: no entry point, which is the
+	 * fragment stage of Sildur's gbuffers_textured.
+	 */
+	String wrapper(Set<String> varyings, Set<String> shadowed) {
+		if (!this.mainWrapped) {
+			return "";
 		}
 
-		return String.join("\n", lines) + "\n";
+		// The lines mesh runs the pack's main twice, the far end of the edge first and the vertex
+		// itself second, so that every varying holds the vertex's own value when the epilogues
+		// below read them, and widens between the two clip positions: Iris's own order
+		// (VanillaTransformer.java:215-223). The depth conversion still lands after, on the widened
+		// position, whose z the widening leaves alone.
+		String body = this.linesWrapped
+				? LinesVertex.OFFSET + " = Normal.xyz; " + GlslTranslator.PACK_MAIN
+						+ "(); vec4 of_LineEnd = "
+						+ "gl_Position; gl_Position = vec4(0.0); " + LinesVertex.OFFSET
+						+ " = vec3(0.0); " + GlslTranslator.PACK_MAIN + "(); " + LinesVertex.WIDEN
+						+ "(gl_Position, of_LineEnd);"
+				: GlslTranslator.PACK_MAIN + "();";
+		// The mask goes last of all, after the discard: a fragment the alpha test threw away
+		// covered nothing, and marking it covered would leave a hole where a leaf was.
+		return "void main() { "
+				+ (this.terrainPrologue ? SodiumVertex.PROLOGUE + "(); " : "")
+				+ (this.distantPrologue ? DistantVertex.PROLOGUE + "(); " : "")
+				+ overlayPrologue()
+				+ identifierPrologue(varyings)
+				+ (wrapsFragment() ? GlslTranslator.ORDER_OUTPUTS + "(); " : "")
+				+ coveragePrologue()
+				+ owedPrologue()
+				+ this.splits.matrixPrologue()
+				+ this.splits.structPrologue()
+				+ this.splits.arrayPrologue()
+				+ body
+				+ this.splits.matrixEpilogue()
+				+ this.splits.structEpilogue()
+				+ this.splits.arrayEpilogue()
+				+ (this.depthEpilogue ? " gl_Position.z = " + GlslTranslator.DEPTH_CONV
+						+ ".x * gl_Position.z + " + GlslTranslator.DEPTH_CONV
+						+ ".y * gl_Position.w;" : "")
+				+ (this.alphaEpilogue
+						? " " + this.alphaTest.discard(outputName(0, shadowed) + ".a")
+						: "")
+				+ (this.covers ? " " + COVERAGE + " = " + writtenDepth() + ";" : "")
+				+ " }\n";
 	}
 
 	/** Whether there is anything owed AND a wrapped main to assign it from. */
