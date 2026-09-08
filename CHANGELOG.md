@@ -130,6 +130,13 @@ what the next one holds.
   code wrote that depth above the pack's line, which the compiler refuses as a redeclaration after
   use: the engine's code now comes after the pack's, where the reference puts its own.
 
+- **A pack that declares its own output where another of its branches wrote the old-style one loads
+  again.** Iteration keeps every one of its final passes in one file, one writing the old-style
+  output and the others declaring their own under the same number, and only one branch is ever
+  taken. The engine counted the branch nobody took, laid its own output on that number, and six of
+  the pack's passes were refused for two outputs on one slot. The pack's own declaration takes the
+  slot now.
+
 - **A greyscale picture a pack ships is read as the pack wrote it.** Every grey image came out
   lighter than the file, its darks lifted towards white, because the decoder converted the picture
   out of its own colour space instead of taking the bytes as they were written. A pack that compares

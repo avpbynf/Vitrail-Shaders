@@ -3690,8 +3690,17 @@ public final class GlslTranslator {
 		// A location the pack spelled out as a number. Anything else, a macro or nothing at all,
 		// leaves no way to say where the output belongs, and inventing one would be worse than the
 		// disorder this exists to fix.
+		//
+		// A slot a gl_FragData subscript or a gl_FragColor already claimed is not refused: that
+		// rewrite counts dead branches too, and a pack that writes gl_FragData under one program
+		// symbol and declares its own output under another has both in one file, with only the
+		// declaration live. The pack's name then takes the slot in the header and the synthesized
+		// one is never declared, which is what the compiler sees of the pack's own text where it
+		// and the expander agree on the live branch. Where they do not (rewriteFragmentOutputs
+		// says why they may), the renamed write names an output nobody declares, a refusal where
+		// the two declarations on one location were a refusal before.
 		int location = literalLocation(parts, cursor);
-		if (location < 0 || location >= MAX_FRAGMENT_OUTPUTS || location <= this.maxFragmentOutput) {
+		if (location < 0 || location >= MAX_FRAGMENT_OUTPUTS) {
 			return;
 		}
 
