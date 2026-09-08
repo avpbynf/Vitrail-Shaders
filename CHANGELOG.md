@@ -178,8 +178,26 @@ what the next one holds.
   start. One pack of those at hand does say something: Pegasus asks for its shadow map to be read
   without smoothing, and now gets it, on a shadow test that steps hard enough for the change to sit
   on the edge of a shadow rather than across it. The same request on the shadow's colour buffer
-  stays ignored, as it is by the engine packs are tuned against, and asking for a mip chain under
-  the map is a separate line and still ignored too.
+  stays ignored, as it is by the engine packs are tuned against.
+
+- **A pack asking for a coarser copy of its shadow map gets one.** A shader pack can ask for the
+  shadow map to be kept at several sizes at once, each half the one above it, and then read the
+  size it wants: a soft, wide shadow is worked out from a small copy in one read where a sharp one
+  needs many. The engine kept one size, and a shader asking for any other was silently handed the
+  full one, so the estimate that decides how soft a shadow edge should be was made from the wrong
+  picture. The copies are now made, once at the end of the pass that draws the map, and a shader
+  that names the size it wants gets that size.
+
+  One pack of those at hand asks: iterationT, on the first of the map's two images, for the width
+  of its soft shadows. A pack that says nothing keeps one size and pays for nothing. A shader that
+  leaves the size to be worked out for it, rather than naming one, still reads the full map: that
+  is a separate limitation of this engine and it is unchanged. The same request on the shadow's
+  colour buffer stays ignored, and that is the reference's own behaviour rather than an omission:
+  it makes that copy and then reads the buffer through a setting that can never reach it.
+
+  A card that will not copy between two sizes of a depth image, which the reference's own graphics
+  interface always allowed and this one does not require, keeps a single size and says so in the
+  log.
 
 - **Smoke, flame and the other solid particles take the colour the pack meant them to.**
   The game draws its quad particles in two goes, the solid ones with the world and the

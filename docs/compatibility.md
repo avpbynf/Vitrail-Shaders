@@ -463,8 +463,9 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   reference does, the log naming the program it happened to. **Of those, only the ones some program
   of the place writes or samples are allocated**, so a pack whose light never names `shadowcolor1`
   is not charged an image at the shadow map's own resolution for it.
-  `shadowcolor0` stands whatever the pack writes, being the attachment the map's depth shares an
-  object with. **Where a program names none, or names more buffers than it writes outputs, it is
+  `shadowcolor0` stands whatever the pack writes, which is the reference's own floor: it builds
+  that buffer before a program has asked for anything, for the framebuffer its depth copy is taken
+  through. **Where a program names none, or names more buffers than it writes outputs, it is
   given only as many as it writes**: a buffer short of the reference. That is deliberate: Vulkan
   leaves an attachment no fragment writes undefined for the whole draw, where the GL these packs
   were written against leaves it standing, and what a pack reads out of an untouched shadow buffer

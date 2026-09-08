@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.glsl.GlslTranslator;
 import dev.vitrail.pack.id.BlockIds;
 import dev.vitrail.pack.id.NameIds;
 import dev.vitrail.pack.option.OptionIndex;
@@ -131,6 +132,12 @@ public final class PackValues {
 		SettingSet settings = pack.settings();
 
 		values.state.directives(PackDirectives.read(source, settings, dimension));
+		// Here because it is the first moment the answer exists and the last one before a unit is
+		// translated: the map's chain is a directive of the PACK, folded over every fragment stage
+		// of the dimension, and what it decides in the translation is whether a shadowtex lookup
+		// keeps the level of detail the pack wrote or is pinned to the base with the rest.
+		GlslTranslator.askShadowChains(values.state.directives().shadowDepthMipmap(0),
+				values.state.directives().shadowDepthMipmap(1));
 		values.state.endFlashShadows(properties.endFlashShadows(settings.globalDefines(options)));
 		values.state.oldHandLight(properties.oldHandLight(settings.globalDefines(options)));
 		values.skyElements = properties.skyElements(settings.globalDefines(options));
@@ -529,13 +536,14 @@ public final class PackValues {
 	}
 
 	/**
-	 * Whether the pack asked for NEAREST on {@code shadowtex0} and on {@code shadowtex1}, in that
-	 * order. Beside {@link #shadowColours()} rather than inside it: the depth pair takes no format
-	 * and no clear colour, and the one thing a pack says about it is how it is read back.
+	 * How the pack asks for {@code shadowtex0} and {@code shadowtex1} to be read back, in that
+	 * order: the filter, and whether the image carries a mip chain. Beside {@link #shadowColours()}
+	 * rather than inside it: the depth pair takes no format and no clear colour, and the one thing
+	 * a pack says about it is how it is read back.
 	 */
-	public List<Boolean> shadowDepthNearest() {
-		return List.of(this.state.directives().shadowDepthNearest(0),
-				this.state.directives().shadowDepthNearest(1));
+	public List<PackDirectives.ShadowDepth> shadowDepths() {
+		return List.of(this.state.directives().shadowDepth(0),
+				this.state.directives().shadowDepth(1));
 	}
 
 	/**

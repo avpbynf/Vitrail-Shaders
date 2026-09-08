@@ -343,11 +343,15 @@ public final class PackDirectives {
 	 * {@code GlSampler.LINEAR} regardless</strong> ({@code samplers/IrisSamplers.java:156-176}). A
 	 * GL sampler object overrules the texture's own parameters, and that one's minification filter
 	 * is plain {@code GL_LINEAR}, which selects the base level whatever level of detail a lookup
-	 * asks for: the chain Iris fills on those buffers ({@code shadows/ShadowRenderer.java:283-291})
-	 * is written and never read. So a pack reading {@code shadowcolor0} at a lod gets level nought
-	 * there, and serving it a coarser level here would be a divergence on the one buffer where a
-	 * pack blurs light across a penumbra. OptiFine does honour them, and that is not the engine
-	 * these packs are tuned against.
+	 * asks for. Iris does still fill a chain on a shadow colour buffer, and on {@code shadowcolor0}
+	 * alone: it settles its samplers once, in the shadow renderer's constructor, and only the
+	 * buffers that exist by then are walked, the rest being built when a framebuffer or a sampler
+	 * first names them ({@code shadows/ShadowRenderer.java:238-244,280-293}, against
+	 * {@code shadows/ShadowRenderTargets.java:73,127}). Filled or not, none of it is reachable: a
+	 * pack reading {@code shadowcolor0} at a lod gets level nought there, and serving it a coarser
+	 * level here would be a divergence on the one buffer where a pack blurs light across a
+	 * penumbra. OptiFine does honour them, and that is not the engine these packs are tuned
+	 * against.
 	 */
 	public ShadowDepth shadowDepth(int index) {
 		return index >= 0 && index < this.shadowDepths.size()

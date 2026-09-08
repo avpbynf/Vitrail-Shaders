@@ -54,6 +54,12 @@ GNU Lesser General Public License version 3
   where the format and clear directives do not. The colour half is parsed by Iris and then
   overruled at the bind, net.irisshaders.iris.samplers.IrisSamplers binding every shadowcolor
   through a LINEAR sampler object whatever the pack asked, so it is not honoured here either.
+  It takes the mipmap family from the same class in the same shape: generateShadowMipmap covers
+  both depth images, shadowtexMipmap is an alias for the first alone with no twin for the second,
+  shadowtexNMipmap names one image each, and the whole family folds in the order the declarations
+  are read so that the blanket name wins or loses on where it stands. The colour half of that
+  family is parsed there and overruled at the bind by the same LINEAR sampler object, so it is not
+  honoured here either.
 
   common/src/main/java/dev/vitrail/pack/target/SamplerPlan.java reproduces the sampler aliasing
   rules of net.irisshaders.iris.samplers.IrisSamplers and of
@@ -190,6 +196,14 @@ GNU Lesser General Public License version 3
   whatever any program says, lines 73 and 75. What is not reused is when: the named ones are all
   built with the map rather than each at its first use, because the shadow programs of this engine
   are not all built before the first frame is drawn.
+
+  The same file takes the size of the depth pair's mip chain from lines 65 and 66 of that class,
+  the logarithm of the resolution in base two and floored, which stops one level short of a chain
+  running down to a single texel, and it takes it per image from that image's own directive. The
+  count is reproduced rather than worked out because a pack reading at or past the last level is
+  clamped to whatever that engine allocated. What is this project's own is the refusal: the chain
+  is not allocated at all where the device does not report both transfer bits on the depth format,
+  which the graphics interface Iris runs against always provided.
 
   common/src/main/java/dev/vitrail/render/storage/StorageBuffers.java keeps the rule that a
   bufferObject starts life at zero, which net.irisshaders.iris.gl.buffer.ShaderStorageBuffer

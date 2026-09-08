@@ -731,8 +731,18 @@ final class PackPass {
 			// driver left there. Deciding this at the binding rather than when the pass was built
 			// is what makes the fall back real instead of announced: a chain nothing has written
 			// is read at level nought, which is the image the pack had before there were chains.
-			boolean mipmaps = surface != null && surface.chainWritten()
-					&& this.lodTargets.contains(binding.index());
+			//
+			// The shadow map's own chain is the other half of this, and it is asked of the map for
+			// the reason the filter is: a pack reading one image through two samplers is a
+			// difference nothing would ever explain. The narrowing above has no equivalent there,
+			// the map's chain being filled once at the tail of the stage that drew it and standing
+			// for the whole frame that follows, so there is no moment of a frame it could belong
+			// to instead.
+			boolean mipmaps = binding.kind() == SamplerPlan.Kind.SHADOW_DEPTH
+					? targets.shadow().depthMipmapped(
+							this.loaded.samplers().withoutTranslucents(binding.sampler()))
+					: surface != null && surface.chainWritten()
+							&& this.lodTargets.contains(binding.index());
 
 			// The noise image repeats and everything else clamps, which is Iris's choice and not a
 			// taste: a pack indexes noisetex with coordinates of its own, in texels and well past
