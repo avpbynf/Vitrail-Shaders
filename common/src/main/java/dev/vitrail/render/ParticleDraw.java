@@ -7,7 +7,6 @@ import dev.vitrail.pack.model.AlphaTest;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
-import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.Vitrail;
@@ -101,12 +100,13 @@ public final class ParticleDraw extends FamilyDraw {
 		/**
 		 * What the pack has to be read for to serve this half, in terms the translation knows.
 		 * <p>
-		 * No coverage mask on either half, which {@link ParticleProgram} sets out where it decides
-		 * the same thing for the pass.
+		 * The coverage mask goes on the half drawn before the scene seed and on that one alone,
+		 * which is the entities' rule word for word ({@code EntityDraw.Piece.covers}), and
+		 * {@link ParticleProgram} says what it buys.
 		 */
 		private PackProgram.GeometryElement asked() {
 			return new PackProgram.GeometryElement(this.element, this.program, CUTOUT,
-					VertexInputs.PARTICLE, false);
+					VertexInputs.PARTICLE, !this.afterDeferred);
 		}
 
 		/**
@@ -143,10 +143,6 @@ public final class ParticleDraw extends FamilyDraw {
 	private final ChainPlan plan;
 	private final TargetPlan chainTargets;
 	private final boolean chainRuns;
-
-	/** Whether the game's finished frame is painted in under the chain, which the opaque half rides
-	 * on and the translucent one does not. */
-	private final boolean seeded;
 	private final ColorTargets targets;
 
 	/** One program per half the pack serves. Empty until the pack has been read. */
@@ -195,7 +191,7 @@ public final class ParticleDraw extends FamilyDraw {
 
 	ParticleDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
 			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, boolean seeded, ColorTargets targets) {
+			boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
@@ -206,7 +202,6 @@ public final class ParticleDraw extends FamilyDraw {
 		this.plan = plan;
 		this.chainTargets = chainTargets;
 		this.chainRuns = chainRuns;
-		this.seeded = seeded;
 		this.targets = targets;
 	}
 
@@ -625,23 +620,20 @@ public final class ParticleDraw extends FamilyDraw {
 	 * all for the file that serves this half, and what puts a file there is the one list
 	 * {@link ChainPlan#geometry} carries. No place of the corpus is in that case.
 	 * <p>
-	 * Null is a refusal, and the reasons are not the same for the two halves. Both refuse a place
-	 * whose targets are not the size of the screen, one render pass having one render area. The
-	 * OPAQUE half refuses two more, and they are the entities' two, word for word and for the same
-	 * reason: it is drawn before the deferred stage over pixels the scene seed is cut out of, so its
-	 * first output has no road into the pack's picture but the seed, and that road only lands where
-	 * the pack asked if the seed paints the target the program writes first.
+	 * Null is a refusal, and there is one left for both halves alike: a place whose targets are not
+	 * the size of the screen, one render pass having one render area.
+	 * <p>
+	 * <strong>The opaque half used to refuse two more and no longer does, because the coverage mask
+	 * took their reason away.</strong> Both rested on the same premise, that its first output had no
+	 * road into the pack's picture but the scene seed: one refused a place where the seed is off, the
+	 * other a place where the seed paints a target the program does not write first. With the mask
+	 * the half owns draw buffer nought outright and writes the pack's own target, which is what Iris
+	 * does with it and what {@link ParticleProgram} sets out. Kept, they would hand a half back for a
+	 * road it no longer travels; Bliss was the corpus case, its {@code gbuffers_textured_lit} writing
+	 * colortex2 first where the seed paints colortex1.
 	 */
 	private List<ChainPlan.Attachment> writes(Element element, PackProgram.Loaded loaded) {
 		String servedBy = loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
-		if (this.chainRuns && !element.afterDeferred() && !this.seeded) {
-			Vitrail.logger().info("The scene seed is off, and it is the only way the first output of an "
-					+ "opaque particle reaches the pack's picture, so the game keeps its own shader for "
-					+ "that half: served, it would write every other draw buffer and no colour");
-
-			return null;
-		}
-
 		Optional<ChainPlan.Pass> geometry = this.plan.geometryOf(servedBy, element.afterDeferred());
 		if (geometry.isEmpty()) {
 			return List.of();
@@ -652,26 +644,6 @@ public final class ParticleDraw extends FamilyDraw {
 			Vitrail.logger().warn("{} writes targets the pack asked to be scaled, so they cannot share "
 					+ "a pass with the game's own target and the game keeps its own shader for the {} "
 					+ "particles", servedBy, element.afterDeferred() ? "translucent" : "opaque");
-
-			return null;
-		}
-
-		if (element.afterDeferred()) {
-			return pass.attachments();
-		}
-
-		// The plan answers it rather than this file working it out again, and the reason is not
-		// tidiness: the verdicts have to know the same thing, so that a half handed back here is not
-		// counted as filled there. Two readings of one condition would drift, and the drift shows up
-		// as a diagnostic saying a target holds the pack's particles when the game drew them.
-		ChainPlan.Attachment first = pass.attachments().get(0);
-		Optional<ChainPlan.Seed> seed = this.plan.seed();
-		if (!ChainPlan.leadsWithSeed(seed.orElse(null), pass)) {
-			Vitrail.logger().warn("{} writes {} first and the scene seed paints {}, so the first output "
-					+ "of an opaque particle would be carried into a target the pack did not ask for: "
-					+ "the game keeps its own shader for that half", servedBy,
-					TargetName.canonical(first.target()),
-					seed.map(where -> TargetName.canonical(where.target())).orElse("nothing"));
 
 			return null;
 		}

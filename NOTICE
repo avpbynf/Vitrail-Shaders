@@ -356,9 +356,12 @@ GNU Lesser General Public License version 3
   it can hand over as it stands.
 
   common/src/main/java/dev/vitrail/render/ParticleDraw.java draws the game's particles with the
-  pack's programs, and three of its answers are Iris's, read in August 2026. The alpha test of one
-  tenth both particle keys of ShaderKey carry, lines 58 and 59, the game's own particle pipeline
-  declaring no cutout define there is anything to inherit from. The render stage posed over the
+  pack's programs, and four of its answers are Iris's. The alpha test of one
+  tenth both particle keys of ShaderKey carry, lines 94 and 96, the game's own particle pipeline
+  declaring no cutout define there is anything to inherit from. Which draw buffers each half writes
+  into, common/src/main/java/dev/vitrail/render/ParticleProgram.java taking the pack's own declared
+  list for both, as net.irisshaders.iris.pipeline.IrisRenderingPipeline builds every gbuffers
+  framebuffer over that same list, lines 677 and 678. The render stage posed over the
   whole of the particle renderer rather than per half,
   net.irisshaders.iris.mixin.MixinParticleEngine lines 24 to 30. And leaving the game's own shader
   on a layer the table has no key for, which is what an unassigned pipeline gets there,
