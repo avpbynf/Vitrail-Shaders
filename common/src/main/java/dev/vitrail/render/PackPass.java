@@ -298,6 +298,14 @@ final class PackPass {
 		// Filed against the pipeline and not the program, because the pipeline is what the
 		// descriptor walk can see when it has to answer for a name.
 		ShadowCompare.note(this.pipeline, this.path, loaded);
+		// A full screen program shipping a geometry stage on a device that cannot run one: the
+		// compile that follows refuses the pipeline over the varyings that stage was to hand on,
+		// wherever it renames them, and the chain draws the pass without it wherever it does not.
+		// Said here rather than passed over in silence; no pack of the corpus writes one.
+		if (!GeometryStage.note(this.pipeline, this.path, loaded)) {
+			this.notes.add(this.path + " ships a geometry stage and this device cannot run one, so "
+					+ "the pass is drawn without whatever that stage worked out per primitive");
+		}
 
 		noteGaps(declared);
 	}

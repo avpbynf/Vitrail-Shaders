@@ -15,6 +15,17 @@ what the next one holds.
 
 ### Added
 
+- **A pack's geometry stage is drawn.** Some packs put a third shader between the two the engine
+  builds every draw from, and use it to work something out per triangle rather than per corner:
+  how coarse the texture on a block face is, whether a sky quad is the moon or the sun. The engine
+  bound the first and the last and nothing in between, so the last one asked for values nobody had
+  written and the whole program was turned away: on iterationT that took the terrain and the moon
+  out of the picture entirely. Those programs now draw.
+
+  It needs a card that can run such a shader, which the desktop cards do and Apple's do not. Where
+  there is none the log names the program, and the world keeps the game's own shader for it rather
+  than drawing it with its middle missing.
+
 - **A pack may now blend one of a pass's targets differently from the others.** A shader pack can
   ask for a blend function per target rather than one for the whole program, and the engine read
   those lines and then dropped them the moment two targets of one pass disagreed, putting the

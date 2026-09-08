@@ -938,8 +938,11 @@ public final class GlslTranslator {
 		 * <p>
 		 * Between the vertex stage and the fragment stage and no further. Iris carries the colour
 		 * through a tessellation or geometry stage as well
-		 * ({@code pipeline/transform/transformer/EntityPatcher.java:63-106}); no program of the corpus
-		 * has either, and {@link #FOG_COORD} stops at the same place for the same reason.
+		 * ({@code pipeline/transform/transformer/EntityPatcher.java:63-106}); no entity program of
+		 * the corpus ships either, iterationT's two geometry stages being its terrain and its sky,
+		 * and {@link #FOG_COORD} stops at the same place for the same reason. One that did would be
+		 * refused by the game's own pairing, the fragment stage declaring a colour the stage before
+		 * it never wrote, rather than drawn without it.
 		 */
 		public void makesOverlayColour(Set<String> varyings) {
 			if (this.translator.entityWrapped && varyings.contains(ENTITY_COLOR)) {
@@ -2243,8 +2246,9 @@ public final class GlslTranslator {
 
 			if (name.equals("varying")) {
 				// A geometry shader has varyings running both ways and the keyword cannot say
-				// which. Every other stage is unambiguous, and the corpus has few enough geometry
-				// programs that guessing wrong here is visible rather than silent.
+				// which, so this guesses in. Every other stage is unambiguous, and the keyword
+				// belongs to a GLSL older than the one that has a geometry stage at all, so a
+				// pack that writes both is writing something no compiler accepted either.
 				this.tokens.replace(index, this.stage == ProgramStage.VERTEX ? "out" : "in");
 				continue;
 			}
@@ -3888,9 +3892,11 @@ public final class GlslTranslator {
 	 * <p>
 	 * The depth conversion is for vertex stages only. A geometry stage writes {@code gl_Position}
 	 * once per {@code EmitVertex}, so an epilogue would land in the wrong place, and a program
-	 * carrying both would have the conversion done before the geometry stage read the position back.
-	 * The corpus has no geometry stage at all; the day one appears, {@link #prepare} has to be told
-	 * the program has one.
+	 * carrying both has the conversion done before the geometry stage reads the position back.
+	 * The corpus writes one geometry stage, iterationT's, and it passes
+	 * {@code gl_in[i].gl_Position} through untouched, so the converted depth reaches the rasteriser
+	 * as this engine wants it. A stage that did arithmetic on the depth it reads back would be
+	 * working in the reversed volume rather than the OpenGL one the pack was written against.
 	 * <p>
 	 * A fragment stage is wrapped for two reasons, the alpha test and the coverage mask, decided in
 	 * {@link #planAlphaEpilogue} and {@link #planCoverage}. The same wrapping argument holds and the

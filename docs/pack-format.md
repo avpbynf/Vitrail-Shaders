@@ -265,7 +265,7 @@ never the player's setting, and the safe zone reads neither, its two boxes being
 throughout.
 
 The same first line also drops the sweep when the shadow program voxelises. A geometry stage on
-that program is enough, even when this engine never binds it, and so is an image load / store that
+that program is enough, as it is in the reference, and so is an image load / store that
 the preprocessor left standing. That second half is this engine's alone: the reference has a
 `setUsesImages` for it and calls it from nowhere, so an image load / store decides nothing there.
 A name gated off does not count.

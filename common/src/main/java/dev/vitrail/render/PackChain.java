@@ -1209,6 +1209,7 @@ public final class PackChain {
 		DistantDraw.close();
 		ConstantTextures.close();
 		ShadowCompare.close();
+		GeometryStage.close();
 	}
 
 	/**

@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vulkan.VulkanPhysicalDevice;
 import com.mojang.blaze3d.vulkan.init.VulkanFeature;
 import dev.vitrail.glsl.VendorExtensions;
 import dev.vitrail.render.BufferBlending;
+import dev.vitrail.render.GeometryStage;
 import dev.vitrail.Vitrail;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VK12;
@@ -41,6 +42,12 @@ import java.util.Set;
  * pipeline, the refusal and the symbol all read. The other half is the game's own pipeline builder,
  * which refuses two colour targets naming different functions whatever the device can do, and
  * {@code RenderPipelineBuilderMixin} lifts on this same answer.
+ * <p>
+ * And {@code geometryShader}, for the stage a pack ships between its two. OpenGL asks the driver
+ * for nothing there, so Iris links a {@code .gsh} on any card; Vulkan makes it a feature, and the
+ * game has no geometry stage to ask for it. Answered on to {@link GeometryStage}, which files
+ * nothing on a device that refused it, leaving such a program refused rather than drawn with its
+ * middle stage missing.
  */
 @Mixin(VulkanBackend.class)
 public abstract class VulkanBackendMixin {
@@ -124,6 +131,14 @@ public abstract class VulkanBackendMixin {
 			VulkanBackend.VK12_FEATURES_STRUCT, "uniformAndStorageBuffer8BitAccess",
 			VkPhysicalDeviceVulkan12Features.UNIFORMANDSTORAGEBUFFER8BITACCESS);
 
+	// The stage a pack puts between its vertex and its fragment stage. Iris links a .gsh whenever
+	// the pack ships one and OpenGL asks nothing of the driver for it; Vulkan makes it an optional
+	// feature, and the game, which has no geometry stage of its own, never asks for it.
+	@Unique
+	private static final VulkanFeature GEOMETRY_SHADER = new VulkanFeature(
+			VulkanBackend.VK10_FEATURES_STRUCT, "geometryShader",
+			VkPhysicalDeviceFeatures.GEOMETRYSHADER);
+
 	@Unique
 	private static final String VOXELS = "voxel lighting will not write";
 
@@ -137,6 +152,10 @@ public abstract class VulkanBackendMixin {
 	@Unique
 	private static final String PER_BUFFER = "a pack requiring PER_BUFFER_BLENDING is refused and "
 			+ "every other one keeps a single blend function for all the targets a pass writes";
+
+	@Unique
+	private static final String GEOMETRY = "a program shipping a geometry stage is refused, its "
+			+ "fragment stage asking for varyings that stage renames";
 
 	@WrapOperation(method = "createDevice(JLcom/mojang/blaze3d/shaders/ShaderSource;"
 			+ "Lcom/mojang/blaze3d/shaders/GpuDebugOptions;Ljava/lang/Runnable;)"
@@ -154,6 +173,7 @@ public abstract class VulkanBackendMixin {
 		enable(physical, features, EXTENDED_FORMATS, enabled, VOXELS);
 		enable(physical, features, WRITE_WITHOUT_FORMAT, enabled, VOXELS);
 		BufferBlending.serve(enable(physical, features, INDEPENDENT_BLEND, enabled, PER_BUFFER));
+		GeometryStage.serve(enable(physical, features, GEOMETRY_SHADER, enabled, GEOMETRY));
 		// The vendor extensions a pack may gate a vendor instruction on, answered by the device
 		// and not by the compiler, which defines the macro of every one it knows; the ones the
 		// device has are enabled on it here, since a module using one needs it enabled.
