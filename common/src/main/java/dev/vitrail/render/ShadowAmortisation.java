@@ -140,6 +140,8 @@ public final class ShadowAmortisation {
 
 	private static boolean drewSinceBegin;
 
+	private static boolean missedLastPlan;
+
 	private static boolean saidRefused;
 
 	private static int countedFrames;
@@ -166,6 +168,17 @@ public final class ShadowAmortisation {
 		// turned down), and on those frames the map is older than the plan says. The anchor has to
 		// follow the map and never the intention, or the pack would be handed matrices for a map
 		// that was never drawn.
+		// Read before the line below clears drewSinceBegin, which is the binding constraint, and
+		// before the plan is overwritten at the foot of this method. Answered rather than reported
+		// from here: this class is one of the few of render/ the off-game harness compiles, and the
+		// census it would call drags the game in with it.
+		//
+		// Guarded on seeded, which is what tells a real miss from the two states where the plan
+		// says DRAW forever and nothing is wrong: the first frame after a load, and a pack that
+		// keeps the opaque world out of its map, whose stage never reaches drawn() at all
+		// (ShadowTerrain.java:364).
+		missedLastPlan = seeded && drawThisFrame && !drewSinceBegin;
+
 		drewLastFrame = drewSinceBegin;
 		drewSinceBegin = false;
 		// Counted here rather than by the stage: what the interval counts is frames since the map
@@ -202,6 +215,33 @@ public final class ShadowAmortisation {
 				|| Math.abs(shadowAngle - anchorAngle) >= ANGLE_TURNS;
 
 		return drewLastFrame;
+	}
+
+	/**
+	 * Whether the frame before this one meant to draw the map and the stage did not, settled by the
+	 * last {@link #beginFrame} and read once by the census.
+	 * <p>
+	 * <strong>Not the same thing as a frame that reused the map.</strong> A reuse is the player's
+	 * own setting doing its work and the anchor follows it. This is the stage giving up on a frame
+	 * the rest of the engine believed it had served, no chain, no device, an OpenGL boot: what the
+	 * sampling passes are handed is then corrected for a shorter walk than the camera actually
+	 * made.
+	 * <p>
+	 * <strong>And not a pack that declares no terrain caster either.</strong> That pack's stage
+	 * never reaches {@link #drawn()}, so the plan says DRAW on every frame of it and nothing is
+	 * wrong. {@link #seeded} separates the two: false until the map has really been filled once,
+	 * and false again after every {@link #forget()}, which is a pack load AND every world or
+	 * dimension change.
+	 * <p>
+	 * <strong>The price of that guard is what it cannot see.</strong> While nothing has been drawn
+	 * yet, a real failure is not counted either, and a stage that never draws at all reads zero
+	 * here for the whole session. That window closes at the first frame the stage really fills the
+	 * map, so what survives it is the intermittent failure and not the permanent one, which is the
+	 * one worth a number: a stage that never draws is loud elsewhere, a stage that skips one frame
+	 * in a thousand is silent everywhere else.
+	 */
+	public static boolean missedLastPlan() {
+		return missedLastPlan;
 	}
 
 	/**

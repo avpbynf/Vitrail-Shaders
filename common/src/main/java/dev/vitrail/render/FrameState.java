@@ -4,6 +4,7 @@ import dev.vitrail.dh.DhDepth;
 import dev.vitrail.pack.id.NameIds;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.target.PackDirectives;
+import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.values.FrameSmoothed;
 import dev.vitrail.uniform.WorldState;
@@ -523,6 +524,9 @@ public final class FrameState implements WorldState {
 		float shadowAngle = sunAngle(isDay()) / 360.0F;
 		boolean drewLastFrame = ShadowAmortisation.beginFrame(this.shift.unshifted(), shadowAngle,
 				TerrainDraw.shadowAmortisable());
+		// Counted where the decision is read rather than where it is made, so one frame is counted
+		// once and only a frame that reached the decision counts at all.
+		PassTimings.shadowMap(ShadowAmortisation.missedLastPlan());
 
 		this.view.advanceShadow(shadowAngle, this.directives.sunPathRotation(),
 				this.directives.shadowIntervalSize(), this.shift.unshifted(),

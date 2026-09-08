@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -191,13 +192,105 @@ public final class PassTimings {
 	 * Counted here rather than read off an overlay or asked of a JVM flag, and that is the whole
 	 * point: the two things this class measures are armed by a file beside the pack, so a session
 	 * with no way into the launcher and no way to read the screen can still say whether a change
-	 * bought anything. Every frame pays one increment for it, armed or not.
+	 * bought anything. Every frame pays for it whether or not anything is armed, which is one
+	 * increment here, one clock reading and one array write for the spread below. A window that
+	 * only began filling when a reading was asked for would have nothing to say on its first pass,
+	 * which is the pass somebody takes.
 	 */
 	private static long censusFrames;
 
 	private static long censusFramesAt;
 
+	/**
+	 * How long each frame of the window took, so the rate above can be read beside its spread.
+	 * <p>
+	 * <strong>An average frame rate cannot say whether a frame arrives on time</strong>, and that is
+	 * the one question a player asks with their eyes rather than with a counter: three hundred
+	 * frames a second that arrive in bursts look worse than a hundred and forty-four that arrive
+	 * evenly, and both read as a flattering number. The window holds the last few thousand
+	 * intervals, which is several seconds of play at any rate worth measuring, and the oldest fall
+	 * off the end rather than being counted twice.
+	 * <p>
+	 * <strong>It rolls and is never emptied at a report</strong>, which is what lets the two
+	 * instruments that print it, the pack census and the timed report, each read it without taking
+	 * the other's window away. It IS emptied at a pack load, so one pack's spread is never read off
+	 * the frames of the one before it, and the interval that spans the load itself is dropped with
+	 * it rather than standing as the worst frame of the next few thousand readings.
+	 * <p>
+	 * <strong>Other stalls inside a session are recorded and are meant to be.</strong> A world
+	 * join, a resource reload, a window that came back from being minimised: each lands as one very
+	 * long interval and shows up as the worst frame until it rolls off. That is what a worst frame
+	 * is for, and it is also why the first readings after any of those are not a reading of play.
+	 * <p>
+	 * <strong>The rate line printed beside it does NOT drop the load</strong>, and that asymmetry
+	 * is deliberate rather than an oversight: {@code printRate} names its first reading as one that
+	 * reaches back to the world being built, and a mean survives one long sample where a percentile
+	 * does not. A single multi-second interval left in this ring is the worst frame and the late
+	 * count of every reading for the next few thousand.
+	 * <p>
+	 * <strong>Written from the render thread and cleared from the pack load, without a fence.</strong>
+	 * That holds because the two callers of the clear are not frames, one at client setup before
+	 * any level renders and one on the render thread itself, which is the same reliance the rest of
+	 * this census already rests on.
+	 */
+	private static final long[] censusIntervals = new long[4096];
+
+	/**
+	 * Where the next interval goes, and how many of the ring are worth reading. A pair rather than
+	 * one counter that only grows: a monotonic count of frames overflows its int after a few months
+	 * of continuous play, and what it would do then is index the array negatively.
+	 */
+	private static int censusIntervalsAt;
+
+	private static int censusIntervalsHeld;
+
+	/** When the last frame ended, zero while the next interval has nothing to measure from. */
+	private static long lastFrameAt;
+
+	/**
+	 * Frames since the pack loaded whose shadow map was older than the frame that planned it, and
+	 * frames since then that reached the decision at all.
+	 * <p>
+	 * <strong>This is not a count of frames that reused the map</strong>, which is what the player's
+	 * own reuse setting asks for and is a saving rather than a defect. It counts the frames where
+	 * the decision said DRAW and the stage did not, after the map had already been filled at least
+	 * once. On those the map on hand is older than the correction every sampling pass was handed,
+	 * and that difference is a distance the player walked.
+	 * <p>
+	 * <strong>So it reports an INTERMITTENT give-up and never a permanent one.</strong> A session
+	 * where the stage never draws at all, no chain, no device, an OpenGL boot, reads zero here and
+	 * is not what this is for: no map is ever handed to anybody, and the log says so where the
+	 * stage refuses. What it is for is the frame that fails between frames that worked, which is
+	 * the shape of a light that walks with the camera and of nothing else.
+	 * <p>
+	 * It reads zero in a healthy session whatever the reuse setting is worth, and that is what
+	 * makes a number here worth printing at all;
+	 * {@link dev.vitrail.render.ShadowAmortisation#missedLastPlan()} carries the guard that keeps
+	 * it so.
+	 * <p>
+	 * <strong>The two lines print different populations, and their words say so.</strong> This one
+	 * counts frames a PACK drew, since it is fed from the pack's own frame setup, and its window is
+	 * the pack's life, the chain being torn down at a pack load. The spread above counts every
+	 * frame the world renderer ended, menus and loading among them, over a rolling ring.
+	 */
+	private static long censusFramesMissingMap;
+
+	private static long censusFramesDecidingMap;
+
 	private PassTimings() {
+	}
+
+	/**
+	 * Said once a frame by the one place that settles whether the shadow map is drawn, and only
+	 * from a frame that reached that decision.
+	 *
+	 * @param missed whether the frame before this one planned to draw the map and did not
+	 */
+	public static void shadowMap(boolean missed) {
+		censusFramesDecidingMap++;
+		if (missed) {
+			censusFramesMissingMap++;
+		}
 	}
 
 	/**
@@ -272,6 +365,13 @@ public final class PassTimings {
 		censusFarSections = 0;
 		censusSubmits = 0;
 		lastCensus = 0L;
+		// The interval that spans a pack load is the load itself, seconds of it, and left in the
+		// window it would be the worst frame of the next reading and a late frame in its count.
+		lastFrameAt = 0L;
+		censusIntervalsAt = 0;
+		censusIntervalsHeld = 0;
+		censusFramesMissingMap = 0;
+		censusFramesDecidingMap = 0;
 		// Read again, so an arming file written or changed while the game runs is picked up by the
 		// next pack load rather than by the next launch.
 		censusSeconds = -1;
@@ -490,9 +590,20 @@ public final class PassTimings {
 	 */
 	public static void endFrame() {
 		censusFrames++;
+		long frameAt = System.nanoTime();
 		if (censusFramesAt == 0L) {
-			censusFramesAt = System.nanoTime();
+			censusFramesAt = frameAt;
 		}
+
+		if (lastFrameAt != 0L) {
+			censusIntervals[censusIntervalsAt] = frameAt - lastFrameAt;
+			censusIntervalsAt = (censusIntervalsAt + 1) % censusIntervals.length;
+			if (censusIntervalsHeld < censusIntervals.length) {
+				censusIntervalsHeld++;
+			}
+		}
+
+		lastFrameAt = frameAt;
 
 		if (censusComplete && !censusPrinted) {
 			printCensus();
@@ -580,10 +691,81 @@ public final class PassTimings {
 					String.format(Locale.ROOT, "%.1f", censusFrames / seconds),
 					String.format(Locale.ROOT, "%.1f", seconds),
 					String.format(Locale.ROOT, "%.2f", seconds * 1000 / censusFrames));
+			// Left to the timed report when that one is armed, or one frame carries both and the
+			// same two lines print twice off the same state, which reads as two windows.
+			if (!ENABLED) {
+				printSpread();
+				printMissedMaps();
+			}
 		}
 
 		censusFrames = 0;
 		censusFramesAt = now;
+	}
+
+	/**
+	 * The middle frame of the window, the late one in a hundred, and the worst, all in milliseconds.
+	 * <p>
+	 * <strong>Read the gap between the first and the last two, not the numbers.</strong> A frame
+	 * that is smooth to look at has all three close together whatever they are worth, and the eye
+	 * follows the third: one frame in a hundred taking six times the middle one is a stutter a
+	 * player sees and an average frame rate cannot report. The last count is the same thing said
+	 * plainly, a frame being late here meaning it took more than twice the middle one. The window
+	 * is the rolling ring, several seconds of play, and not the interval between two reports.
+	 * <p>
+	 * Silent under two hundred frames. A hundred and one is where the arithmetic stops lying, the
+	 * ninety-ninth index and the last coinciding at exactly a hundred so the line would print one
+	 * figure twice and read as a frame whose worst case is its own tail; two hundred is a margin on
+	 * top of that and is a choice, not a necessity. What it buys is that a one second reading at
+	 * sixty frames a second, which is exactly the reading somebody takes first, says nothing rather
+	 * than saying something built on a handful of samples.
+	 */
+	private static void printSpread() {
+		int held = censusIntervalsHeld;
+		if (held < 200) {
+			return;
+		}
+
+		long[] sorted = new long[held];
+		System.arraycopy(censusIntervals, 0, sorted, 0, held);
+		Arrays.sort(sorted);
+
+		long median = sorted[held / 2];
+		long late = median * 2;
+		int lateFrames = 0;
+		for (long interval : sorted) {
+			if (interval > late) {
+				lateFrames++;
+			}
+		}
+
+		Vitrail.logger().info("  middle frame {} ms, one in a hundred over {} ms, worst {} ms, "
+						+ "{} of the last {} frames late",
+				wallMillis(median), wallMillis(sorted[(int) (held * 0.99)]),
+				wallMillis(sorted[held - 1]), lateFrames, held);
+	}
+
+	/**
+	 * How many frames since the pack loaded read a shadow map older than the frame that planned to
+	 * draw it. A different window from the spread above, and the line says so rather than leaving
+	 * two totals side by side to be read as one.
+	 * <p>
+	 * Silent at zero, which is what it reads in a healthy session, and that silence is the point: a
+	 * line here says the stage gave up on frames the rest of the engine believed it had served, so
+	 * what every sampling pass was handed is corrected for a shorter walk than the camera made.
+	 */
+	private static void printMissedMaps() {
+		if (censusFramesMissingMap == 0) {
+			return;
+		}
+
+		Vitrail.logger().info("  {} of {} frames this pack drew read a shadow map the frame that "
+				+ "planned it never drew", censusFramesMissingMap, censusFramesDecidingMap);
+	}
+
+	/** Wall-clock nanoseconds, where {@link #millis(long, double)} converts the card's ticks. */
+	private static String wallMillis(long nanos) {
+		return String.format(Locale.ROOT, "%.2f", nanos / 1_000_000.0);
 	}
 
 	/**
@@ -706,6 +888,11 @@ public final class PassTimings {
 						framesDropped, framesOverflowed, PASSES_PER_FRAME);
 			}
 		}
+
+		// Outside the branch above, because how evenly the frames arrived is a reading of the wall
+		// clock and does not need the card to have answered a single query.
+		printSpread();
+		printMissedMaps();
 
 		rows.clear();
 		framesSummed = 0;
