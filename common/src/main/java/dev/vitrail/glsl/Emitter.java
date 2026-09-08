@@ -193,15 +193,50 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		//
 		// The level of detail is dropped, which is what a comparison sampler with no mipmaps would
 		// have done with it anyway: nothing ever fills a chain on the shadow map.
+		//
+		// An OFFSET is not dropped, and that is the difference between the two. A pack taps the
+		// neighbourhood of a texel through offsets, so an offset left out would take the same tap
+		// over and over and hand back a shadow with no filtering in it, which on screen looks
+		// exactly like one that has it. RenderPearl is the pack that asks: its shadow compute reads
+		// the map as textureLodOffset, a name the arithmetic road used to leave standing over a
+		// declaration it had already rewritten to an ordinary sampler, so the unit did not compile
+		// and the compute never ran.
+		//
+		// It is carried in the COORDINATE and not in a textureGatherOffset, which would be the
+		// natural spelling and asks for a feature nothing here requests: an offset that is a
+		// function parameter is not a constant expression, so that call lowers to an Offset operand
+		// and needs the ImageGatherExtended capability, which this device does not even enable.
+		// The weights are taken off the SHIFTED coordinate, so the arithmetic below is the same
+		// arithmetic at every offset, and at an offset of nought it is the plain gather this
+		// printed before down to the last operation.
+		//
+		// What it does not close is the disagreement this helper was born with: the texture unit
+		// picks its four texels off a coordinate it has quantised to its own subtexel bits, and the
+		// fract beside it is computed at full precision, so a coordinate sitting exactly on a texel
+		// boundary can be rounded the two ways. That is true of the offsetless form as it stands on
+		// dev and the offset neither widens it nor repairs it.
 		if (this.softRewrites > 0) {
-			lines.add("float " + GlslTranslator.SHADOW_COMPARE + "(sampler2D ofMap, vec3 ofAt) {"
-					+ " vec4 ofTests = step(vec4(ofAt.z), textureGather(ofMap, ofAt.xy, 0));"
-					+ " vec2 ofPart = fract(ofAt.xy * vec2(textureSize(ofMap, 0)) - 0.5);"
+			lines.add("float " + GlslTranslator.SHADOW_COMPARE
+					+ "(sampler2D ofMap, vec3 ofAt, ivec2 ofOffset) {"
+					+ " vec2 ofSize = vec2(textureSize(ofMap, 0));"
+					+ " vec2 ofUv = ofAt.xy + vec2(ofOffset) / ofSize;"
+					+ " vec4 ofTests = step(vec4(ofAt.z), textureGather(ofMap, ofUv, 0));"
+					+ " vec2 ofPart = fract(ofUv * ofSize - 0.5);"
 					+ " return mix(mix(ofTests.w, ofTests.z, ofPart.x),"
 					+ " mix(ofTests.x, ofTests.y, ofPart.x), ofPart.y); }");
+			lines.add("float " + GlslTranslator.SHADOW_COMPARE + "(sampler2D ofMap, vec3 ofAt) {"
+					+ " return " + GlslTranslator.SHADOW_COMPARE + "(ofMap, ofAt, ivec2(0)); }");
 			lines.add("float " + GlslTranslator.SHADOW_COMPARE
 					+ "(sampler2D ofMap, vec3 ofAt, float ofLod) {"
-					+ " return " + GlslTranslator.SHADOW_COMPARE + "(ofMap, ofAt); }");
+					+ " return " + GlslTranslator.SHADOW_COMPARE + "(ofMap, ofAt, ivec2(0)); }");
+			lines.add("float " + GlslTranslator.SHADOW_COMPARE
+					+ "(sampler2D ofMap, vec3 ofAt, float ofLod, ivec2 ofOffset) {"
+					+ " return " + GlslTranslator.SHADOW_COMPARE + "(ofMap, ofAt, ofOffset); }");
+			// The bias form of the offset lookup, which a fragment stage may write and which takes
+			// its two trailing arguments the other way round.
+			lines.add("float " + GlslTranslator.SHADOW_COMPARE
+					+ "(sampler2D ofMap, vec3 ofAt, ivec2 ofOffset, float ofBias) {"
+					+ " return " + GlslTranslator.SHADOW_COMPARE + "(ofMap, ofAt, ofOffset); }");
 		}
 
 		// One overload per shape the builtins take, and no driver sine anywhere in it. The turn

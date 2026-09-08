@@ -183,6 +183,17 @@ public final class GlslTranslator {
 	static final String SHADOW_COMPARE = "ofShadowCompare";
 
 	/**
+	 * The lookups the arithmetic road takes over, {@link #SHADOW_COMPARE} carrying an overload for
+	 * every shape each of them can be written in, the bias forms included.
+	 * <p>
+	 * A projective or a gathered comparison is not among them and is counted instead: what those
+	 * need is a different expression and not a different name, a projective one dividing before it
+	 * compares and a gather answering four results rather than one.
+	 */
+	private static final Set<String> COMPARABLE_LOOKUPS = Set.of("texture", "textureLod",
+			"textureOffset", "textureLodOffset");
+
+	/**
 	 * Whether every comparison goes back to the arithmetic of {@link #SHADOW_COMPARE} instead of
 	 * staying on the sampler. The hardware road cannot be watched from inside: a comparison bound
 	 * wrong does not fail, it hands back a fraction of the wrong thing, and the picture stays
@@ -2816,15 +2827,18 @@ public final class GlslTranslator {
 		}
 
 		String name = this.tokens.get(index).text();
-		if (!name.equals("texture") && !name.equals("textureLod")) {
+		if (!COMPARABLE_LOOKUPS.contains(name)) {
 			this.unwrappedShadowCalls++;
 
 			return true;
 		}
 
 		// The name alone: the arguments of texture(sampler, vec3) are the arguments the comparison
-		// takes, so nothing has to be found or balanced. textureLod carries a level this ignores,
-		// which is what a comparison sampler with no mipmaps would have done anyway.
+		// takes, so nothing has to be found or balanced, and the same holds of the other three
+		// shapes because the helper is written with an overload for each. A level is ignored, which
+		// is what a comparison sampler with no mipmaps would have done with it anyway; an OFFSET
+		// is not, and dropping one would turn a pack's neighbourhood of taps into the same tap
+		// taken over and over, which is a shadow with no filtering and looks like one that has it.
 		this.tokens.replace(index, SHADOW_COMPARE);
 		this.softRewrites++;
 
