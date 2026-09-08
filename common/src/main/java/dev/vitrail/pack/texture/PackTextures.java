@@ -308,6 +308,16 @@ public final class PackTextures {
 			notes.add(path + " is a volume of " + raw.orElseThrow().pixelFormat() + " "
 					+ raw.orElseThrow().pixelType() + ", which is not laid out flat here, so " + sampler
 					+ " stays a sampler3D and no program declaring it can be built");
+		} else if (raw.filter(RawImage::serves).isPresent()) {
+			// The plain case, measured the same way and for the same reason. The declaration IS the
+			// size here, so there is nothing to work out: what is asked is only whether a device
+			// would take it.
+			RawImage image = RawImage.of(raw.orElseThrow());
+			if (!image.fits()) {
+				refused.add(new Refused(key, value, path + " is declared " + image.width() + "x"
+						+ image.height() + ", which is past what a texture can be", stage, sampler));
+				return;
+			}
 		}
 
 		supplied.add(texture);
