@@ -19,11 +19,14 @@ what the next one holds.
   of numbers rather than a picture, a table their shaders read in three directions: an atmosphere
   sampled by height, by sun angle and by view angle, a noise field a cloud is carved out of. The
   engine laid out the small ones and turned away any table written in full precision numbers, and
-  it read no pack file over eight megabytes at all, a limit meant for shader text. A pack whose
-  table was either lost every program that read it: on iterationT that was nineteen of the passes
-  it draws the overworld with, which left the bare picture on screen with none of its sky, its
-  clouds or its water put in. Such a table is now read to the length its own declaration announces,
-  however long the file is, and at the precision the pack wrote it.
+  it read no pack file over eight megabytes at all, a limit meant for shader text. It also read
+  such a table only where the shader asked for it in the plainest of the two ways GLSL offers, and
+  a program that asked the other way was turned away with its table sitting ready in memory. A pack
+  hitting any of the three lost every program that read the table: on iterationT that was every
+  pass it draws the overworld with bar a handful, which left the bare picture on screen with none
+  of its sky, its clouds or its water put in. Such a table is now read to the length its own
+  declaration announces, however long the file is, at the precision the pack wrote it, and through
+  either way of asking.
 
   Where a card cannot blend between two of those values, Apple's among them, the table is read at
   its nearest entry instead and the log says so.

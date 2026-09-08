@@ -38,6 +38,13 @@ final class VolumeFlattening {
 	/** The number of arguments {@link GlslTranslator#LOOKUP} takes where it reads a volume. */
 	private static final int LOOKUP_ARGUMENTS = 2;
 
+	/**
+	 * The same with a level or a bias behind it, which is how iterationT reads all three of its
+	 * volumes: {@code textureLod(colortex8, uvw, 0.0)}. An atlas carries one level, so what that
+	 * third argument asks for is what it gets whatever it says.
+	 */
+	private static final int LEVELLED_ARGUMENTS = 3;
+
 	private final TokenStream tokens;
 	private final ExpandedUnit unit;
 
@@ -103,10 +110,12 @@ final class VolumeFlattening {
 	 * out, and that file is what every one of those declarations was going to read.
 	 * <p>
 	 * Nothing is moved unless everything can be. A name this unit reaches any other way than as
-	 * {@code texture(name, vec3)}, the name being the declared one or a macro the unit defines as
-	 * exactly that name, is counted and left exactly as it stands, declaration included, so the
-	 * program stays refused with the message it had. There is no site in the corpus like that, and
-	 * the count is what would say one had appeared.
+	 * {@code texture(name, vec3)} or {@code textureLod(name, vec3, level)}, the name being the
+	 * declared one or a macro the unit defines as exactly that name, is counted and left exactly as
+	 * it stands, declaration included, so the program stays refused with the message it had. The
+	 * levelled form is not a nicety: iterationT writes every one of its reads that way, and reading
+	 * only the plain one left five of its passes refused while all three of its volumes were laid
+	 * out and uploaded.
 	 */
 	void flatten() {
 		if (this.volumes.isEmpty()) {
@@ -240,9 +249,12 @@ final class VolumeFlattening {
 	}
 
 	/**
-	 * The {@code texture} this name is the first argument of, or -1 when it is reached any other
-	 * way. The argument count is checked as well as the name: {@code texture(s, p, bias)} compiles
-	 * and means something else, and the helper takes two.
+	 * The lookup this name is the first argument of, or -1 when it is reached any other way.
+	 * <p>
+	 * The argument count is checked as well as the name, and both counts are served because the
+	 * helper is emitted twice over: a level or a bias asks for something an atlas of one level
+	 * answers the same way, where a fourth argument is an offset in texels of a volume this has
+	 * laid out flat and could not honour.
 	 */
 	private int plainLookup(int index) {
 		int open = this.tokens.significantBefore(index);
@@ -251,13 +263,19 @@ final class VolumeFlattening {
 		}
 
 		int callee = this.tokens.significantBefore(open);
-		if (callee < 0 || !this.tokens.get(callee).identifier(GlslTranslator.LOOKUP)) {
+		if (callee < 0 || !(this.tokens.get(callee).identifier(GlslTranslator.LOOKUP)
+				|| this.tokens.get(callee).identifier(GlslTranslator.LEVELLED_LOOKUP))) {
 			return -1;
 		}
 
 		int close = this.tokens.matchingBracket(open);
+		if (close < 0) {
+			return -1;
+		}
 
-		return close >= 0 && arguments(open, close) == LOOKUP_ARGUMENTS ? callee : -1;
+		int arguments = arguments(open, close);
+
+		return arguments == LOOKUP_ARGUMENTS || arguments == LEVELLED_ARGUMENTS ? callee : -1;
 	}
 
 	/** How many arguments a call holds, counting the commas that belong to it and not to a nested one. */
@@ -329,6 +347,15 @@ final class VolumeFlattening {
 		lines.add("\tvec2 ofB = (vec2(ofFar % " + tiles + ", ofFar / " + tiles
 				+ ") * ofTile + ofIn) / ofSize;");
 		lines.add("\treturn mix(texture(ofMap, ofA), texture(ofMap, ofB), clamp(ofZ - ofBase, 0.0, 1.0));");
+		lines.add("}");
+
+		// The levelled form, which is what every read of iterationT's three volumes is written as.
+		// It drops the level rather than passing it on, and that is exact rather than a shortcut:
+		// the atlas is allocated with one level, so the only level any of these reads could ever
+		// have landed on is the one this reads. A bias behind texture() arrives here too, and a
+		// bias on a texture with no chain is worth exactly as much.
+		lines.add("vec4 " + VOLUME_LOOKUP + name + "(sampler2D ofMap, vec3 ofAt, float ofLevel) {");
+		lines.add("\treturn " + VOLUME_LOOKUP + name + "(ofMap, ofAt);");
 		lines.add("}");
 
 		return lines;
