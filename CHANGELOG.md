@@ -150,6 +150,24 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack that paints its picture with compute shaders draws it.** A few packs do their whole
+  post-processing in compute programs rather than in full screen passes, and store the finished
+  frame into a colour buffer of their own. The engine only ever opened a colour buffer for what a
+  drawing program painted into or read from, so the buffer such a pack hands the screen was never
+  opened at all: the program holding the picture was dropped on every frame and what stayed on
+  screen was the flat colour the game had cleared it to. RenderPearl was a blue screen from end to
+  end for this. Those buffers are opened now, on the strength of the program that writes them,
+  which is what the engine packs are tuned against does.
+
+  Two more things stood between that pack and its picture. It ships two of its lookup tables as
+  plain blocks of numbers rather than pictures, and the engine read a block of numbers only where
+  it was a three dimensional table, so the program reading them found nothing under the name and
+  was dropped; those are read now. And where the engine has to compare shadow depths in arithmetic
+  rather than on the sampler, it only knew the two plainest ways a shader asks for the comparison,
+  so a pack asking any other way did not compile at all: it now knows the forms that carry an
+  offset as well, the offset being how a pack samples the neighbourhood of a texel for a soft
+  edge, and it is carried through rather than dropped.
+
 - **A pack asking for a hard shadow edge gets one.** A shader pack can say that its shadow map is
   to be read without smoothing, and the engine listed those lines among the pack's settings and
   then bound the map smoothed anyway, so a pack written for a hard, stepped shadow came out soft.

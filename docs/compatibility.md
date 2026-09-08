@@ -448,7 +448,9 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   Mellow does with its noise and Photon with its atmosphere table. Since the backend refuses a
   declared three-dimensional sampler, the volume is laid flat onto a two-dimensional atlas and
   reads are rewritten to interpolate two slices, whether the volume repeats or clamps and whether
-  it holds unsigned bytes, unsigned shorts or half floats a channel.
+  it holds unsigned bytes, unsigned shorts or floats of either width a channel. A blob that is a
+  plain two-dimensional table, as RenderPearl's edge-blending tables are, is uploaded at the size
+  the declaration gives.
 - **A pack can ask for an unusual shadow buffer format.** Mellow asks for a single-channel one,
   which is why the shadow pipeline's colour state is built from the attachment rather than
   hardcoded.

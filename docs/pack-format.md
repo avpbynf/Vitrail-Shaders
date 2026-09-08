@@ -458,6 +458,16 @@ pixel type follows on the line. Two things take nothing: a key this cannot read 
 naming a file the pack does not ship, which the reference drops whole so that the name goes on
 meaning what it meant.
 
+**A two-dimensional blob is uploaded as it stands.** A pack may ship a lookup table as a block of
+numbers with no header rather than as a picture, and the declaration beside it is the whole of the
+description: RenderPearl's two edge-blending tables are one, an area table of two channels and a
+search table of one. Nothing is tiled and there is no margin, the coordinates being the ones the
+declaration gives; the channels are widened to the four the engine allocates, a channel the file has
+not got reading nought and a missing alpha reading one, which is what a texture short of channels
+answers. The file is read to the declared length, like a volume's. A blob declared one-dimensional or as a rectangle is
+not uploaded, the log saying so and the sampler reading one black pixel: those are read through
+samplers this backend does not bind, and no pack at hand declares either.
+
 **A three-dimensional volume is flattened onto a two-dimensional atlas**, its declaration rewritten
 under a forged name, and each read replaced by a helper that reads two slices and interpolates.
 What forces that is the data rather than the type: the blob is uploaded as one flat atlas of slices
