@@ -76,6 +76,43 @@ final class TokenStream implements Iterable<Token> {
 	record Closing(int at, String text, String directive) {
 	}
 
+	/** One token to put in before the token at this index, kept as the kind it is given. */
+	record Insertion(int at, Token token) {
+	}
+
+	/**
+	 * Inserts tokens of the kinds they are given, in the order given where several share a
+	 * position, once the scan that decided them has finished reading. The one difference from
+	 * {@link #insertClosings} is the kind: a closing is raw text no later pass reads, where a
+	 * storage word put in front of a member has to be read as the identifier it is by every pass
+	 * that follows, the varying collection and the matrix split among them.
+	 */
+	void insertTokens(List<Insertion> insertions) {
+		if (insertions.isEmpty()) {
+			return;
+		}
+
+		this.functionEndFor = -1;
+		this.lineTable = null;
+		List<Insertion> ordered = new ArrayList<>(insertions);
+		ordered.sort(Comparator.comparingInt(Insertion::at));
+		List<Token> rebuilt = new ArrayList<>(this.tokens.size() + ordered.size());
+		int next = 0;
+		for (int at = 0; at <= this.tokens.size(); at++) {
+			while (next < ordered.size() && ordered.get(next).at() == at) {
+				rebuilt.add(ordered.get(next).token());
+				next++;
+			}
+
+			if (at < this.tokens.size()) {
+				rebuilt.add(this.tokens.get(at));
+			}
+		}
+
+		this.tokens.clear();
+		this.tokens.addAll(rebuilt);
+	}
+
 	/**
 	 * Inserting shifts every index after it, so the last insertion is made first.
 	 * <p>

@@ -118,15 +118,17 @@ what the next one holds.
 ### Fixed
 
 - **A pack written for half precision no longer takes the driver down with it.** RenderPearl
-  computes in sixteen and eight bit numbers, and three things stood between it and the screen. The
+  computes in sixteen and eight bit numbers, and four things stood between it and the screen. The
   engine did not know those types, so the colour output declared under one stayed where the pack
   wrote it and a second output was laid on the same slot; it is declared under its ordinary width
   now, and the value written is the same. The programs asked the card for arithmetic the game never
   turns on, and a program asking for what was not turned on is invalid: the engine now turns on
-  every such feature the card reports. The same pack tells the compiler it leaves the depth alone,
-  and the engine's own code wrote that depth above the pack's line, which the compiler refuses as a
-  redeclaration after use: the engine's code now comes after the pack's, where the reference puts
-  its own.
+  every such feature the card reports. The pack passes its values between the two stages in a block
+  of its own, which the game counts as one value when it numbers them, so the value after the block
+  landed inside it: the block's members are passed one by one now, at the cost of the packing the
+  pack had chosen. The same pack tells the compiler it leaves the depth alone, and the engine's own
+  code wrote that depth above the pack's line, which the compiler refuses as a redeclaration after
+  use: the engine's code now comes after the pack's, where the reference puts its own.
 
 - **A greyscale picture a pack ships is read as the pack wrote it.** Every grey image came out
   lighter than the file, its darks lifted towards white, because the decoder converted the picture
