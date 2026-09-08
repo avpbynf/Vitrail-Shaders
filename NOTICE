@@ -161,7 +161,12 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/pack/target/TargetPlan.java folds a dimension's directives in the
   order of net.irisshaders.iris.shaderpack.programs.ProgramSet.locateDirectives, setup programs
   left out of it as they are there. The order the frame runs in, which the same file also carries,
-  is not that one and is not from Iris.
+  is not that one and is not from Iris. It also opens a colour target on the strength of a program
+  declaring the image name alone, which is what net.irisshaders.iris.samplers.IrisImages does at
+  line 25, calling net.irisshaders.iris.targets.RenderTargets.createIfUnsure, line 398. Which
+  families that set is bound to is read the same way, the terrain and the shadow programs among
+  them, net.irisshaders.iris.pipeline.IrisRenderingPipeline lines 391 and 572, with the shadow
+  composites left out of it, net.irisshaders.iris.shadows.ShadowCompositeRenderer line 306.
 
   common/src/main/java/dev/vitrail/pack/target/PackDirectives.java gathers the settings a pack declares
   about itself with the names, the defaults and the precedence of

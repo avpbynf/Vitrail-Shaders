@@ -85,6 +85,42 @@ public final class TargetPlan {
 			"^\\s*(?:layout\\s*\\([^)]*\\)\\s*)?uniform\\s+(?:layout\\s*\\([^)]*\\)\\s*)?"
 					+ "(?:(?:lowp|mediump|highp)\\s+)?([iu]?sampler\\w*)\\s+([^;]*);.*$");
 
+	/**
+	 * A layout or a memory qualifier, which an image declaration takes any number of.
+	 * <p>
+	 * {@code readonly} is deliberately not among them, and its absence is what keeps a name this
+	 * reads out of the targets a place is said to WRITE: an image the shader may only load from is
+	 * read, not stored into. A target that only such a declaration names is then allocated by
+	 * nothing, which is what happens today and what no pack of the corpus asks for: the four
+	 * readonly images the packs carry are Bliss's voxel volumes and none of them is a
+	 * {@code colorimgN}. The day one is, it wants the road a sampler takes and not this one.
+	 * <p>
+	 * A layout takes no space after it, the way the sampler pattern beside this allows: nothing of
+	 * the corpus writes {@code layout(rgba8)uniform}, and refusing it would be a rule about
+	 * whitespace rather than about GLSL.
+	 */
+	private static final String IMAGE_QUALIFIER =
+			"(?:layout\\s*\\([^)]*\\)\\s*|(?:coherent|volatile|restrict|writeonly)\\s+)";
+
+	/**
+	 * The same declaration for an IMAGE, which is how a program STORES into a colour target rather
+	 * than drawing into it. No draw buffer declares that and no directive of the pack names it, so
+	 * the declaration is the whole of what there is to read. It is the only thing a compute can
+	 * write a target through, and it is not a compute's alone: iterationT stores into
+	 * {@code colorimg0} from the fragment stage of its line program.
+	 * <p>
+	 * Where a sampler carries a precision qualifier an image carries memory qualifiers, any number
+	 * of them and in any order, and a pack writes them on EITHER side of the {@code uniform}, so
+	 * both sides are allowed for: RenderPearl writes
+	 * {@code uniform layout(rgba8) restrict writeonly image2D colorimg0} and Photon writes
+	 * {@code layout(rgba16f) writeonly uniform image2D colorimg4}. Measured rather than reasoned
+	 * about: of the ninety five image declarations the corpus carries this takes eighty nine, and
+	 * every one it leaves is meant to be left, two commented out and four of them read only.
+	 */
+	private static final Pattern IMAGE = Pattern.compile(
+			"^\\s*(?:" + IMAGE_QUALIFIER + ")*uniform\\s+(?:" + IMAGE_QUALIFIER
+					+ "|(?:lowp|mediump|highp)\\s+)*([iu]?image\\w*)\\s+([^;]*);.*$");
+
 	private static final String FINAL = "final";
 
 	/** What {@link #disabled()} says when the pack keeps a pass and {@code passes=} does not. */
@@ -245,6 +281,10 @@ public final class TargetPlan {
 		// program a compute hangs off, and it cannot know which those are before this has said so.
 		// Nothing here reads what the walk writes, so the two only ever ran in this order by habit.
 		computes(properties, options, defines, programs, draft);
+		// After the computes, whose kept list it reads so that a file this place never opens
+		// allocates nothing, and before the defaults, which stop asking their question the moment
+		// the first colour target is written.
+		stored(source, settings, programs, draft);
 		// After the computes, whose two lists it reads to leave out the files this place never
 		// opens. Nothing in the computes reads what this writes.
 		defaults(source, options, settings, properties, defines, programs, textures, images, draft);
@@ -379,6 +419,53 @@ public final class TargetPlan {
 	/** The ones of those the default sampler can stand on, which is where the target is decided. */
 	private static Set<String> picturesTo(PackTextures textures, String program) {
 		return TextureStage.of(program).map(textures::picturesTo).orElse(Set.of());
+	}
+
+	/**
+	 * Records the colour targets the COMPUTES of this place store into, the fragment stages having
+	 * answered for themselves inside {@link #read}.
+	 * <p>
+	 * A compute declares no draw buffer and no directive of the pack names what it writes, so the
+	 * image declaration is the whole of the evidence, and a target nothing else touches is
+	 * allocated on it alone. That is what the reference does, and where: Iris creates the render
+	 * target the moment a program declares the name
+	 * ({@code samplers/IrisImages.java:25} calling {@code targets/RenderTargets.java:398}).
+	 * <p>
+	 * Only the computes {@link #computes} kept, so a file the pack switched off or one past a gap
+	 * in its letters allocates nothing, both being files the reference never opens either. Their
+	 * samplers and their directives are deliberately NOT read: Iris folds neither, locating its
+	 * directives over the fragment stages and handing a compute the samplers of the pass it hangs
+	 * off, so a colortex a compute alone samples is not paid for there and is not paid for here.
+	 */
+	private static void stored(ShaderPackSource source, SettingSet settings, ProgramSet programs,
+			Draft draft) {
+		Set<String> kept = Set.copyOf(draft.computes);
+		IncludeExpander expander = new IncludeExpander(source, settings);
+		for (ProgramSet.ProgramKey key : programs.computesOf(draft.place)) {
+			// Shadow composites are held out for the reason the fragment walk holds them out, and
+			// the reference holds them out too: their image set is the shadow colours and the
+			// pack's own images, with no colorimg among them
+			// ({@code shadows/ShadowCompositeRenderer.java:306}).
+			if (ProgramNames.shadowComposite(key.name().family())
+					|| !kept.contains(stemOf(key.file(), draft.place))) {
+				continue;
+			}
+
+			Optional<Path> file = source.file(key.file());
+			if (file.isEmpty()) {
+				continue;
+			}
+
+			try {
+				// Recorded as written and nothing else. The schedule is built off the declared draw
+				// buffers, and a compute stores into the very half it samples rather than turning
+				// the target over, which TargetSchedule.passing carries: a name read here reaching
+				// the schedule would flip a target nothing flips.
+				draft.written.addAll(colourImages(expander.expand(file.get())));
+			} catch (IOException | RuntimeException e) {
+				draft.unreadable.add(key.file());
+			}
+		}
 	}
 
 	/**
@@ -758,6 +845,21 @@ public final class TargetPlan {
 				draft.written.addAll(writes);
 			}
 
+			// And what this program STORES into, which no draw buffer declares. Read for the
+			// geometry drawn from the light as well, and for the same reason the sampler scan below
+			// is: colorimgN names a colour target whichever end of the world the program is drawn
+			// from, where a draw buffer index does not. Iris binds this set from every place it
+			// builds a program, the terrain at IrisRenderingPipeline.java:391 and the gbuffers and
+			// the light's own geometry at :746, and the one place it does not is the shadow
+			// COMPOSITES, which this walk has already skipped above.
+			//
+			// What this ALLOCATES for, nothing here yet BINDS for: the image behind colorimgN is
+			// pushed for a compute and for nothing else, so iterationT's line program stores into
+			// an image no descriptor carries. That is a gap of its own, older than this, and the
+			// allocation is right whether or not it is closed: the reference opens the target on
+			// the declaration alone.
+			draft.written.addAll(colourImages(unit));
+
 			// A full screen program reads colortex0 under every name nothing else answers for, which
 			// is what SamplerPlan gives it and why Iris hands its default sampler the first colour
 			// target (samplers/IrisSamplers.java:93-95). Iris pays for that target when the binding
@@ -821,8 +923,35 @@ public final class TargetPlan {
 	private record Declaration(String name, String type) {
 	}
 
+	/** Every name declared as a sampler on a live line, whatever the sampler is for. */
+	private static List<Declaration> samplers(ExpandedUnit unit) {
+		return declared(unit, SAMPLER);
+	}
+
 	/**
-	 * Every name declared as a sampler on a live line, whatever the sampler is for.
+	 * The colour targets this unit writes as images, read off the same live lines under the same
+	 * rules. A compute is where most of them are, and not the only place: iterationT stores into
+	 * {@code colorimg0} and {@code colorimg5} from the fragment stage of its line program.
+	 * <p>
+	 * A target named here is allocated on that account alone, which is what the reference does:
+	 * Iris creates the render target behind an image name the moment a program declares it
+	 * ({@code samplers/IrisImages.java:25} calling {@code targets/RenderTargets.java:398}).
+	 * Without it a pack whose whole chain is computes has nowhere to put its picture: RenderPearl
+	 * ships no full screen pass at all, stores its scene into {@code colorimg0}, and that target
+	 * was neither drawn into by a fragment nor sampled by one, so nothing allocated it and the
+	 * compute holding the picture was dropped on every frame.
+	 */
+	private static Set<Integer> colourImages(ExpandedUnit unit) {
+		Set<Integer> indices = new TreeSet<>();
+		for (Declaration declaration : declared(unit, IMAGE)) {
+			TargetName.imageIndex(declaration.name()).ifPresent(indices::add);
+		}
+
+		return indices;
+	}
+
+	/**
+	 * Every name that pattern declares on a live line of the unit.
 	 * <p>
 	 * Live means both things a line can be crossed out by. The preprocessor is one, and the pack's
 	 * own comments are the other: Sildur's puts a whole block of declarations behind a {@code /*} in
@@ -833,7 +962,7 @@ public final class TargetPlan {
 	 * pattern wanting the declaration at the head of the line, so what has to be tracked is only
 	 * whether a block comment was already open when the line began.
 	 */
-	private static List<Declaration> samplers(ExpandedUnit unit) {
+	private static List<Declaration> declared(ExpandedUnit unit, Pattern pattern) {
 		List<Declaration> names = new ArrayList<>();
 		List<String> lines = unit.lines();
 		boolean commented = false;
@@ -845,7 +974,7 @@ public final class TargetPlan {
 				continue;
 			}
 
-			Matcher matcher = SAMPLER.matcher(lines.get(line));
+			Matcher matcher = pattern.matcher(lines.get(line));
 			if (!matcher.matches()) {
 				continue;
 			}

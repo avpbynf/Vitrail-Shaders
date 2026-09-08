@@ -125,6 +125,14 @@ public final class ProgramSet {
 				.toList();
 	}
 
+	/** Every compute entry point of one dimension, the stage no fragment walk reaches. */
+	public List<ProgramKey> computesOf(String place) {
+		return this.keys.stream()
+				.filter(key -> key.stage() == ProgramStage.COMPUTE)
+				.filter(key -> key.dimension().equals(place))
+				.toList();
+	}
+
 	/** The same keys, ordered by family under the caller's rank, then by slot, then by file. */
 	public static List<ProgramKey> sorted(List<ProgramKey> entries, ToIntFunction<String> rank) {
 		return entries.stream()
