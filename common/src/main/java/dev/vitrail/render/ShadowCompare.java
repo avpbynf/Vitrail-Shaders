@@ -208,12 +208,11 @@ public final class ShadowCompare {
 					// here would serve it, and it is not lifted, for two reasons that hold
 					// together. This is ONE object for the device's life, so it cannot follow a
 					// per-image directive, and no pack of the corpus asks for a chain and a
-					// comparison on the same image, so nothing would measure the change. And the
-					// ceiling is doing work nobody asked it for: a compared lookup is skipped by
-					// the level pinning outright, so its level is implicit, and this clamp is what
-					// keeps such a read on the base under the divergent flow this driver renders
-					// wrong. Lifting it belongs with the second comparison sampler, and with a
-					// pack to prove it on.
+					// comparison on the same image, so nothing would measure the change. What the
+					// ceiling is NOT is a defence against the implicit level a compared read used
+					// to keep: the translation pins those now, and an equal ceiling on the ordinary
+					// samplers is exactly what was measured not to hold. Lifting it belongs with
+					// the second comparison sampler, and with a pack to prove it on.
 					.minLod(0.0F)
 					.maxLod(0.0F);
 			LongBuffer handle = stack.mallocLong(1);
