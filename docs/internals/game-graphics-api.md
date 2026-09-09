@@ -243,7 +243,8 @@ and the walk is widened around the facade at three points. The reflected entry l
 storage images and blocks it never enumerates, the layout emits a storage type for those names
 instead of a combined sampler or a uniform buffer, and the descriptor written at bind time carries
 the VMA handle and the three-dimensional view. `IRIS_FEATURE_CUSTOM_IMAGES` is posed on that road
-being open, and it is the only capability define this engine poses today.
+being open, one of the capability defines the engine poses; `EngineDefines` names the others and
+says which condition each one waits on.
 
 The Vulkan backend behind that facade already has the rest. The device object hands out the
 `VkDevice`, the VMA allocator, and a graphics queue created with both the graphics and compute

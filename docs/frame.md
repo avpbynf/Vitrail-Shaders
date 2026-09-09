@@ -371,9 +371,10 @@ road, the one every opaque piece of the world takes: it writes the mask.
 
 **The hand was the last piece that could have taken the mask and did not**, and what had kept it
 there was the flag the mask used to be. It is not the last piece drawn before the seed making the
-trip through the game's target, and the difference is worth keeping: the opaque particles never ask
-for a mask at all, so the seed carries them in by design, and so does anything whose fragment stage
-the translation could not place a mask in. The hand is drawn with its clip depth squeezed into the
+trip through the game's target, and the difference is worth keeping: the seed carries in anything
+whose fragment stage the translation could not place a mask in. The opaque particles are no longer
+of that number, their half writing the mask and owning the draw buffers the pack declares, and the
+translucent half owes none for the reason every after-deferred pass owes none. The hand is drawn with its clip depth squeezed into the
 middle eighth of the range, which is not the depth of anything it stands in front of, so against a
 flag the cut asked whether the depth had moved closer since a copy taken before the game's features
 and every hand pixel answered yes. Against a depth it asks nothing of the sort: the mask is filled

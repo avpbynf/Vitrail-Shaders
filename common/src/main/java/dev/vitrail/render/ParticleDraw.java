@@ -623,14 +623,14 @@ public final class ParticleDraw extends FamilyDraw {
 	 * Null is a refusal, and there is one left for both halves alike: a place whose targets are not
 	 * the size of the screen, one render pass having one render area.
 	 * <p>
-	 * <strong>The opaque half used to refuse two more and no longer does, because the coverage mask
-	 * took their reason away.</strong> Both rested on the same premise, that its first output had no
-	 * road into the pack's picture but the scene seed: one refused a place where the seed is off, the
-	 * other a place where the seed paints a target the program does not write first. With the mask
-	 * the half owns draw buffer nought outright and writes the pack's own target, which is what Iris
-	 * does with it and what {@link ParticleProgram} sets out. Kept, they would hand a half back for a
-	 * road it no longer travels; Bliss was the corpus case, its {@code gbuffers_textured_lit} writing
-	 * colortex2 first where the seed paints colortex1.
+	 * <strong>Two further refusals would look reasonable on the opaque half and are wrong, the
+	 * coverage mask taking their reason away.</strong> Both rest on the premise that its first output
+	 * has no road into the pack's picture but the scene seed: one would refuse a place where the seed
+	 * is off, the other a place where the seed paints a target the program does not write first. With
+	 * the mask the half owns draw buffer nought outright and writes the pack's own target, which is
+	 * what Iris does with it and what {@link ParticleProgram} sets out. Either would hand a half back
+	 * for a road it does not travel; Bliss is the corpus case, its {@code gbuffers_textured_lit}
+	 * writing colortex2 first where the seed paints colortex1.
 	 */
 	private List<ChainPlan.Attachment> writes(Element element, PackProgram.Loaded loaded) {
 		String servedBy = loaded.path().substring(loaded.path().lastIndexOf('/') + 1);

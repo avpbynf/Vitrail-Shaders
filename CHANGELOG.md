@@ -61,7 +61,7 @@ what the next one holds.
   detail comes from the frames themselves and a low scale settles instead of shimmering.
 
   It is off until you turn it on, and the checkbox is greyed out at a render scale of 100 percent,
-  where there is nothing to rebuild. It costs two more passes and three more images, about 32 MiB of
+  where there is nothing to rebuild. It costs two more passes and three more images, about 40 MiB of
   them at 1920x1080. Things that move on their own keep a faint trail, because the match is worked
   out from the camera and not from what each object did.
 
@@ -92,6 +92,16 @@ what the next one holds.
 - **Compute passes are announced as a capability.** They have been running for a while, so a pack
   that says it cannot draw without them was being refused for something it would have got. Clarity
   and Noble now load.
+
+  Three more things stood between those two packs and their picture, and none of them was ever
+  visible in a released version, since neither pack loaded at all. Clarity spells the matrix that
+  places a texture under a plain name rather than the old fixed function one, and nothing here
+  answered that spelling, so every corner of the sun and of the moon was handed the same texture
+  coordinate and both came out as flat squares of a single colour; it also lost two passes to a
+  setting compared against a number with a decimal point, which the entry below describes. Noble
+  names, in the shader itself, the format of the image that shader writes to, and that word was
+  being dropped as the declaration was moved to where this backend wants it, so the pass never
+  built and nothing wrote its screen space reflections.
 
 - **The pack is told what you are holding.** A shader recognises an item by the number the pack
   gives it in its own table, and nothing was looking your hands up in that table, so whatever you
@@ -327,18 +337,6 @@ what the next one holds.
   in one and everything that lights its world reads what that leaves behind, so its diffuse
   lighting, its shadows, its gbuffers and its fog all went dark at once.
 
-- **A pass that writes into an image no longer goes missing.** A pack can name, in the shader
-  itself, the format of the image that shader writes to, and that word was being dropped as the
-  declaration was moved to where this backend wants it. What was left is a declaration the compiler
-  refuses, so the pass never built and the frame went on without it. Noble is the pack this showed
-  on, where nothing wrote its screen space reflections.
-
-- **The sun and the moon carry their texture again on a pack written for the core profile.** Such a
-  pack spells the matrix that places a texture under a plain name rather than the old fixed function
-  one, and nothing here answered that spelling, so every corner of the sun and of the moon was handed
-  the same texture coordinate and both came out as flat squares of a single colour. Clarity is the
-  pack this showed on, in the program that draws them.
-
 - **E-LITE's clouds follow the hour of the day again.** A pack may declare a value of its own under
   either of two keywords, and only one of them was reaching the shaders. E-LITE writes the hour of
   the day under the other one and its sky reads it, so it arrived as nought: the count of days was
@@ -371,8 +369,7 @@ what the next one holds.
   packs write conditions like "if the motion blur is above 0.0" or "if the falloff equals 1", with
   the setting itself holding 0.5 or 1.0. Those were read as whole numbers, so a half became nought
   and the branch was decided the wrong way, and the line was then refused outright besides. Pegasus
-  was losing its terrain, its water, its entities and its particles to one of them, and Clarity two
-  of its passes.
+  was losing its terrain, its water, its entities and its particles to one of them.
 
 - **The extensions a pack asks for are no longer dropped.** A pack using half precision types
   guarded them on the extension being available and shipped a fallback for when it is not; the line

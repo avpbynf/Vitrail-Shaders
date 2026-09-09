@@ -115,9 +115,10 @@ rewrite is by the name of the sampler, and a sampler a function takes as a param
 the depth conversion below describes, is read through its call sites instead: the parameter is
 pinned when every call hands it a sampler already pinned or a parameter already proven, outright in
 a full screen program that asks for no chain at all, and its lookups are counted and left otherwise,
-a function some macro calls included. The shadow map's samplers are pinned with the rest, since
-nothing here fills a chain on the map whatever mipmap directive the pack wrote, which is an older
-gap of the shadow bindings and not of this rewrite. The engine gives a chain to the program that
+a function some macro calls included. The shadow map's samplers are pinned with the rest, and the
+map does carry the chain a pack asks for since the depth pair fills one at the tail of the stage
+that drew it, so a read left on the base is the pinning's doing and not a missing chain. The engine
+gives a chain to the program that
 asked for it and to that program alone, where the reference keeps the mipmap filter on the target
 for the rest of the frame; that is an older divergence of the bindings, and the rewrite does not
 change what those later programs read.

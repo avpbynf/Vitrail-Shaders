@@ -16,7 +16,7 @@
 	"options.vitrail.temporal_fold": "Fusion temporelle",
 	"options.vitrail.temporal_fold_tooltip": "Fusionne plusieurs images agrandies en une seule, pour qu'une échelle de rendu plus basse garde plus de détail.\nLes feuillages et les barrières au loin arrêtent de grouiller. Ce qui bouge laisse une légère traînée.\nDemande une échelle de rendu sous 100 %.\nS'applique à la frame suivante. Pas de rechargement du pack.",
 	"options.vitrail.shadow_amortisation": "Réutilisation des ombres",
-	"options.vitrail.shadow_amortisation_tooltip": "Combien de frames la carte d'ombre est gardée avant d'être redessinée.\nPlus haut, plus rapide : la dessiner est la passe la plus chère de la frame.\nLes ombres de ce qui BOUGE ont ce nombre de frames de retard.\nS'applique à la frame suivante. Pas de rechargement du pack.",
+	"options.vitrail.shadow_amortisation_tooltip": "Combien de frames la carte d'ombre est gardée avant d'être redessinée.\nPlus haut, plus rapide : la dessiner est la passe la plus chère de la frame.\nSeul le SOL vieillit : un bloc posé ou cassé garde son ancienne ombre aussi longtemps.\nS'applique à la frame suivante. Pas de rechargement du pack.",
 	"options.vitrail.shadow_amortisation_off": "Désactivée",
 	"options.vitrail.shadow_amortisation_frame": "%s frame",
 	"options.vitrail.shadow_amortisation_frames": "%s frames",
