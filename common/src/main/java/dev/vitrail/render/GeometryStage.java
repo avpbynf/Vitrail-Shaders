@@ -41,8 +41,8 @@ import java.util.WeakHashMap;
  * flag up for the length of that one call, which {@code GlslCompilerMixin} reads through
  * {@link #compiling} to ask shaderc for kind 3 and to key the module cache under this stage rather
  * than under the vertex one. What that road then does to the unit, the compiler's own two defines,
- * the debug information {@code rebind} needs, the local zeroes and the cache itself, it does for
- * this stage as it does for the two others. The pipeline's own defines are laid on here, which is
+ * the debug information the compiler was or was not asked for, the local zeroes and the cache
+ * itself, it does for this stage as it does for the two others. The pipeline's own defines are laid on here, which is
  * what {@code GeometryProgram} does for the vertex and fragment stages it compiles itself.</li>
  * <li>{@code GlslCompiler.compile} builds the bind group out of two modules and pairs them by
  * name. The third module joins the same group and is rebound between the two: the vertex stage's
