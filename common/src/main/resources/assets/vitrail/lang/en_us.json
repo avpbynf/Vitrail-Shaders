@@ -16,7 +16,7 @@
 	"options.vitrail.temporal_fold": "Temporal Fold",
 	"options.vitrail.temporal_fold_tooltip": "Folds several upscaled frames into one, so a lower Render Scale keeps more detail.\nDistant leaves and fences stop crawling. Things that move keep a faint trail.\nNeeds a Render Scale under 100%.\nApplies at the next frame. No pack reload.",
 	"options.vitrail.shadow_amortisation": "Shadow Reuse",
-	"options.vitrail.shadow_amortisation_tooltip": "How many frames the shadow map is kept before it is drawn again.\nHigher is faster: drawing it is the most expensive pass of the frame.\nShadows of things that MOVE are that many frames late.\nApplies at the next frame. No pack reload.",
+	"options.vitrail.shadow_amortisation_tooltip": "How many frames the shadow map is kept before it is drawn again.\nHigher is faster: drawing it is the most expensive pass of the frame.\nOnly the GROUND ages: a block you place or break keeps its old shadow that long.\nApplies at the next frame. No pack reload.",
 	"options.vitrail.shadow_amortisation_off": "Off",
 	"options.vitrail.shadow_amortisation_frame": "%s frame",
 	"options.vitrail.shadow_amortisation_frames": "%s frames",

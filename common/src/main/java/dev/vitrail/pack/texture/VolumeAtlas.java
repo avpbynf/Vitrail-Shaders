@@ -90,8 +90,8 @@ public final class VolumeAtlas {
 	 * before a volume is served, because a layout that does not fit is one nothing can draw with.
 	 * <p>
 	 * The ATLAS is what is measured and not the volume, and the two are not the same question: a
-	 * megabyte declared as {@code 4096 1 2048} spreads to a hundred and eighty eight thousand
-	 * texels across, which no device will allocate and which nothing in the file said.
+	 * volume declared as {@code 4096 1 2048} spreads to a hundred and eighty eight thousand texels
+	 * across, which no device will allocate and which nothing in the file said.
 	 */
 	public boolean fits() {
 		return RawTexels.fits(atlasWidth(), atlasHeight(), texelBytes());

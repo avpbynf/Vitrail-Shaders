@@ -109,9 +109,8 @@ final class ParticleProgram extends FamilyProgram {
 				// none: the seed has run long before it draws, and it owns draw buffer nought on the
 				// strength of its side alone.
 				//
-				// claimed: no sibling marks these pixels for them. The opaque half is drawn with
-				// RenderPipelines.OPAQUE_PARTICLE, which blends nothing, so the question does not
-				// arise there either.
+				// The opaque half is drawn with RenderPipelines.OPAQUE_PARTICLE, which blends
+				// nothing, so no sibling has to mark these pixels for it either.
 				!element.afterDeferred(), false, element.afterDeferred(),
 				game.getPrimitiveTopology(), game.isCull(),
 				game.getDepthStencilState(), element.stage(),
