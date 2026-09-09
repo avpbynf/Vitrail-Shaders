@@ -209,6 +209,17 @@ what the next one holds.
   interface always allowed and this one does not require, keeps a single size and says so in the
   log.
 
+- **A shadow read through the hardware comparison names the copy it reads.** Where a pack asks the
+  card to compare shadow depths for it, which is how most of them read the map, the engine left the
+  choice of which copy of the map to read to the card, and a card works that out from how the
+  reading coordinate moves between neighbouring pixels. Inside a loop or a branch, where the pixels
+  beside one another may not be doing the same thing, that answer is undefined and the card may hand
+  back a copy nothing ever filled: on screen it shows as a shadow that flickers between frames from
+  a viewpoint that is not moving. Every other kind of read already named its copy for exactly that
+  reason, and these did not, though they are the reads a pack makes most, the four tap shadow filter
+  of both Complementary packs among them. They name it now, and a shader that names a copy itself
+  still gets the one it named.
+
 - **Smoke, flame and the other solid particles take the colour the pack meant them to.**
   The game draws its quad particles in two goes, the solid ones with the world and the
   see-through ones after the water, and only the second lot were reaching the pack's own

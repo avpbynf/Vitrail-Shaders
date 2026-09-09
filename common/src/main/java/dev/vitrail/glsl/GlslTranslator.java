@@ -348,6 +348,22 @@ public final class GlslTranslator {
 	/** What the word sampler is followed by when the declaration asks for a comparison. */
 	private static final String SHADOW_SHAPE = "Shadow";
 
+	/**
+	 * The comparison shapes GLSL gives a lookup that names its level, and so the only ones a
+	 * compared read can be pinned on at all. Asked of glslangValidator and of shaderc, which answer
+	 * the same: {@code textureLod} and {@code textureLodOffset} take these three and refuse
+	 * {@code sampler2DArrayShadow}, {@code samplerCubeShadow} and {@code samplerCubeArrayShadow},
+	 * for which the language offers no explicit-level form to write.
+	 * <p>
+	 * Only the two-dimensional one can carry the shadow map. The names a declaration must introduce
+	 * for the binding to put a comparison sampler under it are the map's own, which are 2D, and
+	 * {@code SamplerTypes} refuses a one-dimensional sampler its pipeline whatever it reads. A read
+	 * through one of the three shapes left out keeps an implicit level, and no unit of the corpus
+	 * writes one.
+	 */
+	private static final Set<String> LEVELLED_SHADOW_SHAPES =
+			Set.of("1DShadow", "1DArrayShadow", "2DShadow");
+
 	/** The level {@link #pinLookupLevels} writes into a lookup, as GLSL text. */
 	private static final String BASE_LEVEL = "0.0";
 
@@ -2133,7 +2149,7 @@ public final class GlslTranslator {
 	}
 
 	private void rewriteIdentifiers() {
-		List<Integer> closings = new ArrayList<>();
+		List<Closing> closings = new ArrayList<>();
 		int[] lines = this.tokens.lineNumbers();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
@@ -2240,8 +2256,18 @@ public final class GlslTranslator {
 					// The wrap adds an opening parenthesis, so it has to add a closing one too.
 					// Substituting the head alone is what left the prototype with eighty-six
 					// units ending in "unexpected SEMICOLON, expecting RIGHT_PAREN".
-					this.tokens.inject(index, "vec4(" + (compared ? SHADOW_COMPARE : shadow));
-					closings.add(close + 1);
+					//
+					// The wrap goes in as a token of its own and the NAME is replaced rather than
+					// fused into it, so that what stands there afterwards is the modern call this
+					// has become, readable by name like any other. It has to be: the level pinning
+					// matches names, and both Complementary packs write their four tap shadow
+					// filter in this spelling, so a fused head left every one of those taps on an
+					// implicit level. The two parentheses are raw text, which the bracket walks
+					// step over, reading operators only, so the call still opens and closes where
+					// it did.
+					closings.add(new Closing(index, "vec4(", directive));
+					this.tokens.replace(index, compared ? SHADOW_COMPARE : shadow);
+					closings.add(new Closing(close + 1, ")", null));
 					this.shadowCalls++;
 					continue;
 				}
@@ -2320,12 +2346,7 @@ public final class GlslTranslator {
 		// anything a later pass still has to know about a token is carried on the token, as
 		// Token#macroName is. A position kept across here would be read against somebody else's
 		// token, and the reading pass has no way to notice.
-		List<Closing> parentheses = new ArrayList<>(closings.size());
-		for (int at : closings) {
-			parentheses.add(new Closing(at, ")", null));
-		}
-
-		this.tokens.insertClosings(parentheses);
+		this.tokens.insertClosings(closings);
 	}
 
 	/**
@@ -2831,7 +2852,10 @@ public final class GlslTranslator {
 	 * spelling, so the lookup compiles to a depth-reference sample and the comparison is made by
 	 * the sampler the binding put under the name, {@code GL_COMPARE_REF_TO_TEXTURE} in the terms
 	 * Iris binds it in. The call is still counted and still answers true, because whatever road
-	 * makes the comparison, what comes back is a fraction of the light and not a depth.
+	 * makes the comparison, what comes back is a fraction of the light and not a depth. Its LEVEL
+	 * is another pass's: {@link #pinLookupLevels} reaches such a call like any other, the hardware
+	 * working the level out from the derivatives of the coordinate here as it does for an ordinary
+	 * read.
 	 * <p>
 	 * The arithmetic road exists because {@code GpuSampler} carries no comparison at all: two
 	 * address modes, two filters, an anisotropy and a maximum level of detail. Bound as an ordinary
@@ -2952,9 +2976,19 @@ public final class GlslTranslator {
 	 * unread, in a program drawn over the screen that asks for no chain at all, since every image
 	 * such a parameter could stand for is read at the base there. A parameter one call hands
 	 * something else, or one that some macro calls its function through, is left as it stood and
-	 * its lookups counted. A comparison sampler is left to {@link #rewriteShadowCompare}, a name
-	 * the pack made a macro of to the preprocessor, and a rectangle, buffer or multisample sampler
-	 * has no levelled lookup to pin.
+	 * its lookups counted. A name the pack made a macro of is left to the preprocessor, and a
+	 * rectangle, buffer or multisample sampler has no levelled lookup to pin.
+	 * <p>
+	 * <strong>A comparison read is pinned with the rest, and it is the one this pass was missing.</strong>
+	 * Where {@link #rewriteShadowCompare} sent the lookup to the arithmetic, there is nothing left
+	 * to pin: what it wrote gathers four texels, and a gather names no level. Where the comparison
+	 * stayed on the sampler the lookup compiles to a depth-reference sample, whose level the
+	 * hardware works out from the derivatives of the coordinate exactly as an ordinary read's, so it
+	 * is the same undefined read under a loop or a branch, and the shadow map is where a pack
+	 * computes its coordinate the most. The comparison sampler's own ceiling of nought is not the
+	 * answer to it: an equal ceiling on the ordinary samplers is what was measured not to hold, and
+	 * it is why this pass exists. {@link #LEVELLED_SHADOW_SHAPES} says which shapes can be written
+	 * that way at all.
 	 * <p>
 	 * A pack image laid over the name of a colour target is classified as the target in a geometry
 	 * program, since only the binding knows the difference, and is pinned with it; nothing fills a
@@ -3000,8 +3034,11 @@ public final class GlslTranslator {
 
 			String name = this.tokens.get(first).text();
 			int line = lines[index];
-			if (this.packMacros.contains(name) || comparisonAt(name, line)
-					|| hardwareComparisonAt(name, line)) {
+			// The arithmetic road only. What it left standing reads through a sampler this class
+			// has already declared ordinary, over a coordinate that still carries the reference to
+			// compare against, and no explicit-level form takes that pair. A comparison kept on the
+			// sampler is pinned like anything else below.
+			if (this.packMacros.contains(name) || comparisonAt(name, line)) {
 				continue;
 			}
 
@@ -3276,7 +3313,8 @@ public final class GlslTranslator {
 
 	/**
 	 * Whether a sampler declared so has a level to pin. A rectangle, a buffer and a multisample
-	 * image have one level and no lookup that takes one, and a comparison sampler is another pass's.
+	 * image have one level and no lookup that takes one, and a comparison sampler has one only in
+	 * the shapes {@link #LEVELLED_SHADOW_SHAPES} names.
 	 *
 	 * @param declaration the type alone, or the declaration {@link #liftUniforms} recorded, which
 	 *                    is the type followed by the name
@@ -3286,7 +3324,8 @@ public final class GlslTranslator {
 			String shape = SamplerTypes.shapeOf(word);
 			if (shape != null) {
 				return !shape.contains("Rect") && !shape.contains("Buffer") && !shape.contains("MS")
-						&& !shape.endsWith(SHADOW_SHAPE);
+						&& (!shape.endsWith(SHADOW_SHAPE)
+								|| LEVELLED_SHADOW_SHAPES.contains(shape));
 			}
 		}
 

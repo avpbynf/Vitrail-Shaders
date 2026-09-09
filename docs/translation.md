@@ -121,7 +121,14 @@ that drew it, so a read left on the base is the pinning's doing and not a missin
 gives a chain to the program that
 asked for it and to that program alone, where the reference keeps the mipmap filter on the target
 for the rest of the frame; that is an older divergence of the bindings, and the rewrite does not
-change what those later programs read.
+change what those later programs read. A read through a comparison sampler is pinned in the same
+move, wherever the comparison stayed on the sampler: the lookup then compiles to a depth-reference
+sample whose level the card works out from the derivatives exactly as an ordinary read's, and the
+shadow map is where a pack computes its coordinate the most. Where the comparison went to shader
+arithmetic instead there is nothing to pin, the gather it is written with naming no level at all.
+GLSL offers the explicit-level form on the one and two dimensional comparison shapes only, and the
+two dimensional one is the only shape the map can be carried on, so nothing a pack can bind is left
+out.
 
 **One uniform becomes a sampler, because its value never comes back from the card.**
 `centerDepthSmooth` is the depth at the middle of the screen, faded by the pack's own half-life,
