@@ -11,17 +11,44 @@ every line is a note about this engine.
 table is one of the steps of cutting a release, which is the only thing that keeps it from going
 quietly stale.
 
+Every pack below was drawn in one scene of real terrain by this engine and by Iris on the same
+machine, the same world, the same window and the same settings, each pack at its own defaults, and
+the two pictures compared. "Close" means the two differ by about as much as one engine differs from
+itself between two captures of that scene, most of which is foliage sway, clouds and a pack's own
+temporal filter; where a row names a difference, it is one that stands above that.
+
 | Pack | What I have seen |
 | --- | --- |
-| BSL v10.1.3 | Drawn whole, and the one watched most closely. Terrain, water, shadow map, sky, clouds, weather, particles, mobs, block entities and the held hand all go through it. |
-| Complementary Unbound r5.8.1 | Drawn whole, and watched as closely. Its colour targets, its deferred chain and its shadow map all come up; the log prints how many targets it allocated and at what size. Its two top profiles, Very High and Ultra, draw with their colored lighting on: the voxel pipe they ask for is served, and [the pack asks for Iris](#the-pack-asks-for-iris) says how to read a pack that asks for something else. |
-| Complementary Reimagined r5.8.1 | Drawn whole, seen beside Unbound, and visually as close to it as the two packs are to each other. Its two top profiles draw the same way. |
-| Bliss v2.1.2 | Drawn, water included. The flat wrong colours its mobs and its held arm used to come out in are gone: that was this engine sending their first output through a target of the game's, eight bits to a channel where the pack stacks two values in sixteen, and both now write the pack's own. It is the pack that reads the light map raw where BSL and Complementary multiply the matrix in, which is why the far terrain's pair is served normalised. |
-| Sildur's Vibrant Extreme v2.01 | Drawn, except for its water, which is an open case here. It is the pack that exercises the paths least travelled: it keeps the overworld's programs at the root of `shaders/` and gives the other two dimensions folders of their own, several families reach its textured program through the fallback tree rather than shipping one, and the target its terrain writes first is not target zero. |
-| Mellow v3.3 | Drawn, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. |
-| Photon v1.3b | Drawn, at default settings. It exercises a clamped volume of half floats as its atmosphere table, reads its volumes through macros standing for the sampler's name, and lays a volume over the name of a colour target that the same stage also reads as a plain `sampler2D`. Not yet compared against the reference shot for shot. |
-| Body Camera v1.6.1 | Drawn. It is one of the packs that branches on the star flag in the sky, so it is worth reading [the sky goes flat](#the-sky-goes-flat) alongside. |
-| Reverie Beta v0.9 | Drawn, at its shipped profile. It is the pack that exercises the storage buffers hardest: its exposure is an average brightness that a compute writes into one and every later pass reads back, and a compute of its cloud pass reads the depth. It declares the uniforms of the Voxy mod beside those of Distant Horizons and reads them only under a `VOXY` define that mod sets and nothing here does, so the seven `vx` names the log reports as zeros are handed as zeros by Iris too without that mod, and the misspelt `previouscameraPositionFract` beside them is read by no program of the pack. Two of its passes read more textures at once than Apple's hardware has slots for, so it is the one pack of these that does not draw on a Mac; [the pack was refused](#the-pack-was-refused) says why that one is a real count. Not yet compared against the reference shot for shot. |
+| AstraLex V93.0 | Drawn. Further from the reference than most on the test scene, and what differs has not been named yet. |
+| Bliss v2.1.2 | Drawn, water included, and close to the reference. It reads the light map raw where BSL and Complementary multiply the matrix in, which is why the far terrain's pair is served normalised. With Distant Horizons, its distant water shows white plates the reference does not. |
+| Body Camera v1.6.1 | Drawn. The ground at the camera's feet comes out nearly twice as bright as the reference's while the sky and the trees match. It branches on the star flag in the sky, so it is worth reading [the sky goes flat](#the-sky-goes-flat) alongside. |
+| BSL v10.1.5 | Drawn whole, and the one watched most closely: terrain, water, shadow map, sky, clouds, weather, particles, mobs, block entities and the held hand all go through it. Its sky differs from the reference's, the ground and the trees being close. |
+| BVS 1.9.3 | Drawn and close to the reference. |
+| Clarity 1.1.3 | Drawn. Its sky differs from the reference's, the terrain matching. |
+| Complementary Reimagined r5.9 | Drawn whole and close to the reference. Its two top profiles draw with their colored lighting on: the voxel pipe they ask for is served, and [the pack asks for Iris](#the-pack-asks-for-iris) says how to read a pack that asks for something else. |
+| Complementary Unbound r5.9 | Drawn whole and close to the reference, its colour targets, deferred chain and shadow map all coming up; the log prints how many targets it allocated and at what size. Its two top profiles draw the same way as Reimagined's. |
+| Complementary Unbound r5.8.1 with EuphoriaPatches 1.9.3 | Drawn and close to the reference, like the release above. |
+| Cursed Fog v1.0.9 | Drawn and close to the reference. |
+| E-LITE 5.1.1 | Drawn. The whole picture comes out brighter than the reference's, sky, ground and trees together. |
+| I Like Vanilla v1.4.4 | Drawn and close to the reference. |
+| iterationT 3.2.0 | Drawn. Its volumetric clouds come out in the same colour and light as the reference's but sit elsewhere in the sky. |
+| Lux v1.2 | Drawn and close to the reference. |
+| MakeUp UltraFast 9.5e | Drawn. The whole picture comes out brighter than the reference's, the same way as E-LITE. |
+| Mellow v3.4 | Drawn and close to the reference. It ships a three-dimensional volume as a raw blob and asks for a single-channel shadow buffer. |
+| miniature 2.19 | Drawn and close to the reference. |
+| Noble v1.9.7 | Drawn. Its sky differs from the reference's, the ground and the trees being close. |
+| Pegasus v0.4 | Drawn. Its foliage comes out about a third darker than the reference's while the ground matches. |
+| Photon v1.3b | Drawn and close to the reference. It exercises a clamped volume of half floats as its atmosphere table, reads its volumes through macros standing for the sampler's name, and lays a volume over the name of a colour target that the same stage also reads as a plain `sampler2D`. |
+| RedHat v34.3.1 | Drawn. Further from the reference than most on the test scene, and what differs has not been named yet. |
+| RenderPearl v2.8.0-beta.4 | Drawn and close to the reference. |
+| Reverie Beta v0.9 | Drawn, at its shipped profile, and close to the reference. It is the pack that exercises the storage buffers hardest: its exposure is an average brightness that a compute writes into one and every later pass reads back, and a compute of its cloud pass reads the depth. It declares the uniforms of the Voxy mod beside those of Distant Horizons and reads them only under a `VOXY` define that mod sets and nothing here does, so the seven `vx` names the log reports as zeros are handed as zeros by Iris too without that mod, and the misspelt `previouscameraPositionFract` beside them is read by no program of the pack. Two of its passes read more textures at once than Apple's hardware has slots for, so on a Mac the pack is stopped; [the pack was refused](#the-pack-was-refused) says why that one is a real count. |
+| Sildur's Vibrant Extreme v2.01 | Drawn, water included, and sunlit dirt comes out duller than the reference's. It is the pack that exercises the paths least travelled: it keeps the overworld's programs at the root of `shaders/` and gives the other two dimensions folders of their own, several families reach its textured program through the fallback tree rather than shipping one, and the target its terrain writes first is not target zero. |
+| Solas V3.7b | Drawn and close to the reference. |
+| Spooklementary v2.0.4 | Drawn and close to the reference. |
+
+On Apple Silicon, BSL, Bliss, Body Camera, both Complementary packs, Mellow, Sildur's and Photon
+draw, each in the release that machine was given, which for some was one before the row above.
+Reverie is the one that does not.
 
 Start from what you are seeing. Each symptom below names its cause, and says how to confirm it
 rather than guess.
@@ -88,11 +115,13 @@ gives one pass sixteen slots for the textures it reads, and no setting or number
 engine numbers a pass off the textures its two shader stages actually read between them, which is as
 tight as the numbering can be made, so what is left over that line is a genuine count rather than an
 accounting artefact. Two of Reverie's passes read seventeen and eighteen textures between their
-stages, so on Apple hardware they are refused and the pack comes down with them, with Apple's own
-message in the log: `'sampler' attribute parameter is out of bounds: must be between 0 and 15`. The
-same two passes draw on a desktop card, the cap being Apple's. What would lift it is Metal's
-argument buffers, a stage handed one table of resources instead of one slot each, and nothing here
-asks for that today. Every other pack measured stays under the line, one of them exactly on it.
+stages, so on Apple hardware they are refused, with Apple's own message in the log:
+`'sampler' attribute parameter is out of bounds: must be between 0 and 15`. The engine then stops
+drawing the pack, the world goes back to the game's own look and the settings screen says an error
+stopped it, which is what the reference does with a pack that fails the same way. The same two
+passes draw on a desktop card, the cap being Apple's. What would lift it is Metal's argument
+buffers, a stage handed one table of resources instead of one slot each, and nothing here asks for
+that today. Every other pack measured on a Mac draws.
 
 **A full-screen pass that fails to compile takes the whole pack with it**, and the log names the
 program. One shape of that was a `const` whose initialiser Vulkan will not take as a constant,
@@ -494,7 +523,7 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   the user's own cloud setting so that the pack's cloud program is handed the geometry it was
   written for. It is honoured only where this engine really draws the clouds, because with the
   game's own shader behind it `off` would take the clouds away and put nothing in their place.
-- **Most packs write `clouds=off`**, six of the nine measured, and it is not a refusal of clouds
+- **Most packs write `clouds=off`**, and it is not a refusal of clouds
   but a redirection: they draw their own, volumetric, inside a composite. Complementary goes further
   and ships a `gbuffers_clouds` that discards outright unless its own cloud style is set to the
   vanilla one. So a pack whose clouds visibly change when the engine starts drawing them is the
