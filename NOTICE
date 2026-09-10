@@ -982,6 +982,16 @@ Apache License, Version 2.0
   with a depth layout, and a use above that redeclaration is refused by the compiler. The wrapper
   itself, and what it writes, are this engine's.
 
+  common/src/main/java/dev/vitrail/glsl/GlslTranslator.java writes the pass's alpha test into a
+  fragment stage only where that stage reaches draw buffer nought through gl_FragColor or
+  gl_FragData[0] at a literal subscript, which is the condition
+  net.irisshaders.iris.pipeline.transform.transformer.CommonTransformer puts on its own injection,
+  line 280 with gl_FragColor renamed onto gl_FragData[0] at line 239, read on the 26.2 branch on
+  10 September 2026. What is taken is the rule and not the code: a pack that declares its own first
+  output is left to test itself against alphaTestRef, and packs are written expecting exactly that.
+  The question is asked of the spelling here and of the preprocessed text there, and the javadoc of
+  GlslTranslator.planAlphaEpilogue says why and what that leaves standing.
+
 AMD FidelityFX Super Resolution 1.0, https://github.com/GPUOpen-Effects/FidelityFX-FSR
 Copyright (c) 2021 Advanced Micro Devices, Inc.
 MIT License
