@@ -154,6 +154,12 @@ what the next one holds.
 
 ### Fixed
 
+- **A graphics card lost in the middle of a session now closes the game on the error that lost it.**
+  When the card stopped answering, the engine caught the error at whichever step of the frame met it
+  first, switched the pack or one of its parts off and went on drawing against a card that was gone,
+  until a later step crashed the game on a report about something else. That error now goes
+  straight through, so the crash report opens on the lost device itself.
+
 - **A pack the graphics card will not build no longer closes the game.** When the card refused one
   of a pack's programs while the pack was being prepared, which Apple's hardware does with a
   program reading more textures at once than it has slots for, the error went all the way up and

@@ -4,6 +4,7 @@ import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.render.PackDefines;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.Minecraft;
@@ -120,6 +121,8 @@ public final class PbrAtlases {
 			if (read != null) {
 				ATLASES.put(atlas, read);
 			}
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			// Named and swallowed. Every one of these images is an improvement on a flat texel and
 			// none of them is owed: a pack that cannot get one still draws, and taking the world

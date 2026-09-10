@@ -18,6 +18,7 @@ import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.NoiseTexture;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -494,6 +495,8 @@ final class ColorTargets {
 			// filled by the frame before anything reads it, so it is never owed a clear. A refusal
 			// there is the copy's own to keep, one target at a time, and takes nothing else down.
 			this.copies.ensure(this::target);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			this.broken = true;
 			this.brokenWidth = screenWidth;
@@ -1152,6 +1155,8 @@ final class ColorTargets {
 				this.packSurfaces.put(image, new TargetSurface(
 						"Vitrail " + image.texture().sampler(), image.format(), false, image.width(),
 						image.height()));
+			} catch (GpuDeviceLossException e) {
+				throw e;
 			} catch (RuntimeException e) {
 				note(image.texture().sampler() + " could not be allocated at " + image.width() + "x"
 						+ image.height() + ", so it reads one black pixel: " + e.getMessage());

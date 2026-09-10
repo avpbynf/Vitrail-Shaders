@@ -4,6 +4,7 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -237,6 +238,8 @@ final class FeatureLayer {
 				// No depth of its own: the redirected draws test against the game's depth, which
 				// the override for depth keeps pointing at, so entities still hide behind walls.
 				this.layer = new TextureTarget("Vitrail features", width, height, false, FORMAT);
+			} catch (GpuDeviceLossException e) {
+				throw e;
 			} catch (RuntimeException e) {
 				this.broken = true;
 				this.brokenWidth = width;

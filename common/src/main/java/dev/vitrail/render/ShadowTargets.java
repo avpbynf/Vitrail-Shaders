@@ -4,6 +4,7 @@ import dev.vitrail.pack.target.PackDirectives;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -420,6 +421,8 @@ final class ShadowTargets {
 				+ "with {}", this.resolution, this.resolution, describe());
 
 			return true;
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			this.broken = true;
 			// The images go with the refusal, so that a map allocated and not emptied is never the

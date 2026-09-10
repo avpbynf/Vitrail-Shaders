@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.pack.source.ShadowCasters;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
@@ -366,6 +367,8 @@ public final class ShadowGeometry {
 			buffers = owned;
 
 			return true;
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			if (owned != null) {
 				owned.close();

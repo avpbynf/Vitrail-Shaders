@@ -751,6 +751,8 @@ public final class PackChain {
 				// of it: closeFrame turns them below, drawn or not.
 				chain.beginFrame();
 			}
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -1290,6 +1292,8 @@ public final class PackChain {
 			// NOT replaced on the way out, so nothing else would ever reset it, and a world joined
 			// again would be measured against where the player stood in the one they left.
 			chain.voxelAnchored = false;
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -1575,6 +1579,8 @@ public final class PackChain {
 
 		try {
 			chain.drawBegins(device);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -1608,6 +1614,8 @@ public final class PackChain {
 
 		try {
 			chain.drawPrepares(device);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -1642,6 +1650,8 @@ public final class PackChain {
 
 		try {
 			chain.drawEarly(device);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -1689,6 +1699,8 @@ public final class PackChain {
 		try {
 			chain.targets.depth().takeDistantOpaque(device.createCommandEncoder(), device,
 					chain.quad(device), served, served.getWidth(0), served.getHeight(0));
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -1789,6 +1801,8 @@ public final class PackChain {
 		try {
 			chain.targets.depth().takePreHand(device.createCommandEncoder(), device, chain.quad(device),
 					main.getDepthTextureView(), main.width, main.height);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -1842,6 +1856,8 @@ public final class PackChain {
 						+ "always-on-top features, so what this pack reads as depthtex0 is the world "
 						+ "rather than the far plane");
 			}
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -1914,6 +1930,8 @@ public final class PackChain {
 			RenderSystem.outputColorTextureOverride = layer;
 			RenderSystem.outputDepthTextureOverride = main.getDepthTextureView();
 			chain.redirected = true;
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			// The overrides are cleared on the way out rather than left half set: one standing past
 			// this point swallows every later feature draw of the frame.
@@ -1956,6 +1974,8 @@ public final class PackChain {
 
 		try {
 			chain.takeReadCopies(device);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
@@ -2029,6 +2049,8 @@ public final class PackChain {
 			// the layer would sit on stale texels and be erased with them at the deferred flush.
 			chain.features.compose(device.createCommandEncoder(), chain.quad, view,
 					chain.targets.takeClear(view));
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);

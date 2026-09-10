@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -395,6 +396,8 @@ public final class TemporalAccumulation {
 					height);
 			this.block = new MappableRingBuffer(() -> LABEL,
 					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, BLOCK_BYTES);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			release();
 			this.refused = true;

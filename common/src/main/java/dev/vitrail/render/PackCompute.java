@@ -23,6 +23,7 @@ import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.UniformCatalog;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -417,6 +418,8 @@ final class PackCompute implements AutoCloseable {
 		for (Pass pass : attached) {
 			try {
 				pass.dispatch(vulkan, commands, values, targets, width, height, step, depth, distant);
+			} catch (GpuDeviceLossException e) {
+				throw e;
 			} catch (RuntimeException e) {
 				if (pass.failed.add(e.toString())) {
 					Vitrail.logger().warn("compute {} failed: {}", pass.path, e.toString());
@@ -482,6 +485,8 @@ final class PackCompute implements AutoCloseable {
 		for (Pass pass : this.passes) {
 			try {
 				pass.dispatch(vulkan, commands, values, targets, width, height, null, null, null);
+			} catch (GpuDeviceLossException e) {
+				throw e;
 			} catch (RuntimeException e) {
 				if (pass.failed.add(e.toString())) {
 					Vitrail.logger().warn("shadow compute {} failed: {}", pass.path, e.toString());
@@ -846,6 +851,8 @@ final class PackCompute implements AutoCloseable {
 								+ "past the {} a device commonly allows at once", this.path,
 								this.entries.size(), PUSH_DESCRIPTORS);
 					}
+				} catch (GpuDeviceLossException e) {
+					throw e;
 				} catch (Exception e) {
 					Vitrail.logger().warn("compute {} SPIR-V failed: {}", this.path,
 							e.toString());
@@ -863,6 +870,8 @@ final class PackCompute implements AutoCloseable {
 			try (MemoryStack stack = MemoryStack.stackPush()) {
 				createLayout(vulkan, stack);
 				createPipeline(vulkan, stack);
+			} catch (GpuDeviceLossException e) {
+				throw e;
 			} catch (RuntimeException e) {
 				destroy(vulkan);
 				Vitrail.logger().warn("compute {} pipeline failed: {}", this.path, e.toString());

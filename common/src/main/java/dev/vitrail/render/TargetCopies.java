@@ -4,6 +4,7 @@ import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.textures.GpuTextureView;
 
@@ -164,6 +165,8 @@ final class TargetCopies {
 				} else {
 					copy.resize(target.width(), target.height());
 				}
+			} catch (GpuDeviceLossException e) {
+				throw e;
 			} catch (RuntimeException e) {
 				this.refused.add(key);
 				TargetSurface failed = this.copies.remove(key);

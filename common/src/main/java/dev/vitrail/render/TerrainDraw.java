@@ -9,6 +9,7 @@ import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -361,6 +362,8 @@ public final class TerrainDraw {
 
 		try {
 			self.targets.shadow().clear(device.createCommandEncoder());
+		} catch (GpuDeviceLossException lost) {
+			throw lost;
 		} catch (RuntimeException second) {
 			// Not rethrown: this is the handler the bus called, and the error above is the one worth
 			// reading. A pass left open by whatever threw there is enough to refuse a clear, so the
@@ -689,6 +692,8 @@ public final class TerrainDraw {
 
 					return false;
 				}
+			} catch (GpuDeviceLossException e) {
+				throw e;
 			} catch (RuntimeException e) {
 				shadowWanted = false;
 				Vitrail.logger().error("Vitrail stopped drawing the shadow map after an error in "
@@ -872,6 +877,8 @@ public final class TerrainDraw {
 
 		try {
 			return draw.prepare(drawn, format, atlas);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			wanted = false;
 			// The same as at the read above: the mesh is about to be drawn by the game's shader.

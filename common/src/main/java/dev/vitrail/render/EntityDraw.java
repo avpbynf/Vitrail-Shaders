@@ -16,6 +16,7 @@ import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
@@ -1812,6 +1813,8 @@ public final class EntityDraw extends FamilyDraw {
 
 		try {
 			return draw.record(device, element, prepared, info);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			// Said before the pass is closed and not after: closing one the failure left in a bad
 			// state can throw in its turn, and the second throw would carry away the only line that

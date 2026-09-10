@@ -13,6 +13,7 @@ import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.IndexType;
 import com.mojang.blaze3d.PrimitiveTopology;
@@ -454,6 +455,8 @@ public final class DistantDraw extends FamilyDraw {
 
 		try {
 			return draw.record(device, minecraft, ELEMENTS.get(key(!opaque, false)), sections);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			// Latched, like every other family the game calls back into: the alternative is one stack
 			// trace a frame for a failure that will not mend itself. What is lost by stopping is only
@@ -506,6 +509,8 @@ public final class DistantDraw extends FamilyDraw {
 		try {
 			draw.recordShadow(device, ELEMENTS.get(key(water, true)),
 					water ? draw.shadowWater : draw.shadowOpaque, camera);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			// Latched on its own, and the picture keeps going: what stops here is the far terrain's
 			// entry into the map, so the LOD is lit by what the pack computes from its own depth,
@@ -585,6 +590,8 @@ public final class DistantDraw extends FamilyDraw {
 			// which hands the far terrain back to that mod for the rest of the pack rather than
 			// costing the occlusion alone.
 			this.seeded = seed(device, main, this.owner.quad(device));
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			this.seedBroken = true;
 			Vitrail.logger().error("Vitrail stopped seeding the world's depth under the far terrain's "

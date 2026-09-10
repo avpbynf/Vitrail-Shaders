@@ -4,6 +4,7 @@ import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -336,6 +337,8 @@ final class MotionVectors {
 			try {
 				this.block = new MappableRingBuffer(() -> LABEL,
 						GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, BLOCK_BYTES);
+			} catch (GpuDeviceLossException e) {
+				throw e;
 			} catch (RuntimeException e) {
 				this.broken = true;
 				this.brokenWidth = width;
@@ -361,6 +364,8 @@ final class MotionVectors {
 			}
 
 			this.vectors = new TargetSurface(LABEL, FORMAT, false, width, height);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			this.broken = true;
 			this.brokenWidth = width;

@@ -3,6 +3,7 @@ package dev.vitrail.render.pbr;
 import dev.vitrail.mixin.access.TextureManagerAccessor;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -185,6 +186,8 @@ public final class PbrTextures {
 			for (PbrMap map : PbrMap.values()) {
 				read(built, map, beside(name, map), resources);
 			}
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			// Named and swallowed, the same answer PbrAtlases gives for the same reason: an image
 			// beside a texture is an improvement on a flat texel and none of them is owed, so a
