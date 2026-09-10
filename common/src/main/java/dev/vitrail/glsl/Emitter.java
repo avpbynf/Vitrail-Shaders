@@ -41,6 +41,7 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		Map<String, VolumeAtlas> readVolumes, Map<Integer, Output> packOutputs,
 		int maxFragmentOutput, Map<String, String> owedOutputs, VaryingSplit splits,
 		int gameTextureMatrix, int gameModelView, int softRewrites, int trigCalls, int hashCalls,
+		Set<String> packBuiltinCalls,
 		boolean mainWrapped, boolean depthEpilogue, boolean terrainPrologue,
 		boolean distantPrologue, boolean entityWrapped, boolean linesWrapped,
 		boolean alphaEpilogue, boolean covers,
@@ -293,6 +294,9 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 					+ " ofN ^= ofN >> 16u;"
 					+ " return float(ofN) * 2.3283064365386963e-10; }");
 		}
+
+		// Only the helpers a call was sent to, which happens on MoltenVK alone. See PackBuiltins.
+		lines.addAll(PackBuiltins.definitions(this.packBuiltinCalls));
 
 		// Only where a lookup was moved. A stage carrying the declaration and never reading it, which
 		// is most of them, has its declaration flattened and owes no helper.

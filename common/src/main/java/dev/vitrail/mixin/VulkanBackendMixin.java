@@ -201,6 +201,7 @@ public abstract class VulkanBackendMixin {
 		WideSamplerSets.serve(moltenVk,
 				physical.vkPhysicalDeviceProperties().limits().maxPerStageDescriptorSamplers(),
 				moltenVk ? tableSamplers(physical) : 0);
+		VendorExtensions.serveMoltenVk(moltenVk);
 		// The vendor extensions a pack may gate a vendor instruction on, answered by the device
 		// and not by the compiler, which defines the macro of every one it knows; the ones the
 		// device has are enabled on it here, since a module using one needs it enabled.

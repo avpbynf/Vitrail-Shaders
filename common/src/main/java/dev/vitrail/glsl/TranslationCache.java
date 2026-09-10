@@ -378,9 +378,10 @@ public final class TranslationCache {
 		// the trig substitution and the shadow comparison both change what it emits and neither
 		// says so in the text it was handed.
 		feed(digest, GlslTranslator.emissionSwitches());
-		// And the device's answer on the vendor extensions and on the stages it runs subgroup
-		// operations in, which decides which branch of a pack compiles: a card that has one of them
-		// translates differently from a card that has not.
+		// And the device's answer on the vendor extensions, on the stages it runs subgroup
+		// operations in and on whether its driver is MoltenVK, which decide which branch of a pack
+		// compiles and what a float packing call becomes: a card that has one of them translates
+		// differently from a card that has not.
 		feed(digest, VendorExtensions.key());
 
 		// The whole table, in its own order, which is fixed by the code that builds it. It carries
