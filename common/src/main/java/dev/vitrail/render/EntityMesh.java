@@ -4,6 +4,7 @@ import dev.vitrail.glsl.EntityVertex;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -115,6 +116,13 @@ public final class EntityMesh {
 	private static boolean said;
 
 	/**
+	 * Whether the device refused one of the game's entity pipelines at {@link #FORMAT}, which holds
+	 * for the rest of the session. The refusal is the device's answer to a fixed format, so every
+	 * later load that asks for the wider mesh would rebuild the world only to be refused again.
+	 */
+	private static boolean widerRefused;
+
+	/**
 	 * Whether a rebuild has already been asked for and not yet answered, so that one load asks for
 	 * one.
 	 * <p>
@@ -173,7 +181,7 @@ public final class EntityMesh {
 	 * come off it too and are already behind the entity switch.
 	 */
 	private static boolean asked() {
-		return EntityDraw.wanted() || HandDraw.wanted();
+		return !widerRefused && (EntityDraw.wanted() || HandDraw.wanted());
 	}
 
 	/**
@@ -272,8 +280,38 @@ public final class EntityMesh {
 			GpuDevice device = RenderSystem.getDevice();
 			if (((GpuDeviceAccessor) device).vitrail$backend() instanceof StalePipelines stale) {
 				List<RenderPipeline> dropped = stale.vitrail$dropEntityPipelines();
-				for (RenderPipeline pipeline : dropped) {
-					device.precompilePipeline(pipeline, null);
+				try {
+					for (RenderPipeline pipeline : dropped) {
+						device.precompilePipeline(pipeline, null);
+					}
+				} catch (GpuDeviceLossException e) {
+					throw e;
+				} catch (RuntimeException e) {
+					// A pipeline the driver refuses throws out of precompilePipeline rather than coming
+					// back invalid, and this runs inside Sodium's renderer setup, outside every catch
+					// of the frame. Going back to the game's own format is the game's own compile, and
+					// a refusal there is not this engine's to answer.
+					if (!asked) {
+						throw e;
+					}
+
+					// Going to the wider format, what was refused is the format, so the mesh stops
+					// carrying it. Whatever this loop already compiled at the wider format leaves the
+					// map again, so every entity pipeline of the game compiles at its own format at its
+					// next bind, and the pack's entities and hand stand down for the session, their
+					// programs reading a mesh that no longer carries. The order is what
+					// asks for no rebuild: the answer goes back first and the hand is taken down without
+					// asking, so the entity switch is the one question left and it finds agreement.
+					widerRefused = true;
+					carrying = false;
+					stale.vitrail$dropEntityPipelines();
+					HandDraw.stopped();
+					EntityDraw.wanted(false);
+					Vitrail.logger().error("An entity pipeline of the game did not compile at the "
+							+ "wider entity format, so no pack draws the entities or the hand for the "
+							+ "rest of this session", e);
+
+					return;
 				}
 
 				Vitrail.logger().info("{} entity pipelines of the game carried the previous "
