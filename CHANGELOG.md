@@ -172,6 +172,22 @@ what the next one holds.
   being drawn. The test is now written only into the programs that expect it, which is where the
   engine the packs are tuned against writes it too.
 
+- **A pack no longer brings the game down on a Mac over a name it chose.** Apple hardware has no
+  driver of its own for the interface this engine draws through, so a translation layer rewrites
+  every shader into Metal's language, which is C++, and it carries over the names a pack gave its
+  own functions and variables. A pack that had named something `bias`, `length_squared` or `new`
+  then collided with words that language already owns, and Apple's compiler refused the whole pass:
+  the game came down at the moment the world was drawn, on a pipeline it could not compile. BSL,
+  Bliss and Photon all died there, on the version out today as much as on this one. The engine now
+  drops the names of everything outside a shader never asks for, which is where a pack names its
+  own working parts, and BSL draws. The names of what a pack exposes stay, its uniforms and its
+  textures, because the engine binds those by name; none of the packs tried collides there.
+
+  Bliss and Photon get past that and stop on a different Apple limit, which is not lifted here.
+  Metal offers sixteen slots for the textures one pass reads, and the engine hands it slot
+  numbers that run past the sixteenth even where a pass reads far fewer than sixteen. Reverie,
+  which never had a name to collide, is refused there too.
+
 - **A pack that paints its picture with compute shaders draws it.** A few packs do their whole
   post-processing in compute programs rather than in full screen passes, and store the finished
   frame into a colour buffer of their own. The engine only ever opened a colour buffer for what a

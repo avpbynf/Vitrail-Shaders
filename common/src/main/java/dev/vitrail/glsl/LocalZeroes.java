@@ -149,7 +149,7 @@ public final class LocalZeroes {
 	 *         SPIR-V, a new one otherwise
 	 */
 	public static Result apply(int[] words) {
-		if (words.length < HEADER_WORDS || words[0] != MAGIC || !wellFormed(words)) {
+		if (!readable(words)) {
 			return new Result(words, 0, 0);
 		}
 
@@ -274,6 +274,16 @@ public final class LocalZeroes {
 		}
 
 		return new Result(out, zeroAt.size(), undefAt.size());
+	}
+
+	/**
+	 * Whether the words can be walked as SPIR-V at all: the magic number first, and every
+	 * instruction's word count keeping inside the module. Shared with {@link DebugNames}, which
+	 * walks the same words for its own reason and needs the same guarantee before it indexes an
+	 * operand: past this, an instruction that declares four words HAS four words.
+	 */
+	static boolean readable(int[] words) {
+		return words.length >= HEADER_WORDS && words[0] == MAGIC && wellFormed(words);
 	}
 
 	/** Whether every instruction's word count keeps inside the module. */
