@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import dev.vitrail.glsl.LocalZeroes;
 import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
 import dev.vitrail.render.PackChain;
+import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
 import dev.vitrail.render.ShaderDebugInfo;
 import dev.vitrail.Vitrail;
@@ -357,6 +358,7 @@ public final class ModuleCache {
 		feed(digest, RawLocals.cacheWord());
 		feed(digest, LocalZeroes.VERSION);
 		feed(digest, ShaderDebugInfo.cacheWord());
+		feed(digest, PackNames.cacheWord());
 		feed(digest, stage);
 		feed(digest, source);
 
@@ -656,6 +658,7 @@ public final class ModuleCache {
 			Vitrail.logger().info("Module cache off, so all {} units of this load were compiled and "
 					+ "reflected ({} since this launch)", misses, COMPILED_SINCE_LAUNCH.get());
 			RawLocals.say(misses);
+			PackNames.say(misses);
 
 			return;
 		}
@@ -673,9 +676,10 @@ public final class ModuleCache {
 					misses > named.size() ? "begin with" : "are", String.join(", ", named));
 		}
 
-		// At the same quiet moment and about the same compiles: what the pass did to the modules
+		// At the same quiet moment and about the same compiles: what the passes did to the modules
 		// this line counts as built.
 		RawLocals.say(misses);
+		PackNames.say(misses);
 	}
 
 	/** The directory, made and measured at the first unit of the run, or null when there is none. */

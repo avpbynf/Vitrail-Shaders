@@ -30,9 +30,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * module of one state under the key of the other, and serve it for as long as the key lives.
  * <p>
  * The pass runs between shaderc and the reflection, on the buffer the game copied the compiler's
- * output into, and hands the reflection a buffer of its own allocation when anything was changed:
- * the module frees whichever buffer it was built on, so the copy the game made is freed here in
- * that case and nothing is freed twice.
+ * output into, and hands on a buffer of its own allocation when anything was changed. The rule is
+ * that whoever replaces a buffer frees the one they were handed: the copy the game made is freed
+ * here in that case, and the buffer this pass hands on is freed in its turn by {@link PackNames}
+ * if that pass replaces it, or by the module it was built on if it gets that far. Nothing is
+ * freed twice and nothing is left behind.
  */
 public final class RawLocals {
 
@@ -129,7 +131,7 @@ public final class RawLocals {
 	 * {@code vitrail_sodium_pack_...}, and this engine's own {@code vitrail_...}), or the label
 	 * {@link PackCompute} gives a compute ({@code pack/<load>/...}).
 	 */
-	private static boolean ours(String filename) {
+	static boolean ours(String filename) {
 		return filename.startsWith(Vitrail.MOD_ID + "_") || filename.startsWith("pack/");
 	}
 

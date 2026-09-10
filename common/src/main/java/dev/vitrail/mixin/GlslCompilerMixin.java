@@ -13,6 +13,7 @@ import com.mojang.blaze3d.vulkan.glsl.ShaderCompileException;
 import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.render.GeometryStage;
+import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
 import dev.vitrail.render.ShaderDebugInfo;
 import dev.vitrail.render.storage.StorageImages;
@@ -203,7 +204,15 @@ public abstract class GlslCompilerMixin {
 							+ "Lcom/mojang/blaze3d/vulkan/glsl/IntermediaryShaderModule;"))
 	private IntermediaryShaderModule vitrail$zeroLocals(String filename, ByteBuffer spirv,
 			Operation<IntermediaryShaderModule> original) {
-		return original.call(filename, RawLocals.patch(filename, spirv));
+		// Two passes over the same output, in this order and not either order. Neither depends on
+		// what the other did to the instructions, the zeroes going by opcode and storage class and
+		// the names by their target, but they are not independent of the HEADER: the zeroes raise
+		// the id bound when they mint ids, and the names pass sizes its tables from that bound, so
+		// each one has to read the bound of the module it is actually handed. Both run BEFORE the
+		// reflection, which has to read the module the driver will read. Each pass frees the buffer
+		// it replaces and neither refuses a module it failed to understand, so one buffer reaches
+		// the module and one only.
+		return original.call(filename, PackNames.patch(filename, RawLocals.patch(filename, spirv)));
 	}
 
 	/**

@@ -23,6 +23,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * decide is the constructor, and the compiler there is the one the game, Sodium and this engine
  * all compile through.
  * <p>
+ * <strong>It decides the debug NAMES as well, since {@link PackNames} reads it.</strong> Off, the
+ * identifiers of everything outside a module never asks for are dropped from this engine's own
+ * modules, which is what keeps a pack's own words out of Metal's namespace on Apple hardware. On,
+ * they stay, because a module whose every function and variable is called {@code _123} is not the
+ * module somebody who asked for debug information meant to read.
+ * <p>
  * {@code -Dvitrail.shaderDebugInfo=true} asks for it back, and the two states keep two sets of
  * blobs: the switch changes the bytes a compile produces without changing the text it was handed,
  * so it goes into the module cache's key exactly as {@link RawLocals} does. Read once at start,
