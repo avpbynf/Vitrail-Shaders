@@ -4781,7 +4781,8 @@ public final class GlslTranslator {
 	/**
 	 * Moves every plain uniform into one block, because Vulkan takes no other kind. Samplers stay
 	 * opaque and loose, but their declarations leave the body the same way: the header writes them
-	 * in the order the program handed over, sampled names first, so MoltenVK numbers those first.
+	 * in the order the program handed over, sampled names first. What that order buys, and what it
+	 * no longer decides, is on {@code ProgramTranslator.sampledFirst}.
 	 * <p>
 	 * Brace depth is not consulted. A uniform is only legal at file scope, {@code uniform} is a
 	 * reserved word so it can be nothing else, and a pack that opens a brace in one branch of an

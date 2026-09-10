@@ -161,10 +161,12 @@ mass overlapping-location errors. The game's compiler switches on the options th
 uniforms and auto-map locations, and that is exactly what makes emitting nothing work: they are not
 inert here, they are what assigns what the emitter deliberately leaves unassigned.
 
-Those assigned numbers follow the order the compiler first meets each name in the shader. Unused
-sampler declarations still consume a number if they sit in front of a used one, which on MoltenVK
-is a Metal sampler index above 15 and a refused pipeline. Sampled names are therefore declared
-first in the header, unused after; see [the graphics API](internals/game-graphics-api.md).
+Those assigned numbers follow the order the compiler first meets each name in the shader, and the
+game then renumbers every sampler over the layout it builds from the modules. A sampler a program
+declares and never reads used to take a place in that layout, which on MoltenVK is a Metal sampler
+index that can land above 15 and refuse the pipeline; the layout is built from what a module
+actually reaches now. Sampled names are still declared first in the header, which no longer decides
+that; see [the graphics API](internals/game-graphics-api.md).
 
 The exception is fragment outputs, which keep their explicit location, because their **order** is
 the only thing that says which write lands on which attachment.

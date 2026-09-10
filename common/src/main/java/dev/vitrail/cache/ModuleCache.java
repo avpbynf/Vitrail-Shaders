@@ -6,6 +6,7 @@ import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
+import dev.vitrail.render.SamplerReach;
 import dev.vitrail.render.ShaderDebugInfo;
 import dev.vitrail.Vitrail;
 
@@ -359,6 +360,7 @@ public final class ModuleCache {
 		feed(digest, LocalZeroes.VERSION);
 		feed(digest, ShaderDebugInfo.cacheWord());
 		feed(digest, PackNames.cacheWord());
+		feed(digest, SamplerReach.cacheWord());
 		feed(digest, stage);
 		feed(digest, source);
 
@@ -659,6 +661,7 @@ public final class ModuleCache {
 					+ "reflected ({} since this launch)", misses, COMPILED_SINCE_LAUNCH.get());
 			RawLocals.say(misses);
 			PackNames.say(misses);
+			SamplerReach.say(misses);
 
 			return;
 		}
@@ -680,6 +683,7 @@ public final class ModuleCache {
 		// this line counts as built.
 		RawLocals.say(misses);
 		PackNames.say(misses);
+		SamplerReach.say(misses);
 	}
 
 	/** The directory, made and measured at the first unit of the run, or null when there is none. */
