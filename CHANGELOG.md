@@ -160,6 +160,13 @@ what the next one holds.
 
 ### Fixed
 
+- **A pack the graphics card will not build no longer closes the game.** When the card refused one
+  of a pack's programs while the pack was being prepared, which Apple's hardware does with a
+  program reading more textures at once than it has slots for, the error went all the way up and
+  the game closed on a crash report: on a Mac that was Reverie. The pack is now put away and the
+  world is drawn by the game, the way it is for a pack refused when it loads, and the settings
+  screen says an error stopped it.
+
 - **Water no longer loses whole patches of its surface on a Mac.** On Apple Silicon a lake could show
   its bed through rectangles where the surface was not drawn, coming and going as the view moved.
   The engine keeps one drawing pass open across the world's geometry when it can, and the hand
