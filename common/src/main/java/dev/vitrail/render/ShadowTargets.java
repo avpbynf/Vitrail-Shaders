@@ -737,11 +737,6 @@ final class ShadowTargets {
 		return this.kept && !this.broken;
 	}
 
-	/** Drops the store, at a resize and wherever the images behind it stop being the map's. */
-	void forgetKept() {
-		this.kept = false;
-	}
-
 	private GpuTexture store(String name, GpuFormat format) {
 		return RenderSystem.getDevice().createTexture(() -> name,
 				GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_COPY_SRC, format,
