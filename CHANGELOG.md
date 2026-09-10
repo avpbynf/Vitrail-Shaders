@@ -281,7 +281,10 @@ what the next one holds.
   line in the chat saying the picture is missing, nor answers Iris's reload key, which is also its
   own, with a red line of its own. After a startup that ended badly, the backend is kept as it was
   set rather than put back to Vulkan while Iris is installed, since Iris has already chosen its side
-  for that backend.
+  for that backend. Where Iris draws, its screen is the one that opens: Vitrail's page in the video
+  settings and NeoForge's Config button lead there, and Vitrail's key for the pack screen leaves the
+  press to Iris's own, which sits on the same I, so a pack picked is the pack drawn. On Vulkan, where
+  Vitrail draws, that I opens Vitrail's screen and not Iris's offer to switch to OpenGL over it.
 
 - **Reverie draws on a Mac.** Two of its passes read more textures at once than the sixteen a Mac
   takes when a pass is handed its textures one by one, which is how the game hands them over, so

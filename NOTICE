@@ -909,9 +909,16 @@ GNU Lesser General Public License version 3
   passes to GlobalSettingsUniform down to what the screen's own fade has reached. Asking for the blur
   is a yes or a no, so without this half the fade fades nothing.
   common/src/main/java/dev/vitrail/screen/SettingsKey.java carries iris.keybind.reload, on R as Iris
-  binds it, with both of the lines Iris says in the chat afterwards, Iris.java:184 and Iris.java:191. The key that opens
-  the settings screen is on I and is NOT Iris's, which binds that screen to O, Iris.java:787; the two
-  it binds that have no counterpart here are toggleShaders on K and an unbound wireframe.
+  binds it, with both of the lines Iris says in the chat afterwards, Iris.java:187 and Iris.java:194,
+  and iris.keybind.shaderPackSelection, on I as Iris binds it, Iris.java:811 and 813; the two it
+  binds that have no counterpart here are toggleShaders on K and an unbound wireframe. Where Iris
+  draws, beside it on OpenGL, the reload stands aside for Iris's own, and the screen key too while
+  bound to the same key as Iris's, which the same press reaches, and the page of Sodium's video settings and NeoForge's Config button open
+  Iris's own screen instead, common/src/main/java/dev/vitrail/screen/PackScreens.java, through the
+  entry point Iris publishes for other mods, IrisApi.openMainIrisScreenObj, IrisApi.java:83. Where
+  Iris does not draw, the press of the I both bind is taken from Iris's mapping at the start of the
+  tick, before Iris asks it at the end, VKOnly_InitKeys.java:27, so the screen Iris opens there,
+  IrisVKOnly.java:24, does not open over this one.
   common/src/main/java/dev/vitrail/ScreenText.java keeps the English of these screens word
   for word wherever Iris has a string for the same thing, so that a player who has configured a
   pack before reads the words they already know; what Iris has no string for is this project's

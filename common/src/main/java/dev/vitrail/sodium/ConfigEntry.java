@@ -8,7 +8,7 @@ import dev.vitrail.render.ShadowAmortisation;
 import dev.vitrail.render.StartupGuard;
 import dev.vitrail.render.TemporalAccumulation;
 import dev.vitrail.render.TerrainDraw;
-import dev.vitrail.screen.SettingsScreen;
+import dev.vitrail.screen.PackScreens;
 import dev.vitrail.ScreenText;
 import dev.vitrail.settings.GraphicsApiChoice;
 import dev.vitrail.settings.PackFile;
@@ -39,7 +39,8 @@ import java.util.Set;
  * <p>
  * This is the same entry the reference takes, {@code IrisConfig} in its own tree, and by the same
  * public API rather than by reaching into Sodium: one page under the mod's own name, which opens
- * this screen with the video settings as the screen to come back to, and a second page for the
+ * the pack screen with the video settings as the screen to come back to, Iris's where Iris draws
+ * ({@link PackScreens}), and a second page for the
  * settings that are this engine's own rather than a pack's. That second page is thin on purpose:
  * almost everything this engine has to offer is the pack's and lives on the pack's pages, and only
  * what a player sets over every pack belongs here. The one thing registered that is not a page is an
@@ -117,7 +118,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				.addPage(builder.createExternalPage()
 						.setName(Component.translatable(ScreenText.PACKS_TITLE))
 						.setScreenConsumer(parent ->
-								Minecraft.getInstance().gui.setScreen(new SettingsScreen(parent))))
+								Minecraft.getInstance().gui.setScreen(PackScreens.open(parent))))
 				.addPage(builder.createOptionPage()
 						.setName(Component.translatable(ScreenText.PAGE_TITLE))
 						.addOptionGroup(builder.createOptionGroup()
