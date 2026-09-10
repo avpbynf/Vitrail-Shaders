@@ -164,9 +164,13 @@ setting, so every setting the index offers is present before the first line is r
 constant is the one that enters only while it is true, because an `#ifdef` on one declared false
 has to read false whatever text the declaration carries.
 
-The table a source file starts with carries **the engine's symbols and nothing else**. The pack's own
-defines enter as the expander walks past their declarations, in file order, exactly as a preprocessor
-would, and its constants never do: there is nothing in one for a preprocessor to test. A file that
+The table a source file starts with carries **the engine's symbols and the compiler's own macros, and
+nothing else**. The compiler defines one macro per extension it supports and one naming the stage
+before it reads a line, less the ones the translator hides in a stage the device lacks them in, so
+the expander starts from the table of the stage the entry's extension names, and a branch a pack
+gates on one of them is live exactly where the compiler takes it. The pack's own defines enter as
+the expander walks past their declarations, in file order, exactly as a preprocessor would, and its
+constants never do: there is nothing in one for a preprocessor to test. A file that
 tests a define above the line declaring it has to see it undefined, because that is what the compiler
 will see later.
 

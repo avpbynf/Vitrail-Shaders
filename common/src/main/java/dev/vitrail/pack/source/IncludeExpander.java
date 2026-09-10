@@ -1,6 +1,8 @@
 package dev.vitrail.pack.source;
 
+import dev.vitrail.glsl.CompilerMacros;
 import dev.vitrail.glsl.LoadClock;
+import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.option.OptionRewriter;
 import dev.vitrail.pack.option.SettingSet;
 
@@ -26,6 +28,12 @@ import java.util.regex.Pattern;
  * conditional. That makes the include graph a function of the settings rather than a property
  * of the pack, and it is why a unit has to be rebuilt when a setting changes rather than
  * patched.
+ * <p>
+ * A condition is decided on the names the compiler will have defined when it reads the line: the
+ * macros it writes ahead of the stage ({@link CompilerMacros}), the engine's own symbols, and the
+ * pack's defines as they are met. Leave the first out and an include under a test of a compiler
+ * macro is dropped where the compiler goes on to take the branch, and the code under it then names
+ * something nothing declared.
  * <p>
  * An include in a branch that is off becomes a comment rather than staying as it was. Keeping
  * it would leave a directive GLSL has no notion of sitting in the text, which is a gamble on
@@ -132,6 +140,9 @@ public final class IncludeExpander {
 	 * <p>
 	 * A unit that throws is not remembered, so whoever asks next reads the file again and meets the
 	 * same failure rather than a silence.
+	 * <p>
+	 * The device's answer on its extensions, which decides some of the compiler's macros, is not in
+	 * the memo's key: the device gives it once, at its creation, before any pack is read.
 	 */
 	public ExpandedUnit expand(Path entry) throws IOException {
 		String relative = this.source.rel(entry);
@@ -145,7 +156,7 @@ public final class IncludeExpander {
 		}
 
 		long began = System.nanoTime();
-		State state = new State(this.settings.unitDefines(), this.loose);
+		State state = new State(startingDefines(relative), this.loose);
 
 		expandFile(entry, 0, state);
 
@@ -157,6 +168,23 @@ public final class IncludeExpander {
 		}
 
 		return unit;
+	}
+
+	/**
+	 * What the compiler has defined before the first line of this entry, then the engine's symbols.
+	 * <p>
+	 * The stage is the one the entry's extension names, which is the stage the file is compiled as,
+	 * so no caller has to say it: the fragment entries a place is read for its directives start
+	 * with the table its fragment stage is compiled with. A file whose extension names no stage is
+	 * compiled as none and starts with the engine's symbols alone.
+	 */
+	private Map<String, String> startingDefines(String relative) {
+		Map<String, String> defines = new LinkedHashMap<>();
+		ProgramStage.ofFile(relative)
+				.ifPresent(stage -> defines.putAll(CompilerMacros.definedIn(stage)));
+		defines.putAll(this.settings.unitDefines());
+
+		return defines;
 	}
 
 	/** What this reader read for the pack across every unit expanded so far, ready for the log. */
@@ -629,8 +657,9 @@ public final class IncludeExpander {
 	 *             as a uniform in one branch and as an ordinary global in the other. Conditional
 	 *             lines themselves count as taken; they are directives, never declarations.
 	 * @param defines what the names of the unit stand for once the whole of it has been read: the
-	 *             engine's own symbols, then every {@code #define} the taken branches declare with
-	 *             the player's settings already applied to it, and none of the ones an
+	 *             macros the compiler defines for the entry's stage, the engine's own symbols, then
+	 *             every {@code #define} the taken branches declare with the player's settings
+	 *             already applied to it, and none of the ones an
 	 *             {@code #undef} took back. The text keeps the names as the pack wrote them,
 	 *             because the compiler substitutes them itself; a reader that has to know a value
 	 *             BEFORE anything is compiled, as the dispatch size of a compute program is, has

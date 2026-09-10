@@ -9,7 +9,8 @@ import java.util.Map;
  * <p>
  * Two tables of defines come out of this and they are deliberately not the same one.
  * {@code shaders.properties} is read with every setting already at its value, because it has to
- * be able to test them. A source file starts with only the engine's own symbols, and picks up
+ * be able to test them. A source file starts with only the engine's own symbols, beside the macros
+ * the compiler defines ahead of every stage ({@code IncludeExpander} adds those), and picks up
  * the pack's as it reads past their declarations, exactly as a preprocessor would: a file that
  * tests a setting above the line declaring it must see it undefined, because that is what the
  * compiler will see later.
@@ -161,9 +162,9 @@ public final class SettingSet {
 	}
 
 	/**
-	 * What a source file starts with, and it is the engine's own symbols alone. A choice is applied
-	 * where the pack declares it and nowhere else, so a name the pack declares nowhere is applied
-	 * nowhere.
+	 * What a source file starts with beside the compiler's own macros, and it is the engine's own
+	 * symbols alone. A choice is applied where the pack declares it and nowhere else, so a name the
+	 * pack declares nowhere is applied nowhere.
 	 * <p>
 	 * Such a name is dropped rather than written into the head of each unit, which is not what Iris
 	 * does either: {@code MutableOptionValues.addAll} walks the options the PACK declares and looks

@@ -170,6 +170,15 @@ what the next one holds.
   the same light. A step past the allowance that runs as several batches is still refused, and the
   log says so. Every other card is left as it was.
 
+- **RenderPearl's water, particles and translucent blocks and mobs are drawn on a Mac.** The pack
+  lights them from light lists it only builds where the shader compiler can share values between
+  neighbouring pixels, and it asks the compiler whether it can. The engine answered that question
+  for itself before handing the shader over, answered no, and left out the part that holds the
+  lists, while the compiler answered yes and went looking for them: those four programs were
+  refused and drawn with the game's own shader instead. The engine now reads the compiler's answer,
+  step by step and less what the card cannot run, so a pack asking the compiler what it supports
+  gets the same answer at both ends.
+
 - **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
   mods reshape Sodium's texture filtering option, and Sodium refuses two of them, so a game set to
   OpenGL with both installed closed before the title screen. Vitrail now only touches that option
