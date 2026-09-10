@@ -1567,11 +1567,11 @@ public final class GlslTranslator {
 			if (token.directive().equals("extension")) {
 				this.strippedExtensions++;
 				String named = extensionNamed(index);
-				// Not hoisted where the device has not got it: the compiler would take the line
-				// and emit the vendor instruction, which is the one thing the device cannot run
-				// (VendorExtensions). The pack's own guard on the macro is hidden further down,
+				// Not hoisted where the device has not got it in this stage: the compiler would
+				// take the line and emit the instruction, which is the one thing the device cannot
+				// run (VendorExtensions). The pack's own guard on the macro is hidden further down,
 				// so its fallback is what compiles.
-				if (named != null && !VendorExtensions.absent(named)) {
+				if (named != null && !VendorExtensions.absent(named, this.stage)) {
 					this.extensions.add(named);
 				}
 			} else if (!token.directive().equals("version")) {
@@ -2074,8 +2074,8 @@ public final class GlslTranslator {
 	}
 
 	/**
-	 * Renames, in the pack's own preprocessor lines, the macro of every vendor extension the device
-	 * has not got, so that the compiler answers {@code defined} the way the device would.
+	 * Renames, in the pack's own preprocessor lines, the macro of every extension the device has not
+	 * got in this stage, so that the compiler answers {@code defined} the way the device would.
 	 * <p>
 	 * The reason is with {@link VendorExtensions}: the compiler defines the macro of every
 	 * extension it knows, and a pack gating a vendor instruction on that macro takes the branch on
@@ -2088,7 +2088,7 @@ public final class GlslTranslator {
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.directive() != null && token.kind() == Kind.IDENTIFIER
-					&& VendorExtensions.absent(token.text())) {
+					&& VendorExtensions.absent(token.text(), this.stage)) {
 				this.tokens.replace(index, VendorExtensions.hidden(token.text()));
 			}
 		}

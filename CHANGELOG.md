@@ -163,6 +163,13 @@ what the next one holds.
   for the target its water is drawn into, where the beacon beam and the lightning would have been
   laid. The log says which.
 
+- **RenderPearl no longer stops on a Mac.** The pack shares its light lists between neighbouring
+  pixels wherever the shader compiler says the card can, and the compiler says so on every card.
+  Apple's graphics stack only allows that in some of the steps a program is made of, and not in
+  the one that places the terrain, so the terrain program was never built and the pack stopped.
+  The pack is now told what the card allows in each step, and takes its own road without it where
+  it is missing. A card that allows it everywhere draws exactly as before.
+
 - **A graphics card lost in the middle of a session now closes the game on the error that lost it.**
   When the card stopped answering, the engine caught the error at whichever step of the frame met it
   first, switched the pack or one of its parts off and went on drawing against a card that was gone,
