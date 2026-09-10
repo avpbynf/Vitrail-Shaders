@@ -89,8 +89,9 @@ public final class FaceShading {
 	 * The game's own brightness back.
 	 * <p>
 	 * Asked from the five places a chain or the terrain family stops, which is what covers every road
-	 * that ends with the game's shader drawing the chunks: {@code PackChain.stop} for the three
-	 * refusals at load, {@code PackChain.putAway} for the thirteen the frame can take,
+	 * that ends with the game's shader drawing the chunks: {@code PackChain.stop} for the refusals at
+	 * load and the errors the frame catches, {@code PackChain.putAway} for the stops the frame takes
+	 * for a reason of its own,
 	 * {@link TerrainDraw#wanted(boolean)} for every road that switches the family off, and the two
 	 * places {@link TerrainDraw} lowers that same field directly, one after a failed read and one
 	 * after a failed prepare. All of them leave

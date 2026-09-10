@@ -21,6 +21,7 @@ import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -169,8 +170,9 @@ public final class PackChain {
 		disabled = true;
 		// The mesh is not taken down here and the pass goes back to the game's own shader, which
 		// expects the game's per face brightness to be in the vertex colour. Said here rather than
-		// at each of the three roads into this method, so a fourth cannot forget it. This is the
-		// LOAD's road only; putAway is the frame's, and says the same thing for the same reason.
+		// at each road into this method, so a new one cannot forget it: the refusals of the load and
+		// the errors the frame catches. putAway, the frame's stop for a reason it names, says the
+		// same thing for the same reason.
 		FaceShading.none();
 	}
 
@@ -637,8 +639,8 @@ public final class PackChain {
 	 * chose that the device would not give, which no screen size changes and which the frame would
 	 * otherwise ask for again at every size the window passes through.
 	 * <p>
-	 * <strong>What this does NOT do is hand the colour targets back</strong>, where the two other
-	 * places that stop a pack mid-session do. The first reason cannot: it runs inside the chunk pass
+	 * <strong>What this does NOT do is hand the colour targets back</strong>, where most of the
+	 * frame's catches do after {@link #stop}. The first reason cannot: it runs inside the chunk pass
 	 * the renderer opened, and releasing a target there tears down what that pass is drawing into.
 	 * The second reaches this outside any pass and could, and does not, so that a pack put away is
 	 * one thing and not two; what it would hand back is what stood allocated when the device
@@ -654,9 +656,9 @@ public final class PackChain {
 		}
 
 		disabled = true;
-		// The frame's own road out, and the thirteen sites that reach it are why this is said here
-		// rather than beside each of them. The mesh stands and the game's shader takes the chunk
-		// passes back, so the per face brightness it reads out of the vertex colour has to be there.
+		// The frame's own road out for a reason it names. The mesh stands and the game's shader
+		// takes the chunk passes back, so the per face brightness it reads out of the vertex colour
+		// has to be there.
 		// Fired from inside a frame on purpose: allChanged raises a flag the next extract consumes
 		// rather than tearing sections down under the frame that asked.
 		FaceShading.none();
@@ -750,7 +752,7 @@ public final class PackChain {
 				chain.beginFrame();
 			}
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -901,21 +903,35 @@ public final class PackChain {
 		}
 
 		long deadline = System.nanoTime() + WARM_BUDGET_NANOS;
-		do {
-			if (disabled) {
+		try {
+			do {
+				if (disabled) {
+					return;
+				}
+
+				if (chain.programs == null) {
+					chain.build(device);
+				}
+
+				if (!chain.prepare(device, main) || !chain.warm(device)) {
+					continue;
+				}
+
 				return;
-			}
-
-			if (chain.programs == null) {
-				chain.build(device);
-			}
-
-			if (!chain.prepare(device, main) || !chain.warm(device)) {
-				continue;
-			}
-
-			return;
-		} while (System.nanoTime() < deadline);
+			} while (System.nanoTime() < deadline);
+		} catch (GpuDeviceLossException e) {
+			// Not about this pack: the device is gone, and PackChoice rethrows it out of a release
+			// for the same reason.
+			throw e;
+		} catch (RuntimeException e) {
+			// A pipeline the driver will not build throws out of precompilePipeline rather than coming
+			// back invalid, which is what MoltenVK does with a stage Metal refuses, and nothing between
+			// here and the game loop caught it. The reference stops drawing the pack and draws the
+			// game's own picture on an exception while it builds its pipeline, and so does this.
+			stop();
+			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			chain.release();
+		}
 	}
 
 	/**
@@ -1275,7 +1291,7 @@ public final class PackChain {
 			// again would be measured against where the player stood in the one they left.
 			chain.voxelAnchored = false;
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 		}
 	}
@@ -1560,7 +1576,7 @@ public final class PackChain {
 		try {
 			chain.drawBegins(device);
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -1593,7 +1609,7 @@ public final class PackChain {
 		try {
 			chain.drawPrepares(device);
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -1627,7 +1643,7 @@ public final class PackChain {
 		try {
 			chain.drawEarly(device);
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -1674,7 +1690,7 @@ public final class PackChain {
 			chain.targets.depth().takeDistantOpaque(device.createCommandEncoder(), device,
 					chain.quad(device), served, served.getWidth(0), served.getHeight(0));
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -1774,7 +1790,7 @@ public final class PackChain {
 			chain.targets.depth().takePreHand(device.createCommandEncoder(), device, chain.quad(device),
 					main.getDepthTextureView(), main.width, main.height);
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -1827,7 +1843,7 @@ public final class PackChain {
 						+ "rather than the far plane");
 			}
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -1876,18 +1892,20 @@ public final class PackChain {
 		}
 
 		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
-		// The layer's own pipeline is compiled on the refused frames too, and deliberately before the
-		// question below rather than after it: it is one more pipeline the frame that finally draws
-		// would otherwise compile on top of the pack's last one.
-		if (main == null || !chain.features.prepare(device) || !chain.drawable()) {
-			return;
-		}
 
 		// Caught like every other entry point this bus calls. These two were the only ones without
 		// it, and they are the worst place to be missing one: an exception here reaches the game
 		// through an event handler and comes back on the very next frame, so what the player sees
-		// is not a pack that stopped drawing but a game that will not run.
+		// is not a pack that stopped drawing but a game that will not run. The layer's compile is
+		// inside it too, a pipeline the driver refuses throwing rather than coming back invalid.
 		try {
+			// The layer's own pipeline is compiled on the refused frames too, and deliberately
+			// before the question below rather than after it: it is one more pipeline the frame
+			// that finally draws would otherwise compile on top of the pack's last one.
+			if (main == null || !chain.features.prepare(device) || !chain.drawable()) {
+				return;
+			}
+
 			GpuTextureView layer = chain.features.open(device, main.width, main.height);
 			if (layer == null) {
 				return;
@@ -1902,7 +1920,7 @@ public final class PackChain {
 			RenderSystem.outputColorTextureOverride = null;
 			RenderSystem.outputDepthTextureOverride = null;
 			chain.redirected = false;
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -1939,7 +1957,7 @@ public final class PackChain {
 		try {
 			chain.takeReadCopies(device);
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -2012,7 +2030,7 @@ public final class PackChain {
 			chain.features.compose(device.createCommandEncoder(), chain.quad, view,
 					chain.targets.takeClear(view));
 		} catch (RuntimeException e) {
-			disabled = true;
+			stop();
 			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
 			chain.release();
 		}
@@ -2817,17 +2835,16 @@ public final class PackChain {
 	}
 
 	/**
-	 * Releases as well as latching, which the two other places that set {@code disabled} already
-	 * did and this one did not. A pack whose one bad program stops the chain kept every colour
-	 * target it had allocated for the rest of the session, ninety nine megabytes of them on BSL,
-	 * for an engine that had just decided to draw nothing.
+	 * Stops the pack and hands its targets back. Kept, they would stay allocated for the rest of
+	 * the session when one bad program stops the chain, ninety nine megabytes of them on BSL, for an
+	 * engine that has just decided to draw nothing.
 	 */
 	private boolean valid(CompiledRenderPipeline compiled, PackPass pass) {
 		if (compiled.isValid()) {
 			return true;
 		}
 
-		disabled = true;
+		stop();
 		Vitrail.logger().error("{} did not compile, nothing of this pack will be drawn", pass.path());
 		release();
 
