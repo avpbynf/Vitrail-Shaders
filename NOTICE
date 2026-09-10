@@ -852,7 +852,8 @@ GNU Lesser General Public License version 3
   net.irisshaders.iris.gui.element.ShaderPackSelectionList: the row at the top switching shaders on
   and off, one row per pack with the yellow the applied one is drawn in and the grey every one takes
   while shaders are off, the bold on the row under the mouse, the line saying a pack can be dropped
-  in, the entry offering somewhere to get one when the folder is empty, the folder watched through a
+  in, the entry offering somewhere to get one when the folder is empty (Iris's opens Modrinth, and
+  a second one here opens CurseForge), the folder watched through a
   WatchService rather than polled, the row geometry down to the two pixel nudge, and the swallowing of
   Up on the first row. Its comment about why clicking a pack switches shaders on is reproduced with
   the behaviour, being the record of a real confusion. Its EnableShadersButtonElement is not carried:
