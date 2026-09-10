@@ -176,6 +176,13 @@ what the next one holds.
   directions, therefore took the place of the value after it, which Apple's graphics refuse
   outright, and the pack stopped. The shorthand is now read like the full spelling.
 
+- **Reverie no longer stops on a Mac.** Two of its passes read more textures at once than the
+  sixteen a Mac takes when a pass is handed its textures one by one, which is how the game hands
+  them over, so Apple's graphics card refused those passes and the engine put the pack away. On a
+  Mac whose card takes textures as one table, which every Apple Silicon Mac does, a pass reading
+  more than sixteen is now handed them that way. Every other pass, and every pass on any other
+  machine, is handed its textures as before.
+
 - **A graphics card lost in the middle of a session now closes the game on the error that lost it.**
   When the card stopped answering, the engine caught the error at whichever step of the frame met it
   first, switched the pack or one of its parts off and went on drawing against a card that was gone,

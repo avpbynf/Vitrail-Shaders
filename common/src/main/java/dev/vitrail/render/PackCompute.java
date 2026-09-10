@@ -405,19 +405,21 @@ final class PackCompute implements AutoCloseable {
 		// underneath would leave that object to close a pass the encoder no longer has.
 		GeometryHold.flush(() -> "the compute dispatch at " + program);
 		GpuRecording.endPass(encoder);
-		VkCommandBuffer commands = commands(encoder);
+		VulkanCommandEncoder recorder = recorder(encoder);
 		VulkanDevice vulkan = vulkan(device);
-		if (commands == null || vulkan == null) {
+		if (recorder == null || vulkan == null) {
 			return;
 		}
 
+		VkCommandBuffer commands = ((VulkanCommandEncoderAccessor) recorder).vitrail$commandBuffer();
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			beforeChainCompute(commands, stack);
 		}
 
 		for (Pass pass : attached) {
 			try {
-				pass.dispatch(vulkan, commands, values, targets, width, height, step, depth, distant);
+				pass.dispatch(vulkan, recorder, commands, values, targets, width, height, step, depth,
+						distant);
 			} catch (GpuDeviceLossException e) {
 				throw e;
 			} catch (RuntimeException e) {
@@ -456,12 +458,13 @@ final class PackCompute implements AutoCloseable {
 		// encoder no longer has, which is a crash at the next flush and not here.
 		GeometryHold.flush(() -> "the shadow compute dispatch");
 		GpuRecording.endPass(encoder);
-		VkCommandBuffer commands = commands(encoder);
+		VulkanCommandEncoder recorder = recorder(encoder);
 		VulkanDevice vulkan = vulkan(device);
-		if (commands == null || vulkan == null) {
+		if (recorder == null || vulkan == null) {
 			return;
 		}
 
+		VkCommandBuffer commands = ((VulkanCommandEncoderAccessor) recorder).vitrail$commandBuffer();
 		values.convention(ClipSpace.FORWARD);
 		values.modelView(null, null);
 		values.projection(null);
@@ -484,7 +487,7 @@ final class PackCompute implements AutoCloseable {
 		int height = main == null ? 0 : main.height;
 		for (Pass pass : this.passes) {
 			try {
-				pass.dispatch(vulkan, commands, values, targets, width, height, null, null, null);
+				pass.dispatch(vulkan, recorder, commands, values, targets, width, height, null, null, null);
 			} catch (GpuDeviceLossException e) {
 				throw e;
 			} catch (RuntimeException e) {
@@ -528,9 +531,9 @@ final class PackCompute implements AutoCloseable {
 		this.alone.values().forEach(list -> list.forEach(Pass::close));
 	}
 
-	private static VkCommandBuffer commands(CommandEncoder encoder) {
+	private static VulkanCommandEncoder recorder(CommandEncoder encoder) {
 		return ((CommandEncoderAccessor) encoder).vitrail$backend() instanceof VulkanCommandEncoder vulkan
-				? ((VulkanCommandEncoderAccessor) vulkan).vitrail$commandBuffer()
+				? vulkan
 				: null;
 	}
 
@@ -728,6 +731,8 @@ final class PackCompute implements AutoCloseable {
 		private MappableRingBuffer block;
 		private long shaderModule;
 		private long setLayout;
+		/** Whether the set layout lost its push flag to {@link WideSamplerSets}. */
+		private boolean allocatedSets;
 		private long pipelineLayout;
 		private long pipeline;
 		private List<VulkanBindGroupLayout.Entry> entries = List.of();
@@ -754,10 +759,11 @@ final class PackCompute implements AutoCloseable {
 		 *                then reads the far plane, and the two copies read what they last held,
 		 *                as they do for a pass drawn before the copy is taken
 		 * @param distant the far terrain's depth on the same terms
+		 * @param recorder the encoder {@code commands} belongs to, whose slot an allocated set lives in
 		 */
-		private void dispatch(VulkanDevice vulkan, VkCommandBuffer commands, PackValues values,
-				ColorTargets targets, int width, int height, TargetSchedule.Bound step,
-				GpuTextureView depth, GpuTextureView distant) {
+		private void dispatch(VulkanDevice vulkan, VulkanCommandEncoder recorder,
+				VkCommandBuffer commands, PackValues values, ColorTargets targets, int width,
+				int height, TargetSchedule.Bound step, GpuTextureView depth, GpuTextureView distant) {
 			if (!this.compiled) {
 				compile(vulkan);
 			}
@@ -770,7 +776,7 @@ final class PackCompute implements AutoCloseable {
 			try (MemoryStack stack = MemoryStack.stackPush()) {
 				VulkanCommandEncoder.memoryBarrier(commands, stack);
 				VK12.vkCmdBindPipeline(commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, this.pipeline);
-				pushDescriptors(commands, stack, targets, step, depth, distant);
+				pushDescriptors(recorder, commands, stack, targets, step, depth, distant);
 				// The screen and not the shadow map: Iris sizes a shadow composite's compute off
 				// the main render target, ShadowCompositeRenderer.java:213-214, and the resolution
 				// of the shadow map is what it sizes the shadow GEOMETRY computes off instead,
@@ -953,6 +959,7 @@ final class PackCompute implements AutoCloseable {
 					.sType$Default()
 					.flags(1)
 					.pBindings(bindings);
+			this.allocatedSets = WideSamplerSets.dropPush(layoutInfo, this.label);
 			LongBuffer layoutPtr = stack.callocLong(1);
 			VulkanUtils.crashIfFailure(vulkan,
 					VK12.vkCreateDescriptorSetLayout(vulkan.vkDevice(), layoutInfo, null, layoutPtr),
@@ -1003,9 +1010,9 @@ final class PackCompute implements AutoCloseable {
 			}
 		}
 
-		private void pushDescriptors(VkCommandBuffer commands, MemoryStack stack,
-				ColorTargets targets, TargetSchedule.Bound step, GpuTextureView depth,
-				GpuTextureView distant) {
+		private void pushDescriptors(VulkanCommandEncoder recorder, VkCommandBuffer commands,
+				MemoryStack stack, ColorTargets targets, TargetSchedule.Bound step,
+				GpuTextureView depth, GpuTextureView distant) {
 			if (this.entries.isEmpty()) {
 				return;
 			}
@@ -1166,6 +1173,12 @@ final class PackCompute implements AutoCloseable {
 						? VK12.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
 						: VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 				write.pImageInfo(imageInfo);
+			}
+
+			if (this.allocatedSets) {
+				WideSamplerSets.bind(recorder, commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE,
+						this.pipelineLayout, 0, this.setLayout, writes);
+				return;
 			}
 
 			KHRPushDescriptor.vkCmdPushDescriptorSetKHR(commands,

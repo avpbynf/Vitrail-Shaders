@@ -79,6 +79,7 @@
 		"VulkanBindGroupLayoutMixin",
 		"access.VulkanCommandEncoderAccessor",
 		"VulkanCommandEncoderMixin",
+		"VulkanCommandEncoderSetsMixin",
 		"VulkanCommandEncoderTransferMixin",
 		"VulkanConstMixin",
 		"VulkanDeviceMixin",

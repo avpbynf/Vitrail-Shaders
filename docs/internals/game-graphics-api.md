@@ -226,9 +226,11 @@ the hardware has.
 `render/SamplerReach` closes that: it drops from a module's reflected sampler list every sampled
 image the entry point does not reach, so the layout is dense and a program under sixteen fits. Over
 a program's two stages TOGETHER, since one layout serves both. A program whose stages read more than
-sixteen between them is still refused there, and that is Metal's own cap, the same one Iris
-documented for macOS. The translator still writes sampled names first in the header, which no longer
-decides the cap and is described where it lives.
+sixteen between them is past Metal's cap for a pushed set, the same one Iris documented for macOS,
+and that is where `render/WideSamplerSets` steps in: on MoltenVK, when the device binds sets through
+tier 2 argument buffers, it creates that one layout without the push flag, which MoltenVK answers
+with a Metal argument buffer, and each draw allocates and binds the set instead of pushing it. The translator still writes sampled names first in the header,
+which no longer decides the cap and is described where it lives.
 
 The asymmetry does not extend to the draw. A sampler that is declared and used, but not bound when
 the draw happens, throws, so the layout can be generous while the binding cannot be sloppy.
