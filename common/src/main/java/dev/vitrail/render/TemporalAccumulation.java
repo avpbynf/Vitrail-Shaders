@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -416,15 +417,24 @@ public final class TemporalAccumulation {
 			this.pipeline = build();
 		}
 
-		if (device.precompilePipeline(this.pipeline, SOURCE).isValid()) {
-			return this.pipeline;
+		RuntimeException thrown = null;
+		try {
+			if (device.precompilePipeline(this.pipeline, SOURCE).isValid()) {
+				return this.pipeline;
+			}
+		} catch (GpuDeviceLossException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			// A stage the driver refuses throws out of precompilePipeline rather than coming back
+			// invalid, and RenderScale.endWorld reaches this outside every catch of the frame.
+			thrown = e;
 		}
 
 		release();
 		this.refused = true;
 		this.pipeline = null;
 		Vitrail.logger().error("The temporal fold did not compile, so it stays off for this "
-				+ "session");
+				+ "session", thrown);
 
 		return null;
 	}

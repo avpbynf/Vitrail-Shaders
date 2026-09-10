@@ -5,6 +5,7 @@ import dev.vitrail.mixin.access.RenderTargetAccessor;
 import dev.vitrail.settings.PackFile;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -366,14 +367,26 @@ public final class RenderScale {
 				this.pipeline = build(this.fragment);
 			}
 
-			if (device.precompilePipeline(this.pipeline, SOURCE).isValid()) {
-				return this.pipeline;
+			try {
+				if (device.precompilePipeline(this.pipeline, SOURCE).isValid()) {
+					return this.pipeline;
+				}
+
+				Vitrail.logger().error("The {} pass of the render scale did not compile",
+						this.fragment.getPath());
+			} catch (GpuDeviceLossException e) {
+				throw e;
+			} catch (RuntimeException e) {
+				// A stage the driver refuses throws out of precompilePipeline rather than coming back
+				// invalid, which is what MoltenVK does with one Metal will not build, and endWorld
+				// runs outside every catch of the frame. The same latch as an invalid pipeline, so the
+				// fallback and the abandonment below it take over from here.
+				Vitrail.logger().error("The {} pass of the render scale did not compile",
+						this.fragment.getPath(), e);
 			}
 
 			this.refused = true;
 			this.pipeline = null;
-			Vitrail.logger().error("The {} pass of the render scale did not compile",
-					this.fragment.getPath());
 
 			return null;
 		}

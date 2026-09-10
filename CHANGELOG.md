@@ -161,6 +161,15 @@ what the next one holds.
   world is drawn by the game, the way it is for a pack refused when it loads, and the settings
   screen says an error stopped it.
 
+- **Three more programs the graphics card will not build no longer close the game.** The render
+  scale's upscale, a pack's particle program rebuilt for particles another mod draws in a format of
+  its own, and the game's entity programs rebuilt when a pack starts drawing the entities or the
+  hand were all built in the middle of a frame with nothing to catch a refusal, so a card that
+  refused one closed the game. The render scale now falls back to a plain stretch, and turns itself
+  off when nothing builds; that other mod's particles are drawn through the pack's program as it
+  stands; and the entities and the hand go back to the game for the rest of the session. The log
+  says which.
+
 - **Water no longer loses whole patches of its surface on a Mac.** On Apple Silicon a lake could show
   its bed through rectangles where the surface was not drawn, coming and going as the view moved.
   The engine keeps one drawing pass open across the world's geometry when it can, and the hand

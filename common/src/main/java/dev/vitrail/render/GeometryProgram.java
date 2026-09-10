@@ -24,6 +24,7 @@ import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.platform.CompareOp;
@@ -1121,13 +1122,28 @@ final class GeometryProgram {
 				return null;
 			}
 
-			if (!device.precompilePipeline(variant, this.source).isValid()) {
+			RuntimeException thrown = null;
+			boolean valid;
+			try {
+				valid = device.precompilePipeline(variant, this.source).isValid();
+			} catch (GpuDeviceLossException e) {
+				throw e;
+			} catch (RuntimeException e) {
+				// A stage the driver refuses throws out of precompilePipeline rather than coming back
+				// invalid, which is what MoltenVK does with one Metal will not build, and the caller
+				// is a pipeline being set on a pass, outside every catch of the frame. It is the same
+				// refusal, so it takes the same latch.
+				thrown = e;
+				valid = false;
+			}
+
+			if (!valid) {
 				// Latched like compile()'s refusal, and for its reason: retrying would pay shaderc
 				// every draw for the same answer, and the caller has a fallback to hand the draw to.
 				this.reshaped.put(layout, null);
 				Vitrail.logger().error("{} did not compile over a mesh layout brought by another "
 						+ "mod, so the {} pass draws that mesh through its own layout", this.path,
-						this.pass.name());
+						this.pass.name(), thrown);
 
 				return null;
 			}
