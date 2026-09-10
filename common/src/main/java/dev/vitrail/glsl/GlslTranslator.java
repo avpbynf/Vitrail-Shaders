@@ -595,6 +595,9 @@ public final class GlslTranslator {
 	/** Goldberg hash idioms rewritten onto {@link #HASH} instead of through a sine. */
 	private int hashCalls;
 
+	/** The float packing builtins this unit's calls were sent to {@link PackBuiltins} from. */
+	private final Set<String> packBuiltinCalls = new HashSet<>();
+
 	/**
 	 * Reads of {@code gl_TextureMatrix[0]} sent to the game's own per draw block instead of to the
 	 * uniform block this engine writes.
@@ -2333,6 +2336,17 @@ public final class GlslTranslator {
 					this.trigCalls++;
 					continue;
 				}
+			}
+
+			// The same two exclusions, and on MoltenVK alone: PackBuiltins says what Metal does with
+			// these calls. Above the directive guard like the sine, a call in a #define body being
+			// code the preprocessor pastes into the program.
+			String packed = PackBuiltins.helper(name);
+			if (packed != null && VendorExtensions.moltenVk() && this.tokens.callOpener(index) >= 0
+					&& !this.declaredNames.contains(name)) {
+				this.tokens.replace(index, packed);
+				this.packBuiltinCalls.add(name);
+				continue;
 			}
 
 			// Above the guard below, and it is the one rewrite that belongs there. The body of a
@@ -5575,8 +5589,8 @@ public final class GlslTranslator {
 				this.volumes.read(), this.packOutputs, this.maxFragmentOutput, this.owedOutputs,
 				this.splits, this.gameTextureMatrix,
 				this.gameModelView, this.softRewrites, this.trigCalls, this.hashCalls,
-				this.mainWrapped, this.depthEpilogue, this.terrainPrologue, this.distantPrologue,
-				this.entityWrapped, this.linesWrapped, this.alphaEpilogue, this.covers,
+				this.packBuiltinCalls, this.mainWrapped, this.depthEpilogue, this.terrainPrologue,
+				this.distantPrologue, this.entityWrapped, this.linesWrapped, this.alphaEpilogue, this.covers,
 				wrapsFragment(), this.ordered, this.namesFragDepth, this.makesOverlayColour);
 	}
 

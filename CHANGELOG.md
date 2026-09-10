@@ -154,6 +154,13 @@ what the next one holds.
 
 ### Fixed
 
+- **Noble's surfaces are lit right on a Mac.** Noble keeps what each surface is made of, how
+  shiny it is, how much it glows and how much shade it gathers, as whole numbers packed out of its
+  colours, and Apple's graphics stored one of those numbers wrong and read them back wrong, so the
+  lit picture came out wrong wherever the pack drew. On a Mac those numbers are now packed and read
+  back by plain arithmetic the engine writes into the shader, which gives the numbers every other
+  card already got. Nothing changes on any other machine.
+
 - **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
   mods reshape Sodium's texture filtering option, and Sodium refuses two of them, so a game set to
   OpenGL with both installed closed before the title screen. Vitrail now only touches that option

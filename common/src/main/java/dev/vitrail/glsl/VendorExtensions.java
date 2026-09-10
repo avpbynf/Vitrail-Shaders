@@ -44,6 +44,11 @@ import java.util.stream.Collectors;
  * from the device at creation ({@link #serveSubgroupStages}); until then, and off game, every stage
  * has them, which is the compiler's answer and what this engine assumed before asking.
  * <p>
+ * Whether the driver is MoltenVK is answered here too ({@link #serveMoltenVk}), since that decides
+ * what the translation writes for a pack's float packing calls, {@link PackBuiltins} saying why.
+ * Until it has answered, and off game, the answer is no, and a device that says no keeps the key it
+ * had before the question was asked.
+ * <p>
  * Five extensions are answered absent on every device, and one of them is a divergence. {@code
  * GL_NV_gpu_shader5} has no Vulkan form at all, while an NVIDIA GL driver has it, so a pack
  * gating on it takes its fallback here where under Iris on a GeForce it takes the extension.
@@ -69,6 +74,8 @@ public final class VendorExtensions {
 
 	private static volatile Set<ProgramStage> subgroupsAbsentIn =
 			Collections.unmodifiableSet(EnumSet.noneOf(ProgramStage.class));
+
+	private static volatile boolean moltenVk;
 
 	private VendorExtensions() {
 	}
@@ -120,18 +127,32 @@ public final class VendorExtensions {
 	}
 
 	/**
-	 * The absent names, and the stages the subgroup extensions are absent from, joined, for a cache
-	 * key. A device running them in every stage keeps the key it had before stages were asked, since
-	 * it translates exactly as it did.
+	 * Records whether the driver is MoltenVK, asked once at the device's creation.
+	 *
+	 * @param moltenVkDriver whether the device's driver is MoltenVK
+	 */
+	public static void serveMoltenVk(boolean moltenVkDriver) {
+		moltenVk = moltenVkDriver;
+	}
+
+	/** Whether a pack's float packing calls go to {@link PackBuiltins} rather than to the driver. */
+	static boolean moltenVk() {
+		return moltenVk;
+	}
+
+	/**
+	 * The absent names, the stages the subgroup extensions are absent from and whether the driver is
+	 * MoltenVK, joined, for a cache key. A device running them in every stage keeps the key it had
+	 * before stages were asked, and a driver other than MoltenVK the key it had before the driver
+	 * was, since each translates exactly as it did.
 	 */
 	public static String key() {
 		String names = String.join(",", absent);
-		if (subgroupsAbsentIn.isEmpty()) {
-			return names;
-		}
-
-		return subgroupsAbsentIn.stream().map(Enum::name)
+		String stages = subgroupsAbsentIn.isEmpty() ? names : subgroupsAbsentIn.stream()
+				.map(Enum::name)
 				.collect(Collectors.joining(",", names + ";subgroups absent in ", ""));
+
+		return moltenVk ? stages + ";MoltenVK" : stages;
 	}
 
 	/** The hidden spelling of a macro the compiler would define and the device would not answer for. */

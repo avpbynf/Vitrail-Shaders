@@ -89,6 +89,16 @@ a builtin introduced after the version the pack targets, and the error does not 
 it complains about overload precision qualifiers. Renaming is triggered only on names the pack
 actually defines, so lengthening the reserved list costs nothing.
 
+**On MoltenVK, the float packing builtins are written out in arithmetic.** A call to
+`packUnorm4x8`, `packUnorm2x16`, `packSnorm4x8`, `packSnorm2x16` or one of their four unpacks
+becomes a call to a helper of the translation's own, which does in integer arithmetic what GLSL
+defines the builtin to do, rounding included. Noble packs its material into two `packUnorm4x8`
+words, and on Apple Silicon the first word reached the target holding the bits of a float rather
+than the packed value, the second one right and the decode wrong the same way, where the same stages
+draw right on NVIDIA. Every other driver keeps the builtins, and a unit that declares or defines one
+of those names for itself keeps its own. Whether the driver is MoltenVK is part of the translation
+cache's key, so a translation kept on disk is never served to the other kind of device.
+
 **Depth reads are converted, and not by the translator.** The game renders in reversed Z; packs
 expect the legacy convention. The translated text does carry depth conversion, at three fixed sites:
 the built-in fragment depth, a write to the built-in output depth, and the clip depth in the vertex
