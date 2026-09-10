@@ -160,6 +160,13 @@ what the next one holds.
 
 ### Fixed
 
+- **Water no longer loses whole patches of its surface on a Mac.** On Apple Silicon a lake could show
+  its bed through rectangles where the surface was not drawn, coming and going as the view moved.
+  The engine keeps one drawing pass open across the world's geometry when it can, and the hand
+  wrote its own data to the graphics card inside that pass right after the water had been drawn in
+  it, which Vulkan does not allow; on a Mac that write cost the water already drawn. The pass is now
+  closed before any such write, unless something is still drawing into it.
+
 - **The world stops being shaded twice, and the sides and undersides of blocks come back to the
   brightness the pack drew them at.** The game tints a block face by which of the six directions it
   faces, out of a small table each dimension carries: in the overworld full strength on top, half

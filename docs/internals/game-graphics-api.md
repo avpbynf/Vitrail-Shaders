@@ -137,6 +137,14 @@ command buffer the frame submits once at its end. A pass left open by an early r
 exception path skips its barrier and stays open besides, so passes belong in try-with-resources
 without exception.
 
+**A transfer is refused inside a pass only by the encoder that opened that pass.**
+`GpuDevice.createCommandEncoder()` hands out a new `CommandEncoder` on every call over the one
+Vulkan encoder, and each instance checks only its own open pass, so a buffer or texture write asked
+for through any other instance is recorded straight into whatever pass is recording, which Vulkan
+forbids. A pass this engine keeps open across geometry is therefore ended before such a write
+whenever nothing is drawing into it, and a file `vitrail/transfer-in-pass` in the instance names
+every transfer that still lands inside a pass.
+
 The price still scales with the number of GPU stops rather than with what they read: each closed
 pass, each standalone clear, each copy. Folding a clear into a load-op, blitting a mip chain, and
 holding matching geometry in one pass are how this engine spends fewer of those stops. Note that

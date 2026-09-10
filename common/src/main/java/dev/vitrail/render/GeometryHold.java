@@ -25,8 +25,9 @@ import java.util.function.Supplier;
  * <p>
  * A later pass that samples what the last one wrote, or that names different attachments, or that
  * is a composite, a copy or a clear, ends the hold first. The encoder mixin is that door: every
- * foreign {@code createRenderPass}, copy or clear flushes. This class's own open is the exception,
- * so a matching geometry program does not flush itself.
+ * foreign {@code createRenderPass}, copy or clear flushes, and so does a buffer or texture transfer
+ * while no family is drawing into the pass ({@link #flushIdle}). This class's own open is the
+ * exception, so a matching geometry program does not flush itself.
  */
 public final class GeometryHold {
 
@@ -48,6 +49,13 @@ public final class GeometryHold {
 	private static int areaW;
 	private static int areaH;
 	private static boolean opening;
+
+	/**
+	 * True from the moment a family is handed the pass until that family closes it: the pass is being
+	 * drawn into rather than merely kept. {@link #flushIdle} reads it, a transfer asked for in the
+	 * middle of a family's own draws being one the hold must not end under that family.
+	 */
+	private static boolean drawing;
 
 	/**
 	 * What ended the hold, kept for the next open to report.
@@ -74,6 +82,7 @@ public final class GeometryHold {
 		int fit = fit(descriptor);
 		if (fit == JOINS) {
 			resetArea(current);
+			drawing = true;
 
 			return current;
 		}
@@ -92,6 +101,7 @@ public final class GeometryHold {
 		try {
 			current = encoder.createRenderPass(descriptor);
 			remember(descriptor);
+			drawing = true;
 
 			return current;
 		} finally {
@@ -104,7 +114,12 @@ public final class GeometryHold {
 	 * close in a try-with-resources; cancelling that close is what keeps the backend pass alive.
 	 */
 	public static boolean keep(RenderPass pass) {
-		return pass == current;
+		boolean held = pass == current;
+		if (held) {
+			drawing = false;
+		}
+
+		return held;
 	}
 
 	/**
@@ -132,6 +147,7 @@ public final class GeometryHold {
 		}
 
 		resetArea(current);
+		drawing = true;
 
 		return current;
 	}
@@ -152,10 +168,28 @@ public final class GeometryHold {
 		}
 
 		current = null;
+		drawing = false;
 		colours = null;
 		depth = null;
 		if (pass != null) {
 			pass.close();
+		}
+	}
+
+	/**
+	 * Ends the hold before a buffer or texture transfer is recorded, unless a family is drawing
+	 * into it.
+	 * <p>
+	 * Between two families the pass is only kept, and a transfer recorded then lands inside it,
+	 * which Vulkan forbids. While a family is drawing it is that family's pass: closing it would
+	 * leave the family drawing into a closed pass, so a transfer arriving there is not this hold's
+	 * to end.
+	 *
+	 * @param cause what the census reports against the pass that opens next
+	 */
+	public static void flushIdle(Supplier<String> cause) {
+		if (!drawing) {
+			flush(cause);
 		}
 	}
 

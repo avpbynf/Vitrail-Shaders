@@ -23,7 +23,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * A geometry hold must end before any of those: a copy or a clear cannot be recorded inside a
  * pass, and a composite that samples what geometry just wrote has to see the store. Leftover
  * Immediate draws and Distant Horizons' GenericObjectRenderer that write the same images are
- * the exception: they keep the hold, the way Iris leaves the default framebuffer bound.
+ * the exception: they keep the hold, the way Iris leaves the default framebuffer bound. A buffer
+ * or texture transfer ends it too, unless a family is still drawing into it.
  */
 @Mixin(CommandEncoder.class)
 public abstract class CommandEncoderMixin {
@@ -99,5 +100,36 @@ public abstract class CommandEncoderMixin {
 	private void vitrail$copyTexture(CallbackInfo ci) {
 		GeometryHold.flush(() -> "a texture copy");
 		PassTimings.censusCopy();
+	}
+
+	/**
+	 * Ends a hold nothing is drawing into before a buffer or texture transfer is recorded.
+	 * <p>
+	 * Every {@code createCommandEncoder()} is a new facade over the one Vulkan encoder, so the
+	 * facade's own refusal of a transfer inside a pass only sees the passes that same instance
+	 * opened. A transfer asked for through any other instance went straight into the pass the hold
+	 * kept open: the hand's projection block and its vertex upload into the pass of whichever family
+	 * drew last, the translucent terrain included. Vulkan forbids a transfer
+	 * inside a render pass, so what a driver makes of one is its own affair and differs between them.
+	 * <p>
+	 * The two-argument {@code writeToTexture} hands over to the six-argument one and is not listed;
+	 * both read backs are, the short one checking for a pass of its own, and ending a hold twice is
+	 * ending it once.
+	 */
+	@Inject(method = {
+			"writeToBuffer(Lcom/mojang/blaze3d/buffers/GpuBufferSlice;Ljava/nio/ByteBuffer;)V",
+			"copyToBuffer(Lcom/mojang/blaze3d/buffers/GpuBufferSlice;Lcom/mojang/blaze3d/buffers/GpuBufferSlice;)V",
+			"writeToTexture(Lcom/mojang/blaze3d/textures/GpuTexture;Lcom/mojang/blaze3d/platform/NativeImage;"
+					+ "IIII)V",
+			"writeToTexture(Lcom/mojang/blaze3d/textures/GpuTexture;Ljava/nio/ByteBuffer;IIIIII)V",
+			"copyBufferToTexture(Lcom/mojang/blaze3d/buffers/GpuBufferSlice;IIII"
+					+ "Lcom/mojang/blaze3d/textures/GpuTexture;IIIIII)V",
+			"copyTextureToBuffer(Lcom/mojang/blaze3d/textures/GpuTexture;Lcom/mojang/blaze3d/buffers/GpuBuffer;"
+					+ "JLjava/lang/Runnable;I)V",
+			"copyTextureToBuffer(Lcom/mojang/blaze3d/textures/GpuTexture;Lcom/mojang/blaze3d/buffers/GpuBuffer;"
+					+ "JLjava/lang/Runnable;IIIII)V"},
+			at = @At("HEAD"), require = 7)
+	private void vitrail$transfer(CallbackInfo ci) {
+		GeometryHold.flushIdle(() -> "a buffer or texture transfer");
 	}
 }
