@@ -19,8 +19,9 @@ a **run** of draws and hand the pack every draw buffer it asked for.
 A run and not the group. One pass carries one set of attachments, so the run lasts as long as the
 draws that follow keep writing the same colour and depth images over the same area, whatever program
 they belong to: `GeometryHold` is what arbitrates that, and a different set of attachments, a
-different area, or anything that cannot be recorded inside a pass at all, which is a copy, a clear
-or a composite, is what ends it. Nothing is reordered to make runs longer, because the order the
+different area, or anything that cannot be recorded inside a pass at all, which is a copy, a clear,
+a composite, or a buffer or texture transfer arriving while nothing is drawing into the pass, is
+what ends it. Nothing is reordered to make runs longer, because the order the
 game walks its draws in is the order things overlap in. A run therefore outlives the group that
 started it, and the encoder still allows one pass at a time: a foreign `createRenderPass` ends the
 hold on its way in, which is what keeps a pass left standing from making the next thing the game
