@@ -714,7 +714,8 @@ public final class GlslTranslator {
 		}
 
 		this.tokens = new TokenStream(GlslLexer.lex(text));
-		this.splits = new VaryingSplit(this.tokens, unit, stage, this::fileScopeDeclaration);
+		this.splits = new VaryingSplit(this.tokens, unit, stage, this::fileScopeDeclaration,
+				this.macroAliases);
 		this.volumes = new VolumeFlattening(this.tokens, unit, volumes, this.packMacros,
 				this.macroAliases);
 	}
@@ -1317,6 +1318,32 @@ public final class GlslTranslator {
 		}
 
 		return Optional.ofNullable(target);
+	}
+
+	/**
+	 * The storage word a token stands for, {@code in} or {@code out}, or null where it is
+	 * neither.
+	 * <p>
+	 * A macro whose live replacement text is exactly one of the two is that word, since the
+	 * compiler never sees the macro. I Like Vanilla writes each varying once for both stages, as
+	 * {@code in_out mat3 tbn} with {@code in_out} defined to {@code in} under {@code FSH} and to
+	 * {@code out} otherwise. Read as the literal word alone, that matrix stays whole, its water
+	 * vertex stage numbers {@code fogAmount} onto a column of {@code tbn}, and Metal refuses two
+	 * outputs on one location outright.
+	 *
+	 * @param aliases the macros whose replacement text is one name, by macro, which is what the
+	 *                translator collects before any pass reads a storage word
+	 */
+	static String storageWord(Token token, Map<String, String> aliases) {
+		if (token.kind() != Kind.IDENTIFIER) {
+			return null;
+		}
+
+		String word = token.text().equals("in") || token.text().equals("out")
+				? token.text()
+				: aliases.getOrDefault(token.text(), "");
+
+		return word.equals("in") || word.equals("out") ? word : null;
 	}
 
 	/**
@@ -4341,13 +4368,14 @@ public final class GlslTranslator {
 				continue;
 			}
 
-			if (token.identifier("out")) {
+			String storage = storageWord(token, this.macroAliases);
+			if ("out".equals(storage)) {
 				FileScope declared = fileScopeDeclaration(index);
 				if (declared != null) {
 					this.declaredOutputs.addAll(declared.names());
 					this.declaredOutputScopes.add(declared);
 				}
-			} else if (token.identifier("in") && this.stage != ProgramStage.VERTEX) {
+			} else if ("in".equals(storage) && this.stage != ProgramStage.VERTEX) {
 				FileScope declared = fileScopeDeclaration(index);
 				if (declared != null) {
 					this.declaredInputs.add(declared);

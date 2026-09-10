@@ -170,6 +170,12 @@ what the next one holds.
   The pack is now told what the card allows in each step, and takes its own road without it where
   it is missing. A card that allows it everywhere draws exactly as before.
 
+- **I Like Vanilla's water no longer makes the pack stop on a Mac.** The pack names the values its
+  water hands from one shader to the next through a shorthand of its own, and the engine only
+  prepared such a value for the game when it was written out in full. One of them, a set of three
+  directions, therefore took the place of the value after it, which Apple's graphics refuse
+  outright, and the pack stopped. The shorthand is now read like the full spelling.
+
 - **A graphics card lost in the middle of a session now closes the game on the error that lost it.**
   When the card stopped answering, the engine caught the error at whichever step of the frame met it
   first, switched the pack or one of its parts off and went on drawing against a card that was gone,
