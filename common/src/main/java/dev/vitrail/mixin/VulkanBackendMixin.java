@@ -55,8 +55,9 @@ import java.util.Set;
  * And {@code geometryShader}, for the stage a pack ships between its two. OpenGL asks the driver
  * for nothing there, so Iris links a {@code .gsh} on any card; Vulkan makes it a feature, and the
  * game has no geometry stage to ask for it. Answered on to {@link GeometryStage}, which files
- * nothing on a device that refused it, leaving such a program refused rather than drawn with its
- * middle stage missing.
+ * nothing on a device that refused it: a stage that only hands each corner on is folded into the
+ * fragment stage there, and any other program is refused rather than drawn with its middle stage
+ * missing.
  */
 @Mixin(VulkanBackend.class)
 public abstract class VulkanBackendMixin {
@@ -173,8 +174,8 @@ public abstract class VulkanBackendMixin {
 			+ "every other one keeps a single blend function for all the targets a pass writes";
 
 	@Unique
-	private static final String GEOMETRY = "a program shipping a geometry stage is refused, its "
-			+ "fragment stage asking for varyings that stage renames";
+	private static final String GEOMETRY = "a program shipping a geometry stage is refused unless "
+			+ "that stage only hands each corner on, which is folded into the fragment stage";
 
 	@WrapOperation(method = "createDevice(JLcom/mojang/blaze3d/shaders/ShaderSource;"
 			+ "Lcom/mojang/blaze3d/shaders/GpuDebugOptions;Ljava/lang/Runnable;)"

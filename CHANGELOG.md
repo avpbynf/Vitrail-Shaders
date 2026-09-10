@@ -183,6 +183,17 @@ what the next one holds.
   more than sixteen is now handed them that way. Every other pass, and every pass on any other
   machine, is handed its textures as before.
 
+- **iterationT's ground is drawn on a Mac instead of black.** Apple's graphics have no geometry
+  stage, the third shader some packs put between the two every draw is built from, so on a Mac a
+  program shipping one was handed back to the game. On iterationT that was the terrain: the game
+  drew the blocks itself, the pack's lighting then found none of the surface it expected there, and
+  the whole ground came out black under a correct sky. A geometry stage that only passes each corner
+  of a triangle on is now folded into the shader after it on such a card, so the pack draws its
+  terrain. iterationT's geometry stage also works out how fine a block's texture is from the whole
+  triangle, and the folded shader works the same size out for each pixel instead. Its sun and moon
+  still fall back to the game on a Mac, that stage telling the moon from the sun by a measure of the
+  whole quad that no single pixel can see.
+
 - **A graphics card lost in the middle of a session now closes the game on the error that lost it.**
   When the card stopped answering, the engine caught the error at whichever step of the frame met it
   first, switched the pack or one of its parts off and went on drawing against a card that was gone,
