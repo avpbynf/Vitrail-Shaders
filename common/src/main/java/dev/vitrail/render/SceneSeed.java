@@ -267,8 +267,8 @@ final class SceneSeed {
 	 * @param seed        which target the scene goes into and on which half, both taken from the
 	 *                    geometry program it stands in for rather than assumed
 	 * @param destination that target's format as the pack declared it. The caller is the one that
-	 *                    checks the target exists: a place that has nowhere to put the scene draws
-	 *                    no seed and says so, it does not refuse the pack
+	 *                    checks the target exists and holds no integers: a place that has nowhere to
+	 *                    put the scene draws no seed and says so, it does not refuse the pack
 	 * @param extras      the draw buffers of that program past the first that this may empty, in the
 	 *                    program's own order and with the ones it may not already left out. Empty
 	 *                    where there is nothing to empty, and then the seed is the one pass it was

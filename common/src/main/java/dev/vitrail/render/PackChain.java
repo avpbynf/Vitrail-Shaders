@@ -407,8 +407,11 @@ public final class PackChain {
 		this.targets = new ColorTargets(chain.targets(), values.noiseResolution(),
 				values.noiseImage(), values.packImages(), values.storageImages(),
 				values.shadowResolution(), values.shadowColours(), values.shadowDepths());
+		// No seed at all into a target of integers, and asked here rather than of the compile, which
+		// on Metal throws instead of handing back a pipeline that is invalid. announceSeed says so.
 		this.seed = chain.chain().seed()
 				.filter(where -> this.targets.has(where.target()))
+				.filter(where -> !holdsIntegers(where.target()))
 				.map(where -> new SceneSeed(where, this.targets.format(where.target()),
 						seedExtras(chain, where)))
 				.orElse(null);
@@ -421,12 +424,9 @@ public final class PackChain {
 				.orElse(null);
 		// Composed where the world's own translucents are about to blend, so it needs that pass to
 		// exist: a pack serving no translucent geometry gets no layer, and the game's features stay
-		// where the game drew them.
-		this.features = chain.chain().geometry(TerrainPass.TRANSLUCENT)
-				.map(ChainPlan.Pass::attachments)
-				.filter(attachments -> !attachments.isEmpty())
-				.map(attachments -> attachments.get(0))
-				.filter(into -> this.targets.has(into.target()))
+		// where the game drew them. A target of integers gets none either, for the seed's reason.
+		this.features = featuresInto()
+				.filter(into -> !holdsIntegers(into.target()))
 				.map(into -> new FeatureLayer(into, this.targets.format(into.target())))
 				.orElse(null);
 		// Held rather than read: the terrain program is compiled against the chunk mesh format, and
@@ -490,6 +490,31 @@ public final class PackChain {
 		// Before the first frame allocates a target: the usage a compute needs is baked into the
 		// image at creation, and nothing can add it afterwards.
 		this.targets.storageTargets(this.compute.storageTargets());
+	}
+
+	/**
+	 * Where the feature layer would be composed: the first draw buffer of the translucent geometry
+	 * pass, provided the targets hold it. Asked by the constructor and again by the announce, which
+	 * has to tell a layer refused for its format from one that had nowhere to go.
+	 */
+	private Optional<ChainPlan.Attachment> featuresInto() {
+		return this.chain.chain().geometry(TerrainPass.TRANSLUCENT)
+				.map(ChainPlan.Pass::attachments)
+				.filter(attachments -> !attachments.isEmpty())
+				.map(attachments -> attachments.get(0))
+				.filter(into -> this.targets.has(into.target()));
+	}
+
+	/**
+	 * Whether a target of the pack holds integers, which the seed and the feature layer cannot write.
+	 * <p>
+	 * Both carry a colour through a {@code vec4} output, and there is no integer that means the
+	 * game's colour, so a {@code uvec4} would not help. Kept out rather than attempted, because a
+	 * float output on an integer attachment is not a pipeline that comes back invalid: Metal refuses
+	 * it by throwing from the compile, which put the whole pack away.
+	 */
+	private boolean holdsIntegers(int target) {
+		return this.chain.targets().directives().format(target).used().integer();
 	}
 
 	/**
@@ -3019,6 +3044,7 @@ public final class PackChain {
 		this.targets.notes().forEach(note -> Vitrail.logger().warn("{}", note));
 
 		announceSeed(seeding);
+		announceFeatures();
 		announceResting(seeding);
 
 		List<Integer> back = unfolded.swapBack();
@@ -3091,7 +3117,25 @@ public final class PackChain {
 		} else if (!this.seedEnabled) {
 			Vitrail.logger().info("The scene seed is off, {} holds its clear colour as well",
 					TargetName.canonical(where.get().target()));
+		} else if (this.seed == null && holdsIntegers(where.get().target())) {
+			Vitrail.logger().warn("{} writes {} first and it holds integers, so the scene seed is not "
+					+ "drawn: the game's frame is a colour and no integer stands for one. Whatever the "
+					+ "game still draws in the pack's place is missing from the picture",
+					where.get().from(), TargetName.canonical(where.get().target()));
 		}
+	}
+
+	private void announceFeatures() {
+		if (this.features != null) {
+			return;
+		}
+
+		featuresInto().filter(into -> holdsIntegers(into.target())).ifPresent(into ->
+				Vitrail.logger().warn("The world's translucents are drawn into {} first and it holds "
+						+ "integers, so the game's translucent features are not composed onto it: the "
+						+ "beacon beam, the lightning and anything else the pack does not draw stay on "
+						+ "the game's own target, which the pack's final draws over",
+						TargetName.canonical(into.target())));
 	}
 
 	private void announceResting(boolean seeding) {
