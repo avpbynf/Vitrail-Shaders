@@ -268,7 +268,8 @@ what the next one holds.
   needs many. The engine kept one size, and a shader asking for any other was silently handed the
   full one, so the estimate that decides how soft a shadow edge should be was made from the wrong
   picture. The copies are now made, once at the end of the pass that draws the map, and a shader
-  that names the size it wants gets that size.
+  that names the size it wants gets that size, unless it reads through the hardware comparison,
+  which always reads the full map.
 
   One pack of those at hand asks: iterationT, on the first of the map's two images, for the width
   of its soft shadows. A pack that says nothing keeps one size and pays for nothing. A shader that
@@ -289,8 +290,9 @@ what the next one holds.
   back a copy nothing ever filled: on screen it shows as a shadow that flickers between frames from
   a viewpoint that is not moving. Every other kind of read already named its copy for exactly that
   reason, and these did not, though they are the reads a pack makes most, the four tap shadow filter
-  of both Complementary packs among them. They name it now, and a shader that names a copy itself
-  still gets the one it named.
+  of both Complementary packs among them. They name it now, and the copy they name is always the
+  full map: a read through the comparison never reaches a smaller one, even where a shader asks
+  for it, which none of the packs at hand does.
 
 - **Smoke, flame and the other solid particles take the colour the pack meant them to.**
   The game draws its quad particles in two goes, the solid ones with the world and the
@@ -445,8 +447,10 @@ what the next one holds.
   for about half a minute, and then it put itself right. A pack of that kind keeps its light in
   volumes it fills a little at a time rather than writing whole, and it was handed those volumes
   still holding whatever had been in that memory, so its first frames spread that instead of light.
-  They are now emptied once, when they are made. Volumes far larger than any of these are left
-  alone, because emptying one of those at that moment is what took the display driver down once.
+  They are now emptied once, when they are made, up to a fixed amount of memory for all the volumes
+  made at the same moment; past it they are left as they come, a precaution kept since emptying at
+  that moment once coincided with the display driver going down. Photon at its two largest settings
+  for those volumes goes past it, and there a reload can still bring the one-colour world back.
 
 - **A setting compared against a number with a decimal point no longer switches a pass off.** Some
   packs write conditions like "if the motion blur is above 0.0" or "if the falloff equals 1", with
