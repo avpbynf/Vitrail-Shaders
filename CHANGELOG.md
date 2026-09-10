@@ -160,6 +160,16 @@ what the next one holds.
 
 ### Fixed
 
+- **The world stops being shaded twice, and the sides and undersides of blocks come back to the
+  brightness the pack drew them at.** The game tints a block face by which of the six directions it
+  faces, out of a small table each dimension carries: in the overworld full strength on top, half
+  underneath and two values between on the sides, which is what gives an unshaded world its relief.
+  A pack works its own lighting out of the direction each surface faces, so that tint left underneath
+  darkened everything the pack had already shaded, each face by its own fixed amount and an
+  underside by half. It showed most where a pack lights a surface the game leaves dark, the plainest
+  of those being a canopy seen from below. A pack that wants the old behaviour writes
+  `oldLighting=true`, which the engine reads now.
+
 - **Leaves, grass and the item in hand come back on a pack that tests its own transparency.** A
   cutout draw needs the test that throws away the see-through parts of a texture, and the engine
   used to write that test into the shader itself whatever the shader was, reading the fourth channel

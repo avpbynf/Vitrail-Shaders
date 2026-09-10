@@ -16,6 +16,7 @@
 		"sodium.BlockRendererMixin",
 		"BufferBuilderMixin",
 		"access.ByteBufferBuilderAccessor",
+		"CardinalLightingMixin",
 		"sodium.ChunkMeshFormatsMixin",
 		"sodium.ChunkVertexMixin",
 		"ClientLevelMixin",

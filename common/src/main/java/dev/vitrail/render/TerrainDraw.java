@@ -167,11 +167,22 @@ public final class TerrainDraw {
 	 * {@code LevelRenderer.invalidateCompiledGeometry}, where Sodium builds its chunk renderer again
 	 * from nothing, and that is where the format is taken.
 	 * <p>
-	 * <strong>Asking is all this does</strong>, and it is what makes the one place that writes the
-	 * field directly safe: a terrain program that threw stops being offered at once, without a
-	 * rebuilt world, and the mesh goes on carrying what it carried until something else rebuilds it.
-	 * The format cannot fall out of step with a living builder that way, because it is not this field
-	 * that the format follows but the reading taken at the rebuild.
+	 * <strong>Asking is all this does</strong>, and it is what makes the two places that write the
+	 * field directly safe: a terrain program that threw stops being offered at once, and the mesh
+	 * goes on carrying what it carried until something else rebuilds it. The format cannot fall out
+	 * of step with a living builder that way, because it is not this field that the format follows
+	 * but the reading taken at the rebuild.
+	 * <p>
+	 * <strong>Those two places CAN ask for a rebuilt world now, and for something else</strong>: they
+	 * call {@link FaceShading#none()} beside the write, because the pass they are handing back is
+	 * about to be drawn by the game's own shader, which reads the game's per face brightness out of
+	 * the vertex colour and would find a mesh built without it. Only when that answer really moves,
+	 * so a pack that never had it dropped asks for nothing. It is a rebuild for the COLOUR and not
+	 * for the format, and it goes through the same deferred door as every other one here, so nothing
+	 * is torn down inside the frame that asked. What it does mean is that the format is taken again
+	 * at that rebuild, out of {@link #carries} as it stands, which on these two roads is still the
+	 * pack's own list: the mesh comes back as wide as it was, which is the state the paragraph above
+	 * describes and not a new one.
 	 * <p>
 	 * Silent before a world is joined, where nothing has been meshed and the first reading answers
 	 * itself.
@@ -182,6 +193,10 @@ public final class TerrainDraw {
 			// flag standing with no chain behind it, and the elements are the half of the answer the
 			// mesh really reads.
 			carries(List.of());
+			// And the game's own per face brightness with them, for the same reason and on the same
+			// terms: the chunk passes are going back to the game's shader, which reads that factor
+			// out of the vertex colour. Said here rather than at each caller that lowers this.
+			FaceShading.none();
 		}
 
 		if (wanted == asked) {
@@ -249,6 +264,9 @@ public final class TerrainDraw {
 					.anyMatch(PackProgram.Loaded::voxelises);
 		} catch (IOException | RuntimeException e) {
 			wanted = false;
+			// And with it the game's own per face brightness, which the shader about to draw this
+			// mesh expects to find in the vertex colour.
+			FaceShading.none();
 			Vitrail.logger().error("Could not read the terrain programs of "
 					+ this.packPath.getFileName() + ", so the world keeps the game's own shader", e);
 		}
@@ -856,6 +874,8 @@ public final class TerrainDraw {
 			return draw.prepare(drawn, format, atlas);
 		} catch (RuntimeException e) {
 			wanted = false;
+			// The same as at the read above: the mesh is about to be drawn by the game's shader.
+			FaceShading.none();
 			Vitrail.logger().error("Vitrail stopped drawing the terrain after an error", e);
 
 			return null;

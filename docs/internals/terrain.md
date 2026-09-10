@@ -71,10 +71,29 @@ index. Four elements. Several of the things a pack asks for are already inside t
 knowing before writing any shader glue.
 
 **The colour already contains lighting.** The encoder multiplies the block tint by ambient occlusion
-before writing it, and face shading is baked in the same way. Two consequences: no translated
-program will ever produce "flat unlit albedo" as long as vertex colour comes from there, and "the
-sides are darker than the tops" is true before any normal exists and therefore proves nothing about
-one. Any test of a normal has to be an A/B on the same scene from the same camera.
+before writing it, so no translated program will ever produce "flat unlit albedo" as long as vertex
+colour comes from there. Any test of a normal has to be an A/B on the same scene from the same
+camera all the same, since the occlusion alone already darkens a corner.
+
+**What is NOT in it any more is the game's own per face brightness.** The game tints a face by which
+of the six directions it faces, out of a table the dimension carries: the overworld's is one on top,
+a half underneath and 0.8 and 0.6 on the sides. A pack works its own directional shading out of the
+normal it is handed, so the factor left underneath shades the same surface twice, and in the
+overworld only the tops escape, their factor being one. So while a pack's own terrain program draws
+the chunks, that table is asked about the top face whatever face is really being built, which is the
+reference's own gesture and the reference's own default; a pack that wants the old behaviour writes
+`oldLighting=true`.
+
+**Asking about the top face is not the same as writing a one**, and the nether is where the two part:
+its table gives 0.9 to the top as much as to the bottom, so a face there is still worth what the
+dimension says and only stops depending on which face it is. Two consequences worth keeping: "the
+sides are darker than the tops" is now a statement about the pack and not about the mesh, and the
+factor is baked into the vertex, so the answer moving is worth a rebuilt world exactly as the block
+id table is. Every road that hands the chunk passes back to the game's own shader puts it back for
+that reason: a pack refused at load, a chain put away mid-frame, and a terrain program that threw at
+either end. And the mesh is not quite all of it, which is worth knowing before reading a capture: a
+block in flight, the falling one and the one a piston carries, is lit through the same table per
+frame rather than out of a section, so it follows the answer with no rebuild in between.
 
 **Unless the pack asked for the two apart.** `separateAo=true` in `shaders.properties` says the pack
 wants the occlusion where it can see it: the tint reaches the program undivided and the coefficient

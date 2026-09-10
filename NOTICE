@@ -992,6 +992,26 @@ Apache License, Version 2.0
   The question is asked of the spelling here and of the preprocessed text there, and the javadoc of
   GlslTranslator.planAlphaEpilogue says why and what that leaves standing.
 
+  common/src/main/java/dev/vitrail/render/FaceShading.java and the two mixins it governs take the
+  reference's rule about the game's own per face brightness: it is left out for every pack that
+  does not write oldLighting, which
+  net.irisshaders.iris.pipeline.IrisRenderingPipeline answers as !oldLighting at lines 1159 to 1160
+  with the directive defaulting to false at shaderpack/properties/PackDirectives.java:92, and it is
+  left out by handing the up direction to the per face table whatever face was asked about, which is
+  what net.irisshaders.iris.mixin.vertices.block_rendering.MixinClientLevel does at lines 16 to 23.
+  The fluid renderer carries the factor itself rather than reading that table, and the call taken
+  there is the one compat/sodium/mixin/MixinDefaultFluidRenderer takes at lines 24 to 32. Read on
+  the 26.2 branch on 10 September 2026. What is taken is the rule and not the code.
+
+  One condition is asked here that is not asked there, and it is a difference in what the two
+  engines can serve rather than a choice: the reference draws the world's chunks with the pack's own
+  programs in every case its pipeline exists for, while this engine has a road where it hands the
+  chunk passes back to the game's shader, which reads the factor out of the vertex colour and
+  expects to find it (render/TerrainDraw.java:179 raises and lowers that switch, and the vertex
+  colour it governs is described in docs/internals/terrain.md). So the brightness is left in
+  wherever that road is taken. What it costs the image is nothing on the road the reference has,
+  and on the road it has not it is the difference between a world the game shades and a flat one.
+
 AMD FidelityFX Super Resolution 1.0, https://github.com/GPUOpen-Effects/FidelityFX-FSR
 Copyright (c) 2021 Advanced Micro Devices, Inc.
 MIT License

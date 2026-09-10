@@ -2,6 +2,7 @@ package dev.vitrail.mixin.sodium;
 
 import dev.vitrail.sodium.TerrainVertex;
 import dev.vitrail.render.BlockStateIds;
+import dev.vitrail.render.FaceShading;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.Vitrail;
 
@@ -108,6 +109,33 @@ public abstract class DefaultFluidRendererMixin {
 					+ "carries the packed id {}", table,
 					fluidBlock == null ? "nothing" : fluidBlock, this.vitrail$id);
 		}
+	}
+
+	/**
+	 * The fluid's side faces at full brightness while a pack shades the world, which is what
+	 * {@link FaceShading} does to every other face and for the same reason.
+	 * <p>
+	 * A fluid does not go through {@code CardinalLighting}: this renderer carries the factor itself
+	 * and hands it to {@code updateQuad}, so the mixin that answers for the blocks never sees it and
+	 * the water alone would keep a shading the pack applies again. The reference makes the same
+	 * change at the same call, {@code compat/sodium/mixin/MixinDefaultFluidRenderer.java:24-32},
+	 * and at that one alone of the three the method makes.
+	 */
+	@ModifyArg(
+			method = "render",
+			at = @At(value = "INVOKE",
+					target = "Lnet/caffeinemc/mods/sodium/client/render/chunk/compile/pipeline/"
+							+ "DefaultFluidRenderer;updateQuad(Lnet/caffeinemc/mods/sodium/client/"
+							+ "model/quad/ModelQuadViewMutable;Lnet/caffeinemc/mods/sodium/client/"
+							+ "world/LevelSlice;Lnet/minecraft/core/BlockPos;Lnet/caffeinemc/mods/"
+							+ "sodium/client/model/light/LightPipeline;Lnet/minecraft/core/Direction;"
+							+ "Lnet/caffeinemc/mods/sodium/client/model/quad/properties/"
+							+ "ModelQuadFacing;FLnet/caffeinemc/mods/sodium/client/model/color/"
+							+ "ColorProvider;Lnet/minecraft/world/level/material/FluidState;)V",
+					ordinal = 2),
+			require = 1)
+	private float vitrail$sideFaceAtFullBrightness(float brightness) {
+		return FaceShading.dropped() ? 1.0F : brightness;
 	}
 
 	/** The path taken when nothing sorts this quad, which is every fluid the pack draws opaquely. */
