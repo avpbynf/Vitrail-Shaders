@@ -142,6 +142,12 @@ public final class ShadowAmortisation {
 
 	private static boolean missedLastPlan;
 
+	/** Whether a map drawn this frame is to be kept for a later frame, settled at the head of it. */
+	private static boolean keepThisFrame;
+
+	/** Whether the map last drawn was kept, which is the only map a later frame may put back. */
+	private static boolean keptAtLastDraw;
+
 	private static boolean saidRefused;
 
 	private static int countedFrames;
@@ -209,7 +215,11 @@ public final class ShadowAmortisation {
 			countedDraws = 0;
 		}
 
-		drawThisFrame = !seeded || asked <= 0 || !amortisable
+		keepThisFrame = asked > 0 && amortisable;
+		// A map that was not kept when it was drawn is not in the store, and the store may hold an
+		// older one from before the reuse was switched off: the first frame after switching it on
+		// draws and keeps, so a put back only ever follows a kept draw.
+		drawThisFrame = !seeded || asked <= 0 || !amortisable || !keptAtLastDraw
 				|| sinceDraw >= asked
 				|| anchorCamera.distance(camera) >= MOVE_BLOCKS
 				|| Math.abs(shadowAngle - anchorAngle) >= ANGLE_TURNS;
@@ -266,6 +276,16 @@ public final class ShadowAmortisation {
 		sinceDraw = 0;
 		seeded = true;
 		drewSinceBegin = true;
+		keptAtLastDraw = keepThisFrame;
+	}
+
+	/**
+	 * Whether the map drawn this frame is to be kept, which the stage asks before it copies it: only
+	 * where the reuse is asked for and the pack allows it. Everywhere else every frame draws its own
+	 * map and a copy of it would never be read. Nought is then the engine as it was, copy included.
+	 */
+	public static boolean keepsDrawnMap() {
+		return keepThisFrame;
 	}
 
 	/**
@@ -283,6 +303,7 @@ public final class ShadowAmortisation {
 		drawThisFrame = true;
 		drewLastFrame = true;
 		drewSinceBegin = false;
+		keptAtLastDraw = false;
 		saidRefused = false;
 	}
 
