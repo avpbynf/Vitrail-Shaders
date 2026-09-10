@@ -290,8 +290,9 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	 * How many frames the shadow map is kept for after the one that drew it.
 	 * <p>
 	 * The pass that fills that map is the most expensive thing the engine does, and between two
-	 * frames of a player standing still nothing in it moves. What the frames cost is on casters that
-	 * MOVE: a mob, a boat, the player's own shadow keep the place they had when the map was drawn.
+	 * frames of a player standing still nothing in it moves. What the frames cost is on the GROUND: a
+	 * block placed or broken keeps the shadow it had when the map was drawn, while a mob, a boat and
+	 * the player's own shadow are drawn into the kept map again on every frame.
 	 * The slider stops at {@link ShadowAmortisation#MAX_FRAMES} because a walk finds the lag at
 	 * three, and a value nobody should choose is better left out of the selector than explained in
 	 * a tooltip.
