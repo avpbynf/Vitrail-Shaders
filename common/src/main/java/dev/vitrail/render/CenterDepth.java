@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.uniform.Smoothed;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -302,6 +303,8 @@ final class CenterDepth {
 			// is still being read for.
 			this.factor = new MappableRingBuffer(() -> LABEL,
 					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, BLOCK_BYTES);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			release();
 			this.refused = true;

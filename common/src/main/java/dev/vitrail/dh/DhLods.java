@@ -5,6 +5,7 @@ import dev.vitrail.render.DistantMesh;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 
 import java.lang.invoke.MethodHandle;
@@ -568,6 +569,8 @@ public final class DhLods {
 					if (DistantDraw.draw(opaque, sections)) {
 						return null;
 					}
+				} catch (GpuDeviceLossException e) {
+					throw e;
 				} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 					usable = false;
 					// Handed back for good and not merely stopped: this proxy stands in front of DH's

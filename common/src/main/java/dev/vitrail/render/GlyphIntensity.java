@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -104,6 +105,8 @@ public final class GlyphIntensity {
 		GpuTextureView made;
 		try {
 			made = device.createTextureView(texture, sheet.baseMipLevel(), sheet.mipLevels());
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			Vitrail.logger().error("Could not build a swizzled view of the font sheet "
 					+ texture.getLabel() + ", so the pack reads it with one channel and draws its "

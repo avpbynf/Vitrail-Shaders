@@ -13,6 +13,7 @@ import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.render.timing.RingTimings;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
@@ -149,6 +150,8 @@ public final class ShadowTerrain {
 	public static void draw() {
 		try {
 			walk();
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			TerrainDraw.shadowStageFailed(e);
 		}

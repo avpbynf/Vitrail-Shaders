@@ -9,6 +9,7 @@ import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -307,6 +308,8 @@ public final class SkyDraw extends FamilyDraw {
 
 		try {
 			return draw.prepare(device, element, modelView, colour);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			wanted = false;
 			Vitrail.logger().error("Vitrail stopped drawing the sky after an error", e);

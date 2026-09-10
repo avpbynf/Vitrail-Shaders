@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -725,6 +726,8 @@ final class PackDepth {
 					width, height);
 			this.scene = new TargetSurface("Vitrail depth with the translucents", FORMAT, false,
 					width, height);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			this.broken = true;
 			this.brokenWidth = width;
@@ -775,6 +778,8 @@ final class PackDepth {
 			this.preHand = close(this.preHand);
 			this.preHand =
 					new TargetSurface("Vitrail depth before the hand", FORMAT, false, width, height);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			this.preHandBroken = true;
 			this.preHand = close(this.preHand);
@@ -840,6 +845,8 @@ final class PackDepth {
 					FORMAT, false, width, height);
 			this.distantScene = new TargetSurface("Vitrail far terrain depth with its water",
 					FORMAT, false, width, height);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			this.distantBroken = true;
 			this.distantBrokenWidth = width;

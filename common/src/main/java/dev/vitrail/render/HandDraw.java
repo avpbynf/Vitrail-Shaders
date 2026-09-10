@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.ProjectionType;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -351,6 +352,8 @@ public final class HandDraw {
 		if (instance == null && !failed) {
 			try {
 				instance = new HandDraw(Minecraft.getInstance());
+			} catch (GpuDeviceLossException e) {
+				throw e;
 			} catch (RuntimeException e) {
 				failed = true;
 				Vitrail.logger().error("Vitrail could not build the renderer it draws the hand with, "

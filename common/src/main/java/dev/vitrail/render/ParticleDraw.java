@@ -11,6 +11,7 @@ import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -260,6 +261,8 @@ public final class ParticleDraw extends FamilyDraw {
 
 		try {
 			return draw.prepare(device, ELEMENTS.get(translucent), colour, depth);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			wanted = false;
 			Vitrail.logger().error("Vitrail stopped drawing the particles after an error", e);

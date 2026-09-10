@@ -518,6 +518,8 @@ public final class PackChoice {
 			if (!engine.weather()) {
 				EngineOptions.announceWeatherOff(gameDirectory);
 			}
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (IOException | RuntimeException e) {
 			PackChain.stop();
 			lastError = "Could not prepare this pack: " + e;
@@ -1112,7 +1114,7 @@ public final class PackChoice {
 				// (VulkanUtils.crashIfFailure) and catches it in no place at all, which is what
 				// makes it the end of the session rather than the end of a release: the load below
 				// would allocate its targets against a device that is gone. Rethrown as it stands,
-				// so the report names the driver rather than a line about video memory.
+				// so the report opens on the lost device rather than on a line about video memory.
 				throw e;
 			} catch (RuntimeException e) {
 				// Said here rather than left to whatever comes next, and said once: the chain is

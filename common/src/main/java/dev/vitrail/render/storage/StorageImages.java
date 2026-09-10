@@ -9,6 +9,7 @@ import dev.vitrail.pack.model.TargetFormat;
 import dev.vitrail.render.StalePipelines;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.GpuDeviceBackend;
@@ -236,6 +237,8 @@ public final class StorageImages implements AutoCloseable {
 							: image.clear() && image.depth() > 1
 									? ", left on the frame that filled it"
 									: "");
+				} catch (GpuDeviceLossException e) {
+					throw e;
 				} catch (RuntimeException e) {
 					this.refusedForGood = true;
 					throw refused(image, e);
@@ -269,6 +272,8 @@ public final class StorageImages implements AutoCloseable {
 					this.allocated.add(Allocated.create(vulkan, image, width, height, 1, false));
 					Vitrail.logger().info("storage image {} at {}x{}", image.describe(), width,
 							height);
+				} catch (GpuDeviceLossException e) {
+					throw e;
 				} catch (RuntimeException e) {
 					throw refused(image, e);
 				}
@@ -788,6 +793,8 @@ public final class StorageImages implements AutoCloseable {
 								"storage image scratch " + declared.name());
 						allocated.scratch = imagePtr.get(0);
 						allocated.scratchAllocation = allocationPtr.get(0);
+					} catch (GpuDeviceLossException e) {
+						throw e;
 					} catch (RuntimeException e) {
 						Vitrail.logger().warn("storage image {} keeps a frame of lag, its scratch "
 								+ "could not be allocated: {}", declared.name(), e.toString());

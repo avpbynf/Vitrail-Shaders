@@ -5,6 +5,7 @@ import dev.vitrail.mixin.access.RenderTargetAccessor;
 import dev.vitrail.settings.PackFile;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -709,6 +710,8 @@ public final class RenderScale {
 			} else if (upscaled.width() != outWidth || upscaled.height() != outHeight) {
 				upscaled.resize(outWidth, outHeight);
 			}
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			refusedAtSize = true;
 			refusedWidth = width;
