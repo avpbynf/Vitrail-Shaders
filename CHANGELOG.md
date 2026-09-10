@@ -38,9 +38,14 @@ what the next one holds.
   written and the whole program was turned away: on iterationT that took the terrain and the moon
   out of the picture entirely. Those programs now draw.
 
-  It needs a card that can run such a shader, which the desktop cards do and Apple's do not. Where
-  there is none the log names the program, and the world keeps the game's own shader for it rather
-  than drawing it with its middle missing.
+  It needs a card that can run such a shader, which the desktop cards do and Apple's do not. On a
+  card without one, a geometry stage that only passes each corner of a triangle on is folded into
+  the shader after it, which is what iterationT's terrain stage does, so its ground is drawn on a
+  Mac too. That stage also works out how fine a block's texture is from the whole triangle, and the
+  folded shader works the same size out for each pixel instead. Any other geometry stage is named in
+  the log on such a card, and the world keeps the game's own shader for that program rather than
+  drawing it with its middle missing: iterationT's sun and moon stay with the game on a Mac, its
+  stage telling the moon from the sun by a measure of the whole quad that no single pixel can see.
 
 - **A pack may now blend one of a pass's targets differently from the others.** A shader pack can
   ask for a blend function per target rather than one for the whole program, and the engine read
@@ -55,28 +60,30 @@ what the next one holds.
   as before and the whole-program function stands, which is the ground Iris refuses it on too.
 
 - **Temporal Fold, a new setting on the engine page.** A world drawn at a lower render scale loses
-  the thin things first, and those are what crawls as you move: distant leaves, fences, the far
-  edges of terrain. The upscale cannot put them back, because it only sees one frame. This blends
-  each frame with the ones before it, matching every pixel to where it stood a frame ago, so the
-  detail comes from the frames themselves and a low scale settles instead of shimmering.
+  the thin things first, and those are what crawls as you move. The upscale cannot put them back,
+  because it only sees one frame. This blends each frame with the ones before it, matching every
+  pixel to where it stood a frame ago, so detail one frame missed can come from the frames before
+  it.
 
   It is off until you turn it on, and the checkbox is greyed out at a render scale of 100 percent,
   where there is nothing to rebuild. It costs two more passes and three more images, about 40 MiB of
-  them at 1920x1080. Things that move on their own keep a faint trail, because the match is worked
-  out from the camera and not from what each object did.
+  them at 1920x1080. Things that move on their own can leave a faint trail, because the match is
+  worked out from the camera and not from what each object did.
 
 - **Shadow Reuse, a new setting on the engine page.** Filling the shadow map means walking the whole
   world a second time, for the sun, and it is the most expensive thing the frame does. Between two
   frames of a player standing still nothing in that map moves, so it is now kept and reused instead
   of drawn again, and the passes that sample it are handed the matrices of the map they actually
-  have. Measured at eye level in open terrain: 143 to 194 frames a second on Complementary Unbound,
-  157 to 190 on Photon.
+  have. Measured on a Mac mini M4 with Complementary Reimagined at its defaults, in a savanna beside
+  a village, in a window of 854x480 with a shadow distance of 32: 111 to 113 frames a second with
+  the map drawn every frame, 131 to 135 with it kept. Those figures belong to that window and that
+  distance, not to every setup.
 
-  **It does nothing on a pack that voxelises into its shadow pass**, which those two do at their
-  own default settings, coloured lighting being what turns it on. The measurements above were taken
-  with that switched off. A pack whose shadow programs fill a volume the rest of the frame reads has
-  to fill it every frame, so the engine refuses the reuse there and says so once in the log. What
-  is left is every pack that does not, and the same packs with coloured lighting off.
+  **It does nothing on a pack that voxelises into its shadow pass**, which Complementary Unbound and
+  Photon do with their coloured lighting on. A pack whose shadow programs fill a volume the rest of
+  the frame reads has to fill it every frame, so the engine refuses the reuse there and says so once
+  in the log. That is decided from the shadow programs as the pack's settings leave them, so what is
+  left is every pack that does not voxelise, and the same packs with coloured lighting off.
 
   What is kept is the ground alone. Everything that moves, a mob, a boat, your own shadow, is drawn
   into the kept map afresh on every frame, so none of it is ever late. The price is on the ground
@@ -87,242 +94,86 @@ what the next one holds.
 - **A pack that ships no `final` program now draws.** Some packs end their chain on their last
   composite and expect what it wrote to be the picture; they were refused outright, with nothing on
   screen. What the chain leaves in `colortex0` is now brought to the screen, which is what Iris
-  does with the same packs. I Like Vanilla and Pegasus were both refused for this alone.
+  does with the same packs. I Like Vanilla and Pegasus were both refused for it, and both now load.
+
+  Neither loaded in a released version, so nothing else they needed was ever visible either. I Like
+  Vanilla reads the screen under one of the game's texture names, which the entry on those names
+  covers, and on a Mac its water declares the values it hands on through a shorthand of its own,
+  now read like the full spelling, where one of them would otherwise take the place of the next and
+  Apple's graphics refuse it. Pegasus defines one of its settings twice under two values, which
+  refused every program of it; where the two cannot be told apart the later one now stands, as a
+  driver takes it, and where a use sits between them the pack is left exactly as it wrote it. Its
+  terrain, its water, its entities and its particles needed two things more. It builds its texture
+  reads out of shorthands of its own, and the name `texture` inside them was left as written while
+  the engine renamed it everywhere else, so those passes read a name nothing declared; the
+  shorthands are renamed with the rest now. And it compares settings against numbers with a decimal
+  point, "if the falloff equals 1" with the setting at 1.0, and those lines were read as whole
+  numbers and then refused. They are now reduced the way a driver reduces them.
 
 - **Compute passes are announced as a capability.** They have been running for a while, so a pack
   that says it cannot draw without them was being refused for something it would have got. Clarity
   and Noble now load.
 
-  Three more things stood between those two packs and their picture, and none of them was ever
-  visible in a released version, since neither pack loaded at all. Clarity spells the matrix that
-  places a texture under a plain name rather than the old fixed function one, and nothing here
-  answered that spelling, so every corner of the sun and of the moon was handed the same texture
-  coordinate and both came out as flat squares of a single colour; it also lost two passes to a
-  setting compared against a number with a decimal point, which the entry below describes. Noble
-  names, in the shader itself, the format of the image that shader writes to, and that word was
-  being dropped as the declaration was moved to where this backend wants it, so the pass never
-  built and nothing wrote its screen space reflections.
+  More stood between those two packs and their picture, and none of it was ever visible in a
+  released version, since neither pack loaded at all. Clarity spells the matrix that places a
+  texture under a plain name rather than the old fixed function one, and nothing here answered that
+  spelling, so every corner of the sun and of the moon was handed the same texture coordinate and
+  both came out flat; it also lost two compute programs to a setting
+  compared against a number with a decimal point, the same reading the Pegasus paragraph above
+  describes. Noble names, in the shader itself, the format of the image that shader writes to, and
+  that word was being dropped as the declaration was moved to where this backend wants it, so the
+  pass never built and nothing wrote its screen space reflections.
+
+  Noble keeps what each surface is made of as whole numbers packed out of its colours. Apple's
+  graphics store and read those numbers wrong, so on a Mac they are packed and read back by plain
+  arithmetic the engine writes into the shader, and the game's own picture is no longer copied into
+  a target holding such numbers, which a Mac refuses outright. On any machine, whatever the game
+  still draws in the pack's place, a mob the pack has no program for among it, is missing from the
+  targets its terrain and its water write rather than painted in flat, and the log says which.
 
 - **The pack is told what you are holding.** A shader recognises an item by the number the pack
   gives it in its own table, and nothing was looking your hands up in that table, so whatever you
   carried the pack was told you carried nothing it knew. What that drives on most packs is the
-  light in your hand: on Complementary a torch, a soul lantern and a froglight all cast the same
-  generic glow instead of their own colour, and a lava bucket cast none at all; on Pegasus the
-  light was white whichever torch you held. Both hands are read. The block you are aiming at and
-  the mount you are riding go through tables of the same kind and are read with them.
+  light in your hand, which now follows the item the pack's table names. Both hands are read. The
+  block you are aiming at and the mount you are riding go through tables of the same kind and are
+  read with them.
 
-  **And the off hand no longer answers for the main one on a pack that asked it not to.** A pack
-  says whether the brighter of your two hands is what the main one reports, which is how it worked
-  before the off hand had a light of its own, and that was being done whatever the pack said. Seven
-  of the eleven packs tested ask for it to stop: on those, a torch in the off hand was being
-  reported in both hands at once, so the pack lit the scene from the empty one beside it as well.
+- **A pack that says it cannot be drawn without the translucent entity program now loads.**
+  RenderPearl names that capability in its own file, the engine did not count the name among the
+  ones it serves, and the pack was turned away before any of its programs was read, with nothing of
+  it on screen. The capability itself was already there: a blending entity draw asks for the pack's
+  `gbuffers_entities_translucent` and a blending block entity for its `gbuffers_block_translucent`,
+  each falling back on the opaque file of its own family where the pack ships neither. The name is
+  now served, and announced as a define beside the others so that a pack testing for it reads the
+  truth. RenderPearl, which names compute shaders as well, now loads.
 
-### Changed
-
-- **The compiled shaders kept on disk are three times smaller.** Every one of them carried a copy
-  of the whole shader text and a marker in front of nearly every instruction, which is what a
-  driver would need to name a line inside a shader and which nothing else reads. Measured on
-  Complementary Unbound, one pack's compiled programs came to eighteen megabytes and now come to
-  six. What is stored is what is read back at every load, so there is less of everything to read,
-  check and hand to the driver, though no load came out measurably shorter on the machine this was
-  taken on. A compile error still names its line exactly as before.
-
-- **A pack read twice in one session is opened once.** Reading a pack means mounting its archive,
-  walking it for the settings it offers, parsing what it declares and pasting every shared header
-  into every file that includes one, and all of that was done again from nothing each time: at a
-  world join, at a portal, and every time you apply a setting. The engine now keeps the archive it
-  opened and reuses that reading wherever nothing it depends on has moved, which halves the work
-  the second reading of a session does. It is opened afresh the moment anything could have changed
-  it, a file edited on disk included, so a pack you are editing is still read as you left it.
-
-- **Reloading resources no longer rebuilds the pack.** Pressing F3 and T, or anything else that
-  reloads the game's resources, threw away every program the pack had compiled and built them all
-  again, with the world held back for about a second while it happened. A pack's programs come out
-  of its own archive, which a resource reload does not touch, so the ones being drawn with are kept
-  across it now and the reload costs the pack nothing. Programs left over from a pack that has been
-  replaced are still freed there, which is the one thing that ever frees them.
-
-- **Joining a world builds the pack once instead of twice.** The pack is read while the client
-  starts up, before any world has arrived, and joining one makes it read again against what that
-  world brings. That second reading used to come after the first had already built the whole
-  chain, so everything was compiled and then thrown away; the question of whether the world moved
-  is asked before the building starts now. Leaving a world and joining another paid the same bill
-  in a different order, reallocating everything for the first frame and then again for the
-  reading, and it does not any more. Nothing about the picture changes, and no wait came out
-  measurably shorter on the machine this was taken on, so it says work removed rather than time
-  gained.
-
-### Fixed
-
-- **Noble's surfaces are lit right on a Mac.** Noble keeps what each surface is made of, how
-  shiny it is, how much it glows and how much shade it gathers, as whole numbers packed out of its
-  colours, and Apple's graphics stored one of those numbers wrong and read them back wrong, so the
-  lit picture came out wrong wherever the pack drew. On a Mac those numbers are now packed and read
-  back by plain arithmetic the engine writes into the shader, which gives the numbers every other
-  card already got. Nothing changes on any other machine.
-
-- **Photon's sky light reaches the ground on a Mac.** Photon works out the light the sky casts in a
-  small step that runs on many threads of the graphics card at once, and those threads keep their
-  working numbers in memory they share. The step asks for more of that memory than Apple's graphics
-  allow, so it was never built, and everything the sky lights came out dark: the grass a dull olive
-  where any other card draws it bright green. On a Mac, such a step now keeps those numbers in an
-  ordinary buffer when it runs as one batch of threads, which is how Photon runs it, and works out
-  the same light. A step past the allowance that runs as several batches is still refused, and the
-  log says so. Every other card is left as it was.
-
-- **RenderPearl's water, particles and translucent blocks and mobs are drawn on a Mac.** The pack
-  lights them from light lists it only builds where the shader compiler can share values between
-  neighbouring pixels, and it asks the compiler whether it can. The engine answered that question
-  for itself before handing the shader over, answered no, and left out the part that holds the
-  lists, while the compiler answered yes and went looking for them: those four programs were
-  refused and drawn with the game's own shader instead. The engine now reads the compiler's answer,
-  step by step and less what the card cannot run, so a pack asking the compiler what it supports
-  gets the same answer at both ends.
-
-- **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
-  mods reshape Sodium's texture filtering option, and Sodium refuses two of them, so a game set to
-  OpenGL with both installed closed before the title screen. Vitrail now only touches that option
-  where it draws the world itself and Iris does not, and where Iris draws it no longer puts a red
-  line in the chat saying the picture is missing, nor answers Iris's reload key, which is also its
-  own, with a red line of its own. After a startup that ended badly, the backend is kept as it was
-  set rather than put back to Vulkan while Iris is installed, since Iris has already chosen its side
-  for that backend.
-
-- **Noble no longer stops on a Mac.** Noble keeps packed whole numbers rather than a colour in the
-  first target its terrain writes, and the engine went on copying the game's own picture into that
-  target wherever the pack drew nothing, which a Mac refuses outright: the pack was put away as soon
-  as it started drawing. A pack that writes such numbers into its terrain target now gets no copy of
-  the game's picture there, so whatever the game still draws in the pack's place, a mob the pack has
-  no program for among it, is missing from the image rather than painted in flat. The same holds
-  for the target its water is drawn into, where the beacon beam and the lightning would have been
-  laid. The log says which.
-
-- **RenderPearl no longer stops on a Mac.** The pack shares its light lists between neighbouring
-  pixels wherever the shader compiler says the card can, and the compiler says so on every card.
-  Apple's graphics stack only allows that in some of the steps a program is made of, and not in
-  the one that places the terrain, so the terrain program was never built and the pack stopped.
-  The pack is now told what the card allows in each step, and takes its own road without it where
-  it is missing. A card that allows it everywhere draws exactly as before.
-
-- **I Like Vanilla's water no longer makes the pack stop on a Mac.** The pack names the values its
-  water hands from one shader to the next through a shorthand of its own, and the engine only
-  prepared such a value for the game when it was written out in full. One of them, a set of three
-  directions, therefore took the place of the value after it, which Apple's graphics refuse
-  outright, and the pack stopped. The shorthand is now read like the full spelling.
-
-- **Reverie no longer stops on a Mac.** Two of its passes read more textures at once than the
-  sixteen a Mac takes when a pass is handed its textures one by one, which is how the game hands
-  them over, so Apple's graphics card refused those passes and the engine put the pack away. On a
-  Mac whose card takes textures as one table, which every Apple Silicon Mac does, a pass reading
-  more than sixteen is now handed them that way. Every other pass, and every pass on any other
-  machine, is handed its textures as before.
-
-- **iterationT's ground is drawn on a Mac instead of black.** Apple's graphics have no geometry
-  stage, the third shader some packs put between the two every draw is built from, so on a Mac a
-  program shipping one was handed back to the game. On iterationT that was the terrain: the game
-  drew the blocks itself, the pack's lighting then found none of the surface it expected there, and
-  the whole ground came out black under a correct sky. A geometry stage that only passes each corner
-  of a triangle on is now folded into the shader after it on such a card, so the pack draws its
-  terrain. iterationT's geometry stage also works out how fine a block's texture is from the whole
-  triangle, and the folded shader works the same size out for each pixel instead. Its sun and moon
-  still fall back to the game on a Mac, that stage telling the moon from the sun by a measure of the
-  whole quad that no single pixel can see.
-
-- **A graphics card lost in the middle of a session now closes the game on the error that lost it.**
-  When the card stopped answering, the engine caught the error at whichever step of the frame met it
-  first, switched the pack or one of its parts off and went on drawing against a card that was gone,
-  until a later step crashed the game on a report about something else. That error now goes
-  straight through, so the crash report opens on the lost device itself.
-
-- **A pack the graphics card will not build no longer closes the game.** When the card refused one
-  of a pack's programs while the pack was being prepared, which Apple's hardware does with a
-  program reading more textures at once than it has slots for, the error went all the way up and
-  the game closed on a crash report: on a Mac that was Reverie. The pack is now put away and the
-  world is drawn by the game, the way it is for a pack refused when it loads, and the settings
-  screen says an error stopped it.
-
-- **Three more programs the graphics card will not build no longer close the game.** The render
-  scale's upscale, a pack's particle program rebuilt for particles another mod draws in a format of
-  its own, and the game's entity programs rebuilt when a pack starts drawing the entities or the
-  hand were all built in the middle of a frame with nothing to catch a refusal, so a card that
-  refused one closed the game. The render scale now falls back to a plain stretch, and turns itself
-  off when nothing builds; that other mod's particles are drawn through the pack's program as it
-  stands; and the entities and the hand go back to the game for the rest of the session. The log
-  says which.
-
-- **Water no longer loses whole patches of its surface on a Mac.** On Apple Silicon a lake could show
-  its bed through rectangles where the surface was not drawn, coming and going as the view moved.
-  The engine keeps one drawing pass open across the world's geometry when it can, and the hand
-  wrote its own data to the graphics card inside that pass right after the water had been drawn in
-  it, which Vulkan does not allow; on a Mac that write cost the water already drawn. The pass is now
-  closed before any such write, unless something is still drawing into it.
-
-- **Banners no longer flicker with light stripes on a Mac.** On Apple Silicon a banner could show
-  fine light stripes coming and going across its colour, plainest on the brown banners hanging in a
-  village seen from below. A banner is drawn twice at the same place, the cloth and then its colour
-  over it, by two different programs of the pack, and the Mac's shader compiler was free to round
-  each program's arithmetic its own way, so the colour could land a hair behind the cloth and be
-  hidden by it. Every vertex program of a pack now asks for its position to come out identical
-  wherever two programs compute it with the same code.
-
-- **The world stops being shaded twice, and the sides and undersides of blocks come back to the
-  brightness the pack drew them at.** The game tints a block face by which of the six directions it
-  faces, out of a small table each dimension carries: in the overworld full strength on top, half
-  underneath and two values between on the sides, which is what gives an unshaded world its relief.
-  A pack works its own lighting out of the direction each surface faces, so that tint left underneath
-  darkened everything the pack had already shaded, each face by its own fixed amount and an
-  underside by half. It showed most where a pack lights a surface the game leaves dark, the plainest
-  of those being a canopy seen from below. A pack that wants the old behaviour writes
-  `oldLighting=true`, which the engine reads now.
-
-- **Leaves, grass and the item in hand come back on a pack that tests its own transparency.** A
-  cutout draw needs the test that throws away the see-through parts of a texture, and the engine
-  used to write that test into the shader itself whatever the shader was, reading the fourth channel
-  of the first buffer the program fills. Filling that buffer the way shaders did before they could
-  name their own outputs came with the test built into the hardware, so a program written that way
-  is written expecting it. A program that names the buffer itself is not: it puts what it likes in
-  that channel, a light level as readily as a transparency, and does its own test with the threshold
-  the engine hands it. Testing the channel anyway threw away every leaf, every blade of grass and
-  the item in hand of RenderPearl, on a ground still carrying the shadow of a canopy that was not
-  being drawn. The test is now written only into the programs that expect it, which is where the
-  engine the packs are tuned against writes it too.
-
-- **A pack no longer brings the game down on a Mac over a name it chose.** Apple hardware has no
-  driver of its own for the interface this engine draws through, so a translation layer rewrites
-  every shader into Metal's language, which is C++, and it carries over the names a pack gave its
-  own functions and variables. A pack that had named something `bias`, `length_squared` or `new`
-  then collided with words that language already owns, and Apple's compiler refused the whole pass:
-  the game came down at the moment the world was drawn, on a pipeline it could not compile. BSL,
-  Bliss and Photon all died there, on the version out today as much as on this one. The engine now
-  drops the names of everything outside a shader never asks for, which is where a pack names its
-  own working parts, and BSL draws. The names of what a pack exposes stay, its uniforms and its
-  textures, because the engine binds those by name; none of the packs tried collides there.
-
-  Bliss and Photon got past that and stopped on a different Apple limit, the one below.
-
-- **A pack that declares more textures than a pass reads draws on a Mac.** Apple offers one pass
-  sixteen slots for the textures it reads, and numbers them off the whole list of textures the
-  engine hands that pass rather than off the ones its shaders touch. A pack usually declares every
-  texture it owns in one file all its programs include, so a pass reading thirteen of them was
-  handed a list of forty-eight and given slot numbers running past the sixteenth: Apple's compiler
-  refused it and the game came down as the world was drawn, on a pass wanting three fewer slots
-  than the hardware has. The engine now numbers a pass off the textures its two shader stages read
-  between them, which is the count that has to fit, so the numbering is dense and anything under
-  sixteen gets in. Bliss and Photon draw.
-
-  Reverie has two passes whose stages read seventeen and eighteen textures between them, more than
-  Apple's hardware holds however they are numbered, and those two stay refused. Everywhere else this
-  is invisible: the same textures are bound as before and the same ones are read, and what changes
-  is only which of them the pass is given a numbered slot for.
+  Much more stood between RenderPearl and its picture, and none of it was visible in a released
+  version, since the pack never loaded. It computes in sixteen and eight bit numbers: the line
+  enabling those types is kept instead of dropped, the card is asked for that arithmetic wherever it
+  reports it, a colour output declared under one of those types is declared under its ordinary
+  width, and the values the pack passes between its two stages in a block of its own are passed one
+  by one, at the cost of the packing it had chosen. Its shared vertex header narrows the block a
+  vertex stage writes its position through, which the language allows only ahead of any use of
+  that block, and pasting the headers in moved that line past one, so every vertex stage of the
+  pack was refused; the line is dropped now and the full block stands. It asks whether the card
+  has an AMD instruction,
+  which the shader compiler answered yes on every card and which takes the driver down on a
+  GeForce, and now gets the card's own answer. It tests its own transparency and keeps a light level
+  where a transparency usually sits, so the engine's own test is now written only into programs that
+  fill their first buffer the old way, which is where the reference writes it; otherwise it would
+  throw away every leaf, every blade of grass and the item in hand. On a Mac, the pack is told which
+  steps of a program the card lets share values between neighbouring pixels, the one placing the
+  terrain not among them, and what it includes is decided on the compiler's own answer, so its
+  water, particles and translucent blocks and mobs are lit by the pack there too. Its picture is
+  painted with compute shaders, which the entry of that name below covers.
 
 - **A pack that paints its picture with compute shaders draws it.** A few packs do their whole
   post-processing in compute programs rather than in full screen passes, and store the finished
   frame into a colour buffer of their own. The engine only ever opened a colour buffer for what a
   drawing program painted into or read from, so the buffer such a pack hands the screen was never
-  opened at all: the program holding the picture was dropped on every frame and what stayed on
-  screen was the flat colour the game had cleared it to. RenderPearl was a blue screen from end to
-  end for this. Those buffers are opened now, on the strength of the program that writes them,
-  which is what the engine packs are tuned against does.
+  opened at all and the program holding the picture was dropped on every frame. Those buffers are
+  opened now, on the strength of the program that writes them. RenderPearl paints its picture that
+  way.
 
   Two more things stood between that pack and its picture. It ships two of its lookup tables as
   plain blocks of numbers rather than pictures, and the engine read a block of numbers only where
@@ -333,17 +184,25 @@ what the next one holds.
   offset as well, the offset being how a pack samples the neighbourhood of a texel for a soft
   edge, and it is carried through rather than dropped.
 
-- **A pack asking for a hard shadow edge gets one.** A shader pack can say that its shadow map is
-  to be read without smoothing, and the engine listed those lines among the pack's settings and
-  then bound the map smoothed anyway, so a pack written for a hard, stepped shadow came out soft.
-  They are read now, on the full screen passes, the world's own programs and the compute passes
-  alike, so one map is read one way across a whole frame.
+- **A compute a pack ships for a step of the chain that draws nothing now runs.** It was left out
+  on the grounds that there was no pass to run it before; it is now dispatched on its own, at the
+  moment the program it hangs off would have run at, which is what Iris does with it: its family
+  says whether that falls before the world, before its translucents or after them, and its name says
+  where it lands among the passes drawn there. A pack reaches that state by shipping the compute and
+  no drawing program for the step, or by shipping one and switching it off itself, its switch never
+  naming the compute file. A pack may go further and build every one of its worlds out of such
+  computes with no full screen pass at all, and such a pack is drawn now as well: RenderPearl is
+  written that way. Noble computes the sun's illuminance and the sky's coefficients in one, and
+  everything that lights its world reads what that leaves behind.
 
-  A pack that says nothing is unchanged, its map staying smoothed, which is where both engines
-  start. One pack of those at hand does say something: Pegasus asks for its shadow map to be read
-  without smoothing, and now gets it, on a shadow test that steps hard enough for the change to sit
-  on the edge of a shadow rather than across it. The same request on the shadow's colour buffer
-  stays ignored, as it is by the engine packs are tuned against.
+- **A pack that calls the screen by one of the game's texture names draws its picture.** In a
+  full screen pass, OptiFine leaves the first colour target as the default texture, so a pack may
+  read the scene under a name that means something else in the world pass, `tex` and `texture` among
+  them. Those names read nothing here, so every pass of such a chain worked on black and what
+  reached the screen was black. They now read the screen, in the compute passes of those stages as
+  well, and a pack that lays a picture of its own over the first colour target has that picture read
+  instead, as it does under the reference. The log names them once per pass. I Like Vanilla reads
+  its screen that way throughout.
 
 - **A pack asking for a coarser copy of its shadow map gets one.** A shader pack can ask for the
   shadow map to be kept at several sizes at once, each half the one above it, and then read the
@@ -365,17 +224,162 @@ what the next one holds.
   interface always allowed and this one does not require, keeps a single size and says so in the
   log.
 
-- **A shadow read through the hardware comparison names the copy it reads.** Where a pack asks the
-  card to compare shadow depths for it, which is how most of them read the map, the engine left the
-  choice of which copy of the map to read to the card, and a card works that out from how the
-  reading coordinate moves between neighbouring pixels. Inside a loop or a branch, where the pixels
-  beside one another may not be doing the same thing, that answer is undefined and the card may hand
-  back a copy nothing ever filled: on screen it shows as a shadow that flickers between frames from
-  a viewpoint that is not moving. Every other kind of read already named its copy for exactly that
-  reason, and these did not, though they are the reads a pack makes most, the four tap shadow filter
-  of both Complementary packs among them. They name it now, and the copy they name is always the
-  full map: a read through the comparison never reaches a smaller one, even where a shader asks
-  for it, which none of the packs at hand does.
+- **A pack asking for a hard shadow edge gets one.** A shader pack can say that its shadow map is
+  to be read without smoothing, and the engine listed those lines among the pack's settings and
+  then bound the map smoothed anyway. They are read now, on the full screen passes, the world's own
+  programs and the compute passes alike, so one map is read one way across a whole frame.
+
+  A pack that says nothing is unchanged, its map staying smoothed, which is where both engines
+  start. One pack of those at hand does say something: Pegasus, which loads for the first time in
+  this version, asks for its shadow map to be read without smoothing and gets it. The same request
+  on the shadow's colour buffer stays ignored, as it is by the engine packs are tuned against.
+
+### Changed
+
+- **The compiled shaders kept on disk are two to three times smaller.** Every one of them carried a
+  copy of the whole shader text and a marker in front of nearly every instruction, which is what a
+  driver would need to name a line inside a shader and which nothing else reads. What is stored is
+  what is read back at every load, so there is less of everything to read, check and hand to the
+  driver. A compile error still names its line exactly as before.
+
+- **A pack read twice in one session is opened once.** Reading a pack means mounting its archive,
+  walking it for the settings it offers, parsing what it declares and pasting every shared header
+  into every file that includes one, and all of that was done again from nothing each time: at a
+  world join, at a portal, and every time you apply a setting. The engine now keeps the archive it
+  opened and serves the next reading from it where the pack, its settings, its profile and the
+  values the engine defines for it are all as they were and its files carry the sizes and dates
+  they had. A setting you changed, or a world that moves those values, still has the pack read
+  afresh. Only that reading is spared: the pack's textures, its translation and its compiles go as
+  they did before. A file edited on disk changes its size or its date, so a pack you are editing is
+  still read as you left it.
+
+- **Reloading resources no longer rebuilds the pack.** Pressing F3 and T, or anything else that
+  reloads the game's resources, threw away every program the pack had compiled and built them all
+  again, with the world held back while it happened. A pack's programs come out of its own archive,
+  which a resource reload does not touch, so the ones being drawn with are kept across it now and
+  the reload costs the pack nothing. Programs left over from a pack that has been replaced are still
+  freed there, which is the one thing that ever frees them.
+
+- **Joining a world builds the pack once instead of twice.** The pack is read while the client
+  starts up, before any world has arrived, and joining one makes it read again against what that
+  world brings. That second reading used to come after the first had already built the whole
+  chain, so everything was compiled and then thrown away; the question of whether the world moved
+  is asked before the building starts now. Leaving a world and joining another paid the same bill
+  in a different order, reallocating everything for the first frame and then again for the
+  reading, and it does not any more. Nothing about the picture changes.
+
+### Fixed
+
+- **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
+  mods reshape Sodium's texture filtering option, and Sodium refuses two of them, so a game set to
+  OpenGL with both installed closed before the title screen. Vitrail now only touches that option
+  where it draws the world itself and Iris does not, and where Iris draws it no longer puts a red
+  line in the chat saying the picture is missing, nor answers Iris's reload key, which is also its
+  own, with a red line of its own. After a startup that ended badly, the backend is kept as it was
+  set rather than put back to Vulkan while Iris is installed, since Iris has already chosen its side
+  for that backend.
+
+- **Reverie draws on a Mac.** Two of its passes read more textures at once than the sixteen a Mac
+  takes when a pass is handed its textures one by one, which is how the game hands them over, so
+  Apple's graphics card refused those passes and the pack could not draw there. On a Mac whose card
+  takes textures as one table, which every Apple Silicon Mac does, a pass reading more than sixteen
+  is now handed them that way. Every other pass, and every pass on any other machine, is handed its
+  textures as before.
+
+- **A graphics card lost in the middle of a session now closes the game on the error that lost it.**
+  When the card stopped answering, the engine caught the error at whichever step of the frame met it
+  first, switched the pack or one of its parts off and went on drawing against a card that was gone,
+  until a later step crashed the game on a report about something else. That error now goes
+  straight through, so the crash report opens on the lost device itself.
+
+- **A pack the graphics card will not build no longer closes the game.** When the card refused one
+  of a pack's programs while the pack was being prepared, which Apple's hardware does with a
+  program reading more textures at once than it has slots for or naming something the way Metal
+  names its own, the error went all the way up and the game closed on a crash report: on a Mac
+  that was BSL, Bliss, Reverie and Photon on 0.10.0-beta, which all draw there now through the
+  entries on them. A pack the card still refuses is put away instead and the world is drawn by the
+  game, the way it is for a pack refused when it loads, and the settings screen says an error
+  stopped it.
+
+- **Three more programs the graphics card will not build no longer close the game.** The render
+  scale's upscale, a pack's particle program rebuilt for particles another mod draws in a format of
+  its own, and the game's entity programs rebuilt when a pack starts drawing the entities or the
+  hand were all built in the middle of a frame with nothing to catch a refusal, so a card that
+  refused one closed the game. The render scale now falls back to a plain stretch, and turns itself
+  off when nothing builds; that other mod's particles are drawn through the pack's program as it
+  stands; and the entities and the hand go back to the game for the rest of the session. The log
+  says which.
+
+- **Water no longer goes missing on a Mac.** The engine keeps one drawing pass open across the
+  world's geometry when it can, and the hand wrote its own data to the graphics card inside that
+  pass right after the water had been drawn in it, which Vulkan does not allow; on a Mac that write
+  cost the water already drawn. The pass is now closed before any such write, unless something is
+  still drawing into it.
+
+- **Banners no longer flicker with light stripes on a Mac.** On Apple Silicon a banner could show
+  fine light stripes coming and going across its colour, seen on the banners of a village with the
+  camera moving. A banner is drawn twice at the same place, the cloth and then its colour over it,
+  by two different programs of the pack, and the Mac's shader compiler was free to round each
+  program's arithmetic its own way, so the colour could land a hair behind the cloth and be hidden
+  by it. Every vertex program of a pack now asks for its position to come out identical
+  wherever two programs compute it with the same code.
+
+- **The world stops being shaded twice, and the sides and undersides of blocks come back to the
+  brightness the pack drew them at.** The game tints a block face by which of the six directions it
+  faces, out of a small table each dimension carries: in the overworld full strength on top, half
+  underneath and two values between on the sides, which is what gives an unshaded world its relief.
+  A pack works its own lighting out of the direction each surface faces, so that tint left underneath
+  darkened everything the pack had already shaded, each face by its own fixed amount and an
+  underside by half. It showed most where a pack lights a surface the game leaves dark, the plainest
+  of those being a canopy seen from below. A pack that wants the old behaviour writes
+  `oldLighting=true`, which the engine reads now.
+
+- **A pack no longer brings the game down on a Mac over a name it chose.** Apple hardware has no
+  driver of its own for the interface this engine draws through, so a translation layer rewrites
+  every shader into Metal's language, which is C++, and it carries over the names a pack gave its
+  own functions and variables. A pack that had named something `bias`, `length_squared` or `new`
+  then collided with words that language already owns, and Apple's compiler refused the whole pass:
+  the game came down while it warmed the pack's pipelines up, on one it could not compile. BSL,
+  Bliss and Photon all came down on a name of their own on 0.10.0-beta. The engine now drops the
+  names of everything outside a shader never asks for, which is where a pack names its own working
+  parts, and BSL draws.
+  The names of what a pack exposes stay, its uniforms and its textures, because the engine binds
+  those by name; none of the packs tried collides there. Bliss and Photon also needed the entry
+  below, and draw with it.
+
+- **A pack that declares more textures than a pass reads draws on a Mac.** Apple offers one pass
+  sixteen slots for the textures it reads, and numbers them off the whole list of textures the
+  engine hands that pass rather than off the ones its shaders touch. A pack usually declares every
+  texture it owns in one file all its programs include, so a pass reading thirteen of them was
+  handed a list of forty-eight and given slot numbers running past the sixteenth: Apple's compiler
+  refused it and the game came down while it warmed the pack's pipelines up, on a pass wanting
+  three fewer slots than the hardware has. The engine now numbers a pass off the textures its two
+  shader stages read between them, which is the count that has to fit, so the numbering is dense
+  and anything under sixteen gets in. Bliss and Photon draw.
+
+  Reverie has two passes whose stages read seventeen and eighteen textures between them, more than
+  sixteen slots hold however they are numbered, and those two are handed their textures as one table
+  instead, as the entry on Reverie says. Everywhere else this is invisible: the same textures are
+  bound as before and the same ones are read, and what changes is only which of them the pass is
+  given a numbered slot for.
+
+  Photon also works out the light its sky casts in a small step that runs on many threads of the
+  graphics card at once, and those threads share more working memory than Apple's graphics allow,
+  which leaves the step unbuilt and the sky lighting nothing. On a Mac, such a step now keeps those
+  numbers in an ordinary buffer when it runs as one batch of threads, which is how Photon runs it,
+  and works out the same light. A step past the allowance that runs as several batches is still
+  refused, and the log says so. Every other card is left as it was.
+
+- **A shadow read through the hardware comparison names the level it reads.** Where a pack asks
+  the card to compare shadow depths for it, which is how most of them read the map, the engine left
+  the level of detail to the card, and a card works that out from how the reading coordinate moves
+  between neighbouring pixels. Inside a loop or a branch, where the pixels beside one another may
+  not be doing the same thing, that answer is undefined, and a ceiling on the sampler is no guard:
+  the same ceiling on the other kinds of read was measured not to hold. Those reads already named
+  their level for exactly that reason, and these did not, though they are the reads a pack makes
+  most, the four tap shadow filter of both Complementary packs among them. They name it now, and
+  what they name is always the full map: a read through the comparison never reaches a smaller
+  copy, even where a shader asks for it, which none of the packs at hand does.
 
 - **Smoke, flame and the other solid particles take the colour the pack meant them to.**
   The game draws its quad particles in two goes, the solid ones with the world and the
@@ -400,30 +404,12 @@ what the next one holds.
   taken just ahead of the pass, which holds the world the pass wants to see behind itself, at
   the cost of two image copies a frame per such target.
 
-- **A pack written for half precision no longer takes the driver down with it.** RenderPearl
-  computes in sixteen and eight bit numbers, and five things stood between it and the screen, one of
-  which crashed the game the moment the pack's first program was built. The engine did not know
-  those types, so the colour output declared under one stayed where the pack wrote it and a second
-  output was laid on the same slot; it is declared under its ordinary width now, and the value
-  written is the same. The programs asked the card for arithmetic the game never turns on, and a
-  program asking for what was not turned on is invalid: the engine now turns on those the card
-  reports, all but the one for sixteen bit stage outputs, which the output declared under its
-  ordinary width no longer needs. The pack passes its values between the two stages in a block of its own, which
-  the game counts as one value when it numbers them, so the value after the block landed inside it:
-  the block's members are passed one by one now, at the cost of the packing the pack had chosen. And
-  the pack asks whether the card has an AMD instruction before using it, a question the shader
-  compiler answered yes on every card, and the instruction is what took the driver down on a
-  GeForce: the engine now answers it the way the card does, so the pack takes the road it wrote for
-  that card. The same pack tells the compiler it leaves the depth alone, and the engine's own code
-  wrote that depth above the pack's line, which the compiler refuses as a redeclaration after use:
-  the engine's code now comes after the pack's, where the reference puts its own.
-
-- **A pack that declares its own output where another of its branches wrote the old-style one loads
-  again.** Iteration keeps every one of its final passes in one file, one writing the old-style
-  output and the others declaring their own under the same number, and only one branch is ever
-  taken. The engine counted the branch nobody took, laid its own output on that number, and six of
-  the pack's passes were refused for two outputs on one slot. The pack's own declaration takes the
-  slot now.
+- **A pack that declares its own output where another of its branches wrote the old-style one
+  draws those passes.** Iteration keeps every one of its final passes in one file, one writing the
+  old-style output and the others declaring their own under the same number, and only one branch is
+  ever taken. The engine counted the branch nobody took, laid its own output on that number, and six
+  of the pack's passes were refused for two outputs on one slot. The pack's own declaration takes
+  the slot now.
 
 - **An effect a pack carries from one frame to the next no longer alternates between two images
   while the view moves.** The two halves of such a target were exchanged at the end of the frame
@@ -432,15 +418,14 @@ what the next one holds.
   pack was handed one image on one frame and the previous one on the next. It is steady standing
   still and shows as the view moves, so it reads as lighting that slides.
 
-- **A geometry program drawn before the water sees the world's depth again.** The terrain, the
-  mobs, the opaque particles and the held item are drawn before the frame takes its copy of the
-  opaque world, and those programs were handed an empty world where a pack asked for that copy,
-  so a shader that softens or fogs itself against the scene from one of them saw nothing in front
-  of it. They now read the copy as it stands, which at that point of the frame is the frame
-  before's, exactly what the reference hands them; the live depth stays out of reach there, being
-  the very image those programs draw into. Complementary Reimagined and Photon draw the same
-  picture as before: the one only reads that copy from its water, drawn after the take, and the
-  other reads it from its particles and glowing eyes without using it there.
+- **A geometry program drawn before the water sees the world's depth.** The terrain, the mobs, the
+  opaque particles and the held item are drawn before the frame takes its copy of the opaque world,
+  and those programs were handed the far plane where a pack asked for that copy, so a shader that
+  softens or fogs itself against the scene from one of them saw nothing in front of it. They now
+  read the copy as it stands, which at that point of the frame is the frame before's, exactly what
+  the reference hands them; the live depth stays out of reach there, being the very image those
+  programs draw into. Photon reads that copy from its opaque particles and its glowing eyes, and
+  Pegasus and E-LITE from their terrain, mobs, hand and particles.
 
 - **A greyscale picture a pack ships is read as the pack wrote it.** Every grey image came out
   lighter than the file, its darks lifted towards white, because the decoder converted the picture
@@ -460,53 +445,28 @@ what the next one holds.
   name stands for nothing the engine can read, the step still covers the whole screen and the log
   says which word it could not read.
 
-- **A pack that says it cannot be drawn without the translucent entity program now loads.**
-  RenderPearl names that capability in its own file, the engine did not count the name among the
-  ones it serves, and the pack was turned away before any of its programs was read, with nothing of
-  it on screen. The capability itself was already there: a blending entity draw asks for the pack's
-  `gbuffers_entities_translucent` and a blending block entity for its `gbuffers_block_translucent`,
-  each falling back on the opaque file of its own family where the pack ships neither. The name is
-  now served, and announced as a define beside the others so that a pack testing for it reads the
-  truth.
-
 - **The world is no longer painted over by the stage meant to run before it.** Some packs open the
   frame with a "prepare" stage, whose job is to fill a table the rest of the frame reads. It ran
   once the world was already drawn instead of ahead of it, so on a pack whose prepare fills the very
   image its terrain, its sky or its hand draws into, that table replaced all of them. On MakeUp
-  UltraFast and on E-LITE the ground vanished behind a pale blue field, the held item was not there
+  UltraFast and on E-LITE the ground vanished behind a pale field, the held item was not there
   and the sky stopped being the brightest thing on screen. The stage now runs at the head of the
   frame, where the world lands over it, and the begin stage that opens it runs ahead of the shadow
   map rather than behind it.
 
-- **A pack that calls the screen by one of the game's texture names draws its picture again.** In a
-  full screen pass, OptiFine leaves the first colour target as the default texture, so a pack may
-  read the scene under a name that means something else in the world pass, `tex` and `texture` among
-  them. Those names read nothing here, so every pass of such a chain worked on black and what
-  reached the screen was black. They now read the screen, in the compute passes of those stages as
-  well, and a pack that lays a picture of its own over the first colour target has that picture read
-  instead, as it does under the reference. The log names them once per pass. I Like Vanilla is the
-  pack this showed on, and it showed on the whole picture.
-
 - **Switching packs no longer leaves graphics memory behind on packs that use compute shaders.**
   A pack can attach a compute program to a step of its chain, and those programs kept their
   pipelines and their buffers when the pack was replaced, so every switch and every press of the
-  Reload Shaders key added to what was never given back. Long sessions spent trying packs out ended
-  with graphics memory that only closing the game freed. Photon, which builds its sky lighting in
-  such a compute, is among the packs this held on to.
+  Reload Shaders key added to what was never given back until the game closed. Photon builds its
+  sky lighting in such a compute, so every switch away from it left one behind.
 
-- **A compute a pack ships for a step of the chain that draws nothing now runs.** It was left out
-  on the grounds that there was no pass to run it before; it is now dispatched on its own, at the
-  moment the program it hangs off would have run at, which is what Iris does with it: its family
-  says whether that falls before the world, before its translucents or after them, and its name says
-  where it lands among the passes drawn there. A pack reaches that state by shipping the compute and
-  no drawing program for the step, or by shipping one and switching it off itself, its switch never
-  naming the compute file. A pack may go further and build every one of its worlds out of such
-  computes with no full screen pass at all, which used to stop its chain before the first frame:
-  RenderPearl is written that way. Noble computes the sun's illuminance and the sky's coefficients
-  in one and everything that lights its world reads what that leaves behind, so its diffuse
-  lighting, its shadows, its gbuffers and its fog all went dark at once.
+- **The off hand no longer answers for the main one on a pack that asked it not to.** A pack says
+  whether the brighter of your two hands is what the main one reports, which is how it worked
+  before the off hand had a light of its own, and that was being done whatever the pack said. Seven
+  of the eleven packs tested ask for it to stop: on those, a torch in the off hand was being
+  reported in both hands at once, so the pack lit the scene from the empty one beside it as well.
 
-- **E-LITE's clouds follow the hour of the day again.** A pack may declare a value of its own under
+- **E-LITE's clouds follow the hour of the day.** A pack may declare a value of its own under
   either of two keywords, and only one of them was reaching the shaders. E-LITE writes the hour of
   the day under the other one and its sky reads it, so it arrived as nought: the count of days was
   all the clock the cloud cover had left, and it changed in day-sized steps instead of drifting
@@ -520,7 +480,7 @@ what the next one holds.
   that was never written. They are now named for what they are, and a pack gets the same nought under
   Iris.
 
-- **A pack's quality profile is named again instead of reading "Custom".** A profile can list a
+- **A pack's quality profile is named instead of reading "Custom".** A profile can list a
   setting the pack does not actually have, and one such name was enough to stop the profile from
   ever being recognised: the shader screen and the F3 overlay both fell back to "Custom" on a pack
   nobody had touched, and the profile buttons could never land on a name. Photon is the pack this
@@ -536,27 +496,10 @@ what the next one holds.
   that moment once coincided with the display driver going down. Photon at its two largest settings
   for those volumes goes past it, and there a reload can still bring the one-colour world back.
 
-- **A setting compared against a number with a decimal point no longer switches a pass off.** Some
-  packs write conditions like "if the motion blur is above 0.0" or "if the falloff equals 1", with
-  the setting itself holding 0.5 or 1.0. Those were read as whole numbers, so a half became nought
-  and the branch was decided the wrong way, and the line was then refused outright besides. Pegasus
-  was losing its terrain, its water, its entities and its particles to one of them.
-
-- **The extensions a pack asks for are no longer dropped.** A pack using half precision types
-  guarded them on the extension being available and shipped a fallback for when it is not; the line
-  that enables the extension was thrown away while everything around it stayed, so neither road
-  worked and every one of that pack's programs failed on a type the compiler had never been told
-  about. RenderPearl went from nothing at all to most of its programs.
-
-- **A pack defining the same setting twice no longer loses every program.** Drivers take the later
-  definition and warn; this refused the whole file. Where the two cannot be told apart the later one
-  now stands, and where a use sits between them the pack is left exactly as it wrote it. Pegasus was
-  losing all of its programs to one duplicated line.
-
-- **RedHat's shadows, E-LITE's entities and hand, and the vertex stages of core-profile packs.**
-  Three separate names a pack may write that this engine either had no answer for or answered
-  twice, each of which cost the passes that read them: the picture kept the game's own shader there
-  and the pack's effect was missing on those surfaces alone.
+- **RedHat's shadows, and E-LITE's entities and hand.** Two separate names a pack may write that
+  this engine either had no answer for or answered twice, each of which cost the passes that read
+  them: the picture kept the game's own shader there and the pack's effect was missing on those
+  surfaces alone.
 
 ## 0.10.0-beta
 
