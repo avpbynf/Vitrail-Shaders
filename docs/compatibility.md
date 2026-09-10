@@ -110,18 +110,20 @@ Iris refuses a required flag only when the name is unknown to it or the hardware
 it, and it has built every one of the ones Reverie asks for: some outright, some wherever the
 driver supports them.
 
-**On a Mac, a pass that reads more than sixteen textures at once takes the pack with it.** Apple
-gives one pass sixteen slots for the textures it reads, and no setting or numbering raises that. The
-engine numbers a pass off the textures its two shader stages actually read between them, which is as
-tight as the numbering can be made, so what is left over that line is a genuine count rather than an
-accounting artefact. Two of Reverie's passes read seventeen and eighteen textures between their
-stages, so on Apple hardware they are refused, with Apple's own message in the log:
-`'sampler' attribute parameter is out of bounds: must be between 0 and 15`. The engine then stops
-drawing the pack, the world goes back to the game's own look and the settings screen says an error
-stopped it, which is what the reference does with a pack that fails the same way. The same two
-passes draw on a desktop card, the cap being Apple's. What would lift it is Metal's argument
-buffers, a stage handed one table of resources instead of one slot each, and nothing here asks for
-that today. Every other pack measured on a Mac draws.
+**On a Mac, a pass that reads more than sixteen textures at once is handed them as one table.**
+Apple gives one pass sixteen slots for textures handed over one at a time, which is how the game
+hands over every texture. The engine numbers a pass off the textures its two shader stages actually
+read between them, which is as tight as the numbering can be made, so a pass over that line
+genuinely reads more: two of Reverie's passes read seventeen and eighteen between their stages, and
+Apple refused them with `'sampler' attribute parameter is out of bounds: must be between 0 and 15`.
+A pass past that count is given its textures through a Metal argument buffer, one table a stage
+reads far more than sixteen textures out of, while every other pass, and every pass on any other
+machine, is handed them the way the game hands them. Such a table needs macOS 11 and a graphics card
+in Apple's second tier of argument buffers, which every Apple Silicon Mac is: on an older Mac, or
+with MoltenVK's argument buffers turned off, the pass is still handed its textures one by one and
+refused. A pass the card refuses stops the pack:
+the world goes back to the game's own look and the settings screen says an error stopped it, which
+is what the reference does with a pack that fails the same way.
 
 **A full-screen pass that fails to compile takes the whole pack with it**, and the log names the
 program. One shape of that was a `const` whose initialiser Vulkan will not take as a constant,

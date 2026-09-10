@@ -27,8 +27,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * number is a name and nothing more, and the numbering can be as sparse as it likes. On Apple it is
  * not: MoltenVK hands each descriptor of a set a Metal slot counted off its place among the
  * descriptors of its own kind, and Metal has sixteen sampler slots. So a stage that reads thirteen
- * samplers out of a layout carrying forty-eight is given indices running past sixteen and the
- * pipeline is refused, for a shader wanting three slots fewer than the hardware has.
+ * samplers out of a layout carrying forty-eight is given indices running past sixteen, which a
+ * pushed set cannot reach: the layout then needs {@link WideSamplerSets} and an argument buffer,
+ * for a shader wanting three slots fewer than the hardware has.
  * <p>
  * <strong>Why the list held more than the shader reads.</strong> A pack's programs are a handful of
  * files over a shared include, and that include declares every sampler any of them might want. The
@@ -126,11 +127,12 @@ public final class SamplerReach {
 			// initialiser refuses long before anything compiles, but the invoke can still throw,
 			// and thrown from here it would come out of the compiler's own method and take every
 			// pack on the machine down rather than cost one layout its density. Said at WARN,
-			// because a load that lost this quietly is a load whose Apple refusals come back with
-			// nothing in the log to explain them.
+			// because a load that lost this quietly is a load that binds allocated sets on Apple
+			// hardware, or is refused there, with nothing in the log to explain why.
 			Vitrail.logger().warn("Could not read a module's sampler names, so its layout keeps a "
-					+ "binding for every declared sampler: a pack over Metal's sixteen slots is "
-					+ "refused on Apple hardware again", e);
+					+ "binding for every declared sampler: on Apple hardware a stage numbered past "
+					+ "Metal's sixteen slots needs an allocated set, and is refused where no argument "
+					+ "buffer takes it", e);
 
 			return;
 		}
@@ -157,7 +159,9 @@ public final class SamplerReach {
 			Vitrail.logger().warn("Every DECLARED sampler given a binding, asked for by "
 					+ "-Dvitrail.declaredSamplers ({} modules built this load, none walked): a pack "
 					+ "whose shared include declares more samplers than a stage reads is numbered "
-					+ "past Metal's sixteen slots and refused on Apple hardware", compiled);
+					+ "past Metal's sixteen slots, which on Apple hardware takes an allocated set or is "
+					+ "refused",
+					compiled);
 
 			return;
 		}

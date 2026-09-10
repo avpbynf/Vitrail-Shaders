@@ -2,17 +2,24 @@ package dev.vitrail.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout.Entry;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.render.GeometryStage;
+import dev.vitrail.render.WideSamplerSets;
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
+import org.lwjgl.vulkan.VK12;
+import org.lwjgl.vulkan.VkAllocationCallbacks;
 import org.lwjgl.vulkan.VkDescriptorSetLayoutBinding;
+import org.lwjgl.vulkan.VkDescriptorSetLayoutCreateInfo;
+import org.lwjgl.vulkan.VkDevice;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 
+import java.nio.LongBuffer;
 import java.util.List;
 
 /**
@@ -22,6 +29,8 @@ import java.util.List;
  * The Java enum has no storage-image or storage-buffer arm, so the layout would otherwise write
  * a combined image sampler (type 1) for {@code voxel_img} and a uniform buffer (type 6) for
  * {@code blockDataBuffer}. Complementary writes both with {@code imageStore} / SSBO stores.
+ * <p>
+ * And takes the push flag off the layout MoltenVK could not push, for {@link WideSamplerSets}.
  */
 @Mixin(VulkanBindGroupLayout.class)
 public abstract class VulkanBindGroupLayoutMixin {
@@ -80,5 +89,29 @@ public abstract class VulkanBindGroupLayoutMixin {
 			Operation<VkDescriptorSetLayoutBinding> original) {
 		return original.call(binding,
 				GeometryStage.buildingHere() ? flags | GeometryStage.STAGE_BIT : flags);
+	}
+
+	/**
+	 * Takes the push flag off a layout MoltenVK could not push, and records which road the handle
+	 * that comes back takes, which is what {@code VulkanRenderPassMixin} asks at every draw.
+	 * <p>
+	 * At the driver call rather than at the flag the game writes, because both rewrites above have
+	 * run by then: the count is taken over the types and the stages the layout really carries.
+	 */
+	@WrapOperation(method = "create", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lorg/lwjgl/vulkan/VK12;vkCreateDescriptorSetLayout("
+							+ "Lorg/lwjgl/vulkan/VkDevice;Lorg/lwjgl/vulkan/VkDescriptorSetLayoutCreateInfo;"
+							+ "Lorg/lwjgl/vulkan/VkAllocationCallbacks;Ljava/nio/LongBuffer;)I"))
+	private static int vitrail$allocatedSets(VkDevice device, VkDescriptorSetLayoutCreateInfo info,
+			VkAllocationCallbacks allocator, LongBuffer handle, Operation<Integer> original,
+			@Local(argsOnly = true) String name) {
+		boolean allocated = WideSamplerSets.dropPush(info, name);
+		int result = original.call(device, info, allocator, handle);
+		if (result == VK12.VK_SUCCESS) {
+			WideSamplerSets.created(handle.get(0), allocated);
+		}
+
+		return result;
 	}
 }

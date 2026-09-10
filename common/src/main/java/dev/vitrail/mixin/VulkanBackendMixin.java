@@ -9,6 +9,7 @@ import dev.vitrail.glsl.VendorExtensions;
 import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.render.BufferBlending;
 import dev.vitrail.render.GeometryStage;
+import dev.vitrail.render.WideSamplerSets;
 import dev.vitrail.Vitrail;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VK10;
@@ -21,6 +22,7 @@ import org.lwjgl.vulkan.VkPhysicalDeviceProperties2;
 import org.lwjgl.vulkan.VkPhysicalDeviceSubgroupProperties;
 import org.lwjgl.vulkan.VkPhysicalDeviceVulkan11Features;
 import org.lwjgl.vulkan.VkPhysicalDeviceVulkan12Features;
+import org.lwjgl.vulkan.VkPhysicalDeviceVulkan12Properties;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -191,6 +193,13 @@ public abstract class VulkanBackendMixin {
 		enable(physical, features, WRITE_WITHOUT_FORMAT, enabled, VOXELS);
 		BufferBlending.serve(enable(physical, features, INDEPENDENT_BLEND, enabled, PER_BUFFER));
 		GeometryStage.serve(enable(physical, features, GEOMETRY_SHADER, enabled, GEOMETRY));
+		// Not a feature, but asked of the same device at the same moment: the physical device is
+		// closed once the game's own device has read what it keeps of it.
+		boolean moltenVk =
+				physical.vkPhysicalDeviceDriverProperties().driverID() == VK12.VK_DRIVER_ID_MOLTENVK;
+		WideSamplerSets.serve(moltenVk,
+				physical.vkPhysicalDeviceProperties().limits().maxPerStageDescriptorSamplers(),
+				moltenVk ? tableSamplers(physical) : 0);
 		// The vendor extensions a pack may gate a vendor instruction on, answered by the device
 		// and not by the compiler, which defines the macro of every one it knows; the ones the
 		// device has are enabled on it here, since a module using one needs it enabled.
@@ -252,6 +261,20 @@ public abstract class VulkanBackendMixin {
 			}
 
 			return stages;
+		}
+	}
+
+	// The samplers one stage of an allocated set may read, which MoltenVK raises past the pushed
+	// sixteen only while it binds sets through tier 2 argument buffers.
+	@Unique
+	private static int tableSamplers(VulkanPhysicalDevice physical) {
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			VkPhysicalDeviceVulkan12Properties vulkan12 =
+					VkPhysicalDeviceVulkan12Properties.calloc(stack).sType$Default();
+			VkPhysicalDeviceProperties2 properties =
+					VkPhysicalDeviceProperties2.calloc(stack).sType$Default().pNext(vulkan12);
+			VK11.vkGetPhysicalDeviceProperties2(physical.vkPhysicalDevice(), properties);
+			return vulkan12.maxPerStageDescriptorUpdateAfterBindSamplers();
 		}
 	}
 

@@ -4,15 +4,19 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
+import com.mojang.blaze3d.vulkan.VulkanCommandEncoder;
 import com.mojang.blaze3d.vulkan.VulkanRenderPass;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
 import dev.vitrail.render.PushedDescriptor;
 import dev.vitrail.render.ShadowCompare;
+import dev.vitrail.render.WideSamplerSets;
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
+import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkDescriptorBufferInfo;
 import org.lwjgl.vulkan.VkDescriptorImageInfo;
 import org.lwjgl.vulkan.VkWriteDescriptorSet;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -32,12 +36,19 @@ import java.util.Set;
  * on {@code blockDataBuffer}. The comparison is the same shape of gap: no {@code GpuSampler}
  * describes one, so {@link ShadowCompare} makes it in Vulkan's own terms and this walk puts its
  * handle under the names the pipeline registered when it was built.
+ * <p>
+ * And binds those same writes as an allocated set where the layout is one MoltenVK could not push,
+ * for {@link WideSamplerSets}.
  */
 @Mixin(VulkanRenderPass.class)
 public abstract class VulkanRenderPassMixin {
 
 	@Shadow
 	protected VulkanRenderPipeline pipeline;
+
+	@Shadow
+	@Final
+	private VulkanCommandEncoder encoder;
 
 	/** The pipeline the set below answers for, so that the set is asked once per pipeline. */
 	@Unique
@@ -139,6 +150,27 @@ public abstract class VulkanRenderPassMixin {
 		}
 
 		return original.call(set, type);
+	}
+
+	/**
+	 * Allocates and binds a set carrying the writes the push was handed, the rewrites above
+	 * included, where the pipeline's layout was created without the push flag. Every other draw,
+	 * which on any machine but a Mac under such a pack is every draw, pushes as the game does.
+	 */
+	@WrapOperation(method = "pushDescriptors", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lorg/lwjgl/vulkan/KHRPushDescriptor;vkCmdPushDescriptorSetKHR("
+							+ "Lorg/lwjgl/vulkan/VkCommandBuffer;IJI"
+							+ "Lorg/lwjgl/vulkan/VkWriteDescriptorSet$Buffer;)V"))
+	private void vitrail$pushOrBind(VkCommandBuffer commands, int bindPoint, long layout, int set,
+			VkWriteDescriptorSet.Buffer writes, Operation<Void> original) {
+		long setLayout = this.pipeline == null ? 0L : this.pipeline.layout().handle();
+		if (WideSamplerSets.allocated(setLayout)) {
+			WideSamplerSets.bind(this.encoder, commands, bindPoint, layout, set, setLayout, writes);
+			return;
+		}
+
+		original.call(commands, bindPoint, layout, set, writes);
 	}
 
 	@Unique
