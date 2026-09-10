@@ -178,7 +178,8 @@ final class FeatureLayer {
 	 *                    world's own translucents are about to blend, taken from the plan rather
 	 *                    than assumed
 	 * @param destination that target's format as the pack declared it, for the pipeline's own
-	 *                    colour state, the same rule the seed follows
+	 *                    colour state, the same rule the seed follows. Never an integer one, which the
+	 *                    caller keeps out for the seed's reason
 	 */
 	FeatureLayer(ChainPlan.Attachment into, GpuFormat destination) {
 		this.into = into;

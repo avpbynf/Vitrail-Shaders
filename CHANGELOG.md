@@ -154,6 +154,15 @@ what the next one holds.
 
 ### Fixed
 
+- **Noble no longer stops on a Mac.** Noble keeps packed whole numbers rather than a colour in the
+  first target its terrain writes, and the engine went on copying the game's own picture into that
+  target wherever the pack drew nothing, which a Mac refuses outright: the pack was put away as soon
+  as it started drawing. A pack that writes such numbers into its terrain target now gets no copy of
+  the game's picture there, so whatever the game still draws in the pack's place, a mob the pack has
+  no program for among it, is missing from the image rather than painted in flat. The same holds
+  for the target its water is drawn into, where the beacon beam and the lightning would have been
+  laid. The log says which.
+
 - **A graphics card lost in the middle of a session now closes the game on the error that lost it.**
   When the card stopped answering, the engine caught the error at whichever step of the frame met it
   first, switched the pack or one of its parts off and went on drawing against a card that was gone,
