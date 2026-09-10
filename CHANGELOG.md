@@ -160,6 +160,18 @@ what the next one holds.
 
 ### Fixed
 
+- **Leaves, grass and the item in hand come back on a pack that tests its own transparency.** A
+  cutout draw needs the test that throws away the see-through parts of a texture, and the engine
+  used to write that test into the shader itself whatever the shader was, reading the fourth channel
+  of the first buffer the program fills. Filling that buffer the way shaders did before they could
+  name their own outputs came with the test built into the hardware, so a program written that way
+  is written expecting it. A program that names the buffer itself is not: it puts what it likes in
+  that channel, a light level as readily as a transparency, and does its own test with the threshold
+  the engine hands it. Testing the channel anyway threw away every leaf, every blade of grass and
+  the item in hand of RenderPearl, on a ground still carrying the shadow of a canopy that was not
+  being drawn. The test is now written only into the programs that expect it, which is where the
+  engine the packs are tuned against writes it too.
+
 - **A pack that paints its picture with compute shaders draws it.** A few packs do their whole
   post-processing in compute programs rather than in full screen passes, and store the finished
   frame into a colour buffer of their own. The engine only ever opened a colour buffer for what a

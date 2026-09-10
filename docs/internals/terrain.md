@@ -323,6 +323,16 @@ implementation's value for that pass, or a line in the pack's properties file na
 that serves it, which wins over it. That second one is why a pack shipping a single
 `gbuffers_terrain` for both the solid and the cutout pass moves both of them with one override.
 
+That test is written into the shader, and only into a fragment stage that writes its first draw
+buffer the way the fixed function pipeline did, through `gl_FragColor` or `gl_FragData[0]` at a
+subscript written out as a number. A pack that declares `layout(location = 0) out` for itself gets
+none, and is left to test itself against the `alphaTestRef` value the engine hands it, which is what
+the reference leaves it to do as well. The reason is that the alpha of a self declared first output
+is not an alpha at all: it is whatever the pack chose to pack there, a light level or a material
+word as easily as a coverage. Testing it discards geometry on a value that means nothing, and the
+symptom is a world with its solid blocks and none of its leaves, grass or held item, on a ground
+still carrying the shadow those leaves cast.
+
 There is a practical corollary for anyone choosing a witness block for a test: a block drawn in the
 cutout pass never reaches a program that has only been substituted on the solid pass. Foliage is
 cutout. Picking a leaf block to prove that block ids arrive is a test of nothing, and it looks like a

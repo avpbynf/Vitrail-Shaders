@@ -562,6 +562,17 @@ public final class GlslTranslator {
 	private boolean mainWrapped;
 
 	private int maxFragmentOutput = -1;
+
+	/**
+	 * Whether this fragment stage writes draw buffer nought the way the fixed function pipeline
+	 * did, which is {@code gl_FragColor} or {@code gl_FragData[0]} at a literal subscript.
+	 * <p>
+	 * Counted from every branch, taken or not, for the reason {@link #rewriteFragmentOutputs}
+	 * measured about the count beside it. It is what decides whether the pass's alpha test is
+	 * written in at all, and {@link #planAlphaEpilogue} says why.
+	 */
+	private boolean legacySlotZero;
+
 	private boolean ordered;
 	private int dynamicFragData;
 	private int shadowCalls;
@@ -3758,10 +3769,12 @@ public final class GlslTranslator {
 			this.tokens.blank(number);
 			this.tokens.blank(this.tokens.significantAfter(number));
 			this.maxFragmentOutput = Math.max(this.maxFragmentOutput, slot);
+			this.legacySlotZero |= slot == 0;
 		}
 
 		if (fragColor) {
 			this.maxFragmentOutput = Math.max(this.maxFragmentOutput, 0);
+			this.legacySlotZero = true;
 		}
 	}
 
@@ -3959,16 +3972,50 @@ public final class GlslTranslator {
 	 * is done by wrapping, for the reasons {@link #wrapMain} gives about closing braces, and the
 	 * wrapper then makes both calls.
 	 * <p>
-	 * Three things have to hold and none of them is a formality. The stage has to declare an output
-	 * nought, since that is the one the fixed function pipeline tested and the only one a pack can
-	 * mean; that output has to be a {@code vec4}, or it has no alpha to read; and {@code main} has
-	 * to be findable, since a stage whose {@code main} is not is a stage nothing can be appended to.
-	 * Nothing in the corpus fails any of the three, and a program that does keeps its picture and
+	 * <strong>The test is only written into a stage that writes draw buffer nought the way the
+	 * fixed function pipeline did</strong>, {@code gl_FragColor} or {@code gl_FragData[0]} at a
+	 * literal subscript. Iris asks the same before it injects anything, and it asks it in one
+	 * place: {@code pipeline/transform/transformer/CommonTransformer.java:280} on
+	 * {@code origin/26.2} wants the index nought of {@code gl_FragData} to have been rewritten,
+	 * {@code gl_FragColor} having been renamed onto it at {@code :239}. Its core profile
+	 * transformers never call that method at all, and the flag beside the condition is passed true
+	 * by the roads that must not inject whatever a stage writes, the composites and the compute
+	 * ones; the road a pack's geometry takes passes it false.
+	 * <p>
+	 * A pack that declares its own {@code layout(location = 0) out} is saying that slot holds
+	 * whatever it packed there, and the reference leaves it to test itself against
+	 * {@code alphaTestRef}, which it serves under that name and under {@code iris_currentAlphaTest}
+	 * both ({@code uniforms/IrisInternalUniforms.java:41,45}), renaming a pack's use of the first
+	 * only on its core profile roads.
+	 * <p>
+	 * <strong>Writing one in anyway is not a harmless extra.</strong> RenderPearl's cutout terrain
+	 * puts the block light level in the alpha of its draw buffer nought,
+	 * {@code colortex1 = f16vec4(linear(color.rgb), block_light)}, and an injected
+	 * {@code if (!(colortex1.a > 0.5)) { discard; }} then threw away every cutout fragment of the
+	 * world: no leaves, no grass, no held item, on a ground still carrying the canopy's shadow. The
+	 * alpha of a self declared slot nought is not an alpha, it is whatever the pack packed there.
+	 * <p>
+	 * <strong>The question is asked of the spelling and not of the live branches</strong>, which
+	 * differs from the reference and is deliberate: Iris preprocesses the file before its
+	 * transformer sees it, this translator leaves every {@code #if} standing so the game's compiler
+	 * re-evaluates the engine symbols, and the branch the expander read as dead is one the compiler
+	 * may read as live. {@link #rewriteFragmentOutputs} measured what asking for liveness costs on
+	 * exactly this token. What it leaves standing is a pack whose only legacy write to slot nought
+	 * sits on a dead branch beside a live declaration of its own, the shape {@link #liftOutput}
+	 * describes: that one would be given a test on its own output. No pack of the corpus writes it,
+	 * and withholding a discard from a program that really writes the builtin is the worse of the
+	 * two, a leaf drawn as a cube.
+	 * <p>
+	 * Two more things have to hold. Where the pack has ALSO declared slot nought for itself, that
+	 * declaration owns the name the test would read, so it has to be a {@code vec4} or there is no
+	 * alpha there to read; and {@code main} has to be findable, since a stage whose {@code main} is
+	 * not is a stage nothing can be appended to. A program that fails either keeps its picture and
 	 * loses its discard, which {@link TranslatedUnit.Notes#alphaEpilogue} reports rather than hides.
 	 */
 	private void planAlphaEpilogue() {
-		if (this.stage != ProgramStage.FRAGMENT || !this.alphaTest.tests()
-				|| this.maxFragmentOutput < 0) {
+		// No test for maxFragmentOutput here, unlike planCoverage: neither road can raise the flag
+		// without that count having been raised too, the gl_FragColor one at the end of its walk.
+		if (this.stage != ProgramStage.FRAGMENT || !this.alphaTest.tests() || !this.legacySlotZero) {
 			return;
 		}
 
