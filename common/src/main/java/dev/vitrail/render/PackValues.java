@@ -160,6 +160,7 @@ public final class PackValues {
 		// Read against the same settings as everything above, which is not a formality: BSL wraps
 		// all its declarations in one conditional and keeps a fifth of them under the #else, so a
 		// reading with an empty table measures a different pack.
+		FaceShading.install(properties.oldLighting(settings.globalDefines(options)));
 		BlockStateIds.install(BlockIds.read(source, settings.globalDefines(options)));
 		PackNameIds.install(
 				NameIds.read(source, settings.globalDefines(options), NameIds.Kind.ENTITY),

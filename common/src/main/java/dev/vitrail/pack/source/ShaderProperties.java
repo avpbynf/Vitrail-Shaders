@@ -133,6 +133,11 @@ public final class ShaderProperties {
 	// eleven packs of the corpus write it, all seven write false, and none writes true, so a flat
 	// default would have an off hand torch answering for seven main hands that asked it not to.
 	private static final Pattern OLD_HAND_LIGHT = Pattern.compile("^\\s*oldHandLight\\s*=\\s*(.*)$");
+	// Whether the game's own per face brightness stays in the chunk mesh. Read on the live
+	// lines and on separateAo's rule, and the default is off, which is the reference's
+	// (shaderpack/properties/PackDirectives.java:92, getOldLighting().orElse(false)): a pack
+	// shades from the normal it is handed, so the game's factor underneath it shades twice.
+	private static final Pattern OLD_LIGHTING = Pattern.compile("^\\s*oldLighting\\s*=\\s*(.*)$");
 	private static final Pattern SIZE_BUFFER = Pattern.compile("^\\s*size\\.buffer\\.([^=\\s.]+)\\s*=\\s*(.*)$");
 	private static final Pattern SKY_ELEMENT = Pattern.compile("^\\s*(sun|moon|stars|sky)\\s*=\\s*(.*)$");
 	// The fifth word of that family, kept apart because it is the one that takes neither a yes nor a
@@ -423,6 +428,11 @@ public final class ShaderProperties {
 		// And on that rule too, for that reason: a word this cannot read is what puts the answer back
 		// to the default, so the line is read whether the word is one of the four or not.
 		if (OLD_HAND_LIGHT.matcher(line).matches()) {
+			return;
+		}
+
+		// The same rule again, and the same reason.
+		if (OLD_LIGHTING.matcher(line).matches()) {
 			return;
 		}
 
@@ -1445,6 +1455,32 @@ public final class ShaderProperties {
 		}
 
 		return asked == null || asked;
+	}
+
+	/**
+	 * Whether the pack asks for the game's own per face brightness to stay in the chunk mesh, which
+	 * is what {@code oldLighting} means and what almost no pack wants.
+	 * <p>
+	 * <strong>The default is off, and it is the reference's</strong>
+	 * ({@code shaderpack/properties/PackDirectives.java:92},
+	 * {@code getOldLighting().orElse(false)}). A pack computes its own directional shading from the
+	 * normal it is handed, so the game's fixed factor multiplied in beneath it shades the same
+	 * surface twice: the top of the world is unharmed, its factor being one, and every other face
+	 * comes out darker than the pack drew it. What the directive buys back is the old behaviour for
+	 * a pack written to expect it.
+	 * <p>
+	 * Read through {@link #live} and answered like {@link #separateAo}, whose note carries why the
+	 * last live line decides even when it carries a word this cannot read.
+	 *
+	 * @param defines the pack's settings, which decide which lines of the file are alive at all
+	 */
+	public boolean oldLighting(Map<String, String> defines) {
+		Boolean asked = null;
+		for (Matcher line : live(OLD_LIGHTING, defines)) {
+			asked = truth(line.group(1).trim());
+		}
+
+		return Boolean.TRUE.equals(asked);
 	}
 
 	/** Each profile's unexpanded body, in the order the pack declares them. */

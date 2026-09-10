@@ -167,6 +167,11 @@ public final class PackChain {
 	/** Stops the frame drawing the pack; the reason is {@link PackChoice}'s to say. */
 	static void stop() {
 		disabled = true;
+		// The mesh is not taken down here and the pass goes back to the game's own shader, which
+		// expects the game's per face brightness to be in the vertex colour. Said here rather than
+		// at each of the three roads into this method, so a fourth cannot forget it. This is the
+		// LOAD's road only; putAway is the frame's, and says the same thing for the same reason.
+		FaceShading.none();
 	}
 
 	static boolean stopped() {
@@ -649,6 +654,12 @@ public final class PackChain {
 		}
 
 		disabled = true;
+		// The frame's own road out, and the thirteen sites that reach it are why this is said here
+		// rather than beside each of them. The mesh stands and the game's shader takes the chunk
+		// passes back, so the per face brightness it reads out of the vertex colour has to be there.
+		// Fired from inside a frame on purpose: allChanged raises a flag the next extract consumes
+		// rather than tearing sections down under the frame that asked.
+		FaceShading.none();
 		PackChoice.error(this.chain.packName() + " is not drawn at all: " + why);
 		Vitrail.logger().error("{} is put away rather than drawn by halves, because {}",
 				this.chain.packName(), why);
