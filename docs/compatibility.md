@@ -40,15 +40,15 @@ temporal filter; where a row names a difference, it is one that stands above tha
 | Pegasus v0.4 | Drawn. Its foliage comes out about a third darker than the reference's while the ground matches. |
 | Photon v1.3b | Drawn and close to the reference. It exercises a clamped volume of half floats as its atmosphere table, reads its volumes through macros standing for the sampler's name, and lays a volume over the name of a colour target that the same stage also reads as a plain `sampler2D`. |
 | RedHat v34.3.1 | Drawn. Further from the reference than most on the test scene, and what differs has not been named yet. |
-| RenderPearl v2.8.0-beta.4 | Drawn and close to the reference. |
-| Reverie Beta v0.9 | Drawn, at its shipped profile, and close to the reference. It is the pack that exercises the storage buffers hardest: its exposure is an average brightness that a compute writes into one and every later pass reads back, and a compute of its cloud pass reads the depth. It declares the uniforms of the Voxy mod beside those of Distant Horizons and reads them only under a `VOXY` define that mod sets and nothing here does, so the seven `vx` names the log reports as zeros are handed as zeros by Iris too without that mod, and the misspelt `previouscameraPositionFract` beside them is read by no program of the pack. Two of its passes read more textures at once than Apple's hardware has slots for, so on a Mac the pack is stopped; [the pack was refused](#the-pack-was-refused) says why that one is a real count. |
+| RenderPearl v2.8.0-beta.4 | Drawn and close to the reference. The background behind a name plate or a text display comes out opaque black where the reference's is translucent grey, on a Mac as here. |
+| Reverie Beta v0.9 | Drawn, at its shipped profile, and close to the reference. It is the pack that exercises the storage buffers hardest: its exposure is an average brightness that a compute writes into one and every later pass reads back, and a compute of its cloud pass reads the depth. It declares the uniforms of the Voxy mod beside those of Distant Horizons and reads them only under a `VOXY` define that mod sets and nothing here does, so the seven `vx` names the log reports as zeros are handed as zeros by Iris too without that mod, and the misspelt `previouscameraPositionFract` beside them is read by no program of the pack. Two of its passes read more textures at once than Apple's hardware hands a pass one by one, so on a Mac they are given them as one table, which [the pack was refused](#the-pack-was-refused) describes. |
 | Sildur's Vibrant Extreme v2.01 | Drawn, water included, and sunlit dirt comes out duller than the reference's. It is the pack that exercises the paths least travelled: it keeps the overworld's programs at the root of `shaders/` and gives the other two dimensions folders of their own, several families reach its textured program through the fallback tree rather than shipping one, and the target its terrain writes first is not target zero. |
 | Solas V3.7b | Drawn and close to the reference. |
 | Spooklementary v2.0.4 | Drawn and close to the reference. |
 
-On Apple Silicon, BSL, Bliss, Body Camera, both Complementary packs, Mellow, Sildur's and Photon
-draw, each in the release that machine was given, which for some was one before the row above.
-Reverie is the one that does not.
+On Apple Silicon, every pack in the table draws on the same code as the rows above: each one
+compiles and draws without an error, and Noble, Photon, RenderPearl and Reverie were looked at on
+screen. That is not yet a comparison with the reference on that machine.
 
 Start from what you are seeing. Each symptom below names its cause, and says how to confirm it
 rather than guess.
