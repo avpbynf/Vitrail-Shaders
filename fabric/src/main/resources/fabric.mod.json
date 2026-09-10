@@ -28,9 +28,9 @@
 		"vitrail-fabric.mixins.json"
 	],
 	"depends": {
-		"fabricloader": ">=${fabric_loader_version}",
+		"fabricloader": ">=${fabric_loader_min_version}",
 		"minecraft": ">=${minecraft_version} <26.3",
-		"sodium": ">=0.9.1",
+		"sodium": "0.9.x",
 		"fabric-key-mapping-api-v1": "*",
 		"fabric-lifecycle-events-v1": "*"
 	},
