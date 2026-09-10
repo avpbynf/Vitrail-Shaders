@@ -489,6 +489,15 @@ public final class ProgramTranslator {
 	 * Names a stage samples first, unused declarations after, so both the bind group and the
 	 * shader text meet the used names first. The compiler assigns bindings in the order it first
 	 * meets a name, and MoltenVK turns that into a Metal sampler that only accepts 0 through 15.
+	 * <p>
+	 * This is no longer what decides whether a pack fits under those sixteen, and it was never
+	 * enough on its own: what counts as sampled here is read off the translated TEXT, where every
+	 * {@code #if} is still standing, so a name read in a branch the game's compiler will drop
+	 * counts as sampled and takes a place at the front. Measured over the corpus that keeps about
+	 * three times too many. {@code render/SamplerReach} answers the same question on the compiled
+	 * module, where the branches are settled, and the layout is built from that. What this is still
+	 * for is the two roads where that answer is not there: a module SPIRV-Cross would not read
+	 * twice, and {@code -Dvitrail.declaredSamplers}.
 	 */
 	private static List<TranslatedUnit.Uniform> sampledFirst(
 			Map<String, TranslatedUnit.Uniform> samplers,

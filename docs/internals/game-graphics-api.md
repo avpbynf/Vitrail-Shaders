@@ -206,13 +206,21 @@ Over-declaring is therefore free and under-declaring fails at compile time, whic
 direction is a generous layout. That is what makes it practical to serve a large uniform surface
 without declaring it pipeline by pipeline.
 
-**MoltenVK is the exception that makes the order of those declarations load-bearing.** Metal numbers
-a sampler by the binding the compiler assigned from the order it first met the name, not by how
-many the shader actually samples, and it only accepts 0 through 15. A shader that declares twenty
-unused names ahead of the one texture the body reads still hands that texture binding 17, and the
-pipeline is refused. The translator therefore writes the names a program samples first in the
-header, unused declarations after. A program that samples more than sixteen textures is still
-refused there: that is Metal's own cap, the same one Iris documented for macOS.
+**MoltenVK is the exception that makes over-declaring cost something.** Metal accepts sampler
+indices 0 through 15 only, and MoltenVK counts a descriptor's Metal index off its place among the
+descriptors of its kind in the set's layout. That layout is built from the modules themselves:
+`GlslCompiler.compile` walks each stage's reflected sampler list and the INDEX of an entry becomes
+the Vulkan binding the module is rebound onto, whatever number shaderc had assigned. So a program
+whose shared include declares forty-eight samplers used to hand a body that reads thirteen of them
+indices running past the sixteenth, and the pipeline was refused for wanting three slots fewer than
+the hardware has.
+
+`render/SamplerReach` closes that: it drops from a module's reflected sampler list every sampled
+image the entry point does not reach, so the layout is dense and a program under sixteen fits. Over
+a program's two stages TOGETHER, since one layout serves both. A program whose stages read more than
+sixteen between them is still refused there, and that is Metal's own cap, the same one Iris
+documented for macOS. The translator still writes sampled names first in the header, which no longer
+decides the cap and is described where it lives.
 
 The asymmetry does not extend to the draw. A sampler that is declared and used, but not bound when
 the draw happens, throws, so the layout can be generous while the binding cannot be sloppy.

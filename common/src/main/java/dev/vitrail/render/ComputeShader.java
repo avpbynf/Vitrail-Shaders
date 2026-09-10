@@ -294,6 +294,18 @@ public final class ComputeShader {
 		}
 	}
 
+	/**
+	 * The name on one of the sampler records this package holds in raw lists, for
+	 * {@link SamplerReach}, which is the other reader inside {@code render}. Here rather than looked
+	 * up again there because this class already holds the handle and its initialiser already fails
+	 * loudly if the record moves. {@code cache/ModuleCache} keeps a third lookup of its own, and
+	 * deliberately: it has to survive a game that no longer carries the record at all, so its
+	 * handles are nullable where these are not.
+	 */
+	static String samplerName(Object sampler) {
+		return nameOf(sampler, SAMPLER_NAME);
+	}
+
 	private static String nameOf(Object record, Method accessor) {
 		try {
 			return (String) accessor.invoke(record);

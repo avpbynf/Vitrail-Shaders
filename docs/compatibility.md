@@ -21,7 +21,7 @@ quietly stale.
 | Mellow v3.3 | Drawn, and it exercises two more of them: it ships a three-dimensional volume as a raw blob, and it asks for a single-channel shadow buffer. |
 | Photon v1.3b | Drawn, at default settings. It exercises a clamped volume of half floats as its atmosphere table, reads its volumes through macros standing for the sampler's name, and lays a volume over the name of a colour target that the same stage also reads as a plain `sampler2D`. Not yet compared against the reference shot for shot. |
 | Body Camera v1.6.1 | Drawn. It is one of the packs that branches on the star flag in the sky, so it is worth reading [the sky goes flat](#the-sky-goes-flat) alongside. |
-| Reverie Beta v0.9 | Drawn, at its shipped profile. It is the pack that exercises the storage buffers hardest: its exposure is an average brightness that a compute writes into one and every later pass reads back, and a compute of its cloud pass reads the depth. It declares the uniforms of the Voxy mod beside those of Distant Horizons and reads them only under a `VOXY` define that mod sets and nothing here does, so the seven `vx` names the log reports as zeros are handed as zeros by Iris too without that mod, and the misspelt `previouscameraPositionFract` beside them is read by no program of the pack. Not yet compared against the reference shot for shot. |
+| Reverie Beta v0.9 | Drawn, at its shipped profile. It is the pack that exercises the storage buffers hardest: its exposure is an average brightness that a compute writes into one and every later pass reads back, and a compute of its cloud pass reads the depth. It declares the uniforms of the Voxy mod beside those of Distant Horizons and reads them only under a `VOXY` define that mod sets and nothing here does, so the seven `vx` names the log reports as zeros are handed as zeros by Iris too without that mod, and the misspelt `previouscameraPositionFract` beside them is read by no program of the pack. Two of its passes read more textures at once than Apple's hardware has slots for, so it is the one pack of these that does not draw on a Mac; [the pack was refused](#the-pack-was-refused) says why that one is a real count. Not yet compared against the reference shot for shot. |
 
 Start from what you are seeing. Each symptom below names its cause, and says how to confirm it
 rather than guess.
@@ -82,6 +82,17 @@ a pack refused here is not for that reason refused there.
 Iris refuses a required flag only when the name is unknown to it or the hardware cannot serve
 it, and it has built every one of the ones Reverie asks for: some outright, some wherever the
 driver supports them.
+
+**On a Mac, a pass that reads more than sixteen textures at once takes the pack with it.** Apple
+gives one pass sixteen slots for the textures it reads, and no setting or numbering raises that. The
+engine numbers a pass off the textures its two shader stages actually read between them, which is as
+tight as the numbering can be made, so what is left over that line is a genuine count rather than an
+accounting artefact. Two of Reverie's passes read seventeen and eighteen textures between their
+stages, so on Apple hardware they are refused and the pack comes down with them, with Apple's own
+message in the log: `'sampler' attribute parameter is out of bounds: must be between 0 and 15`. The
+same two passes draw on a desktop card, the cap being Apple's. What would lift it is Metal's
+argument buffers, a stage handed one table of resources instead of one slot each, and nothing here
+asks for that today. Every other pack measured stays under the line, one of them exactly on it.
 
 **A full-screen pass that fails to compile takes the whole pack with it**, and the log names the
 program. One shape of that was a `const` whose initialiser Vulkan will not take as a constant,

@@ -183,10 +183,22 @@ what the next one holds.
   own working parts, and BSL draws. The names of what a pack exposes stay, its uniforms and its
   textures, because the engine binds those by name; none of the packs tried collides there.
 
-  Bliss and Photon get past that and stop on a different Apple limit, which is not lifted here.
-  Metal offers sixteen slots for the textures one pass reads, and the engine hands it slot
-  numbers that run past the sixteenth even where a pass reads far fewer than sixteen. Reverie,
-  which never had a name to collide, is refused there too.
+  Bliss and Photon got past that and stopped on a different Apple limit, the one below.
+
+- **A pack that declares more textures than a pass reads draws on a Mac.** Apple offers one pass
+  sixteen slots for the textures it reads, and numbers them off the whole list of textures the
+  engine hands that pass rather than off the ones its shaders touch. A pack usually declares every
+  texture it owns in one file all its programs include, so a pass reading thirteen of them was
+  handed a list of forty-eight and given slot numbers running past the sixteenth: Apple's compiler
+  refused it and the game came down as the world was drawn, on a pass wanting three fewer slots
+  than the hardware has. The engine now numbers a pass off the textures its two shader stages read
+  between them, which is the count that has to fit, so the numbering is dense and anything under
+  sixteen gets in. Bliss and Photon draw.
+
+  Reverie has two passes whose stages read seventeen and eighteen textures between them, more than
+  Apple's hardware holds however they are numbered, and those two stay refused. Everywhere else this
+  is invisible: the same textures are bound as before and the same ones are read, and what changes
+  is only which of them the pass is given a numbered slot for.
 
 - **A pack that paints its picture with compute shaders draws it.** A few packs do their whole
   post-processing in compute programs rather than in full screen passes, and store the finished
