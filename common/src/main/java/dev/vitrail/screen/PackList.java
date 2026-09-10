@@ -73,14 +73,16 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 	private static final float FAINTEST = 0.01F;
 
 	/**
-	 * Where a pack comes from when the folder is empty. Iris sends people to Modrinth from here,
-	 * which is a store this mod is not on, so the address is the CurseForge search instead. It asks
-	 * for the shader class and nothing else: the same search filtered on a game version answers
-	 * with the packs whose author has uploaded a file tagged for it, which is close to none of them
-	 * in the weeks after a game release, exactly when somebody arrives here with an empty folder.
+	 * Where a pack comes from when the folder is empty, one row for each store this mod is published
+	 * on, since nothing here knows which of the two a player came through. Modrinth's is the page Iris
+	 * sends people to from the same place, {@code ShaderPackSelectionList.java:58}. CurseForge's asks
+	 * for the shader class and nothing else: the same search filtered on a game version answers with
+	 * the packs whose author has uploaded a file tagged for it, which is close to none of them in the
+	 * weeks after a game release, exactly when somebody arrives here with an empty folder.
 	 */
-	private static final String PACK_SITE =
+	private static final String CURSEFORGE_PACKS =
 			"https://www.curseforge.com/minecraft/search?class=shaders";
+	private static final String MODRINTH_PACKS = "https://modrinth.com/shaders";
 
 	private static final int ROW_HEIGHT = 20;
 
@@ -280,7 +282,10 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 		this.toggleRow.packsPresent = !packs.isEmpty();
 		if (packs.isEmpty()) {
 			// Untranslated, as Iris leaves its own: the address it opens is in English either way.
-			addEntry(new PinnedEntry(Component.literal("Download Shaders"), this::openPackSite));
+			addEntry(new PinnedEntry(Component.literal("Download Shaders from CurseForge"),
+					() -> openPackSite(CURSEFORGE_PACKS)));
+			addEntry(new PinnedEntry(Component.literal("Download Shaders from Modrinth"),
+					() -> openPackSite(MODRINTH_PACKS)));
 		}
 
 		PackEntry selected = null;
@@ -341,17 +346,17 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 	/**
 	 * Somewhere to get a pack, through the game's own "do you want to open this link" screen so that
 	 * nothing is opened without being asked for and the address is shown before it is followed. Iris
-	 * offers a page of its own from the same place.
+	 * offers Modrinth's from the same place.
 	 */
-	private void openPackSite() {
+	private void openPackSite(String address) {
 		Screen here = this.minecraft.gui.screen();
 		this.minecraft.gui.setScreen(new ConfirmLinkScreen(followed -> {
 			if (followed) {
-				Util.getPlatform().openUri(PACK_SITE);
+				Util.getPlatform().openUri(address);
 			}
 
 			this.minecraft.gui.setScreen(here);
-		}, PACK_SITE, true));
+		}, address, true));
 	}
 
 	/** Every row of this list, whatever it draws. */

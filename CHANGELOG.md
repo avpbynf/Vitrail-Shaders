@@ -272,6 +272,10 @@ what the next one holds.
   corner, where Iris puts its own name on its screen, with the engine's news on the line under them
   when there is any, so a player with both mods installed can tell which screen is open.
 
+- **An empty pack folder offers both stores.** The pack screen with no pack in its folder had one
+  button, to CurseForge's shader search. It has two now, CurseForge and Modrinth, each asking before
+  it opens the page, since Vitrail is on both and a player finds packs where they found the mod.
+
 ### Fixed
 
 - **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
