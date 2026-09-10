@@ -6,14 +6,19 @@ import com.mojang.blaze3d.vulkan.VulkanBackend;
 import com.mojang.blaze3d.vulkan.VulkanPhysicalDevice;
 import com.mojang.blaze3d.vulkan.init.VulkanFeature;
 import dev.vitrail.glsl.VendorExtensions;
+import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.render.BufferBlending;
 import dev.vitrail.render.GeometryStage;
 import dev.vitrail.Vitrail;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.vulkan.VK10;
+import org.lwjgl.vulkan.VK11;
 import org.lwjgl.vulkan.VK12;
 import org.lwjgl.vulkan.VkDevice;
 import org.lwjgl.vulkan.VkPhysicalDeviceFeatures;
 import org.lwjgl.vulkan.VkPhysicalDeviceFeatures2;
+import org.lwjgl.vulkan.VkPhysicalDeviceProperties2;
+import org.lwjgl.vulkan.VkPhysicalDeviceSubgroupProperties;
 import org.lwjgl.vulkan.VkPhysicalDeviceVulkan11Features;
 import org.lwjgl.vulkan.VkPhysicalDeviceVulkan12Features;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,7 +27,9 @@ import org.spongepowered.asm.mixin.injection.At;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -139,6 +146,16 @@ public abstract class VulkanBackendMixin {
 			VulkanBackend.VK10_FEATURES_STRUCT, "geometryShader",
 			VkPhysicalDeviceFeatures.GEOMETRYSHADER);
 
+	// The Vulkan stage bit of each stage a pack ships, to read the stages a device names.
+	@Unique
+	private static final Map<ProgramStage, Integer> STAGE_BITS = Map.of(
+			ProgramStage.VERTEX, VK10.VK_SHADER_STAGE_VERTEX_BIT,
+			ProgramStage.FRAGMENT, VK10.VK_SHADER_STAGE_FRAGMENT_BIT,
+			ProgramStage.GEOMETRY, VK10.VK_SHADER_STAGE_GEOMETRY_BIT,
+			ProgramStage.COMPUTE, VK10.VK_SHADER_STAGE_COMPUTE_BIT,
+			ProgramStage.TESSELLATION_CONTROL, VK10.VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+			ProgramStage.TESSELLATION_EVALUATION, VK10.VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
+
 	@Unique
 	private static final String VOXELS = "voxel lighting will not write";
 
@@ -181,6 +198,12 @@ public abstract class VulkanBackendMixin {
 		if (!vendor.isEmpty()) {
 			Vitrail.logger().info("Vulkan vendor extensions: {}", String.join(", ", vendor));
 		}
+		// And the stages the device runs subgroup operations in, which the compiler does not know
+		// either: MoltenVK leaves the vertex stage out, where SPIRV-Cross refuses a module using them.
+		Set<ProgramStage> noSubgroups = VendorExtensions.serveSubgroupStages(subgroupStages(physical));
+		if (!noSubgroups.isEmpty()) {
+			Vitrail.logger().info("Vulkan subgroup operations absent from stages: {}", noSubgroups);
+		}
 
 		enable(physical, features, SHADER_FLOAT16, enabled, NARROW);
 		enable(physical, features, SHADER_INT8, enabled, NARROW);
@@ -209,6 +232,27 @@ public abstract class VulkanBackendMixin {
 		enabled.add(feature.name());
 
 		return true;
+	}
+
+	@Unique
+	private static Set<ProgramStage> subgroupStages(VulkanPhysicalDevice physical) {
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			VkPhysicalDeviceSubgroupProperties subgroups =
+					VkPhysicalDeviceSubgroupProperties.calloc(stack).sType$Default();
+			VkPhysicalDeviceProperties2 properties =
+					VkPhysicalDeviceProperties2.calloc(stack).sType$Default().pNext(subgroups);
+			VK11.vkGetPhysicalDeviceProperties2(physical.vkPhysicalDevice(), properties);
+			int bits = subgroups.supportedStages();
+
+			Set<ProgramStage> stages = EnumSet.noneOf(ProgramStage.class);
+			for (Map.Entry<ProgramStage, Integer> stage : STAGE_BITS.entrySet()) {
+				if ((bits & stage.getValue()) != 0) {
+					stages.add(stage.getKey());
+				}
+			}
+
+			return stages;
+		}
 	}
 
 	@Unique

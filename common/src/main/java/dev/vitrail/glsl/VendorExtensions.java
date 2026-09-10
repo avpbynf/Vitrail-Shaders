@@ -1,7 +1,10 @@
 package dev.vitrail.glsl;
 
+import dev.vitrail.pack.model.ProgramStage;
+
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +12,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * The vendor GLSL extensions the device does not have, so that a pack testing for one reads the
@@ -31,6 +35,15 @@ import java.util.function.Predicate;
  * absent. A translation is keyed on the answer ({@link #key}), so a cache written on one card is
  * not served to another.
  * <p>
+ * The subgroup extensions are answered the same way, but per stage, since a device may run
+ * subgroup operations in some stages and not in others. MoltenVK names the fragment, compute and
+ * tessellation control stages and leaves the vertex stage out, and SPIRV-Cross then refuses a
+ * vertex module using a subgroup builtin rather than convert it to Metal. RenderPearl gates its
+ * subgroup path on the compiler's macros, so its terrain vertex stage never converted on a Mac
+ * and the pack stopped, where hiding those macros lets it take its own fallback. The stages come
+ * from the device at creation ({@link #serveSubgroupStages}); until then, and off game, every stage
+ * has them, which is the compiler's answer and what this engine assumed before asking.
+ * <p>
  * Five extensions are answered absent on every device, and one of them is a divergence. {@code
  * GL_NV_gpu_shader5} has no Vulkan form at all, while an NVIDIA GL driver has it, so a pack
  * gating on it takes its fallback here where under Iris on a GeForce it takes the extension.
@@ -47,8 +60,15 @@ public final class VendorExtensions {
 	/** Each vendor GLSL extension with the device extension that implements it on Vulkan. */
 	private static final Map<String, String> DEVICE_EXTENSIONS = deviceExtensions();
 
+	/** The names of the subgroup extensions start with one of these, whatever operation they add. */
+	private static final List<String> SUBGROUP_PREFIXES =
+			List.of("GL_KHR_shader_subgroup_", "GL_EXT_shader_subgroup_extended_types_");
+
 	private static volatile Set<String> absent = Collections.unmodifiableSet(
 			new TreeSet<>(DEVICE_EXTENSIONS.keySet()));
+
+	private static volatile Set<ProgramStage> subgroupsAbsentIn =
+			Collections.unmodifiableSet(EnumSet.noneOf(ProgramStage.class));
 
 	private VendorExtensions() {
 	}
@@ -76,19 +96,57 @@ public final class VendorExtensions {
 		return enabled;
 	}
 
-	/** Whether a pack's {@code #extension} of this name asks for something the device lacks. */
-	static boolean absent(String glslExtension) {
-		return absent.contains(glslExtension);
+	/**
+	 * Records the stages the device runs subgroup operations in, asked once at the device's creation.
+	 *
+	 * @param supported the stages the device's subgroup properties name
+	 * @return the stages left out, for the log
+	 */
+	public static Set<ProgramStage> serveSubgroupStages(Set<ProgramStage> supported) {
+		Set<ProgramStage> lacking = EnumSet.allOf(ProgramStage.class);
+		lacking.removeAll(supported);
+		subgroupsAbsentIn = Collections.unmodifiableSet(lacking);
+
+		return subgroupsAbsentIn;
 	}
 
-	/** The absent names, joined, for a cache key. */
+	/**
+	 * Whether a pack's {@code #extension} of this name asks, in this stage, for something the device
+	 * lacks.
+	 */
+	static boolean absent(String glslExtension, ProgramStage stage) {
+		return absent.contains(glslExtension)
+				|| (subgroupsAbsentIn.contains(stage) && subgroup(glslExtension));
+	}
+
+	/**
+	 * The absent names, and the stages the subgroup extensions are absent from, joined, for a cache
+	 * key. A device running them in every stage keeps the key it had before stages were asked, since
+	 * it translates exactly as it did.
+	 */
 	public static String key() {
-		return String.join(",", absent);
+		String names = String.join(",", absent);
+		if (subgroupsAbsentIn.isEmpty()) {
+			return names;
+		}
+
+		return subgroupsAbsentIn.stream().map(Enum::name)
+				.collect(Collectors.joining(",", names + ";subgroups absent in ", ""));
 	}
 
 	/** The hidden spelling of a macro the compiler would define and the device would not answer for. */
 	static String hidden(String glslExtension) {
 		return "OF_ABSENT_" + glslExtension;
+	}
+
+	private static boolean subgroup(String glslExtension) {
+		for (String prefix : SUBGROUP_PREFIXES) {
+			if (glslExtension.startsWith(prefix)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private static Map<String, String> deviceExtensions() {
