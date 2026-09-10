@@ -241,7 +241,10 @@ handed three varyings draws the lake as the reference does. A plain array varyin
 over several locations too, and it is split the same way, one varying per element: Photon's
 sky harmonics reach its deferred shading as nine `vec3` in one array, with two varyings declared
 after them. Only a single dimension sized by a number the pack wrote out is taken; a size behind
-a constant expression stays with the declaration.
+a constant expression stays with the declaration. All three read the storage word through a macro
+whose live replacement is exactly `in` or `out`, since I Like Vanilla declares each varying once
+for both stages as `in_out`, defined to one or the other by stage: read as the literal word alone,
+its water's `tbn` stays whole, and Metal refuses the two outputs that then share a location.
 
 A consequence for measurement, and it is sharper than it looks: **a per-unit check cannot see this
 class of defect at all**, because it never pairs a vertex stage with its fragment stage. Neither

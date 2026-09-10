@@ -27,9 +27,10 @@ import java.util.regex.Pattern;
  * around its {@code main}. The three cases share the numbering they exist for, the shape of the
  * rewrite and the wrapper they are copied in, which is why they are one class and not three.
  * <p>
- * What it can see is the token list, the unit's own liveness, the stage, and one reader handed to
- * it: a declaration at file scope is {@link GlslTranslator}'s to recognise, and reading one a
- * second way here would be a second answer to drift from the first.
+ * What it can see is the token list, the unit's own liveness, the stage, the macros that spell
+ * another name, and one reader handed to it: a declaration at file scope is
+ * {@link GlslTranslator}'s to recognise, and so is a storage word, and reading either a second way
+ * here would be a second answer to drift from the first.
  */
 final class VaryingSplit {
 
@@ -65,6 +66,13 @@ final class VaryingSplit {
 	private final Declarations declarations;
 
 	/**
+	 * The translator's macros whose replacement text is one name, filled before {@link #split}
+	 * runs, so that a varying declared through a macro standing for {@code in} or {@code out} is
+	 * split like one written with the word.
+	 */
+	private final Map<String, String> macroAliases;
+
+	/**
 	 * Matrix varyings rewritten as one vector per column, so {@code createFromSpirv} can number
 	 * them without overlap. Empty when the stage declared none.
 	 */
@@ -83,11 +91,12 @@ final class VaryingSplit {
 	private final List<SplitArray> arrays = new ArrayList<>();
 
 	VaryingSplit(TokenStream tokens, ExpandedUnit unit, ProgramStage stage,
-			Declarations declarations) {
+			Declarations declarations, Map<String, String> macroAliases) {
 		this.tokens = tokens;
 		this.unit = unit;
 		this.stage = stage;
 		this.declarations = declarations;
+		this.macroAliases = macroAliases;
 	}
 
 	/**
@@ -277,12 +286,12 @@ final class VaryingSplit {
 				continue;
 			}
 
-			boolean input = token.identifier("in");
-			boolean output = token.identifier("out");
-			if (!input && !output) {
+			String storage = GlslTranslator.storageWord(token, this.macroAliases);
+			if (storage == null) {
 				continue;
 			}
 
+			boolean input = storage.equals("in");
 			if (input && this.stage == ProgramStage.VERTEX) {
 				continue;
 			}
@@ -403,12 +412,12 @@ final class VaryingSplit {
 				continue;
 			}
 
-			boolean input = token.identifier("in");
-			boolean output = token.identifier("out");
-			if (!input && !output) {
+			String storage = GlslTranslator.storageWord(token, this.macroAliases);
+			if (storage == null) {
 				continue;
 			}
 
+			boolean input = storage.equals("in");
 			if (input && this.stage == ProgramStage.VERTEX) {
 				continue;
 			}
@@ -596,11 +605,12 @@ final class VaryingSplit {
 			return;
 		}
 
+		String wanted = output ? "out" : "in";
 		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.directive() != null || !this.unit.isLive(lines[index])
-					|| !token.identifier(output ? "out" : "in")) {
+					|| !wanted.equals(GlslTranslator.storageWord(token, this.macroAliases))) {
 				continue;
 			}
 
