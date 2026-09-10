@@ -179,6 +179,17 @@ declare all outputs in the header from zero with no gaps, and name each once in 
 from a function called as the first statement of main, so rank equals location and the game's
 rewrite becomes the identity.
 
+Every vertex stage also declares `invariant gl_Position`. Two programs of one pack often place the
+same vertex with the same code and are expected to land it at the same depth to the last bit: a
+banner's colour is drawn over its cloth by another program, with a test that passes only at an
+equal or nearer depth. MoltenVK compiles with fast math unless a stage says otherwise, which leaves
+Metal free to fold each program's arithmetic its own way, and on Apple Silicon the colour lost that
+test in hatched patches until the qualifier was there. SPIRV-Cross reports it as position
+invariance, and MoltenVK compiles the stage with `preserveInvariance`, which every vertex stage
+pays. The qualifier only holds where the two programs spell the computation the same: a pack whose
+programs place a vertex by different code is not covered, nor a draw the game still makes with its
+own shader.
+
 ## The unit of translation is the program, not the file
 
 This is the correction that mattered most, and it applies twice.

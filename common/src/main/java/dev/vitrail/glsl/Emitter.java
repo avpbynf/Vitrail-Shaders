@@ -163,6 +163,16 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 					}
 				}
 			}
+
+			// Two programs of a pack that place the same vertex with the same code have to land it at
+			// the same depth to the last bit: a banner's pattern is tested GREATER_THAN_OR_EQUAL
+			// against the depth its base wrote through another program. MoltenVK compiles with fast
+			// math unless a stage says otherwise, and Metal is then free to fold each program's
+			// arithmetic its own way; on an M4 the pattern lost that test in hatched patches across a
+			// village's banners, and with this line it does not. SPIRV-Cross reports the qualifier as
+			// position invariance and MoltenVK compiles the stage with preserveInvariance, which
+			// every vertex stage now pays, the shadow and full screen ones included.
+			lines.add("invariant gl_Position;");
 		}
 
 		// The four taps a hardware comparison blends, for the lookups the road decision sent here:

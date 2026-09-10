@@ -167,6 +167,14 @@ what the next one holds.
   it, which Vulkan does not allow; on a Mac that write cost the water already drawn. The pass is now
   closed before any such write, unless something is still drawing into it.
 
+- **Banners no longer flicker with light stripes on a Mac.** On Apple Silicon a banner could show
+  fine light stripes coming and going across its colour, plainest on the brown banners hanging in a
+  village seen from below. A banner is drawn twice at the same place, the cloth and then its colour
+  over it, by two different programs of the pack, and the Mac's shader compiler was free to round
+  each program's arithmetic its own way, so the colour could land a hair behind the cloth and be
+  hidden by it. Every vertex program of a pack now asks for its position to come out identical
+  wherever two programs compute it with the same code.
+
 - **The world stops being shaded twice, and the sides and undersides of blocks come back to the
   brightness the pack drew them at.** The game tints a block face by which of the six directions it
   faces, out of a small table each dimension carries: in the overworld full strength on top, half
