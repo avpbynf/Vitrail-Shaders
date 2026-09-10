@@ -268,6 +268,10 @@ what the next one holds.
   in a different order, reallocating everything for the first frame and then again for the
   reading, and it does not any more. Nothing about the picture changes.
 
+- **The pack screen names itself at the bottom left.** Vitrail and its version sit in grey in the
+  corner, where Iris puts its own name on its screen, with the engine's news on the line under them
+  when there is any, so a player with both mods installed can tell which screen is open.
+
 ### Fixed
 
 - **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both

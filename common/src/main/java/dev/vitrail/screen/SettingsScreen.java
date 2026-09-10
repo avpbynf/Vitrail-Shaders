@@ -64,9 +64,9 @@ import java.util.stream.Stream;
  * the world behind can be looked at while a setting is judged, and Escape brings them back. This is
  * what makes the screen usable for the one thing it is for.
  * <p>
- * <b>Three facts this engine has and Iris does not</b> are drawn where Iris draws its own name, at the
- * bottom left: a load that failed, how many settings {@code vitrail/options.txt} is holding down, and
- * how many passes this backend could not build. Nothing else on the screen reaches the player with
+ * <b>The bottom left carries the name and version, as Iris's does, and under them three facts this
+ * engine has and Iris does not</b>: a load that failed, how many settings {@code vitrail/options.txt}
+ * is holding down, and how many passes this backend could not build. Nothing else on the screen reaches the player with
  * them, and the log is not where anyone looks.
  */
 public final class SettingsScreen extends Screen implements PackHost, ScreenHost {
@@ -118,6 +118,9 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 			.withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC);
 
 	private final @Nullable Screen parent;
+
+	/** The mod's name and version in grey, Iris's own line, {@code ShaderPackScreen.java:119} and 125. */
+	private final Component nameLine;
 
 	/**
 	 * The pages walked through to get here, so that going back follows the way in rather than a tree
@@ -176,6 +179,8 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	public SettingsScreen(@Nullable Screen parent) {
 		super(Component.translatable(ScreenText.PACKS_TITLE));
 		this.parent = parent;
+		this.nameLine = Component.literal(Vitrail.MOD_NAME + " " + Vitrail.platform().modVersion())
+				.withStyle(ChatFormatting.GRAY);
 		adopt(PackChoice.session().orElse(null));
 		// Whatever the file says when there is no pack: the other view would be an empty page, and the
 		// list is where one is picked.
@@ -360,16 +365,21 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 			drawComment(graphics);
 		}
 
-		// After every list entry, and before the engine's own line, which nothing may cover.
+		// After every list entry, and before the lines at the bottom left, which nothing may cover.
 		for (Runnable draw : this.topLayer) {
 			draw.run();
 		}
 
 		this.topLayer.clear();
 
+		// Iris's arrangement, ShaderPackScreen.java:218-226: the name and version on the bottom line,
+		// pushed up one by whatever has to be said under them.
 		Component note = engineNote();
-		if (!note.getString().isEmpty()) {
+		if (note.getString().isEmpty()) {
+			graphics.text(this.font, this.nameLine, 2, this.height - 10, WHITE);
+		} else {
 			graphics.text(this.font, note, 2, this.height - 10, WHITE);
+			graphics.text(this.font, this.nameLine, 2, this.height - 20, WHITE);
 		}
 	}
 
@@ -404,9 +414,9 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 	}
 
 	/**
-	 * The one line at the bottom left, which is where Iris draws its own name and version. Ours carries
-	 * the engine's news instead, worst first: a load that failed, then what is being held down from
-	 * outside, then what could not be built.
+	 * The line under the name at the bottom left, where Iris says it runs in a development environment
+	 * or is out of date. Ours carries the engine's news, worst first: a load that failed, then what is
+	 * being held down from outside, then what could not be built, and nothing when there is none.
 	 */
 	private Component engineNote() {
 		String failed = this.error == null ? PackChoice.lastError().orElse(null) : this.error;
