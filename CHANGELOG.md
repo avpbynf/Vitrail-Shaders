@@ -81,8 +81,8 @@ what the next one holds.
   What is kept is the ground alone. Everything that moves, a mob, a boat, your own shadow, is drawn
   into the kept map afresh on every frame, so none of it is ever late. The price is on the ground
   itself: a block you place or break casts the shadow it had for as many frames as the setting
-  keeps. One frame is what it ships at and is not visible in play; the slider goes to two and stops
-  there. Turning it off restores the previous behaviour exactly.
+  keeps. One frame is what it ships at, and the slider goes to two and stops there. Turning it off
+  restores the previous behaviour exactly.
 
 - **A pack that ships no `final` program now draws.** Some packs end their chain on their last
   composite and expect what it wrote to be the picture; they were refused outright, with nothing on
@@ -317,8 +317,9 @@ what the next one holds.
   those types, so the colour output declared under one stayed where the pack wrote it and a second
   output was laid on the same slot; it is declared under its ordinary width now, and the value
   written is the same. The programs asked the card for arithmetic the game never turns on, and a
-  program asking for what was not turned on is invalid: the engine now turns on every such feature
-  the card reports. The pack passes its values between the two stages in a block of its own, which
+  program asking for what was not turned on is invalid: the engine now turns on those the card
+  reports, all but the one for sixteen bit stage outputs, which the output declared under its
+  ordinary width no longer needs. The pack passes its values between the two stages in a block of its own, which
   the game counts as one value when it numbers them, so the value after the block landed inside it:
   the block's members are passed one by one now, at the cost of the packing the pack had chosen. And
   the pack asks whether the card has an AMD instruction before using it, a question the shader
