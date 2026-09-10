@@ -712,7 +712,6 @@ final class GeometryProgram {
 		this.readWhileWritten = readWhileWritten(targets);
 
 		String vertex = loaded.program().stages().get(ProgramStage.VERTEX).text();
-		String fragment = loaded.program().stages().get(ProgramStage.FRAGMENT).text();
 		// The pass is in the name and not only the path, because two passes are usually served by
 		// the same file and their text still differs: the cutout half carries a discard the solid
 		// half does not. The device caches a shader module under its identifier, so one name for two
@@ -721,14 +720,6 @@ final class GeometryProgram {
 		String stem = "pack/" + load + "/" + pass.name() + "/" + this.path;
 		Identifier vertexId = Identifier.fromNamespaceAndPath(pass.namespace(), stem + "/vertex");
 		Identifier fragmentId = Identifier.fromNamespaceAndPath(pass.namespace(), stem + "/fragment");
-
-		this.source = (id, type) -> {
-			if (type == ShaderType.FRAGMENT) {
-				return fragmentId.equals(id) ? fragment : null;
-			}
-
-			return vertexId.equals(id) ? vertex : null;
-		};
 
 		BindGroupLayout.Builder bindings = BindGroupLayout.builder()
 				.withUniform(UNIFORM_BLOCK, UniformType.UNIFORM_BUFFER);
@@ -822,10 +813,21 @@ final class GeometryProgram {
 
 		// Same filing, same reason: the compile road has the pipeline in hand and nothing else. And
 		// the same refusal the storage block below takes, on the one road that answers no: a pack
-		// ships a geometry stage and the device has not got the feature to run one.
-		if (!GeometryStage.note(this.pipeline, this.path, loaded)) {
+		// ships a geometry stage the device cannot run and that cannot be folded away. The fragment
+		// stage is asked for here rather than read beside the vertex one because a fold rewrites it,
+		// which is also why the source is only built once the pipeline exists.
+		String fragment = GeometryStage.fragment(this.pipeline, this.path, loaded);
+		if (fragment == null) {
 			this.broken = true;
 		}
+
+		this.source = (id, type) -> {
+			if (type == ShaderType.FRAGMENT) {
+				return fragmentId.equals(id) ? fragment : null;
+			}
+
+			return vertexId.equals(id) ? vertex : null;
+		};
 
 		// A storage block this engine has no bufferObject for is the one refusal that does not
 		// announce itself. An unbindable sampler stops the pipeline from being built and this class
