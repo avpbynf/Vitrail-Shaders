@@ -172,6 +172,14 @@ public final class HostReport {
 			return;
 		}
 
+		// Iris drawing this session means a player who picked it, and a red line saying the picture
+		// is missing would be false for them. Asked of what Iris chose at startup rather than of
+		// Iris being there: after a Vulkan boot that fell back, Iris draws nothing and the line is
+		// owed.
+		if (IrisBeside.draws()) {
+			return;
+		}
+
 		minecraft.gui.hud.getChat().addClientSystemMessage(Component.translatable(
 				ScreenText.OTHER_BACKEND, backend(), Component.translatable(ScreenText.GRAPHICS_API),
 				Component.translatable(ScreenText.GRAPHICS_API_VULKAN))
@@ -202,9 +210,21 @@ public final class HostReport {
 	 * the programs having been translated against Vulkan's depth and clip conventions. Credible and
 	 * wrong reads as a pack fault, which is worse than a picture the game draws alone, so nothing is
 	 * drawn and the line says why.
+	 * <p>
+	 * Where Iris draws this session the same backend is information rather than an error: the
+	 * picture is not missing, it is the other engine's.
 	 */
 	private static void sayBackend() {
 		if (!otherBackend()) {
+			return;
+		}
+
+		if (IrisBeside.draws()) {
+			Vitrail.logger().info("This game is running the {} backend with Iris installed, so Iris "
+					+ "draws the packs and {} stands aside. Set Graphics API to \"Prefer Vulkan "
+					+ "(Experimental)\" under Options, Video Settings, and restart to draw them with {} "
+					+ "instead", backend(), Vitrail.MOD_NAME, Vitrail.MOD_NAME);
+
 			return;
 		}
 

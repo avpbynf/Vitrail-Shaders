@@ -154,6 +154,15 @@ what the next one holds.
 
 ### Fixed
 
+- **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
+  mods reshape Sodium's texture filtering option, and Sodium refuses two of them, so a game set to
+  OpenGL with both installed closed before the title screen. Vitrail now only touches that option
+  where it draws the world itself and Iris does not, and where Iris draws it no longer puts a red
+  line in the chat saying the picture is missing, nor answers Iris's reload key, which is also its
+  own, with a red line of its own. After a startup that ended badly, the backend is kept as it was
+  set rather than put back to Vulkan while Iris is installed, since Iris has already chosen its side
+  for that backend.
+
 - **Noble no longer stops on a Mac.** Noble keeps packed whole numbers rather than a colour in the
   first target its terrain writes, and the engine went on copying the game's own picture into that
   target wherever the pack drew nothing, which a Mac refuses outright: the pack was put away as soon
