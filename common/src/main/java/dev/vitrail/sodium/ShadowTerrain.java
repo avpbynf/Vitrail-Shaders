@@ -363,9 +363,13 @@ public final class ShadowTerrain {
 
 		// The store is taken HERE and nowhere else: with the opaque world in the map and before the
 		// first thing that moves goes into it. A store taken later would carry a mob, and every
-		// frame restoring it would paint that mob's old place back under the new one.
+		// frame restoring it would paint that mob's old place back under the new one. Taken only where
+		// a later frame may put it back: with the reuse off the copy is the whole map and its colours
+		// on every frame, read by nobody, and it cost the M4 about eight per cent of its frames.
 		if (drawTerrain && casters.terrain()) {
-			TerrainDraw.keepShadowMap();
+			if (ShadowAmortisation.keepsDrawnMap()) {
+				TerrainDraw.keepShadowMap();
+			}
 			ShadowAmortisation.drawn();
 		}
 

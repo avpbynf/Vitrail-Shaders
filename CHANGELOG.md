@@ -75,9 +75,10 @@ what the next one holds.
   frames of a player standing still nothing in that map moves, so it is now kept and reused instead
   of drawn again, and the passes that sample it are handed the matrices of the map they actually
   have. Measured on a Mac mini M4 with Complementary Reimagined at its defaults, in a savanna beside
-  a village, in a window of 854x480 with a shadow distance of 32: 111 to 113 frames a second with
-  the map drawn every frame, 131 to 135 with it kept. Those figures belong to that window and that
-  distance, not to every setup.
+  a village, in a window of 854x480 with a shadow distance of 32: 116 frames a second with the map
+  drawn every frame, 133 with it kept. Those figures belong to that window and that distance, not
+  to every setup: on flat ground with little to draw into the map, putting the kept map back can
+  cost more than drawing it, and turning the setting off is then the faster choice.
 
   **It does nothing on a pack that voxelises into its shadow pass**, which Complementary Unbound and
   Photon do with their coloured lighting on. A pack whose shadow programs fill a volume the rest of
