@@ -1577,13 +1577,14 @@ public final class GlslTranslator {
 	 * language wants them, and {@link #extensions} is what carries them there.
 	 * <p>
 	 * <strong>All the device has, and as {@code enable} rather than as the {@code require} the
-	 * pack wrote.</strong> Both halves are deliberate. A pack gates its extensions on macros this
-	 * engine's own {@code #if} evaluation cannot answer, since what defines them is the compiler
-	 * further down the road, so keeping only the live ones would keep none of the ones that
-	 * matter; and a name the compiler does not know is a warning under {@code enable} where
-	 * {@code require} is an error, which turns a pack asking for a vendor extension it will not
-	 * get into a pack that still compiles. What decides whether the pack's code USES an extension
-	 * is unchanged either way: its own macro test, answered by the compiler, which for a vendor
+	 * pack wrote.</strong> Both halves are deliberate. A pack gates its extensions on the
+	 * compiler's own macros, and whether a line is live is this engine's reading of the pack's
+	 * conditionals where the compiler's reading is the one that counts, so every extension named is
+	 * kept rather than only the live ones; and a name the compiler does not know is a warning under
+	 * {@code enable} where {@code require} is an error, which turns a pack asking for a vendor
+	 * extension it will not get into a pack that still compiles. What decides whether the pack's
+	 * code USES an extension is unchanged either way: its own macro test, answered by the compiler,
+	 * which for a vendor
 	 * extension the device has not got is given the device's answer to read
 	 * ({@link #hideAbsentExtensionMacros}, {@link VendorExtensions}).
 	 */
@@ -2111,8 +2112,8 @@ public final class GlslTranslator {
 	 * extension it knows, and a pack gating a vendor instruction on that macro takes the branch on
 	 * a card that cannot run the instruction. Under a GL driver the macro is only defined where the
 	 * card has the extension, which is the answer restored here. Every line is rewritten, live or
-	 * not, since the question is what the compiler will read; the engine's own evaluation already
-	 * answered undefined for a name it never defines, so the two agree afterwards.
+	 * not, since the question is what the compiler will read; the expander already read these names
+	 * as undefined in this stage ({@link CompilerMacros}), so the two agree afterwards.
 	 */
 	private void hideAbsentExtensionMacros() {
 		for (int index = 0; index < this.tokens.size(); index++) {

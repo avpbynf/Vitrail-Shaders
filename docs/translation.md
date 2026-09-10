@@ -25,6 +25,14 @@ condition, matches an include and tracks a define on the joined text. What it wr
 lines as they were, unless a setting rewrote the line: the compiler joins them again, and it joins
 once, so a joined line written out could end on a backslash the pack never meant as a continuation.
 
+**A condition reads the macros the compiler defines.** Before the first line of a stage the compiler
+defines a macro for every extension it supports, and one naming the stage, and packs gate code on
+them: RenderPearl turns its subgroup lighting on where `GL_KHR_shader_subgroup_basic` is defined
+and pulls in the buffer that lighting reads under the same test. The expander starts each entry
+from that table, for the stage the entry's extension names and without the extensions the device
+lacks in that stage, which the translator hides from the compiler as well. Read without it, that
+include is dropped while the compiler takes the branch and meets a name nothing declared.
+
 **Order at load matters.** The table of values that supplies a pack's defines has to be installed
 *before* the pack is read, because those symbols decide which branches compile. Read the pack first
 and it sees none of them. The same table is only meaningful once a world exists, so the reload path

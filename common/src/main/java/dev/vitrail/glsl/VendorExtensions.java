@@ -35,6 +35,11 @@ import java.util.stream.Collectors;
  * absent. A translation is keyed on the answer ({@link #key}), so a cache written on one card is
  * not served to another.
  * <p>
+ * The expander reads a pack's conditionals with the same answer before the compiler does: the
+ * macros a stage starts with there ({@link CompilerMacros}) leave out every name {@link #absent}
+ * gives for that stage, so an include under such a test is followed exactly where the compiler
+ * takes the branch.
+ * <p>
  * The subgroup extensions are answered the same way, but per stage, since a device may run
  * subgroup operations in some stages and not in others. MoltenVK names the fragment, compute and
  * tessellation control stages and leaves the vertex stage out, and SPIRV-Cross then refuses a
