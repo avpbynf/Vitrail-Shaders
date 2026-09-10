@@ -125,6 +125,14 @@ refused. A pass the card refuses stops the pack:
 the world goes back to the game's own look and the settings screen says an error stopped it, which
 is what the reference does with a pack that fails the same way.
 
+**On a Mac, a compute step that shares more memory between its threads than Metal allows is given a
+buffer instead.** Metal lets the threads of one compute step share 32768 bytes, and Photon's sky
+light asks for 36864, so the step was refused and the ground the sky lights came out dark. Where
+the step runs as a single group of threads, which is how Photon runs it, that memory is now a buffer
+and the step computes the same light. A step past the limit that runs as several groups is still
+refused, and the log names it. How is in
+[the game's graphics API](internals/game-graphics-api.md#compute-and-storage-images-the-facade-vs-the-backend).
+
 **A full-screen pass that fails to compile takes the whole pack with it**, and the log names the
 program. One shape of that was a `const` whose initialiser Vulkan will not take as a constant,
 which OpenGL drivers accepted as merely immutable; that spelling is now rewritten, see

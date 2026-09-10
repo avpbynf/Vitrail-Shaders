@@ -292,6 +292,23 @@ Which programs it serves, including the pack's own switch deciding whether it se
 and why the shadow moment rather than beside the shadow map that feeds it, is answered where the
 pack's chain is.
 
+**On MoltenVK, a compute's shared variables can be moved into a storage buffer.** SPIRV-Cross
+declares a GLSL `shared` variable as `threadgroup` memory of the Metal kernel, and Metal refuses a
+kernel holding more than 32768 bytes of it as the pipeline is built: Photon's
+`shared vec3 shared_memory[256][9]`, sixteen bytes a `float3`, is refused as 36864. Vulkan reports
+no such limit, so the figure is Metal's own message. `PackCompute` preprocesses a stage that says
+`shared`, `glsl/SharedMemory` sizes its live declarations the way SPIRV-Cross lays them out, and past
+the limit the stage is compiled with them declared in one `std430` block instead, which the pass
+allocates through VMA and binds for its dispatch. The body is left as it was. Two conditions make
+that the same memory. The pack's own count has to be one work group on every axis, since a shared
+variable is one copy per group and a buffer one copy for the whole dispatch; any other stage keeps
+its threadgroup memory and the log says Metal will refuse it. And the barriers have to name the
+buffer: SPIRV-Cross writes `barrier()` as `threadgroup_barrier(mem_flags::mem_threadgroup)`, which
+orders writes to threadgroup memory only, so the moved text puts `memoryBarrierBuffer()` in front of
+each one, `mem_device` below MSL 3.2 and a fence over device memory from 3.2, and declares the block
+`coherent`. The translation is the same on every driver; the module store is keyed on the text
+compiled, which differs where the move was made.
+
 ## Small things that cost a lot to rediscover
 
 - **The shared sampler cache hands out shared objects.** Never close one; the cache owns it.

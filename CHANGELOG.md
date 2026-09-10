@@ -161,6 +161,15 @@ what the next one holds.
   back by plain arithmetic the engine writes into the shader, which gives the numbers every other
   card already got. Nothing changes on any other machine.
 
+- **Photon's sky light reaches the ground on a Mac.** Photon works out the light the sky casts in a
+  small step that runs on many threads of the graphics card at once, and those threads keep their
+  working numbers in memory they share. The step asks for more of that memory than Apple's graphics
+  allow, so it was never built, and everything the sky lights came out dark: the grass a dull olive
+  where any other card draws it bright green. On a Mac, such a step now keeps those numbers in an
+  ordinary buffer when it runs as one batch of threads, which is how Photon runs it, and works out
+  the same light. A step past the allowance that runs as several batches is still refused, and the
+  log says so. Every other card is left as it was.
+
 - **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
   mods reshape Sodium's texture filtering option, and Sodium refuses two of them, so a game set to
   OpenGL with both installed closed before the title screen. Vitrail now only touches that option

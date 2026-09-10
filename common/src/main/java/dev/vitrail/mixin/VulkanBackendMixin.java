@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vulkan.VulkanBackend;
 import com.mojang.blaze3d.vulkan.VulkanPhysicalDevice;
 import com.mojang.blaze3d.vulkan.init.VulkanFeature;
+import dev.vitrail.glsl.SharedMemory;
 import dev.vitrail.glsl.VendorExtensions;
 import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.render.BufferBlending;
@@ -202,6 +203,8 @@ public abstract class VulkanBackendMixin {
 				physical.vkPhysicalDeviceProperties().limits().maxPerStageDescriptorSamplers(),
 				moltenVk ? tableSamplers(physical) : 0);
 		VendorExtensions.serveMoltenVk(moltenVk);
+		// And Metal's cap on the threadgroup memory of a compute, which Vulkan has no limit to name.
+		SharedMemory.serve(moltenVk);
 		// The vendor extensions a pack may gate a vendor instruction on, answered by the device
 		// and not by the compiler, which defines the macro of every one it knows; the ones the
 		// device has are enabled on it here, since a module using one needs it enabled.

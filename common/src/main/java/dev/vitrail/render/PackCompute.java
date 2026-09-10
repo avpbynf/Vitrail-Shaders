@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.PackProgram;
+import dev.vitrail.glsl.SharedMemory;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.mixin.access.CommandEncoderAccessor;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
@@ -44,13 +45,17 @@ import com.mojang.blaze3d.vulkan.VulkanUtils;
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
+import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.shaderc.Shaderc;
+import org.lwjgl.util.vma.Vma;
+import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.vulkan.KHRPushDescriptor;
 import org.lwjgl.vulkan.KHRSynchronization2;
 import org.lwjgl.vulkan.VK12;
 import org.lwjgl.vulkan.VK13;
+import org.lwjgl.vulkan.VkBufferCreateInfo;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
 import org.lwjgl.vulkan.VkDependencyInfo;
@@ -66,6 +71,7 @@ import org.lwjgl.vulkan.VkWriteDescriptorSet;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -512,9 +518,10 @@ final class PackCompute implements AutoCloseable {
 	 * Frees every pass this load built: the shadow computes, the ones hanging off a full screen
 	 * pass, and the ones dispatched at the moment of a program this place draws no pass for.
 	 * <p>
-	 * A pass holds a shader module, a descriptor set layout, a pipeline layout, a pipeline and a
-	 * ring of uniform buffers. {@link Pass#destroy} queues the module, both layouts and the
-	 * pipeline on {@link GpuRecording#destroyLater}, and {@link Pass#close} queues the ring there
+	 * A pass holds a shader module, a descriptor set layout, a pipeline layout, a pipeline, a ring
+	 * of uniform buffers, and on MoltenVK the buffer its shared variables were moved into when it
+	 * has one. {@link Pass#destroy} queues the module, both layouts, the pipeline and that buffer
+	 * on {@link GpuRecording#destroyLater}, and {@link Pass#close} queues the ring there
 	 * as well rather than closing it where it stands, since this is not a quiet moment: every
 	 * error path of a frame calls {@link PackChain#release} in the middle of one, after the chain
 	 * has dispatched these computes, so a pass is closed while frames that still name its objects
@@ -738,6 +745,14 @@ final class PackCompute implements AutoCloseable {
 		private List<VulkanBindGroupLayout.Entry> entries = List.of();
 		private boolean compiled;
 
+		/**
+		 * The std430 size of the block {@link SharedMemory} moved this compute's shared variables
+		 * into, or 0 where they keep their threadgroup memory, which is everywhere but MoltenVK.
+		 */
+		private long sharedBytes;
+		private long sharedBuffer;
+		private long sharedAllocation;
+
 		private Pass(PackProgram.Compute compute, UniformCatalog catalog, int load, String path,
 				String program) {
 			this.compute = compute;
@@ -818,7 +833,7 @@ final class PackCompute implements AutoCloseable {
 			// One state for the key and the patch, as the game's compiler road takes it.
 			RawLocals.begin();
 			try {
-				String source = unit.text();
+				String source = sharedMemory(unit.text());
 				String key = ModuleCache.keyOf(source, MODULE_CACHE_STAGE);
 				module = ModuleCache.lookup(key, this.label);
 				ByteBuffer spirv = null;
@@ -876,6 +891,7 @@ final class PackCompute implements AutoCloseable {
 			try (MemoryStack stack = MemoryStack.stackPush()) {
 				createLayout(vulkan, stack);
 				createPipeline(vulkan, stack);
+				createSharedBuffer(vulkan, stack);
 			} catch (GpuDeviceLossException e) {
 				throw e;
 			} catch (RuntimeException e) {
@@ -889,23 +905,65 @@ final class PackCompute implements AutoCloseable {
 			}
 		}
 
+		/**
+		 * The text to compile: the translation as it stands, or on MoltenVK the same with its shared
+		 * variables moved into a storage buffer, where Metal would refuse the threadgroup memory they
+		 * take. {@link SharedMemory} says why the buffer is the same memory and what the move does to
+		 * the barriers.
+		 * <p>
+		 * Only for a pack count of one work group on every axis, which is what makes one buffer the
+		 * memory every invocation of the dispatch shares: the count a pack writes is dispatched as
+		 * written, and a count off the screen is as many groups as the window asks for. Anything else
+		 * keeps its threadgroup memory, and the log says why Metal will refuse it. The translation
+		 * itself is not touched, so its store holds one answer for every driver, and the module store
+		 * is keyed on the text returned here, which differs wherever the move was made.
+		 */
+		private String sharedMemory(String translated) {
+			if (!SharedMemory.moltenVk() || !SharedMemory.mentioned(translated)) {
+				return translated;
+			}
+
+			String preprocessed = preprocess(translated);
+			if (preprocessed == null) {
+				return translated;
+			}
+
+			SharedMemory.Reading reading = SharedMemory.read(preprocessed);
+			if (reading.unread() != null) {
+				Vitrail.logger().warn("compute {} declares shared memory this engine cannot size, "
+						+ "{}, so it keeps its threadgroup memory on Metal", this.path, reading.unread());
+				return translated;
+			}
+
+			if (!reading.over()) {
+				return translated;
+			}
+
+			if (this.compute.groupsX() != 1 || this.compute.groupsY() != 1
+					|| this.compute.groupsZ() != 1) {
+				Vitrail.logger().warn("compute {} asks Metal for {} bytes of threadgroup memory, past "
+						+ "the {} it allows, and does not dispatch a single work group, where one buffer "
+						+ "would not be the memory each group has of its own, so Metal refuses it",
+						this.path, reading.threadgroupBytes(), SharedMemory.THREADGROUP_BYTES);
+				return translated;
+			}
+
+			this.sharedBytes = reading.bufferBytes();
+			Vitrail.logger().info("compute {} asks Metal for {} bytes of threadgroup memory, past the "
+					+ "{} it allows, so its shared variables are served from a storage buffer of {} bytes",
+					this.path, reading.threadgroupBytes(), SharedMemory.THREADGROUP_BYTES,
+					this.sharedBytes);
+			return reading.moved();
+		}
+
 		private static ByteBuffer compileSpirv(String source) {
 			long compiler = Shaderc.shaderc_compiler_initialize();
-			long options = Shaderc.shaderc_compile_options_initialize();
+			long options = compileOptions();
 			ByteBuffer sourceBuffer = MemoryUtil.memUTF8(source, false);
 			ByteBuffer filename = MemoryUtil.memUTF8("shadowcomp.csh");
 			ByteBuffer entry = MemoryUtil.memUTF8("main");
 			long result = 0L;
 			try {
-				Shaderc.shaderc_compile_options_set_target_env(options, 0, SHADERC_VULKAN_1_2);
-				Shaderc.shaderc_compile_options_set_auto_bind_uniforms(options, true);
-				Shaderc.shaderc_compile_options_set_auto_map_locations(options, true);
-				Shaderc.shaderc_compile_options_set_generate_debug_info(options);
-				// Performance, and for the LAYOUT before speed: the pack's common include
-				// declares samplers a compute never reads, an unoptimised module keeps them,
-				// and reflection then demands a binding for every one. Optimised, the dead
-				// declarations fall out and the entries are the names the shader touches.
-				Shaderc.shaderc_compile_options_set_optimization_level(options, 2);
 				result = Shaderc.shaderc_compile_into_spv(compiler, sourceBuffer, SHADERC_COMPUTE,
 						filename, entry, options);
 				int status = Shaderc.shaderc_result_get_compilation_status(result);
@@ -932,6 +990,88 @@ final class PackCompute implements AutoCloseable {
 			}
 		}
 
+		/** The options a compute is compiled and preprocessed at, released by the caller. */
+		private static long compileOptions() {
+			long options = Shaderc.shaderc_compile_options_initialize();
+			Shaderc.shaderc_compile_options_set_target_env(options, 0, SHADERC_VULKAN_1_2);
+			Shaderc.shaderc_compile_options_set_auto_bind_uniforms(options, true);
+			Shaderc.shaderc_compile_options_set_auto_map_locations(options, true);
+			Shaderc.shaderc_compile_options_set_generate_debug_info(options);
+			// Performance, and for the LAYOUT before speed: the pack's common include declares
+			// samplers a compute never reads, an unoptimised module keeps them, and reflection then
+			// demands a binding for every one. Optimised, the dead declarations fall out and the
+			// entries are the names the shader touches.
+			Shaderc.shaderc_compile_options_set_optimization_level(options, 2);
+			return options;
+		}
+
+		/**
+		 * The text through shaderc's preprocessor alone, at the options it is compiled at, or null
+		 * where it does not preprocess, which the compile after it then says.
+		 */
+		private static String preprocess(String source) {
+			long compiler = Shaderc.shaderc_compiler_initialize();
+			long options = compileOptions();
+			ByteBuffer sourceBuffer = MemoryUtil.memUTF8(source, false);
+			ByteBuffer filename = MemoryUtil.memUTF8("shadowcomp.csh");
+			ByteBuffer entry = MemoryUtil.memUTF8("main");
+			long result = 0L;
+			try {
+				result = Shaderc.shaderc_compile_into_preprocessed_text(compiler, sourceBuffer,
+						SHADERC_COMPUTE, filename, entry, options);
+				if (result == 0L) {
+					return null;
+				}
+
+				ByteBuffer bytes = Shaderc.shaderc_result_get_bytes(result);
+				if (Shaderc.shaderc_result_get_compilation_status(result) != 0 || bytes == null) {
+					return null;
+				}
+
+				return StandardCharsets.UTF_8.decode(bytes).toString();
+			} finally {
+				if (result != 0L) {
+					Shaderc.shaderc_result_release(result);
+				}
+
+				MemoryUtil.memFree(entry);
+				MemoryUtil.memFree(filename);
+				MemoryUtil.memFree(sourceBuffer);
+				Shaderc.shaderc_compile_options_release(options);
+				Shaderc.shaderc_compiler_release(compiler);
+			}
+		}
+
+		/**
+		 * The buffer a moved stage's shared variables live in, allocated the way the pack's own
+		 * storage buffers are. Left unfilled: a shared variable starts undefined.
+		 */
+		private void createSharedBuffer(VulkanDevice vulkan, MemoryStack stack) {
+			if (this.sharedBytes <= 0L) {
+				return;
+			}
+
+			VkBufferCreateInfo bufferInfo = VkBufferCreateInfo.calloc(stack).sType$Default();
+			bufferInfo.size(this.sharedBytes);
+			bufferInfo.usage(VK12.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+			bufferInfo.sharingMode(VK12.VK_SHARING_MODE_EXCLUSIVE);
+			VmaAllocationCreateInfo allocationInfo = VmaAllocationCreateInfo.calloc(stack);
+			allocationInfo.usage(8);
+			LongBuffer bufferPtr = stack.callocLong(1);
+			PointerBuffer allocationPtr = stack.callocPointer(1);
+			VulkanUtils.crashIfFailure(vulkan,
+					Vma.vmaCreateBuffer(vulkan.vma(), bufferInfo, allocationInfo, bufferPtr,
+							allocationPtr, null),
+					"compute shared memory");
+			this.sharedBuffer = bufferPtr.get(0);
+			this.sharedAllocation = allocationPtr.get(0);
+		}
+
+		/** Whether that entry is the block the shared variables were moved into. */
+		private boolean servesShared(String name) {
+			return this.sharedBytes > 0L && SharedMemory.BLOCK.equals(name);
+		}
+
 		private void createLayout(VulkanDevice vulkan, MemoryStack stack) {
 			int count = Math.max(1, this.entries.size());
 			VkDescriptorSetLayoutBinding.Buffer bindings =
@@ -943,7 +1083,7 @@ final class PackCompute implements AutoCloseable {
 						|| COLOUR_IMAGE.matcher(entry.name()).matches();
 				int type;
 				if (entry.type() == VulkanBindGroupLayout.VulkanBindGroupEntryType.UNIFORM_BUFFER) {
-					type = StorageBuffers.named(entry.name())
+					type = StorageBuffers.named(entry.name()) || servesShared(entry.name())
 							? VK12.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
 							: VK12.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 				} else {
@@ -1025,6 +1165,16 @@ final class PackCompute implements AutoCloseable {
 				write.dstArrayElement(0);
 				write.descriptorCount(1);
 				if (entry.type() == VulkanBindGroupLayout.VulkanBindGroupEntryType.UNIFORM_BUFFER) {
+					if (servesShared(entry.name())) {
+						VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.calloc(1, stack);
+						bufferInfo.buffer(this.sharedBuffer);
+						bufferInfo.offset(0L);
+						bufferInfo.range(this.sharedBytes);
+						write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+						write.pBufferInfo(bufferInfo);
+						continue;
+					}
+
 					if (StorageBuffers.named(entry.name())) {
 						StorageBuffers.Bound bound = StorageBuffers.bound(entry.name());
 						if (bound == null) {
@@ -1274,11 +1424,19 @@ final class PackCompute implements AutoCloseable {
 			long pipelineLayout = this.pipelineLayout;
 			long setLayout = this.setLayout;
 			long shaderModule = this.shaderModule;
+			long sharedBuffer = this.sharedBuffer;
+			long sharedAllocation = this.sharedAllocation;
 			this.pipeline = 0L;
 			this.pipelineLayout = 0L;
 			this.setLayout = 0L;
 			this.shaderModule = 0L;
+			this.sharedBuffer = 0L;
+			this.sharedAllocation = 0L;
 			GpuRecording.destroyLater(() -> {
+				if (sharedBuffer != 0L) {
+					Vma.vmaDestroyBuffer(vulkan.vma(), sharedBuffer, sharedAllocation);
+				}
+
 				if (pipeline != 0L) {
 					VK12.vkDestroyPipeline(vulkan.vkDevice(), pipeline, null);
 				}
