@@ -110,6 +110,15 @@ public final class EngineStages {
 	}
 
 	/**
+	 * At the start of every client tick, before anything of the tick has asked a key. Only the key
+	 * this mod shares with Iris is served here, whose press has to be taken before Iris asks for it
+	 * at the end of the same tick ({@link SettingsKey#beforeTick}).
+	 */
+	public static void clientTickStart() {
+		SettingsKey.beforeTick();
+	}
+
+	/**
 	 * At the end of every client tick, in a world or out of one. The one moment of the engine that
 	 * is not a point of the frame, and it is listed here for the same reason the others are: what
 	 * is asked once a tick has to be the same list on both loaders, and each of them reaches it

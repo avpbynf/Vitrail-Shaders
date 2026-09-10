@@ -12,24 +12,29 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Path;
 
 /**
- * The two keys this mod binds: R reads the pack again, I opens the settings screen.
+ * The two keys this mod binds: R reads the pack again, I opens the pack screen.
  * <p>
- * R is Iris's own, {@code iris.keybind.reload} at {@code Iris.java:785}, so a player who has
- * configured a pack before will try it first and find it. I is NOT: Iris opens its screen on O,
- * {@code Iris.java:787}. Nothing forced that, it is simply the key this mod was given before anyone
- * read which one the reference used, and it is written down here rather than quietly presented as
- * parity.
+ * Both are Iris's own, {@code iris.keybind.reload} and {@code iris.keybind.shaderPackSelection} at
+ * {@code Iris.java:811} and {@code 813}, so a player who has configured a pack before will try them
+ * first and find them. The game hands a press to every mapping bound to its key, so beside Iris one
+ * press reaches both mods, and only one of them may answer it. Where Iris draws, the reload stands
+ * aside, Iris's answering only with its debug options on ({@code Iris.java:181}), and so does this
+ * screen's key while it shares Iris's. Where Iris does not draw, on Vulkan, Iris binds I to a screen
+ * saying it cannot run there ({@code IrisVKOnly.java:17}), and the press is taken from Iris's mapping
+ * before Iris asks it ({@link #beforeTick}). A player who moved either key gets each screen on its
+ * own.
  * <p>
- * The mappings and what a press does are here; registering them and asking them once a tick is each
+ * The mappings and what a press does are here; registering them and asking them on the tick is each
  * loader's own business, because those are the two things they do differently. Asking on a tick
  * rather than on a key event is deliberate and is the same on both: the game only feeds key mappings
  * while no screen is open, so the shortcut cannot open a second copy of this screen over the first,
- * and it costs two booleans a tick.
+ * and it costs two booleans a tick, and one lookup more beside Iris.
  * <p>
  * That last point is also why the screen keeps a reload button of its own. From an open screen these
  * keys are not fed at all, so the key alone would leave the one place where a pack is being worked on
@@ -46,14 +51,37 @@ public final class SettingsKey {
 	public static final KeyMapping RELOAD =
 			new KeyMapping(ScreenText.RELOAD_PACK, GLFW.GLFW_KEY_R, CATEGORY);
 
+	/** Iris's mapping for its pack screen, by the name it registers under on both backends. */
+	private static final String IRIS_SCREEN_KEY = "iris.keybind.shaderPackSelection";
+
 	private SettingsKey() {
+	}
+
+	/**
+	 * Takes the press of the key this mod shares with Iris from Iris's mapping, where Iris does not
+	 * draw. Called before anything of the tick has asked a key, because Iris asks its own at the end
+	 * of the tick ({@code VKOnly_InitKeys.java:27}) and would open its screen over this one.
+	 */
+	public static void beforeTick() {
+		if (!IrisBeside.installed() || PackScreens.irisDraws()) {
+			return;
+		}
+
+		KeyMapping iris = sharedIrisKey();
+		if (iris != null) {
+			drain(iris);
+		}
 	}
 
 	/** Acts on whichever of the two was pressed since the last tick, and does nothing otherwise. */
 	public static void poll() {
 		if (drain(OPEN)) {
-			Minecraft minecraft = Minecraft.getInstance();
-			minecraft.gui.setScreen(new SettingsScreen(minecraft.gui.screen()));
+			// Where Iris draws and the key is shared, the same press reached Iris's mapping, which opens
+			// Iris's screen: opening it here as well would lay a second over it.
+			if (!PackScreens.irisDraws() || sharedIrisKey() == null) {
+				Minecraft minecraft = Minecraft.getInstance();
+				minecraft.gui.setScreen(PackScreens.open(minecraft.gui.screen()));
+			}
 
 			return;
 		}
@@ -61,6 +89,13 @@ public final class SettingsKey {
 		if (drain(RELOAD)) {
 			reload();
 		}
+	}
+
+	/** Iris's mapping for its pack screen where it is bound to the same key as {@link #OPEN}, or null. */
+	private static @Nullable KeyMapping sharedIrisKey() {
+		KeyMapping iris = KeyMapping.get(IRIS_SCREEN_KEY);
+
+		return iris != null && iris.same(OPEN) ? iris : null;
 	}
 
 	/**
@@ -93,7 +128,7 @@ public final class SettingsKey {
 	 * The failure is asked for rather than caught, because catching is not where it lands: reading a
 	 * pack puts what went wrong where the screen's own bottom line reads it instead of throwing, and
 	 * the load's own catch is what makes that so. So a press that read nothing is told apart by asking
-	 * that same question. Iris says both lines too, {@code Iris.java:184} and {@code Iris.java:191},
+	 * that same question. Iris says both lines too, {@code Iris.java:187} and {@code Iris.java:194},
 	 * off a catch rather than off a question because throwing is what its own reload does.
 	 * <p>
 	 * <b>A reading that read nothing because the named pack is gone answers as a failure.</b> Warned

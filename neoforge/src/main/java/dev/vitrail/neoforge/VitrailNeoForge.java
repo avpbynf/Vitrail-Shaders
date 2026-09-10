@@ -2,7 +2,7 @@ package dev.vitrail.neoforge;
 
 import dev.vitrail.platform.EngineStages;
 import dev.vitrail.render.pbr.PbrAtlases;
-import dev.vitrail.screen.SettingsScreen;
+import dev.vitrail.screen.PackScreens;
 import dev.vitrail.Vitrail;
 
 import net.minecraft.client.renderer.texture.TextureAtlas;
@@ -37,7 +37,7 @@ public final class VitrailNeoForge {
 		// pause menu. A two argument lambda rather than a supplier, which is the overload it
 		// would otherwise pick.
 		container.registerExtensionPoint(IConfigScreenFactory.class,
-				(_, modListScreen) -> new SettingsScreen(modListScreen));
+				(_, modListScreen) -> PackScreens.open(modListScreen));
 
 		VitrailKeys.register(modBus);
 
@@ -50,6 +50,7 @@ public final class VitrailNeoForge {
 
 		modBus.addListener(FMLClientSetupEvent.class, _ -> EngineStages.clientSetup());
 
+		NeoForge.EVENT_BUS.addListener(ClientTickEvent.Pre.class, _ -> EngineStages.clientTickStart());
 		NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, _ -> EngineStages.clientTick());
 
 		// Posted at the end of TextureAtlas.upload, once per atlas and once per resource reload,
