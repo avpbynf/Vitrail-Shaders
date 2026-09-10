@@ -900,7 +900,8 @@ GNU Lesser General Public License version 3
   common/src/main/java/dev/vitrail/screen/SettingsScreen.java is
   net.irisshaders.iris.gui.screen.ShaderPackScreen: the two views and the switch that applies on the
   way between them, the three buttons of the bottom row and the two above it, the eye and F1, the
-  notification line, the comment panel with its splitting on sentences, the queue of what must be drawn
+  notification line, the name and version in grey at the bottom left with the line that pushes them up
+  one, the comment panel with its splitting on sentences, the queue of what must be drawn
   after every row, the two fades and the blur they gate, and the files dropped on either view.
   The blur has a second half, and it is Iris's too:
   common/src/main/java/dev/vitrail/mixin/GameRendererBlurMixin.java is
