@@ -1,5 +1,6 @@
 package dev.vitrail.screen;
 
+import dev.vitrail.IrisBeside;
 import dev.vitrail.render.PackChoice;
 import dev.vitrail.ScreenText;
 import dev.vitrail.settings.PackSession;
@@ -103,6 +104,13 @@ public final class SettingsKey {
 	 * it.
 	 */
 	private static void reload() {
+		// Where Iris draws this session the key is Iris's: it reloads its own pack on the same R, and
+		// this engine, which draws nothing on that backend, would only answer the press with a red
+		// line saying the pack is not drawn.
+		if (IrisBeside.draws()) {
+			return;
+		}
+
 		Path directory = PackChoice.session()
 				.map(PackSession::gameDirectory)
 				.orElseGet(() -> Vitrail.platform().gameDirectory());

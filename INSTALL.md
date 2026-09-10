@@ -42,10 +42,12 @@ to Sodium. For a CurseForge instance that is:
 <instances>/<instance name>/mods/
 ```
 
-Remove any other shader engine from that folder first. Iris and Vitrail both want
-to own the frame, and there is no reason to have both. An older Vitrail goes too:
-the per-loader `vitrail-neoforge-*` and `vitrail-fabric-*` jars carry the same
-mod as the merged one, and a loader that finds it twice refuses to start.
+Iris can stay in that folder. The two share an instance by the graphics backend
+the game runs on: on Vulkan Vitrail draws and Iris stands aside, on OpenGL Iris
+draws and Vitrail stands aside, so switching the backend in the video settings and
+restarting the game switches engines. An older Vitrail has to go, though: the per-loader
+`vitrail-neoforge-*` and `vitrail-fabric-*` jars carry the same mod as the merged
+one, and a loader that finds it twice refuses to start.
 
 Shader packs go into the `shaderpacks/` folder at the root of the instance, the
 same folder OptiFine and Iris use, zipped or unpacked. Two files of the mod's own

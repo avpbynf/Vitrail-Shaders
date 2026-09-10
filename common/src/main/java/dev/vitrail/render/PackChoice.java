@@ -278,8 +278,9 @@ public final class PackChoice {
 			// reaches a mesh or a frame: the programs are translated against Vulkan's depth and
 			// clip conventions, and what they drew when let run elsewhere was a picture credible
 			// and wrong, which reads as a pack fault. The game's own image is the better answer.
-			// HostReport says it once in the log at startup and once in chat on entering a world;
-			// what this road adds is the screen's bottom line, through lastError, and nothing else.
+			// HostReport says it once in the log at startup and, unless Iris draws there, once in chat
+			// on entering a world; what this road adds is the screen's bottom line, through
+			// lastError, and nothing else.
 			if (HostReport.otherBackend()) {
 				TerrainDraw.wanted(false);
 				EntityDraw.wanted(false);

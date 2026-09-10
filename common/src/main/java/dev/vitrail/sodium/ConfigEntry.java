@@ -1,6 +1,8 @@
 package dev.vitrail.sodium;
 
 import dev.vitrail.cache.ModuleCache;
+import dev.vitrail.HostReport;
+import dev.vitrail.IrisBeside;
 import dev.vitrail.render.PackChoice;
 import dev.vitrail.render.ShadowAmortisation;
 import dev.vitrail.render.StartupGuard;
@@ -17,6 +19,7 @@ import net.caffeinemc.mods.sodium.api.config.ConfigState;
 import net.caffeinemc.mods.sodium.api.config.option.OptionImpact;
 import net.caffeinemc.mods.sodium.api.config.option.Range;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
+import net.caffeinemc.mods.sodium.api.config.structure.ModOptionsBuilder;
 import net.caffeinemc.mods.sodium.api.config.structure.OptionBuilder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.TextureFilteringMethod;
@@ -106,7 +109,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 
 	@Override
 	public void registerConfigLate(ConfigBuilder builder) {
-		builder.registerOwnModOptions()
+		ModOptionsBuilder options = builder.registerOwnModOptions()
 				// Not tinted: this icon is the mod's own, in colour, where Sodium's screen is drawn
 				// for the monochrome ones it can paint in the theme colour.
 				.setNonTintedIcon(ICON)
@@ -124,37 +127,47 @@ public final class ConfigEntry implements ConfigEntryPoint {
 								.addOption(temporalFold(builder))
 								.addOption(shadowAmortisation(builder))
 								.addOption(graphicsApi(builder))
-								.addOption(moduleCacheCeiling(builder))))
-				// RGSS is shader code, written into the game's own terrain shader and into Sodium's,
-				// so it is worth nothing while the pack's terrain program is the one drawing: the
-				// player moves the selector and the image does not move. ANISOTROPIC keeps working,
-				// because it is a sampler and an atlas seam fix rather than a shader, and this engine
-				// takes both as it finds them. The reference registers this same overlay over the
-				// same two values, IrisConfig.java:78.
-				//
-				// What differs is the question asked, and only because this engine can answer a
-				// narrower one. The reference asks whether a pack is loaded, IrisConfig.java:87,
-				// which for it is the same thing: a loaded pack there always takes the terrain over.
-				// Here the pack's terrain program can be off on its own while the rest of the chain
-				// draws, either because the engine options refuse it or because reading it threw, and
-				// then Sodium's own shader draws the world and RGSS works again. So the question is
-				// whether that program draws, which is what TerrainDraw.asked answers.
-				//
-				// Asked through UPDATE_ON_REBUILD rather than read once, so the list follows a pack
-				// loaded or dropped while the game is up rather than the state the screen was first
-				// built under.
-				//
-				// A stored RGSS survives the narrowing, and that is not something this overlay can
-				// change from here. Sodium answers a value its allowed set no longer holds with the
-				// option's default (EnumOption.validateValue), and its default for this option is
-				// RGSS itself (SodiumConfigBuilder.java:511), so the fall back lands on the value it
-				// was meant to replace: the selector opens on a name outside the set it offers, and
-				// the player cannot cycle back to it once they have moved off.
-				.registerOptionOverlay(FILTERING,
-						builder.createEnumOption(FILTERING, TextureFilteringMethod.class)
-								.setAllowedValuesProvider(
-										state -> TerrainDraw.asked() ? WITHOUT_RGSS : EVERY_METHOD,
-										ConfigState.UPDATE_ON_REBUILD));
+								.addOption(moduleCacheCeiling(builder))));
+
+		// Only on the backend this engine draws on. Anywhere else the pack draws nothing, so RGSS
+		// keeps working and there is nothing to narrow. And never where Iris draws, which registers
+		// its own overlay of this option in exactly that case (IrisConfig.java:40 and 54): Sodium
+		// refuses two overlays of one option, so a game on OpenGL with both mods installed closed at
+		// startup on the settings it could not build. Iris decides from options.txt and this engine
+		// from the device, and IrisBeside says where those two part company, which is why both
+		// questions are asked. The device is up by this walk.
+		if (HostReport.otherBackend() || IrisBeside.draws()) {
+			return;
+		}
+
+		// RGSS is shader code, written into the game's own terrain shader and into Sodium's, so it
+		// is worth nothing while the pack's terrain program is the one drawing: the player moves the
+		// selector and the image does not move. ANISOTROPIC keeps working, because it is a sampler
+		// and an atlas seam fix rather than a shader, and this engine takes both as it finds them.
+		// The reference registers this same overlay over the same two values, IrisConfig.java:58.
+		//
+		// What differs is the question asked, and only because this engine can answer a narrower
+		// one. The reference asks whether a pack is loaded, IrisConfig.java:74, which for it is the
+		// same thing: a loaded pack there always takes the terrain over. Here the pack's terrain
+		// program can be off on its own while the rest of the chain draws, either because the engine
+		// options refuse it or because reading it threw, and then Sodium's own shader draws the world
+		// and RGSS works again. So the question is whether that program draws, which is what
+		// TerrainDraw.asked answers.
+		//
+		// Asked through UPDATE_ON_REBUILD rather than read once, so the list follows a pack loaded or
+		// dropped while the game is up rather than the state the screen was first built under.
+		//
+		// A stored RGSS survives the narrowing, and that is not something this overlay can change
+		// from here. Sodium answers a value its allowed set no longer holds with the option's default
+		// (EnumOption.validateValue), and its default for this option is RGSS itself
+		// (SodiumConfigBuilder.java:511), so the fall back lands on the value it was meant to replace:
+		// the selector opens on a name outside the set it offers, and the player cannot cycle back to
+		// it once they have moved off.
+		options.registerOptionOverlay(FILTERING,
+				builder.createEnumOption(FILTERING, TextureFilteringMethod.class)
+						.setAllowedValuesProvider(
+								state -> TerrainDraw.asked() ? WITHOUT_RGSS : EVERY_METHOD,
+								ConfigState.UPDATE_ON_REBUILD));
 	}
 
 	/**
@@ -339,7 +352,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	 * own and the cheapest thing a player can trade for frames.
 	 * <p>
 	 * It is the reference's option, built the same way and over the same range,
-	 * {@code compat/sodium/config/IrisConfig.java:54-76}: zero to thirty-two, thirty-two by default,
+	 * {@code compat/sodium/config/IrisConfig.java:163-194}: zero to thirty-two, thirty-two by default,
 	 * greyed out while the pack forces a distance of its own, and shown as the pack's number then
 	 * rather than as the player's. What the two numbers mean and which of them wins is
 	 * {@code PackValues.shadowRenderDistance}, and the conversion into blocks lives there too.
@@ -377,7 +390,7 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				// Sodium refuses to build an option without one, at the loading screen and not at
 				// compile time. It has nothing left to do here: the binding above writes pack.txt
 				// as it is moved, where the reference's binding only moves a field and its handler
-				// saves the whole config file afterwards, IrisConfig.java:67.
+				// saves the whole config file afterwards, IrisConfig.java:192.
 				.setStorageHandler(() -> {})
 				.setImpact(OptionImpact.HIGH);
 	}
