@@ -1,5 +1,6 @@
 package dev.vitrail.screen;
 
+import dev.vitrail.HostReport;
 import dev.vitrail.Vitrail;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.PackChoice;
@@ -29,6 +30,12 @@ import org.jspecify.annotations.Nullable;
  * pack that was refused would send the reader to the settings screen when the log is where the
  * answer is.
  * <p>
+ * Nothing is said on a backend this engine does not draw on, which is where Iris draws when it is
+ * installed. Iris shows its own lines only off Vulkan, its mixin plugin applying the mixin that
+ * registers them there alone ({@code mixin/IrisMixinPlugin.java:71-73},
+ * {@code mixin/MixinDebugEntries.java:23}), so each engine's lines stand where that engine draws.
+ * Before the device exists the backend has no name and the lines show.
+ * <p>
  * Registration is {@code DebugScreenEntriesMixin}'s, and the line showing without a hand's turn of
  * F3 configuration is {@code DebugScreenEntryListMixin}'s; this class only says the words. All
  * three follow Iris's own construction on the same vanilla seams.
@@ -54,6 +61,10 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 	@Override
 	public void display(DebugScreenDisplayer displayer, @Nullable Level level,
 			@Nullable LevelChunk clientChunk, @Nullable LevelChunk serverChunk) {
+		if (HostReport.otherBackend()) {
+			return;
+		}
+
 		displayer.addToGroup(GROUP, PREFIX + "Version: " + Vitrail.platform().modVersion());
 		PackChain.compilingWords().ifPresent(words ->
 				displayer.addToGroup(GROUP, PREFIX + words.getString()));
