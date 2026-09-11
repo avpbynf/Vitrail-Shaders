@@ -461,7 +461,10 @@ GNU Lesser General Public License version 3
   game's F3 registry, an entry registered as the registry's class initializer returns, a display
   status written only while the entry has none so that the player's own choice stands, and the
   wording of the version, shaderpack and shaders-disabled lines. What is said when a pack is not
-  drawn is this project's own, following how its loader keeps the three reasons apart.
+  drawn is this project's own, following how its loader keeps the three reasons apart. Iris's lines
+  show only off Vulkan, net.irisshaders.iris.mixin.IrisMixinPlugin applying the registering mixin
+  there alone, and this entry says nothing on a backend other than Vulkan, the same line held from
+  the other side.
 
   common/src/main/java/dev/vitrail/glsl/LegacyGlsl.java reproduces what Iris puts in place of the
   fixed function vertex inputs of a full screen pass, in CompositeTransformer lines 47 to 71: the

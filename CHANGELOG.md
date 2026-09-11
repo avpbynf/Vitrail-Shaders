@@ -295,6 +295,8 @@ what the next one holds.
   settings and NeoForge's Config button lead there, and Vitrail's key for the pack screen leaves the
   press to Iris's own, which sits on the same I, so a pack picked is the pack drawn. On Vulkan, where
   Vitrail draws, that I opens Vitrail's screen and not Iris's offer to switch to OpenGL over it.
+  And the F3 screen carries Iris's lines alone on OpenGL, Vitrail's staying off it there the way
+  Iris's stay off it on Vulkan.
 
 - **Reverie draws on a Mac.** Two of its passes read more textures at once than the sixteen a Mac
   takes when a pass is handed its textures one by one, which is how the game hands them over, so
