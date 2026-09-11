@@ -67,7 +67,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -503,11 +502,12 @@ final class GeometryProgram {
 	private boolean discarded;
 
 	/**
-	 * The attachments of this pass some sampler of the program also reads, on the same half.
-	 * Served a copy taken before the world's translucents on a pass drawn after the deferred
-	 * stage, and one pixel on any other; {@link TargetCopies} says why the two differ.
+	 * The attachments of this pass some sampler of the program also names, on the same half, each
+	 * with whether it is served a copy taken before the world's translucents. Only a name the
+	 * program samples on a pass drawn after the deferred stage is; every other one is served one
+	 * pixel, and {@link TargetCopies} says why the two passes differ.
 	 */
-	private final Set<ChainPlan.Attachment> readWhileWritten;
+	private final Map<ChainPlan.Attachment, Boolean> readWhileWritten;
 
 	/** Reused while a descriptor is built: Sodium asks for one per region, not once a frame. */
 	private final List<GpuTextureView> attachedViews = new ArrayList<>();
@@ -2243,71 +2243,96 @@ final class GeometryProgram {
 	}
 
 	/**
-	 * Which of this pass's attachments some sampler of the program reads on the same half,
-	 * settled once: both lists are the plan's and neither moves while the pack is loaded. Said in
-	 * the log here, once per program, because the answer decides what the draw reads.
+	 * Which of this pass's attachments some sampler of the program names on the same half, and
+	 * whether each is served the copy, settled once: both lists are the plan's and neither moves
+	 * while the pack is loaded. Said in the log here, once per program, because the answer decides
+	 * what the draw reads.
 	 * <p>
 	 * A pass drawn after the deferred stage asks for the copy {@link TargetCopies} takes ahead of
-	 * it, which is the picture the reference's framebuffer holds when it is read there. A pass drawn before it keeps the one pixel: what stands in the target at that
-	 * moment is the frame's clear or the pass's own siblings at work, and no copy taken at one
-	 * moment stands in for either. So does a read of the first four targets on any pass, which
-	 * the reference binds to no geometry program at all ({@link TargetCopies#FIRST_SAMPLED}).
+	 * it, which is the picture the reference's framebuffer holds when it is read there. A pass drawn
+	 * before it keeps the one pixel: what stands in the target at that moment is the frame's clear
+	 * or the pass's own siblings at work, and no copy taken at one moment stands in for either. So
+	 * does a read of the first four targets on any pass, which the reference binds to no geometry
+	 * program at all ({@link TargetCopies#FIRST_SAMPLED}).
+	 * <p>
+	 * Only a name the program's stages sample asks for the copy. A pack's shared header declares
+	 * targets most of its programs never read, Complementary's colortex4, colortex6 and colortex12
+	 * among them, and each one asked is copied at full size twice a frame. A name that is only
+	 * declared is still answered with the one pixel and never with the target: a layout can carry
+	 * every declared name, {@code -Dvitrail.declaredSamplers} puts them all back, and one image
+	 * cannot be an attachment and a texture of one pass. Sampled is read off the text with every
+	 * {@code #if} standing, so a read in a branch the compiler drops still asks.
 	 */
-	private Set<ChainPlan.Attachment> readWhileWritten(ColorTargets targets) {
-		Set<ChainPlan.Attachment> collided = new HashSet<>();
+	private Map<ChainPlan.Attachment, Boolean> readWhileWritten(ColorTargets targets) {
+		Set<String> sampled = this.loaded.program().sampled();
+		Map<ChainPlan.Attachment, Boolean> collided = new HashMap<>();
 		for (ChainPlan.Attachment attachment : this.extra) {
+			if (collided.containsKey(attachment)) {
+				continue;
+			}
+
+			boolean named = false;
+			boolean read = false;
 			for (Sampled one : this.bound) {
 				SamplerPlan.Binding binding = one.binding;
-				if (binding.kind() != SamplerPlan.Kind.COLORTEX
-						|| binding.index() != attachment.target()
-						|| binding.side() != attachment.side()
-						|| !collided.add(attachment)) {
-					continue;
+				if (binding.kind() == SamplerPlan.Kind.COLORTEX
+						&& binding.index() == attachment.target()
+						&& binding.side() == attachment.side()) {
+					// Two names can answer one target, gaux1 and colortex4, and a read of either counts.
+					named = true;
+					read |= sampled.contains(one.name);
 				}
+			}
 
-				boolean copied = this.pass.afterDeferred()
-						&& attachment.target() >= TargetCopies.FIRST_SAMPLED;
-				if (copied) {
-					targets.copies().ask(attachment.target(), attachment.side());
-				}
+			if (!named) {
+				continue;
+			}
 
-				// Once per program path: the entity family builds one of these per element it serves.
-				if (!targets.copies().firstMention(this.path, attachment.target(), attachment.side())) {
-					continue;
-				}
+			boolean copied = read && this.pass.afterDeferred()
+					&& attachment.target() >= TargetCopies.FIRST_SAMPLED;
+			collided.put(attachment, copied);
+			if (copied) {
+				targets.copies().ask(attachment.target(), attachment.side());
+			}
 
-				if (copied) {
-					Vitrail.logger().info("{} reads {} on the half it writes, so it is served a copy "
-							+ "taken ahead of the pass, which is what the target holds when the "
-							+ "reference reads it there", this.path,
-							TargetName.canonical(attachment.target()));
-				} else if (attachment.target() < TargetCopies.FIRST_SAMPLED) {
-					Vitrail.logger().warn("{} reads {} on the half it writes, so it is answered with "
-							+ "one pixel: one image cannot be both an attachment and a texture of one "
-							+ "pass, and the reference binds none of the first four targets to a "
-							+ "geometry program", this.path, TargetName.canonical(attachment.target()));
-				} else {
-					Vitrail.logger().warn("{} reads {} on the half it writes, so it is answered with "
-							+ "one pixel: one image cannot be both an attachment and a texture of one "
-							+ "pass, and a pass drawn before the deferred stage has no picture a copy "
-							+ "could stand in for", this.path, TargetName.canonical(attachment.target()));
-				}
+			// A name only declared draws the same whatever answers it, so it is not worth a line.
+			// Once per program path: the entity family builds one of these per element it serves.
+			if (!read
+					|| !targets.copies().firstMention(this.path, attachment.target(), attachment.side())) {
+				continue;
+			}
+
+			if (copied) {
+				Vitrail.logger().info("{} reads {} on the half it writes, so it is served a copy "
+						+ "taken ahead of the pass, which is what the target holds when the "
+						+ "reference reads it there", this.path,
+						TargetName.canonical(attachment.target()));
+			} else if (attachment.target() < TargetCopies.FIRST_SAMPLED) {
+				Vitrail.logger().warn("{} reads {} on the half it writes, so it is answered with "
+						+ "one pixel: one image cannot be both an attachment and a texture of one "
+						+ "pass, and the reference binds none of the first four targets to a "
+						+ "geometry program", this.path, TargetName.canonical(attachment.target()));
+			} else {
+				Vitrail.logger().warn("{} reads {} on the half it writes, so it is answered with "
+						+ "one pixel: one image cannot be both an attachment and a texture of one "
+						+ "pass, and a pass drawn before the deferred stage has no picture a copy "
+						+ "could stand in for", this.path, TargetName.canonical(attachment.target()));
 			}
 		}
 
-		return Set.copyOf(collided);
+		return Map.copyOf(collided);
 	}
 
-	/** Whether this name reads a target this pass writes, whatever it is answered with. */
+	/** Whether this name answers a target this pass writes, whatever it is answered with. */
 	private boolean collides(SamplerPlan.Binding binding) {
-		return binding.kind() == SamplerPlan.Kind.COLORTEX && this.readWhileWritten.contains(
+		return binding.kind() == SamplerPlan.Kind.COLORTEX && this.readWhileWritten.containsKey(
 				new ChainPlan.Attachment(binding.index(), binding.side()));
 	}
 
 	/** Whether this name is answered with the copy rather than with the target itself. */
 	private boolean copied(SamplerPlan.Binding binding) {
-		return this.pass.afterDeferred() && binding.index() >= TargetCopies.FIRST_SAMPLED
-				&& collides(binding);
+		return binding.kind() == SamplerPlan.Kind.COLORTEX && this.readWhileWritten.getOrDefault(
+				new ChainPlan.Attachment(binding.index(), binding.side()), false);
 	}
 
 	/**
@@ -2321,7 +2346,8 @@ final class GeometryProgram {
 	 * same pass, and no copy taken at one moment stands in for a target the pass's own siblings
 	 * are filling, so the read is refused rather than left to mean whatever the driver decides
 	 * that frame; and so is a read of the first four targets, which the reference binds to no
-	 * geometry program. {@link #readWhileWritten} said which at the load.
+	 * geometry program, and a name the program declares on a target it writes and never samples.
+	 * {@link #readWhileWritten} said which at the load.
 	 */
 	private GpuTextureView colortex(SamplerPlan.Binding binding) {
 		if (collides(binding)) {

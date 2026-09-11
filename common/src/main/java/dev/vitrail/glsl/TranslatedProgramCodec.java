@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A translated program written down and read back, byte for byte the same object either way.
@@ -19,9 +20,9 @@ import java.util.Map;
  * It exists so that {@link TranslationCache} can keep a translation between two loads. Everything a
  * {@link ProgramTranslator.TranslatedProgram} carries is written: the text of each stage, the notes
  * the translation took on the way, the uniform block in the order that IS its layout, the samplers
- * in the order they bind, and the names the translator synthesised. Leaving one of them out would
- * not fail: it would hand back a program that draws with a block laid out differently from the one
- * the engine fills, which is a wrong picture and not a crash.
+ * in the order they bind, the names the stages sample, and the names the translator synthesised.
+ * Leaving one of them out would not fail: it would hand back a program that draws with a block laid
+ * out differently from the one the engine fills, which is a wrong picture and not a crash.
  * <p>
  * <strong>Every string is written behind its length in bytes</strong> rather than through
  * {@code writeUTF}, whose count is a short: a translated composite runs to tens of thousands of
@@ -33,7 +34,7 @@ import java.util.Map;
 final class TranslatedProgramCodec {
 
 	/** Bumped by hand when the layout changes. It is part of the key, so old blobs go unread. */
-	static final String FORMAT = "vitrail-translation-5";
+	static final String FORMAT = "vitrail-translation-6";
 
 	private TranslatedProgramCodec() {
 	}
@@ -52,6 +53,7 @@ final class TranslatedProgramCodec {
 
 			uniforms(out, program.uniforms());
 			uniforms(out, program.samplers());
+			names(out, List.copyOf(program.sampled()));
 
 			out.writeInt(program.synthesized().size());
 			for (Map.Entry<String, String> made : program.synthesized().entrySet()) {
@@ -85,6 +87,7 @@ final class TranslatedProgramCodec {
 
 			List<TranslatedUnit.Uniform> uniforms = uniforms(in);
 			List<TranslatedUnit.Uniform> samplers = uniforms(in);
+			Set<String> sampled = Set.copyOf(names(in));
 
 			Map<String, String> synthesized = new LinkedHashMap<>();
 			for (int left = in.readInt(); left > 0; left--) {
@@ -92,7 +95,7 @@ final class TranslatedProgramCodec {
 			}
 
 			return new ProgramTranslator.TranslatedProgram(Map.copyOf(stages), uniforms, samplers,
-					Map.copyOf(synthesized), inputs);
+					sampled, Map.copyOf(synthesized), inputs);
 		} catch (IllegalArgumentException | NullPointerException e) {
 			// A stage name no enum has, or a null where the format promised a string. Both are a
 			// damaged blob and neither is worth its own catch upstream.
