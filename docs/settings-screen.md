@@ -15,6 +15,10 @@ the key bound in the game's controls (`I` by default), or from wherever else you
 options. A second key, `R`, reads the pack again from disk without opening anything, which is what
 makes editing a shader by hand and seeing the result a two second loop.
 
+On a backend other than Vulkan the engine draws nothing, so its page in the video settings opens an
+offer to switch to Vulkan, which closes the game, Iris installed or not. Its two keys do nothing
+there, and its own page of settings is not listed in the video settings.
+
 ## Two views, one screen
 
 The screen holds two views and swaps between them with the button above the bottom row. Tab does the

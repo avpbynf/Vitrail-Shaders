@@ -261,26 +261,16 @@ public final class PackChoice {
 				return;
 			}
 
-			SettingsLayers.Resolved settings = open(gameDirectory, pack);
-
-			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());
-			// Reserved keys rather than options: no pack declares a setting under any of these
-			// names, and each names something this mod does rather than a value the pack has. The
-			// fourth, profile, never reaches here: the settings layer takes it out and carries it
-			// apart, because it is the side that writes it back into the pack's own file.
-			EngineOptions.Read engine = EngineOptions.take(chosen);
-			packsFirst = engine.packsFirst();
-			PackChain.chainWanted(engine.chain());
-
-			// Read and shown, and not drawn. On a backend this engine is not written for, the pack
-			// is published to the screen above so that it can be picked and configured ahead of the
-			// restart that will draw it, and every switch below stays down so that nothing of it
-			// reaches a mesh or a frame: the programs are translated against Vulkan's depth and
-			// clip conventions, and what they drew when let run elsewhere was a picture credible
-			// and wrong, which reads as a pack fault. The game's own image is the better answer.
+			// Chosen, and neither read, drawn nor offered for picking. On a backend this engine is not
+			// written for, its pages open the offer to switch to Vulkan instead (PackScreens) and its
+			// keys do nothing (SettingsKey), so nothing asks for the pack's settings, and every switch
+			// here stays down so that nothing of the pack reaches a mesh or a frame: the programs are
+			// translated against Vulkan's depth and clip conventions, and what they drew when let run
+			// elsewhere was a picture credible and wrong, which reads as a pack fault. The game's own
+			// image is the better answer. Asked before the pack is opened rather than after it, so
+			// that beside Iris the log carries no reading of a pack Iris is not the one drawing.
 			// HostReport says it once in the log at startup and, unless Iris draws there, once in chat
-			// on entering a world; what this road adds is the screen's bottom line, through
-			// lastError, and nothing else.
+			// on entering a world; lastError is kept all the same, for whatever asks it next.
 			if (HostReport.otherBackend()) {
 				TerrainDraw.wanted(false);
 				EntityDraw.wanted(false);
@@ -291,6 +281,17 @@ public final class PackChoice {
 				OpenedPack.forgetKept();
 				return;
 			}
+
+			SettingsLayers.Resolved settings = open(gameDirectory, pack);
+
+			Map<String, OptionValue> chosen = new LinkedHashMap<>(settings.chosen());
+			// Reserved keys rather than options: no pack declares a setting under any of these
+			// names, and each names something this mod does rather than a value the pack has. The
+			// fourth, profile, never reaches here: the settings layer takes it out and carries it
+			// apart, because it is the side that writes it back into the pack's own file.
+			EngineOptions.Read engine = EngineOptions.take(chosen);
+			packsFirst = engine.packsFirst();
+			PackChain.chainWanted(engine.chain());
 
 			TerrainDraw.wanted(engine.terrain());
 			TerrainDraw.shadowWanted(engine.shadow());

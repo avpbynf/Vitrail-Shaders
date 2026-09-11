@@ -227,6 +227,16 @@ public final class ScreenText {
 	public static final String GRAPHICS_API_OPENGL = "options.graphicsApi.opengl";
 
 	/**
+	 * What the pages leading to the pack screen open instead on a backend this engine does not draw
+	 * on, with its two buttons. Iris's words with the two backends swapped,
+	 * {@code ShaderPackScreenPlaceholder.java:30}, 19 and 38, since Iris makes the same offer the other
+	 * way round.
+	 */
+	public static final String BACKEND_PLACEHOLDER = "options.vitrail.backend_placeholder";
+	public static final String BACKEND_SWITCH = "options.vitrail.backend_switch";
+	public static final String BACKEND_RETURN = "options.vitrail.backend_return";
+
+	/**
 	 * The words beside the pulsing mark for as long as a pack compiles, through the held world
 	 * and the background compiles alike. Short on purpose: they stand next to a sixteen-pixel
 	 * icon, not on a line of their own.

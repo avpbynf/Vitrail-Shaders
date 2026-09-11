@@ -282,6 +282,14 @@ what the next one holds.
   after the packs named in plain letters. The codes are left out of the sort now, as Iris does, and
   two names that differ only in case keep Iris's order too.
 
+- **On OpenGL, Vitrail offers to switch to Vulkan.** Vitrail draws nothing on OpenGL, yet its pack
+  screen and its settings page still opened there, so a pack picked or a setting moved changed
+  nothing you could see. Its page in the video settings and NeoForge's Config button now open a
+  screen saying Vitrail cannot run on OpenGL, with a button that sets the game to Vulkan and closes
+  it, and one that goes back. Its settings page is no longer listed there, its keys and its lines on
+  the F3 screen do nothing and show nothing, and the game's own Graphics API setting is where it
+  always was. Beside Iris it is the same offer, the way Iris's own page offers OpenGL on Vulkan.
+
 ### Fixed
 
 - **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
@@ -291,12 +299,9 @@ what the next one holds.
   line in the chat saying the picture is missing, nor answers Iris's reload key, which is also its
   own, with a red line of its own. After a startup that ended badly, the backend is kept as it was
   set rather than put back to Vulkan while Iris is installed, since Iris has already chosen its side
-  for that backend. Where Iris draws, its screen is the one that opens: Vitrail's page in the video
-  settings and NeoForge's Config button lead there, and Vitrail's key for the pack screen leaves the
-  press to Iris's own, which sits on the same I, so a pack picked is the pack drawn. On Vulkan, where
+  for that backend. Where Iris draws, Vitrail's key for the pack screen leaves the press to Iris's
+  own, which sits on the same I, so the I opens Iris's screen alone. On Vulkan, where
   Vitrail draws, that I opens Vitrail's screen and not Iris's offer to switch to OpenGL over it.
-  And the F3 screen carries Iris's lines alone on OpenGL, Vitrail's staying off it there the way
-  Iris's stay off it on Vulkan.
 
 - **Reverie draws on a Mac.** Two of its passes read more textures at once than the sixteen a Mac
   takes when a pass is handed its textures one by one, which is how the game hands them over, so
