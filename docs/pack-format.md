@@ -398,8 +398,19 @@ preprocessor reached on it: an `#if` or an `#elif` carrying no expression become
 an `#endif` with nothing open for it becomes a comment. Each of those is named in the log. One line
 still comes out for one line, which is what the numbering below rests on, and the only thing added
 is an `#endif` at the end of the file for each rewritten group the file never closed. Only for
-those: a group the PACK left open is one the compiler may never have opened, a conditional written
-inside a block comment being a directive to this reader and nothing at all to the compiler.
+those: a group the PACK left open is handed to the compiler exactly as the pack wrote it.
+
+**A line that starts inside a block comment is read as neither a condition nor a define**, because
+the compiler strips comments before it reads a directive. A header that gives `#define` lines as
+examples in a comment therefore neither adds to the names a condition is decided on nor makes a
+branch live. For the same reason, format directives a pack writes between an `#ifdef` and its
+`#endif` inside one comment all count, as they do under Iris, which preprocesses with comments kept
+and reads its directives out of them. The player's settings are still applied to such a line, the
+directive readers taking their constants out of comments, and an `#include` written there is still
+followed, as Iris follows it: it resolves includes on the raw lines before its preprocessor runs.
+Two shapes the compiler takes are still missed: a directive written after the `*/` that closes a
+comment on the same line, and the `#endif` added at the end of a file for a rewritten group when
+that file ends inside a comment it never closed, which lands inside the comment.
 
 **A non-evaluable condition is taken as true**, and counted. The asymmetry is deliberate: including
 too much is recoverable, while a skipped include produces an avalanche of undeclared identifiers

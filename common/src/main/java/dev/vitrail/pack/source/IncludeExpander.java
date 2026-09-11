@@ -35,6 +35,20 @@ import java.util.regex.Pattern;
  * macro is dropped where the compiler goes on to take the branch, and the code under it then names
  * something nothing declared.
  * <p>
+ * A line that starts inside a block comment is read as neither a condition nor a define, the
+ * compiler stripping comments before it reads a directive. NVIDIA's FXAA header, which SEUS PTGI
+ * HRR ships, gives {@code #define FXAA_HLSL_5 1} among the examples of its licence comment: read as
+ * a define, it made the Direct3D branches live, the translator then settled the macros of the GLSL
+ * branch away as redefinitions, and the three composite programs that include the header did not
+ * build. For the same reason every format directive a pack writes between a condition and its end
+ * inside one comment is live, as under Iris, which preprocesses with comments kept and reads its
+ * directives out of them. The player's settings are still applied to such a line, the directive
+ * readers taking their constants out of comments, and an include there is still followed, as Iris
+ * follows it: it resolves includes on the raw lines before its preprocessor runs. Two shapes the
+ * compiler takes are still not read: a directive after the pair that closes a comment on the same
+ * line, and the {@code #endif} this reader adds at the end of a file that closes no comment it
+ * opened, which lands inside that comment.
+ * <p>
  * An include in a branch that is off becomes a comment rather than staying as it was. Keeping
  * it would leave a directive GLSL has no notion of sitting in the text, which is a gamble on
  * how the compiler treats directives inside a block it is discarding.
@@ -232,6 +246,19 @@ public final class IncludeExpander {
 			}
 
 			String line = logical.text();
+			if (state.inBlockComment && !INCLUDE.matcher(line).matches()) {
+				String settled = conditions.active()
+						? OptionRewriter.apply(line, this.settings.chosen(), this.settings.scale())
+						: line;
+				if (settled.equals(line)) {
+					state.emit(logical.physical(), conditions.active());
+				} else {
+					state.emit(settled, true);
+				}
+
+				continue;
+			}
+
 			String directive = handleCondition(logical, relative, conditions, state);
 			if (directive != null) {
 				if (directive.equals(line)) {
@@ -285,11 +312,8 @@ public final class IncludeExpander {
 		// A rewritten conditional the file never closes would leave a directive this reader put in
 		// the text with nothing to close it, so it is closed where the file ends.
 		//
-		// Only those are closed. A group the PACK left open is one the compiler may never have
-		// opened: this reader matches directives line by line and a compiler strips comments
-		// first, so a conditional written inside a block comment is open here and absent there.
-		// Sildur's writes four such files, and an #endif added at the end of them is refused as
-		// a mismatched statement where the file compiles untouched.
+		// Only those are closed: a group the PACK left open is handed to the compiler exactly as the
+		// pack wrote it.
 		for (int open = conditions.unclosedRewritten(); open > 0; open--) {
 			state.emit("#endif", true);
 			state.openInOutput--;
@@ -463,9 +487,10 @@ public final class IncludeExpander {
 	 * is what costs its three {@code composite3} programs.
 	 * <p>
 	 * The count that decides this is of what has been WRITTEN, never the depth of the file being
-	 * read, and it errs the one way it can afford to. A conditional inside a block comment is a
-	 * directive to this reader and not to the compiler, so the count can only be too high, and too
-	 * high leaves the directive alone. Too low would delete the one {@code #endif} a group needed.
+	 * read: a group opened in an include is closed by whichever file writes its {@code #endif}. A
+	 * count too low would comment out an {@code #endif} a group needed, and it is too low on the
+	 * shapes this reader does not see: a directive that follows a comment on the same line, and an
+	 * {@code #endif} added at the end of a file inside a comment that file never closed.
 	 */
 	private static String unopened(ConditionStack conditions, State state, String relative,
 			Logical logical) {
@@ -730,6 +755,12 @@ public final class IncludeExpander {
 		 */
 		private int openInOutput;
 
+		/**
+		 * Whether the text written out so far leaves a block comment open, which belongs to the
+		 * unit rather than to one file for the same reason a group does.
+		 */
+		private boolean inBlockComment;
+
 		private State(Map<String, String> defines, Set<String> loose) {
 			this.defines = new LinkedHashMap<>(defines);
 			this.loose = loose;
@@ -741,13 +772,28 @@ public final class IncludeExpander {
 		}
 
 		private void emit(String line, boolean taken) {
+			add(line, taken);
+			this.inBlockComment = BlockComments.openAfter(line, this.inBlockComment);
+		}
+
+		/**
+		 * Lines a backslash joins, whose comments are read over the joined text: a line comment
+		 * continued that way hides the line under it too.
+		 */
+		private void emit(List<String> lines, boolean taken) {
+			StringBuilder joined = new StringBuilder();
+			for (String line : lines) {
+				add(line, taken);
+				joined.append(line.endsWith("\\") ? line.substring(0, line.length() - 1) : line);
+			}
+
+			this.inBlockComment = BlockComments.openAfter(joined.toString(), this.inBlockComment);
+		}
+
+		private void add(String line, boolean taken) {
 			this.live.set(this.output.size(), taken);
 			this.output.add(line);
 			this.characters += line.length() + 1;
-		}
-
-		private void emit(List<String> lines, boolean taken) {
-			lines.forEach(line -> emit(line, taken));
 		}
 
 		private boolean overBudget() {

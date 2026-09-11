@@ -11,6 +11,19 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **SEUS PTGI HRR 3 is no longer set aside as soon as it loads.** Its anti-aliasing header carries
+  a comment giving example settings for other platforms, and the engine read those examples as if
+  the pack had set them. It then took the code meant for those platforms as the code in use, left
+  the three programs that include the header without the pieces they call, and since those could
+  not be built, drew nothing of the pack at all. A line inside a comment no longer decides which
+  code is in use, nor sets a name. What a pack writes inside a comment about its own buffers, their
+  format and their mip chain, is read in full as Iris reads it, so Complementary with
+  EuphoriaPatches, Photon, Sildur's Vibrant and I Like Vanilla get the buffers their text asks for.
+
 ## 0.11.0-beta
 
 ### Added

@@ -231,7 +231,7 @@ public final class TargetDirectives {
 			}
 		}
 
-		/** Two live declarations of one name that disagree. The corpus has none, which is worth knowing. */
+		/** Notes two live declarations of one name that disagree, with where each of them stands. */
 		private void noteConflict(ConstDirectives.Directive directive, String where) {
 			String previous = this.lastValue.put(directive.name(), directive.value());
 			String source = this.lastSource.put(directive.name(), where);
@@ -339,7 +339,7 @@ public final class TargetDirectives {
 		return Collections.unmodifiableSet(targets);
 	}
 
-	/** Two live declarations of one key that disagree, as text. Empty on the eight packs. */
+	/** Two live declarations of one key that disagree, as text. */
 	public List<String> conflicts() {
 		return this.conflicts;
 	}
