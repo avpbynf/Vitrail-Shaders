@@ -11,6 +11,7 @@ import dev.vitrail.pack.program.ChainFilter;
 import dev.vitrail.pack.model.ProgramNames;
 import dev.vitrail.pack.program.ProgramSet;
 import dev.vitrail.pack.model.ProgramStage;
+import dev.vitrail.pack.source.BlockComments;
 import dev.vitrail.pack.source.DimensionSet;
 import dev.vitrail.pack.source.IncludeExpander;
 import dev.vitrail.pack.source.ShaderPackSource;
@@ -969,7 +970,7 @@ public final class TargetPlan {
 
 		for (int line = 0; line < lines.size(); line++) {
 			boolean opened = commented;
-			commented = afterLine(lines.get(line), commented);
+			commented = BlockComments.openAfter(lines.get(line), commented);
 			if (opened || !unit.isLive(line)) {
 				continue;
 			}
@@ -994,29 +995,6 @@ public final class TargetPlan {
 		}
 
 		return names;
-	}
-
-	/**
-	 * Whether a block comment is still open once this line has been read. A line comment closes at
-	 * the end of the line and so ends the walk of it; inside a block, neither form opens anything
-	 * and only the closing pair is looked for.
-	 */
-	private static boolean afterLine(String line, boolean commented) {
-		for (int at = 0; at < line.length() - 1; at++) {
-			if (commented) {
-				if (line.charAt(at) == '*' && line.charAt(at + 1) == '/') {
-					commented = false;
-					at++;
-				}
-			} else if (line.charAt(at) == '/' && line.charAt(at + 1) == '/') {
-				return false;
-			} else if (line.charAt(at) == '/' && line.charAt(at + 1) == '*') {
-				commented = true;
-				at++;
-			}
-		}
-
-		return commented;
 	}
 
 	public String packName() {
