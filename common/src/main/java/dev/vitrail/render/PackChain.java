@@ -16,6 +16,7 @@ import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.render.storage.StorageImages;
 import dev.vitrail.render.timing.PassTimings;
+import dev.vitrail.HostReport;
 import dev.vitrail.ScreenText;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
@@ -734,6 +735,12 @@ public final class PackChain {
 	 *         frame nothing
 	 */
 	public static boolean beforeLevel() {
+		// Off Vulkan nothing is loaded for the world to move under, and the road is not named either:
+		// beside Iris that line would be about a pack Iris is the one drawing.
+		if (HostReport.otherBackend()) {
+			return false;
+		}
+
 		sayBeforeLevelRoad();
 
 		return RELOAD_BEFORE_LEVEL

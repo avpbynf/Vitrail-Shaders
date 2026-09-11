@@ -1,5 +1,6 @@
 package dev.vitrail.mixin.sodium;
 
+import dev.vitrail.HostReport;
 import dev.vitrail.render.EntityMesh;
 import dev.vitrail.sodium.TerrainMesh;
 
@@ -46,6 +47,12 @@ public abstract class MixinSodiumWorldRendererInit {
 
 	@Inject(method = "initRenderer", at = @At("HEAD"), require = 1)
 	private void vitrail$settle(CallbackInfo callback) {
+		// Off Vulkan no pack is loaded and both meshes stay the game's and Sodium's, so there is
+		// nothing to settle and nothing to say about it.
+		if (HostReport.otherBackend()) {
+			return;
+		}
+
 		TerrainMesh.settle();
 		EntityMesh.settle();
 	}

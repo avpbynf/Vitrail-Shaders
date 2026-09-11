@@ -292,9 +292,11 @@ what the next one holds.
 
 ### Fixed
 
-- **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
-  mods reshape Sodium's texture filtering option, and Sodium refuses two of them, so a game set to
-  OpenGL with both installed closed before the title screen. Vitrail now only touches that option
+- **Iris and Vitrail installed together no longer close the game on OpenGL.** Both mods reshape
+  Sodium's texture filtering option, and Sodium refuses two of them, so a game set to OpenGL with
+  both installed closed before the title screen. Past it, joining a world with some packs closed the
+  game again, Reverie among them, because Vitrail still ran parts of its frame inside Iris's; it now
+  runs none of its frame on a backend it does not draw on. Vitrail now only touches that option
   where it draws the world itself and Iris does not, and where Iris draws it no longer puts a red
   line in the chat saying the picture is missing, nor answers Iris's reload key, which is also its
   own, with a red line of its own. After a startup that ended badly, the backend is kept as it was
