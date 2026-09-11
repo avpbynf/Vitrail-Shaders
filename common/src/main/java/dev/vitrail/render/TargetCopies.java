@@ -102,8 +102,9 @@ final class TargetCopies {
 
 	/**
 	 * Says that a geometry program drawn after the deferred stage samples this target on the half
-	 * it writes. Asked at the program's construction, which is before any frame; a key asked once
-	 * a frame is running is served from the next {@link #ensure} on.
+	 * it writes. A name the program only declares, as a shared header declares every target, does
+	 * not ask. Asked at the program's construction, which is before any frame; a key asked once a
+	 * frame is running is served from the next {@link #ensure} on.
 	 */
 	void ask(int target, TargetSchedule.Side side) {
 		synchronized (this) {

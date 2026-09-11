@@ -65,6 +65,11 @@ public final class ProgramTranslator {
 	 *                    Names a stage actually samples come first, so their bindings stay inside
 	 *                    Metal's sixteen sampler slots; unused declarations follow rather than
 	 *                    pushing a used name onto slot 17
+	 * @param sampled     the names any stage reads outside their declaration. Read off the text
+	 *                    with every {@code #if} still standing, so it can hold a name only a branch
+	 *                    the compiler drops reads, or one declared again where it is not taken for
+	 *                    a declaration; it errs toward holding a name, which costs a copy and never
+	 *                    a wrong read
 	 * @param synthesized vertex inputs the mesh has not got, answered with a constant, by name and
 	 *                    with the type the pack declared them under. Empty for every pass drawn over
 	 *                    a quad, which is every pass this engine drew before milestone six
@@ -76,7 +81,7 @@ public final class ProgramTranslator {
 	 */
 	public record TranslatedProgram(Map<ProgramStage, TranslatedUnit> stages,
 			List<TranslatedUnit.Uniform> uniforms, List<TranslatedUnit.Uniform> samplers,
-			Map<String, String> synthesized, VertexInputs inputs) {
+			Set<String> sampled, Map<String, String> synthesized, VertexInputs inputs) {
 	}
 
 	/**
@@ -304,8 +309,13 @@ public final class ProgramTranslator {
 			stage.samplers().forEach(sampler -> samplers.putIfAbsent(sampler.name(), sampler));
 		}
 
+		Set<String> sampled = new LinkedHashSet<>();
+		for (GlslTranslator.Stage stage : prepared.values()) {
+			sampled.addAll(stage.sampled());
+		}
+
 		List<TranslatedUnit.Uniform> block = fixedFunctionFirst(uniforms);
-		List<TranslatedUnit.Uniform> bound = sampledFirst(samplers, prepared);
+		List<TranslatedUnit.Uniform> bound = sampledFirst(samplers, sampled);
 		Set<String> elements = clashingElements(prepared, inputs);
 
 		Map<ProgramStage, TranslatedUnit> translated = new LinkedHashMap<>();
@@ -315,8 +325,8 @@ public final class ProgramTranslator {
 			translated.put(stage, prepare.render(block, bound, varyings, shadowed));
 		});
 
-		return new TranslatedProgram(Map.copyOf(translated), block, bound, Map.copyOf(synthesized),
-				inputs);
+		return new TranslatedProgram(Map.copyOf(translated), block, bound, Set.copyOf(sampled),
+				Map.copyOf(synthesized), inputs);
 	}
 
 	/**
@@ -500,13 +510,7 @@ public final class ProgramTranslator {
 	 * twice, and {@code -Dvitrail.declaredSamplers}.
 	 */
 	private static List<TranslatedUnit.Uniform> sampledFirst(
-			Map<String, TranslatedUnit.Uniform> samplers,
-			Map<ProgramStage, GlslTranslator.Stage> prepared) {
-		Set<String> sampled = new LinkedHashSet<>();
-		for (GlslTranslator.Stage stage : prepared.values()) {
-			sampled.addAll(stage.sampled());
-		}
-
+			Map<String, TranslatedUnit.Uniform> samplers, Set<String> sampled) {
 		List<TranslatedUnit.Uniform> bound = new ArrayList<>();
 		for (TranslatedUnit.Uniform sampler : samplers.values()) {
 			if (sampled.contains(sampler.name())) {
