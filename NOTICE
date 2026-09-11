@@ -868,6 +868,10 @@ GNU Lesser General Public License version 3
   itself, where Iris looks the row up by an index it was built with: that index counts the rows and
   not the packs, so it already counts the toggle above them and would count wrong the day another row
   joins it.
+  common/src/main/java/dev/vitrail/pack/load/PackLoader.java lists the packs in the order of
+  net.irisshaders.iris.shaderpack.discovery.ShaderpackDirectoryManager: by name with each section sign
+  and the character after it left out, ignoring case and then by the exact name. Its debug mode, which
+  puts folders above archives, is not carried, this engine having no such mode.
 
   Three things in this group are not transcriptions. Iris enables blending by hand before each blit
   through com.mojang.blaze3d.opengl.GlStateManager, which is the OpenGL backend's own state machine
